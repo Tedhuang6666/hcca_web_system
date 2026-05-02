@@ -1,0 +1,33 @@
+[project]
+name = "campus-platform"
+version = "0.1.0"
+description = "校園自治整合平台"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.18.4",
+    "fastapi>=0.135.3",
+    "uvicorn>=0.44.0",
+]
+
+[tool.uv.workspace]
+members = [
+    "apps/api",
+    "libs/shared",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "SIM"]
+# B008: FastAPI 的 Depends() 在函式簽名中使用是標準模式
+ignore = ["E501", "B008"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["api", "shared"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["apps/api/tests"]

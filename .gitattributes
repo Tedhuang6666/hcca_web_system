@@ -1,0 +1,21 @@
+# 強制所有 Shell 腳本使用 LF 換行符（防止 Windows CRLF 污染）
+*.sh        text eol=lf
+
+# 文字檔案：根據作業系統自動轉換（預設行為）
+*.py        text eol=lf
+*.md        text eol=lf
+*.toml      text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.json      text eol=lf
+*.env       text eol=lf
+
+# 二進位檔案：不做換行符轉換
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.pdf       binary
+*.xlsx      binary
+*.zip       binary

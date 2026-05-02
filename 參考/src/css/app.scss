@@ -1,0 +1,12 @@
+// app global css in SCSS form
+.no-print {
+  @media print {
+    display: none;
+  }
+}
+
+.official-font-when-printing {
+  @media print {
+    font-family: '標楷體2', '標楷體', 'BiauKai', 'DFKai-sb', 'cwTeXKai', Times, serif;
+  }
+}

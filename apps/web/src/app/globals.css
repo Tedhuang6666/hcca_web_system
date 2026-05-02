@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+/* ── 色調系統：科技感深色主題 ─────────────────────────────────────────── */
+:root {
+  --bg-base:      #0a0e1a;   /* 最深背景 */
+  --bg-surface:   #0f1629;   /* 卡片/面板 */
+  --bg-elevated:  #161d35;   /* 浮層/Modal */
+  --border:       rgba(56, 189, 248, 0.15);
+  --border-glow:  rgba(56, 189, 248, 0.4);
+
+  --accent:       #38bdf8;   /* 科技藍 */
+  --accent-dim:   rgba(56, 189, 248, 0.12);
+  --accent-neon:  #06b6d4;
+
+  --success:      #22d3ee;
+  --warning:      #fb923c;
+  --danger:       #f87171;
+  --muted:        #475569;
+}
+
+body {
+  background-color: var(--bg-base);
+  color: #e2e8f0;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Glassmorphism 基礎類別 ───────────────────────────────────────────── */
+.glass {
+  background: rgba(15, 22, 41, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+}
+
+.glass-hover:hover {
+  border-color: var(--border-glow);
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.08);
+  transition: all 0.2s ease;
+}
+
+/* ── Neon 光暈效果 ────────────────────────────────────────────────────── */
+.neon-text {
+  color: var(--accent);
+  text-shadow: 0 0 20px rgba(56, 189, 248, 0.5);
+}
+
+.neon-border {
+  border-color: var(--accent);
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.3), inset 0 0 12px rgba(56, 189, 248, 0.05);
+}
+
+/* ── 動畫 ─────────────────────────────────────────────────────────────── */
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.6; }
+}
+.animate-pulse-slow { animation: pulse-slow 3s ease-in-out infinite; }
+
+@keyframes slide-in-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-slide-in { animation: slide-in-up 0.3s ease-out forwards; }
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
