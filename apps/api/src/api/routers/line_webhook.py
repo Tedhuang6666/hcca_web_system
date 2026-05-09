@@ -2,9 +2,11 @@
 
 import logging
 
-from fastapi import APIRouter, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from linebot.v3.exceptions import InvalidSignatureError
 
+from api.core.permission_codes import PermissionCode
+from api.dependencies.permissions import require_permission
 from api.services.line_bot import is_configured, verify_and_parse
 
 logger = logging.getLogger(__name__)
@@ -45,9 +47,13 @@ async def line_webhook(
 
 
 @router.get("/status", summary="LINE Bot 設定狀態")
-async def line_status() -> dict[str, object]:
+async def line_status(
+    _: object = Depends(require_permission(PermissionCode.ADMIN_ALL)),
+) -> dict[str, object]:
     """回傳 LINE Bot 是否已完整設定（供管理員確認）"""
     return {
         "configured": is_configured(),
-        "message": "LINE Bot 已設定完成" if is_configured() else "請設定 LINE_CHANNEL_SECRET 與 LINE_CHANNEL_ACCESS_TOKEN",
+        "message": "LINE Bot 已設定完成"
+        if is_configured()
+        else "請設定 LINE_CHANNEL_SECRET 與 LINE_CHANNEL_ACCESS_TOKEN",
     }

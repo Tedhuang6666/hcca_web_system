@@ -1,0 +1,93 @@
+"use client";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { toast } from "sonner";
+import { orgsApi, ApiError } from "@/lib/api";
+import type { OrgRead } from "@/lib/api";
+
+export default function OrgsPage() {
+  const [orgs, setOrgs] = useState<OrgRead[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    orgsApi.list()
+      .then(setOrgs)
+      .catch(e => toast.error(e instanceof ApiError ? e.message : "載入失敗"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  // 建立樹狀結構（頂層：parent_id == null）
+  const roots = orgs.filter(o => !o.parent_id);
+  const childrenOf = (id: string) => orgs.filter(o => o.parent_id === id);
+
+  function OrgCard({ org, depth = 0 }: { org: OrgRead; depth?: number }) {
+    const children = childrenOf(org.id);
+    return (
+      <div style={{ marginLeft: depth * 16 }}>
+        <Link href={`/orgs/${org.id}`}
+          className="flex items-center gap-3 px-4 py-3 rounded-xl transition-all group"
+          style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", textDecoration: "none" }}
+          onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--border-strong)")}
+          onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--border)")}>
+          {/* 縮排指示 */}
+          {depth > 0 && (
+            <div className="w-3 h-3 flex-shrink-0 flex items-end justify-end">
+              <div className="w-2 h-2 border-l border-b rounded-bl" style={{ borderColor: "var(--border-strong)" }} />
+            </div>
+          )}
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0"
+            style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
+            {org.name.charAt(0)}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{org.name}</p>
+            {org.description && (
+              <p className="text-xs truncate mt-0.5" style={{ color: "var(--text-muted)" }}>{org.description}</p>
+            )}
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2" strokeLinecap="round" className="flex-shrink-0 opacity-40 group-hover:opacity-80 transition-opacity"
+            style={{ color: "var(--primary)" }}>
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </Link>
+        {children.length > 0 && (
+          <div className="mt-1.5 space-y-1.5">
+            {children.map(c => <OrgCard key={c.id} org={c} depth={depth + 1} />)}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-2xl mx-auto space-y-5">
+      {/* 頁首 */}
+      <div>
+        <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>組織總覽</h1>
+        <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>
+          點擊組織查看職位與成員詳情
+        </p>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
+            style={{ borderColor: "var(--primary)", borderTopColor: "transparent" }} />
+        </div>
+      ) : orgs.length === 0 ? (
+        <div className="py-16 text-center rounded-2xl" style={{ border: "1px dashed var(--border)" }}>
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>尚未建立任何組織</p>
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          {roots.map(org => <OrgCard key={org.id} org={org} />)}
+          {/* 孤立節點（parent_id 指向不存在的 org）*/}
+          {orgs.filter(o => o.parent_id && !orgs.some(p => p.id === o.parent_id)).map(org => (
+            <OrgCard key={org.id} org={org} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

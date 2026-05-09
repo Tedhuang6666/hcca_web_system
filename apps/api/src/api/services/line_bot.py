@@ -23,9 +23,7 @@ logger = logging.getLogger(__name__)
 
 handler = WebhookHandler(settings.LINE_CHANNEL_SECRET or "placeholder")
 
-_line_config = Configuration(
-    access_token=settings.LINE_CHANNEL_ACCESS_TOKEN or "placeholder"
-)
+_line_config = Configuration(access_token=settings.LINE_CHANNEL_ACCESS_TOKEN or "placeholder")
 
 
 def is_configured() -> bool:
@@ -34,6 +32,7 @@ def is_configured() -> bool:
 
 
 # ── 訊息事件處理器 ────────────────────────────────────────────────────────────
+
 
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_text_message(event: MessageEvent) -> None:
@@ -66,6 +65,7 @@ def _build_reply(user_text: str) -> str:
 
 
 # ── 推播輔助函式 ──────────────────────────────────────────────────────────────
+
 
 def push_text_message(user_id: str, text: str) -> None:
     """

@@ -6,6 +6,7 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
+from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
 from api.models.user import User
 from api.services.permission import get_user_permission_codes
@@ -24,14 +25,17 @@ class PermissionChecker:
             ...
     """
 
-    def __init__(self, required_permission: str) -> None:
-        self.required_permission = required_permission
+    def __init__(self, required_permission: str | PermissionCode) -> None:
+        self.required_permission = str(required_permission)
 
     async def __call__(
         self,
         current_user: User = Depends(get_current_active_user),
         db: AsyncSession = Depends(get_db),
     ) -> User:
+        # 超級管理員繞過所有 RBAC 檢查
+        if current_user.is_superuser:
+            return current_user
         codes = await get_user_permission_codes(db, current_user.id)
         if self.required_permission not in codes:
             raise HTTPException(
@@ -41,7 +45,7 @@ class PermissionChecker:
         return current_user
 
 
-def require_permission(permission_code: str) -> PermissionChecker:
+def require_permission(permission_code: str | PermissionCode) -> PermissionChecker:
     """
     工廠函式，建立針對特定權限碼的 PermissionChecker。
 
@@ -65,14 +69,17 @@ class AnyPermissionChecker:
         @router.get("/report", dependencies=[Depends(require_any("finance:view", "admin:all"))])
     """
 
-    def __init__(self, *permissions: str) -> None:
-        self.permissions = set(permissions)
+    def __init__(self, *permissions: str | PermissionCode) -> None:
+        self.permissions = {str(code) for code in permissions}
 
     async def __call__(
         self,
         current_user: User = Depends(get_current_active_user),
         db: AsyncSession = Depends(get_db),
     ) -> User:
+        # 超級管理員繞過所有 RBAC 檢查
+        if current_user.is_superuser:
+            return current_user
         codes = await get_user_permission_codes(db, current_user.id)
         if not codes & self.permissions:
             raise HTTPException(
@@ -82,6 +89,6 @@ class AnyPermissionChecker:
         return current_user
 
 
-def require_any(*permission_codes: str) -> AnyPermissionChecker:
+def require_any(*permission_codes: str | PermissionCode) -> AnyPermissionChecker:
     """工廠函式，建立 OR 邏輯的 AnyPermissionChecker"""
     return AnyPermissionChecker(*permission_codes)

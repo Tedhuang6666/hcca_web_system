@@ -1,11 +1,14 @@
 """身份驗證路由 - Google OAuth2 + JWT Token 管理"""
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from urllib.parse import urlencode
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
 from jwt.exceptions import InvalidTokenError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.config import settings
 from api.core.database import get_db
 from api.core.oauth import google
 from api.core.security import (
@@ -15,10 +18,42 @@ from api.core.security import (
     decode_token,
     is_blacklisted,
 )
+from api.dependencies.auth import get_current_active_user
 from api.models.user import User
-from api.schemas.auth import RefreshRequest, TokenPair
+from api.schemas.auth import RefreshRequest
 
 router = APIRouter(prefix="/auth", tags=["身份驗證"])
+
+# 前端 base URL（從 ALLOWED_ORIGINS 第一個取得）
+_FRONTEND_ORIGIN = (
+    settings.ALLOWED_ORIGINS[0] if settings.ALLOWED_ORIGINS else "http://localhost:3000"
+)
+
+
+def _set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
+    response.set_cookie(
+        settings.ACCESS_TOKEN_COOKIE_NAME,
+        access_token,
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+        path="/",
+    )
+    response.set_cookie(
+        settings.REFRESH_TOKEN_COOKIE_NAME,
+        refresh_token,
+        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+        path="/",
+    )
+
+
+def _delete_auth_cookies(response: Response) -> None:
+    response.delete_cookie(settings.ACCESS_TOKEN_COOKIE_NAME, path="/")
+    response.delete_cookie(settings.REFRESH_TOKEN_COOKIE_NAME, path="/")
 
 
 @router.get("/google/login", summary="發起 Google OAuth2 登入")
@@ -29,19 +64,18 @@ async def google_login(request: Request) -> RedirectResponse:
 
 
 @router.get("/google/callback", name="google_callback", summary="Google OAuth2 Callback")
-async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) -> TokenPair:
+async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) -> RedirectResponse:
     """
     處理 Google 授權回呼：
     1. 換取 ID Token
-    2. 建立或更新使用者
-    3. 回傳 JWT Token Pair
+    2. 建立或更新使用者（自動授予 SUPERUSER_EMAILS 中的帳號超級管理員權限）
+    3. 重導向至前端 /auth/callback 並附上 Token Pair
     """
     try:
         token_data = await google.authorize_access_token(request)
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=f"OAuth2 授權失敗: {e}"
-        ) from e
+    except Exception:
+        error_qs = urlencode({"error": "OAuth2 授權失敗，請重新登入"})
+        return RedirectResponse(url=f"{_FRONTEND_ORIGIN}/login?{error_qs}")
 
     user_info = token_data.get("userinfo") or await google.userinfo(token=token_data)
 
@@ -49,6 +83,11 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
     email: str = user_info["email"]
     display_name: str = user_info.get("name", email.split("@")[0])
     avatar_url: str | None = user_info.get("picture")
+
+    # 從學校信箱自動提取學號（格式：g0{student_id}@hchs.hc.edu.tw）
+    student_id: str | None = None
+    if email.endswith("@hchs.hc.edu.tw") and email.startswith("g0"):
+        student_id = email[2:].split("@")[0]  # 去掉 g0 前綴
 
     # 查詢或建立使用者
     result = await db.execute(select(User).where(User.google_sub == google_sub))
@@ -59,6 +98,9 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
         result = await db.execute(select(User).where(User.email == email))
         user = result.scalar_one_or_none()
 
+    # 檢查是否為超級管理員
+    is_superuser = email in settings.SUPERUSER_EMAILS
+
     if user is None:
         user = User(
             email=email,
@@ -66,33 +108,48 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
             avatar_url=avatar_url,
             google_sub=google_sub,
             is_verified=True,
+            is_superuser=is_superuser,
+            student_id=student_id,
         )
         db.add(user)
     else:
         user.google_sub = google_sub
         user.avatar_url = avatar_url
         user.display_name = display_name
+        user.is_superuser = is_superuser  # 每次登入時更新超級管理員狀態
+        if student_id and not user.student_id:
+            user.student_id = student_id  # 補填學號（若尚未設定）
 
     await db.flush()
 
     access_token = create_access_token(subject=str(user.id))
     refresh_token = create_refresh_token(subject=str(user.id))
 
-    return TokenPair(access_token=access_token, refresh_token=refresh_token)
+    response = RedirectResponse(url=f"{_FRONTEND_ORIGIN}/auth/callback")
+    _set_auth_cookies(response, access_token, refresh_token)
+    return response
 
 
 @router.post("/refresh", summary="使用 Refresh Token 換發 Access Token")
-async def refresh_token(body: RefreshRequest, db: AsyncSession = Depends(get_db)) -> TokenPair:
+async def refresh_token(
+    request: Request,
+    response: Response,
+    body: RefreshRequest | None = None,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
     """驗證 Refresh Token 並發行新的 Token Pair"""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED, detail="無效的 Refresh Token"
     )
 
-    if await is_blacklisted(body.refresh_token):
+    token = (body.refresh_token if body else None) or request.cookies.get(
+        settings.REFRESH_TOKEN_COOKIE_NAME
+    )
+    if not token or await is_blacklisted(token):
         raise credentials_exception
 
     try:
-        payload = decode_token(body.refresh_token)
+        payload = decode_token(token)
     except InvalidTokenError as e:
         raise credentials_exception from e
 
@@ -109,21 +166,49 @@ async def refresh_token(body: RefreshRequest, db: AsyncSession = Depends(get_db)
         raise credentials_exception
 
     # 舊 Refresh Token 加入黑名單（Token Rotation）
-    await add_to_blacklist(body.refresh_token)
+    await add_to_blacklist(token)
 
-    return TokenPair(
-        access_token=create_access_token(subject=str(user.id)),
-        refresh_token=create_refresh_token(subject=str(user.id)),
-    )
+    access_token = create_access_token(subject=str(user.id))
+    refresh_token_value = create_refresh_token(subject=str(user.id))
+    _set_auth_cookies(response, access_token, refresh_token_value)
+
+    return {"message": "ok"}
+
+
+@router.get("/me", summary="取得當前使用者資料")
+async def get_me(
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """回傳當前登入使用者的基本資料與 is_superuser 旗標"""
+    from api.services.permission import get_user_permission_codes
+
+    codes = await get_user_permission_codes(db, current_user.id)
+    return {
+        "id": str(current_user.id),
+        "email": current_user.email,
+        "display_name": current_user.display_name,
+        "avatar_url": current_user.avatar_url,
+        "is_superuser": current_user.is_superuser,
+        "permissions": sorted(codes),
+    }
 
 
 @router.post("/logout", summary="登出（使 Token 失效）")
 async def logout(
     request: Request,
+    response: Response,
 ) -> dict[str, str]:
-    """將 Access Token 加入黑名單實現登出"""
+    """將 Access/Refresh Token 加入黑名單實現登出"""
     auth = request.headers.get("authorization", "")
     if auth.lower().startswith("bearer "):
         token = auth[7:]
         await add_to_blacklist(token)
+    access_cookie = request.cookies.get(settings.ACCESS_TOKEN_COOKIE_NAME)
+    refresh_cookie = request.cookies.get(settings.REFRESH_TOKEN_COOKIE_NAME)
+    if access_cookie:
+        await add_to_blacklist(access_cookie)
+    if refresh_cookie:
+        await add_to_blacklist(refresh_cookie)
+    _delete_auth_cookies(response)
     return {"message": "已成功登出"}

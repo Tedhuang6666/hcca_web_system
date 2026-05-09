@@ -7,8 +7,7 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select, text
-from sqlalchemy.orm.exc import StaleDataError
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -19,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 # ── 序號生成 ──────────────────────────────────────────────────────────────────
+
 
 async def generate_order_serial(session: AsyncSession) -> str:
     """
@@ -32,6 +32,7 @@ async def generate_order_serial(session: AsyncSession) -> str:
 
 
 # ── 商品 CRUD ─────────────────────────────────────────────────────────────────
+
 
 async def get_product(session: AsyncSession, product_id: uuid.UUID) -> Product | None:
     result = await session.execute(select(Product).where(Product.id == product_id))
@@ -108,6 +109,7 @@ async def deactivate_product(session: AsyncSession, product: Product) -> Product
 
 # ── 訂單 CRUD ─────────────────────────────────────────────────────────────────
 
+
 async def get_order(session: AsyncSession, order_id: uuid.UUID) -> Order | None:
     result = await session.execute(
         select(Order)
@@ -126,11 +128,7 @@ async def list_orders(
     limit: int = 20,
     offset: int = 0,
 ) -> list[Order]:
-    q = (
-        select(Order)
-        .options(selectinload(Order.items))
-        .order_by(Order.created_at.desc())
-    )
+    q = select(Order).options(selectinload(Order.items)).order_by(Order.created_at.desc())
     if user_id:
         q = q.where(Order.user_id == user_id)
     if org_id:
@@ -215,12 +213,14 @@ async def create_order(
     await session.flush()  # 取得 order.id
 
     for oi in order_items:
-        session.add(OrderItem(
-            order_id=order.id,
-            product_id=oi["product"].id,
-            quantity=oi["quantity"],
-            unit_price=oi["unit_price"],
-        ))
+        session.add(
+            OrderItem(
+                order_id=order.id,
+                product_id=oi["product"].id,
+                quantity=oi["quantity"],
+                unit_price=oi["unit_price"],
+            )
+        )
 
     await session.flush()
     logger.info("訂單建立 serial=%s total=%d", serial, total_price)
@@ -257,6 +257,7 @@ async def cancel_order(
 
 
 # ── 報表匯出 [M-26] ───────────────────────────────────────────────────────────
+
 
 async def _fetch_order_report_rows(
     session: AsyncSession,
@@ -308,8 +309,21 @@ async def export_orders_excel(
     import pandas as pd  # 延遲匯入，避免未安裝時影響啟動
 
     rows = await _fetch_order_report_rows(session, org_id=org_id)
-    df = pd.DataFrame(rows) if rows else pd.DataFrame(
-        columns=["訂單字號", "訂單狀態", "商品名稱", "數量", "單價（NT$）", "小計（NT$）", "訂單總金額（NT$）", "建立時間"]
+    df = (
+        pd.DataFrame(rows)
+        if rows
+        else pd.DataFrame(
+            columns=[
+                "訂單字號",
+                "訂單狀態",
+                "商品名稱",
+                "數量",
+                "單價（NT$）",
+                "小計（NT$）",
+                "訂單總金額（NT$）",
+                "建立時間",
+            ]
+        )
     )
 
     buf = io.BytesIO()

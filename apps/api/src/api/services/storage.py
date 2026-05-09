@@ -5,6 +5,7 @@ from __future__ import annotations
 import abc
 import logging
 import mimetypes
+import re
 import uuid
 from pathlib import Path
 
@@ -84,6 +85,23 @@ _ALLOWED_TYPES: frozenset[str] = frozenset(
 MAX_FILE_SIZE = 20 * 1024 * 1024  # 20 MB
 
 
+def _sanitize_filename(filename: str) -> str:
+    """移除文件名中 Windows 不允許的字符"""
+    # Windows 不允許的字符: < > : " / \ | ? *
+    sanitized = re.sub(r'[<>:"/\\|?*]', "_", filename)
+    # 移除控制字符
+    sanitized = re.sub(r"[\x00-\x1f\x7f]", "", sanitized)
+    # 分離名稱和副檔名
+    if "." in sanitized:
+        parts = sanitized.rsplit(".", 1)
+        name, ext = parts[0], parts[1]
+        name = name.strip(". ")
+        sanitized = f"{name}.{ext}" if name else f"file.{ext}"
+    else:
+        sanitized = sanitized.strip(". ") or "file"
+    return sanitized
+
+
 class LocalStorageBackend(StorageBackend):
     """
     本地檔案系統儲存後端（開發環境）。
@@ -109,8 +127,10 @@ class LocalStorageBackend(StorageBackend):
             msg = f"不支援的檔案類型：{content_type}"
             raise ValueError(msg)
 
-        # 產生唯一 storage_key
-        ext = Path(file.filename or "file").suffix
+        # 產生唯一 storage_key（使用清理後的副檔名）
+        original_filename = file.filename or "file"
+        sanitized = _sanitize_filename(original_filename)
+        ext = Path(sanitized).suffix or ""
         unique_name = f"{uuid.uuid4().hex}{ext}"
         key = f"{prefix}/{unique_name}".lstrip("/") if prefix else unique_name
 
@@ -118,10 +138,10 @@ class LocalStorageBackend(StorageBackend):
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(content)
 
-        logger.info("檔案儲存 key=%s size=%d", key, len(content))
+        logger.info("檔案儲存 key=%s size=%d original_name=%s", key, len(content), sanitized)
         return StoredFile(
             storage_key=key,
-            filename=file.filename or unique_name,
+            filename=sanitized,
             content_type=content_type,
             file_size=len(content),
             url=f"/uploads/{key}",
@@ -139,6 +159,7 @@ class LocalStorageBackend(StorageBackend):
 
 # ── S3StorageBackend（介面預留）────────────────────────────────────────────────
 
+
 class S3StorageBackend(StorageBackend):
     """
     AWS S3 / MinIO 相容儲存後端（介面預留，需安裝 boto3）。
@@ -151,6 +172,7 @@ class S3StorageBackend(StorageBackend):
         # boto3 延遲載入，避免未安裝時 import 錯誤
         try:
             import boto3  # type: ignore[import-untyped]
+
             self._client = boto3.client("s3", region_name=region)
         except ImportError as e:
             msg = "請先安裝 boto3：uv add boto3"
@@ -162,7 +184,9 @@ class S3StorageBackend(StorageBackend):
             msg = "檔案超過最大限制"
             raise ValueError(msg)
 
-        ext = Path(file.filename or "file").suffix
+        original_filename = file.filename or "file"
+        sanitized = _sanitize_filename(original_filename)
+        ext = Path(sanitized).suffix or ""
         key = f"{prefix}/{uuid.uuid4().hex}{ext}".lstrip("/")
         content_type = file.content_type or "application/octet-stream"
 
@@ -174,7 +198,7 @@ class S3StorageBackend(StorageBackend):
         )
         return StoredFile(
             storage_key=key,
-            filename=file.filename or key,
+            filename=sanitized,
             content_type=content_type,
             file_size=len(content),
             url=await self.get_url(key),
@@ -192,6 +216,7 @@ class S3StorageBackend(StorageBackend):
 
 
 # ── 全域單例（由 config 決定後端）────────────────────────────────────────────
+
 
 def get_storage() -> StorageBackend:
     """

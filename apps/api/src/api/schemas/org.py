@@ -15,6 +15,9 @@ class OrgBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     description: str | None = None
     parent_id: uuid.UUID | None = None
+    prefix: str | None = Field(
+        None, max_length=20, description="字號前綴，如「嶺代」「嶺學」，用於組合字號模板"
+    )
 
 
 class OrgCreate(OrgBase):
@@ -24,7 +27,10 @@ class OrgCreate(OrgBase):
 class OrgUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=100)
     description: str | None = None
+    note: str | None = None
+    remark: str | None = None
     parent_id: uuid.UUID | None = None
+    prefix: str | None = Field(None, max_length=20, description="字號前綴（留空則不更新）")
 
 
 class OrgRead(OrgBase):
@@ -65,6 +71,8 @@ class PermissionRead(BaseModel):
 class PositionBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     description: str | None = None
+    weight: int = Field(0, ge=0, description="權限係數，同組織內數字越大代表權限越高")
+    parent_id: uuid.UUID | None = None
 
 
 class PositionCreate(PositionBase):
@@ -74,6 +82,10 @@ class PositionCreate(PositionBase):
 class PositionUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=100)
     description: str | None = None
+    note: str | None = None
+    remark: str | None = None
+    weight: int | None = Field(None, ge=0)
+    parent_id: uuid.UUID | None = None
 
 
 class PositionRead(PositionBase):
@@ -110,3 +122,19 @@ class UserPositionRead(BaseModel):
     end_date: date | None
     created_at: datetime
     updated_at: datetime
+    # 職位名稱（eagerly loaded from position relationship）
+    position_name: str = ""
+    position_org_id: uuid.UUID | None = None
+    position_org_name: str = ""
+
+    @classmethod
+    def from_orm_with_details(cls, up: object) -> UserPositionRead:
+        obj = cls.model_validate(up)
+        pos = getattr(up, "position", None)
+        if pos:
+            obj.position_name = getattr(pos, "name", "")
+            org = getattr(pos, "org", None)
+            if org:
+                obj.position_org_id = getattr(org, "id", None)
+                obj.position_org_name = getattr(org, "name", "")
+        return obj

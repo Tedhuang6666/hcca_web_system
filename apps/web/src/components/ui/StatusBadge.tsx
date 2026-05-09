@@ -1,81 +1,241 @@
-import type { DocumentStatus, OrderStatus, ProductStatus } from "@/lib/types";
+import type { DocumentStatus, OrderStatus, PetitionStatus, ProductStatus } from "@/lib/types";
 
-// ── 公文狀態 ─────────────────────────────────────────────────────────────────
+/* ── 統一徽章基礎 ─────────────────────────────────────────────────────────── */
+interface BadgeDef { label: string; color: string; bg: string; border: string }
 
-const DOC_STATUS: Record<DocumentStatus, { label: string; color: string; bg: string; border: string }> = {
-  draft:    { label: "草稿",   color: "#94a3b8", bg: "rgba(148,163,184,0.1)", border: "rgba(148,163,184,0.3)" },
-  pending:  { label: "待審核", color: "#fb923c", bg: "rgba(251,146,60,0.1)",  border: "rgba(251,146,60,0.3)"  },
-  approved: { label: "已核准", color: "#22d3ee", bg: "rgba(34,211,238,0.1)",  border: "rgba(34,211,238,0.3)"  },
-  rejected: { label: "已退件", color: "#f87171", bg: "rgba(248,113,113,0.1)", border: "rgba(248,113,113,0.3)" },
-  archived: { label: "已封存", color: "#475569", bg: "rgba(71,85,105,0.1)",   border: "rgba(71,85,105,0.3)"   },
+function StatusDot({ color }: { color: string }) {
+  return (
+    <span
+      className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0"
+      style={{ background: color }}
+      aria-hidden="true"
+    />
+  );
+}
+
+function Badge({ label, color, bg, border }: BadgeDef) {
+  return (
+    <span
+      className="badge"
+      style={{ color, background: bg, borderColor: border }}>
+      <StatusDot color={color} />
+      {label}
+    </span>
+  );
+}
+
+/* ── 公文狀態 ─────────────────────────────────────────────────────────────── */
+const DOC_STATUS: Record<DocumentStatus, BadgeDef> = {
+  draft: {
+    label: "草稿",
+    color: "var(--text-muted)",
+    bg: "var(--bg-hover)",
+    border: "var(--border)",
+  },
+  pending: {
+    label: "待審核",
+    color: "var(--warning)",
+    bg: "var(--warning-dim)",
+    border: "var(--warning-border)",
+  },
+  approved: {
+    label: "已核准",
+    color: "var(--success)",
+    bg: "var(--success-dim)",
+    border: "var(--success-border)",
+  },
+  rejected: {
+    label: "已退件",
+    color: "var(--danger)",
+    bg: "var(--danger-dim)",
+    border: "var(--danger-border)",
+  },
+  archived: {
+    label: "已封存",
+    color: "var(--info)",
+    bg: "var(--info-dim)",
+    border: "var(--info-border)",
+  },
 };
 
 export function DocumentStatusBadge({ status }: { status: DocumentStatus }) {
-  const s = DOC_STATUS[status] ?? DOC_STATUS.draft;
-  return (
-    <span className="text-xs px-2.5 py-1 rounded-full font-medium"
-      style={{ color: s.color, background: s.bg, border: `1px solid ${s.border}` }}>
-      {s.label}
-    </span>
-  );
+  return <Badge {...(DOC_STATUS[status] ?? DOC_STATUS.draft)} />;
 }
 
-// ── 速別標籤 ─────────────────────────────────────────────────────────────────
-
+/* ── 速別 ─────────────────────────────────────────────────────────────────── */
 export function UrgencyBadge({ urgency }: { urgency: string }) {
-  const map: Record<string, { label: string; color: string }> = {
-    normal:      { label: "普通",   color: "#94a3b8" },
-    urgent:      { label: "速件",   color: "#fb923c" },
-    most_urgent: { label: "最速件", color: "#f87171" },
-    flash:       { label: "閃電件", color: "#a78bfa" },
+  const map: Record<string, BadgeDef> = {
+    normal: {
+      label: "普通件",
+      color: "var(--text-muted)",
+      bg: "var(--bg-hover)",
+      border: "var(--border)",
+    },
+    priority: {
+      label: "速件",
+      color: "var(--warning)",
+      bg: "var(--warning-dim)",
+      border: "var(--warning-border)",
+    },
+    express: {
+      label: "最速件",
+      color: "var(--danger)",
+      bg: "var(--danger-dim)",
+      border: "var(--danger-border)",
+    },
   };
-  const { label, color } = map[urgency] ?? map.normal;
-  return <span className="text-xs font-medium" style={{ color }}>{label}</span>;
+  return <Badge {...(map[urgency] ?? map.normal)} />;
 }
 
-// ── 商品狀態 ─────────────────────────────────────────────────────────────────
-
-const PRODUCT_STATUS: Record<ProductStatus, { label: string; color: string }> = {
-  draft:    { label: "草稿",   color: "#94a3b8" },
-  active:   { label: "上架中", color: "#22d3ee" },
-  sold_out: { label: "售罄",   color: "#f87171" },
-  archived: { label: "已下架", color: "#475569" },
+/* ── 商品狀態 ─────────────────────────────────────────────────────────────── */
+const PRODUCT_STATUS: Record<ProductStatus, BadgeDef> = {
+  draft: {
+    label: "草稿",
+    color: "var(--text-muted)",
+    bg: "var(--bg-hover)",
+    border: "var(--border)",
+  },
+  active: {
+    label: "上架中",
+    color: "var(--success)",
+    bg: "var(--success-dim)",
+    border: "var(--success-border)",
+  },
+  sold_out: {
+    label: "售罄",
+    color: "var(--danger)",
+    bg: "var(--danger-dim)",
+    border: "var(--danger-border)",
+  },
+  archived: {
+    label: "已下架",
+    color: "var(--text-muted)",
+    bg: "var(--bg-hover)",
+    border: "var(--border)",
+  },
 };
 
 export function ProductStatusBadge({ status }: { status: ProductStatus }) {
-  const s = PRODUCT_STATUS[status] ?? PRODUCT_STATUS.draft;
-  return <span className="text-xs font-medium" style={{ color: s.color }}>{s.label}</span>;
+  return <Badge {...(PRODUCT_STATUS[status] ?? PRODUCT_STATUS.draft)} />;
 }
 
-// ── 訂單狀態 ─────────────────────────────────────────────────────────────────
-
-const ORDER_STATUS: Record<OrderStatus, { label: string; color: string; bg: string; border: string }> = {
-  pending:  { label: "待付款", color: "#fb923c", bg: "rgba(251,146,60,0.1)",  border: "rgba(251,146,60,0.3)"  },
-  paid:     { label: "已付款", color: "#22d3ee", bg: "rgba(34,211,238,0.1)",  border: "rgba(34,211,238,0.3)"  },
-  cancelled:{ label: "已取消", color: "#f87171", bg: "rgba(248,113,113,0.1)", border: "rgba(248,113,113,0.3)" },
-  refunded: { label: "已退款", color: "#94a3b8", bg: "rgba(148,163,184,0.1)", border: "rgba(148,163,184,0.3)" },
+/* ── 訂單狀態 ─────────────────────────────────────────────────────────────── */
+const ORDER_STATUS: Record<OrderStatus, BadgeDef> = {
+  pending: {
+    label: "待確認",
+    color: "var(--warning)",
+    bg: "var(--warning-dim)",
+    border: "var(--warning-border)",
+  },
+  confirmed: {
+    label: "已確認",
+    color: "var(--success)",
+    bg: "var(--success-dim)",
+    border: "var(--success-border)",
+  },
+  cancelled: {
+    label: "已取消",
+    color: "var(--danger)",
+    bg: "var(--danger-dim)",
+    border: "var(--danger-border)",
+  },
+  refunded: {
+    label: "已退款",
+    color: "var(--text-muted)",
+    bg: "var(--bg-hover)",
+    border: "var(--border)",
+  },
 };
 
 export function OrderStatusBadge({ status }: { status: OrderStatus }) {
-  const s = ORDER_STATUS[status] ?? ORDER_STATUS.pending;
-  return (
-    <span className="text-xs px-2.5 py-1 rounded-full font-medium"
-      style={{ color: s.color, background: s.bg, border: `1px solid ${s.border}` }}>
-      {s.label}
-    </span>
-  );
+  return <Badge {...(ORDER_STATUS[status] ?? ORDER_STATUS.pending)} />;
 }
 
-// ── 法規分類 ─────────────────────────────────────────────────────────────────
+/* ── 陳情狀態 ─────────────────────────────────────────────────────────────── */
+const PETITION_STATUS: Record<PetitionStatus, BadgeDef> = {
+  submitted: {
+    label: "已收件",
+    color: "var(--primary)",
+    bg: "var(--primary-dim)",
+    border: "var(--info-border)",
+  },
+  assigned: {
+    label: "已分案",
+    color: "var(--info)",
+    bg: "var(--info-dim)",
+    border: "var(--info-border)",
+  },
+  in_progress: {
+    label: "承辦中",
+    color: "var(--warning)",
+    bg: "var(--warning-dim)",
+    border: "var(--warning-border)",
+  },
+  needs_info: {
+    label: "等待補件",
+    color: "var(--danger)",
+    bg: "var(--danger-dim)",
+    border: "var(--danger-border)",
+  },
+  transferred: {
+    label: "已轉派",
+    color: "var(--info)",
+    bg: "var(--info-dim)",
+    border: "var(--info-border)",
+  },
+  resolved: {
+    label: "已回覆",
+    color: "var(--success)",
+    bg: "var(--success-dim)",
+    border: "var(--success-border)",
+  },
+  closed: {
+    label: "已結案",
+    color: "var(--text-muted)",
+    bg: "var(--bg-hover)",
+    border: "var(--border)",
+  },
+  rejected: {
+    label: "不受理",
+    color: "var(--danger)",
+    bg: "var(--danger-dim)",
+    border: "var(--danger-border)",
+  },
+};
+
+export function PetitionStatusBadge({ status }: { status: PetitionStatus }) {
+  return <Badge {...(PETITION_STATUS[status] ?? PETITION_STATUS.submitted)} />;
+}
+
+/* ── 法規分類 ─────────────────────────────────────────────────────────────── */
+const REG_CATEGORY_MAP: Record<string, { label: string; color: string }> = {
+  constitution:       { label: "憲章",       color: "#D97706" },
+  chairman:           { label: "主席相關",   color: "#7C3AED" },
+  executive_dept:     { label: "行政部門",   color: "#0891B2" },
+  student_council:    { label: "學生議會",   color: "#059669" },
+  judicial_committee: { label: "評議委員會", color: "#DC2626" },
+  executive_order:    { label: "行政命令",   color: "#2563EB" },
+  council_order:      { label: "議會命令",   color: "#16A34A" },
+  judicial_order:     { label: "評議命令",   color: "#B91C1C" },
+  election_order:     { label: "選委會命令", color: "#C026D3" },
+  other:              { label: "其他",       color: "#64748B" },
+};
 
 export function RegulationCategoryBadge({ category }: { category: string }) {
-  const map: Record<string, string> = {
-    charter:   "章程", bylaw: "細則", procedure: "辦法", policy: "政策", other: "其他",
-  };
+  const { label, color } = REG_CATEGORY_MAP[category] ?? { label: category, color: "#64748B" };
   return (
-    <span className="text-xs px-2 py-0.5 rounded"
-      style={{ color: "var(--accent)", background: "var(--accent-dim)", border: "1px solid var(--border-glow)" }}>
-      {map[category] ?? category}
+    <span
+      className="badge"
+      style={{
+        color,
+        background: `${color}18`,
+        borderColor: `${color}40`,
+      }}>
+      {label}
     </span>
   );
 }
+
+export const REGULATION_CATEGORY_LABELS = Object.fromEntries(
+  Object.entries(REG_CATEGORY_MAP).map(([k, v]) => [k, v.label])
+) as Record<string, string>;

@@ -1,95 +1,248 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { regulationsApi, ApiError } from "@/lib/api";
-import type { RegulationListItem, RegulationCategory } from "@/lib/types";
+import type { RegulationListItem, RegulationCategory, RegulationWorkflowStatus } from "@/lib/types";
 import { RegulationCategoryBadge } from "@/components/ui/StatusBadge";
+import { usePermissions } from "@/hooks/usePermissions";
 
 const CATEGORIES: { key: RegulationCategory | "all"; label: string }[] = [
-  { key: "all", label: "全部" },
-  { key: "charter", label: "章程" },
-  { key: "bylaw", label: "細則" },
-  { key: "procedure", label: "辦法" },
-  { key: "policy", label: "政策" },
-  { key: "other", label: "其他" },
+  { key: "all",                label: "全部" },
+  { key: "constitution",       label: "憲章" },
+  { key: "chairman",           label: "主席相關" },
+  { key: "executive_dept",     label: "行政部門" },
+  { key: "student_council",    label: "學生議會" },
+  { key: "judicial_committee", label: "評議委員會" },
+  { key: "executive_order",    label: "行政命令" },
+  { key: "council_order",      label: "議會命令" },
+  { key: "judicial_order",     label: "評議命令" },
+  { key: "election_order",     label: "選委會命令" },
+  { key: "other",              label: "其他" },
 ];
 
+const WORKFLOW_LABEL: Record<RegulationWorkflowStatus, { label: string; color: string; bg: string }> = {
+  draft:            { label: "草稿",     color: "var(--text-muted)",     bg: "var(--bg-elevated)" },
+  under_review:     { label: "送審中",   color: "#0284c7",               bg: "rgba(2,132,199,0.1)" },
+  scheduled:        { label: "排入議程", color: "#7c3aed",               bg: "rgba(124,58,237,0.1)" },
+  council_approved: { label: "議會核定", color: "var(--warning)",        bg: "var(--warning-dim)" },
+  published:        { label: "現行有效", color: "var(--success)",        bg: "var(--success-dim)" },
+  rejected:         { label: "已退回",   color: "var(--danger)",         bg: "rgba(220,38,38,0.1)" },
+  archived:         { label: "已廢止",   color: "var(--text-muted)",     bg: "var(--bg-elevated)" },
+};
+
+function WorkflowBadge({ status }: { status: RegulationWorkflowStatus }) {
+  const s = WORKFLOW_LABEL[status] ?? WORKFLOW_LABEL.draft;
+  return (
+    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded"
+      style={{ color: s.color, background: s.bg, border: `1px solid ${s.color}22` }}>
+      {s.label}
+    </span>
+  );
+}
+
 export default function RegulationsPage() {
-  const [regs, setRegs] = useState<RegulationListItem[]>([]);
+  const [allRegs, setAllRegs] = useState<RegulationListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState<RegulationCategory | "all">("all");
   const [search, setSearch] = useState("");
+  const [showAll, setShowAll] = useState(false);
+  const { can } = usePermissions();
+
+  const canManage = can("regulation:create") || can("regulation:admin");
 
   useEffect(() => {
     setLoading(true);
     const params: Record<string, string> = {};
     if (category !== "all") params.category = category;
-    if (search.trim()) params.q = search.trim();
-    regulationsApi.list(params)
-      .then(data => setRegs(data.filter(r => r.is_active)))
-      .catch(e => toast.error(e instanceof ApiError ? e.message : "載入失敗"))
+    if (!showAll || !canManage) params.active_only = "true";
+    const req = search.trim()
+      ? regulationsApi.search(search.trim(), params)
+      : regulationsApi.list(params);
+    req
+      .then(setAllRegs)
+      .catch((e) => toast.error(e instanceof ApiError ? e.message : "載入失敗"))
       .finally(() => setLoading(false));
-  }, [category, search]);
+  }, [category, search, showAll, canManage]);
+
+  const sorted = useMemo(
+    () => [...allRegs].sort((a, b) => (b.published_at ?? "").localeCompare(a.published_at ?? "")),
+    [allRegs],
+  );
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
+    <div className="space-y-5 max-w-6xl mx-auto">
+
+      {/* 頁首 */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-slate-100">法規查詢</h1>
-          <p className="text-sm mt-0.5" style={{ color: "var(--muted)" }}>瀏覽組織章程、辦法與政策文件</p>
+          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>法規查詢</h1>
+          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
+            瀏覽組織章程、辦法與政策文件
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {canManage && (
+            <label className="flex items-center gap-2 cursor-pointer">
+              <button
+                role="switch"
+                aria-checked={showAll}
+                onClick={() => setShowAll(v => !v)}
+                className="relative w-8 h-4 rounded-full transition-colors flex-shrink-0"
+                style={{ background: showAll ? "var(--primary)" : "var(--border-strong)" }}>
+                <span className="absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform"
+                  style={{ transform: showAll ? "translateX(16px)" : "translateX(2px)" }} />
+              </button>
+              <span className="text-xs" style={{ color: "var(--text-muted)" }}>顯示草稿</span>
+            </label>
+          )}
+          {can("regulation:create") && (
+            <Link href="/regulations/new" className="btn btn-primary">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              新增法規
+            </Link>
+          )}
         </div>
       </div>
 
       {/* 搜尋 + 分類 */}
-      <div className="flex flex-wrap items-center gap-3">
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 搜尋法規名稱..."
-          className="bg-transparent text-slate-300 text-sm px-3 py-1.5 rounded-lg outline-none w-56"
-          style={{ border: "1px solid var(--border)" }} />
-        <div className="flex gap-1 p-1 rounded-lg" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
-          {CATEGORIES.map(({ key, label }) => (
-            <button key={key} onClick={() => setCategory(key)}
-              className="px-3 py-1.5 rounded-md text-xs font-medium transition-all"
-              style={category === key
-                ? { background: "var(--accent-dim)", border: "1px solid var(--border-glow)", color: "var(--accent)" }
-                : { color: "#475569" }}>
-              {label}
-            </button>
-          ))}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 flex-wrap">
+        <div className="relative">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+            width="14" height="14" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+            style={{ color: "var(--text-muted)" }} aria-hidden="true">
+            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input type="search" value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder="搜尋法規名稱…" className="input pl-9 w-56" aria-label="搜尋法規" />
+        </div>
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="法規分類篩選">
+          {CATEGORIES.map(({ key, label }) => {
+            const active = category === key;
+            return (
+              <button key={key} aria-pressed={active}
+                onClick={() => setCategory(key)}
+                className="px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap cursor-pointer hover:opacity-80"
+                style={active
+                  ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
+                  : { color: "var(--text-muted)", border: "1px solid var(--border)", background: "var(--bg-surface)" }}>
+                {label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* 列表 */}
+      {/* 統計列 */}
+      {!loading && sorted.length > 0 && (
+        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+          共 {sorted.length} 筆法規
+        </p>
+      )}
+
+      {/* 結果 */}
       {loading ? (
-        <div className="py-20 text-center text-slate-500">載入中...</div>
-      ) : regs.length === 0 ? (
-        <div className="py-20 text-center text-slate-500">找不到符合條件的法規</div>
+        <div className="py-20 text-center" style={{ color: "var(--text-muted)" }}>
+          <div className="w-7 h-7 rounded-full border-2 border-t-transparent animate-spin mx-auto mb-3"
+            style={{ borderColor: "var(--border-strong)", borderTopColor: "var(--primary)" }}
+            role="status" aria-label="載入中" />
+          <p className="text-sm">載入中…</p>
+        </div>
+      ) : sorted.length === 0 ? (
+        <div className="py-20 text-center" style={{ color: "var(--text-muted)" }}>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="1.5" className="mx-auto mb-3 opacity-40" aria-hidden="true">
+            <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+            <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+          </svg>
+          <p className="text-sm">找不到符合條件的法規</p>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {regs.map(reg => (
-            <Link key={reg.id} href={`/regulations/${reg.id}`}
-              className="glass p-4 flex flex-col gap-3 hover:border-sky-400/40 transition-all group"
-              style={{ textDecoration: "none" }}>
-              <div className="flex items-start justify-between gap-2">
-                <h3 className="font-semibold text-slate-100 group-hover:text-sky-300 transition-colors text-sm leading-snug">
-                  {reg.title}
-                </h3>
-                <RegulationCategoryBadge category={reg.category} />
-              </div>
-              <div className="flex items-center justify-between text-xs" style={{ color: "var(--muted)" }}>
-                <span>版本 v{reg.version}</span>
-                {reg.published_at
-                  ? <span>發布於 {new Date(reg.published_at).toLocaleDateString("zh-TW")}</span>
-                  : <span>草稿</span>}
-              </div>
-              <div className="flex items-center gap-1 text-xs" style={{ color: "var(--accent)" }}>
-                <span>閱讀全文</span>
-                <span className="group-hover:translate-x-1 transition-transform">→</span>
-              </div>
-            </Link>
+        <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))" }}>
+          {sorted.map((reg) => (
+            <RegCard key={reg.id} reg={reg} />
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function RegCard({ reg }: { reg: RegulationListItem }) {
+  const isArchived = !reg.is_active || reg.workflow_status === "archived";
+
+  return (
+    <div className="card p-5 flex flex-col gap-3 reg-card-link" style={{ opacity: isArchived ? 0.6 : 1 }}>
+    <Link href={`/regulations/${reg.id}`}
+      className="flex flex-col gap-3 flex-1"
+      style={{
+        textDecoration: "none",
+        transition: "box-shadow var(--transition), border-color var(--transition)",
+      }}>
+      <div className="flex items-start justify-between gap-2">
+        <h3 className="font-semibold text-sm leading-snug flex-1 reg-card-title"
+          style={{
+            color: "var(--text-primary)",
+            transition: "color var(--transition)",
+            textDecoration: isArchived ? "line-through" : "none",
+          }}>
+          {reg.title}
+        </h3>
+        <RegulationCategoryBadge category={reg.category} />
+      </div>
+      <div className="flex items-center justify-between">
+        <WorkflowBadge status={reg.workflow_status} />
+        <span className="text-xs" style={{ color: "var(--text-muted)" }}>v{reg.version}</span>
+      </div>
+      <div className="flex items-center justify-between text-xs" style={{ color: "var(--text-muted)" }}>
+        {reg.published_at
+          ? <span>發布 {new Date(reg.published_at).toLocaleDateString("zh-TW")}</span>
+          : <span>更新 {new Date(reg.updated_at).toLocaleDateString("zh-TW")}</span>
+        }
+        {!isArchived ? (
+          <span className="flex items-center gap-1 reg-card-cta" style={{ color: "var(--primary)" }}>
+            閱讀全文
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+              <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+            </svg>
+          </span>
+        ) : (
+          <span className="text-xs px-1.5 py-0.5 rounded"
+            style={{ color: "var(--text-disabled)", background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+            已廢止
+          </span>
+        )}
+      </div>
+    </Link>
+    {/* 底部工具列 */}
+    <div className="flex items-center justify-end gap-2 pt-1" style={{ borderTop: "1px solid var(--border)" }}>
+      <button
+        onClick={async (e) => {
+          e.preventDefault();
+          const url = `${window.location.origin}/regulations/${reg.id}`;
+          try {
+            await navigator.clipboard.writeText(url);
+            toast.success("連結已複製");
+          } catch {
+            toast.error("複製失敗");
+          }
+        }}
+        className="flex items-center gap-1 text-xs px-2 py-1 rounded hover:opacity-80 transition-opacity"
+        style={{ color: "var(--text-muted)" }}
+        title="複製連結">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+        </svg>
+        複製連結
+      </button>
+    </div>
     </div>
   );
 }

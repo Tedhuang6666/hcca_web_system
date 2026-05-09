@@ -27,8 +27,10 @@ export function useWS(
 
   const connect = useCallback(() => {
     if (!room || !enabled) return;
-    const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
-    const url = `${WS_BASE}/ws/${encodeURIComponent(room)}${token ? `?token=${token}` : ""}`;
+    // 房間名稱如 "user:uuid" 中的冒號在 URL 路徑段中是合法字符（RFC 3986），無需 encodeURIComponent
+    // 使用 encodeURIComponent 會將冒號轉成 %3A，導致 Starlette 路由匹配或 room key 不一致（404）
+    const safeRoom = room.replace(/\//g, "%2F"); // 只需 encode 正斜線
+    const url = `${WS_BASE}/ws/${safeRoom}`;
 
     const socket = new WebSocket(url);
     ws.current = socket;

@@ -6,7 +6,7 @@ import uuid
 from datetime import date
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import Date, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -25,6 +25,8 @@ class Org(Base, TimestampMixin):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 字號前綴：用於組合字號模板的 org_prefix（如「嶺代」「嶺學」），選填
+    prefix: Mapped[str | None] = mapped_column(String(20), nullable=True)
     parent_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("orgs.id", ondelete="SET NULL"), nullable=True, index=True
     )
@@ -38,7 +40,7 @@ class Org(Base, TimestampMixin):
 
 
 class Position(Base, TimestampMixin):
-    """職位定義（屬於某個組織）"""
+    """職位定義（屬於某個組織，支援上下級階層）"""
 
     __tablename__ = "positions"
 
@@ -48,10 +50,23 @@ class Position(Base, TimestampMixin):
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 權限係數：同組織內的相對權限大小，數字越大權限越高（用於自動派發審核）
+    weight: Mapped[int] = mapped_column(Integer, nullable=False, default=0, index=True)
+    # 職位階層：上級職位（同組織內，選填）
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("positions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     org: Mapped[Org] = relationship("Org", back_populates="positions")
     permissions: Mapped[list[Permission]] = relationship("Permission", back_populates="position")
     holders: Mapped[list[UserPosition]] = relationship("UserPosition", back_populates="position")
+    parent: Mapped[Position | None] = relationship(
+        "Position", remote_side="Position.id", back_populates="children"
+    )
+    children: Mapped[list[Position]] = relationship("Position", back_populates="parent")
 
 
 class Permission(Base):

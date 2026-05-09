@@ -15,7 +15,7 @@ success() { echo -e "${GREEN}[OK]${NC}  $*"; }
 warn()    { echo -e "${YELLOW}[WARN]${NC} $*"; }
 error()   { echo -e "${RED}[ERR]${NC}  $*" >&2; }
 
-# ── 腳本根目錄（無論從哪裡呼叫都正確）────────────────────────────────────────
+# ── 腳本根目錄（無論從哪裡呼叫都正確） ────────────────────────────────────────
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ── 載入 .env ─────────────────────────────────────────────────────────────────
@@ -44,7 +44,7 @@ _require uv
 _require node
 _require npm
 
-# ── 清理函式（Ctrl+C 時關閉前景行程）─────────────────────────────────────────
+# ── 清理函式（Ctrl+C 時關閉前景行程） ─────────────────────────────────────────
 _cleanup() {
     echo ""
     info "收到中止訊號，停止所有開發行程..."
@@ -55,7 +55,7 @@ _cleanup() {
 }
 trap _cleanup INT TERM
 
-# ── 1. 啟動基礎設施（PostgreSQL + Redis）──────────────────────────────────────
+# ── 1. 啟動基礎設施（PostgreSQL + Redis） ──────────────────────────────────────
 info "啟動 Docker 基礎設施（db + redis）..."
 docker compose -f "${REPO_ROOT}/docker-compose.yml" up -d db redis
 
@@ -80,11 +80,15 @@ success "Python 依賴同步完成"
 
 # ── 3. 執行 Alembic Migration ─────────────────────────────────────────────────
 info "執行資料庫 Migration（alembic upgrade head）..."
-(cd "${REPO_ROOT}" && uv run alembic upgrade head) \
-    && success "Migration 完成" \
-    || warn "Migration 執行失敗或無新版本，請手動確認"
+(
+    cd "${REPO_ROOT}"
+    # 關鍵：加上 PYTHONPATH 指向後端原始碼路徑
+    export PYTHONPATH="${REPO_ROOT}/apps/api/src"
+    uv run alembic upgrade head
+) && success "Migration 完成" \
+  || warn "Migration 執行失敗或無新版本，請手動確認"
 
-# ── 4. 啟動 FastAPI 後端（背景，熱重載）───────────────────────────────────────
+# ── 4. 啟動 FastAPI 後端（背景，熱重載） ───────────────────────────────────────
 info "啟動 FastAPI 後端（port 8000，熱重載）..."
 (
     cd "${REPO_ROOT}"
@@ -98,7 +102,7 @@ info "啟動 FastAPI 後端（port 8000，熱重載）..."
 API_PID=$!
 success "FastAPI 已啟動 PID=${API_PID} → http://localhost:8000/docs"
 
-# ── 5. 安裝前端依賴並啟動 Next.js（背景）──────────────────────────────────────
+# ── 5. 安裝前端依賴並啟動 Next.js（背景） ──────────────────────────────────────
 WEB_DIR="${REPO_ROOT}/apps/web"
 info "檢查 Next.js 依賴..."
 if [[ ! -d "${WEB_DIR}/node_modules" ]]; then
@@ -114,10 +118,10 @@ success "Next.js 已啟動 PID=${WEB_PID} → http://localhost:3000"
 # ── 完成提示 ──────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}════════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}  🚀 開發環境已就緒！${NC}"
-echo -e "  API Docs  : ${CYAN}http://localhost:8000/docs${NC}"
-echo -e "  Web UI    : ${CYAN}http://localhost:3000${NC}"
-echo -e "  按 Ctrl+C 停止所有服務"
+echo -e "${GREEN}   🚀 開發環境已就緒！${NC}"
+echo -e "   API Docs  : ${CYAN}http://localhost:8000/docs${NC}"
+echo -e "   Web UI    : ${CYAN}http://localhost:3000${NC}"
+echo -e "   按 Ctrl+C 停止所有服務"
 echo -e "${GREEN}════════════════════════════════════════════════════${NC}"
 echo ""
 

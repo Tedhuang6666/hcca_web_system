@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 # ── FastMail 連線設定（延遲初始化，避免無 SMTP 設定時啟動失敗）─────────────
 
+
 def _get_mail_config() -> ConnectionConfig:
     return ConnectionConfig(
         MAIL_USERNAME=settings.MAIL_USERNAME,
@@ -31,6 +32,7 @@ def _get_mail_config() -> ConnectionConfig:
 
 # ── Celery Task（同步函式內用 asyncio.run 執行非同步郵件發送）────────────────
 
+
 @celery_app.task(name="api.services.mail.send_email", bind=True, max_retries=3)
 def send_email(
     self,  # noqa: ANN001
@@ -45,6 +47,7 @@ def send_email(
     - bind=True：可透過 self 呼叫 retry()
     - max_retries=3：SMTP 失敗自動重試最多 3 次（指數退避）
     """
+
     async def _send() -> None:
         message = MessageSchema(
             subject=subject,
@@ -61,10 +64,11 @@ def send_email(
         return {"status": "sent", "to": to, "subject": subject}
     except Exception as exc:
         logger.warning("郵件發送失敗，準備重試: %s", exc)
-        raise self.retry(exc=exc, countdown=2 ** self.request.retries) from exc
+        raise self.retry(exc=exc, countdown=2**self.request.retries) from exc
 
 
 # ── 輔助函式（FastAPI 路由層呼叫）────────────────────────────────────────────
+
 
 def enqueue_email(
     to: str | list[str],

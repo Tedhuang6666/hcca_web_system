@@ -1,4 +1,25 @@
-version: "3.9"
+# ── 共用 API 設定（anchor） ────────────────────────────────────────────────────
+x-api-common: &api-common
+  build:
+    context: .
+    dockerfile: apps/api/Dockerfile
+  env_file:
+    - .env
+  environment:
+    DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/campus_platform
+    DATABASE_URL_SYNC: postgresql+psycopg2://postgres:postgres@db:5432/campus_platform
+    REDIS_URL: redis://redis:6379/0
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  volumes:
+    # PDF generation uses direct @font-face file URLs. STKAITI avoids the KaiU
+    # glyph component offset bug in WeasyPrint while keeping a Kai-style face.
+    - /mnt/c/Windows/Fonts/STKAITI.TTF:/usr/share/fonts/truetype/hcca/STKAITI.TTF:ro
+    - /mnt/c/Windows/Fonts/SIMLI.TTF:/usr/share/fonts/truetype/hcca/SIMLI.TTF:ro
+    - /usr/share/fonts/opentype/noto-custom:/usr/share/fonts/opentype/noto-custom:ro
 
 services:
   # ── PostgreSQL ────────────────────────────────────────────────
@@ -35,29 +56,71 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── FastAPI ───────────────────────────────────────────────────
+  # ── FastAPI（Gunicorn + UvicornWorker） ───────────────────────
   api:
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
+    <<: *api-common
     container_name: campus_api
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/campus_platform
       DATABASE_URL_SYNC: postgresql+psycopg2://postgres:postgres@db:5432/campus_platform
       REDIS_URL: redis://redis:6379/0
+      GUNICORN_WORKERS: "4"
     ports:
       - "8000:8000"
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+    # 開發模式可 override CMD 為：uvicorn api:app --reload --host 0.0.0.0 --port 8000
+
+  # ── Celery Worker ─────────────────────────────────────────────
+  celery-worker:
+    <<: *api-common
+    container_name: campus_celery_worker
+    restart: unless-stopped
+    command: >
+      celery -A api.core.celery_app.celery_app worker
+      --loglevel=info
+      --concurrency=4
+      --queues=celery
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/campus_platform
+      DATABASE_URL_SYNC: postgresql+psycopg2://postgres:postgres@db:5432/campus_platform
+      REDIS_URL: redis://redis:6379/0
+
+  # ── Celery Beat（定時排程） ───────────────────────────────────
+  celery-beat:
+    <<: *api-common
+    container_name: campus_celery_beat
+    restart: unless-stopped
+    command: >
+      celery -A api.core.celery_app.celery_app beat
+      --loglevel=info
+      --scheduler celery.beat:PersistentScheduler
+      --pidfile=/tmp/celerybeat.pid
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/campus_platform
+      DATABASE_URL_SYNC: postgresql+psycopg2://postgres:postgres@db:5432/campus_platform
+      REDIS_URL: redis://redis:6379/0
     volumes:
-      - ./apps/api/src:/app/src  # 開發模式：熱重載
+      - celerybeat:/tmp  # 持久化 beat schedule 狀態
+
+  # ── Next.js（standalone 生產模式） ───────────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # 瀏覽器直接呼叫的 API URL（非 Docker 內部位址）
+        # 本機開發：http://localhost:8000；生產部署：填入對外公開的 API 域名
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    container_name: campus_web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+    depends_on:
+      - api
 
 volumes:
   pgdata:
   redisdata:
+  celerybeat:

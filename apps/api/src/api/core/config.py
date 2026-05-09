@@ -1,7 +1,11 @@
 """應用程式設定 - 使用 Pydantic Settings 管理環境變數"""
 
-from pydantic import Field, PostgresDsn, RedisDsn, field_validator
+import warnings
+
+from pydantic import Field, PostgresDsn, RedisDsn, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_DEFAULT_SECRET = "CHANGE_ME_IN_PRODUCTION_USE_256_BIT_KEY"
 
 
 class Settings(BaseSettings):
@@ -16,7 +20,9 @@ class Settings(BaseSettings):
     # --- 應用程式基本設定 ---
     APP_NAME: str = "校園自治整合平台"
     APP_VERSION: str = "0.1.0"
+    ENVIRONMENT: str = "development"
     DEBUG: bool = False
+    ENABLE_API_DOCS: bool = False
     ALLOWED_ORIGINS: list[str] = ["http://localhost:3000"]
 
     # --- 資料庫設定 ---
@@ -31,10 +37,14 @@ class Settings(BaseSettings):
     REDIS_URL: RedisDsn = Field(default="redis://localhost:6379/0")
 
     # --- JWT 設定 ---
-    SECRET_KEY: str = Field(default="CHANGE_ME_IN_PRODUCTION_USE_256_BIT_KEY")
+    SECRET_KEY: str = Field(default=_DEFAULT_SECRET)
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    ACCESS_TOKEN_COOKIE_NAME: str = "hcca_access_token"
+    REFRESH_TOKEN_COOKIE_NAME: str = "hcca_refresh_token"
+    COOKIE_SECURE: bool = False
+    COOKIE_SAMESITE: str = "lax"
 
     # --- Google OAuth2 設定 ---
     GOOGLE_CLIENT_ID: str = Field(default="")
@@ -51,6 +61,15 @@ class Settings(BaseSettings):
     MAIL_STARTTLS: bool = Field(default=True)
     MAIL_SSL_TLS: bool = Field(default=False)
 
+    # --- 超級管理員 ---
+    # 這些 email 登入後自動取得 is_superuser=True，繞過所有 RBAC 檢查
+    SUPERUSER_EMAILS: list[str] = Field(default_factory=list)
+
+    # --- 簡易 Rate Limit ---
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_REQUESTS: int = 120
+    RATE_LIMIT_WINDOW_SECONDS: int = 60
+
     # --- LINE Bot 設定 ---
     LINE_CHANNEL_SECRET: str = Field(default="")
     LINE_CHANNEL_ACCESS_TOKEN: str = Field(default="")
@@ -58,11 +77,33 @@ class Settings(BaseSettings):
     @field_validator("SECRET_KEY")
     @classmethod
     def secret_key_must_be_set(cls, v: str) -> str:
-        if v == "CHANGE_ME_IN_PRODUCTION_USE_256_BIT_KEY":
-            import warnings
-
-            warnings.warn("SECRET_KEY 使用預設值，請在生產環境中設定！", stacklevel=2)
+        if v == _DEFAULT_SECRET:
+            import os
+            if os.getenv("ENVIRONMENT", "development").lower() in {"prod", "production"}:
+                raise ValueError("生產環境必須設定非預設的 SECRET_KEY")
+            warnings.warn("SECRET_KEY 使用預設值，僅允許本機開發環境使用。", stacklevel=2)
         return v
+
+    @field_validator("COOKIE_SAMESITE")
+    @classmethod
+    def cookie_samesite_must_be_valid(cls, v: str) -> str:
+        normalized = v.lower()
+        if normalized not in {"lax", "strict", "none"}:
+            raise ValueError("COOKIE_SAMESITE 必須是 lax、strict 或 none")
+        return normalized
+
+    @model_validator(mode="after")
+    def production_security_must_be_explicit(self) -> "Settings":
+        is_prod = self.ENVIRONMENT.lower() in {"prod", "production"}
+        if is_prod and self.SECRET_KEY == _DEFAULT_SECRET:
+            raise ValueError("生產環境必須設定強 SECRET_KEY，不能使用預設值")
+        if is_prod and self.SUPERUSER_EMAILS:
+            raise ValueError("生產環境不可使用 SUPERUSER_EMAILS 自動繞過 RBAC")
+        if is_prod and not self.COOKIE_SECURE:
+            raise ValueError("生產環境必須啟用 COOKIE_SECURE")
+        if "*" in self.ALLOWED_ORIGINS:
+            raise ValueError("ALLOWED_ORIGINS 不可包含 '*'；請明確列出允許來源")
+        return self
 
 
 settings = Settings()

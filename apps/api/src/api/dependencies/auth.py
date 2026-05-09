@@ -1,16 +1,64 @@
 """FastAPI 依賴注入 - 身份驗證相關"""
 
-from fastapi import Depends, HTTPException, status
+from typing import TYPE_CHECKING
+
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.config import settings
 from api.core.database import get_db
 from api.core.security import decode_token, is_blacklisted
 from api.models.user import User
 
+if TYPE_CHECKING:
+    pass
+
 bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def _token_from_request(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None,
+) -> str | None:
+    if credentials is not None:
+        return credentials.credentials
+    return request.cookies.get(settings.ACCESS_TOKEN_COOKIE_NAME)
+
+
+async def _user_from_access_token(token: str, db: AsyncSession) -> User | None:
+    if await is_blacklisted(token):
+        return None
+    try:
+        payload = decode_token(token)
+    except (ExpiredSignatureError, InvalidTokenError):
+        return None
+    if payload.get("type") != "access":
+        return None
+    user_id: str | None = payload.get("sub")
+    if not user_id:
+        return None
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if user is None or not user.is_active:
+        return None
+    return user
+
+
+# 不拋出 401，直接回傳 None（供公開端點使用）
+async def get_optional_user(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> "User | None":
+    """嘗試解析 Bearer Token，失敗或無 token 時回傳 None（不拋出 401）"""
+    token = _token_from_request(request, credentials)
+    if token is None:
+        return None
+    return await _user_from_access_token(token, db)
+
 
 _CREDENTIALS_EXCEPTION = HTTPException(
     status_code=status.HTTP_401_UNAUTHORIZED,
@@ -20,14 +68,14 @@ _CREDENTIALS_EXCEPTION = HTTPException(
 
 
 async def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> User:
     """從 Bearer Token 解析並回傳當前使用者"""
-    if credentials is None:
+    token = _token_from_request(request, credentials)
+    if token is None:
         raise _CREDENTIALS_EXCEPTION
-
-    token = credentials.credentials
 
     # 檢查黑名單
     if await is_blacklisted(token):

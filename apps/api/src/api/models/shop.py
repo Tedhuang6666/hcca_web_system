@@ -30,21 +30,23 @@ if TYPE_CHECKING:
 
 # ── 狀態枚舉 ──────────────────────────────────────────────────────────────────
 
-class ProductStatus(str, enum.Enum):
-    DRAFT = "draft"           # 草稿（尚未上架）
-    ACTIVE = "active"         # 上架中（可購買）
-    SOLD_OUT = "sold_out"     # 售罄（庫存歸零）
-    CANCELLED = "cancelled"   # 已下架
+
+class ProductStatus(enum.StrEnum):
+    DRAFT = "draft"  # 草稿（尚未上架）
+    ACTIVE = "active"  # 上架中（可購買）
+    SOLD_OUT = "sold_out"  # 售罄（庫存歸零）
+    CANCELLED = "cancelled"  # 已下架
 
 
-class OrderStatus(str, enum.Enum):
-    PENDING = "pending"       # 待確認
-    CONFIRMED = "confirmed"   # 已確認
-    CANCELLED = "cancelled"   # 已取消
-    REFUNDED = "refunded"     # 已退款
+class OrderStatus(enum.StrEnum):
+    PENDING = "pending"  # 待確認
+    CONFIRMED = "confirmed"  # 已確認
+    CANCELLED = "cancelled"  # 已取消
+    REFUNDED = "refunded"  # 已退款
 
 
 # ── 商品 / 票券 ────────────────────────────────────────────────────────────────
+
 
 class Product(Base, TimestampMixin):
     """
@@ -56,9 +58,7 @@ class Product(Base, TimestampMixin):
 
     __tablename__ = "products"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     # ── 樂觀鎖版本欄位（必須在 __mapper_args__ 之前宣告）──────────────────────
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
@@ -81,12 +81,16 @@ class Product(Base, TimestampMixin):
     sale_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     org_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("orgs.id", ondelete="RESTRICT"),
-        nullable=False, index=True,
+        UUID(as_uuid=True),
+        ForeignKey("orgs.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
     )
     created_by: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"),
-        nullable=False, index=True,
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
     )
 
     org: Mapped[Org] = relationship("Org")
@@ -96,25 +100,26 @@ class Product(Base, TimestampMixin):
 
 # ── 訂單 ──────────────────────────────────────────────────────────────────────
 
+
 class Order(Base, TimestampMixin):
     """訂單主表"""
 
     __tablename__ = "orders"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     # 字號：ORD-YYYY-NNNNNN（與公文系統相同的原子性序號策略）
-    serial_number: Mapped[str] = mapped_column(
-        String(30), unique=True, nullable=False, index=True
-    )
+    serial_number: Mapped[str] = mapped_column(String(30), unique=True, nullable=False, index=True)
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"),
-        nullable=False, index=True,
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
     )
     org_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("orgs.id", ondelete="RESTRICT"),
-        nullable=False, index=True,
+        UUID(as_uuid=True),
+        ForeignKey("orgs.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
     )
     status: Mapped[OrderStatus] = mapped_column(
         Enum(OrderStatus, name="orderstatus"),
@@ -135,24 +140,25 @@ class Order(Base, TimestampMixin):
 
 # ── 訂單明細 ──────────────────────────────────────────────────────────────────
 
+
 class OrderItem(Base, TimestampMixin):
     """訂單明細（商品快照：下單當時的單價）"""
 
     __tablename__ = "order_items"
-    __table_args__ = (
-        UniqueConstraint("order_id", "product_id", name="uq_order_product"),
-    )
+    __table_args__ = (UniqueConstraint("order_id", "product_id", name="uq_order_product"),)
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     order_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("orders.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        UUID(as_uuid=True),
+        ForeignKey("orders.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     product_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("products.id", ondelete="RESTRICT"),
-        nullable=False, index=True,
+        UUID(as_uuid=True),
+        ForeignKey("products.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
     )
     quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     # 下單時的單價快照（不受日後商品調價影響）

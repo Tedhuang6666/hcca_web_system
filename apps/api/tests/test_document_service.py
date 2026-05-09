@@ -8,9 +8,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from api.models.document import ApprovalStepStatus, Document, DocumentApproval, DocumentStatus
+from api.models.document import (
+    ApprovalStepStatus,
+    DelegateSource,
+    Document,
+    DocumentApproval,
+    DocumentStatus,
+)
 from api.schemas.document import DocumentCreate, DocumentUpdate
 from api.services.document import (
+    _get_current_approval,
     approve_step,
     create_document,
     reject_step,
@@ -18,8 +25,8 @@ from api.services.document import (
     update_document,
 )
 
-
 # ── Fixtures ───────────────────────────────────────────────────────────────────
+
 
 def _make_session() -> AsyncMock:
     """建立假的 AsyncSession"""
@@ -60,6 +67,7 @@ def _make_create_payload(**kwargs: object) -> DocumentCreate:
     defaults: dict = {
         "title": "測試公文",
         "org_id": uuid.uuid4(),
+        "subject": "為測試公文建立流程，請 鑒核。",
         "content": "## 草稿",
     }
     defaults.update(kwargs)
@@ -73,13 +81,20 @@ def _make_update_payload(**kwargs: object) -> DocumentUpdate:
 
 # ── 建立公文 ───────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_create_document_generates_serial() -> None:
     """create_document 應自動生成字號並建立初始版本"""
     session = _make_session()
 
     # 服務層呼叫 generate_serial_number，mock 回傳固定值
-    with patch("api.services.document.generate_serial_number", return_value="DOC-2026-000001"):
+    async def return_created_document(*_: object) -> Document:
+        return session.add.call_args_list[0].args[0]
+
+    with (
+        patch("api.services.document.generate_serial_number", return_value="DOC-2026-000001"),
+        patch("api.services.document.get_document", side_effect=return_created_document),
+    ):
         doc = await create_document(
             session,
             data=_make_create_payload(),
@@ -93,6 +108,7 @@ async def test_create_document_generates_serial() -> None:
 
 
 # ── 更新草稿 ───────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_update_document_draft_ok() -> None:
@@ -133,6 +149,7 @@ async def test_update_document_pending_raises() -> None:
 
 # ── 送審 ───────────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_submit_document_creates_approval_steps() -> None:
     """送審應建立對應數量的審核步驟"""
@@ -140,7 +157,8 @@ async def test_submit_document_creates_approval_steps() -> None:
     doc = _make_draft_doc()
     approvers = [uuid.uuid4(), uuid.uuid4(), uuid.uuid4()]
 
-    await submit_document(session, doc, approver_ids=approvers)
+    with patch("api.services.document._resolve_active_delegate_assignment", return_value=None):
+        await submit_document(session, doc, approver_ids=approvers)
 
     assert doc.status == DocumentStatus.PENDING
     assert doc.submitted_at is not None
@@ -169,6 +187,7 @@ async def test_submit_non_draft_raises() -> None:
 
 
 # ── 核准 ───────────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_approve_last_step_sets_approved() -> None:
@@ -211,6 +230,7 @@ async def test_approve_non_pending_raises() -> None:
 
 # ── 退件 ───────────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_reject_sets_rejected_and_skips_remaining() -> None:
     """退件後文件變 REJECTED，後續步驟設為 SKIPPED"""
@@ -242,7 +262,60 @@ async def test_reject_sets_rejected_and_skips_remaining() -> None:
     assert remaining.status == ApprovalStepStatus.SKIPPED
 
 
-# ── 儲存服務測試 ───────────────────────────────────────────────────────────────
+@pytest.mark.asyncio
+async def test_get_current_approval_allows_active_assignment_delegate() -> None:
+    """有效的請假代理人應可代行當前待審步驟。"""
+    session = _make_session()
+    approver_id = uuid.uuid4()
+    delegate_id = uuid.uuid4()
+    doc = _make_pending_doc()
+
+    approval = MagicMock(spec=DocumentApproval)
+    approval.approver_id = approver_id
+    approval.delegate_id = delegate_id
+    approval.delegate_source = DelegateSource.ASSIGNMENT
+    approval.status = ApprovalStepStatus.PENDING
+
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = approval
+    session.execute = AsyncMock(return_value=result)
+
+    assignment = MagicMock()
+    assignment.delegate_user_id = delegate_id
+
+    with patch(
+        "api.services.document._resolve_active_delegate_assignment", return_value=assignment
+    ):
+        current, is_acting = await _get_current_approval(session, doc, delegate_id)
+
+    assert current is approval
+    assert is_acting is True
+
+
+@pytest.mark.asyncio
+async def test_get_current_approval_blocks_expired_assignment_delegate() -> None:
+    """過期的請假代理人不可再代行審核。"""
+    session = _make_session()
+    approver_id = uuid.uuid4()
+    delegate_id = uuid.uuid4()
+    doc = _make_pending_doc()
+
+    approval = MagicMock(spec=DocumentApproval)
+    approval.approver_id = approver_id
+    approval.delegate_id = delegate_id
+    approval.delegate_source = DelegateSource.ASSIGNMENT
+    approval.status = ApprovalStepStatus.PENDING
+
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = approval
+    session.execute = AsyncMock(return_value=result)
+
+    with patch("api.services.document._resolve_active_delegate_assignment", return_value=None):
+        current, is_acting = await _get_current_approval(session, doc, delegate_id)
+
+    assert current is None
+    assert is_acting is False
+
 
 @pytest.mark.asyncio
 async def test_local_storage_rejects_unsupported_type() -> None:

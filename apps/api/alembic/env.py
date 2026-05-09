@@ -10,6 +10,13 @@ from alembic import context
 import api.models.org  # noqa: F401
 import api.models.user  # noqa: F401
 import api.models.document  # noqa: F401
+import api.models.regulation  # noqa: F401
+import api.models.announcement  # noqa: F401
+import api.models.shop  # noqa: F401
+import api.models.notification  # noqa: F401
+import api.models.meal  # noqa: F401
+import api.models.survey  # noqa: F401
+import api.models.petition  # noqa: F401
 from api.core.config import settings
 from api.core.database import Base
 

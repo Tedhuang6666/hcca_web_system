@@ -22,6 +22,20 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # ==============================================================================
 FROM python:3.12-slim AS runtime
 
+# WeasyPrint needs native text/layout libraries; Noto CJK keeps generated PDFs readable.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        fontconfig \
+        fonts-noto-cjk \
+        libgdk-pixbuf-2.0-0 \
+        libharfbuzz-subset0 \
+        libjpeg62-turbo \
+        libopenjp2-7 \
+        libpango-1.0-0 \
+        libpangoft2-1.0-0 && \
+    mkdir -p /usr/share/fonts/truetype/hcca /usr/share/fonts/opentype/noto-custom && \
+    rm -rf /var/lib/apt/lists/*
+
 # 建立非 root 使用者（安全最佳實踐）
 RUN groupadd --gid 1001 appgroup && \
     useradd --uid 1001 --gid appgroup --no-create-home appuser
@@ -34,6 +48,7 @@ COPY --from=builder /build/.venv /app/.venv
 # 複製應用程式原始碼
 COPY apps/api/src /app/src
 COPY libs/shared/src /app/src
+COPY apps/api/gunicorn.conf.py /app/gunicorn.conf.py
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
@@ -44,5 +59,6 @@ USER appuser
 
 EXPOSE 8000
 
-# 使用 Uvicorn（單 worker，生產環境建議搭配 Gunicorn）
-CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+# 生產：Gunicorn + UvicornWorker（多 worker 充分利用多核）
+# 開發：CMD 可被 docker-compose override 為 uvicorn --reload
+CMD ["gunicorn", "api:app", "--config", "/app/gunicorn.conf.py"]

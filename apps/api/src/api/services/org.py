@@ -45,7 +45,20 @@ async def create_org(db: AsyncSession, data: OrgCreate) -> Org:
 
 
 async def update_org(db: AsyncSession, org: Org, data: OrgUpdate) -> Org:
-    for field, value in data.model_dump(exclude_none=True).items():
+    updates = data.model_dump(exclude_none=True)
+    if "description" not in updates:
+        note = updates.pop("note", None)
+        remark = updates.pop("remark", None)
+        if note is not None:
+            updates["description"] = note
+        elif remark is not None:
+            updates["description"] = remark
+    else:
+        updates.pop("note", None)
+        updates.pop("remark", None)
+    if updates.get("parent_id") == org.id:
+        raise ValueError("組織不可將自己設為上級")
+    for field, value in updates.items():
         setattr(org, field, value)
     await db.flush()
     await db.refresh(org)
@@ -97,7 +110,30 @@ async def create_position(db: AsyncSession, org_id: uuid.UUID, data: PositionCre
 
 
 async def update_position(db: AsyncSession, position: Position, data: PositionUpdate) -> Position:
-    for field, value in data.model_dump(exclude_none=True).items():
+    updates = data.model_dump(exclude_none=True)
+    if "description" not in updates:
+        note = updates.pop("note", None)
+        remark = updates.pop("remark", None)
+        if note is not None:
+            updates["description"] = note
+        elif remark is not None:
+            updates["description"] = remark
+    else:
+        updates.pop("note", None)
+        updates.pop("remark", None)
+
+    parent_id = updates.get("parent_id")
+    if parent_id == position.id:
+        raise ValueError("職位不可將自己設為上級")
+    if parent_id is not None:
+        parent_result = await db.execute(select(Position).where(Position.id == parent_id))
+        parent = parent_result.scalar_one_or_none()
+        if parent is None:
+            raise ValueError("指定的上級職位不存在")
+        if parent.org_id != position.org_id:
+            raise ValueError("上級職位必須位於同一組織")
+
+    for field, value in updates.items():
         setattr(position, field, value)
     await db.flush()
     await db.refresh(position, ["permissions"])
@@ -134,6 +170,7 @@ async def get_user_positions(db: AsyncSession, user_id: uuid.UUID) -> list[UserP
     result = await db.execute(
         select(UserPosition)
         .where(UserPosition.user_id == user_id)
+        .options(selectinload(UserPosition.position).selectinload(Position.org))
         .order_by(UserPosition.start_date.desc())
     )
     return list(result.scalars().all())
@@ -169,6 +206,9 @@ async def get_active_positions_by_date(
             UserPosition.start_date <= check_date,
             (UserPosition.end_date.is_(None)) | (UserPosition.end_date >= check_date),
         )
-        .options(selectinload(UserPosition.position).selectinload(Position.permissions))
+        .options(
+            selectinload(UserPosition.position).selectinload(Position.permissions),
+            selectinload(UserPosition.position).selectinload(Position.org),
+        )
     )
     return list(result.scalars().all())

@@ -9,8 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from api.models.shop import OrderStatus, ProductStatus
 
-
 # ── 商品 ─────────────────────────────────────────────────────────────────────
+
 
 class ProductOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -54,10 +54,12 @@ class ProductUpdate(BaseModel):
 
 class ProductActivateRequest(BaseModel):
     """上架商品（DRAFT → ACTIVE）"""
+
     pass
 
 
 # ── 訂單明細 ─────────────────────────────────────────────────────────────────
+
 
 class OrderItemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -82,6 +84,7 @@ class OrderItemCreate(BaseModel):
 
 # ── 訂單 ─────────────────────────────────────────────────────────────────────
 
+
 class OrderOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -99,6 +102,7 @@ class OrderOut(BaseModel):
 
 class OrderListItem(BaseModel):
     """訂單列表輕量版"""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
