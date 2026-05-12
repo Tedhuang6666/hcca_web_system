@@ -24,6 +24,7 @@ import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { RegulationCategoryBadge } from "@/components/ui/StatusBadge";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ApiError, documentsApi, regulationsApi, usersApi } from "@/lib/api";
+import { apiUrl } from "@/lib/config";
 import type { DocumentOut, RegulationOut, RegulationRevisionOut } from "@/lib/types";
 
 // ── 主頁面 ────────────────────────────────────────────────────────────────────
@@ -360,8 +361,7 @@ export default function RegulationDetailPage() {
                     const toastId = toast.loading("正在處理檔案，請稍候...");
                     setPrintingPdf(true);
                     try {
-                      const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-                      const res = await fetch(`${BASE}/regulations/${id}/print`, {
+                      const res = await fetch(apiUrl(`/regulations/${id}/print`), {
                         credentials: "include",
                       });
                       if (!res.ok) throw new Error(res.statusText);

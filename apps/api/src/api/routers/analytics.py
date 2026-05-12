@@ -17,6 +17,7 @@ from api.dependencies.permissions import require_any, require_permission
 from api.models.announcement import Announcement, AnnouncementRead
 from api.models.document import Document, DocumentApproval
 from api.models.org import Org
+from api.models.survey import Survey, SurveyResponse, SurveyStatus
 
 router = APIRouter(prefix="/analytics", tags=["數據分析"])
 
@@ -51,6 +52,14 @@ class AnnouncementParticipationItem(BaseModel):
     title: str
     reader_count: int
     published_at: datetime | None
+
+
+class SurveyParticipationItem(BaseModel):
+    survey_id: uuid.UUID
+    title: str
+    response_count: int
+    status: str
+    created_at: datetime
 
 
 # ── 公文效率統計 ───────────────────────────────────────────────────────────────
@@ -240,6 +249,56 @@ async def announcement_participation(
             title=row.title,
             reader_count=row.reader_count,
             published_at=row.published_at,
+        )
+        for row in rows
+    ]
+
+
+# ── 問卷回應率統計 ─────────────────────────────────────────────────────────────
+
+
+@router.get(
+    "/surveys/participation",
+    response_model=list[SurveyParticipationItem],
+    summary="問卷回應率統計",
+)
+async def survey_participation(
+    db: DbDep,
+    _: Annotated[object, Depends(require_any(PermissionCode.ANALYTICS_VIEW, PermissionCode.ADMIN_ALL))],
+    org_id: uuid.UUID | None = Query(None),
+    date_from: datetime | None = Query(None),
+    date_to: datetime | None = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+) -> list[SurveyParticipationItem]:
+    q = (
+        select(
+            Survey.id,
+            Survey.title,
+            Survey.status,
+            Survey.created_at,
+            func.count(SurveyResponse.id).label("response_count"),
+        )
+        .outerjoin(SurveyResponse, SurveyResponse.survey_id == Survey.id)
+        .where(Survey.status != SurveyStatus.DRAFT)
+        .group_by(Survey.id, Survey.title, Survey.status, Survey.created_at)
+        .order_by(func.count(SurveyResponse.id).desc())
+        .limit(limit)
+    )
+    if org_id:
+        q = q.where(Survey.org_id == org_id)
+    if date_from:
+        q = q.where(Survey.created_at >= date_from)
+    if date_to:
+        q = q.where(Survey.created_at <= date_to)
+
+    rows = (await db.execute(q)).all()
+    return [
+        SurveyParticipationItem(
+            survey_id=row.id,
+            title=row.title,
+            response_count=row.response_count,
+            status=row.status,
+            created_at=row.created_at,
         )
         for row in rows
     ]

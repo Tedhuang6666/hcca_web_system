@@ -4,6 +4,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { orgsApi, adminApi, ApiError } from "@/lib/api";
+import { apiUrl } from "@/lib/config";
 import type { OrgRead } from "@/lib/api";
 import type { OrgWithPositions, AdminUserDetail } from "@/lib/types";
 
@@ -43,7 +44,7 @@ export default function OrgDetailPage() {
       })
       .catch(() => {
         // 非管理員：fallback 到 GET /orgs/{id}/positions（無 permission_codes）
-        fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/orgs/${id}/positions`, {
+        fetch(apiUrl(`/orgs/${id}/positions`), {
           credentials: "include",
         })
           .then(r => r.json())

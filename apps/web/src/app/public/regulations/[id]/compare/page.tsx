@@ -7,6 +7,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { diffLines } from "diff";
 
+import { apiUrl } from "@/lib/config";
+
 type RegulationRevisionOut = {
   id: string;
   version: number;
@@ -24,8 +26,6 @@ type RegulationOut = {
   content: string;
 };
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
 function pickByVersion(revs: RegulationRevisionOut[], v: number | null) {
   if (v == null) return null;
   return revs.find(r => r.version === v) ?? null;
@@ -42,7 +42,7 @@ export default function PublicRegulationComparePage() {
 
   useEffect(() => {
     setLoading(true);
-    fetch(`${BASE}/regulations/${id}`)
+    fetch(apiUrl(`/regulations/${id}`))
       .then(r => (r.ok ? r.json() : null))
       .then(setReg)
       .finally(() => setLoading(false));
@@ -216,4 +216,3 @@ export default function PublicRegulationComparePage() {
     </div>
   );
 }
-

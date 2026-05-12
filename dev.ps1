@@ -38,12 +38,11 @@ try {
 # ── 3. 後端依賴與 Migration ──────────────────────────────────────────────────
 Write-Host "`n--- [Step 3] 同步 Python 依賴與資料庫 ---" -ForegroundColor Cyan
 Set-Location $PSScriptRoot
-uv sync
+uv sync --project apps/api
 
-$AlembicDir = if (Test-Path "$PSScriptRoot\apps\api\alembic.ini") { "$PSScriptRoot\apps\api" } else { $PSScriptRoot }
-Push-Location $AlembicDir
+Push-Location "$PSScriptRoot\apps\api"
 Write-Host "[INFO] 執行 Alembic Migration..." -ForegroundColor Gray
-uv run alembic upgrade head
+uv run --project "$PSScriptRoot\apps\api" python -m alembic upgrade head
 Pop-Location
 
 # ── 4. 前端健康檢查 (確保 if-else 區塊完整) ───────────────────────────────────
@@ -73,7 +72,7 @@ Start-PortGuardian 3000
 
 # 啟動後端
 Write-Host "[API] 正在彈出後端視窗..." -ForegroundColor Gray
-Start-Process cmd -ArgumentList "/k title BACKEND-API && uv run uvicorn api:app --host 0.0.0.0 --port 8000 --reload --reload-dir apps/api/src --app-dir apps/api/src" -WorkingDirectory $PSScriptRoot
+Start-Process cmd -ArgumentList "/k title BACKEND-API && uv run --project `"$PSScriptRoot\apps\api`" python -m uvicorn api:app --host 0.0.0.0 --port 8000 --reload --reload-dir src --app-dir src" -WorkingDirectory "$PSScriptRoot\apps\api"
 
 # 啟動前端
 Write-Host "[WEB] 正在彈出前端視窗..." -ForegroundColor Gray

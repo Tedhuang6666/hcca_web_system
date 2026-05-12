@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import { apiUrl } from "@/lib/config";
 
 const FEATURES = [
   {
@@ -60,9 +60,12 @@ export default function LoginPage() {
   const searchParams = useSearchParams();
   const error = searchParams.get("error");
   const [mounted, setMounted] = useState(false);
+  const [loginHref, setLoginHref] = useState(apiUrl("/auth/google/login"));
 
   useEffect(() => {
     setMounted(true);
+    const frontendOrigin = encodeURIComponent(window.location.origin);
+    setLoginHref(apiUrl(`/auth/google/login?frontend_origin=${frontendOrigin}`));
     if (localStorage.getItem("user_id")) {
       window.location.replace("/");
     }
@@ -199,7 +202,7 @@ export default function LoginPage() {
 
             {/* Google 登入按鈕 */}
             <a
-              href={`${API_URL}/auth/google/login`}
+              href={loginHref}
               className="flex items-center justify-center gap-3 w-full h-11 px-5 rounded-lg font-medium text-sm transition-all cursor-pointer"
               style={{
                 background: "#FFFFFF",

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 
+import { serverApiUrl } from "@/lib/config";
+
 type RegulationListItem = {
   id: string;
   title: string;
@@ -19,10 +21,8 @@ export const metadata: Metadata = {
   description: "公開法規查詢：條文目錄、穩定連結、沿革與版本比對。",
 };
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
 async function fetchRegs(q?: string): Promise<RegulationListItem[]> {
-  const url = new URL(`${BASE}/regulations`);
+  const url = new URL(serverApiUrl("/regulations"));
   url.searchParams.set("active_only", "true");
   url.searchParams.set("limit", "50");
   url.searchParams.set("offset", "0");
@@ -113,4 +113,3 @@ export default async function PublicRegulationsPage({
     </div>
   );
 }
-

@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, HttpUrl, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, HttpUrl, field_validator, model_validator
 
 from api.models.document import (
     ApprovalStepStatus,
@@ -403,6 +403,19 @@ class DocumentCreate(BaseModel):
     page_info: str | None = Field(None, max_length=50, description="頁次資訊（列印後回填）")
     # 受文者（可隨建立一起傳入）
     recipients: list[RecipientCreate] = Field(default_factory=list, description="受文者清單")
+
+    @field_validator("title", "subject", "doc_description", "action_required", "content", mode="before")
+    @classmethod
+    def prevent_xss_attacks(cls, v: str | None) -> str | None:
+        """防止 XSS 攻擊 - 檢查常見的危險標籤"""
+        if v is None:
+            return v
+        v_lower = v.lower()
+        dangerous_patterns = ["<script", "javascript:", "onerror=", "onload=", "<iframe"]
+        for pattern in dangerous_patterns:
+            if pattern in v_lower:
+                raise ValueError(f"內容包含不允許的標籤或屬性：{pattern}")
+        return v
 
     @model_validator(mode="after")
     def validate_official_fields(self) -> DocumentCreate:

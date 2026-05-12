@@ -1,5 +1,5 @@
 "use client";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 
 /**
  * 讀取 localStorage 中儲存的使用者權限列表（由 /auth/me 在登入時寫入）。
@@ -20,20 +20,24 @@ export function usePermissions() {
   }, []);
 
   /** 是否擁有指定權限（超管自動通過） */
-  const can = (code: string) =>
+  const can = useCallback((code: string) =>
     isAdmin
     || permissions.has("admin:all")
     || permissions.has(code)
-    || (code === "audit:view_org" && (permissions.has("audit:view_all") || permissions.has("audit:view")));
+    || (code === "audit:view_org" && (permissions.has("audit:view_all") || permissions.has("audit:view"))),
+    [isAdmin, permissions],
+  );
 
   /** 是否擁有任一指定權限（超管自動通過） */
-  const canAny = (...codes: string[]) =>
+  const canAny = useCallback((...codes: string[]) =>
     isAdmin
     || permissions.has("admin:all")
     || codes.some(c =>
       permissions.has(c)
       || (c === "audit:view_org" && (permissions.has("audit:view_all") || permissions.has("audit:view")))
-    );
+    ),
+    [isAdmin, permissions],
+  );
 
   return { can, canAny, isAdmin, permissions };
 }

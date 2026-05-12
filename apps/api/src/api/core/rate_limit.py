@@ -4,12 +4,19 @@ from __future__ import annotations
 
 import logging
 import time
+from collections import defaultdict
 from collections.abc import Awaitable, Callable
 
+from redis.exceptions import RedisError
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from api.core.security import redis_client
+
+logger = logging.getLogger(__name__)
+
+# 簡單的內存降級 rate limit（當 Redis 不可用時使用）
+_memory_buckets: dict[str, list[float]] = defaultdict(list)
 
 
 class SimpleRateLimitMiddleware:
@@ -47,6 +54,17 @@ class SimpleRateLimitMiddleware:
                 return req, win
         return self.requests, self.window_seconds
 
+    def _check_memory_rate_limit(self, key: str, req_limit: int, win: int) -> bool:
+        """簡單的內存降級 rate limit（固定視窗）"""
+        now = time.time()
+        window_start = now - win
+
+        # 清理舊記錄
+        _memory_buckets[key] = [t for t in _memory_buckets[key] if t > window_start]
+        _memory_buckets[key].append(now)
+
+        return len(_memory_buckets[key]) > req_limit
+
     async def __call__(self, scope, receive, send) -> None:
         if scope["type"] != "http" or not self.enabled:
             await self.app(scope, receive, send)
@@ -77,12 +95,33 @@ class SimpleRateLimitMiddleware:
                 )
                 await response(scope, receive, send)
                 return
-        except Exception:
-            logger = logging.getLogger(__name__)
+        except RedisError as e:
             logger.error(
-                "Rate limit Redis unavailable, degrading to no-limit",
+                "Rate limit Redis connection failed, degrading to memory-based limit",
                 exc_info=True,
+                extra={"client_ip": client_host, "path": request.url.path},
             )
-            # 降級：Redis 不可用時不阻擋請求，但需監控
+            # 降級到內存 rate limit
+            if self._check_memory_rate_limit(key, req_limit, win):
+                response = JSONResponse(
+                    {"detail": "請求過於頻繁，請稍後再試"},
+                    status_code=429,
+                    headers={"Retry-After": str(win)},
+                )
+                await response(scope, receive, send)
+                return
+        except Exception as e:
+            logger.error(
+                "Unexpected error in rate limit middleware",
+                exc_info=True,
+                extra={"client_ip": client_host, "path": request.url.path},
+            )
+            # 未預期的錯誤時，拒絕請求確保安全
+            response = JSONResponse(
+                {"detail": "伺服器內部錯誤"},
+                status_code=500,
+            )
+            await response(scope, receive, send)
+            return
 
         await self.app(scope, receive, send)

@@ -108,15 +108,15 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
       args:
-        # 瀏覽器直接呼叫的 API URL（非 Docker 內部位址）
-        # 本機開發：http://localhost:8000；生產部署：填入對外公開的 API 域名
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        # 留空時瀏覽器使用同源 /api，由 Next.js 轉發到 API
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
     container_name: campus_web
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
       NODE_ENV: production
+      API_INTERNAL_URL: http://api:8000
     depends_on:
       - api
 

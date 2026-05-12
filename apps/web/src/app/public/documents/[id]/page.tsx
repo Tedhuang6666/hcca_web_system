@@ -3,6 +3,8 @@ import type { Metadata } from "next";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import { serverApiUrl } from "@/lib/config";
+
 type RecipientOut = { id: string; recipient_type: string; name: string; email: string | null };
 type AttachmentOut = {
   id: string;
@@ -41,10 +43,8 @@ type DocumentOut = {
   recipients: RecipientOut[];
 };
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
 async function fetchDoc(idOrSerial: string): Promise<DocumentOut | null> {
-  const res = await fetch(`${BASE}/documents/${idOrSerial}`, { next: { revalidate: 60 } });
+  const res = await fetch(serverApiUrl(`/documents/${idOrSerial}`), { next: { revalidate: 60 } });
   if (!res.ok) return null;
   return res.json();
 }
@@ -258,4 +258,3 @@ export default async function PublicDocumentDetailPage({
     </div>
   );
 }
-

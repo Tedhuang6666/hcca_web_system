@@ -13,6 +13,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -194,6 +195,12 @@ class Document(Base, TimestampMixin):
     """
 
     __tablename__ = "documents"
+    __table_args__ = (
+        # 列表查詢高頻複合索引
+        Index("ix_documents_org_status", "org_id", "status"),
+        Index("ix_documents_created_by_status", "created_by", "status"),
+        Index("ix_documents_status_created_at", "status", "created_at"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     # 字號，格式：DOC-YYYY-NNNNNN（由 PostgreSQL Sequence 原子性生成）

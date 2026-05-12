@@ -17,8 +17,9 @@ import type {
   NotificationPreferences,
   DocumentEfficiencyOut, DeptRankingItem, PendingAlertItem, AnnouncementParticipationItem,
 } from "./types";
+import { API_BASE, apiUrl } from "./config";
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const BASE = API_BASE;
 
 // ── 核心 fetch 包裝 ────────────────────────────────────────────────────────────
 
@@ -28,7 +29,7 @@ export class ApiError extends Error {
 
 async function silentRefresh(): Promise<boolean> {
   try {
-    const res = await fetch(`${BASE}/auth/refresh`, {
+    const res = await fetch(apiUrl("/auth/refresh"), {
       method: "POST",
       credentials: "include",
     });
@@ -36,6 +37,23 @@ async function silentRefresh(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function getCookie(name: string): string | null {
+  if (typeof document === "undefined") return null;
+  const prefix = `${name}=`;
+  return document.cookie
+    .split(";")
+    .map((item) => item.trim())
+    .find((item) => item.startsWith(prefix))
+    ?.slice(prefix.length) ?? null;
+}
+
+function csrfHeaders(method?: string): Record<string, string> {
+  const normalized = (method ?? "GET").toUpperCase();
+  if (!["POST", "PUT", "PATCH", "DELETE"].includes(normalized)) return {};
+  const token = getCookie("csrf_token");
+  return token ? { "X-CSRF-Token": decodeURIComponent(token) } : {};
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -46,6 +64,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       credentials: "include",
       headers: {
         "Content-Type": "application/json",
+        ...csrfHeaders(init.method),
         ...init.headers,
       },
     });
@@ -61,12 +80,13 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       try {
         retry = await fetch(`${BASE}${path}`, {
           ...init,
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-            ...init.headers,
-          },
-        });
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...csrfHeaders(init.method),
+          ...init.headers,
+        },
+      });
       } catch {
         throw new ApiError(0, `無法連線至後端 API：${BASE}`);
       }
@@ -178,6 +198,7 @@ export const documentsApi = {
       fetch(`${BASE}/documents/${id}/attachments`, {
         method: "POST",
         credentials: "include",
+        headers: csrfHeaders("POST"),
         body: fd,
       });
 
@@ -677,6 +698,7 @@ async function uploadPetitionFile<T>(path: string, fd: FormData): Promise<T> {
     fetch(`${BASE}${path}`, {
       method: "POST",
       credentials: "include",
+      headers: csrfHeaders("POST"),
       body: fd,
     });
   let res = await doFetch();
@@ -800,6 +822,7 @@ export const announcementsApi = {
       fetch(`${BASE}/announcements/${id}/media`, {
         method: "POST",
         credentials: "include",
+        headers: csrfHeaders("POST"),
         body: fd,
       });
     let res = await doFetch();

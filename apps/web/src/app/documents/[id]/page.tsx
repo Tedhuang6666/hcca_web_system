@@ -13,6 +13,7 @@ import { OfficialText } from "@/components/ui/OfficialText";
 import { ApprovalPanel } from "@/components/documents/ApprovalPanel";
 import { VersionHistory } from "@/components/documents/VersionHistory";
 import { useWS } from "@/hooks/useWS";
+import { apiUrl } from "@/lib/config";
 
 function toROCDate(dateStr: string) {
   const d = new Date(dateStr);
@@ -497,8 +498,7 @@ export default function DocumentDetailPage() {
               const toastId = toast.loading("正在處理檔案，請稍候...");
               setPrintingPdf(true);
               try {
-                const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-                const res = await fetch(`${BASE}/documents/${id}/print`, {
+                const res = await fetch(apiUrl(`/documents/${id}/print`), {
                   credentials: "include",
                 });
                 if (!res.ok) throw new Error(res.statusText);

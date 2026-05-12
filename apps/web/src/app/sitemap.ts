@@ -1,5 +1,7 @@
 import type { MetadataRoute } from "next";
 
+import { serverApiUrl } from "@/lib/config";
+
 type RegulationListItem = {
   id: string;
   updated_at: string;
@@ -11,8 +13,6 @@ type DocumentListItem = {
   updated_at?: string;
   created_at: string;
 };
-
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 async function pagedFetch<T>(url: URL, limit = 200): Promise<T[]> {
   const all: T[] = [];
@@ -40,12 +40,12 @@ async function pagedFetch<T>(url: URL, limit = 200): Promise<T[]> {
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
-  const regUrl = new URL(`${BASE}/regulations`);
+  const regUrl = new URL(serverApiUrl("/regulations"));
   regUrl.searchParams.set("active_only", "true");
   // 公開：後端會在未登入時自動只回傳已發布（本次實作會補上）
   const regs = await pagedFetch<RegulationListItem>(regUrl);
 
-  const docUrl = new URL(`${BASE}/documents`);
+  const docUrl = new URL(serverApiUrl("/documents"));
   docUrl.searchParams.set("visibility", "publicly_open");
   const docs = await pagedFetch<DocumentListItem>(docUrl);
 

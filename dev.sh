@@ -15,6 +15,27 @@ success() { echo -e "${GREEN}[OK]${NC}  $*"; }
 warn()    { echo -e "${YELLOW}[WARN]${NC} $*"; }
 error()   { echo -e "${RED}[ERR]${NC}  $*" >&2; }
 
+_wait_http() {
+    local name="$1"
+    local url="$2"
+    local pid="$3"
+    local max_attempts="${4:-30}"
+
+    for _ in $(seq 1 "$max_attempts"); do
+        if curl -fsS "$url" >/dev/null 2>&1; then
+            return 0
+        fi
+        if ! kill -0 "$pid" 2>/dev/null; then
+            error "${name} 行程已結束，啟動失敗"
+            return 1
+        fi
+        sleep 1
+    done
+
+    error "${name} 未在預期時間內回應：${url}"
+    return 1
+}
+
 # ── 腳本根目錄（無論從哪裡呼叫都正確） ────────────────────────────────────────
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -43,6 +64,7 @@ _require docker
 _require uv
 _require node
 _require npm
+_require curl
 
 # ── 清理函式（Ctrl+C 時關閉前景行程） ─────────────────────────────────────────
 _cleanup() {
@@ -75,31 +97,35 @@ success "Redis 已就緒"
 
 # ── 2. 同步 Python 依賴 ────────────────────────────────────────────────────────
 info "uv sync — 同步 Python 依賴..."
-(cd "${REPO_ROOT}" && uv sync)
+(cd "${REPO_ROOT}" && uv sync --project apps/api)
 success "Python 依賴同步完成"
 
 # ── 3. 執行 Alembic Migration ─────────────────────────────────────────────────
 info "執行資料庫 Migration（alembic upgrade head）..."
 (
-    cd "${REPO_ROOT}"
+    cd "${REPO_ROOT}/apps/api"
     # 關鍵：加上 PYTHONPATH 指向後端原始碼路徑
     export PYTHONPATH="${REPO_ROOT}/apps/api/src"
-    uv run alembic upgrade head
+    uv run --project "${REPO_ROOT}/apps/api" python -m alembic upgrade head
 ) && success "Migration 完成" \
   || warn "Migration 執行失敗或無新版本，請手動確認"
 
 # ── 4. 啟動 FastAPI 後端（背景，熱重載） ───────────────────────────────────────
 info "啟動 FastAPI 後端（port 8000，熱重載）..."
 (
-    cd "${REPO_ROOT}"
-    uv run uvicorn api:app \
+    cd "${REPO_ROOT}/apps/api"
+    uv run --project "${REPO_ROOT}/apps/api" python -m uvicorn api:app \
         --host 0.0.0.0 \
         --port 8000 \
         --reload \
-        --reload-dir apps/api/src \
-        --app-dir apps/api/src
+        --reload-dir src \
+        --app-dir src
 ) &
 API_PID=$!
+if ! _wait_http "FastAPI" "http://localhost:8000/health" "$API_PID" 30; then
+    kill "$API_PID" 2>/dev/null || true
+    exit 1
+fi
 success "FastAPI 已啟動 PID=${API_PID} → http://localhost:8000/docs"
 
 # ── 5. 安裝前端依賴並啟動 Next.js（背景） ──────────────────────────────────────
@@ -113,6 +139,10 @@ fi
 info "啟動 Next.js 開發伺服器（port 3000）..."
 (cd "${WEB_DIR}" && npm run dev) &
 WEB_PID=$!
+if ! _wait_http "Next.js" "http://localhost:3000" "$WEB_PID" 30; then
+    kill "$WEB_PID" 2>/dev/null || true
+    exit 1
+fi
 success "Next.js 已啟動 PID=${WEB_PID} → http://localhost:3000"
 
 # ── 完成提示 ──────────────────────────────────────────────────────────────────

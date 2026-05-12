@@ -7,7 +7,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
+from api.core.audit import SecurityAuditMiddleware
 from api.core.config import settings
+from api.core.csrf import CSRFMiddleware
 from api.core.rate_limit import SimpleRateLimitMiddleware
 from api.routers import (
     admin,
@@ -18,6 +20,7 @@ from api.routers import (
     documents,
     line_webhook,
     meal,
+    mfa,
     notifications,
     orgs,
     petitions,
@@ -53,22 +56,25 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    app.add_middleware(SecurityAuditMiddleware)
     app.add_middleware(
         SimpleRateLimitMiddleware,
         enabled=settings.RATE_LIMIT_ENABLED,
         requests=settings.RATE_LIMIT_REQUESTS,
         window_seconds=settings.RATE_LIMIT_WINDOW_SECONDS,
     )
+    app.add_middleware(CSRFMiddleware, enabled=True, secure=settings.COOKIE_SECURE)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.ALLOWED_ORIGINS,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
-        allow_headers=["Content-Type", "Authorization"],
+        allow_headers=["Content-Type", "Authorization", "X-CSRF-Token"],
     )
     app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
 
     app.include_router(auth.router)
+    app.include_router(mfa.router)
     app.include_router(users.router)
     app.include_router(audit.router)
     app.include_router(announcements.router)

@@ -838,45 +838,6 @@ def send_approval_reminders():
         )
 ```
 
----
-
-### 10. 🤖 AI 自動摘要
-
-**功能**：使用 Claude API 自動生成摘要
-
-**工作量**：2 人天
-
-**實現**：
-```python
-# services
-from anthropic import AsyncAnthropic
-
-async def generate_document_summary(content: str) -> str:
-    """使用 Claude 生成摘要"""
-    client = AsyncAnthropic()
-    response = await client.messages.create(
-        model="claude-opus-4-1",
-        max_tokens=500,
-        messages=[
-            {
-                "role": "user",
-                "content": f"請用 100-200 字總結以下公文內容：\n\n{content}",
-            }
-        ],
-    )
-    return response.content[0].text
-```
-
----
-
-### 11. 🤖 智能簽核路由
-
-**功能**：根據主旨自動推薦簽核人
-
-**工作量**：3 人天
-
----
-
 ### 12. 🤖 法規變更提醒
 
 **功能**：相關法規更新時通知
@@ -927,33 +888,6 @@ export default function NotificationSettingsPage() {
     </div>
   );
 }
-```
-
----
-
-### 14. 📝 文件評論線程
-
-**功能**：公文/法規評論回覆
-
-**工作量**：3 人天
-
-**實現**：
-```python
-# models
-class DocumentComment(Base):
-    __tablename__ = "document_comments"
-    
-    id: UUID = primary_key()
-    document_id: UUID = ForeignKey("documents.id")
-    author_id: UUID = ForeignKey("users.id")
-    
-    content: str
-    parent_id: UUID | None = ForeignKey("document_comments.id")  # 回覆
-    
-    created_at: datetime
-    updated_at: datetime
-    
-    replies = relationship("DocumentComment", backref="parent")
 ```
 
 ---

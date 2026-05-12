@@ -3,8 +3,7 @@ import { useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 
 import { cacheCurrentUser } from "@/lib/auth-cache";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import { apiUrl } from "@/lib/config";
 
 export default function AuthCallbackPage() {
   const searchParams = useSearchParams();
@@ -15,7 +14,7 @@ export default function AuthCallbackPage() {
 
     async function fetchMeFromCookie() {
       try {
-        const res = await fetch(`${API_BASE}/auth/me`, {
+        const res = await fetch(apiUrl("/auth/me"), {
           credentials: "include",
         });
         const me = await res.json();
@@ -31,7 +30,7 @@ export default function AuthCallbackPage() {
 
     async function bootstrapFromCookie() {
       try {
-        const res = await fetch(`${API_BASE}/auth/refresh`, {
+        const res = await fetch(apiUrl("/auth/refresh"), {
           method: "POST",
           credentials: "include",
         });

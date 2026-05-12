@@ -62,8 +62,16 @@ class Settings(BaseSettings):
     MAIL_SSL_TLS: bool = Field(default=False)
 
     # --- 超級管理員 ---
-    # 這些 email 登入後自動取得 is_superuser=True，繞過所有 RBAC 檢查
+    # 生產環境禁用自動授予，改用 API + IP 白名單
     SUPERUSER_EMAILS: list[str] = Field(default_factory=list)
+    ADMIN_IP_WHITELIST: list[str] = Field(
+        default_factory=list,
+        description="允許超級管理員登入的 IP 位址（若設定，登入 IP 必須在此清單中）",
+    )
+    REQUIRE_2FA_FOR_SUPERUSER: bool = Field(
+        default=False,
+        description="若啟用，超級管理員登入需要 2FA（目前實驗性功能）",
+    )
 
     # --- 簡易 Rate Limit ---
     RATE_LIMIT_ENABLED: bool = True

@@ -112,36 +112,57 @@ async def _assert_access(session: AsyncSession, doc: Document, user: User) -> No
         )
 
 
-async def _current_position_title(
+async def _get_user_positions_batch(
     session: AsyncSession,
-    user_id: uuid.UUID,
+    user_ids: list[uuid.UUID],
     org_id: uuid.UUID,
-) -> str | None:
+) -> dict[uuid.UUID, str]:
+    """批量查詢多個用戶在組織中的最高職位（避免 N+1 查詢）"""
+    if not user_ids:
+        return {}
+
     today = date.today()
     result = await session.execute(
-        select(Position.name)
-        .join(UserPosition, UserPosition.position_id == Position.id)
+        select(UserPosition.user_id, Position.name)
+        .join(Position, UserPosition.position_id == Position.id)
         .where(
-            UserPosition.user_id == user_id,
+            UserPosition.user_id.in_(user_ids),
             UserPosition.start_date <= today,
             or_(UserPosition.end_date.is_(None), UserPosition.end_date >= today),
             Position.org_id == org_id,
         )
-        .order_by(Position.weight.desc())
-        .limit(1)
+        .order_by(UserPosition.user_id, Position.weight.desc())
     )
-    return result.scalar_one_or_none()
+
+    # 去重：每個用戶只取第一條（weight 最高）
+    user_titles = {}
+    for user_id, title in result.all():
+        if user_id not in user_titles:
+            user_titles[user_id] = title
+
+    return user_titles
 
 
 async def _attach_approval_titles(session: AsyncSession, doc: Document) -> None:
-    for approval in doc.approvals or []:
-        approval.__dict__["approver_title"] = await _current_position_title(
-            session, approval.approver_id, doc.org_id
-        )
+    """為公文的審核步驟附加職位標題（批量查詢，避免 N+1）"""
+    if not doc.approvals:
+        return
+
+    # 收集所有需要查詢的用戶 ID
+    user_ids = set()
+    for approval in doc.approvals:
+        user_ids.add(approval.approver_id)
         if approval.delegate_id:
-            approval.__dict__["delegate_title"] = await _current_position_title(
-                session, approval.delegate_id, doc.org_id
-            )
+            user_ids.add(approval.delegate_id)
+
+    # 批量查詢
+    user_titles = await _get_user_positions_batch(session, list(user_ids), doc.org_id)
+
+    # 附加到 approval 物件
+    for approval in doc.approvals:
+        approval.__dict__["approver_title"] = user_titles.get(approval.approver_id)
+        if approval.delegate_id:
+            approval.__dict__["delegate_title"] = user_titles.get(approval.delegate_id)
 
 
 async def _assert_can_edit(session: AsyncSession, doc: Document, user: User) -> None:

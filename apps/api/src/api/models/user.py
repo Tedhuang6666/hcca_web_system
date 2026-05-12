@@ -42,6 +42,11 @@ class User(Base, TimestampMixin):
     # 超級管理員（繞過所有 RBAC 檢查，由 SUPERUSER_EMAILS 環境變數自動授予）
     is_superuser: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
+    # 2FA (TOTP) 相關欄位
+    mfa_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    mfa_secret: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    mfa_pending_secret: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
     # 通知偏好設定（空 dict = 全部啟用；可覆蓋個別類型：{"document_pending": false}）
     notification_preferences: Mapped[dict] = mapped_column(
         JSONDict, nullable=False, default=dict, server_default="{}"

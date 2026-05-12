@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 
+import { serverApiUrl } from "@/lib/config";
+
 type DocumentListItem = {
   id: string;
   serial_number: string;
@@ -23,10 +25,8 @@ export const metadata: Metadata = {
   description: "公開公文查詢：可分享的 URL 篩選、附件預覽與列印。",
 };
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
 async function fetchDocs(q?: string): Promise<DocumentListItem[]> {
-  const url = new URL(`${BASE}/documents`);
+  const url = new URL(serverApiUrl("/documents"));
   url.searchParams.set("visibility", "publicly_open");
   url.searchParams.set("limit", "50");
   url.searchParams.set("offset", "0");
@@ -117,4 +117,3 @@ export default async function PublicDocumentsPage({
     </div>
   );
 }
-

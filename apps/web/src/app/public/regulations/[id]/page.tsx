@@ -3,6 +3,8 @@ import type { Metadata } from "next";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import { serverApiUrl } from "@/lib/config";
+
 type RegulationArticleOut = {
   id: string;
   sort_index: number;
@@ -46,10 +48,8 @@ type RegulationOut = {
   revisions: RegulationRevisionOut[];
 };
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
 async function fetchReg(id: string): Promise<RegulationOut | null> {
-  const res = await fetch(`${BASE}/regulations/${id}`, { next: { revalidate: 60 } });
+  const res = await fetch(serverApiUrl(`/regulations/${id}`), { next: { revalidate: 60 } });
   if (!res.ok) return null;
   return res.json();
 }
@@ -374,4 +374,3 @@ export default async function PublicRegulationDetailPage({
     </div>
   );
 }
-

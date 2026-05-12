@@ -1,8 +1,12 @@
 "use client";
 import { useEffect, useRef, useCallback } from "react";
 
-const WS_BASE = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000")
-  .replace(/^http/, "ws");
+function getWsBase(): string {
+  const configured = process.env.NEXT_PUBLIC_API_URL;
+  if (configured) return configured.replace(/^http/, "ws");
+  if (typeof window === "undefined") return "ws://localhost:8000";
+  return `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/api`;
+}
 
 export interface WsMessage {
   type: string;
@@ -30,7 +34,7 @@ export function useWS(
     // 房間名稱如 "user:uuid" 中的冒號在 URL 路徑段中是合法字符（RFC 3986），無需 encodeURIComponent
     // 使用 encodeURIComponent 會將冒號轉成 %3A，導致 Starlette 路由匹配或 room key 不一致（404）
     const safeRoom = room.replace(/\//g, "%2F"); // 只需 encode 正斜線
-    const url = `${WS_BASE}/ws/${safeRoom}`;
+    const url = `${getWsBase()}/ws/${safeRoom}`;
 
     const socket = new WebSocket(url);
     ws.current = socket;
