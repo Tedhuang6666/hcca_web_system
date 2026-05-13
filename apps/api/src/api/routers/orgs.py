@@ -5,6 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
@@ -155,4 +156,11 @@ async def delete_org(org_id: uuid.UUID, db: DbDep, current_user: CurrentUser) ->
         },
         summary=f"刪除組織「{org.name}」",
     )
-    await org_svc.delete_org(db, org)
+    try:
+        await org_svc.delete_org(db, org)
+    except IntegrityError as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="此組織仍被公文、法規、餐訂、購票或問卷資料引用，無法刪除",
+        ) from e

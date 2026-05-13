@@ -1,6 +1,7 @@
 # 校園自治平台（HCCA）系統全面審查報告
 
 **生成日期**：2026-05-07  
+**最新完成狀態**：請以 [`IMPLEMENTATION_STATUS.md`](./IMPLEMENTATION_STATUS.md) 為準（最後核對：2026-05-13）  
 **審查對象**：完整生產系統（P0-P8 全 9 階段）  
 **狀態**：✅ 功能完整，進入優化期
 
@@ -254,10 +255,10 @@
 
 ## 📖 補充資源
 
-- **安全性詳細報告**：見 `.claude/analysis/SECURITY_ISSUES.md`
-- **性能優化詳細方案**：見 `.claude/analysis/PERFORMANCE_OPTIMIZATION.md`
-- **新功能詳細設計**：見 `.claude/analysis/FEATURE_PROPOSALS.md`
-- **測試計畫**：見 `.claude/analysis/TEST_COVERAGE_PLAN.md`
+- **最新狀態總表**：見 `.claude/analysis/IMPLEMENTATION_STATUS.md`
+- **安全性詳細報告**：見 `.claude/analysis/SECURITY_ISSUES_DETAILED.md`
+- **新功能詳細設計**：見 `.claude/analysis/FEATURE_PROPOSALS_DETAILED.md`
+- **實作摘要**：見 `.claude/analysis/IMPLEMENTATION_SUMMARY.md`
 
 ---
 

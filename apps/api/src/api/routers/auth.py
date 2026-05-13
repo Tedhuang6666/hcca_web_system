@@ -6,6 +6,7 @@ from urllib.parse import urlencode, urlsplit
 from authlib.integrations.base_client import OAuthError
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
+from httpx import ConnectTimeout
 from jwt.exceptions import InvalidTokenError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -135,13 +136,20 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
     client_ip = request.client.host if request.client else "unknown"
     frontend_origin = _frontend_origin_for(request)
     try:
-        token_data = await google.authorize_access_token(request)
+        token_data = await google.authorize_access_token(request, timeout=30.0)
     except OAuthError as e:
         logger.warning(
             "OAuth2 authentication failed",
             extra={"error": str(e), "client_ip": client_ip},
         )
         error_qs = urlencode({"error": "OAuth2 授權失敗，請重新登入"})
+        return RedirectResponse(url=f"{frontend_origin}/login?{error_qs}")
+    except ConnectTimeout:
+        logger.exception(
+            "Google OAuth2 token endpoint connection timed out",
+            extra={"client_ip": client_ip},
+        )
+        error_qs = urlencode({"error": "連線 Google 登入服務逾時，請稍後再試"})
         return RedirectResponse(url=f"{frontend_origin}/login?{error_qs}")
     except Exception:
         logger.error(

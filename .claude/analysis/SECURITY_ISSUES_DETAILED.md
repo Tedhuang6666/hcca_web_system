@@ -1,6 +1,7 @@
 # 安全性問題詳細報告
 
 **生成日期**：2026-05-07  
+**最新修復狀態**：請以 [`IMPLEMENTATION_STATUS.md`](./IMPLEMENTATION_STATUS.md) 為準（最後核對：2026-05-13）  
 **危險級別分佈**：🔴 4 個 CRITICAL | 🟠 6 個 HIGH | 🟡 7 個 MEDIUM | 🟢 3 個 LOW
 
 ---

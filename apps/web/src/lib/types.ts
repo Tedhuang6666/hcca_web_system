@@ -348,6 +348,16 @@ export interface UserSummary {
   email: string;
 }
 
+export interface OrgRead {
+  id: string;
+  name: string;
+  description: string | null;
+  parent_id: string | null;
+  prefix: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface UserPositionRead {
   id: string;
   user_id: string;

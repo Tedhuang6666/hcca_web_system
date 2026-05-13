@@ -12,6 +12,7 @@ import type {
   AnnouncementStatsOut,
   SavedFilterOut,
   AuditLogOut,
+  OrgRead,
   PetitionCaseListItem, PetitionCaseOut, PetitionCreate, PetitionCreatedOut,
   PetitionStatsOut, PetitionStatus, PetitionTypeOut,
   NotificationPreferences,
@@ -406,14 +407,7 @@ export const usersApi = {
 
 // ── 組織（公開端點）───────────────────────────────────────────────────────────
 
-export interface OrgRead {
-  id: string;
-  name: string;
-  description: string | null;
-  parent_id: string | null;
-  prefix: string | null;
-  created_at: string;
-}
+export type { OrgRead } from "./types";
 
 export const orgsApi = {
   list: () => get<OrgRead[]>("/orgs"),
@@ -511,7 +505,7 @@ export const adminApi = {
 
   // 組織管理
   createOrg: (body: { name: string; description?: string; parent_id?: string | null; prefix?: string | null }) =>
-    post<OrgWithPositions>("/orgs", body),
+    post<OrgRead>("/orgs", body),
   updateOrg: (id: string, body: {
     name?: string;
     description?: string | null;
@@ -519,7 +513,7 @@ export const adminApi = {
     prefix?: string | null;
     note?: string | null;
     remark?: string | null;
-  }) => patch<OrgWithPositions>(`/orgs/${id}`, body),
+  }) => patch<OrgRead>(`/orgs/${id}`, body),
   deleteOrg: (id: string) => del<void>(`/orgs/${id}`),
 };
 

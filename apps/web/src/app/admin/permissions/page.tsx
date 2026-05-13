@@ -173,15 +173,15 @@ export default function PermissionsAdminPage() {
 
   return (
     <div className="h-full flex flex-col" style={{ maxHeight: "calc(100vh - 4rem)" }}>
-      <header className="flex items-center justify-between gap-3 px-5 py-4 flex-shrink-0" style={{ borderBottom: "1px solid var(--border)" }}>
+      <header className="flex flex-col items-stretch gap-3 px-4 py-4 flex-shrink-0 sm:flex-row sm:items-center sm:justify-between sm:px-5" style={{ borderBottom: "1px solid var(--border)" }}>
         <div className="min-w-0">
           <h1 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>自治管理工作台</h1>
           <p className="text-xs mt-0.5 truncate" style={{ color: "var(--text-muted)" }}>
             {loading ? "載入中..." : `${orgs.length} 個組織 · ${positions.length} 個職位 · ${users.length} 位使用者`}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <SmallButton onClick={() => setSidebarOpen(true)}><span className="sm:hidden">組織</span></SmallButton>
+        <div className="grid grid-cols-3 gap-2 sm:flex sm:items-center">
+          <SmallButton onClick={() => setSidebarOpen(true)}><span className="sm:hidden">組織</span><span className="hidden sm:inline">選擇組織</span></SmallButton>
           <SmallButton onClick={() => setShowNewOrg(true)} tone="primary"><Icon name="plus" />新增組織</SmallButton>
           <SmallButton onClick={() => setShowWizard(true)} tone="primary"><Icon name="users" />新人上任</SmallButton>
         </div>
@@ -507,13 +507,13 @@ function DetailPanel({
     return <UserPanel user={selectedUser} positions={positions} permCodes={permCodes} onRefresh={onRefresh} onConfirm={onConfirm} />;
   }
   if (selectedOrg) {
-    return <OrgPanel org={selectedOrg} orgs={orgs} positions={positions} users={users} permCodes={permCodes} onRefresh={onRefresh} onSelect={onSelect} metrics={metrics} />;
+    return <OrgPanel org={selectedOrg} orgs={orgs} positions={positions} users={users} permCodes={permCodes} onRefresh={onRefresh} onSelect={onSelect} onConfirm={onConfirm} metrics={metrics} />;
   }
   return <div className="p-6 text-sm" style={{ color: "var(--text-muted)" }}>尚無可管理資料</div>;
 }
 
 function OrgPanel({
-  org, orgs, positions, users, permCodes, onRefresh, onSelect, metrics,
+  org, orgs, positions, users, permCodes, onRefresh, onSelect, onConfirm, metrics,
 }: {
   org: OrgRead;
   orgs: OrgRead[];
@@ -522,6 +522,7 @@ function OrgPanel({
   permCodes: PermissionCodeInfo[];
   onRefresh: () => Promise<void>;
   onSelect: (detail: Detail) => void;
+  onConfirm: (state: ConfirmState) => void;
   metrics: {
     orphanPositions: PositionSummary[];
     noPermPositions: PositionSummary[];
@@ -538,6 +539,16 @@ function OrgPanel({
   const [newCodes, setNewCodes] = useState<string[]>([]);
   const orgPositions = positions.filter((p) => p.org_id === org.id);
   const orgMembers = users.filter((u) => orgPositions.some((p) => u.positions.some((up) => up.id === p.id)));
+  const descendantIds = new Set<string>();
+  const collectDescendants = (parentId: string) => {
+    orgs.filter((o) => o.parent_id === parentId).forEach((child) => {
+      if (descendantIds.has(child.id)) return;
+      descendantIds.add(child.id);
+      collectDescendants(child.id);
+    });
+  };
+  collectDescendants(org.id);
+  const childCount = orgs.filter((o) => o.parent_id === org.id).length;
 
   useEffect(() => {
     setName(org.name);
@@ -584,11 +595,23 @@ function OrgPanel({
   };
   return (
     <div className="w-full p-5 space-y-5">
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>組織架構</p>
-        <h2 className="text-xl font-semibold mt-1" style={{ color: "var(--text-primary)" }}>{org.name}</h2>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>組織架構</p>
+          <h2 className="text-xl font-semibold mt-1 break-words" style={{ color: "var(--text-primary)" }}>{org.name}</h2>
+        </div>
+        <SmallButton
+          tone="danger"
+          onClick={() => onConfirm({
+            title: "刪除組織",
+            body: `確定刪除「${org.name}」？此組織目前有 ${orgPositions.length} 個職位、${orgMembers.length} 位成員與 ${childCount} 個直屬下層組織。若仍被公文、法規、餐訂、購票或問卷引用，系統會阻止刪除。`,
+            action: () => adminApi.deleteOrg(org.id),
+          })}
+        >
+          <Icon name="trash" />刪除
+        </SmallButton>
       </div>
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Metric label="職位" value={orgPositions.length} />
         <Metric label="成員" value={orgMembers.length} />
         <Metric label="空職位" value={metrics.orphanPositions.filter((p) => p.org_id === org.id).length} />
@@ -599,16 +622,16 @@ function OrgPanel({
           <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>組織資料</h3>
           <SmallButton onClick={save} tone="primary"><Icon name="edit" />儲存</SmallButton>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="text-xs" style={{ color: "var(--text-muted)" }}>名稱<TextInput value={name} onChange={(e) => setName(e.target.value)} className="mt-1" /></label>
           <label className="text-xs" style={{ color: "var(--text-muted)" }}>字號前綴<TextInput value={prefix} onChange={(e) => setPrefix(e.target.value)} className="mt-1" placeholder="例：嶺代" /></label>
-          <label className="text-xs col-span-2" style={{ color: "var(--text-muted)" }}>描述<TextInput value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1" /></label>
-          <label className="text-xs col-span-2" style={{ color: "var(--text-muted)" }}>上層組織<SelectInput value={parentId} onChange={(e) => setParentId(e.target.value)} className="mt-1"><option value="">無（頂層）</option>{orgs.filter((o) => o.id !== org.id).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</SelectInput></label>
+          <label className="text-xs sm:col-span-2" style={{ color: "var(--text-muted)" }}>描述<TextInput value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1" /></label>
+          <label className="text-xs sm:col-span-2" style={{ color: "var(--text-muted)" }}>上層組織<SelectInput value={parentId} onChange={(e) => setParentId(e.target.value)} className="mt-1"><option value="">無（頂層）</option>{orgs.filter((o) => o.id !== org.id && !descendantIds.has(o.id)).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</SelectInput></label>
         </div>
       </section>
       <section className="rounded-xl p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
         <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>新增職位</h3>
-        <div className="grid grid-cols-[1fr_120px_auto] gap-2 items-end">
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr_120px_auto] gap-2 items-end">
           <label className="text-xs" style={{ color: "var(--text-muted)" }}>職位名稱<TextInput value={newPositionName} onChange={(e) => setNewPositionName(e.target.value)} className="mt-1" /></label>
           <label className="text-xs" style={{ color: "var(--text-muted)" }}>權重<TextInput type="number" min={0} value={newWeight} onChange={(e) => setNewWeight(Number(e.target.value))} className="mt-1" /></label>
           <SmallButton onClick={createPosition} tone="primary"><Icon name="plus" />建立</SmallButton>
@@ -699,11 +722,11 @@ function PositionPanel({
           <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>職位資料與權限</h3>
           <SmallButton onClick={save} tone="primary">儲存變更</SmallButton>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="text-xs" style={{ color: "var(--text-muted)" }}>名稱<TextInput value={name} onChange={(e) => setName(e.target.value)} className="mt-1" /></label>
           <label className="text-xs" style={{ color: "var(--text-muted)" }}>權限係數<TextInput type="number" min={0} value={weight} onChange={(e) => setWeight(Number(e.target.value))} className="mt-1" /></label>
-          <label className="text-xs col-span-2" style={{ color: "var(--text-muted)" }}>描述<TextInput value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1" /></label>
-          <label className="text-xs col-span-2" style={{ color: "var(--text-muted)" }}>上級職位<SelectInput value={parentId} onChange={(e) => setParentId(e.target.value)} className="mt-1"><option value="">無上級</option>{orgPositions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</SelectInput></label>
+          <label className="text-xs sm:col-span-2" style={{ color: "var(--text-muted)" }}>描述<TextInput value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1" /></label>
+          <label className="text-xs sm:col-span-2" style={{ color: "var(--text-muted)" }}>上級職位<SelectInput value={parentId} onChange={(e) => setParentId(e.target.value)} className="mt-1"><option value="">無上級</option>{orgPositions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</SelectInput></label>
         </div>
         <PermCheckboxes selected={codes} onChange={setCodes} permCodes={permCodes} />
       </section>
@@ -711,7 +734,7 @@ function PositionPanel({
         <div className="px-4 py-3" style={{ background: "var(--bg-elevated)", borderBottom: "1px solid var(--border)" }}>
           <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>成員任期</h3>
         </div>
-        <div className="p-4 grid grid-cols-[1fr_130px_130px_auto] gap-2 items-end" style={{ borderBottom: "1px solid var(--border)" }}>
+        <div className="p-4 grid grid-cols-1 sm:grid-cols-[1fr_130px_130px_auto] gap-2 items-end" style={{ borderBottom: "1px solid var(--border)" }}>
           <SelectInput value={memberUserId} onChange={(e) => setMemberUserId(e.target.value)}><option value="">選擇新增成員</option>{candidates.map((u) => <option key={u.id} value={u.id}>{u.display_name} · {u.email}</option>)}</SelectInput>
           <TextInput type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ colorScheme: "dark" }} />
           <TextInput type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={{ colorScheme: "dark" }} />
@@ -746,7 +769,7 @@ function AssignmentRow({
     }
   };
   return (
-    <div className="grid grid-cols-[1fr_130px_130px_auto_auto] gap-2 items-center px-4 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
+    <div className="grid grid-cols-1 sm:grid-cols-[1fr_130px_130px_auto_auto] gap-2 items-center px-4 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
       <button onClick={() => onSelect({ type: "user", id: user.id })} className="text-left min-w-0 cursor-pointer">
         <p className="text-sm font-medium truncate" style={{ color: "var(--text-primary)" }}>{user.display_name}</p>
         <p className="text-xs truncate" style={{ color: "var(--text-muted)" }}>{user.email}</p>
@@ -825,7 +848,7 @@ function UserPanel({
       </div>
       <section className="rounded-xl p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
         <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>指派新職位</h3>
-        <div className="grid grid-cols-[1fr_130px_130px_auto] gap-2 items-end">
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr_130px_130px_auto] gap-2 items-end">
           <SelectInput value={positionId} onChange={(e) => setPositionId(e.target.value)}><option value="">選擇職位</option>{available.map((p) => <option key={p.id} value={p.id}>{p.org_name} · {p.name}</option>)}</SelectInput>
           <TextInput type="date" value={start} onChange={(e) => setStart(e.target.value)} style={{ colorScheme: "dark" }} />
           <TextInput type="date" value={end} onChange={(e) => setEnd(e.target.value)} style={{ colorScheme: "dark" }} />
@@ -874,7 +897,7 @@ function UserAssignmentEditor({
     }
   };
   return (
-    <div className="grid grid-cols-[1fr_130px_130px_auto_auto] gap-2 items-center px-4 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
+    <div className="grid grid-cols-1 sm:grid-cols-[1fr_130px_130px_auto_auto] gap-2 items-center px-4 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
       <div className="min-w-0">
         <p className="text-sm font-medium truncate" style={{ color: "var(--text-primary)" }}>{position.org_name} · {position.name}</p>
         <p className="text-xs" style={{ color: "var(--text-muted)" }}>{position.permission_codes.length} 個權限</p>
@@ -984,7 +1007,7 @@ function OnboardingWizard({
   };
   return (
     <Modal title="新人上任 Wizard" onClose={onClose} maxWidthClassName="max-w-3xl">
-      <div className="grid grid-cols-[180px_1fr] gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-4">
         <div className="space-y-2">
           {[
             ["new", "建立新帳號"],
@@ -1002,13 +1025,13 @@ function OnboardingWizard({
           {mode === "existing" ? (
             <SelectInput value={userId} onChange={(e) => setUserId(e.target.value)}><option value="">選擇使用者</option>{users.map((u) => <option key={u.id} value={u.id}>{u.display_name} · {u.email}</option>)}</SelectInput>
           ) : (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <TextInput value={name} onChange={(e) => setName(e.target.value)} placeholder="姓名" />
               <TextInput value={studentId} onChange={(e) => setStudentId(e.target.value)} placeholder="學號（擇一）" />
-              <TextInput value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email（擇一）" className="col-span-2" />
+              <TextInput value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email（擇一）" className="sm:col-span-2" />
             </div>
           )}
-          <div className="grid grid-cols-[1fr_150px_150px] gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_150px_150px] gap-3">
             <SelectInput value={positionId} onChange={(e) => setPositionId(e.target.value)}><option value="">選擇職位</option>{positions.map((p) => <option key={p.id} value={p.id}>{p.org_name} · {p.name}</option>)}</SelectInput>
             <TextInput type="date" value={start} onChange={(e) => setStart(e.target.value)} style={{ colorScheme: "dark" }} />
             <TextInput type="date" value={end} onChange={(e) => setEnd(e.target.value)} style={{ colorScheme: "dark" }} />

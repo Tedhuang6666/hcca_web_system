@@ -1,6 +1,7 @@
 # 新增功能詳細提案
 
 **生成日期**：2026-05-07  
+**最新完成狀態**：請以 [`IMPLEMENTATION_STATUS.md`](./IMPLEMENTATION_STATUS.md) 為準（最後核對：2026-05-13）  
 **優先級分布**：15 個 Tier 1（立即）| 18 個 Tier 2（3 個月）| 10 個 Tier 3（可選）
 
 ---
@@ -1007,4 +1008,3 @@ export default function AuditLogsPage() {
 - [ ] **測試**：Unit + Integration 測試
 - [ ] **文件**：API Swagger + 使用者文件
 - [ ] **審查**：代碼審查 + QA 驗收
-

@@ -45,7 +45,7 @@ async def create_org(db: AsyncSession, data: OrgCreate) -> Org:
 
 
 async def update_org(db: AsyncSession, org: Org, data: OrgUpdate) -> Org:
-    updates = data.model_dump(exclude_none=True)
+    updates = data.model_dump(exclude_unset=True)
     if "description" not in updates:
         note = updates.pop("note", None)
         remark = updates.pop("remark", None)
@@ -56,8 +56,19 @@ async def update_org(db: AsyncSession, org: Org, data: OrgUpdate) -> Org:
     else:
         updates.pop("note", None)
         updates.pop("remark", None)
-    if updates.get("parent_id") == org.id:
+    parent_id = updates.get("parent_id")
+    if parent_id == org.id:
         raise ValueError("組織不可將自己設為上級")
+    if "parent_id" in updates and parent_id is not None:
+        current_id = parent_id
+        while current_id is not None:
+            if current_id == org.id:
+                raise ValueError("組織不可將自己的下層組織設為上級")
+            parent_result = await db.execute(select(Org).where(Org.id == current_id))
+            parent = parent_result.scalar_one_or_none()
+            if parent is None:
+                raise ValueError("指定的上層組織不存在")
+            current_id = parent.parent_id
     for field, value in updates.items():
         setattr(org, field, value)
     await db.flush()
@@ -110,7 +121,7 @@ async def create_position(db: AsyncSession, org_id: uuid.UUID, data: PositionCre
 
 
 async def update_position(db: AsyncSession, position: Position, data: PositionUpdate) -> Position:
-    updates = data.model_dump(exclude_none=True)
+    updates = data.model_dump(exclude_unset=True)
     if "description" not in updates:
         note = updates.pop("note", None)
         remark = updates.pop("remark", None)

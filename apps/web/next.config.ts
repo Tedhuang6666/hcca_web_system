@@ -6,6 +6,10 @@ const apiInternalUrl = process.env.API_INTERNAL_URL || "http://localhost:8000";
 const nextConfig: NextConfig = {
   output: "standalone",
   outputFileTracingRoot: __dirname,
+  allowedDevOrigins: [
+    "*.trycloudflare.com",
+    "*.devtunnels.ms",
+  ],
   turbopack: {
     root: path.resolve(__dirname),
   },
