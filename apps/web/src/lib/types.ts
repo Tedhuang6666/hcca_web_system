@@ -10,7 +10,7 @@ export type DocumentCategory = "letter" | "decree" | "announcement" | "report" |
 /** 可見度：僅當事人 / 機關成員 / 全體登入 / 公開（含未登入） */
 export type DocumentVisibility = "subject_only" | "org_only" | "public" | "publicly_open";
 export type RecipientType = "main" | "primary" | "copy";
-export type ApprovalStepStatus = "pending" | "approved" | "rejected" | "waiting";
+export type ApprovalStepStatus = "pending" | "approved" | "rejected" | "waiting" | "skipped";
 export type DelegateSource = "manual" | "assignment";
 export type RejectMode = "to_creator" | "to_previous";
 
@@ -95,7 +95,6 @@ export interface DocumentOut {
   meeting_chairperson: string | null;
   handler_name: string | null;
   handler_unit: string | null;
-  handler_phone: string | null;
   handler_email: string | null;
   file_number: string | null;
   retention_period: string | null;
@@ -161,7 +160,7 @@ export interface DocumentCreate {
   content?: string;
   meeting_purpose?: string; meeting_time?: string;
   meeting_location?: string; meeting_chairperson?: string;
-  handler_name?: string; handler_unit?: string; handler_phone?: string; handler_email?: string;
+  handler_name?: string; handler_unit?: string; handler_email?: string;
   file_number?: string; retention_period?: string;
   due_date?: string;
   page_info?: string;
@@ -311,6 +310,11 @@ export interface RegulationOut {
   freeze_reason: string | null;
   freeze_at: string | null;
   freeze_document_id: string | null;
+  /** 廢止欄位 */
+  is_repealed: boolean;
+  repealed_date: string | null;
+  repeal_reason: string | null;
+  repeal_replacement_id: string | null;
   articles: RegulationArticleOut[];
   revisions: RegulationRevisionOut[];
   workflow_logs: RegulationWorkflowLogOut[];
@@ -319,8 +323,10 @@ export interface RegulationOut {
 export interface RegulationListItem {
   id: string; title: string; category: RegulationCategory;
   version: number; is_active: boolean; workflow_status: RegulationWorkflowStatus;
+  is_repealed: boolean;
   org_id: string;
   published_at: string | null;
+  repealed_date: string | null;
   freeze_reason: string | null;
   freeze_at: string | null;
   created_at: string; updated_at: string;
@@ -334,12 +340,22 @@ export interface UserRead {
   display_name: string;
   student_id: string | null;
   avatar_url: string | null;
-  phone: string | null;
-  show_phone: boolean;
   show_email: boolean;
   is_active: boolean;
   is_verified: boolean;
   is_superuser: boolean;
+}
+
+export interface MFAStatusOut {
+  mfa_enabled: boolean;
+  has_pending_setup: boolean;
+  backup_code_count: number;
+}
+
+export interface MFASetupOut {
+  secret: string;
+  qr_uri: string;
+  backup_codes: string[];
 }
 
 export interface UserSummary {
@@ -354,6 +370,7 @@ export interface OrgRead {
   description: string | null;
   parent_id: string | null;
   prefix: string | null;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -751,7 +768,6 @@ export interface PetitionCreate {
   is_named: boolean;
   contact_name?: string | null;
   contact_email?: string | null;
-  contact_phone?: string | null;
   title: string;
   content: string;
 }
@@ -775,7 +791,6 @@ export interface PetitionSubmitterOut {
   student_id: string | null;
   contact_name: string | null;
   contact_email: string | null;
-  contact_phone: string | null;
 }
 
 export interface PetitionAttachmentOut {
@@ -832,7 +847,6 @@ export interface PetitionCaseOut extends PetitionCaseListItem {
   submitter_id: string | null;
   contact_name: string | null;
   contact_email: string | null;
-  contact_phone: string | null;
   assigned_at: string | null;
   first_response_at: string | null;
   resolved_at: string | null;
@@ -922,4 +936,12 @@ export interface AnnouncementParticipationItem {
   title: string;
   reader_count: number;
   published_at: string | null;
+}
+
+export interface SurveyParticipationItem {
+  survey_id: string;
+  title: string;
+  response_count: number;
+  status: SurveyStatus;
+  created_at: string;
 }

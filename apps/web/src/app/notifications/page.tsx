@@ -145,6 +145,8 @@ export default function NotificationsPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [unreadOnly, setUnreadOnly] = useState(false);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [unreadCount, setUnreadCount] = useState(0);
   const [wsRoom, setWsRoom] = useState<string | null>(null);
 
@@ -159,7 +161,10 @@ export default function NotificationsPage() {
     setLoadError(false);
     try {
       const [list, counts] = await Promise.all([
-        notificationsApi.list(unreadOnly, 80),
+        notificationsApi.list(unreadOnly, 80, {
+          date_from: dateFrom || undefined,
+          date_to: dateTo || undefined,
+        }),
         notificationsApi.count(),
       ]);
       setItems(list);
@@ -170,7 +175,7 @@ export default function NotificationsPage() {
     } finally {
       setLoading(false);
     }
-  }, [unreadOnly]);
+  }, [dateFrom, dateTo, unreadOnly]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -229,6 +234,13 @@ export default function NotificationsPage() {
             公文審核、系統通知與重要提醒
           </p>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+        <Link
+          href="/settings/notifications"
+          className="px-4 py-2 rounded-lg text-sm font-medium transition-all hover:opacity-80"
+          style={{ color: "var(--text-secondary)", border: "1px solid var(--border)", textDecoration: "none" }}>
+          偏好設定
+        </Link>
         {unreadCount > 0 && (
           <button
             onClick={handleReadAll}
@@ -237,6 +249,7 @@ export default function NotificationsPage() {
             全部標為已讀
           </button>
         )}
+        </div>
       </div>
 
       {/* 篩選 */}
@@ -255,6 +268,30 @@ export default function NotificationsPage() {
             {label}
           </button>
         ))}
+      </div>
+
+      <div className="card p-4">
+        <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+          <label className="space-y-1.5">
+            <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>起始日期</span>
+            <input className="input" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          </label>
+          <label className="space-y-1.5">
+            <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>結束日期</span>
+            <input className="input" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          </label>
+          <div className="flex items-end">
+            <button
+              className="btn btn-ghost w-full"
+              onClick={() => {
+                setDateFrom("");
+                setDateTo("");
+              }}
+              disabled={!dateFrom && !dateTo}>
+              清除日期
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* 通知列表 */}

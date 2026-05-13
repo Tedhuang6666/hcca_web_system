@@ -72,11 +72,32 @@ class Settings(BaseSettings):
         default=False,
         description="若啟用，超級管理員登入需要 2FA（目前實驗性功能）",
     )
+    MFA_SECRET_ENCRYPTION_KEY: str = Field(
+        default="",
+        description="MFA secret 欄位加密用 key；未設定時由 SECRET_KEY 派生",
+    )
+    MFA_CHALLENGE_EXPIRE_MINUTES: int = Field(
+        default=5,
+        description="OAuth 登入完成後 MFA challenge token 有效分鐘數",
+    )
 
     # --- 簡易 Rate Limit ---
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_REQUESTS: int = 120
     RATE_LIMIT_WINDOW_SECONDS: int = 60
+
+    # --- 瀏覽器安全標頭 ---
+    SECURITY_HEADERS_ENABLED: bool = True
+    SECURITY_HSTS_MAX_AGE_SECONDS: int = 31_536_000
+    SECURITY_CSP: str = (
+        "default-src 'self'; "
+        "img-src 'self' data:; "
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "frame-ancestors 'none'; "
+        "object-src 'none'; "
+        "base-uri 'self'"
+    )
 
     # --- LINE Bot 設定 ---
     LINE_CHANNEL_SECRET: str = Field(default="")

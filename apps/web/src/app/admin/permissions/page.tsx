@@ -159,7 +159,13 @@ export default function PermissionsAdminPage() {
   const runConfirm = async () => {
     if (!confirmState) return;
     try {
-      await confirmState.action();
+      const result = await confirmState.action();
+      if (
+        typeof result === "object"
+        && result !== null
+        && "keepOpen" in result
+        && (result as { keepOpen?: boolean }).keepOpen
+      ) return;
       setConfirmState(null);
       await load();
     } catch (e) {
@@ -593,23 +599,73 @@ function OrgPanel({
       displayError(e, "建立職位失敗");
     }
   };
+  const confirmDeactivate = () => {
+    onConfirm({
+      title: "停用組織",
+      body: `停用「${org.name}」後，既有公文與法規會保留，但新建公文、法規與字號範本時不再列為可選組織。`,
+      action: async () => {
+        await adminApi.deactivateOrg(org.id);
+        toast.success("組織已停用");
+      },
+    });
+  };
+  const confirmActivate = () => {
+    onConfirm({
+      title: "啟用組織",
+      body: `確定重新啟用「${org.name}」？啟用後會再次出現在新建流程的組織選單。`,
+      action: async () => {
+        await adminApi.activateOrg(org.id);
+        toast.success("組織已啟用");
+      },
+    });
+  };
+  const confirmDelete = () => {
+    onConfirm({
+      title: "刪除組織",
+      body: `確定刪除「${org.name}」？此組織目前有 ${orgPositions.length} 個職位、${orgMembers.length} 位成員與 ${childCount} 個直屬下層組織。若仍關聯公文或法規，系統會引導改為停用。`,
+      action: async () => {
+        try {
+          await adminApi.deleteOrg(org.id);
+          toast.success("組織已刪除");
+        } catch (e) {
+          if (e instanceof ApiError && e.status === 409) {
+            onConfirm({
+              title: "改為停用組織",
+              body: `${e.message}。是否現在停用「${org.name}」？`,
+              action: async () => {
+                await adminApi.deactivateOrg(org.id);
+                toast.success("組織已停用");
+              },
+            });
+            return { keepOpen: true };
+          }
+          throw e;
+        }
+      },
+    });
+  };
   return (
     <div className="w-full p-5 space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>組織架構</p>
-          <h2 className="text-xl font-semibold mt-1 break-words" style={{ color: "var(--text-primary)" }}>{org.name}</h2>
+          <div className="flex flex-wrap items-center gap-2 mt-1">
+            <h2 className="text-xl font-semibold break-words" style={{ color: "var(--text-primary)" }}>{org.name}</h2>
+            {!org.is_active && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ color: "#f59e0b", border: "1px solid rgba(245,158,11,0.35)", background: "rgba(245,158,11,0.12)" }}>
+                已停用
+              </span>
+            )}
+          </div>
         </div>
-        <SmallButton
-          tone="danger"
-          onClick={() => onConfirm({
-            title: "刪除組織",
-            body: `確定刪除「${org.name}」？此組織目前有 ${orgPositions.length} 個職位、${orgMembers.length} 位成員與 ${childCount} 個直屬下層組織。若仍被公文、法規、餐訂、購票或問卷引用，系統會阻止刪除。`,
-            action: () => adminApi.deleteOrg(org.id),
-          })}
-        >
-          <Icon name="trash" />刪除
-        </SmallButton>
+        <div className="flex flex-wrap gap-2">
+          {org.is_active ? (
+            <SmallButton tone="warning" onClick={confirmDeactivate}>停用</SmallButton>
+          ) : (
+            <SmallButton tone="primary" onClick={confirmActivate}>啟用</SmallButton>
+          )}
+          <SmallButton tone="danger" onClick={confirmDelete}><Icon name="trash" />刪除</SmallButton>
+        </div>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Metric label="職位" value={orgPositions.length} />

@@ -407,8 +407,6 @@ async def render_document_print_html(
     handler_block = ""
     if doc.handler_name:
         handler_block += f"<div>承辦人：{_esc(doc.handler_name)}</div>"
-    if doc.handler_phone:
-        handler_block += f"<div>電話：{_esc(doc.handler_phone)}</div>"
     if doc.handler_email:
         handler_block += f"<div>電子信箱：{_esc(doc.handler_email)}</div>"
 

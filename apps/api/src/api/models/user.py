@@ -32,8 +32,6 @@ class User(Base, TimestampMixin):
     google_sub: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
 
     # 個人聯絡資訊（用於公文承辦人自動填入）
-    phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
-    show_phone: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     show_email: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # 帳號狀態
@@ -44,8 +42,14 @@ class User(Base, TimestampMixin):
 
     # 2FA (TOTP) 相關欄位
     mfa_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    mfa_secret: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    mfa_pending_secret: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    mfa_secret: Mapped[str | None] = mapped_column(Text, nullable=True)
+    mfa_pending_secret: Mapped[str | None] = mapped_column(Text, nullable=True)
+    mfa_backup_code_hashes: Mapped[dict] = mapped_column(
+        JSONDict, nullable=False, default=dict, server_default="{}"
+    )
+    mfa_pending_backup_code_hashes: Mapped[dict] = mapped_column(
+        JSONDict, nullable=False, default=dict, server_default="{}"
+    )
 
     # 通知偏好設定（空 dict = 全部啟用；可覆蓋個別類型：{"document_pending": false}）
     notification_preferences: Mapped[dict] = mapped_column(

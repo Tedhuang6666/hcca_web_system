@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, memo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -70,7 +70,7 @@ function formatActingSignature(step: DocumentOut["approvals"][number] | undefine
 
 // ── 使用者選取器 ──────────────────────────────────────────────────────────────
 
-function UserPicker({
+const UserPicker = memo(function UserPicker({
   selectedIds, onChange,
 }: {
   selectedIds: string[];
@@ -83,9 +83,12 @@ function UserPicker({
     usersApi.list().then(setUsers).catch(() => {});
   }, []);
 
-  const filtered = users.filter(u =>
-    u.display_name.toLowerCase().includes(search.toLowerCase()) ||
-    u.email.toLowerCase().includes(search.toLowerCase()),
+  const filtered = useMemo(
+    () => users.filter(u =>
+      u.display_name.toLowerCase().includes(search.toLowerCase()) ||
+      u.email.toLowerCase().includes(search.toLowerCase()),
+    ),
+    [users, search]
   );
 
   const toggle = (uid: string) =>
@@ -139,7 +142,7 @@ function UserPicker({
       )}
     </div>
   );
-}
+});
 
 // ── 主頁面 ────────────────────────────────────────────────────────────────────
 
@@ -584,10 +587,9 @@ export default function DocumentDetailPage() {
                 </div>
               ))}
             </dl>
-            {doc.handler_phone && (
+            {doc.handler_email && (
               <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
-                聯絡：{doc.handler_phone}
-                {doc.handler_email && <span> · {doc.handler_email}</span>}
+                聯絡：{doc.handler_email}
               </p>
             )}
           </div>

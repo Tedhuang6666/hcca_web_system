@@ -24,8 +24,6 @@ CurrentUser = Annotated[User, Depends(get_current_active_user)]
 class UserSelfUpdate(BaseModel):
     display_name: str | None = Field(None, min_length=1, max_length=100)
     student_id: str | None = Field(None, max_length=20)
-    phone: str | None = Field(None, max_length=30)
-    show_phone: bool | None = None
     show_email: bool | None = None
 
 
@@ -88,10 +86,6 @@ async def update_me(
         current_user.display_name = body.display_name
     if body.student_id is not None:
         current_user.student_id = body.student_id or None
-    if body.phone is not None:
-        current_user.phone = body.phone or None
-    if body.show_phone is not None:
-        current_user.show_phone = body.show_phone
     if body.show_email is not None:
         current_user.show_email = body.show_email
     try:

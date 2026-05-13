@@ -298,7 +298,7 @@ export default function PetitionManagePage() {
 
               {selected.submitter ? (
                 <div className="rounded-lg p-3 text-sm" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
-                  提交者：{selected.submitter.display_name || selected.submitter.contact_name || "未提供"} · {selected.submitter.email || selected.submitter.contact_email || selected.submitter.contact_phone || "無聯絡資訊"}
+                  提交者：{selected.submitter.display_name || selected.submitter.contact_name || "未提供"} · {selected.submitter.email || selected.submitter.contact_email || "無聯絡資訊"}
                 </div>
               ) : (
                 <div className="rounded-lg p-3 text-sm" style={{ background: "var(--primary-dim)", border: "1px solid var(--info-border)", color: "var(--text-muted)" }}>

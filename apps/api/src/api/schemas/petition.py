@@ -49,11 +49,10 @@ class PetitionCreate(BaseModel):
     is_named: bool = True
     contact_name: str | None = Field(None, max_length=100)
     contact_email: EmailStr | None = None
-    contact_phone: str | None = Field(None, max_length=30)
     title: str = Field(..., min_length=1, max_length=200)
     content: str = Field(..., min_length=1, max_length=10000)
 
-    @field_validator("contact_name", "contact_phone")
+    @field_validator("contact_name")
     @classmethod
     def strip_optional(cls, value: str | None) -> str | None:
         if value is None:
@@ -81,7 +80,6 @@ class PetitionSubmitterOut(BaseModel):
     student_id: str | None = None
     contact_name: str | None = None
     contact_email: str | None = None
-    contact_phone: str | None = None
 
 
 class PetitionAttachmentOut(BaseModel):
@@ -144,7 +142,6 @@ class PetitionCaseOut(PetitionCaseListItem):
     submitter_id: uuid.UUID | None = None
     contact_name: str | None = None
     contact_email: str | None = None
-    contact_phone: str | None = None
     submitted_at: datetime
     assigned_at: datetime | None
     first_response_at: datetime | None

@@ -12,7 +12,6 @@ export default function NewPetitionPage() {
   const [isNamed, setIsNamed] = useState(true);
   const [contactName, setContactName] = useState("");
   const [contactEmail, setContactEmail] = useState("");
-  const [contactPhone, setContactPhone] = useState("");
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [files, setFiles] = useState<FileList | null>(null);
@@ -43,7 +42,6 @@ export default function NewPetitionPage() {
         is_named: isNamed,
         contact_name: isLoggedIn ? null : contactName || null,
         contact_email: isLoggedIn ? null : contactEmail || null,
-        contact_phone: contactPhone || null,
         title,
         content,
       });
@@ -143,14 +141,11 @@ export default function NewPetitionPage() {
           </div>
         )}
         {!isLoggedIn ? (
-          <div className="grid sm:grid-cols-3 gap-3">
+          <div className="grid sm:grid-cols-2 gap-3">
             <input className="input" placeholder="聯絡姓名" value={contactName} onChange={(e) => setContactName(e.target.value)} />
-            <input className="input" placeholder="聯絡 email" type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} />
-            <input className="input" placeholder="聯絡電話" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} />
+            <input className="input" placeholder="聯絡 email" type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} required />
           </div>
-        ) : (
-          <input className="input w-full" placeholder="聯絡電話（選填，會自動優先使用個人資料中的電話）" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} />
-        )}
+        ) : null}
         <input className="input w-full" placeholder="標題" value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={200} />
         <textarea className="input w-full min-h-52" placeholder="請描述事實、期待處理方式與相關時間地點" value={content} onChange={(e) => setContent(e.target.value)} required />
         <label className="block">

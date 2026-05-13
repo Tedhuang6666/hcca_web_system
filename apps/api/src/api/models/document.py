@@ -275,7 +275,6 @@ class Document(Base, TimestampMixin):
     # ── 承辦人資訊 ───────────────────────────────────────────────────────────
     handler_name: Mapped[str | None] = mapped_column(String(50), nullable=True)
     handler_unit: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    handler_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
     handler_email: Mapped[str | None] = mapped_column(String(200), nullable=True)
     # 檔號
     file_number: Mapped[str | None] = mapped_column(String(100), nullable=True)

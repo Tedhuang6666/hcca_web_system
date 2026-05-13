@@ -31,12 +31,14 @@ class OrgUpdate(BaseModel):
     remark: str | None = None
     parent_id: uuid.UUID | None = None
     prefix: str | None = Field(None, max_length=20, description="字號前綴（留空則不更新）")
+    is_active: bool | None = None
 
 
 class OrgRead(OrgBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    is_active: bool
     created_at: datetime
     updated_at: datetime
 

@@ -1,12 +1,17 @@
 """2FA (TOTP) 路由 - 多因素認證管理"""
 
+import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
+from jwt.exceptions import InvalidTokenError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.config import settings
 from api.core.database import get_db
+from api.core.security import create_access_token, create_refresh_token, decode_token
 from api.dependencies.auth import get_current_active_user
 from api.models.user import User
 from api.services import mfa as mfa_svc
@@ -26,6 +31,7 @@ class MFASetupOut(BaseModel):
 class MFAStatusOut(BaseModel):
     mfa_enabled: bool
     has_pending_setup: bool
+    backup_code_count: int = 0
 
 
 class MFAConfirmIn(BaseModel):
@@ -36,11 +42,42 @@ class MFAVerifyIn(BaseModel):
     code: str = Field(..., min_length=6, max_length=8, description="TOTP 驗證碼")
 
 
+class MFALoginVerifyIn(BaseModel):
+    challenge_token: str = Field(..., min_length=1)
+    code: str = Field(..., min_length=6, max_length=8, description="TOTP 或備用碼")
+
+
+class MFABackupCodesOut(BaseModel):
+    backup_codes: list[str]
+
+
+def _set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
+    response.set_cookie(
+        settings.ACCESS_TOKEN_COOKIE_NAME,
+        access_token,
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+        path="/",
+    )
+    response.set_cookie(
+        settings.REFRESH_TOKEN_COOKIE_NAME,
+        refresh_token,
+        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+        path="/",
+    )
+
+
 @router.get("/status", response_model=MFAStatusOut, summary="查詢 2FA 狀態")
 async def mfa_status(user: CurrentUser) -> MFAStatusOut:
     return MFAStatusOut(
         mfa_enabled=user.mfa_enabled,
         has_pending_setup=user.mfa_pending_secret is not None,
+        backup_code_count=mfa_svc.backup_code_count(user),
     )
 
 
@@ -63,12 +100,68 @@ async def confirm_mfa(payload: MFAConfirmIn, db: DbDep, user: CurrentUser) -> di
 
 
 @router.post("/verify", summary="驗證 2FA 碼")
-async def verify_mfa(payload: MFAVerifyIn, user: CurrentUser) -> dict[str, bool]:
+async def verify_mfa(payload: MFAVerifyIn, db: DbDep, user: CurrentUser) -> dict[str, bool]:
     """驗證 TOTP 碼（用於需要二次確認的敏感操作）"""
-    valid = await mfa_svc.verify_mfa(user, payload.code)
+    valid = await mfa_svc.verify_mfa(db, user, payload.code)
     if not valid:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="2FA 驗證碼錯誤")
     return {"verified": True}
+
+
+@router.post("/login/verify", summary="完成登入 2FA 挑戰")
+async def verify_mfa_login(
+    payload: MFALoginVerifyIn,
+    response: Response,
+    db: DbDep,
+) -> dict[str, str]:
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="2FA 登入挑戰已失效，請重新登入",
+    )
+    try:
+        decoded = decode_token(payload.challenge_token)
+    except InvalidTokenError as e:
+        raise credentials_exception from e
+    if decoded.get("type") != "mfa_challenge":
+        raise credentials_exception
+    user_id = decoded.get("sub")
+    if not user_id:
+        raise credentials_exception
+
+    try:
+        parsed_user_id = uuid.UUID(str(user_id))
+    except ValueError as e:
+        raise credentials_exception from e
+
+    result = await db.execute(select(User).where(User.id == parsed_user_id))
+    user = result.scalar_one_or_none()
+    if user is None or not user.is_active:
+        raise credentials_exception
+
+    valid = await mfa_svc.verify_mfa(db, user, payload.code)
+    if not valid:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="2FA 驗證碼錯誤")
+
+    access_token = create_access_token(subject=str(user.id))
+    refresh_token = create_refresh_token(subject=str(user.id))
+    _set_auth_cookies(response, access_token, refresh_token)
+    return {"message": "ok"}
+
+
+@router.post(
+    "/backup-codes/regenerate",
+    response_model=MFABackupCodesOut,
+    summary="重新產生 2FA 備用碼",
+)
+async def regenerate_backup_codes(
+    payload: MFAConfirmIn,
+    db: DbDep,
+    user: CurrentUser,
+) -> MFABackupCodesOut:
+    backup_codes = await mfa_svc.regenerate_backup_codes(db, user, payload.code)
+    if backup_codes is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="驗證碼錯誤，無法重產備用碼")
+    return MFABackupCodesOut(backup_codes=backup_codes)
 
 
 @router.delete("/disable", summary="停用 2FA")

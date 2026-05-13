@@ -186,7 +186,6 @@ async def _decorate_case(
             student_id=case_obj.submitter.student_id if case_obj.submitter else None,
             contact_name=case_obj.contact_name,
             contact_email=case_obj.contact_email,
-            contact_phone=case_obj.contact_phone,
         )
 
     return PetitionCaseOut(
@@ -199,7 +198,6 @@ async def _decorate_case(
         submitter_id=case_obj.submitter_id if can_view_submitter else None,
         contact_name=case_obj.contact_name if can_view_submitter else None,
         contact_email=case_obj.contact_email if can_view_submitter else None,
-        contact_phone=case_obj.contact_phone if can_view_submitter else None,
         assigned_at=case_obj.assigned_at,
         first_response_at=case_obj.first_response_at,
         resolved_at=case_obj.resolved_at,

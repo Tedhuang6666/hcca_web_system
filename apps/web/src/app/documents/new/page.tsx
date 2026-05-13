@@ -187,9 +187,7 @@ export default function NewDocumentPage() {
   // 承辦人（從個人資料自動填入）
   const [handlerName, setHandlerName] = useState("");
   const [handlerUnit, setHandlerUnit] = useState("");
-  const [handlerPhone, setHandlerPhone] = useState("");
   const [handlerEmail, setHandlerEmail] = useState("");
-  const [showPhone, setShowPhone] = useState(true);
   const [showEmail, setShowEmail] = useState(true);
 
   const [dueDate, setDueDate] = useState("");
@@ -219,9 +217,7 @@ export default function NewDocumentPage() {
     // 從個人資料自動填入承辦人
     usersApi.me().then(u => {
       setHandlerName(u.display_name ?? "");
-      if (u.show_phone && u.phone) setHandlerPhone(u.phone);
       if (u.show_email) setHandlerEmail(u.email ?? "");
-      setShowPhone(u.show_phone ?? true);
       setShowEmail(u.show_email ?? true);
     }).catch(() => {});
   }, []);
@@ -258,7 +254,6 @@ export default function NewDocumentPage() {
         meeting_chairperson: category === "meeting_notice" ? (meetingChairperson || undefined) : undefined,
         handler_name: handlerName || undefined,
         handler_unit: handlerUnit || undefined,
-        handler_phone: showPhone ? (handlerPhone || undefined) : undefined,
         handler_email: showEmail ? (handlerEmail || undefined) : undefined,
         due_date: dueDate || undefined,
         visibility_level: visibilityLevel,
@@ -672,24 +667,6 @@ export default function NewDocumentPage() {
                   style={{ ...inputStyle, fontSize: "0.75rem" }} />
               </div>
             ))}
-            {/* 電話 + 顯示切換 */}
-            <div className="flex items-center gap-3">
-              <span className="text-xs w-12 flex-shrink-0 font-medium" style={{ color: "var(--text-muted)" }}>
-                電話
-              </span>
-              <input value={handlerPhone} onChange={(e) => setHandlerPhone(e.target.value)}
-                placeholder="聯絡電話" type="tel"
-                style={{ ...inputStyle, flex: 1, fontSize: "0.75rem" }} />
-              <div className="flex items-center gap-1.5 flex-shrink-0" title="顯示於公文上">
-                <button role="switch" aria-checked={showPhone} onClick={() => setShowPhone(p => !p)}
-                  className="relative w-8 h-4 rounded-full transition-colors overflow-hidden"
-                  style={{ background: showPhone ? "var(--primary)" : "var(--border-strong)" }}>
-                  <span className="absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform"
-                    style={{ transform: showPhone ? "translateX(16px)" : "translateX(2px)" }} />
-                </button>
-                <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>顯示</span>
-              </div>
-            </div>
             {/* Email + 顯示切換 */}
             <div className="flex items-center gap-3">
               <span className="text-xs w-12 flex-shrink-0 font-medium" style={{ color: "var(--text-muted)" }}>

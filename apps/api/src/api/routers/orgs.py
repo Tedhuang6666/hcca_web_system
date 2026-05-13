@@ -47,11 +47,14 @@ async def list_my_create_orgs(db: DbDep, current_user: CurrentUser) -> list:
     superuser 直接回傳所有組織。
     """
     if current_user.is_superuser:
-        return await org_svc.get_orgs(db)
+        result = await db.execute(select(Org).where(Org.is_active.is_(True)).order_by(Org.name))
+        return list(result.scalars().all())
     org_ids = await get_user_org_ids_with_permission(db, current_user.id, "document:create")
     if not org_ids:
         return []
-    result = await db.execute(select(Org).where(Org.id.in_(org_ids)).order_by(Org.name))
+    result = await db.execute(
+        select(Org).where(Org.id.in_(org_ids), Org.is_active.is_(True)).order_by(Org.name)
+    )
     return list(result.scalars().all())
 
 
@@ -105,6 +108,7 @@ async def update_org(
         "description": org.description,
         "parent_id": str(org.parent_id) if org.parent_id else None,
         "prefix": org.prefix,
+        "is_active": org.is_active,
     }
     try:
         org = await org_svc.update_org(db, org, data)
@@ -124,9 +128,60 @@ async def update_org(
                 "description": org.description,
                 "parent_id": str(org.parent_id) if org.parent_id else None,
                 "prefix": org.prefix,
+                "is_active": org.is_active,
             },
         },
         summary=f"更新組織「{org.name}」",
+    )
+    return org
+
+
+@router.post(
+    "/{org_id}/deactivate",
+    response_model=OrgRead,
+    summary="停用組織節點（需 org:manage 或 admin:all）",
+    dependencies=[Depends(require_any(PermissionCode.ORG_MANAGE, PermissionCode.ADMIN_ALL))],
+)
+async def deactivate_org(org_id: uuid.UUID, db: DbDep, current_user: CurrentUser) -> object:
+    org = await org_svc.get_org(db, org_id)
+    if not org:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="組織節點不存在")
+    before = {"is_active": org.is_active}
+    org = await org_svc.set_org_active(db, org, False)
+    await audit_svc.record(
+        db,
+        entity_type="org",
+        entity_id=str(org.id),
+        action="org.deactivate",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={"before": before, "after": {"is_active": org.is_active}},
+        summary=f"停用組織「{org.name}」",
+    )
+    return org
+
+
+@router.post(
+    "/{org_id}/activate",
+    response_model=OrgRead,
+    summary="啟用組織節點（需 org:manage 或 admin:all）",
+    dependencies=[Depends(require_any(PermissionCode.ORG_MANAGE, PermissionCode.ADMIN_ALL))],
+)
+async def activate_org(org_id: uuid.UUID, db: DbDep, current_user: CurrentUser) -> object:
+    org = await org_svc.get_org(db, org_id)
+    if not org:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="組織節點不存在")
+    before = {"is_active": org.is_active}
+    org = await org_svc.set_org_active(db, org, True)
+    await audit_svc.record(
+        db,
+        entity_type="org",
+        entity_id=str(org.id),
+        action="org.activate",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={"before": before, "after": {"is_active": org.is_active}},
+        summary=f"啟用組織「{org.name}」",
     )
     return org
 
@@ -141,6 +196,11 @@ async def delete_org(org_id: uuid.UUID, db: DbDep, current_user: CurrentUser) ->
     org = await org_svc.get_org(db, org_id)
     if not org:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="組織節點不存在")
+    if await org_svc.org_has_documents_or_regulations(db, org.id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="此組織仍關聯公文或法規，無法刪除；請改為停用組織",
+        )
     await audit_svc.record(
         db,
         entity_type="org",
@@ -162,5 +222,5 @@ async def delete_org(org_id: uuid.UUID, db: DbDep, current_user: CurrentUser) ->
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="此組織仍被公文、法規、餐訂、購票或問卷資料引用，無法刪除",
+            detail="此組織仍被其他資料引用，無法刪除；請改為停用組織",
         ) from e

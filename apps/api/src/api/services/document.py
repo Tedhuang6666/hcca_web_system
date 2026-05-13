@@ -129,20 +129,23 @@ async def create_serial_template(
     org_prefix 自動從組織的 Org.prefix 欄位取得。
     重複的 org_id + org_prefix + category_char 組合會觸發 UniqueConstraint 錯誤。
     """
-    # 取得組織 prefix
-    org_result = await session.execute(select(Org).where(Org.id == data.org_id))
-    org = org_result.scalar_one_or_none()
-    if org is None:
+    # 取得組織 prefix（只查詢必要欄位）
+    org_result = await session.execute(
+        select(Org.prefix, Org.name).where(Org.id == data.org_id)
+    )
+    org_row = org_result.first()
+    if org_row is None:
         raise ValueError("指定的組織不存在")
-    if not org.prefix:
-        raise ValueError(f"組織「{org.name}」尚未設定字號前綴（Org.prefix），請先由管理員設定")
+    prefix, org_name = org_row
+    if not prefix:
+        raise ValueError(f"組織「{org_name}」尚未設定字號前綴（Org.prefix），請先由管理員設定")
 
     now = datetime.now(UTC)
     current_year = now.year - 1911 if data.year_mode == YearMode.ROC else now.year
 
     template = DocumentSerialTemplate(
         org_id=data.org_id,
-        org_prefix=org.prefix,
+        org_prefix=prefix,
         category_char=data.category_char,
         year_mode=data.year_mode,
         reset_on_new_year=data.reset_on_new_year,
@@ -156,12 +159,25 @@ async def create_serial_template(
     )
     session.add(template)
     await session.flush()
-    await _normalize_serial_template_defaults(session, template)
+    if template.is_default or template.is_default_president_publish:
+        result = await session.execute(
+            select(DocumentSerialTemplate).where(
+                DocumentSerialTemplate.org_id == template.org_id,
+                DocumentSerialTemplate.id != template.id,
+            )
+        )
+        siblings = list(result.scalars().all())
+        for sibling in siblings:
+            if template.is_default and sibling.is_default:
+                sibling.is_default = False
+            if template.is_default_president_publish and sibling.is_default_president_publish:
+                sibling.is_default_president_publish = False
+        await session.flush()
     logger.info(
         "字號模板建立 id=%s org_id=%s prefix=%s%s",
         template.id,
         data.org_id,
-        org.prefix,
+        prefix,
         data.category_char,
     )
     return template
@@ -223,38 +239,36 @@ async def update_serial_template(
         template.is_default = False
         template.is_default_president_publish = False
     await session.flush()
-    await _normalize_serial_template_defaults(session, template)
-    return template
-
-
-async def _normalize_serial_template_defaults(
-    session: AsyncSession,
-    template: DocumentSerialTemplate,
-) -> None:
-    """同組織僅保留一個一般預設與一個主席公布預設模板。"""
-    if not template.is_default and not template.is_default_president_publish:
-        return
-
-    result = await session.execute(
-        select(DocumentSerialTemplate).where(
-            DocumentSerialTemplate.org_id == template.org_id,
-            DocumentSerialTemplate.id != template.id,
+    if template.is_default or template.is_default_president_publish:
+        result = await session.execute(
+            select(DocumentSerialTemplate).where(
+                DocumentSerialTemplate.org_id == template.org_id,
+                DocumentSerialTemplate.id != template.id,
+            )
         )
-    )
-    siblings = list(result.scalars().all())
-    for sibling in siblings:
-        if template.is_default and sibling.is_default:
-            sibling.is_default = False
-        if template.is_default_president_publish and sibling.is_default_president_publish:
-            sibling.is_default_president_publish = False
-    await session.flush()
+        siblings = list(result.scalars().all())
+        for sibling in siblings:
+            if template.is_default and sibling.is_default:
+                sibling.is_default = False
+            if template.is_default_president_publish and sibling.is_default_president_publish:
+                sibling.is_default_president_publish = False
+        await session.flush()
+    return template
 
 
 # ── 查詢輔助 ────────────────────────────────────────────────────────────────────
 
 
+def _doc_query_for_list():
+    """列表用查詢：最小化加載（只有基本字段 + 建立者）"""
+    return select(Document).options(
+        selectinload(Document.creator),
+        selectinload(Document.org),
+    )
+
+
 def _doc_query_with_relations():
-    """標準查詢：含所有子關聯（版本、審核步驟、附件、受文者）"""
+    """詳細查詢：含所有子關聯（版本、審核步驟、附件、受文者）"""
     return select(Document).options(
         selectinload(Document.org),
         selectinload(Document.revisions),
@@ -435,6 +449,78 @@ async def check_document_access(
     return result.scalar_one_or_none() is not None
 
 
+async def _build_visibility_filter(
+    session: AsyncSession,
+    viewer_id: uuid.UUID | None = None,
+) -> list | None:
+    """建構文件可見性篩選條件。用於 list_documents() 及其他需要可見性檢查的查詢。
+    回傳 OR 條件列表；若 viewer_id 為 None 則回傳 None（無篩選）。
+    """
+    if viewer_id is None:
+        return None
+
+    from api.models.document import DocumentApproval, DocumentRecipient
+    from api.models.org import Position, UserPosition
+
+    viewer = await session.scalar(select(User).where(User.id == viewer_id))
+    viewer_email = viewer.email if viewer else None
+
+    org_ids_result = await session.execute(
+        select(Position.org_id)
+        .join(UserPosition, UserPosition.position_id == Position.id)
+        .where(UserPosition.user_id == viewer_id)
+        .distinct()
+    )
+    viewer_org_ids = list(org_ids_result.scalars().all())
+
+    is_approver = exists(
+        select(1).where(
+            DocumentApproval.document_id == Document.id,
+            or_(
+                DocumentApproval.approver_id == viewer_id,
+                and_(
+                    DocumentApproval.delegate_source == DelegateSource.MANUAL,
+                    DocumentApproval.delegate_id == viewer_id,
+                ),
+                and_(
+                    DocumentApproval.delegate_source == DelegateSource.ASSIGNMENT,
+                    _active_assignment_exists_for_viewer(viewer_id=viewer_id),
+                ),
+            ),
+        )
+    )
+    is_subject_recipient = (
+        exists(
+            select(1).where(
+                DocumentRecipient.document_id == Document.id,
+                DocumentRecipient.email.is_not(None),
+                DocumentRecipient.email == viewer_email,
+            )
+        )
+        if viewer_email
+        else False
+    )
+
+    return [
+        Document.visibility_level == DocumentVisibility.PUBLICLY_OPEN,
+        Document.visibility_level == DocumentVisibility.PUBLIC,
+        Document.created_by == viewer_id,
+        is_approver,
+        and_(
+            Document.visibility_level == DocumentVisibility.ORG_ONLY,
+            Document.org_id.in_(viewer_org_ids) if viewer_org_ids else False,
+        ),
+        and_(
+            Document.visibility_level == DocumentVisibility.SUBJECT_ONLY,
+            or_(
+                Document.created_by == viewer_id,
+                is_approver,
+                is_subject_recipient,
+            ),
+        ),
+    ]
+
+
 async def list_documents(
     session: AsyncSession,
     *,
@@ -462,72 +548,13 @@ async def list_documents(
     public_only=True 時僅回傳 publicly_open 的公文（未登入訪客）。
     viewer_id 有值時額外顯示對該使用者公開的公文。
     """
-    q = _doc_query_with_relations()
+    q = _doc_query_for_list()
     if public_only:
         q = q.where(Document.visibility_level == DocumentVisibility.PUBLICLY_OPEN)
     elif viewer_id is not None:
-        from api.models.document import DocumentApproval, DocumentRecipient
-        from api.models.org import Position, UserPosition
-
-        viewer = await session.scalar(select(User).where(User.id == viewer_id))
-        viewer_email = viewer.email if viewer else None
-
-        org_ids_result = await session.execute(
-            select(Position.org_id)
-            .join(UserPosition, UserPosition.position_id == Position.id)
-            .where(UserPosition.user_id == viewer_id)
-            .distinct()
-        )
-        viewer_org_ids = list(org_ids_result.scalars().all())
-
-        is_approver = exists(
-            select(1).where(
-                DocumentApproval.document_id == Document.id,
-                or_(
-                    DocumentApproval.approver_id == viewer_id,
-                    and_(
-                        DocumentApproval.delegate_source == DelegateSource.MANUAL,
-                        DocumentApproval.delegate_id == viewer_id,
-                    ),
-                    and_(
-                        DocumentApproval.delegate_source == DelegateSource.ASSIGNMENT,
-                        _active_assignment_exists_for_viewer(viewer_id=viewer_id),
-                    ),
-                ),
-            )
-        )
-        is_subject_recipient = (
-            exists(
-                select(1).where(
-                    DocumentRecipient.document_id == Document.id,
-                    DocumentRecipient.email.is_not(None),
-                    DocumentRecipient.email == viewer_email,
-                )
-            )
-            if viewer_email
-            else False
-        )
-
-        q = q.where(
-            or_(
-                Document.visibility_level == DocumentVisibility.PUBLICLY_OPEN,
-                Document.visibility_level == DocumentVisibility.PUBLIC,
-                Document.created_by == viewer_id,
-                is_approver,
-                and_(
-                    Document.visibility_level == DocumentVisibility.ORG_ONLY,
-                    Document.org_id.in_(viewer_org_ids) if viewer_org_ids else False,
-                ),
-                and_(
-                    Document.visibility_level == DocumentVisibility.SUBJECT_ONLY,
-                    or_(
-                        Document.created_by == viewer_id,
-                        is_approver,
-                        is_subject_recipient,
-                    ),
-                ),
-            )
-        )
+        visibility_conditions = await _build_visibility_filter(session, viewer_id)
+        if visibility_conditions:
+            q = q.where(or_(*visibility_conditions))
     if org_id:
         q = q.where(Document.org_id == org_id)
     if status:
@@ -559,7 +586,6 @@ async def list_documents(
             or_(
                 Document.handler_name.ilike(pattern),
                 Document.handler_unit.ilike(pattern),
-                Document.handler_phone.ilike(pattern),
                 Document.handler_email.ilike(pattern),
             )
         )
@@ -635,7 +661,6 @@ async def create_document(
         content=data.content,
         handler_name=data.handler_name,
         handler_unit=data.handler_unit,
-        handler_phone=data.handler_phone,
         handler_email=data.handler_email,
         file_number=data.file_number,
         retention_period=data.retention_period,

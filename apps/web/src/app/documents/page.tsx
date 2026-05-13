@@ -122,14 +122,23 @@ export default function DocumentListPage() {
   );
 
   useEffect(() => {
-    setIsLoggedIn(!!localStorage.getItem("user_id"));
-    orgsApi.list().then(setOrgs).catch(() => {});
-  }, []);
-
-  useEffect(() => {
     const userId = typeof window !== "undefined" ? localStorage.getItem("user_id") : null;
-    if (!userId) return;
-    savedFiltersApi.list("documents").then(setSavedFilters).catch(() => {});
+    setIsLoggedIn(!!userId);
+
+    const loadInitialData = async () => {
+      try {
+        const [orgsRes, savedFiltersRes] = await Promise.all([
+          orgsApi.list(),
+          userId ? savedFiltersApi.list("documents") : Promise.resolve([]),
+        ]);
+        setOrgs(orgsRes);
+        setSavedFilters(savedFiltersRes);
+      } catch {
+        // API errors handled silently; defaults used
+      }
+    };
+
+    loadInitialData();
   }, []);
 
   useEffect(() => {
@@ -599,7 +608,7 @@ export default function DocumentListPage() {
                 <input
                   value={filterHandlerKeyword}
                   onChange={e => setFilterHandlerKeyword(e.target.value)}
-                  placeholder="姓名/單位/電話/Email"
+                  placeholder="姓名/單位/Email"
                   className="text-xs px-2 py-1.5 rounded-lg outline-none w-56"
                   style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
                 />
@@ -838,16 +847,24 @@ export default function DocumentListPage() {
         )}
       </div>
 
-      {/* 載入更多 */}
-      {!loading && hasMore && (
-        <div className="text-center pt-2">
-          <button
-            onClick={loadMore}
-            disabled={loadingMore}
-            className="btn btn-ghost text-sm px-6"
-            style={{ border: "1px solid var(--border)" }}>
-            {loadingMore ? "載入中…" : "載入更多"}
-          </button>
+      {/* 分頁指示與載入更多 */}
+      {!loading && (sorted.length > 0 || hasMore) && (
+        <div className="flex flex-col items-center gap-3 pt-6 pb-4">
+          {sorted.length > 0 && (
+            <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+              已顯示 <span style={{ color: "var(--primary)", fontWeight: 500 }}>{sorted.length}</span> 筆
+              {hasMore && " · 向下捲動或點擊按鈕載入更多"}
+            </p>
+          )}
+          {hasMore && (
+            <button
+              onClick={loadMore}
+              disabled={loadingMore}
+              className="btn btn-ghost text-sm px-6"
+              style={{ border: "1px solid var(--border)" }}>
+              {loadingMore ? "載入中…" : "載入更多"}
+            </button>
+          )}
         </div>
       )}
     </div>

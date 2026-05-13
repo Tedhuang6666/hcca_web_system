@@ -11,6 +11,7 @@ from api.core.audit import SecurityAuditMiddleware
 from api.core.config import settings
 from api.core.csrf import CSRFMiddleware
 from api.core.rate_limit import SimpleRateLimitMiddleware
+from api.core.security_headers import SecurityHeadersMiddleware
 from api.routers import (
     admin,
     analytics,
@@ -56,6 +57,13 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    app.add_middleware(
+        SecurityHeadersMiddleware,
+        enabled=settings.SECURITY_HEADERS_ENABLED,
+        hsts_enabled=settings.COOKIE_SECURE,
+        hsts_max_age=settings.SECURITY_HSTS_MAX_AGE_SECONDS,
+        content_security_policy=settings.SECURITY_CSP,
+    )
     app.add_middleware(SecurityAuditMiddleware)
     app.add_middleware(
         SimpleRateLimitMiddleware,

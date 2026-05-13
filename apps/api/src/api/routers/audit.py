@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import csv
+import json
 from datetime import UTC, date, datetime, timedelta
+from io import StringIO
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -79,24 +83,20 @@ async def _get_current_org_ids(session: AsyncSession, user_id: object) -> list[s
     return [str(org_id) for org_id in result.scalars().all()]
 
 
-@router.get(
-    "",
-    response_model=list[AuditLogOut],
-    summary="查詢稽核日誌（需 audit:view_org / audit:view_all / admin:all）",
-)
-async def list_audit_logs(
-    session: DbDep,
-    current_user: Annotated[User, Depends(get_current_active_user)],
-    entity_type: str | None = Query(None, description="資源種類 document/regulation/user..."),
-    entity_id: str | None = Query(None, description="資源 ID"),
-    actor_id: str | None = Query(None, description="操作者 ID"),
-    action: str | None = Query(None, description="操作動詞"),
-    system: str | None = Query(None, description="系統代碼：admin/org/document/..."),
-    date_from: date | None = Query(None, description="起始日期"),
-    date_to: date | None = Query(None, description="結束日期"),
-    limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
-) -> list[AuditLogOut]:
+async def _list_filtered_audit_logs(
+    *,
+    session: AsyncSession,
+    current_user: User,
+    entity_type: str | None,
+    entity_id: str | None,
+    actor_id: str | None,
+    action: str | None,
+    system: str | None,
+    date_from: date | None,
+    date_to: date | None,
+    limit: int,
+    offset: int,
+) -> list[AuditLog]:
     codes = await get_user_permission_codes(session, current_user.id)
     can_view_all = (
         current_user.is_superuser
@@ -143,6 +143,108 @@ async def list_audit_logs(
                 (AuditLog.entity_type == "org") & AuditLog.entity_id.in_(org_ids),
             )
         )
-    q = q.limit(limit).offset(offset)
-    result = await session.execute(q)
-    return [AuditLogOut.from_orm_obj(r) for r in result.scalars().all()]
+
+    result = await session.execute(q.limit(limit).offset(offset))
+    return list(result.scalars().all())
+
+
+@router.get(
+    "",
+    response_model=list[AuditLogOut],
+    summary="查詢稽核日誌（需 audit:view_org / audit:view_all / admin:all）",
+)
+async def list_audit_logs(
+    session: DbDep,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    entity_type: str | None = Query(None, description="資源種類 document/regulation/user..."),
+    entity_id: str | None = Query(None, description="資源 ID"),
+    actor_id: str | None = Query(None, description="操作者 ID"),
+    action: str | None = Query(None, description="操作動詞"),
+    system: str | None = Query(None, description="系統代碼：admin/org/document/..."),
+    date_from: date | None = Query(None, description="起始日期"),
+    date_to: date | None = Query(None, description="結束日期"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> list[AuditLogOut]:
+    rows = await _list_filtered_audit_logs(
+        session=session,
+        current_user=current_user,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        actor_id=actor_id,
+        action=action,
+        system=system,
+        date_from=date_from,
+        date_to=date_to,
+        limit=limit,
+        offset=offset,
+    )
+    return [AuditLogOut.from_orm_obj(r) for r in rows]
+
+
+@router.get(
+    "/export.csv",
+    response_class=Response,
+    summary="匯出稽核日誌 CSV（套用同查詢條件）",
+)
+async def export_audit_logs_csv(
+    session: DbDep,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    entity_type: str | None = Query(None, description="資源種類 document/regulation/user..."),
+    entity_id: str | None = Query(None, description="資源 ID"),
+    actor_id: str | None = Query(None, description="操作者 ID"),
+    action: str | None = Query(None, description="操作動詞"),
+    system: str | None = Query(None, description="系統代碼：admin/org/document/..."),
+    date_from: date | None = Query(None, description="起始日期"),
+    date_to: date | None = Query(None, description="結束日期"),
+    limit: int = Query(5000, ge=1, le=10000),
+) -> Response:
+    rows = await _list_filtered_audit_logs(
+        session=session,
+        current_user=current_user,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        actor_id=actor_id,
+        action=action,
+        system=system,
+        date_from=date_from,
+        date_to=date_to,
+        limit=limit,
+        offset=0,
+    )
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "created_at",
+            "action",
+            "entity_type",
+            "entity_id",
+            "actor_id",
+            "actor_email",
+            "ip_address",
+            "summary",
+            "meta_json",
+        ]
+    )
+    for row in rows:
+        writer.writerow(
+            [
+                row.created_at.isoformat(),
+                row.action,
+                row.entity_type,
+                row.entity_id,
+                row.actor_id or "",
+                row.actor_email or "",
+                row.ip_address or "",
+                row.summary or "",
+                json.dumps(row.meta or {}, ensure_ascii=False, sort_keys=True),
+            ]
+        )
+
+    filename = f"audit_logs_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.csv"
+    return Response(
+        content="\ufeff" + output.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

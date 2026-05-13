@@ -36,6 +36,12 @@ def create_refresh_token(subject: str) -> str:
     return _create_token(data, timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS))
 
 
+def create_mfa_challenge_token(subject: str) -> str:
+    """建立短效 MFA 登入挑戰 Token。"""
+    data = {"sub": subject, "type": "mfa_challenge"}
+    return _create_token(data, timedelta(minutes=settings.MFA_CHALLENGE_EXPIRE_MINUTES))
+
+
 def decode_token(token: str) -> dict:
     """解碼並驗證 JWT Token，失敗時拋出 InvalidTokenError"""
     return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])

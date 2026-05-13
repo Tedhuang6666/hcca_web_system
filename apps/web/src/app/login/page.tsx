@@ -65,11 +65,13 @@ export default function LoginPage() {
   useEffect(() => {
     setMounted(true);
     const frontendOrigin = encodeURIComponent(window.location.origin);
-    setLoginHref(apiUrl(`/auth/google/login?frontend_origin=${frontendOrigin}`));
+    const next = searchParams.get("next");
+    const nextParam = next ? `&next=${encodeURIComponent(next)}` : "";
+    setLoginHref(apiUrl(`/auth/google/login?frontend_origin=${frontendOrigin}${nextParam}`));
     if (localStorage.getItem("user_id")) {
       window.location.replace("/");
     }
-  }, []);
+  }, [searchParams]);
 
   if (!mounted) return null;
 

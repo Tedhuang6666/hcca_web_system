@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { PermissionProvider } from "@/contexts/PermissionContext";
+import { usePermissions } from "@/hooks/usePermissions";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 import UrgentAnnouncementPopup from "@/components/announcements/UrgentAnnouncementPopup";
@@ -27,7 +29,8 @@ function requiresAuth(pathname: string): boolean {
   return true;
 }
 
-export default function AppShell({ children }: { children: React.ReactNode }) {
+function AppShellContent({ children }: { children: React.ReactNode }) {
+  const { can } = usePermissions();
   const router = useRouter();
   const pathname = usePathname();
   const [authReady, setAuthReady] = useState(false);
@@ -70,39 +73,45 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: "var(--bg-base)" }}>
-      {/* 行動版側邊欄遮罩 */}
-      {sidebarOpen && (
+    <PermissionProvider can={can}>
+      <div className="flex h-screen overflow-hidden" style={{ background: "var(--bg-base)" }}>
+        {/* 行動版側邊欄遮罩 */}
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 z-20 lg:hidden"
+            style={{ background: "var(--bg-overlay)" }}
+            onClick={() => setSidebarOpen(false)}
+            aria-hidden="true"
+          />
+        )}
+
+        {/* 側邊欄 */}
         <div
-          className="fixed inset-0 z-20 lg:hidden"
-          style={{ background: "var(--bg-overlay)" }}
-          onClick={() => setSidebarOpen(false)}
-          aria-hidden="true"
-        />
-      )}
+          className={`
+            fixed inset-y-0 left-0 z-30 transition-transform duration-300
+            lg:relative lg:translate-x-0 lg:z-auto
+            ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+          `}
+          style={{ width: "var(--sidebar-w, 240px)" }}>
+          <Sidebar />
+        </div>
 
-      {/* 側邊欄 */}
-      <div
-        className={`
-          fixed inset-y-0 left-0 z-30 transition-transform duration-300
-          lg:relative lg:translate-x-0 lg:z-auto
-          ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
-        `}
-        style={{ width: "var(--sidebar-w, 240px)" }}>
-        <Sidebar />
+        {/* 主內容區 */}
+        <div className="flex flex-col flex-1 overflow-hidden min-w-0">
+          <Topbar onMenuClick={() => setSidebarOpen((p) => !p)} />
+          <main
+            id="main-content"
+            className="flex-1 overflow-y-auto p-5 md:p-6 animate-slide-in"
+            style={{ background: "var(--bg-base)" }}>
+            {children}
+          </main>
+        </div>
+        <UrgentAnnouncementPopup />
       </div>
-
-      {/* 主內容區 */}
-      <div className="flex flex-col flex-1 overflow-hidden min-w-0">
-        <Topbar onMenuClick={() => setSidebarOpen((p) => !p)} />
-        <main
-          id="main-content"
-          className="flex-1 overflow-y-auto p-5 md:p-6 animate-slide-in"
-          style={{ background: "var(--bg-base)" }}>
-          {children}
-        </main>
-      </div>
-      <UrgentAnnouncementPopup />
-    </div>
+    </PermissionProvider>
   );
+}
+
+export default function AppShell({ children }: { children: React.ReactNode }) {
+  return <AppShellContent>{children}</AppShellContent>;
 }

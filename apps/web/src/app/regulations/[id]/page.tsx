@@ -25,7 +25,12 @@ import { RegulationCategoryBadge } from "@/components/ui/StatusBadge";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ApiError, documentsApi, regulationsApi, usersApi } from "@/lib/api";
 import { apiUrl } from "@/lib/config";
-import type { DocumentOut, RegulationOut, RegulationRevisionOut } from "@/lib/types";
+import type {
+  DocumentOut,
+  RegulationListItem,
+  RegulationOut,
+  RegulationRevisionOut,
+} from "@/lib/types";
 
 // ── 主頁面 ────────────────────────────────────────────────────────────────────
 
@@ -48,7 +53,11 @@ export default function RegulationDetailPage() {
     action: string; label: string; fn: (note: string) => Promise<void>;
     hint?: string; placeholder?: string;
   }>(null);
-  const [confirmArchive, setConfirmArchive] = useState(false);
+  const [showRepeal, setShowRepeal] = useState(false);
+  const [repealReason, setRepealReason] = useState("");
+  const [repealReplacementId, setRepealReplacementId] = useState("");
+  const [repealOptions, setRepealOptions] = useState<RegulationListItem[]>([]);
+  const [repealLoading, setRepealLoading] = useState(false);
   const [showDeleted, setShowDeleted] = useState(false);
   const [tocVisible, setTocVisible] = useState(true);
   const [chapterCollapsedMap, setChapterCollapsedMap] = useState<Record<string, boolean>>({});
@@ -97,6 +106,13 @@ export default function RegulationDetailPage() {
       .then(setPublishedDoc)
       .catch(() => setPublishedDoc(null));
   }, [reg?.published_document_id]);
+
+  useEffect(() => {
+    if (!showRepeal || !reg) return;
+    regulationsApi.list({ active_only: "true", limit: "100" })
+      .then((items) => setRepealOptions(items.filter((item) => item.id !== reg.id)))
+      .catch(() => setRepealOptions([]));
+  }, [reg, showRepeal]);
 
   useEffect(() => {
     try {
@@ -247,6 +263,7 @@ export default function RegulationDetailPage() {
     .reverse()
     .find((log) => log.to_status === "council_approved");
   const proposerName = reg.created_by_name ?? userDirectory[reg.created_by] ?? reg.created_by;
+  const canRepeal = can("regulation:publish") || can("regulation:admin") || isAdmin;
 
   return (
     <>
@@ -436,34 +453,18 @@ export default function RegulationDetailPage() {
                   </button>
                 )}
 
-                {/* 停用（inline 確認） */}
-                {can("regulation:admin") && reg.is_active && (
-                  confirmArchive ? (
-                    <>
-                      <button
-                        onClick={async () => {
-                          try {
-                            await regulationsApi.archive(id);
-                            toast.success("法規已停用");
-                            regulationsApi.get(id).then(setReg).catch(() => {});
-                          } catch (e) { toast.error(e instanceof ApiError ? e.message : "操作失敗"); }
-                          finally { setConfirmArchive(false); }
-                        }}
-                        className="px-3 py-1.5 rounded-lg text-xs font-medium"
-                        style={{ background: "#ef4444", color: "white", border: "1px solid #ef4444" }}>
-                        確定停用
-                      </button>
-                      <button onClick={() => setConfirmArchive(false)}
-                        className="px-2 py-1.5 rounded-lg text-xs"
-                        style={{ color: "var(--text-muted)" }}>取消</button>
-                    </>
-                  ) : (
-                    <button onClick={() => setConfirmArchive(true)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium"
-                      style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}>
-                      停用
-                    </button>
-                  )
+                {/* 廢止 */}
+                {canRepeal && reg.is_active && !reg.is_repealed && (
+                  <button
+                    onClick={() => {
+                      setRepealReason("");
+                      setRepealReplacementId("");
+                      setShowRepeal(true);
+                    }}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium"
+                    style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)" }}>
+                    廢止
+                  </button>
                 )}
               </div>
             </div>
@@ -478,7 +479,28 @@ export default function RegulationDetailPage() {
         </div>
 
         {/* ── 失效橫幅 ─────────────────────────────────────────────────────── */}
-        {!reg.is_active && (
+        {reg.is_repealed && (
+          <div className="rounded-xl px-4 py-3 flex items-start gap-3"
+            style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)" }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2" style={{ color: "#ef4444", flexShrink: 0, marginTop: 2 }}>
+              <circle cx="12" cy="12" r="10" />
+              <line x1="15" y1="9" x2="9" y2="15" />
+              <line x1="9" y1="9" x2="15" y2="15" />
+            </svg>
+            <div>
+              <p className="text-sm font-semibold" style={{ color: "#ef4444" }}>
+                本法規已廢止
+              </p>
+              <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>
+                {reg.repealed_date ? `廢止日期：${new Date(reg.repealed_date).toLocaleDateString("zh-TW")}　｜　` : ""}
+                {reg.repeal_reason || "未提供廢止理由"}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {!reg.is_active && !reg.is_repealed && (
           <div className="rounded-xl px-4 py-3 flex items-center gap-3"
             style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)" }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -791,31 +813,19 @@ export default function RegulationDetailPage() {
                   <button disabled={wfActionLoading} onClick={() => runWfAction("重新提交", (note) => regulationsApi.submitReview(id, note || undefined).then(setReg))}
                     className="btn btn-primary text-xs px-3 py-1.5">重新送審</button>
                 )}
-                {/* 廢止法規（inline 確認） */}
-                {reg.workflow_status === "published" && can("regulation:admin") && (
-                  confirmArchive ? (
-                    <>
-                      <button disabled={wfActionLoading} onClick={async () => {
-                        setWfActionLoading(true);
-                        try { const r = await regulationsApi.archive(id); setReg(r); toast.success("法規已廢止"); }
-                        catch (e) { toast.error(e instanceof ApiError ? e.message : "操作失敗"); }
-                        finally { setWfActionLoading(false); setConfirmArchive(false); }
-                      }}
-                        className="text-xs px-3 py-1.5 rounded-lg disabled:opacity-40"
-                        style={{ color: "white", background: "#ef4444", border: "1px solid #ef4444" }}>
-                        確定廢止
-                      </button>
-                      <button onClick={() => setConfirmArchive(false)}
-                        className="text-xs px-2 py-1.5 rounded-lg"
-                        style={{ color: "var(--text-muted)" }}>取消</button>
-                    </>
-                  ) : (
-                    <button disabled={wfActionLoading} onClick={() => setConfirmArchive(true)}
-                      className="text-xs px-3 py-1.5 rounded-lg"
-                      style={{ color: "var(--danger)", background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.3)" }}>
-                      廢止法規
-                    </button>
-                  )
+                {/* 廢止法規 */}
+                {reg.workflow_status === "published" && canRepeal && !reg.is_repealed && (
+                  <button
+                    disabled={wfActionLoading}
+                    onClick={() => {
+                      setRepealReason("");
+                      setRepealReplacementId("");
+                      setShowRepeal(true);
+                    }}
+                    className="text-xs px-3 py-1.5 rounded-lg"
+                    style={{ color: "var(--danger)", background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.3)" }}>
+                    廢止法規
+                  </button>
                 )}
                 {(reg.workflow_status === "draft" || reg.workflow_status === "rejected") && !can("regulation:submit") && (
                   <p className="text-xs" style={{ color: "var(--text-muted)" }}>
@@ -928,6 +938,91 @@ export default function RegulationDetailPage() {
                 className="text-xs px-4 py-1.5 rounded-lg font-medium disabled:opacity-50"
                 style={{ background: "#fb923c", color: "white" }}>
                 {freezeLoading ? "處理中…" : "確認凍結"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 廢止 Modal ──────────────────────────────────────────────────────── */}
+      {showRepeal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "var(--bg-overlay)" }} role="dialog" aria-modal="true">
+          <div className="absolute inset-0" onClick={() => setShowRepeal(false)} aria-hidden="true" />
+          <div className="relative w-full max-w-lg rounded-2xl p-5 shadow-2xl"
+            style={{ background: "var(--bg-surface)", border: "1px solid var(--danger-border)" }}>
+            <div>
+              <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--danger)" }}>
+                REPEAL REGULATION
+              </p>
+              <h2 className="mt-1 text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+                廢止法規
+              </h2>
+              <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+                廢止後法規會標記為失效並保留歷史紀錄。此操作會記錄廢止理由與替代法規。
+              </p>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <label className="block space-y-1.5">
+                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+                  廢止理由（必填）
+                </span>
+                <textarea
+                  value={repealReason}
+                  onChange={(e) => setRepealReason(e.target.value)}
+                  rows={4}
+                  placeholder="例：依第四屆第一次會員代表大會決議，原法規已由新版自治章程取代。"
+                  className="input resize-none"
+                />
+              </label>
+
+              <label className="block space-y-1.5">
+                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+                  替代法規（選填）
+                </span>
+                <select
+                  className="input"
+                  value={repealReplacementId}
+                  onChange={(e) => setRepealReplacementId(e.target.value)}>
+                  <option value="">不指定替代法規</option>
+                  {repealOptions.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.title} v{item.version}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                onClick={() => setShowRepeal(false)}
+                className="btn btn-ghost text-xs px-4 py-1.5"
+                disabled={repealLoading}>
+                取消
+              </button>
+              <button
+                disabled={repealLoading || !repealReason.trim()}
+                onClick={async () => {
+                  setRepealLoading(true);
+                  try {
+                    const updated = await regulationsApi.repeal(id, {
+                      reason: repealReason.trim(),
+                      replacement_id: repealReplacementId || null,
+                    });
+                    setReg(updated);
+                    setShowRepeal(false);
+                    toast.success("法規已廢止");
+                  } catch (e) {
+                    toast.error(e instanceof ApiError ? e.message : "廢止失敗");
+                  } finally {
+                    setRepealLoading(false);
+                  }
+                }}
+                className="text-xs px-4 py-1.5 rounded-lg font-medium disabled:opacity-50"
+                style={{ background: "var(--danger)", color: "white" }}>
+                {repealLoading ? "處理中…" : "確認廢止"}
               </button>
             </div>
           </div>

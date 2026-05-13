@@ -339,6 +339,7 @@ export default function AuditLogsPage() {
   const [actorOptions, setActorOptions] = useState<UserSummary[]>([]);
   const [searchingUsers, setSearchingUsers] = useState(false);
   const [selectedLog, setSelectedLog] = useState<AuditLogOut | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const actionOptions = useMemo(() => {
     const loaded = logs.map((log) => log.action);
@@ -428,6 +429,38 @@ export default function AuditLogsPage() {
     setActorOptions([]);
   };
 
+  const exportCsv = async () => {
+    setExporting(true);
+    try {
+      const res = await fetch(auditLogsApi.exportCsvUrl({
+        action: action || undefined,
+        system: system || undefined,
+        entity_type: entityType || undefined,
+        actor_id: actorId,
+        date_from: dateFrom || undefined,
+        date_to: dateTo || undefined,
+        limit: 5000,
+      }), {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(res.statusText);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `audit_logs_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      toast.success("CSV 已匯出");
+    } catch (e) {
+      toast.error(e instanceof Error && e.message ? `匯出失敗：${e.message}` : "匯出失敗");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   if (!canView) {
     return (
       <div className="mx-auto max-w-4xl">
@@ -450,16 +483,21 @@ export default function AuditLogsPage() {
             查看所有操作軌跡
           </p>
         </div>
-        <button className="btn btn-secondary" onClick={() => loadLogs(0, false)} disabled={loading}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
-            <path d="M3 21v-5h5" />
-            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-            <path d="M16 8h5V3" />
-          </svg>
-          重新整理
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button className="btn btn-ghost" onClick={exportCsv} disabled={exporting || loading}>
+            匯出 CSV
+          </button>
+          <button className="btn btn-secondary" onClick={() => loadLogs(0, false)} disabled={loading}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+              <path d="M3 21v-5h5" />
+              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+              <path d="M16 8h5V3" />
+            </svg>
+            重新整理
+          </button>
+        </div>
       </header>
 
       <section className="card p-4">

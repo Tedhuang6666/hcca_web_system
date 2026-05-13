@@ -98,6 +98,8 @@ async def _next_case_number(session: AsyncSession) -> str:
     )
     latest = result.scalar_one_or_none()
     next_counter = int(latest[3:]) + 1 if latest else 1
+    if next_counter > 9999:
+        raise ValueError(f"案件編號流水號已滿（{year} 年已達 9999 件），請聯絡系統管理員")
     return f"{prefix}{next_counter:04d}"
 
 
@@ -174,15 +176,13 @@ async def create_case(
     petition_type = await get_type(session, data.type_id)
     if petition_type is None or not petition_type.is_active:
         raise ValueError("陳情類型不存在或已停用")
-    if submitter is None and not (data.contact_email or data.contact_phone):
-        raise ValueError("訪客送件需提供聯絡 email 或電話至少一項")
+    if submitter is None and not data.contact_email:
+        raise ValueError("訪客送件需提供聯絡 email")
     contact_name = data.contact_name
     contact_email = str(data.contact_email) if data.contact_email else None
-    contact_phone = data.contact_phone
     if submitter is not None:
         contact_name = submitter.display_name
         contact_email = submitter.email
-        contact_phone = data.contact_phone or submitter.phone
 
     code = generate_verification_code()
     case_number = await _next_case_number(session)
@@ -194,7 +194,6 @@ async def create_case(
         submitter_id=submitter.id if submitter else None,
         contact_name=contact_name,
         contact_email=contact_email,
-        contact_phone=contact_phone,
         title=data.title,
         content=data.content,
         current_org_id=petition_type.responsible_org_id,

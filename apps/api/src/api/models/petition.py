@@ -103,7 +103,6 @@ class PetitionCase(Base, TimestampMixin):
     )
     contact_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     contact_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    contact_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
 
     title: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)

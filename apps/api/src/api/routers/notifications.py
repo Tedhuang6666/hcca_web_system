@@ -1,9 +1,10 @@
 """通知路由 — Email 發送 + 站內通知收件匣"""
 
 import uuid
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, EmailStr
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -97,16 +98,29 @@ async def list_notifications(
     db: DbDep,
     current_user: CurrentUser,
     unread_only: bool = False,
-    limit: int = 50,
+    date_from: date | None = Query(None, description="起始日期"),
+    date_to: date | None = Query(None, description="結束日期"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
 ) -> list[NotificationOut]:
     stmt = (
         select(Notification)
         .where(Notification.user_id == current_user.id)
         .order_by(Notification.created_at.desc())
-        .limit(limit)
     )
     if unread_only:
         stmt = stmt.where(Notification.is_read == False)  # noqa: E712
+    if date_from:
+        stmt = stmt.where(
+            Notification.created_at
+            >= datetime(date_from.year, date_from.month, date_from.day, tzinfo=UTC)
+        )
+    if date_to:
+        stmt = stmt.where(
+            Notification.created_at
+            < datetime(date_to.year, date_to.month, date_to.day, tzinfo=UTC) + timedelta(days=1)
+        )
+    stmt = stmt.limit(limit).offset(offset)
     result = await db.execute(stmt)
     notifications = result.scalars().all()
     return [NotificationOut.from_orm_dt(n) for n in notifications]

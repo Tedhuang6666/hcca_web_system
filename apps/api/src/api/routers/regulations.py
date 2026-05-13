@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user, get_optional_user
-from api.dependencies.permissions import require_permission
+from api.dependencies.permissions import require_any, require_permission
 from api.models.document import (
     DocumentCategory,
     DocumentClassification,
@@ -404,7 +404,15 @@ async def archive_regulation(
         403: {"description": "需要 regulation:publish 或 regulation:admin 權限"},
         409: {"description": "法規已廢止或已停用"},
     },
-    dependencies=[Depends(require_permission("regulation:publish"))],
+    dependencies=[
+        Depends(
+            require_any(
+                PermissionCode.REGULATION_PUBLISH,
+                PermissionCode.REGULATION_ADMIN,
+                PermissionCode.ADMIN_ALL,
+            )
+        )
+    ],
 )
 async def repeal_regulation(
     reg_id: uuid.UUID,

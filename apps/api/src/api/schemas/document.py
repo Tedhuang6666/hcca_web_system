@@ -6,7 +6,15 @@ import uuid
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, HttpUrl, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    HttpUrl,
+    field_validator,
+    model_validator,
+)
 
 from api.models.document import (
     ApprovalStepStatus,
@@ -285,7 +293,6 @@ class DocumentOut(BaseModel):
     # 承辦人
     handler_name: str | None
     handler_unit: str | None
-    handler_phone: str | None
     handler_email: str | None
     file_number: str | None = None
     retention_period: str | None = None
@@ -353,7 +360,6 @@ class DocumentCreate(BaseModel):
                 "serial_template_id": None,
                 "handler_name": "王小明",
                 "handler_unit": "學聯會秘書處",
-                "handler_phone": "0912-345-678",
                 "handler_email": "secretary@example.edu.tw",
                 "due_date": "2025-12-25T00:00:00+08:00",
             }
@@ -389,7 +395,6 @@ class DocumentCreate(BaseModel):
     # 承辦人
     handler_name: str | None = Field(None, max_length=50, description="承辦人姓名")
     handler_unit: str | None = Field(None, max_length=100, description="承辦人所屬單位")
-    handler_phone: str | None = Field(None, max_length=30, description="承辦人聯絡電話")
     handler_email: EmailStr | None = Field(None, description="承辦人電子郵件")
     file_number: str | None = Field(None, max_length=100, description="檔號")
     retention_period: str | None = Field(None, max_length=100, description="保存年限")
@@ -455,7 +460,6 @@ class DocumentUpdate(BaseModel):
     meeting_chairperson: str | None = Field(None, max_length=100)
     handler_name: str | None = Field(None, max_length=50)
     handler_unit: str | None = Field(None, max_length=100)
-    handler_phone: str | None = Field(None, max_length=30)
     handler_email: EmailStr | None = None
     file_number: str | None = Field(None, max_length=100)
     retention_period: str | None = Field(None, max_length=100)

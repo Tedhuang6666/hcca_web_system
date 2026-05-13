@@ -5,11 +5,13 @@ from __future__ import annotations
 import uuid
 from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.models.document import Document
 from api.models.org import Org, Permission, Position, UserPosition
+from api.models.regulation import Regulation
 from api.schemas.org import (
     OrgCreate,
     OrgTree,
@@ -36,6 +38,27 @@ async def get_org(db: AsyncSession, org_id: uuid.UUID) -> Org | None:
     return result.scalar_one_or_none()
 
 
+async def _org_exists(db: AsyncSession, org_id: uuid.UUID) -> bool:
+    """快速檢查組織是否存在（用於 FK 驗證）"""
+    result = await db.execute(select(Org.id).where(Org.id == org_id).limit(1))
+    return result.scalar_one_or_none() is not None
+
+
+async def _has_ancestor(db: AsyncSession, child_id: uuid.UUID, ancestor_candidate: uuid.UUID) -> bool:
+    """用遞迴 CTE 檢查 ancestor_candidate 是否在 child_id 的祖先鏈中（避免 N+1 查詢）"""
+    query = text("""
+    WITH RECURSIVE ancestors AS (
+        SELECT parent_id FROM orgs WHERE id = :child_id
+        UNION ALL
+        SELECT o.parent_id FROM orgs o
+        JOIN ancestors a ON o.id = a.parent_id WHERE o.parent_id IS NOT NULL
+    )
+    SELECT EXISTS(SELECT 1 FROM ancestors WHERE parent_id = :ancestor_id)
+    """)
+    result = await db.execute(query, {"child_id": str(child_id), "ancestor_id": str(ancestor_candidate)})
+    return result.scalar_one_or_none() or False
+
+
 async def create_org(db: AsyncSession, data: OrgCreate) -> Org:
     org = Org(**data.model_dump())
     db.add(org)
@@ -60,17 +83,27 @@ async def update_org(db: AsyncSession, org: Org, data: OrgUpdate) -> Org:
     if parent_id == org.id:
         raise ValueError("組織不可將自己設為上級")
     if "parent_id" in updates and parent_id is not None:
-        current_id = parent_id
-        while current_id is not None:
-            if current_id == org.id:
-                raise ValueError("組織不可將自己的下層組織設為上級")
-            parent_result = await db.execute(select(Org).where(Org.id == current_id))
-            parent = parent_result.scalar_one_or_none()
-            if parent is None:
-                raise ValueError("指定的上層組織不存在")
-            current_id = parent.parent_id
+        if not await _org_exists(db, parent_id):
+            raise ValueError("指定的上層組織不存在")
+        if await _has_ancestor(db, parent_id, org.id):
+            raise ValueError("組織不可將自己的下層組織設為上級")
     for field, value in updates.items():
         setattr(org, field, value)
+    await db.flush()
+    await db.refresh(org)
+    return org
+
+
+async def org_has_documents_or_regulations(db: AsyncSession, org_id: uuid.UUID) -> bool:
+    doc_result = await db.execute(select(Document.id).where(Document.org_id == org_id).limit(1))
+    if doc_result.scalar_one_or_none() is not None:
+        return True
+    reg_result = await db.execute(select(Regulation.id).where(Regulation.org_id == org_id).limit(1))
+    return reg_result.scalar_one_or_none() is not None
+
+
+async def set_org_active(db: AsyncSession, org: Org, is_active: bool) -> Org:
+    org.is_active = is_active
     await db.flush()
     await db.refresh(org)
     return org
@@ -82,7 +115,7 @@ async def delete_org(db: AsyncSession, org: Org) -> None:
 
 
 def build_org_tree(orgs: list[Org], parent_id: uuid.UUID | None = None) -> list[OrgTree]:
-    """從扁平清單遞迴建構樹狀結構（避免 N+1 查詢）"""
+    """從扁平清單遞迴建構樹狀結構。O(n²) 複雜度：每層遍歷所有節點。"""
     return [
         OrgTree.model_validate(org).model_copy(update={"children": build_org_tree(orgs, org.id)})
         for org in orgs

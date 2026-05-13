@@ -2,165 +2,48 @@
 import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import {
+  LayoutGrid,
+  FileText,
+  FilePlus,
+  BookOpen,
+  PenTool,
+  Barcode,
+  ShoppingCart,
+  Warehouse,
+  CheckSquare,
+  MessageCircle,
+  MessageSquare,
+  Bell,
+  Lock,
+  ClipboardList,
+  Sitemap,
+  User,
+  ChevronRight,
+} from "lucide-react";
 
-/* ── SVG Icons ───────────────────────────────────────────────────────────── */
-const Icons: Record<string, () => React.ReactElement> = {
-  dashboard: () => (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="3" y="3" width="7" height="7" rx="1.5" />
-      <rect x="14" y="3" width="7" height="7" rx="1.5" />
-      <rect x="3" y="14" width="7" height="7" rx="1.5" />
-      <rect x="14" y="14" width="7" height="7" rx="1.5" />
-    </svg>
-  ),
-  documents: () => (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-      <polyline points="14 2 14 8 20 8" />
-      <line x1="8" y1="13" x2="16" y2="13" />
-      <line x1="8" y1="17" x2="12" y2="17" />
-    </svg>
-  ),
-  documentNew: () => (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-      <polyline points="14 2 14 8 20 8" />
-      <line x1="12" y1="13" x2="12" y2="17" />
-      <line x1="10" y1="15" x2="14" y2="15" />
-    </svg>
-  ),
-  regulations: () => (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
-      <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
-    </svg>
-  ),
-  regulationNew: () => (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-      <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z" />
-    </svg>
-  ),
-  serial: () => (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <polyline points="4 7 4 4 20 4 20 7" />
-      <line x1="9" y1="20" x2="15" y2="20" />
-      <line x1="12" y1="4" x2="12" y2="20" />
-    </svg>
-  ),
-  shop: () => (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="9" cy="21" r="1" />
-      <circle cx="20" cy="21" r="1" />
-      <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-    </svg>
-  ),
-  shopAdmin: () => (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M20 7H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z" />
-      <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-    </svg>
-  ),
-  survey: () => (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M9 11l3 3L22 4" />
-      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-    </svg>
-  ),
-  surveyNew: () => (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-      <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z" />
-    </svg>
-  ),
-  meal: () => (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M18 8h1a4 4 0 0 1 0 8h-1" />
-      <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z" />
-      <line x1="6" y1="1" x2="6" y2="4" />
-      <line x1="10" y1="1" x2="10" y2="4" />
-      <line x1="14" y1="1" x2="14" y2="4" />
-    </svg>
-  ),
-  mealVendor: () => (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-      <polyline points="9 22 9 12 15 12 15 22" />
-    </svg>
-  ),
-  announcement: () => (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-    </svg>
-  ),
-  petition: () => (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />
-      <path d="M8 9h8" />
-      <path d="M8 13h5" />
-    </svg>
-  ),
-  notifications: () => (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-    </svg>
-  ),
-  permissions: () => (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-    </svg>
-  ),
-  audit: () => (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M9 11l3 3L22 4" />
-      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-      <path d="M8 7h4" />
-      <path d="M8 17h8" />
-    </svg>
-  ),
-  org: () => (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="8" y="2" width="8" height="4" rx="1" />
-      <rect x="1" y="14" width="6" height="4" rx="1" />
-      <rect x="9" y="14" width="6" height="4" rx="1" />
-      <rect x="17" y="14" width="6" height="4" rx="1" />
-      <path d="M4 14v-3a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3" />
-      <line x1="12" y1="6" x2="12" y2="10" />
-    </svg>
-  ),
-  profile: () => (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-      <circle cx="12" cy="7" r="4" />
-    </svg>
-  ),
-  chevronRight: () => (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <polyline points="9 18 15 12 9 6" />
-    </svg>
-  ),
+/* ── Lucide React Icons ───────────────────────────────────────────────────────────── */
+const Icons: Record<string, React.ComponentType<{ size: number; "aria-hidden": boolean }>> = {
+  dashboard: ({ size, "aria-hidden": ariaHidden }) => <LayoutGrid size={size} aria-hidden={ariaHidden} />,
+  documents: ({ size, "aria-hidden": ariaHidden }) => <FileText size={size} aria-hidden={ariaHidden} />,
+  documentNew: ({ size, "aria-hidden": ariaHidden }) => <FilePlus size={size} aria-hidden={ariaHidden} />,
+  regulations: ({ size, "aria-hidden": ariaHidden }) => <BookOpen size={size} aria-hidden={ariaHidden} />,
+  regulationNew: ({ size, "aria-hidden": ariaHidden }) => <PenTool size={size} aria-hidden={ariaHidden} />,
+  serial: ({ size, "aria-hidden": ariaHidden }) => <Barcode size={size} aria-hidden={ariaHidden} />,
+  shop: ({ size, "aria-hidden": ariaHidden }) => <ShoppingCart size={size} aria-hidden={ariaHidden} />,
+  shopAdmin: ({ size, "aria-hidden": ariaHidden }) => <Warehouse size={size} aria-hidden={ariaHidden} />,
+  survey: ({ size, "aria-hidden": ariaHidden }) => <CheckSquare size={size} aria-hidden={ariaHidden} />,
+  surveyNew: ({ size, "aria-hidden": ariaHidden }) => <PenTool size={size} aria-hidden={ariaHidden} />,
+  meal: ({ size, "aria-hidden": ariaHidden }) => <ShoppingCart size={size} aria-hidden={ariaHidden} />,
+  mealVendor: ({ size, "aria-hidden": ariaHidden }) => <MessageCircle size={size} aria-hidden={ariaHidden} />,
+  announcement: ({ size, "aria-hidden": ariaHidden }) => <MessageCircle size={size} aria-hidden={ariaHidden} />,
+  petition: ({ size, "aria-hidden": ariaHidden }) => <MessageSquare size={size} aria-hidden={ariaHidden} />,
+  notifications: ({ size, "aria-hidden": ariaHidden }) => <Bell size={size} aria-hidden={ariaHidden} />,
+  permissions: ({ size, "aria-hidden": ariaHidden }) => <Lock size={size} aria-hidden={ariaHidden} />,
+  audit: ({ size, "aria-hidden": ariaHidden }) => <ClipboardList size={size} aria-hidden={ariaHidden} />,
+  org: ({ size, "aria-hidden": ariaHidden }) => <Sitemap size={size} aria-hidden={ariaHidden} />,
+  profile: ({ size, "aria-hidden": ariaHidden }) => <User size={size} aria-hidden={ariaHidden} />,
+  chevronRight: ({ size, "aria-hidden": ariaHidden }) => <ChevronRight size={size} aria-hidden={ariaHidden} />,
 };
 
 /* ── Nav 資料結構 ─────────────────────────────────────────────────────────── */
@@ -212,11 +95,15 @@ const NAV_DEF: (NavItem | NavSection)[] = [
       { href: "/meal",        iconKey: "meal",       label: "學餐訂購" },
       { href: "/surveys",     iconKey: "survey",     label: "問卷填答" },
       { href: "/petitions",   iconKey: "petition",   label: "陳情系統" },
+      { href: "/notifications", iconKey: "notifications", label: "通知中心" },
+      { href: "/settings/security", iconKey: "permissions", label: "安全設定" },
+      { href: "/settings/notifications", iconKey: "notifications", label: "通知設定" },
     ],
   },
   {
     heading: "管理",
     items: [
+      { href: "/analytics",         iconKey: "dashboard",   label: "績效統計", perm: "analytics:view" },
       { href: "/orgs",              iconKey: "org",         label: "組織管理", perm: "org:*" },
       { href: "/admin/permissions", iconKey: "permissions", label: "權限管理", perm: "admin:all" },
       { href: "/audit-logs",        iconKey: "audit",       label: "稽核日誌", perm: "audit:view_org" },
@@ -256,7 +143,7 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
       href={item.href}
       className="sidebar-nav-item"
       aria-current={active ? "page" : undefined}>
-      {Icon && <span className="flex-shrink-0"><Icon /></span>}
+      {Icon && <span className="flex-shrink-0"><Icon size={15} aria-hidden={true} /></span>}
       <span className="flex-1 truncate">{item.label}</span>
     </Link>
   );

@@ -31,6 +31,9 @@ const PAGE_TITLES: Record<string, string> = {
   "/announcements":     "公告檢視",
   "/announcements/new": "新增公告",
   "/notifications":     "通知中心",
+  "/settings/notifications": "通知偏好設定",
+  "/settings/security": "安全設定",
+  "/analytics":         "績效統計",
   "/admin/permissions": "權限管理",
   "/profile":           "個人資料",
 };
@@ -274,10 +277,15 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
                 )}
               </div>
               <div className="px-4 py-2.5" style={{ borderTop: "1px solid var(--border)" }}>
-                <Link href="/" onClick={() => setShowBell(false)}
+                <Link href="/notifications" onClick={() => setShowBell(false)}
                   className="block text-center text-xs font-medium"
                   style={{ color: "var(--primary)", textDecoration: "none" }}>
-                  到儀表板查看 →
+                  查看全部通知 →
+                </Link>
+                <Link href="/settings/notifications" onClick={() => setShowBell(false)}
+                  className="mt-2 block text-center text-xs font-medium"
+                  style={{ color: "var(--text-muted)", textDecoration: "none" }}>
+                  通知偏好設定
                 </Link>
               </div>
             </div>
@@ -389,6 +397,36 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
                       <circle cx="12" cy="7" r="4" />
                     </svg>
                     個人資料
+                  </Link>
+                  <Link
+                    href="/settings/notifications"
+                    role="menuitem"
+                    onClick={() => setShowMenu(false)}
+                    className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-2.5 transition-colors cursor-pointer"
+                    style={{ color: "var(--text-secondary)", textDecoration: "none", display: "flex" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                    </svg>
+                    通知偏好
+                  </Link>
+                  <Link
+                    href="/settings/security"
+                    role="menuitem"
+                    onClick={() => setShowMenu(false)}
+                    className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-2.5 transition-colors cursor-pointer"
+                    style={{ color: "var(--text-secondary)", textDecoration: "none", display: "flex" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                    安全設定
                   </Link>
 
                   <div style={{ borderTop: "1px solid var(--border)", margin: "4px 0" }} />

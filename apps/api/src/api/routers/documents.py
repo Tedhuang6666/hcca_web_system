@@ -183,10 +183,6 @@ async def _can_manage_delegation_for_org(
     return "document:admin" in codes or "admin:all" in codes
 
 
-def _approval_recipient(step: DocumentApproval) -> User:
-    return step.delegate or step.approver
-
-
 # ── 背景通知輔助 ──────────────────────────────────────────────────────────────
 
 
@@ -247,16 +243,23 @@ def _ws_broadcast_bg(doc: Document) -> None:
     summary="取得公文統計數據（草稿 / 待審 / 本月核准 / 退件 / 待我審核）",
 )
 async def get_document_stats(session: DbDep, current_user: CurrentUser) -> dict:
-    """回傳當前使用者相關的公文計數，供儀表板顯示。"""
+    """回傳當前使用者相關的公文計數，供儀表板顯示（計數限制以避免 full table scan）。"""
     from datetime import UTC, datetime
 
     now = datetime.now(UTC)
-    base = select(func.count(Document.id)).where(Document.created_by == current_user.id)
+    base = select(Document.id).where(Document.created_by == current_user.id)
+    COUNT_THRESHOLD = 100  # 限制計數至 100；超過則返回 "99+"
 
-    draft_count = await session.scalar(base.where(Document.status == DocumentStatus.DRAFT))
-    pending_count = await session.scalar(base.where(Document.status == DocumentStatus.PENDING))
-    rejected_count = await session.scalar(base.where(Document.status == DocumentStatus.REJECTED))
-    approved_month = await session.scalar(
+    async def safe_count(q) -> int | str:
+        """計數至閾值；若超過，返回 "99+""""
+        result = await session.execute(q.limit(COUNT_THRESHOLD + 1))
+        rows = list(result.scalars().all())
+        return "99+" if len(rows) > COUNT_THRESHOLD else len(rows)
+
+    draft_count = await safe_count(base.where(Document.status == DocumentStatus.DRAFT))
+    pending_count = await safe_count(base.where(Document.status == DocumentStatus.PENDING))
+    rejected_count = await safe_count(base.where(Document.status == DocumentStatus.REJECTED))
+    approved_month = await safe_count(
         base.where(Document.status == DocumentStatus.APPROVED)
         .where(extract("year", Document.updated_at) == now.year)
         .where(extract("month", Document.updated_at) == now.month)
@@ -274,8 +277,8 @@ async def get_document_stats(session: DbDep, current_user: CurrentUser) -> dict:
             DocumentApprovalDelegation.end_at >= now,
         ),
     )
-    my_pending = await session.scalar(
-        select(func.count(DocumentApproval.id))
+    my_pending = await safe_count(
+        select(DocumentApproval.id)
         .join(Document, DocumentApproval.document_id == Document.id)
         .where(DocumentApproval.status == ApprovalStepStatus.PENDING)
         .where(
@@ -294,11 +297,11 @@ async def get_document_stats(session: DbDep, current_user: CurrentUser) -> dict:
     )
 
     return {
-        "draft": int(draft_count or 0),
-        "pending_submitted": int(pending_count or 0),
-        "pending_my_approval": int(my_pending or 0),
-        "approved_this_month": int(approved_month or 0),
-        "rejected": int(rejected_count or 0),
+        "draft": draft_count,
+        "pending_submitted": pending_count,
+        "pending_my_approval": my_pending,
+        "approved_this_month": approved_month,
+        "rejected": rejected_count,
     }
 
 
@@ -506,8 +509,7 @@ async def submit_document(
 
     # 通知第一位審核人（站內 + Email）
     if updated.approvals:
-        first_approval = updated.approvals[0]
-        approver = _approval_recipient(first_approval)
+        approver = updated.approvals[0].delegate or updated.approvals[0].approver
         await create_notification(
             session,
             user_id=approver.id,
@@ -580,7 +582,7 @@ async def approve_document(
             (a for a in updated.approvals if a.step_order == updated.current_step), None
         )
         if next_step:
-            recipient = _approval_recipient(next_step)
+            recipient = next_step.delegate or next_step.approver
             await create_notification(
                 session,
                 user_id=recipient.id,
@@ -661,7 +663,7 @@ async def reject_document(
             (a for a in updated.approvals if a.step_order == updated.current_step), None
         )
         if prev_step:
-            recipient = _approval_recipient(prev_step)
+            recipient = prev_step.delegate or prev_step.approver
             await create_notification(
                 session,
                 user_id=recipient.id,

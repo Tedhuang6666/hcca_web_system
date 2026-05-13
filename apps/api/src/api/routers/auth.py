@@ -18,6 +18,7 @@ from api.core.oauth import google
 from api.core.security import (
     add_to_blacklist,
     create_access_token,
+    create_mfa_challenge_token,
     create_refresh_token,
     decode_token,
     is_blacklisted,
@@ -53,7 +54,11 @@ def _origin_from_url(url: str | None) -> str | None:
 
 
 def _frontend_origin_param(request: Request) -> str | None:
-    return _origin_from_url(request.query_params.get("frontend_origin"))
+    raw = _origin_from_url(request.query_params.get("frontend_origin"))
+    if raw and raw not in settings.ALLOWED_ORIGINS:
+        logger.warning("Rejected frontend_origin not in ALLOWED_ORIGINS: %s", raw)
+        return None
+    return raw
 
 
 def _frontend_origin_for(request: Request, *, use_saved: bool = True) -> str:
@@ -90,6 +95,12 @@ def _frontend_origin_for(request: Request, *, use_saved: bool = True) -> str:
     return _FRONTEND_ORIGIN
 
 
+def _safe_next_path(value: str | None) -> str:
+    if not value or not value.startswith("/") or value.startswith("//"):
+        return "/"
+    return value
+
+
 def _set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
     response.set_cookie(
         settings.ACCESS_TOKEN_COOKIE_NAME,
@@ -121,6 +132,7 @@ async def google_login(request: Request) -> RedirectResponse:
     """將使用者重導向至 Google 授權頁面"""
     frontend_origin = _frontend_origin_for(request, use_saved=False)
     request.session["frontend_origin"] = frontend_origin
+    request.session["login_next"] = _safe_next_path(request.query_params.get("next"))
     redirect_uri = f"{frontend_origin}/auth/google/callback"
     return await google.authorize_redirect(request, redirect_uri)
 
@@ -135,6 +147,7 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
     """
     client_ip = request.client.host if request.client else "unknown"
     frontend_origin = _frontend_origin_for(request)
+    login_next = _safe_next_path(request.session.get("login_next"))
     try:
         token_data = await google.authorize_access_token(request, timeout=30.0)
     except OAuthError as e:
@@ -244,10 +257,16 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
     # 記錄成功登入
     await record_login(str(user.id), client_ip, request.headers.get("user-agent"))
 
+    if user.mfa_enabled:
+        challenge_token = create_mfa_challenge_token(subject=str(user.id))
+        challenge_qs = urlencode({"challenge": challenge_token, "next": login_next})
+        return RedirectResponse(url=f"{frontend_origin}/auth/mfa?{challenge_qs}")
+
     access_token = create_access_token(subject=str(user.id))
     refresh_token = create_refresh_token(subject=str(user.id))
 
-    response = RedirectResponse(url=f"{frontend_origin}/auth/callback")
+    callback_qs = urlencode({"next": login_next})
+    response = RedirectResponse(url=f"{frontend_origin}/auth/callback?{callback_qs}")
     _set_auth_cookies(response, access_token, refresh_token)
     return response
 

@@ -13,10 +13,12 @@ import type {
   SavedFilterOut,
   AuditLogOut,
   OrgRead,
+  MFASetupOut, MFAStatusOut,
   PetitionCaseListItem, PetitionCaseOut, PetitionCreate, PetitionCreatedOut,
   PetitionStatsOut, PetitionStatus, PetitionTypeOut,
   NotificationPreferences,
   DocumentEfficiencyOut, DeptRankingItem, PendingAlertItem, AnnouncementParticipationItem,
+  SurveyParticipationItem,
 } from "./types";
 import { API_BASE, apiUrl } from "./config";
 
@@ -28,16 +30,19 @@ export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
 
+let refreshPromise: Promise<boolean> | null = null;
+
 async function silentRefresh(): Promise<boolean> {
-  try {
-    const res = await fetch(apiUrl("/auth/refresh"), {
-      method: "POST",
-      credentials: "include",
+  refreshPromise ??= fetch(apiUrl("/auth/refresh"), {
+    method: "POST",
+    credentials: "include",
+  })
+    .then((res) => res.ok)
+    .catch(() => false)
+    .finally(() => {
+      refreshPromise = null;
     });
-    return res.ok;
-  } catch {
-    return false;
-  }
+  return refreshPromise;
 }
 
 function getCookie(name: string): string | null {
@@ -302,6 +307,8 @@ export const regulationsApi = {
   publish: (id: string, body: { change_brief: string; is_total_amendment?: boolean; resolution_link?: string }) =>
     post<RegulationOut>(`/regulations/${id}/publish`, body),
   archive: (id: string) => post<RegulationOut>(`/regulations/${id}/archive`),
+  repeal: (id: string, body: { reason: string; replacement_id?: string | null }) =>
+    post<RegulationOut>(`/regulations/${id}/repeal`, body),
   delete: (id: string) => del<void>(`/regulations/${id}`),
   // ── 修訂歷程 ──────────────────────────────────────────────────────────────
   listRevisions: (id: string) => get<RegulationRevisionOut[]>(`/regulations/${id}/revisions`),
@@ -387,6 +394,22 @@ export const authApi = {
   }>("/auth/me"),
 };
 
+export const mfaApi = {
+  status: () => get<MFAStatusOut>("/auth/mfa/status"),
+  setup: () => post<MFASetupOut>("/auth/mfa/setup", {}),
+  confirm: (code: string) => post<{ message: string }>("/auth/mfa/confirm", { code }),
+  verify: (code: string) => post<{ verified: boolean }>("/auth/mfa/verify", { code }),
+  verifyLogin: (challenge_token: string, code: string) =>
+    post<{ message: string }>("/auth/mfa/login/verify", { challenge_token, code }),
+  regenerateBackupCodes: (code: string) =>
+    post<{ backup_codes: string[] }>("/auth/mfa/backup-codes/regenerate", { code }),
+  disable: (code: string) =>
+    request<{ message: string }>("/auth/mfa/disable", {
+      method: "DELETE",
+      body: JSON.stringify({ code }),
+    }),
+};
+
 export const usersApi = {
   list: () => get<UserSummary[]>("/users"),
   /** 依關鍵字搜尋使用者（用於下拉選單）*/
@@ -397,7 +420,7 @@ export const usersApi = {
   me: () => get<import("@/lib/types").UserRead>("/users/me"),
   updateMe: (body: {
     display_name?: string; student_id?: string;
-    phone?: string | null; show_phone?: boolean; show_email?: boolean;
+    show_email?: boolean;
   }) => patch<import("@/lib/types").UserRead>("/users/me", body),
   myPositions: (activeOnly = false) =>
     get<import("@/lib/types").UserPositionRead[]>(
@@ -424,6 +447,7 @@ export const orgsApi = {
     parent_id?: string | null;
     note?: string | null;
     remark?: string | null;
+    is_active?: boolean;
   }) =>
     patch<OrgRead>(`/orgs/${id}`, data),
 };
@@ -513,8 +537,11 @@ export const adminApi = {
     prefix?: string | null;
     note?: string | null;
     remark?: string | null;
+    is_active?: boolean;
   }) => patch<OrgRead>(`/orgs/${id}`, body),
   deleteOrg: (id: string) => del<void>(`/orgs/${id}`),
+  deactivateOrg: (id: string) => post<OrgRead>(`/orgs/${id}/deactivate`, {}),
+  activateOrg: (id: string) => post<OrgRead>(`/orgs/${id}/activate`, {}),
 };
 
 // ── 稽核日誌 ──────────────────────────────────────────────────────────────────
@@ -544,6 +571,28 @@ export const auditLogsApi = {
     const qs = q.toString();
     return get<AuditLogOut[]>(`/audit-logs${qs ? `?${qs}` : ""}`);
   },
+  exportCsvUrl: (params?: {
+    entity_type?: string;
+    system?: string;
+    entity_id?: string;
+    actor_id?: string;
+    action?: string;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+  }) => {
+    const q = new URLSearchParams();
+    if (params?.entity_type) q.set("entity_type", params.entity_type);
+    if (params?.system) q.set("system", params.system);
+    if (params?.entity_id) q.set("entity_id", params.entity_id);
+    if (params?.actor_id) q.set("actor_id", params.actor_id);
+    if (params?.action) q.set("action", params.action);
+    if (params?.date_from) q.set("date_from", params.date_from);
+    if (params?.date_to) q.set("date_to", params.date_to);
+    if (params?.limit !== undefined) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return `${BASE}/audit-logs/export.csv${qs ? `?${qs}` : ""}`;
+  },
 };
 
 // ── 站內通知 ──────────────────────────────────────────────────────────────────
@@ -560,8 +609,19 @@ export interface NotificationItem {
 }
 
 export const notificationsApi = {
-  list: (unread_only = false, limit = 50) =>
-    get<NotificationItem[]>(`/notifications/inbox?unread_only=${unread_only}&limit=${limit}`),
+  list: (
+    unread_only = false,
+    limit = 50,
+    params?: { date_from?: string; date_to?: string; offset?: number },
+  ) => {
+    const q = new URLSearchParams();
+    q.set("unread_only", String(unread_only));
+    q.set("limit", String(limit));
+    if (params?.date_from) q.set("date_from", params.date_from);
+    if (params?.date_to) q.set("date_to", params.date_to);
+    if (params?.offset !== undefined) q.set("offset", String(params.offset));
+    return get<NotificationItem[]>(`/notifications/inbox?${q}`);
+  },
   count: () => get<{ unread: number; total: number }>("/notifications/inbox/count"),
   markRead: (id: string) => patch<NotificationItem>(`/notifications/inbox/${id}/read`, {}),
   markAllRead: () => post<{ marked_read: number }>("/notifications/inbox/read-all"),
@@ -862,6 +922,18 @@ export const analyticsApi = {
     if (params?.limit) q.set("limit", String(params.limit));
     return get<AnnouncementParticipationItem[]>(
       `/analytics/announcements/participation${q.size ? `?${q}` : ""}`
+    );
+  },
+  surveyParticipation: (params?: {
+    org_id?: string; date_from?: string; date_to?: string; limit?: number
+  }) => {
+    const q = new URLSearchParams();
+    if (params?.org_id) q.set("org_id", params.org_id);
+    if (params?.date_from) q.set("date_from", params.date_from);
+    if (params?.date_to) q.set("date_to", params.date_to);
+    if (params?.limit) q.set("limit", String(params.limit));
+    return get<SurveyParticipationItem[]>(
+      `/analytics/surveys/participation${q.size ? `?${q}` : ""}`
     );
   },
 };
