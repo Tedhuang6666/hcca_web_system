@@ -16,7 +16,6 @@ export default function CompleteProfilePage() {
   const [user, setUser] = useState<UserRead | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [studentId, setStudentId] = useState("");
-  const [phone, setPhone] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -39,7 +38,6 @@ export default function CompleteProfilePage() {
       await usersApi.updateMe({
         display_name: displayName.trim(),
         student_id: studentId.trim(),
-        phone: phone.trim() || undefined,
       });
       toast.success("個人資料已完成設定");
       const next = new URLSearchParams(window.location.search).get("next") || "/";
@@ -117,23 +115,6 @@ export default function CompleteProfilePage() {
             />
             <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
               已從您的信箱自動帶入，請確認是否正確
-            </p>
-          </div>
-
-          {/* 聯絡電話（選填） */}
-          <div>
-            <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--text-primary)" }}>
-              聯絡電話 <span className="text-xs font-normal" style={{ color: "var(--text-muted)" }}>（選填）</span>
-            </label>
-            <input
-              className="input"
-              value={phone}
-              onChange={e => setPhone(e.target.value)}
-              placeholder="例：0912-345-678"
-              maxLength={30}
-            />
-            <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-              用於公文承辦人聯絡資訊，可隨時於個人資料中修改
             </p>
           </div>
 

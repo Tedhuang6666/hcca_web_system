@@ -31,7 +31,6 @@ export default function EditDocumentPage() {
 
   const [handlerName, setHandlerName] = useState("");
   const [handlerUnit, setHandlerUnit] = useState("");
-  const [handlerPhone, setHandlerPhone] = useState("");
   const [handlerEmail, setHandlerEmail] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [changeNote, setChangeNote] = useState("");
@@ -61,7 +60,6 @@ export default function EditDocumentPage() {
 
       setHandlerName(d.handler_name ?? "");
       setHandlerUnit(d.handler_unit ?? "");
-      setHandlerPhone(d.handler_phone ?? "");
       setHandlerEmail(d.handler_email ?? "");
       setDueDate(d.due_date ? d.due_date.split("T")[0] : "");
       setSelectedTemplateId(d.serial_template_id ?? "");
@@ -107,7 +105,7 @@ export default function EditDocumentPage() {
         subject: subject || undefined, doc_description: docDescription || undefined,
         action_required: actionRequired || undefined,
         handler_name: handlerName || undefined, handler_unit: handlerUnit || undefined,
-        handler_phone: handlerPhone || undefined, handler_email: handlerEmail || undefined,
+        handler_email: handlerEmail || undefined,
         due_date: dueDate || undefined, change_note: changeNote || undefined,
       });
       // 更新受文者（整批覆寫）
@@ -322,7 +320,6 @@ export default function EditDocumentPage() {
             {[
               { label: "姓名", value: handlerName, setter: setHandlerName, ph: "承辦人姓名" },
               { label: "單位", value: handlerUnit, setter: setHandlerUnit, ph: "所屬單位" },
-              { label: "電話", value: handlerPhone, setter: setHandlerPhone, ph: "聯絡電話" },
               { label: "Email", value: handlerEmail, setter: setHandlerEmail, ph: "電子郵件" },
             ].map(({ label, value, setter, ph }) => (
               <div key={label} className="flex items-center gap-2">

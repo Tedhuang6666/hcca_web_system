@@ -36,8 +36,6 @@ class UserRead(BaseModel):
     display_name: str
     student_id: str | None = None
     avatar_url: str | None = None
-    phone: str | None = None
-    show_phone: bool = True
     show_email: bool = True
     is_active: bool
     is_verified: bool

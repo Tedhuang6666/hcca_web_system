@@ -124,25 +124,6 @@ export default function ProfilePage() {
     }
   }
 
-  async function savePhone(v: string) {
-    try {
-      const updated = await usersApi.updateMe({ phone: v.trim() || null });
-      setUser(updated);
-      toast.success("聯絡電話已更新");
-    } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "更新失敗");
-      throw e;
-    }
-  }
-
-  async function toggleShowPhone() {
-    if (!user) return;
-    try {
-      const updated = await usersApi.updateMe({ show_phone: !user.show_phone });
-      setUser(updated);
-    } catch { /* ignore */ }
-  }
-
   async function toggleShowEmail() {
     if (!user) return;
     try {
@@ -229,13 +210,6 @@ export default function ProfilePage() {
             maxLength={20}
             onSave={saveStudentId}
           />
-          <EditableField
-            label="聯絡電話"
-            value={user?.phone ?? ""}
-            placeholder="尚未設定"
-            maxLength={30}
-            onSave={savePhone}
-          />
           <div>
             <p className="text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>電子郵件</p>
             <p className="text-sm" style={{ color: "var(--text-primary)" }}>{user?.email ?? "—"}</p>
@@ -247,15 +221,10 @@ export default function ProfilePage() {
               公文承辦人資訊顯示設定
             </p>
             <p className="text-xs mb-3" style={{ color: "var(--text-muted)" }}>
-              建立公文時，以下資訊可自動帶入承辦人欄位，並選擇是否顯示於公文上。
+              建立公文時，電子郵件可自動帶入承辦人欄位，並選擇是否顯示於公文上。
             </p>
             <div className="space-y-2">
               {[
-                {
-                  label: "在公文上顯示聯絡電話",
-                  checked: user?.show_phone ?? true,
-                  onToggle: toggleShowPhone,
-                },
                 {
                   label: "在公文上顯示電子郵件",
                   checked: user?.show_email ?? true,
