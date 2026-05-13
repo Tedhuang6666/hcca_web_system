@@ -251,7 +251,7 @@ async def get_document_stats(session: DbDep, current_user: CurrentUser) -> dict:
     COUNT_THRESHOLD = 100  # 限制計數至 100；超過則返回 "99+"
 
     async def safe_count(q) -> int | str:
-        """計數至閾值；若超過，返回 "99+""""
+        """計數至閾值；若超過，返回 "99+"""
         result = await session.execute(q.limit(COUNT_THRESHOLD + 1))
         rows = list(result.scalars().all())
         return "99+" if len(rows) > COUNT_THRESHOLD else len(rows)
