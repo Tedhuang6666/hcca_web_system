@@ -27,11 +27,19 @@ _HISTORY_KEYWORDS = (
     "制訂",
     "訂定",
     "修正",
+    "修訂",
+    "增訂",
+    "刪除",
     "通過",
     "公布",
+    "發布",
+    "公告",
     "施行",
     "廢止",
+    "核定",
+    "備查",
 )
+_HISTORY_HEADING_RE = re.compile(r"^(歷史沿革|沿革|立法沿革|修正沿革|制修訂紀錄)[:：]?$")
 
 
 @dataclass(frozen=True)
@@ -87,9 +95,13 @@ def _parse_regulation_paragraphs(paragraphs: list[str]) -> ImportedRegulationDra
 
     preface_parts: list[str] = []
     history_parts: list[str] = []
+    in_history_block = False
     for line in title_candidates[1:]:
-        if _looks_like_history(line):
-            history_parts.append(line)
+        if _HISTORY_HEADING_RE.match(line):
+            in_history_block = True
+            continue
+        if in_history_block or _looks_like_history(line):
+            history_parts.extend(_split_history_line(line))
         else:
             preface_parts.append(line)
 
@@ -256,7 +268,23 @@ def _find_first_structural_index(paragraphs: list[str]) -> int | None:
 
 
 def _looks_like_history(line: str) -> bool:
-    return "年" in line and any(keyword in line for keyword in _HISTORY_KEYWORDS)
+    if any(keyword in line for keyword in _HISTORY_KEYWORDS) and (
+        "年" in line or re.search(r"\d{2,4}[./-]\d{1,2}[./-]\d{1,2}", line)
+    ):
+        return True
+    return bool(re.match(r"^(中華民國|民國)?\s*\d{2,4}\s*年", line)) and any(
+        keyword in line for keyword in _HISTORY_KEYWORDS
+    )
+
+
+def _split_history_line(line: str) -> list[str]:
+    normalized = line.strip()
+    if not normalized:
+        return []
+    pattern = re.compile(
+        r"\s+(?=(?:中華民國|民國)\s*\d{2,4}\s*年|\d{2,4}\s*學年度|\d{2,4}[./-]\d{1,2}[./-]\d{1,2})"
+    )
+    return [part.strip() for part in pattern.split(normalized) if part.strip()]
 
 
 def _structural_type(kind: str) -> ArticleType:

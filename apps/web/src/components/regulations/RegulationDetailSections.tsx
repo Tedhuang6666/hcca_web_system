@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import type { CSSProperties, MouseEvent } from "react";
 import { diffLines } from "diff";
+import { AlertTriangle } from "lucide-react";
 
 import type {
   ArticleType,
@@ -60,6 +62,25 @@ type RevisionSnapshotArticle = {
   content: string | null;
   legal_number?: string | null;
 };
+
+function toChineseOrdinal(value: number): string {
+  const digits = ["", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
+  if (value <= 0) return String(value);
+  if (value < 10) return digits[value];
+  if (value === 10) return "十";
+  if (value < 20) return `十${digits[value - 10]}`;
+  if (value < 100) {
+    const tens = Math.floor(value / 10);
+    const ones = value % 10;
+    return `${digits[tens]}十${ones ? digits[ones] : ""}`;
+  }
+  return String(value);
+}
+
+function listMarkerFromLegalNumber(legalNumber: string | undefined, fallback: number): string {
+  if (!legalNumber) return toChineseOrdinal(fallback);
+  return /^\d+$/.test(legalNumber) ? toChineseOrdinal(Number(legalNumber)) : legalNumber;
+}
 
 function parseProposalSnapshot(raw: string): ParsedProposalSnapshot {
   const snapshot: ParsedProposalSnapshot = {
@@ -158,11 +179,11 @@ export function buildArticleDisplayRows(
       case "subsection":
         subparagraphCount += 1;
         itemCount = 0;
-        displayLabel = `第 ${legalNumber || subparagraphCount} 款`;
+        displayLabel = `${listMarkerFromLegalNumber(legalNumber, subparagraphCount)}、`;
         break;
       case "item":
         itemCount += 1;
-        displayLabel = `第 ${legalNumber || itemCount} 目`;
+        displayLabel = `（${listMarkerFromLegalNumber(legalNumber, itemCount)}）`;
         break;
       case "special_clause":
         displayLabel = "附則";
@@ -470,7 +491,18 @@ export function WorkflowTimeline({
 // ── 條文列（含錨點、凍結高亮、已刪除顯示） ────────────────────────────────────
 
 export function ArticleRow({
-  article: a, index, displayLabel, collapsed = false, hidden = false, chapterCollapsed = false, onToggleChapter,
+  article: a,
+  index,
+  displayLabel,
+  collapsed = false,
+  hidden = false,
+  chapterCollapsed = false,
+  onToggleChapter,
+  shareUrl,
+  onCopyLink,
+  showTopDivider = true,
+  highlighted = false,
+  onClearHighlight,
 }: {
   article: RegulationArticleOut;
   index: number;
@@ -479,6 +511,11 @@ export function ArticleRow({
   hidden?: boolean;
   chapterCollapsed?: boolean;
   onToggleChapter?: (() => void) | null;
+  shareUrl?: string;
+  onCopyLink?: (url: string) => void;
+  showTopDivider?: boolean;
+  highlighted?: boolean;
+  onClearHighlight?: () => void;
 }) {
   if (hidden) return null;
   const isStructural = ARTICLE_IS_STRUCTURAL[a.article_type] ?? false;
@@ -487,35 +524,90 @@ export function ArticleRow({
   const isFrozen = Boolean(a.frozen_by);
   const isDeleted = a.is_deleted;
 
-  const frozenBorder: React.CSSProperties = isFrozen ? {
+  const frozenBorder: CSSProperties = isFrozen ? {
     borderLeft: "3px solid #fb923c",
     paddingLeft: "10px",
     background: "rgba(251,146,60,0.05)",
   } : {};
 
-  const deletedStyle: React.CSSProperties = isDeleted ? {
+  const deletedStyle: CSSProperties = isDeleted ? {
     opacity: 0.45,
     textDecoration: "line-through",
   } : {};
+  const dividerStyle: CSSProperties = showTopDivider && index > 0
+    ? { borderTop: "1px solid var(--border)" }
+    : {};
+  const highlightedStyle: CSSProperties = highlighted ? {
+    background: "rgba(14,165,233,0.12)",
+    boxShadow: "inset 0 0 0 1px rgba(14,165,233,0.45)",
+  } : {};
+  const copyButton = shareUrl && onCopyLink ? (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        onCopyLink(shareUrl);
+      }}
+      className="no-print inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md opacity-70 transition-opacity hover:opacity-100"
+      style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}
+      title="複製此條連結"
+      aria-label={`複製${displayLabel}連結`}
+    >
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+      </svg>
+    </button>
+  ) : null;
+  const copyOnContextMenu = shareUrl && onCopyLink
+    ? (event: MouseEvent) => {
+        event.preventDefault();
+        onCopyLink(shareUrl);
+      }
+    : undefined;
+  const clearHighlightButton = highlighted && onClearHighlight ? (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        onClearHighlight();
+      }}
+      className="no-print inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md transition-opacity hover:opacity-80"
+      style={{ color: "var(--primary)", border: "1px solid var(--border-strong)", background: "var(--bg-surface)" }}
+      title="關閉高亮"
+      aria-label="關閉高亮"
+    >
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+        <line x1="18" y1="6" x2="6" y2="18" />
+        <line x1="6" y1="6" x2="18" y2="18" />
+      </svg>
+    </button>
+  ) : null;
 
   // 章節標題
   if (isStructural) {
     return (
       <div
         id={stableAnchorId}
+        onContextMenu={copyOnContextMenu}
         className="scroll-mt-20 text-center font-semibold py-4 px-5"
         style={{
           color: "var(--text-primary)",
           fontSize: "1rem",
           fontFamily: '"標楷體", "DFKai-SB", serif',
-          borderTop: index > 0 ? "1px solid var(--border)" : "none",
+          ...dividerStyle,
           marginTop: index > 0 ? "0.5rem" : "0",
+          ...highlightedStyle,
           ...frozenBorder,
           ...deletedStyle,
         }}>
         <span id={legacyAnchorId} aria-hidden="true" />
-        <div className="flex items-center justify-center gap-3">
+        <div className="flex flex-col items-center justify-center gap-2 sm:flex-row sm:gap-3">
           <span>{displayLabel}　{a.title ?? ""}</span>
+          {copyButton}
+          {clearHighlightButton}
           {a.article_type === "chapter" && onToggleChapter && (
             <button
               type="button"
@@ -536,7 +628,8 @@ export function ArticleRow({
         {isFrozen && !isDeleted && (
           <span className="ml-2 text-xs px-1.5 py-0.5 rounded inline-flex items-center gap-1"
             style={{ color: "#fb923c", background: "rgba(251,146,60,0.12)", fontWeight: "normal", border: "1px solid rgba(251,146,60,0.3)" }}>
-            ⚠ 凍結：{a.frozen_by}
+            <AlertTriangle size={12} strokeWidth={2.2} aria-hidden="true" />
+            凍結：{a.frozen_by}
           </span>
         )}
       </div>
@@ -548,32 +641,37 @@ export function ArticleRow({
     return (
       <div
         id={stableAnchorId}
-        className="scroll-mt-20 px-5 py-2"
+        onContextMenu={copyOnContextMenu}
+        className="scroll-mt-20 px-3 py-3 sm:px-5 sm:py-2"
         style={{
           fontFamily: '"標楷體", "DFKai-SB", serif',
           lineHeight: "1.9",
           fontSize: "0.9375rem",
+          ...dividerStyle,
+          ...highlightedStyle,
           ...frozenBorder,
         }}>
         <span id={legacyAnchorId} aria-hidden="true" />
-        <div className="flex gap-0" style={{ textIndent: 0, ...deletedStyle }}>
-          <span className="flex-shrink-0 font-bold" style={{ color: "var(--text-primary)", minWidth: "5em" }}>
-            {displayLabel}
+        <div className="flex flex-col gap-1 sm:flex-row sm:gap-0" style={{ textIndent: 0, ...deletedStyle }}>
+          <span className="flex items-center gap-1.5 font-bold sm:flex-shrink-0 sm:min-w-[5em]" style={{ color: "var(--text-primary)" }}>
+            <span>{displayLabel}</span>
+            {copyButton}
+            {clearHighlightButton}
           </span>
           <span className="flex-1" style={{ color: "var(--text-primary)", whiteSpace: "pre-wrap" }}>
             {collapsed ? (a.title || a.content?.slice(0, 30) + "…") : (a.content ?? "")}
           </span>
         </div>
         {isDeleted && (
-          <span className="text-xs px-1.5 py-0.5 rounded ml-[5em]"
+          <span className="text-xs px-1.5 py-0.5 rounded sm:ml-[5em]"
             style={{ color: "var(--danger)", background: "rgba(220,38,38,0.1)" }}>
             已刪除
           </span>
         )}
         {isFrozen && !isDeleted && (
-          <div className="mt-1 ml-[5em] flex items-start gap-1 text-xs"
+          <div className="mt-1 flex items-start gap-1 text-xs sm:ml-[5em]"
             style={{ color: "#fb923c" }}>
-            <span>⚠</span>
+            <AlertTriangle size={12} strokeWidth={2.2} className="mt-0.5 flex-shrink-0" aria-hidden="true" />
             <span style={{ background: "rgba(251,146,60,0.08)", padding: "2px 6px", borderRadius: "4px", border: "1px solid rgba(251,146,60,0.25)" }}>
               凍結：{a.frozen_by}
             </span>
@@ -587,23 +685,29 @@ export function ArticleRow({
   const INDENT_MAP: Partial<Record<ArticleType, number>> = {
     paragraph: 1, subparagraph: 2, subsection: 2, item: 3, special_clause: 0,
   };
-  const indentPx = (INDENT_MAP[a.article_type] ?? 0) * 32 + 20;
+  const indentLevel = INDENT_MAP[a.article_type] ?? 0;
+  const indentPx = indentLevel * 32 + 20;
 
   return (
     <div
       id={stableAnchorId}
-      className="scroll-mt-20 px-5 py-1"
+      onContextMenu={copyOnContextMenu}
+      className="scroll-mt-20 px-3 py-2 sm:px-5 sm:py-1"
       style={{
         fontFamily: '"標楷體", "DFKai-SB", serif',
         lineHeight: "1.8",
         fontSize: "0.9375rem",
-        paddingLeft: `${indentPx}px`,
+        paddingLeft: `clamp(16px, ${4 + indentLevel * 6}vw, ${indentPx}px)`,
+        ...dividerStyle,
+        ...highlightedStyle,
         ...frozenBorder,
       }}>
       <span id={legacyAnchorId} aria-hidden="true" />
-      <div className="flex gap-2" style={deletedStyle}>
-        <span className="flex-shrink-0 font-medium" style={{ color: "var(--text-primary)", minWidth: "4.5em" }}>
-          {displayLabel}
+      <div className="flex flex-col gap-1 sm:flex-row sm:gap-2" style={deletedStyle}>
+        <span className="flex items-center gap-1.5 font-medium sm:flex-shrink-0 sm:min-w-[4.5em]" style={{ color: "var(--text-primary)" }}>
+          <span>{displayLabel}</span>
+          {copyButton}
+          {clearHighlightButton}
         </span>
         <span style={{ color: "var(--text-secondary)", whiteSpace: "pre-wrap" }}>
           {collapsed ? "" : (a.content ?? "")}
@@ -618,7 +722,8 @@ export function ArticleRow({
       {isFrozen && !isDeleted && (
         <span className="ml-2 text-xs px-1.5 py-0.5 rounded inline-flex items-center gap-1"
           style={{ color: "#fb923c", background: "rgba(251,146,60,0.08)", border: "1px solid rgba(251,146,60,0.25)" }}>
-          ⚠ {a.frozen_by}
+          <AlertTriangle size={12} strokeWidth={2.2} aria-hidden="true" />
+          {a.frozen_by}
         </span>
       )}
     </div>

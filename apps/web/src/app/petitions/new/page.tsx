@@ -60,6 +60,7 @@ export default function NewPetitionPage() {
   };
 
   if (created) {
+    const shareHref = `/petitions/${created.case_number}/${created.verification_code}`;
     return (
       <div className="max-w-2xl mx-auto space-y-5">
         <div className="card p-6 space-y-4">
@@ -79,8 +80,19 @@ export default function NewPetitionPage() {
             </div>
           </div>
           <p className="text-sm" style={{ color: "var(--text-muted)" }}>{created.status_public_message}</p>
-          <div className="flex gap-2">
-            <Link className="btn btn-primary" href={`/petitions/${created.id}`}>查看案件</Link>
+          <div className="flex gap-2 flex-wrap">
+            <Link className="btn btn-primary" href={shareHref}>查看案件進度</Link>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={async () => {
+                const url = `${window.location.origin}${shareHref}`;
+                await navigator.clipboard.writeText(url);
+                toast.success("分享連結已複製");
+              }}
+            >
+              複製分享連結
+            </button>
             <Link className="btn btn-ghost" href="/petitions">回陳情系統</Link>
           </div>
         </div>

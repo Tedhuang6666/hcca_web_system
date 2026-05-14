@@ -39,8 +39,8 @@ CurrentUser = Annotated[User, Depends(get_current_active_user)]
 # ── 輔助 ──────────────────────────────────────────────────────────────────────
 
 
-async def _survey_or_404(survey_id: uuid.UUID, session: DbDep) -> Survey:
-    s = await survey_svc.get_survey(session, survey_id)
+async def _survey_or_404(survey_id: uuid.UUID | str, session: DbDep) -> Survey:
+    s = await survey_svc.get_survey_by_identifier(session, survey_id)
     if s is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此問卷")
     return s
@@ -74,8 +74,16 @@ async def list_surveys(
 
 
 @router.get("/{survey_id}", response_model=SurveyOut, summary="取得問卷詳細（含題目）")
-async def get_survey(survey_id: uuid.UUID, session: DbDep, _: CurrentUser) -> Survey:
+async def get_survey(survey_id: str, session: DbDep, _: CurrentUser) -> Survey:
     return await _survey_or_404(survey_id, session)
+
+
+@router.get("/public/{survey_id}", response_model=SurveyOut, summary="公開取得開放問卷")
+async def get_public_survey(survey_id: str, session: DbDep) -> Survey:
+    survey = await _survey_or_404(survey_id, session)
+    if survey.status not in (SurveyStatus.OPEN, SurveyStatus.CLOSED):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此問卷")
+    return survey
 
 
 @router.post(
@@ -114,7 +122,7 @@ async def create_survey(payload: SurveyCreate, session: DbDep, user: CurrentUser
     dependencies=[Depends(require_permission(PermissionCode.SURVEY_MANAGE))],
 )
 async def update_survey(
-    survey_id: uuid.UUID, payload: SurveyUpdate, session: DbDep, user: CurrentUser
+    survey_id: str, payload: SurveyUpdate, session: DbDep, user: CurrentUser
 ) -> Survey:
     survey = await _survey_or_404(survey_id, session)
     before = {
@@ -158,7 +166,7 @@ async def update_survey(
     summary="開放問卷填答",
     dependencies=[Depends(require_permission(PermissionCode.SURVEY_MANAGE))],
 )
-async def open_survey(survey_id: uuid.UUID, session: DbDep, user: CurrentUser) -> Survey:
+async def open_survey(survey_id: str, session: DbDep, user: CurrentUser) -> Survey:
     survey = await _survey_or_404(survey_id, session)
     try:
         survey = await survey_svc.open_survey(session, survey)
@@ -183,7 +191,7 @@ async def open_survey(survey_id: uuid.UUID, session: DbDep, user: CurrentUser) -
     summary="關閉問卷",
     dependencies=[Depends(require_permission(PermissionCode.SURVEY_MANAGE))],
 )
-async def close_survey(survey_id: uuid.UUID, session: DbDep, user: CurrentUser) -> Survey:
+async def close_survey(survey_id: str, session: DbDep, user: CurrentUser) -> Survey:
     survey = await _survey_or_404(survey_id, session)
     try:
         survey = await survey_svc.close_survey(session, survey)
@@ -213,7 +221,7 @@ async def close_survey(survey_id: uuid.UUID, session: DbDep, user: CurrentUser) 
     dependencies=[Depends(require_permission(PermissionCode.SURVEY_MANAGE))],
 )
 async def add_question(
-    survey_id: uuid.UUID, payload: SurveyQuestionCreate, session: DbDep, user: CurrentUser
+    survey_id: str, payload: SurveyQuestionCreate, session: DbDep, user: CurrentUser
 ) -> SurveyQuestion:
     survey = await _survey_or_404(survey_id, session)
     try:
@@ -327,7 +335,7 @@ async def delete_question(question_id: uuid.UUID, session: DbDep, user: CurrentU
     summary="提交填答",
 )
 async def submit_response(
-    survey_id: uuid.UUID,
+    survey_id: str,
     payload: SurveySubmit,
     session: DbDep,
     user: CurrentUser,
@@ -386,6 +394,6 @@ async def submit_response(
     summary="取得問卷統計（survey:manage）",
     dependencies=[Depends(require_permission(PermissionCode.SURVEY_MANAGE))],
 )
-async def get_survey_stats(survey_id: uuid.UUID, session: DbDep, _: CurrentUser) -> SurveyStats:
+async def get_survey_stats(survey_id: str, session: DbDep, _: CurrentUser) -> SurveyStats:
     survey = await _survey_or_404(survey_id, session)
     return await survey_svc.get_survey_stats(session, survey)

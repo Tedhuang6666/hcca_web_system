@@ -45,6 +45,10 @@ class QuestionType(enum.StrEnum):
     MULTIPLE = "multiple"  # 多選
     RATING = "rating"  # 評分（1–5 / 1–10）
     DATE = "date"  # 日期輸入
+    SECTION_TEXT = "section_text"  # 純文字描述區塊
+    PAGE_BREAK = "page_break"  # 分頁
+    IMAGE = "image"  # 圖片 URL
+    VIDEO = "video"  # 影片連結
 
 
 # ── 問卷主表 ──────────────────────────────────────────────────────────────────

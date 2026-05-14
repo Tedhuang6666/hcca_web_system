@@ -340,6 +340,12 @@ export default function DocumentListPage() {
 
   const selectedList = sorted.filter((doc) => selectedIds.has(doc.id));
   const selectedArray = selectedList.map((doc) => doc.id);
+  const selectedPendingArray = selectedList
+    .filter((doc) => doc.status === "pending")
+    .map((doc) => doc.id);
+  const selectedApprovedArray = selectedList
+    .filter((doc) => doc.status === "approved")
+    .map((doc) => doc.id);
   const allVisibleSelected = sorted.length > 0 && sorted.every((doc) => selectedIds.has(doc.id));
 
   const summarizeBatch = (result: BatchDocumentOperationOut) => {
@@ -384,25 +390,33 @@ export default function DocumentListPage() {
 
   const runBatch = async (action: "approve" | "reject" | "archive" | "delegate") => {
     if (selectedArray.length === 0) return;
+    const targetIds =
+      action === "archive" ? selectedApprovedArray
+      : action === "approve" || action === "reject" || action === "delegate" ? selectedPendingArray
+      : selectedArray;
+    if (targetIds.length === 0) {
+      toast.error(action === "archive" ? "請先選取已核准公文" : "請先選取待審核公文");
+      return;
+    }
     setBatchBusy(true);
     try {
       let result: BatchDocumentOperationOut;
       if (action === "approve") {
         const comment = prompt("批量核准意見（可留空）：", "") ?? undefined;
-        result = await documentsApi.batchApprove(selectedArray, comment);
+        result = await documentsApi.batchApprove(targetIds, comment);
       } else if (action === "reject") {
         const comment = prompt("請輸入批量退件原因：", "");
         if (!comment?.trim()) return;
-        result = await documentsApi.batchReject(selectedArray, comment.trim());
+        result = await documentsApi.batchReject(targetIds, comment.trim());
       } else if (action === "archive") {
-        if (!confirm(`封存 ${selectedArray.length} 份已核准公文？`)) return;
-        result = await documentsApi.batchArchive(selectedArray);
+        if (!confirm(`封存 ${targetIds.length} 份已核准公文？`)) return;
+        result = await documentsApi.batchArchive(targetIds);
       } else {
         if (!delegateId) {
           toast.error("請先選擇代理人");
           return;
         }
-        result = await documentsApi.batchDelegate(selectedArray, delegateId);
+        result = await documentsApi.batchDelegate(targetIds, delegateId);
       }
       summarizeBatch(result);
       await reloadCurrent();
@@ -780,6 +794,9 @@ export default function DocumentListPage() {
               <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
                 已選取 {selectedArray.length} 筆
               </span>
+              <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                待審核 {selectedPendingArray.length} 筆，已核准 {selectedApprovedArray.length} 筆
+              </span>
               <button
                 className="btn btn-ghost text-xs"
                 onClick={() => setSelectedIds(new Set())}
@@ -791,7 +808,7 @@ export default function DocumentListPage() {
               {can("document:approve") && (
                 <button
                   className="btn btn-primary text-xs"
-                  disabled={batchBusy}
+                  disabled={batchBusy || selectedPendingArray.length === 0}
                   onClick={() => runBatch("approve")}>
                   批量核准
                 </button>
@@ -799,7 +816,7 @@ export default function DocumentListPage() {
               {can("document:reject") && (
                 <button
                   className="btn btn-danger text-xs"
-                  disabled={batchBusy}
+                  disabled={batchBusy || selectedPendingArray.length === 0}
                   onClick={() => runBatch("reject")}>
                   批量退件
                 </button>
@@ -807,7 +824,7 @@ export default function DocumentListPage() {
               {can("document:archive") && (
                 <button
                   className="btn btn-ghost text-xs"
-                  disabled={batchBusy}
+                  disabled={batchBusy || selectedApprovedArray.length === 0}
                   onClick={() => runBatch("archive")}>
                   批量封存
                 </button>
@@ -823,7 +840,7 @@ export default function DocumentListPage() {
                   />
                   <button
                     className="btn btn-ghost text-xs"
-                    disabled={batchBusy || !delegateId}
+                    disabled={batchBusy || !delegateId || selectedPendingArray.length === 0}
                     onClick={() => runBatch("delegate")}>
                     批量轉代理
                   </button>

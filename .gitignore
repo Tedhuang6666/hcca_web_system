@@ -24,6 +24,8 @@ apps/web/.next/
 .env
 .env.*
 !.env.example
+!.env.production.example
+.en
 
 # 排除資料庫遷移歷史
 /alembic.ini
@@ -50,3 +52,11 @@ RegulationArticleCreate
 .env
 .env.*
 !.env.example
+
+.claude/
+.codex/
+.cursor/
+.vscode/
+docs/
+README_FOR_CLAUDE.md
+CLAUDE.md

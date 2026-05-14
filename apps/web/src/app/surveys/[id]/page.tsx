@@ -7,6 +7,8 @@ import { surveysApi, ApiError } from "@/lib/api";
 import type { SurveyOut, SurveyQuestionOut, SurveyStats } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
 
+const DISPLAY_TYPES = new Set(["section_text", "page_break", "image", "video"]);
+
 /* ── 各題型的填答元件 ─────────────────────────────────────────────────────── */
 function QuestionInput({
   question, value, onChange,
@@ -18,6 +20,44 @@ function QuestionInput({
   const { question_type: type, options, min_value, max_value, placeholder } = question;
   const minV = min_value ?? 1;
   const maxV = max_value ?? 5;
+
+  if (type === "section_text") {
+    return (
+      <p className="text-sm whitespace-pre-wrap leading-7" style={{ color: "var(--text-secondary)" }}>
+        {question.question_text}
+      </p>
+    );
+  }
+  if (type === "page_break") {
+    return <hr style={{ borderColor: "var(--border)" }} />;
+  }
+  if (type === "image") {
+    return (
+      <figure className="space-y-2">
+        {placeholder && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={placeholder} alt={question.question_text} className="max-h-80 w-full rounded-lg object-contain" />
+        )}
+        <figcaption className="text-sm whitespace-pre-wrap" style={{ color: "var(--text-muted)" }}>
+          {question.question_text}
+        </figcaption>
+      </figure>
+    );
+  }
+  if (type === "video") {
+    return (
+      <div className="space-y-2">
+        <p className="text-sm whitespace-pre-wrap" style={{ color: "var(--text-secondary)" }}>
+          {question.question_text}
+        </p>
+        {placeholder && (
+          <a href={placeholder} target="_blank" rel="noreferrer" className="btn btn-ghost inline-flex text-xs">
+            開啟影片
+          </a>
+        )}
+      </div>
+    );
+  }
 
   if (type === "text") {
     return (
@@ -131,6 +171,7 @@ function QuestionInput({
 function StatsView({ surveyId }: { surveyId: string }) {
   const [stats, setStats] = useState<SurveyStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [chartTypes, setChartTypes] = useState<Record<string, string>>({});
 
   useEffect(() => {
     surveysApi.stats(surveyId)
@@ -141,6 +182,47 @@ function StatsView({ surveyId }: { surveyId: string }) {
 
   if (loading) return <div className="py-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>統計載入中…</div>;
   if (!stats) return null;
+
+  const renderPie = (qs: SurveyStats["questions"][number]) => {
+    const entries = Object.entries(qs.option_counts).sort(([, a], [, b]) => b - a);
+    if (entries.length === 0) return null;
+    const total = entries.reduce((sum, [, count]) => sum + count, 0) || 1;
+    const colors = ["#38bdf8", "#22c55e", "#f59e0b", "#ef4444", "#a78bfa", "#14b8a6"];
+    let offset = 25;
+    return (
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+        <svg viewBox="0 0 42 42" className="h-32 w-32 -rotate-90">
+          {entries.map(([opt, count], index) => {
+            const value = (count / total) * 100;
+            const node = (
+              <circle
+                key={opt}
+                cx="21"
+                cy="21"
+                r="15.915"
+                fill="transparent"
+                stroke={colors[index % colors.length]}
+                strokeWidth="8"
+                strokeDasharray={`${value} ${100 - value}`}
+                strokeDashoffset={offset}
+              />
+            );
+            offset -= value;
+            return node;
+          })}
+        </svg>
+        <div className="space-y-1.5">
+          {entries.map(([opt, count], index) => (
+            <div key={opt} className="flex items-center gap-2 text-xs">
+              <span className="h-2.5 w-2.5 rounded-full" style={{ background: colors[index % colors.length] }} />
+              <span style={{ color: "var(--text-secondary)" }}>{opt}</span>
+              <span style={{ color: "var(--text-muted)" }}>{count}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-4">
@@ -157,9 +239,28 @@ function StatsView({ surveyId }: { surveyId: string }) {
             {qs.question_text}
           </p>
           <p className="text-xs" style={{ color: "var(--text-muted)" }}>{qs.total_responses} 份回答</p>
+          {qs.available_charts.length > 1 && (
+            <div className="flex gap-1">
+              {qs.available_charts.map(chart => (
+                <button
+                  key={chart}
+                  type="button"
+                  onClick={() => setChartTypes(prev => ({ ...prev, [qs.question_id]: chart }))}
+                  className="text-xs px-2 py-1 rounded-lg"
+                  style={(chartTypes[qs.question_id] ?? qs.suggested_chart) === chart
+                    ? { color: "var(--primary)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }
+                    : { color: "var(--text-muted)", border: "1px solid var(--border)" }}
+                >
+                  {chart === "pie" ? "圓餅圖" : chart === "bar" ? "長條圖" : "列表"}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {(chartTypes[qs.question_id] ?? qs.suggested_chart) === "pie" && renderPie(qs)}
 
           {/* 選項票數 */}
-          {Object.keys(qs.option_counts).length > 0 && (
+          {Object.keys(qs.option_counts).length > 0 && (chartTypes[qs.question_id] ?? qs.suggested_chart) !== "pie" && (
             <div className="space-y-2.5">
               {Object.entries(qs.option_counts)
                 .sort(([, a], [, b]) => b - a)
@@ -245,7 +346,9 @@ export default function SurveyDetailPage() {
         setSurvey(s);
         // 初始化答案狀態
         const init: Record<string, { text: string; options: string[] }> = {};
-        s.questions.forEach(q => { init[q.id] = { text: "", options: [] }; });
+        s.questions.forEach(q => {
+          if (!DISPLAY_TYPES.has(q.question_type)) init[q.id] = { text: "", options: [] };
+        });
         setAnswers(init);
       })
       .catch(() => toast.error("載入問卷失敗"))
@@ -258,6 +361,7 @@ export default function SurveyDetailPage() {
     if (!survey) return;
     // 驗證必填
     for (const q of survey.questions) {
+      if (DISPLAY_TYPES.has(q.question_type)) continue;
       if (!q.is_required) continue;
       const ans = answers[q.id];
       const hasText = ans?.text.trim();
@@ -272,11 +376,13 @@ export default function SurveyDetailPage() {
     try {
       const anon_token = survey.is_anonymous ? crypto.randomUUID() : undefined;
       await surveysApi.submit(id, {
-        answers: survey.questions.map(q => ({
-          question_id: q.id,
-          answer_text: answers[q.id]?.text || undefined,
-          answer_options: answers[q.id]?.options,
-        })),
+        answers: survey.questions
+          .filter(q => !DISPLAY_TYPES.has(q.question_type))
+          .map(q => ({
+            question_id: q.id,
+            answer_text: answers[q.id]?.text || undefined,
+            answer_options: answers[q.id]?.options,
+          })),
         anon_token,
       });
       toast.success("填答成功，感謝您的參與！");
@@ -383,7 +489,7 @@ export default function SurveyDetailPage() {
             匿名問卷
           </span>
         )}
-        <span>{survey.questions.length} 道題目</span>
+        <span>{survey.questions.filter(q => !DISPLAY_TYPES.has(q.question_type)).length} 道題目</span>
         {isAdmin && <span>{survey.response_count} 份回應</span>}
         {survey.closes_at && (
           <span>截止 {new Date(survey.closes_at).toLocaleDateString("zh-TW")}</span>
@@ -412,13 +518,17 @@ export default function SurveyDetailPage() {
         </div>
       ) : (
         <form onSubmit={e => { e.preventDefault(); submit(); }} className="space-y-4">
-          {survey.questions.map((q, idx) => (
-            <div key={q.id} className="card p-5 space-y-3">
+          {survey.questions.map((q, idx) => {
+            const isDisplay = DISPLAY_TYPES.has(q.question_type);
+            return (
+            <div key={q.id} className={isDisplay ? "py-2 space-y-3" : "card p-5 space-y-3"}>
               <div className="flex items-start gap-2">
-                <span className="text-xs font-bold mt-0.5 flex-shrink-0"
-                  style={{ color: "var(--primary)" }}>Q{idx + 1}</span>
+                {!isDisplay && (
+                  <span className="text-xs font-bold mt-0.5 flex-shrink-0"
+                    style={{ color: "var(--primary)" }}>Q{idx + 1}</span>
+                )}
                 <div className="flex-1">
-                  <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+                  <p className={isDisplay ? "sr-only" : "text-sm font-medium"} style={{ color: "var(--text-primary)" }}>
                     {q.question_text}
                     {q.is_required && <span className="ml-1" style={{ color: "var(--danger)" }}>*</span>}
                   </p>
@@ -430,7 +540,8 @@ export default function SurveyDetailPage() {
                 onChange={val => setAnswers(prev => ({ ...prev, [q.id]: val }))}
               />
             </div>
-          ))}
+            );
+          })}
 
           <div className="flex gap-3 pt-2">
             <button

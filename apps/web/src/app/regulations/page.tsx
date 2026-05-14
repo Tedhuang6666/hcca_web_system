@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { regulationsApi, ApiError } from "@/lib/api";
+import { regulationsApi, ApiError, regulationHref } from "@/lib/api";
 import type { RegulationListItem, RegulationCategory, RegulationWorkflowStatus } from "@/lib/types";
 import { RegulationCategoryBadge } from "@/components/ui/StatusBadge";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -10,15 +10,8 @@ import { usePermissions } from "@/hooks/usePermissions";
 const CATEGORIES: { key: RegulationCategory | "all"; label: string }[] = [
   { key: "all",                label: "全部" },
   { key: "constitution",       label: "憲章" },
-  { key: "chairman",           label: "主席相關" },
-  { key: "executive_dept",     label: "行政部門" },
-  { key: "student_council",    label: "學生議會" },
-  { key: "judicial_committee", label: "評議委員會" },
-  { key: "executive_order",    label: "行政命令" },
-  { key: "council_order",      label: "議會命令" },
-  { key: "judicial_order",     label: "評議命令" },
-  { key: "election_order",     label: "選委會命令" },
-  { key: "other",              label: "其他" },
+  { key: "ordinance",          label: "條例" },
+  { key: "procedure",          label: "辦法" },
 ];
 
 const WORKFLOW_LABEL: Record<RegulationWorkflowStatus, { label: string; color: string; bg: string }> = {
@@ -78,7 +71,7 @@ export default function RegulationsPage() {
         <div>
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>法規查詢</h1>
           <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            瀏覽組織章程、辦法與政策文件
+            瀏覽憲章、條例與辦法
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -109,8 +102,8 @@ export default function RegulationsPage() {
       </div>
 
       {/* 搜尋 + 分類 */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 flex-wrap">
-        <div className="relative">
+      <div className="card p-4 flex flex-col gap-3">
+        <div className="relative w-full">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
             width="14" height="14" viewBox="0 0 24 24" fill="none"
             stroke="currentColor" strokeWidth="2" strokeLinecap="round"
@@ -118,9 +111,9 @@ export default function RegulationsPage() {
             <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
           <input type="search" value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="搜尋法規名稱…" className="input pl-9 w-56" aria-label="搜尋法規" />
+            placeholder="搜尋法規名稱…" className="input pl-11 w-full min-w-0" aria-label="搜尋法規" />
         </div>
-        <div className="flex flex-wrap gap-1.5" role="group" aria-label="法規分類篩選">
+        <div className="flex w-full flex-wrap gap-1.5" role="group" aria-label="法規分類篩選">
           {CATEGORIES.map(({ key, label }) => {
             const active = category === key;
             return (
@@ -177,7 +170,7 @@ function RegCard({ reg }: { reg: RegulationListItem }) {
 
   return (
     <div className="card p-5 flex flex-col gap-3 reg-card-link" style={{ opacity: isArchived ? 0.6 : 1 }}>
-    <Link href={`/regulations/${reg.id}`}
+    <Link href={regulationHref(reg)}
       className="flex flex-col gap-3 flex-1"
       style={{
         textDecoration: "none",
@@ -224,7 +217,7 @@ function RegCard({ reg }: { reg: RegulationListItem }) {
       <button
         onClick={async (e) => {
           e.preventDefault();
-          const url = `${window.location.origin}/regulations/${reg.id}`;
+          const url = `${window.location.origin}${regulationHref(reg)}`;
           try {
             await navigator.clipboard.writeText(url);
             toast.success("連結已複製");

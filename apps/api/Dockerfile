@@ -50,6 +50,8 @@ COPY apps/api/src /app/src
 COPY libs/shared/src /app/src
 COPY apps/api/gunicorn.conf.py /app/gunicorn.conf.py
 
+RUN mkdir -p /app/uploads && chown -R appuser:appgroup /app/uploads
+
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

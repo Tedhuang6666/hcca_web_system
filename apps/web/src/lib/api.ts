@@ -4,7 +4,7 @@ import type {
   BatchDocumentOperationOut,
   DocumentApprovalDelegationOut,
   ProductOut, OrderOut, OrderListItem, OrderCreate,
-  RegulationOut, RegulationListItem,
+  RegulationOut, RegulationListItem, RegulationCategory,
   RegulationArticleOut, RegulationRevisionOut, RegulationWorkflowLogOut, RegulationTreeNodeOut,
   SerialTemplateOut,
   MealVendorOut, MenuScheduleOut, MenuScheduleListItem, MenuItemOut,
@@ -291,6 +291,27 @@ export const shopApi = {
 
 // ── 法規 ──────────────────────────────────────────────────────────────────────
 
+export interface RegulationImportItem {
+  filename: string | null;
+  ok: boolean;
+  regulation: RegulationOut | null;
+  detail: string | null;
+  article_count: number;
+  legislative_history: string | null;
+  warnings: string[];
+}
+
+const pathSegment = (value: string) => {
+  try {
+    return encodeURIComponent(decodeURIComponent(value));
+  } catch {
+    return encodeURIComponent(value);
+  }
+};
+const regulationPath = (id: string) => `/regulations/${pathSegment(id)}`;
+export const regulationHref = (reg: { id: string; title?: string | null }) =>
+  regulationPath(reg.title?.trim() || reg.id);
+
 export const regulationsApi = {
   list: (params?: Record<string, string>) => {
     const qs = params ? "?" + new URLSearchParams(params).toString() : "";
@@ -300,9 +321,9 @@ export const regulationsApi = {
     const base: Record<string, string> = { keyword, ...params };
     return get<RegulationListItem[]>(`/regulations/search?${new URLSearchParams(base).toString()}`);
   },
-  get: (id: string) => get<RegulationOut>(`/regulations/${id}`),
+  get: (id: string) => get<RegulationOut>(regulationPath(id)),
   create: (body: {
-    title: string; category: string; content: string; preface?: string; org_id: string;
+    title: string; category: RegulationCategory; content: string; preface?: string; org_id: string;
     amendment_type?: "enact" | "amend" | "abolish";
     amended_articles?: string | null;
     effective_date?: string | null;
@@ -311,11 +332,18 @@ export const regulationsApi = {
     proposal_metadata?: string | null;
   }) =>
     post<RegulationOut>("/regulations", body),
-  importDocument: async (file: File, body: { org_id: string; category: string }) => {
+  importDocument: async (file: File, body: {
+    org_id: string;
+    category: RegulationCategory;
+    publish_immediately?: boolean;
+    change_brief?: string;
+  }) => {
     const fd = new FormData();
     fd.append("file", file);
     fd.append("org_id", body.org_id);
     fd.append("category", body.category);
+    fd.append("publish_immediately", String(body.publish_immediately ?? false));
+    fd.append("change_brief", body.change_brief ?? "匯入既有現行法規");
 
     const doFetch = () =>
       fetch(`${BASE}/regulations/import-docx`, {
@@ -344,8 +372,48 @@ export const regulationsApi = {
     }
     return res.json() as Promise<RegulationOut>;
   },
+  importDocuments: async (files: File[], body: {
+    org_id: string;
+    category: RegulationCategory;
+    publish_immediately?: boolean;
+    change_brief?: string;
+  }) => {
+    const fd = new FormData();
+    files.forEach(file => fd.append("files", file));
+    fd.append("org_id", body.org_id);
+    fd.append("category", body.category);
+    fd.append("publish_immediately", String(body.publish_immediately ?? false));
+    fd.append("change_brief", body.change_brief ?? "匯入既有現行法規");
+
+    const doFetch = () =>
+      fetch(`${BASE}/regulations/import-documents`, {
+        method: "POST",
+        credentials: "include",
+        headers: csrfHeaders("POST"),
+        body: fd,
+      });
+
+    let res = await doFetch();
+    if (res.status === 401) {
+      const ok = await silentRefresh();
+      if (ok) res = await doFetch();
+      else {
+        if (typeof window !== "undefined" && localStorage.getItem("user_id")) {
+          window.location.replace("/login");
+        }
+        throw new ApiError(401, "登入已過期，請重新登入");
+      }
+    }
+
+    if (!res.ok) {
+      let detail = res.statusText;
+      try { detail = (await res.json()).detail ?? detail; } catch { /* ignore */ }
+      throw new ApiError(res.status, detail);
+    }
+    return res.json() as Promise<RegulationImportItem[]>;
+  },
   update: (id: string, body: Partial<{
-    title: string; category: string; content: string; preface: string; change_brief: string;
+    title: string; category: RegulationCategory; content: string; preface: string; change_brief: string;
     amendment_type: "enact" | "amend" | "abolish";
     amended_articles: string | null;
     effective_date: string | null;
@@ -353,55 +421,55 @@ export const regulationsApi = {
     legal_basis: string | null;
     proposal_metadata: string | null;
   }>) =>
-    patch<RegulationOut>(`/regulations/${id}`, body),
+    patch<RegulationOut>(regulationPath(id), body),
   publish: (id: string, body: { change_brief: string; is_total_amendment?: boolean; resolution_link?: string }) =>
-    post<RegulationOut>(`/regulations/${id}/publish`, body),
-  archive: (id: string) => post<RegulationOut>(`/regulations/${id}/archive`),
+    post<RegulationOut>(`${regulationPath(id)}/publish`, body),
+  archive: (id: string) => post<RegulationOut>(`${regulationPath(id)}/archive`),
   repeal: (id: string, body: { reason: string; replacement_id?: string | null }) =>
-    post<RegulationOut>(`/regulations/${id}/repeal`, body),
-  delete: (id: string) => del<void>(`/regulations/${id}`),
+    post<RegulationOut>(`${regulationPath(id)}/repeal`, body),
+  delete: (id: string) => del<void>(regulationPath(id)),
   // ── 修訂歷程 ──────────────────────────────────────────────────────────────
-  listRevisions: (id: string) => get<RegulationRevisionOut[]>(`/regulations/${id}/revisions`),
+  listRevisions: (id: string) => get<RegulationRevisionOut[]>(`${regulationPath(id)}/revisions`),
   // ── 審議流程 ──────────────────────────────────────────────────────────────
-  listWorkflowLogs: (id: string) => get<RegulationWorkflowLogOut[]>(`/regulations/${id}/workflow_logs`),
-  submitReview: (id: string, note?: string) => post<RegulationOut>(`/regulations/${id}/submit`, { note }),
-  forkDraft: (id: string) => post<RegulationOut>(`/regulations/${id}/fork_draft`, {}),
-  scheduleAgenda: (id: string, note?: string) => post<RegulationOut>(`/regulations/${id}/schedule`, { note }),
-  councilApprove: (id: string, note?: string) => post<RegulationOut>(`/regulations/${id}/council_approve`, { note }),
-  presidentPublish: (id: string, note?: string) => post<RegulationOut>(`/regulations/${id}/president_publish`, { note }),
-  rejectRegulation: (id: string, note: string) => post<RegulationOut>(`/regulations/${id}/reject`, { note }),
+  listWorkflowLogs: (id: string) => get<RegulationWorkflowLogOut[]>(`${regulationPath(id)}/workflow_logs`),
+  submitReview: (id: string, note?: string) => post<RegulationOut>(`${regulationPath(id)}/submit`, { note }),
+  forkDraft: (id: string) => post<RegulationOut>(`${regulationPath(id)}/fork_draft`, {}),
+  scheduleAgenda: (id: string, note?: string) => post<RegulationOut>(`${regulationPath(id)}/schedule`, { note }),
+  councilApprove: (id: string, note?: string) => post<RegulationOut>(`${regulationPath(id)}/council_approve`, { note }),
+  presidentPublish: (id: string, note?: string) => post<RegulationOut>(`${regulationPath(id)}/president_publish`, { note }),
+  rejectRegulation: (id: string, note: string) => post<RegulationOut>(`${regulationPath(id)}/reject`, { note }),
   freeze: (id: string, reason: string, freeze_document_id?: string) =>
-    post<RegulationOut>(`/regulations/${id}/freeze`, { reason, freeze_document_id: freeze_document_id ?? null }),
-  unfreeze: (id: string) => post<RegulationOut>(`/regulations/${id}/unfreeze`, {}),
+    post<RegulationOut>(`${regulationPath(id)}/freeze`, { reason, freeze_document_id: freeze_document_id ?? null }),
+  unfreeze: (id: string) => post<RegulationOut>(`${regulationPath(id)}/unfreeze`, {}),
   // ── 條文管理 ──────────────────────────────────────────────────────────────
   listArticles: (id: string, includeDeleted = false) =>
-    get<RegulationArticleOut[]>(`/regulations/${id}/articles${includeDeleted ? "?include_deleted=true" : ""}`),
+    get<RegulationArticleOut[]>(`${regulationPath(id)}/articles${includeDeleted ? "?include_deleted=true" : ""}`),
   addArticle: (id: string, body: { sort_index: number; order_index?: number; parent_id?: string | null; article_type: string; title?: string; subtitle?: string; legal_number?: string; content?: string }) => {
     // 後端已禁止新建舊層級類型：clause/subsection。前端做一次向前相容轉換，避免 422。
     const article_type =
       body.article_type === "clause" ? "article"
         : body.article_type === "subsection" ? "subparagraph"
           : body.article_type;
-    return post<RegulationArticleOut>(`/regulations/${id}/articles`, { ...body, article_type });
+    return post<RegulationArticleOut>(`${regulationPath(id)}/articles`, { ...body, article_type });
   },
   updateArticle: (regId: string, articleId: string, body: Partial<{ sort_index: number; order_index: number; parent_id: string | null; article_type: string; title: string; subtitle: string; legal_number: string; content: string; is_deleted: boolean }>) =>
-    patch<RegulationArticleOut>(`/regulations/${regId}/articles/${articleId}`, body),
-  tree: (id: string) => get<RegulationTreeNodeOut[]>(`/regulations/${id}/tree`),
+    patch<RegulationArticleOut>(`${regulationPath(regId)}/articles/${pathSegment(articleId)}`, body),
+  tree: (id: string) => get<RegulationTreeNodeOut[]>(`${regulationPath(id)}/tree`),
   moveArticle: (regId: string, articleId: string, body: { parent_id: string | null; order_index: number }) =>
-    post<RegulationArticleOut>(`/regulations/${regId}/articles/${articleId}/move`, body),
+    post<RegulationArticleOut>(`${regulationPath(regId)}/articles/${pathSegment(articleId)}/move`, body),
   deleteArticle: (regId: string, articleId: string, hard = false) =>
-    del<void>(`/regulations/${regId}/articles/${articleId}${hard ? "?hard=true" : ""}`),
+    del<void>(`${regulationPath(regId)}/articles/${pathSegment(articleId)}${hard ? "?hard=true" : ""}`),
   reorderArticles: (id: string, items: { id: string; sort_index: number }[]) =>
-    put<RegulationArticleOut[]>(`/regulations/${id}/articles/reorder`, { items }),
+    put<RegulationArticleOut[]>(`${regulationPath(id)}/articles/reorder`, { items }),
   autoRenumber: (id: string, includeSpecialNumber = false) =>
-    post<RegulationArticleOut[]>(`/regulations/${id}/articles/auto-renumber`, { include_special_number: includeSpecialNumber }),
+    post<RegulationArticleOut[]>(`${regulationPath(id)}/articles/auto-renumber`, { include_special_number: includeSpecialNumber }),
   amendmentComparison: (id: string) =>
-    get<{ article_key: string; revised_text: string; current_text: string; note: string }[]>(`/regulations/${id}/amendment-comparison`),
+    get<{ article_key: string; revised_text: string; current_text: string; note: string }[]>(`${regulationPath(id)}/amendment-comparison`),
   referenceWarnings: (id: string) =>
-    get<{ source_article_id: string; source_title: string; referenced_legal_number: string; message: string }[]>(`/regulations/${id}/reference-warnings`),
+    get<{ source_article_id: string; source_title: string; referenced_legal_number: string; message: string }[]>(`${regulationPath(id)}/reference-warnings`),
   timeMachine: (id: string, asOfIso: string) =>
     get<{ as_of: string; version: number; amended_at: string; content_snapshot: string; tree: RegulationTreeNodeOut[] }>(
-      `/regulations/${id}/time-machine?${new URLSearchParams({ as_of: asOfIso }).toString()}`
+      `${regulationPath(id)}/time-machine?${new URLSearchParams({ as_of: asOfIso }).toString()}`
     ),
 };
 
@@ -529,6 +597,10 @@ export const orgsApi = {
   tree: () => get<(OrgRead & { children: OrgRead[] })[]>("/orgs/tree"),
   /** 取得當前使用者有 document:create 權限的組織列表（RBAC 過濾） */
   myCreateOrgs: () => get<OrgRead[]>("/orgs/my-create-orgs"),
+  /** 取得當前使用者有 regulation:create 權限的組織列表（RBAC 過濾） */
+  myRegulationCreateOrgs: () => get<OrgRead[]>("/orgs/my-regulation-create-orgs"),
+  /** 取得當前使用者有 serial:create 權限的組織列表（RBAC 過濾） */
+  mySerialTemplateOrgs: () => get<OrgRead[]>("/orgs/my-serial-template-orgs"),
   /** 更新組織資訊（需 org:manage 或 admin:all 權限） */
   updateOrg: (id: string, data: {
     prefix?: string | null;
@@ -822,17 +894,18 @@ export const surveysApi = {
     if (params?.org_id) q.set("org_id", params.org_id);
     return get<SurveyListItem[]>(`/surveys/?${q}`);
   },
-  get: (id: string) => get<SurveyOut>(`/surveys/${id}`),
+  get: (id: string) => get<SurveyOut>(`/surveys/${pathSegment(id)}`),
+  getPublic: (id: string) => get<SurveyOut>(`/surveys/public/${pathSegment(id)}`),
   create: (body: { title: string; description?: string; is_anonymous?: boolean; allow_multiple?: boolean; opens_at?: string; closes_at?: string; org_id: string }) =>
     post<SurveyOut>("/surveys/", body),
-  open: (id: string) => post<SurveyOut>(`/surveys/${id}/open`),
-  close: (id: string) => post<SurveyOut>(`/surveys/${id}/close`),
+  open: (id: string) => post<SurveyOut>(`/surveys/${pathSegment(id)}/open`),
+  close: (id: string) => post<SurveyOut>(`/surveys/${pathSegment(id)}/close`),
   addQuestion: (id: string, body: { question_text: string; question_type: string; is_required?: boolean; options?: string[]; min_value?: number; max_value?: number; placeholder?: string; order_index?: number }) =>
-    post<{ id: string; question_text: string; question_type: string; options: string[] }>(`/surveys/${id}/questions`, body),
+    post<{ id: string; question_text: string; question_type: string; options: string[] }>(`/surveys/${pathSegment(id)}/questions`, body),
   deleteQuestion: (questionId: string) => del<void>(`/surveys/questions/${questionId}`),
   submit: (id: string, body: { answers: { question_id: string; answer_text?: string; answer_options?: string[] }[]; anon_token?: string }) =>
-    post<SurveyResponseOut>(`/surveys/${id}/submit`, body),
-  stats: (id: string) => get<SurveyStats>(`/surveys/${id}/stats`),
+    post<SurveyResponseOut>(`/surveys/${pathSegment(id)}/submit`, body),
+  stats: (id: string) => get<SurveyStats>(`/surveys/${pathSegment(id)}/stats`),
 };
 
 // ── 陳情系統 ──────────────────────────────────────────────────────────────────
@@ -881,6 +954,8 @@ export const petitionsApi = {
     get<PetitionCaseOut>(
       `/petitions/lookup?${new URLSearchParams({ case_number: caseNumber, verification_code: verificationCode }).toString()}`
     ),
+  directLookup: (caseNumber: string, verificationCode: string) =>
+    get<PetitionCaseOut>(`/petitions/${caseNumber}/${verificationCode}`),
   my: (params?: { status?: PetitionStatus; keyword?: string }) => {
     const qs = params ? `?${new URLSearchParams(Object.entries(params).filter(([, v]) => Boolean(v)) as [string, string][]).toString()}` : "";
     return get<PetitionCaseListItem[]>(`/petitions/my${qs}`);

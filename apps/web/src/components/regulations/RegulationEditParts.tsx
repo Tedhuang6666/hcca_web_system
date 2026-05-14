@@ -14,15 +14,8 @@ import type {
 
 export const CATEGORIES: [RegulationCategory, string][] = [
   ["constitution",       "憲章"],
-  ["chairman",           "主席相關"],
-  ["executive_dept",     "行政部門"],
-  ["student_council",    "學生議會"],
-  ["judicial_committee", "評議委員會"],
-  ["executive_order",    "行政命令"],
-  ["council_order",      "議會命令"],
-  ["judicial_order",     "評議委員會命令"],
-  ["election_order",     "選舉委員會命令"],
-  ["other",              "其他"],
+  ["ordinance",          "條例"],
+  ["procedure",          "辦法"],
 ];
 
 export const ARTICLE_TYPES: [ArticleType, string][] = [
@@ -102,9 +95,9 @@ export function ArticleEditModal({
   const inputStyle = { border: "1px solid var(--border)" };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4"
       style={{ background: "rgba(0,0,0,0.7)" }} onClick={onClose}>
-      <div className="w-full max-w-lg rounded-xl p-5 space-y-4"
+      <div className="w-full max-w-lg rounded-xl p-4 space-y-4 max-h-[90vh] overflow-y-auto sm:p-5"
         style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
         onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
@@ -116,7 +109,7 @@ export function ArticleEditModal({
           </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>層級</label>
             <select value={type} onChange={e => setType(e.target.value as ArticleType)}
@@ -138,7 +131,7 @@ export function ArticleEditModal({
             className="w-full bg-transparent text-sm p-2 rounded outline-none resize-y" style={inputStyle} />
         </div>
 
-        <div className="flex gap-2 justify-end">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
           <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm cursor-pointer"
             style={{ color: "var(--text-muted)" }}>取消</button>
           <button onClick={handleSave} disabled={saving}
@@ -204,7 +197,7 @@ export function DiffModal({
       <div className="w-full max-w-3xl rounded-xl flex flex-col"
         style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", maxHeight: "85vh" }}
         onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 border-b flex-shrink-0"
+        <div className="flex items-start justify-between gap-3 px-4 py-4 border-b flex-shrink-0 sm:px-5"
           style={{ borderColor: "var(--border)" }}>
           <div>
             <h3 className="text-sm font-semibold">全文差異比對</h3>
@@ -254,12 +247,13 @@ export function DiffModal({
           })}
         </div>
 
-        <div className="flex items-center justify-between px-5 py-4 border-t flex-shrink-0"
+        <div
+          className="flex flex-col gap-3 px-4 py-4 border-t flex-shrink-0 sm:flex-row sm:items-center sm:justify-between sm:px-5"
           style={{ borderColor: "var(--border)" }}>
           <p className="text-xs" style={{ color: "var(--text-muted)" }}>
             確認無誤後，點擊「繼續發布」填寫修訂摘要
           </p>
-          <div className="flex gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:flex">
             <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm cursor-pointer"
               style={{ color: "var(--text-muted)" }}>返回編輯</button>
             <button onClick={onConfirm} className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer"
@@ -344,9 +338,9 @@ export function PublishModal({
   const inputStyle = { border: "1px solid var(--border)" };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4"
       style={{ background: "rgba(0,0,0,0.7)" }} onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl p-5 space-y-4"
+      <div className="w-full max-w-md rounded-xl p-4 space-y-4 max-h-[90vh] overflow-y-auto sm:p-5"
         style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
         onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
@@ -378,7 +372,7 @@ export function PublishModal({
           </div>
         </div>
 
-        <div className="flex gap-2 justify-end">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
           <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm cursor-pointer"
             style={{ color: "var(--text-muted)" }}>取消</button>
           <button onClick={handlePublish} disabled={publishing}

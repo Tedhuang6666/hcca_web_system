@@ -2,10 +2,26 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import {
+  Archive,
+  CalendarDays,
+  CheckCircle2,
+  ClipboardList,
+  FilePenLine,
+  ScrollText,
+  Trash2,
+  Undo2,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
 
+import {
+  loadDrafts,
+  saveDrafts,
+  type Draft,
+} from "@/components/regulations/AmendmentDraftParts";
 import {
   ARTICLE_IS_STRUCTURAL,
   ArticleRow,
@@ -23,26 +39,143 @@ import {
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { RegulationCategoryBadge } from "@/components/ui/StatusBadge";
 import { usePermissions } from "@/hooks/usePermissions";
-import { ApiError, documentsApi, regulationsApi, usersApi } from "@/lib/api";
+import { usePersistedZoom } from "@/hooks/usePersistedZoom";
+import { ApiError, documentsApi, regulationsApi, regulationHref, usersApi } from "@/lib/api";
 import { apiUrl } from "@/lib/config";
+import { formatGeneratedHistoryRows, splitLegislativeHistory } from "@/lib/regulationHistory";
 import type {
+  ArticleType,
   DocumentOut,
+  RegulationArticleOut,
   RegulationListItem,
   RegulationOut,
   RegulationRevisionOut,
 } from "@/lib/types";
 
+const CN_NUMERAL: Record<string, number> = {
+  零: 0, 〇: 0, 一: 1, 二: 2, 兩: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9,
+};
+
+function chineseToInt(value: string): number {
+  const raw = value.trim();
+  if (/^\d+$/.test(raw)) return Number(raw);
+  let total = 0;
+  let current = 0;
+  for (const char of raw) {
+    if (char in CN_NUMERAL) current = CN_NUMERAL[char];
+    else if (char === "十") { total += (current || 1) * 10; current = 0; }
+    else if (char === "百") { total += (current || 1) * 100; current = 0; }
+    else if (char === "千") { total += (current || 1) * 1000; current = 0; }
+  }
+  return total + current;
+}
+
+function normalizedType(type: ArticleType): ArticleType {
+  if (type === "clause") return "article";
+  if (type === "subsection") return "subparagraph";
+  return type;
+}
+
+const LINKABLE_ARTICLE_TYPES = new Set<ArticleType>([
+  "volume",
+  "chapter",
+  "section",
+  "article",
+  "clause",
+  "paragraph",
+  "subparagraph",
+  "subsection",
+  "item",
+]);
+
+const ARTICLE_TYPE_SUFFIX: Partial<Record<ArticleType, string>> = {
+  volume: "編",
+  chapter: "章",
+  section: "節",
+  article: "條",
+  clause: "條",
+  paragraph: "項",
+  subparagraph: "款",
+  subsection: "款",
+  item: "目",
+};
+
+const REF_SUFFIX_TYPE: Record<string, ArticleType> = {
+  編: "volume",
+  章: "chapter",
+  節: "section",
+  條: "article",
+  項: "paragraph",
+  款: "subparagraph",
+  目: "item",
+};
+
+type ParsedLawRef = {
+  number: string;
+  type: ArticleType;
+};
+
+function normalizeLegalNumber(value: string | null | undefined): string {
+  const raw = value?.trim() ?? "";
+  if (!raw) return "";
+  if (/^\d+$/.test(raw)) return raw;
+  if (/^[零〇一二兩三四五六七八九十百千]+$/.test(raw)) return String(chineseToInt(raw));
+  return raw;
+}
+
+function parseLawRef(value: string | null): ParsedLawRef | null {
+  if (!value) return null;
+  const match = value.match(/第\s*([零〇一二兩三四五六七八九十百千0-9]+)\s*([編章節條項款目])/);
+  const type = match ? REF_SUFFIX_TYPE[match[2]] : null;
+  if (!match || !type) return null;
+  return {
+    number: normalizeLegalNumber(match[1]),
+    type,
+  };
+}
+
+function linkSegmentForArticle(type: ArticleType, legalNumber: string | null | undefined, fallback: string) {
+  const number = (
+    normalizeLegalNumber(legalNumber)
+    || fallback.replace(/[第\s編章節條項款目、（）()]/g, "").trim()
+    || "?"
+  );
+  const suffix = ARTICLE_TYPE_SUFFIX[type] ?? ARTICLE_TYPE_SUFFIX[normalizedType(type)] ?? "條";
+  return `第${number}${suffix}`;
+}
+
+function decodeRouteSegment(value: string) {
+  let current = value;
+  for (let index = 0; index < 2; index += 1) {
+    try {
+      const decoded = decodeURIComponent(current);
+      if (decoded === current) break;
+      current = decoded;
+    } catch {
+      break;
+    }
+  }
+  return current;
+}
+
+function logRegulationDeepLink(message: string, data?: unknown) {
+  if (typeof window === "undefined") return;
+  console.info(`[regulation-deeplink] ${message}`, data ?? "");
+}
+
 // ── 主頁面 ────────────────────────────────────────────────────────────────────
 
 export default function RegulationDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  const { id, refs: routeRefs } = useParams<{ id: string; refs?: string[] }>();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [reg, setReg] = useState<RegulationOut | null>(null);
   const [loading, setLoading] = useState(true);
   const initialTab = searchParams.get("tab");
+  const articleRef = searchParams.get("article_ref");
+  const unitRef = searchParams.get("unit_ref");
   const [tab, setTab] = useState<Tab>(isTab(initialTab) ? initialTab : "content");
-  const [zoom, setZoom] = useState(100);
+  const { zoom, setZoom, zoomStyle } = usePersistedZoom("hcca.viewer.zoom");
   const [diffPair, setDiffPair] = useState<[RegulationRevisionOut, RegulationRevisionOut | null] | null>(null);
 
   const [wfActionLoading, setWfActionLoading] = useState(false);
@@ -62,13 +195,16 @@ export default function RegulationDetailPage() {
   const [tocVisible, setTocVisible] = useState(true);
   const [chapterCollapsedMap, setChapterCollapsedMap] = useState<Record<string, boolean>>({});
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [amendmentDraftCount, setAmendmentDraftCount] = useState(0);
+  const [amendmentDrafts, setAmendmentDrafts] = useState<Draft[]>([]);
   const [activeAnchorId, setActiveAnchorId] = useState<string | null>(null);
+  const [highlightedArticleId, setHighlightedArticleId] = useState<string | null>(null);
+  const [showBackToTop, setShowBackToTop] = useState(false);
   const [printingPdf, setPrintingPdf] = useState(false);
   const [publishedDoc, setPublishedDoc] = useState<DocumentOut | null>(null);
   const [userDirectory, setUserDirectory] = useState<Record<string, string>>({});
   const { can, isAdmin } = usePermissions();
   const currentUserId = typeof window !== "undefined" ? localStorage.getItem("user_id") ?? "" : "";
+  const currentRegHref = reg ? regulationHref(reg) : `/regulations/${encodeURIComponent(id)}`;
 
   useEffect(() => {
     const handler = () => setIsFullscreen(Boolean(document.fullscreenElement));
@@ -115,13 +251,7 @@ export default function RegulationDetailPage() {
   }, [reg, showRepeal]);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(`amendment_drafts_${id}`);
-      if (raw) {
-        const drafts = JSON.parse(raw);
-        setAmendmentDraftCount(Array.isArray(drafts) ? drafts.length : 0);
-      }
-    } catch { /* ignore */ }
+    setAmendmentDrafts(loadDrafts(id));
   }, [id]);
 
   useEffect(() => {
@@ -134,8 +264,8 @@ export default function RegulationDetailPage() {
   const handleTabChange = useCallback((nextTab: Tab) => {
     setTab(nextTab);
     const hash = typeof window !== "undefined" ? window.location.hash : "";
-    router.replace(`/regulations/${id}?tab=${nextTab}${hash}`, { scroll: false });
-  }, [id, router]);
+    router.replace(`${currentRegHref}?tab=${nextTab}${hash}`, { scroll: false });
+  }, [currentRegHref, router]);
 
   const runWfAction = useCallback(async (
     label: string, fn: (note: string) => Promise<void>, needNote = false,
@@ -178,6 +308,23 @@ export default function RegulationDetailPage() {
       .catch(() => toast.error("複製失敗"));
   }, []);
 
+  const handleCopyArticleLink = useCallback((path: string) => {
+    const url = `${window.location.origin}${path}`;
+    navigator.clipboard.writeText(url)
+      .then(() => toast.success("條文連結已複製"))
+      .catch(() => toast.error("複製失敗"));
+  }, []);
+
+  const handleDeleteAmendmentDraft = useCallback((draftId: string) => {
+    const draft = amendmentDrafts.find((item) => item.id === draftId);
+    if (!draft) return;
+    if (!window.confirm(`確定刪除「${draft.name}」？此操作只會刪除本機草稿。`)) return;
+    const next = amendmentDrafts.filter((item) => item.id !== draftId);
+    saveDrafts(id, next);
+    setAmendmentDrafts(next);
+    toast.success("修正案草稿已刪除");
+  }, [amendmentDrafts, id]);
+
   const allArticles = reg?.articles ?? [];
   const activeArticles = showDeleted ? allArticles : allArticles.filter(a => !a.is_deleted);
   const chapterArticles = useMemo(
@@ -201,6 +348,43 @@ export default function RegulationDetailPage() {
     () => buildArticleDisplayRows(activeArticles, chapterCollapsedMap),
     [activeArticles, chapterCollapsedMap],
   );
+  const articleShareUrls = useMemo(() => {
+    if (!reg) return {};
+    const byId = new Map(activeArticles.map((article) => [article.id, article]));
+    const rowById = new Map(articleDisplayRows.map((row) => [row.article.id, row]));
+    const basePath = `/regulations/${reg.title}`;
+
+    const chainForArticle = (article: RegulationArticleOut) => {
+      const chain: RegulationArticleOut[] = [];
+      let current: RegulationArticleOut | undefined = article;
+      while (current) {
+        chain.unshift(current);
+        current = current.parent_id ? byId.get(current.parent_id) : undefined;
+      }
+      return chain;
+    };
+
+    return Object.fromEntries(articleDisplayRows.map(({ article, displayLabel }) => {
+      const pathSegments = chainForArticle(article)
+        .filter((item) => LINKABLE_ARTICLE_TYPES.has(item.article_type))
+        .map((item) => {
+          const label = rowById.get(item.id)?.displayLabel ?? displayLabel;
+          return linkSegmentForArticle(item.article_type, item.legal_number, label);
+        });
+      return [article.id, pathSegments.length > 0 ? `${basePath}/${pathSegments.join("/")}` : `${basePath}#a-${article.id}`];
+    }));
+  }, [activeArticles, articleDisplayRows, reg]);
+
+  const deepLinkRefs = useMemo(() => {
+    const refs = (routeRefs ?? []).map(decodeRouteSegment);
+    for (let index = 0; index < 8; index += 1) {
+      const value = searchParams.get(`ref${index}`);
+      if (value) refs.push(value);
+    }
+    if (refs.length === 0 && articleRef) refs.push(articleRef);
+    if (refs.length === 1 && unitRef) refs.push(unitRef);
+    return refs;
+  }, [articleRef, routeRefs, searchParams, unitRef]);
 
   useEffect(() => {
     setChapterCollapsedMap((prev) => {
@@ -251,14 +435,147 @@ export default function RegulationDetailPage() {
     return () => observer.disconnect();
   }, [tab, tocItems, activeAnchorId]);
 
+  useEffect(() => {
+    const onScroll = () => setShowBackToTop(window.scrollY > 520);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    if (!reg || tab !== "content" || deepLinkRefs.length === 0) return;
+    const parsedRefs = deepLinkRefs.map(parseLawRef).filter((ref): ref is ParsedLawRef => Boolean(ref));
+    const targetRef = parsedRefs[parsedRefs.length - 1];
+    logRegulationDeepLink("received refs", {
+      href: window.location.href,
+      routeRefs,
+      queryRefs: Object.fromEntries(
+        Array.from({ length: 8 }, (_, index) => [`ref${index}`, searchParams.get(`ref${index}`)])
+          .filter(([, value]) => value),
+      ),
+      deepLinkRefs,
+      parsedRefs,
+      tab,
+      regulationTitle: reg.title,
+    });
+    if (!targetRef) return;
+
+    const articles = (reg.articles ?? []).filter((article) => !article.is_deleted);
+    const byId = new Map(articles.map((article) => [article.id, article]));
+    const rowById = new Map(articleDisplayRows.map((row) => [row.article.id, row]));
+    const articleNumberForRef = (article: RegulationArticleOut) => {
+      const legalNumber = normalizeLegalNumber(article.legal_number);
+      if (legalNumber) return legalNumber;
+      const displayLabel = rowById.get(article.id)?.displayLabel ?? "";
+      return parseLawRef(
+        linkSegmentForArticle(article.article_type, article.legal_number, displayLabel),
+      )?.number ?? "";
+    };
+    const matchesRef = (article: RegulationArticleOut, ref: ParsedLawRef) =>
+      normalizedType(article.article_type) === ref.type
+      && articleNumberForRef(article) === ref.number;
+    const chainForArticle = (article: RegulationArticleOut) => {
+      const chain: RegulationArticleOut[] = [];
+      let current: RegulationArticleOut | undefined = article;
+      while (current) {
+        chain.unshift(current);
+        current = current.parent_id ? byId.get(current.parent_id) : undefined;
+      }
+      return chain;
+    };
+    const chainMatchesRefs = (chain: RegulationArticleOut[], refs: ParsedLawRef[]) => {
+      let cursor = 0;
+      for (const ref of refs) {
+        const foundIndex = chain.findIndex((article, index) => index >= cursor && matchesRef(article, ref));
+        if (foundIndex < 0) return false;
+        cursor = foundIndex + 1;
+      }
+      return true;
+    };
+    const candidates = articles.filter((article) => matchesRef(article, targetRef));
+    const target = candidates.find((candidate) => {
+      const ancestorRefs = parsedRefs.slice(0, -1);
+      return ancestorRefs.length === 0 || chainMatchesRefs(chainForArticle(candidate).slice(0, -1), ancestorRefs);
+    }) ?? candidates[0];
+    logRegulationDeepLink("matching result", {
+      targetRef,
+      candidates: candidates.map((article) => ({
+        id: article.id,
+        type: article.article_type,
+        normalizedType: normalizedType(article.article_type),
+        legalNumber: article.legal_number,
+        displayLabel: rowById.get(article.id)?.displayLabel,
+        computedNumber: articleNumberForRef(article),
+        parentId: article.parent_id,
+        title: article.title,
+        contentPreview: article.content?.slice(0, 24) ?? "",
+      })),
+      target: target ? {
+        id: target.id,
+        type: target.article_type,
+        legalNumber: target.legal_number,
+        displayLabel: rowById.get(target.id)?.displayLabel,
+      } : null,
+      rows: articleDisplayRows.map((row) => ({
+        id: row.article.id,
+        type: row.article.article_type,
+        normalizedType: normalizedType(row.article.article_type),
+        legalNumber: row.article.legal_number,
+        displayLabel: row.displayLabel,
+        computedNumber: articleNumberForRef(row.article),
+        hiddenByChapter: row.hiddenByChapter,
+        parentId: row.article.parent_id,
+        title: row.article.title,
+      })),
+    });
+    if (!target) {
+      logRegulationDeepLink("no target matched");
+      return;
+    }
+    const targetChain = chainForArticle(target);
+    setChapterCollapsedMap((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const ancestor of targetChain) {
+        if (ancestor.article_type === "chapter" && next[ancestor.id]) {
+          next[ancestor.id] = false;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+    setHighlightedArticleId(target.id);
+    const scrollToTarget = (attempt = 0) => {
+      const element = document.getElementById(`a-${target.id}`);
+      logRegulationDeepLink("scroll attempt", {
+        targetId: target.id,
+        attempt,
+        elementFound: Boolean(element),
+      });
+      if (!element && attempt < 12) {
+        window.setTimeout(() => scrollToTarget(attempt + 1), 80);
+        return;
+      }
+      element?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    };
+    requestAnimationFrame(() => scrollToTarget());
+  }, [articleDisplayRows, deepLinkRefs, reg, routeRefs, searchParams, tab]);
+
   if (loading) return <div className="py-20 text-center" style={{ color: "var(--text-muted)" }}>載入中...</div>;
   if (!reg) return <div className="py-20 text-center" style={{ color: "var(--danger)" }}>法規不存在或無法存取</div>;
 
   const sortedRevisions = [...(reg.revisions ?? [])].sort(
     (a, b) => new Date(a.amended_at).getTime() - new Date(b.amended_at).getTime()
   );
+  const legislativeHistoryRows = splitLegislativeHistory(reg.legislative_history);
+  const generatedHistoryRows = formatGeneratedHistoryRows(sortedRevisions);
+  const hasHistoryRows = legislativeHistoryRows.length > 0 || generatedHistoryRows.length > 0;
   const latestRevision = sortedRevisions[sortedRevisions.length - 1] ?? null;
   const deletedCount = allArticles.filter(a => a.is_deleted).length;
+  const amendmentDraftCount = amendmentDrafts.length;
   const councilApprovedLog = [...(reg.workflow_logs ?? [])]
     .reverse()
     .find((log) => log.to_status === "council_approved");
@@ -286,7 +603,7 @@ export default function RegulationDetailPage() {
           <Link href="/regulations"
             className="no-print mt-1 w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center hover:opacity-80"
             style={{ border: "1px solid var(--border)" }}>←</Link>
-          <div className="flex-1">
+          <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2 mb-1">
               <RegulationCategoryBadge category={reg.category} />
               <span className="text-xs px-2 py-0.5 rounded"
@@ -296,14 +613,14 @@ export default function RegulationDetailPage() {
               <WorkflowStatusBadge status={reg.workflow_status} />
             </div>
 
-            <div className="flex items-start justify-between gap-3">
-              <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <h1 className="min-w-0 text-lg font-semibold leading-snug break-words sm:text-xl" style={{ color: "var(--text-primary)" }}>
                 {!reg.is_active && <span style={{ color: "var(--danger)" }}>(失效) </span>}
                 {reg.title}
               </h1>
 
               {/* 工具列 */}
-              <div className="no-print flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
+              <div className="no-print flex w-full flex-wrap items-center justify-start gap-2 sm:w-auto sm:flex-shrink-0 sm:justify-end">
                 {/* 縮放 */}
                 <div className="flex items-center gap-1 rounded-lg overflow-hidden"
                   style={{ border: "1px solid var(--border)" }}>
@@ -378,7 +695,7 @@ export default function RegulationDetailPage() {
                     const toastId = toast.loading("正在處理檔案，請稍候...");
                     setPrintingPdf(true);
                     try {
-                      const res = await fetch(apiUrl(`/regulations/${id}/print`), {
+                      const res = await fetch(apiUrl(`${currentRegHref}/print`), {
                         credentials: "include",
                       });
                       if (!res.ok) throw new Error(res.statusText);
@@ -421,7 +738,7 @@ export default function RegulationDetailPage() {
 
                 {/* 編輯（限建立者或管理員） */}
                 {(reg.created_by === currentUserId || isAdmin) && (
-                  <Link href={`/regulations/${id}/edit`}
+                  <Link href={`${currentRegHref}/edit`}
                     className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90 inline-flex items-center gap-1.5"
                     style={{ background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }}>
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
@@ -437,10 +754,11 @@ export default function RegulationDetailPage() {
                 {/* 起草修正案 */}
                 {can("regulation:create") && reg.is_active && reg.published_at && (
                   <Link
-                    href={`/regulations/${id}/amendment`}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90"
+                    href={`${currentRegHref}/amendment`}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90 inline-flex items-center gap-1.5"
                     style={{ background: "rgba(99,102,241,0.1)", color: "#818cf8", border: "1px solid rgba(99,102,241,0.3)" }}>
-                    ✍ 起草修正案
+                    <FilePenLine size={12} strokeWidth={2} aria-hidden="true" />
+                    起草修正案
                   </Link>
                 )}
 
@@ -576,113 +894,149 @@ export default function RegulationDetailPage() {
 
         {/* ── 分頁內容 ─────────────────────────────────────────────────────── */}
 
-        {/* 法規內容（Markdown） */}
+        {/* 法規內容 */}
         {tab === "content" && (
-          <div className="card p-6 print-content" style={{ fontSize: `${zoom}%` }}>
+          <div className="card p-4 sm:p-6 print-content">
             {reg.preface && (
               <div className="mb-6 pb-5 border-b text-sm italic"
                 style={{ color: "var(--text-muted)", borderColor: "var(--border)" }}>
                 {reg.preface}
               </div>
             )}
-            {reg.content && (
-              <div className={PROSE}>
+            {hasHistoryRows && (
+              <section
+                className="mb-6 rounded-xl p-4"
+                style={{
+                  background: "var(--bg-elevated)",
+                  border: "1px solid var(--border)",
+                  ...zoomStyle,
+                }}
+              >
+                <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+                  法規沿革
+                </h2>
+                <div
+                  className="space-y-1 text-sm"
+                  style={{
+                    color: "var(--text-secondary)",
+                    fontFamily: '"標楷體", "DFKai-SB", serif',
+                    lineHeight: 1.8,
+                    overflowWrap: "anywhere",
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word",
+                  }}
+                >
+                  {legislativeHistoryRows.map((row, index) => <p key={`manual-${index}-${row}`}>{row}</p>)}
+                  {generatedHistoryRows.map((row, index) => <p key={`generated-${index}-${row}`}>{row}</p>)}
+                </div>
+              </section>
+            )}
+            {activeArticles.length === 0 && reg.content ? (
+              <div className={PROSE} style={zoomStyle}>
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{reg.content}</ReactMarkdown>
               </div>
-            )}
-            <div className="mt-8 pt-6 border-t space-y-3" style={{ borderColor: "var(--border)" }}>
-              <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>條文內容</h2>
-              <div className="no-print flex items-center gap-2 flex-wrap">
-                <button
-                  onClick={() => {
-                    const nextValue = !allChaptersCollapsed;
-                    setChapterCollapsedMap(
-                      Object.fromEntries(chapterArticles.map((article) => [article.id, nextValue])),
-                    );
-                  }}
-                  className="text-xs px-3 py-1.5 rounded-lg transition-all hover:opacity-80 inline-flex items-center gap-1.5"
-                  style={{
-                    color: allChaptersCollapsed ? "var(--primary)" : "var(--text-muted)",
-                    border: "1px solid var(--border)",
-                    background: allChaptersCollapsed ? "var(--primary-dim)" : "transparent",
-                  }}>
-                  {allChaptersCollapsed ? "展開各章條文" : "收合各章條文"}
-                </button>
-                <button onClick={() => setTocVisible(v => !v)}
-                  className="text-xs px-3 py-1.5 rounded-lg transition-all hover:opacity-80 inline-flex items-center gap-1.5"
-                  style={{
-                    color: tocVisible ? "var(--primary)" : "var(--text-muted)",
-                    border: "1px solid var(--border)",
-                    background: tocVisible ? "var(--primary-dim)" : "transparent",
-                  }}>
-                  {tocVisible ? "隱藏目錄" : "顯示目錄"}
-                </button>
-                {deletedCount > 0 && (
-                  <button onClick={() => setShowDeleted(v => !v)}
+            ) : (
+              <div className="space-y-3">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                  <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>條文內容</h2>
+                  <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                    共 {activeArticles.filter(a => !a.is_deleted).length} 個有效條文
+                  </span>
+                </div>
+                <div className="no-print flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={() => {
+                      const nextValue = !allChaptersCollapsed;
+                      setChapterCollapsedMap(
+                        Object.fromEntries(chapterArticles.map((article) => [article.id, nextValue])),
+                      );
+                    }}
                     className="text-xs px-3 py-1.5 rounded-lg transition-all hover:opacity-80 inline-flex items-center gap-1.5"
-                    style={showDeleted
-                      ? { color: "var(--danger)", background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.3)" }
-                      : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
-                    {showDeleted ? "隱藏已刪除" : `顯示已刪除 (${deletedCount})`}
+                    style={{
+                      color: allChaptersCollapsed ? "var(--primary)" : "var(--text-muted)",
+                      border: "1px solid var(--border)",
+                      background: allChaptersCollapsed ? "var(--primary-dim)" : "transparent",
+                    }}>
+                    {allChaptersCollapsed ? "展開各章條文" : "收合各章條文"}
                   </button>
-                )}
-                <span className="text-xs ml-auto" style={{ color: "var(--text-muted)" }}>
-                  共 {activeArticles.filter(a => !a.is_deleted).length} 個有效條文
-                </span>
-              </div>
+                  <button onClick={() => setTocVisible(v => !v)}
+                    className="text-xs px-3 py-1.5 rounded-lg transition-all hover:opacity-80 inline-flex items-center gap-1.5"
+                    style={{
+                      color: tocVisible ? "var(--primary)" : "var(--text-muted)",
+                      border: "1px solid var(--border)",
+                      background: tocVisible ? "var(--primary-dim)" : "transparent",
+                    }}>
+                    {tocVisible ? "隱藏目錄" : "顯示目錄"}
+                  </button>
+                  {deletedCount > 0 && (
+                    <button onClick={() => setShowDeleted(v => !v)}
+                      className="text-xs px-3 py-1.5 rounded-lg transition-all hover:opacity-80 inline-flex items-center gap-1.5"
+                      style={showDeleted
+                        ? { color: "var(--danger)", background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.3)" }
+                        : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
+                      {showDeleted ? "隱藏已刪除" : `顯示已刪除 (${deletedCount})`}
+                    </button>
+                  )}
+                </div>
 
-              <div className="flex gap-4 items-start">
-                {tocVisible && (
-                  <aside className="no-print w-64 max-h-[70vh] overflow-auto rounded-xl p-3 sticky top-4"
-                    style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
-                    <p className="text-xs font-semibold mb-2" style={{ color: "var(--text-muted)" }}>章節目錄</p>
-                    <div className="space-y-1">
-                      {tocItems.map(item => (
-                        <button
-                          key={item.anchor}
-                          onClick={() => {
-                            const target = document.getElementById(item.anchor);
-                            if (!target) return;
-                            setActiveAnchorId(item.anchor);
-                            requestAnimationFrame(() => {
-                              target.scrollIntoView({ behavior: "smooth", block: "start" });
-                            });
-                          }}
-                          className="w-full text-left text-xs px-2 py-1 rounded hover:opacity-80"
-                          style={{
-                            color: activeAnchorId === item.anchor ? "var(--primary)" : "var(--text-secondary)",
-                            background: activeAnchorId === item.anchor ? "var(--primary-dim)" : "transparent",
-                            border: activeAnchorId === item.anchor ? "1px solid var(--border-strong)" : "1px solid transparent",
-                          }}
-                        >
-                          {item.label}
-                        </button>
-                      ))}
-                    </div>
-                  </aside>
-                )}
-                <div className="flex-1 glass divide-y divide-slate-700/50 overflow-hidden" style={{ fontSize: `${zoom}%` }}>
-                  {activeArticles.length === 0
-                    ? <p className="p-6 text-center" style={{ color: "var(--text-muted)" }}>尚無條文記錄</p>
-                    : articleDisplayRows.map(({ article, index, displayLabel, hiddenByChapter }) => (
-                        <ArticleRow
-                          key={article.id}
-                          article={article}
-                          index={index}
-                          displayLabel={displayLabel}
-                          collapsed={hiddenByChapter && !ARTICLE_IS_STRUCTURAL[article.article_type]}
-                          hidden={hiddenByChapter}
-                          chapterCollapsed={Boolean(article.article_type === "chapter" && chapterCollapsedMap[article.id])}
-                          onToggleChapter={
-                            article.article_type === "chapter"
-                              ? () => setChapterCollapsedMap((prev) => ({ ...prev, [article.id]: !prev[article.id] }))
-                              : null
-                          }
-                        />
-                      ))}
+                <div className="flex flex-col gap-3 lg:flex-row lg:gap-4 lg:items-start">
+                  {tocVisible && (
+                    <aside className="no-print w-full max-h-52 overflow-auto rounded-xl p-3 lg:sticky lg:top-4 lg:w-64 lg:max-h-[70vh] lg:flex-shrink-0"
+                      style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
+                      <p className="text-xs font-semibold mb-2" style={{ color: "var(--text-muted)" }}>章節目錄</p>
+                      <div className="space-y-1">
+                        {tocItems.map(item => (
+                          <button
+                            key={item.anchor}
+                            onClick={() => {
+                              const target = document.getElementById(item.anchor);
+                              if (!target) return;
+                              setActiveAnchorId(item.anchor);
+                              requestAnimationFrame(() => {
+                                target.scrollIntoView({ behavior: "smooth", block: "start" });
+                              });
+                            }}
+                            className="w-full text-left text-xs px-2 py-1 rounded hover:opacity-80"
+                            style={{
+                              color: activeAnchorId === item.anchor ? "var(--primary)" : "var(--text-secondary)",
+                              background: activeAnchorId === item.anchor ? "var(--primary-dim)" : "transparent",
+                              border: activeAnchorId === item.anchor ? "1px solid var(--border-strong)" : "1px solid transparent",
+                            }}
+                          >
+                            {item.label}
+                          </button>
+                        ))}
+                      </div>
+                    </aside>
+                  )}
+                  <div className="w-full min-w-0 flex-1 glass overflow-hidden" style={zoomStyle}>
+                    {activeArticles.length === 0
+                      ? <p className="p-6 text-center" style={{ color: "var(--text-muted)" }}>尚無條文記錄</p>
+                      : articleDisplayRows.map(({ article, index, displayLabel, hiddenByChapter }) => (
+                          <ArticleRow
+                            key={article.id}
+                            article={article}
+                            index={index}
+                            displayLabel={displayLabel}
+                            collapsed={hiddenByChapter && !ARTICLE_IS_STRUCTURAL[article.article_type]}
+                            hidden={hiddenByChapter}
+                            chapterCollapsed={Boolean(article.article_type === "chapter" && chapterCollapsedMap[article.id])}
+                            shareUrl={articleShareUrls[article.id]}
+                            onCopyLink={handleCopyArticleLink}
+                            showTopDivider={!article.parent_id}
+                            highlighted={highlightedArticleId === article.id}
+                            onClearHighlight={() => setHighlightedArticleId(null)}
+                            onToggleChapter={
+                              article.article_type === "chapter"
+                                ? () => setChapterCollapsedMap((prev) => ({ ...prev, [article.id]: !prev[article.id] }))
+                                : null
+                            }
+                          />
+                        ))}
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         )}
 
@@ -747,21 +1101,24 @@ export default function RegulationDetailPage() {
           <div className="space-y-4">
             {/* 下一步視覺引導卡 */}
             {(() => {
-              const NEXT: Record<string, { icon: string; color: string; bg: string; border: string; title: string; desc: string }> = {
-                draft:            { icon: "✍️", color: "#818cf8", bg: "rgba(99,102,241,0.07)", border: "rgba(99,102,241,0.25)", title: "下一步：送交議會審議", desc: "草稿完成後，由起草人點擊「送交議會審議」，進入審議流程。" },
-                under_review:     { icon: "📋", color: "#0284c7", bg: "rgba(2,132,199,0.07)", border: "rgba(2,132,199,0.25)", title: "下一步：排入議程", desc: "書記官審閱後，點擊「排入議程」將法規列入下次議會討論。" },
-                scheduled:        { icon: "🗓️", color: "#7c3aed", bg: "rgba(124,58,237,0.07)", border: "rgba(124,58,237,0.25)", title: "下一步：議會核定", desc: "議會討論後，議長點擊「議會核定通過」完成議會程序。" },
-                council_approved: { icon: "📜", color: "#d97706", bg: "rgba(217,119,6,0.07)", border: "rgba(217,119,6,0.25)", title: "下一步：主席公布", desc: "主席審核後點擊「主席公布法規」，法規正式生效並記錄修訂歷程。" },
-                published:        { icon: "✅", color: "var(--success)", bg: "var(--success-dim)", border: "rgba(34,197,94,0.3)", title: "法規已公布生效", desc: "此法規目前為現行有效版本。如需修訂，請從法規詳情頁起草修正案。" },
-                rejected:         { icon: "↩️", color: "var(--danger)", bg: "rgba(220,38,38,0.07)", border: "rgba(220,38,38,0.25)", title: "已退回草稿", desc: "法規已被退回，請修正內容後重新送審。" },
-                archived:         { icon: "🗄️", color: "var(--text-muted)", bg: "var(--bg-elevated)", border: "var(--border)", title: "法規已廢止", desc: "此法規已停用，僅供歷史查閱。" },
+              const NEXT: Record<string, { Icon: LucideIcon; color: string; bg: string; border: string; title: string; desc: string }> = {
+                draft:            { Icon: FilePenLine, color: "#818cf8", bg: "rgba(99,102,241,0.07)", border: "rgba(99,102,241,0.25)", title: "下一步：送交議會審議", desc: "草稿完成後，由起草人點擊「送交議會審議」，進入審議流程。" },
+                under_review:     { Icon: ClipboardList, color: "#0284c7", bg: "rgba(2,132,199,0.07)", border: "rgba(2,132,199,0.25)", title: "下一步：排入議程", desc: "書記官審閱後，點擊「排入議程」將法規列入下次議會討論。" },
+                scheduled:        { Icon: CalendarDays, color: "#7c3aed", bg: "rgba(124,58,237,0.07)", border: "rgba(124,58,237,0.25)", title: "下一步：議會核定", desc: "議會討論後，議長點擊「議會核定通過」完成議會程序。" },
+                council_approved: { Icon: ScrollText, color: "#d97706", bg: "rgba(217,119,6,0.07)", border: "rgba(217,119,6,0.25)", title: "下一步：主席公布", desc: "主席審核後點擊「主席公布法規」，法規正式生效並記錄修訂歷程。" },
+                published:        { Icon: CheckCircle2, color: "var(--success)", bg: "var(--success-dim)", border: "rgba(34,197,94,0.3)", title: "法規已公布生效", desc: "此法規目前為現行有效版本。如需修訂，請從法規詳情頁起草修正案。" },
+                rejected:         { Icon: Undo2, color: "var(--danger)", bg: "rgba(220,38,38,0.07)", border: "rgba(220,38,38,0.25)", title: "已退回草稿", desc: "法規已被退回，請修正內容後重新送審。" },
+                archived:         { Icon: Archive, color: "var(--text-muted)", bg: "var(--bg-elevated)", border: "var(--border)", title: "法規已廢止", desc: "此法規已停用，僅供歷史查閱。" },
               };
               const info = NEXT[reg.workflow_status];
               if (!info) return null;
+              const Icon = info.Icon;
               return (
                 <div className="rounded-xl px-4 py-3 flex items-start gap-3"
                   style={{ background: info.bg, border: `1px solid ${info.border}` }}>
-                  <span className="text-lg flex-shrink-0 mt-0.5">{info.icon}</span>
+                  <span className="flex-shrink-0 mt-0.5" style={{ color: info.color }}>
+                    <Icon size={18} strokeWidth={2.2} aria-hidden="true" />
+                  </span>
                   <div>
                     <p className="text-sm font-semibold" style={{ color: info.color }}>{info.title}</p>
                     <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{info.desc}</p>
@@ -857,11 +1214,39 @@ export default function RegulationDetailPage() {
               {amendmentDraftCount === 0 ? (
                 <p className="text-xs" style={{ color: "var(--text-muted)" }}>目前無本機修正案草稿。</p>
               ) : (
-                <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                  您有 {amendmentDraftCount} 份尚未提交的修正案草稿，儲存於本機。
-                </p>
+                <div className="space-y-2">
+                  <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                    您有 {amendmentDraftCount} 份尚未提交的修正案草稿，儲存於本機。
+                  </p>
+                  <div className="divide-y overflow-hidden rounded-lg"
+                    style={{ border: "1px solid var(--border)", borderColor: "var(--border)" }}>
+                    {amendmentDrafts.map((draft) => (
+                      <div key={draft.id} className="flex items-center gap-3 px-3 py-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-medium" style={{ color: "var(--text-primary)" }}>
+                            {draft.name}
+                          </p>
+                          <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-muted)" }}>
+                            {draft.amendmentType === "partial" ? "部分修正" : "全文修正"} ·
+                            最後修改 {new Date(draft.updatedAt).toLocaleString("zh-TW")}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteAmendmentDraft(draft.id)}
+                          className="inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg hover:opacity-80"
+                          style={{ color: "var(--danger)", border: "1px solid rgba(220,38,38,0.25)", background: "rgba(220,38,38,0.06)" }}
+                          aria-label={`刪除草稿 ${draft.name}`}
+                          title="刪除草稿"
+                        >
+                          <Trash2 size={13} strokeWidth={2.2} aria-hidden="true" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
-              <Link href={`/regulations/${id}/amendment`}
+              <Link href={`${currentRegHref}/amendment`}
                 className="btn btn-primary text-xs px-3 py-1.5 inline-flex items-center gap-1.5"
                 style={{ textDecoration: "none" }}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -891,6 +1276,26 @@ export default function RegulationDetailPage() {
           </dl>
         </div>
       </div>
+
+      {showBackToTop && (
+        <button
+          type="button"
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          className="no-print fixed bottom-5 right-5 z-40 inline-flex h-11 w-11 items-center justify-center rounded-full shadow-lg transition-opacity hover:opacity-85"
+          style={{
+            background: "var(--bg-surface)",
+            color: "var(--primary)",
+            border: "1px solid var(--border-strong)",
+          }}
+          title="回到最上方"
+          aria-label="回到最上方"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="m18 15-6-6-6 6" />
+          </svg>
+        </button>
+      )}
 
       {/* ── 版本差異 Modal ──────────────────────────────────────────────────── */}
       {diffPair && (

@@ -6,8 +6,14 @@ x-api-common: &api-common
   env_file:
     - .env
   environment:
-    DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/campus_platform
-    DATABASE_URL_SYNC: postgresql+psycopg2://postgres:postgres@db:5432/campus_platform
+    ENVIRONMENT: development
+    DEBUG: "true"
+    ENABLE_API_DOCS: "true"
+    ALLOWED_ORIGINS: '["http://localhost:3000","http://127.0.0.1:3000"]'
+    ALLOWED_HOSTS: '["localhost","127.0.0.1","api"]'
+    COOKIE_SECURE: "false"
+    DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
+    DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
     REDIS_URL: redis://redis:6379/0
   depends_on:
     db:
@@ -20,6 +26,7 @@ x-api-common: &api-common
     - /mnt/c/Windows/Fonts/STKAITI.TTF:/usr/share/fonts/truetype/hcca/STKAITI.TTF:ro
     - /mnt/c/Windows/Fonts/SIMLI.TTF:/usr/share/fonts/truetype/hcca/SIMLI.TTF:ro
     - /usr/share/fonts/opentype/noto-custom:/usr/share/fonts/opentype/noto-custom:ro
+    - ./uploads:/app/uploads
 
 services:
   # ── PostgreSQL ────────────────────────────────────────────────
@@ -28,11 +35,11 @@ services:
     container_name: campus_db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: campus_platform
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-campus_platform}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -47,7 +54,7 @@ services:
     container_name: campus_redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redisdata:/data
     healthcheck:
@@ -62,12 +69,18 @@ services:
     container_name: campus_api
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/campus_platform
-      DATABASE_URL_SYNC: postgresql+psycopg2://postgres:postgres@db:5432/campus_platform
+      ENVIRONMENT: development
+      DEBUG: "true"
+      ENABLE_API_DOCS: "true"
+      ALLOWED_ORIGINS: '["http://localhost:3000","http://127.0.0.1:3000"]'
+      ALLOWED_HOSTS: '["localhost","127.0.0.1","api"]'
+      COOKIE_SECURE: "false"
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
+      DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
       REDIS_URL: redis://redis:6379/0
       GUNICORN_WORKERS: "4"
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     # 開發模式可 override CMD 為：uvicorn api:app --reload --host 0.0.0.0 --port 8000
 
   # ── Celery Worker ─────────────────────────────────────────────
@@ -81,8 +94,9 @@ services:
       --concurrency=4
       --queues=celery
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/campus_platform
-      DATABASE_URL_SYNC: postgresql+psycopg2://postgres:postgres@db:5432/campus_platform
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
+      DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
       REDIS_URL: redis://redis:6379/0
 
   # ── Celery Beat（定時排程） ───────────────────────────────────
@@ -96,8 +110,9 @@ services:
       --scheduler celery.beat:PersistentScheduler
       --pidfile=/tmp/celerybeat.pid
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/campus_platform
-      DATABASE_URL_SYNC: postgresql+psycopg2://postgres:postgres@db:5432/campus_platform
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
+      DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
       REDIS_URL: redis://redis:6379/0
     volumes:
       - celerybeat:/tmp  # 持久化 beat schedule 狀態
@@ -110,10 +125,11 @@ services:
       args:
         # 留空時瀏覽器使用同源 /api，由 Next.js 轉發到 API
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-ws://localhost:8000}
     container_name: campus_web
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       NODE_ENV: production
       API_INTERNAL_URL: http://api:8000

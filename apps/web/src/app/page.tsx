@@ -5,6 +5,7 @@ import {
   documentsApi,
   notificationsApi,
   regulationsApi,
+  regulationHref,
   type DocumentStats,
   type NotificationItem,
 } from "@/lib/api";
@@ -177,7 +178,7 @@ export default function DashboardPage() {
     { href: "/shop", label: "訂購系統", desc: "商品訂購管理" },
     { href: "/meal", label: "學餐訂購", desc: "訂今日午餐" },
     { href: "/surveys", label: "問卷填答", desc: "填答問卷表達意見" },
-    ...(can("doc.issue") ? [{ href: "/serial-templates", label: "字號模板", desc: "設定公文字號規則" }] : []),
+    ...(can("serial:create") ? [{ href: "/serial-templates", label: "字號模板", desc: "設定公文字號規則" }] : []),
     ...(can("admin:all") || can("audit:view_org") || can("audit:view_all")
       ? [{ href: "/audit-logs", label: "稽核日誌", desc: "查看所有操作軌跡" }]
       : []),
@@ -454,7 +455,7 @@ export default function DashboardPage() {
                   <li key={reg.id}
                     style={idx < pendingRegs.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}}>
                     <Link
-                      href={`/regulations/${reg.id}`}
+                      href={regulationHref(reg)}
                       className="flex items-center gap-3 px-5 py-3 transition-colors"
                       style={{ textDecoration: "none" }}
                       onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-hover)")}
@@ -503,7 +504,7 @@ export default function DashboardPage() {
               {frozenRegs.map((reg, idx) => (
                 <li key={reg.id}
                   style={idx < frozenRegs.length - 1 ? { borderBottom: "1px solid rgba(251,146,60,0.15)" } : {}}>
-                  <Link href={`/regulations/${reg.id}`}
+                  <Link href={regulationHref(reg)}
                     className="flex items-center gap-3 px-5 py-3 transition-colors"
                     style={{ textDecoration: "none" }}
                     onMouseEnter={e => (e.currentTarget.style.background = "rgba(251,146,60,0.05)")}

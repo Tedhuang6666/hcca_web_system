@@ -38,7 +38,31 @@ npx -y node@24 node_modules/next/dist/bin/next build
 - 登入狀態以 HttpOnly cookie 與 `/auth/me` 為準；`localStorage` 只做 UI cache。
 - WebSocket 使用 cookie 驗證，前端不再把 access token 放在 query string。
 - 生產環境必須設定 `ENVIRONMENT=production`、強 `SECRET_KEY`、`COOKIE_SECURE=true`，且不可使用 `SUPERUSER_EMAILS` 自動繞過 RBAC。
+- 生產環境必須設定 `ALLOWED_ORIGINS` 與 `ALLOWED_HOSTS`，不可使用萬用字元。
+- 預設 `docker-compose.yml` 僅供本機開發，DB/Redis/API/Web port 只綁定 `127.0.0.1`。
+- 正式部署使用 `docker-compose.prod.yml`，只由 Caddy 對外公開 `80/443`。
 - `npm audit --omit=dev` 目前應為 0 vulnerabilities；PostCSS 透過 npm `overrides` 固定到安全版本。
+
+## 正式部署
+
+```bash
+cp .env.production.example .env.production
+# 編輯 .env.production：SITE_DOMAIN、SECRET_KEY、DB/Redis 密碼、OAuth、SMTP、LINE
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+```
+
+正式部署前請先執行：
+
+```bash
+docker compose config --quiet
+PROD_ENV_FILE=.env.production.example \
+  SITE_DOMAIN=example.edu.tw \
+  POSTGRES_USER=hcca \
+  POSTGRES_PASSWORD=dbpass \
+  POSTGRES_DB=campus_platform \
+  REDIS_PASSWORD=redispass \
+  docker compose -f docker-compose.prod.yml config --quiet
+```
 
 ## 已知非阻塞警告
 

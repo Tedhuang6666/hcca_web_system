@@ -6,9 +6,17 @@ from zipfile import ZipFile
 
 import pytest
 
-from api.models.regulation import ArticleType, RegulationWorkflowStatus
+from api.models.org import Org
+from api.models.regulation import (
+    ArticleType,
+    Regulation,
+    RegulationArticle,
+    RegulationCategory,
+    RegulationWorkflowStatus,
+)
 from api.schemas.regulation import RegulationArticleCreate, RegulationPublishRequest
 from api.services import regulation as reg_svc
+from api.services.official_print import render_regulation_print_html
 from api.services.regulation_consistency import audit_regulation_document_consistency
 from api.services.regulation_import import parse_regulation_document, parse_regulation_docx
 
@@ -113,6 +121,104 @@ def test_parse_regulation_pdf_maps_text_pdf_to_articles(monkeypatch: pytest.Monk
     assert draft.articles[3].content == "出席會議。"
 
 
+def test_parse_regulation_docx_collects_history_heading_block() -> None:
+    raw = _build_docx(
+        [
+            "學生會選舉罷免辦法",
+            "歷史沿革",
+            "中華民國 112 年 9 月 1 日學生議會通過",
+            "2024.03.15 修正第二條",
+            "第一條本辦法規範學生會選舉事項。",
+        ]
+    )
+
+    draft = parse_regulation_docx(raw, "選罷辦法.docx")
+
+    assert draft.legislative_history == "\n".join(
+        [
+            "中華民國 112 年 9 月 1 日學生議會通過",
+            "2024.03.15 修正第二條",
+        ]
+    )
+    assert draft.articles[0].legal_number == "1"
+
+
+def test_regulation_print_renders_title_history_and_nested_numbering() -> None:
+    reg_id = uuid.uuid4()
+    reg = Regulation(
+        id=reg_id,
+        title="學生代表法",
+        category=RegulationCategory.ORDINANCE,
+        content="",
+        legislative_history="114 年 12 月 15 日學生議會制訂通過",
+        org_id=uuid.uuid4(),
+        created_by=uuid.uuid4(),
+    )
+    reg.org = Org(id=reg.org_id, name="學生會")
+    reg.articles = [
+        RegulationArticle(
+            id=uuid.uuid4(),
+            regulation_id=reg_id,
+            sort_index=10,
+            order_index=0,
+            article_type=ArticleType.ARTICLE,
+            legal_number="2",
+            title="職權",
+            content="學生代表職權如下：",
+        ),
+        RegulationArticle(
+            id=uuid.uuid4(),
+            regulation_id=reg_id,
+            sort_index=20,
+            order_index=0,
+            article_type=ArticleType.PARAGRAPH,
+            content="學生代表應出席會議。",
+        ),
+        RegulationArticle(
+            id=uuid.uuid4(),
+            regulation_id=reg_id,
+            sort_index=30,
+            order_index=0,
+            article_type=ArticleType.SUBPARAGRAPH,
+            legal_number="1",
+            content="提出建議。",
+        ),
+        RegulationArticle(
+            id=uuid.uuid4(),
+            regulation_id=reg_id,
+            sort_index=40,
+            order_index=0,
+            article_type=ArticleType.ITEM,
+            legal_number="1",
+            content="書面提出。",
+        ),
+    ]
+
+    rendered = render_regulation_print_html(reg)
+
+    assert "<div>學生代表法</div>" in rendered
+    assert "國立新竹高級中學學生會" not in rendered
+    assert rendered.index("<div>學生代表法</div>") < rendered.index(
+        '<section class="legislative-history">'
+    )
+    assert rendered.index('<section class="legislative-history">') < rendered.index(
+        '<section class="articles">'
+    )
+    assert "114 年 12 月 15 日學生議會制訂通過" in rendered
+    assert "第二條" in rendered
+    assert "第一項" in rendered
+    assert "一、" in rendered
+    assert "（一）" in rendered
+    assert (
+        '<span class="nested-label">第一項</span><span class="nested-body">學生代表應出席會議。'
+        in rendered
+    )
+    assert '<span class="nested-label">一、</span><span class="nested-body">提出建議。' in rendered
+    assert (
+        '<span class="nested-label">（一）</span><span class="nested-body">書面提出。' in rendered
+    )
+
+
 @pytest.mark.asyncio
 async def test_publish_regulation_disabled_requires_president_publish() -> None:
     with pytest.raises(ValueError, match="president_publish"):
@@ -137,7 +243,7 @@ async def test_transition_reject_requires_note() -> None:
 
     reg = Regulation(
         title="測試法規",
-        category=RegulationCategory.EXECUTIVE_DEPT,
+        category=RegulationCategory.ORDINANCE,
         content="",
         org_id=uuid.uuid4(),
         created_by=uuid.uuid4(),
@@ -184,7 +290,7 @@ async def test_consistency_audit_flags_missing_published_document() -> None:
 
     reg = Regulation(
         title="測試法規",
-        category=RegulationCategory.EXECUTIVE_DEPT,
+        category=RegulationCategory.ORDINANCE,
         content="",
         org_id=uuid.uuid4(),
         created_by=uuid.uuid4(),

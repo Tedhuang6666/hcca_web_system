@@ -4,6 +4,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { serverApiUrl } from "@/lib/config";
+import { formatGeneratedHistoryRows, splitLegislativeHistory } from "@/lib/regulationHistory";
 
 type RegulationArticleOut = {
   id: string;
@@ -39,6 +40,7 @@ type RegulationOut = {
   is_active: boolean;
   workflow_status: string;
   workflow_note: string | null;
+  legislative_history: string | null;
   org_id: string;
   created_by: string;
   published_at: string | null;
@@ -49,10 +51,17 @@ type RegulationOut = {
 };
 
 async function fetchReg(id: string): Promise<RegulationOut | null> {
-  const res = await fetch(serverApiUrl(`/regulations/${id}`), { next: { revalidate: 60 } });
+  const res = await fetch(serverApiUrl(`/regulations/${encodeURIComponent(id)}`), {
+    next: { revalidate: 60 },
+  });
   if (!res.ok) return null;
   return res.json();
 }
+
+const publicRegulationHref = (reg: { title: string }) =>
+  `/public/regulations/${encodeURIComponent(reg.title)}`;
+
+const regulationHref = (reg: { title: string }) => `/regulations/${encodeURIComponent(reg.title)}`;
 
 export async function generateMetadata(
   { params }: { params: Promise<{ id: string }> },
@@ -64,7 +73,17 @@ export async function generateMetadata(
   return {
     title,
     description: desc,
-    alternates: { canonical: `/public/regulations/${id}` },
+    openGraph: {
+      title,
+      description: desc,
+      type: "article",
+      url: reg ? publicRegulationHref(reg) : `/public/regulations/${encodeURIComponent(id)}`,
+      siteName: "HCCA 校園自治整合平台",
+    },
+    twitter: { card: "summary", title, description: desc },
+    alternates: {
+      canonical: reg ? publicRegulationHref(reg) : `/public/regulations/${encodeURIComponent(id)}`,
+    },
   };
 }
 
@@ -96,6 +115,9 @@ export default async function PublicRegulationDetailPage({
   const sortedRevs = [...(reg.revisions ?? [])].sort(
     (a, b) => new Date(a.amended_at).getTime() - new Date(b.amended_at).getTime(),
   );
+  const manualHistoryRows = splitLegislativeHistory(reg.legislative_history);
+  const generatedHistoryRows = formatGeneratedHistoryRows(sortedRevs);
+  const publicHref = publicRegulationHref(reg);
 
   const highlight = (text: string) => {
     if (!q) return text;
@@ -144,14 +166,14 @@ export default async function PublicRegulationDetailPage({
         </div>
         <div className="flex gap-2 flex-wrap justify-end">
           <Link
-            href={`/public/regulations/${id}${q ? `?q=${encodeURIComponent(q)}` : ""}`}
+            href={`${publicHref}${q ? `?q=${encodeURIComponent(q)}` : ""}`}
             className="px-3 py-1.5 rounded-lg text-xs hover:opacity-80"
             style={{ border: "1px solid var(--border)", color: "var(--text-muted)" }}
           >
             重新整理
           </Link>
           <Link
-            href={`/regulations/${id}`}
+            href={regulationHref(reg)}
             className="px-3 py-1.5 rounded-lg text-xs hover:opacity-80"
             style={{ background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }}
           >
@@ -159,7 +181,7 @@ export default async function PublicRegulationDetailPage({
           </Link>
           {sortedRevs.length >= 2 && (
             <Link
-              href={`/public/regulations/${id}/compare`}
+              href={`${publicHref}/compare`}
               className="px-3 py-1.5 rounded-lg text-xs hover:opacity-80"
               style={{ border: "1px solid var(--border)", color: "var(--text-muted)" }}
             >
@@ -266,6 +288,22 @@ export default async function PublicRegulationDetailPage({
             <h2 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>
               沿革（修訂歷程）
             </h2>
+            {manualHistoryRows.length > 0 && (
+              <div
+                className="mb-4 space-y-1 rounded-xl p-4 text-sm"
+                style={{
+                  border: "1px solid var(--border)",
+                  color: "var(--text-secondary)",
+                  fontFamily: '"標楷體", "DFKai-SB", serif',
+                  lineHeight: 1.8,
+                  overflowWrap: "anywhere",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                }}
+              >
+                {manualHistoryRows.map((row, index) => <p key={`${index}-${row}`}>{row}</p>)}
+              </div>
+            )}
             {sortedRevs.length === 0 ? (
               <p className="text-sm" style={{ color: "var(--text-muted)" }}>
                 尚無沿革紀錄
@@ -280,14 +318,13 @@ export default async function PublicRegulationDetailPage({
                           v{rev.version} · {new Date(rev.amended_at).toLocaleDateString("zh-TW")}
                         </p>
                         <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-                          {rev.change_brief}
-                          {rev.is_total_amendment ? "（全文修訂）" : ""}
+                          {generatedHistoryRows[sortedRevs.findIndex((item) => item.id === rev.id)] ?? rev.change_brief}
                         </p>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
                         {idx < sortedRevs.length - 1 && (
                           <Link
-                            href={`/public/regulations/${id}/compare?from=${sortedRevs[sortedRevs.length - 1 - (idx + 1)]?.version}&to=${rev.version}`}
+                            href={`${publicHref}/compare?from=${sortedRevs[sortedRevs.length - 1 - (idx + 1)]?.version}&to=${rev.version}`}
                             className="text-xs px-3 py-1.5 rounded-lg hover:opacity-80"
                             style={{ background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }}
                           >
@@ -318,7 +355,7 @@ export default async function PublicRegulationDetailPage({
               </p>
             </div>
             <div className="p-3 space-y-2">
-              <form action={`/public/regulations/${id}`} className="flex gap-2">
+              <form action={publicHref} className="flex gap-2">
                 <input
                   name="q"
                   defaultValue={q}

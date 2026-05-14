@@ -4,6 +4,7 @@ import path from "node:path";
 const apiInternalUrl = process.env.API_INTERNAL_URL || "http://localhost:8000";
 
 const nextConfig: NextConfig = {
+  devIndicators: false,
   output: "standalone",
   outputFileTracingRoot: __dirname,
   allowedDevOrigins: [

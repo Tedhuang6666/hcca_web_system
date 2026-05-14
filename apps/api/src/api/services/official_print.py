@@ -698,10 +698,42 @@ def _paragraphs(text: str | None) -> list[str]:
 
 
 def _law_revision_rows(reg: Regulation) -> str:
+    revisions = sorted(reg.revisions or [], key=lambda item: item.amended_at)
+    term_counts: dict[tuple[int, str], int] = {}
     rows: list[str] = []
-    for rev in sorted(reg.revisions or [], key=lambda item: item.version):
-        label = rev.change_brief or f"第 {rev.version} 版修訂"
+    for rev in revisions:
+        month = rev.amended_at.month
+        if month >= 8:
+            academic_year = rev.amended_at.year - 1911
+            semester = "第一"
+        else:
+            academic_year = rev.amended_at.year - 1912
+            semester = "第一" if month == 1 else "第二"
+        term_key = (academic_year, semester)
+        term_counts[term_key] = term_counts.get(term_key, 0) + 1
+        label = (
+            f"{academic_year}學年度第{semester}學期"
+            f"第{_cn_number(term_counts[term_key])}次學生議會修訂"
+        )
         rows.append(f"<div>{_esc(label)}</div>")
+    return "".join(rows)
+
+
+def _law_history_rows(reg: Regulation) -> str:
+    rows: list[str] = []
+    history = (getattr(reg, "legislative_history", None) or "").strip()
+    if history:
+        history = re.sub(
+            r"\s+(?=(?:中華民國|民國)\s*\d{2,4}\s*年|\d{2,4}\s*學年度|\d{2,4}[./-]\d{1,2}[./-]\d{1,2})",
+            "\n",
+            history,
+        )
+        rows.extend(
+            f"<div>{_br(line.strip())}</div>" for line in history.splitlines() if line.strip()
+        )
+    revision_rows = _law_revision_rows(reg)
+    if revision_rows:
+        rows.append(revision_rows)
     return "".join(rows)
 
 
@@ -714,6 +746,25 @@ def _article_html(label: str, body: str, *, cls: str = "article-row") -> str:
     )
 
 
+def _nested_article_html(label: str, body: str, *, cls: str) -> str:
+    return (
+        f'<div class="nested-article-row {cls}">'
+        f'<span class="nested-label">{label}</span>'
+        f'<span class="nested-body">{body or "&nbsp;"}</span>'
+        "</div>"
+    )
+
+
+def _law_number(legal_number: str | None, fallback: int) -> str:
+    raw = str(legal_number or "").strip()
+    if not raw:
+        return _cn_number(fallback)
+    raw = re.sub(r"^第\s*", "", raw)
+    raw = re.sub(r"\s*[編章節條項款目]$", "", raw)
+    raw = raw.strip()
+    return _cn_number(int(raw)) if raw.isdigit() else raw
+
+
 def _render_structured_articles(reg: Regulation) -> str:
     articles = sorted(
         [article for article in (reg.articles or []) if not article.is_deleted],
@@ -722,36 +773,97 @@ def _render_structured_articles(reg: Regulation) -> str:
     if not articles:
         return ""
 
-    counters = {key: 0 for key in ("volume", "chapter", "section", "article")}
+    counters = {
+        key: 0
+        for key in (
+            "volume",
+            "chapter",
+            "section",
+            "article",
+            "paragraph",
+            "subparagraph",
+            "item",
+        )
+    }
     chunks: list[str] = []
     for article in articles:
         article_type = _enum_value(article.article_type)
+        if article_type == "clause":
+            article_type = "article"
+        elif article_type == "subsection":
+            article_type = "subparagraph"
         content = _br(article.content or "")
         title = _esc(article.title or article.subtitle or "")
-        if article_type in counters:
-            counters[article_type] += 1
+        body = "　".join(part for part in [title, content] if part)
 
         if article_type == "volume":
+            counters["volume"] += 1
+            counters["chapter"] = counters["section"] = counters["article"] = 0
+            counters["paragraph"] = counters["subparagraph"] = counters["item"] = 0
             chunks.append(
-                _article_html(f"第{_cn_number(counters['volume'])}編", title, cls="chapter-row")
+                _article_html(
+                    f"第{_law_number(article.legal_number, counters['volume'])}編",
+                    title,
+                    cls="chapter-row",
+                )
             )
         elif article_type == "chapter":
+            counters["chapter"] += 1
+            counters["section"] = counters["article"] = 0
+            counters["paragraph"] = counters["subparagraph"] = counters["item"] = 0
             chunks.append(
-                _article_html(f"第{_cn_number(counters['chapter'])}章", title, cls="chapter-row")
+                _article_html(
+                    f"第{_law_number(article.legal_number, counters['chapter'])}章",
+                    title,
+                    cls="chapter-row",
+                )
             )
         elif article_type == "section":
+            counters["section"] += 1
+            counters["article"] = counters["paragraph"] = counters["subparagraph"] = 0
+            counters["item"] = 0
             chunks.append(
-                _article_html(f"第{_cn_number(counters['section'])}節", title, cls="chapter-row")
+                _article_html(
+                    f"第{_law_number(article.legal_number, counters['section'])}節",
+                    title,
+                    cls="chapter-row",
+                )
             )
-        elif article_type in ("article", "clause"):
-            body = "　".join(part for part in [title, content] if part)
-            chunks.append(_article_html(f"第{_cn_number(counters['article'])}條", body))
+        elif article_type == "article":
+            counters["article"] += 1
+            counters["paragraph"] = counters["subparagraph"] = counters["item"] = 0
+            chunks.append(
+                _article_html(f"第{_law_number(article.legal_number, counters['article'])}條", body)
+            )
         elif article_type == "paragraph":
-            chunks.append(f'<div class="law-indent level-1">{content}</div>')
-        elif article_type in ("subparagraph", "subsection"):
-            chunks.append(f'<div class="law-indent level-2">{content}</div>')
+            counters["paragraph"] += 1
+            counters["subparagraph"] = counters["item"] = 0
+            chunks.append(
+                _nested_article_html(
+                    f"第{_law_number(article.legal_number, counters['paragraph'])}項",
+                    body,
+                    cls="paragraph-row",
+                )
+            )
+        elif article_type == "subparagraph":
+            counters["subparagraph"] += 1
+            counters["item"] = 0
+            chunks.append(
+                _nested_article_html(
+                    f"{_law_number(article.legal_number, counters['subparagraph'])}、",
+                    body,
+                    cls="subparagraph-row",
+                )
+            )
         elif article_type == "item":
-            chunks.append(f'<div class="law-indent level-3">{content}</div>')
+            counters["item"] += 1
+            chunks.append(
+                _nested_article_html(
+                    f"（{_law_number(article.legal_number, counters['item'])}）",
+                    body,
+                    cls="item-row",
+                )
+            )
         else:
             chunks.append(_article_html(title or "附則", content, cls="chapter-row"))
     return "".join(chunks)
@@ -775,9 +887,8 @@ def _render_markdown_law(text: str | None) -> str:
 
 def render_regulation_print_html(reg: Regulation) -> str:
     """Render a law-compilation style regulation print page."""
-    org = _esc(_full_org_name(reg))
     title = _esc(reg.title)
-    revisions = _law_revision_rows(reg)
+    history = _law_history_rows(reg)
     preface = "".join(f'<p class="preface">{_br(item)}</p>' for item in _paragraphs(reg.preface))
     articles = _render_structured_articles(reg) or _render_markdown_law(reg.content)
 
@@ -820,15 +931,18 @@ def render_regulation_print_html(reg: Regulation) -> str:
       text-align: center;
       font-size: 20pt;
       line-height: 1.75;
-      margin: 12mm 0 8mm;
+      margin: 12mm 0 4mm;
       letter-spacing: .08em;
     }}
-    .revision-history {{
+    .legislative-history {{
       width: 74mm;
       margin: 0 0 13mm auto;
       font-size: 12pt;
       line-height: 1.65;
       text-align: left;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+      word-break: break-word;
     }}
     .preface {{
       margin: 0 0 5mm;
@@ -855,6 +969,19 @@ def render_regulation_print_html(reg: Regulation) -> str:
       text-align: justify;
       overflow-wrap: anywhere;
     }}
+    .nested-article-row {{
+      margin-top: 1.4mm;
+      margin-bottom: 1.4mm;
+      text-align: justify;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      break-inside: avoid;
+    }}
+    .paragraph-row {{ margin-left: 38mm; }}
+    .subparagraph-row {{ margin-left: 46mm; }}
+    .item-row {{ margin-left: 54mm; }}
+    .nested-label,
+    .nested-body {{ display: inline; }}
     .law-indent {{
       margin: 1.4mm 0 1.4mm 38mm;
       text-align: justify;
@@ -875,10 +1002,9 @@ def render_regulation_print_html(reg: Regulation) -> str:
   <div class="no-print"><button onclick="window.print()">列印 / 另存 PDF</button></div>
   <main class="law-page">
     <header class="law-title">
-      {f"<div>{org}</div>" if org and org not in title else ""}
       <div>{title}</div>
     </header>
-    {f'<section class="revision-history">{revisions}</section>' if revisions else ""}
+    {f'<section class="legislative-history">{history}</section>' if history else ""}
     {preface}
     <section class="articles">{articles}</section>
   </main>

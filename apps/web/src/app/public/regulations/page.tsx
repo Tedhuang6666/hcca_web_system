@@ -19,6 +19,17 @@ type RegulationListItem = {
 export const metadata: Metadata = {
   title: "法規資料庫",
   description: "公開法規查詢：條文目錄、穩定連結、沿革與版本比對。",
+  openGraph: {
+    title: "法規資料庫",
+    description: "公開法規查詢：條文目錄、穩定連結、沿革與版本比對。",
+    type: "website",
+    siteName: "HCCA 校園自治整合平台",
+  },
+  twitter: {
+    card: "summary",
+    title: "法規資料庫",
+    description: "公開法規查詢：條文目錄、穩定連結、沿革與版本比對。",
+  },
 };
 
 async function fetchRegs(q?: string): Promise<RegulationListItem[]> {
@@ -31,6 +42,9 @@ async function fetchRegs(q?: string): Promise<RegulationListItem[]> {
   if (!res.ok) return [];
   return res.json();
 }
+
+const publicRegulationHref = (reg: { title: string }) =>
+  `/public/regulations/${encodeURIComponent(reg.title)}`;
 
 export default async function PublicRegulationsPage({
   searchParams,
@@ -77,7 +91,7 @@ export default async function PublicRegulationsPage({
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
                     <Link
-                      href={`/public/regulations/${r.id}`}
+                      href={publicRegulationHref(r)}
                       className="font-medium hover:underline"
                       style={{ color: "var(--text-primary)" }}
                     >
@@ -97,7 +111,7 @@ export default async function PublicRegulationsPage({
                   </div>
                   <div className="flex-shrink-0">
                     <Link
-                      href={`/public/regulations/${r.id}`}
+                      href={publicRegulationHref(r)}
                       className="text-xs px-3 py-1.5 rounded-lg hover:opacity-80"
                       style={{ color: "var(--primary)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }}
                     >

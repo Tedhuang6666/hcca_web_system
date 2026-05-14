@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.cache import cache_get, cache_set, cache_invalidate
+from api.core.cache import cache_get, cache_invalidate, cache_set
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
@@ -18,7 +18,7 @@ from api.models.user import User
 from api.schemas.org import OrgCreate, OrgRead, OrgTree, OrgUpdate
 from api.services import audit as audit_svc
 from api.services import org as org_svc
-from api.services.permission import get_user_org_ids_with_permission
+from api.services.permission import get_user_org_ids_with_permission, get_user_permission_codes
 
 router = APIRouter(prefix="/orgs", tags=["組織架構"])
 
@@ -73,6 +73,54 @@ async def list_my_create_orgs(db: DbDep, current_user: CurrentUser) -> list:
         result = await db.execute(select(Org).where(Org.is_active.is_(True)).order_by(Org.name))
         return list(result.scalars().all())
     org_ids = await get_user_org_ids_with_permission(db, current_user.id, "document:create")
+    if not org_ids:
+        return []
+    result = await db.execute(
+        select(Org).where(Org.id.in_(org_ids), Org.is_active.is_(True)).order_by(Org.name)
+    )
+    return list(result.scalars().all())
+
+
+@router.get(
+    "/my-regulation-create-orgs",
+    response_model=list[OrgRead],
+    summary="取得當前使用者有權起草法規的組織列表（RBAC 過濾）",
+)
+async def list_my_regulation_create_orgs(db: DbDep, current_user: CurrentUser) -> list:
+    """
+    回傳使用者在哪些組織擁有 regulation:create 權限。
+    superuser 直接回傳所有組織。
+    """
+    if current_user.is_superuser:
+        result = await db.execute(select(Org).where(Org.is_active.is_(True)).order_by(Org.name))
+        return list(result.scalars().all())
+    org_ids = await get_user_org_ids_with_permission(db, current_user.id, "regulation:create")
+    if not org_ids:
+        return []
+    result = await db.execute(
+        select(Org).where(Org.id.in_(org_ids), Org.is_active.is_(True)).order_by(Org.name)
+    )
+    return list(result.scalars().all())
+
+
+@router.get(
+    "/my-serial-template-orgs",
+    response_model=list[OrgRead],
+    summary="取得當前使用者可管理字號模板的組織列表（RBAC 過濾）",
+)
+async def list_my_serial_template_orgs(db: DbDep, current_user: CurrentUser) -> list:
+    """
+    回傳使用者在哪些組織擁有 serial:create 權限。
+    superuser 或 admin:all 直接回傳所有組織。
+    """
+    if current_user.is_superuser:
+        result = await db.execute(select(Org).where(Org.is_active.is_(True)).order_by(Org.name))
+        return list(result.scalars().all())
+    codes = await get_user_permission_codes(db, current_user.id)
+    if "admin:all" in codes:
+        result = await db.execute(select(Org).where(Org.is_active.is_(True)).order_by(Org.name))
+        return list(result.scalars().all())
+    org_ids = await get_user_org_ids_with_permission(db, current_user.id, "serial:create")
     if not org_ids:
         return []
     result = await db.execute(

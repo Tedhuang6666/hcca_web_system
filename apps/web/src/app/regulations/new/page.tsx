@@ -5,13 +5,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import LawTreeEditor, { inferParentIdByPrevious } from "@/components/regulations/LawTreeEditor";
-import { ApiError, orgsApi, regulationsApi, type OrgRead } from "@/lib/api";
+import { ApiError, orgsApi, regulationsApi, regulationHref, type OrgRead } from "@/lib/api";
 import type { ArticleType, RegulationArticleOut, RegulationCategory } from "@/lib/types";
 
 const CATEGORIES: [RegulationCategory, string][] = [
-  ["constitution", "憲章"], ["chairman", "主席相關"], ["executive_dept", "行政部門"], ["student_council", "學生議會"],
-  ["judicial_committee", "評議委員會"], ["executive_order", "行政命令"], ["council_order", "議會命令"],
-  ["judicial_order", "評議委員會命令"], ["election_order", "選舉委員會命令"], ["other", "其他"],
+  ["constitution", "憲章"],
+  ["ordinance", "條例"],
+  ["procedure", "辦法"],
 ];
 
 type DraftModal = {
@@ -48,15 +48,16 @@ export default function NewRegulationPage() {
   const [orgs, setOrgs] = useState<OrgRead[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState("");
   const [title, setTitle] = useState("");
-  const [category, setCategory] = useState<RegulationCategory>("executive_dept");
+  const [category, setCategory] = useState<RegulationCategory>("ordinance");
   const [preface, setPreface] = useState("");
-  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importFiles, setImportFiles] = useState<File[]>([]);
+  const [publishImported, setPublishImported] = useState(false);
   const [articles, setArticles] = useState<RegulationArticleOut[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [modal, setModal] = useState<DraftModal | null>(null);
 
   useEffect(() => {
-    orgsApi.myCreateOrgs().then(list => {
+    orgsApi.myRegulationCreateOrgs().then(list => {
       setOrgs(list);
       const stored = typeof window !== "undefined" ? localStorage.getItem("org_id") ?? "" : "";
       setSelectedOrgId(stored && list.some(o => o.id === stored) ? stored : list[0]?.id ?? "");
@@ -104,7 +105,7 @@ export default function NewRegulationPage() {
         idMap.set(a.id, created.id);
       }
       toast.success("法規草案已建立");
-      router.push(`/regulations/${reg.id}/edit`);
+      router.push(`${regulationHref(reg)}/edit`);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "建立失敗");
     } finally {
@@ -112,14 +113,29 @@ export default function NewRegulationPage() {
     }
   };
 
-  const importDocxDraft = async () => {
+  const importDocxDrafts = async () => {
     if (!selectedOrgId) return toast.error("請選擇所屬組織");
-    if (!importFile) return toast.error("請選擇 Word 或 PDF 法規文檔");
+    if (importFiles.length === 0) return toast.error("請選擇 Word 或 PDF 法規文檔");
     setImporting(true);
     try {
-      const reg = await regulationsApi.importDocument(importFile, { org_id: selectedOrgId, category });
-      toast.success(`已匯入「${reg.title}」`);
-      router.push(`/regulations/${reg.id}/edit`);
+      const results = await regulationsApi.importDocuments(importFiles, {
+        org_id: selectedOrgId,
+        category,
+        publish_immediately: publishImported,
+      });
+      const succeeded = results.filter(item => item.ok);
+      const failed = results.filter(item => !item.ok);
+      if (succeeded.length === 1 && failed.length === 0 && succeeded[0].regulation) {
+        toast.success(`已匯入「${succeeded[0].regulation.title}」`);
+        router.push(`${regulationHref(succeeded[0].regulation)}/edit`);
+        return;
+      }
+      if (succeeded.length > 0) {
+        toast.success(`已匯入 ${succeeded.length} 份法規${failed.length ? `，${failed.length} 份失敗` : ""}`);
+        router.push("/regulations");
+        return;
+      }
+      toast.error(failed[0]?.detail ?? "匯入失敗");
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "匯入失敗");
     } finally {
@@ -251,25 +267,45 @@ export default function NewRegulationPage() {
         <aside className="space-y-4">
           <div className="card p-4 space-y-3">
             <div>
-              <h3 className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>文件匯入</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>批量文件匯入</h3>
               <p className="text-xs leading-relaxed" style={{ color: "var(--text-secondary)" }}>
-                支援 Word/PDF 的「第○章」「第○節」「第○條」格式，會自動建立結構化條文。
+                可一次選取多份 Word/PDF。系統會解析「第○章」「第○節」「第○條」，並自動抓取文件前段的歷史沿革。
               </p>
             </div>
             <input
               type="file"
+              multiple
               accept=".docx,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf"
-              onChange={e => setImportFile(e.target.files?.[0] ?? null)}
+              onChange={e => setImportFiles(Array.from(e.target.files ?? []))}
               className="w-full text-xs"
               style={{ color: "var(--text-secondary)" }}
             />
+            {importFiles.length > 0 && (
+              <div className="rounded-lg p-2 text-xs space-y-1"
+                style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
+                <p>已選取 {importFiles.length} 份文件</p>
+                {importFiles.slice(0, 4).map(file => (
+                  <p key={`${file.name}-${file.size}`} className="truncate">・{file.name}</p>
+                ))}
+                {importFiles.length > 4 && <p>・另有 {importFiles.length - 4} 份</p>}
+              </div>
+            )}
+            <label className="flex items-start gap-2 text-xs cursor-pointer" style={{ color: "var(--text-secondary)" }}>
+              <input
+                type="checkbox"
+                checked={publishImported}
+                onChange={e => setPublishImported(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span>匯入後直接標記為現行公開法規，並建立「匯入既有現行法規」修訂快照</span>
+            </label>
             <button
-              onClick={importDocxDraft}
-              disabled={importing || !selectedOrgId || !importFile}
+              onClick={importDocxDrafts}
+              disabled={importing || !selectedOrgId || importFiles.length === 0}
               className="w-full py-2.5 rounded-lg text-sm font-medium disabled:opacity-50"
               style={{ background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }}
             >
-              {importing ? "匯入中..." : "匯入文件草稿"}
+              {importing ? "匯入中..." : `批量匯入 ${importFiles.length || ""} 份文件`}
             </button>
           </div>
 

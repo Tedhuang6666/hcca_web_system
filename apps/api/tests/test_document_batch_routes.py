@@ -11,8 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.document import ApprovalStepStatus, Document, DocumentApproval, DocumentStatus
 from api.models.org import Org
 from api.models.user import User
-from api.routers.documents import batch_approve_documents, batch_archive_documents
-from api.schemas.document import BatchApproveRequest, BatchArchiveRequest
+from api.routers.documents import (
+    batch_approve_documents,
+    batch_archive_documents,
+    batch_reject_documents,
+)
+from api.schemas.document import BatchApproveRequest, BatchArchiveRequest, BatchRejectRequest
 
 
 @pytest.mark.asyncio
@@ -64,7 +68,41 @@ async def test_batch_approve_returns_per_document_results(db_session: AsyncSessi
     assert result.results[0].ok is True
     assert result.results[0].status == DocumentStatus.APPROVED
     assert result.results[1].ok is False
-    assert "非待審核狀態" in (result.results[1].detail or "")
+    assert result.results[1].detail == "只有待審核公文可以批量核准"
+
+
+@pytest.mark.asyncio
+async def test_batch_reject_skips_already_approved_document(db_session: AsyncSession) -> None:
+    org = Org(name="退件組", prefix="退")
+    creator = User(email="batch-reject-creator@example.com", display_name="Creator")
+    approver = User(email="batch-reject-approver@example.com", display_name="Approver")
+    db_session.add_all([org, creator, approver])
+    await db_session.flush()
+
+    approved_doc = Document(
+        serial_number="DOC-2026-100003",
+        title="已核准不可退件",
+        org_id=org.id,
+        created_by=creator.id,
+        status=DocumentStatus.APPROVED,
+        current_step=1,
+        subject="已經核准並發出，不可再批量退件。",
+    )
+    db_session.add(approved_doc)
+    await db_session.flush()
+
+    result = await batch_reject_documents(
+        BatchRejectRequest(document_ids=[approved_doc.id], comment="退件"),
+        db_session,
+        approver,
+        BackgroundTasks(),
+    )
+
+    assert result.succeeded == 0
+    assert result.failed == 1
+    assert result.results[0].ok is False
+    assert result.results[0].status == DocumentStatus.APPROVED
+    assert result.results[0].detail == "只有待審核公文可以批量退件"
 
 
 @pytest.mark.asyncio

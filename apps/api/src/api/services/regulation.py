@@ -134,6 +134,32 @@ async def get_regulation(session: AsyncSession, reg_id: uuid.UUID) -> Regulation
     return reg
 
 
+async def get_regulation_by_identifier(
+    session: AsyncSession,
+    identifier: uuid.UUID | str,
+) -> Regulation | None:
+    """以 UUID 或法規中文全名取得法規（含條文與修訂歷程）。"""
+    if isinstance(identifier, uuid.UUID):
+        return await get_regulation(session, identifier)
+
+    try:
+        return await get_regulation(session, uuid.UUID(identifier))
+    except ValueError:
+        pass
+
+    result = await session.execute(
+        _reg_query_with_relations()
+        .where(Regulation.title == identifier)
+        .order_by(Regulation.is_active.desc(), Regulation.updated_at.desc())
+        .limit(1)
+    )
+    reg = result.scalar_one_or_none()
+    if reg is None:
+        return None
+    _attach_display_names([reg])
+    return reg
+
+
 async def list_regulations(
     session: AsyncSession,
     *,
@@ -331,6 +357,35 @@ async def create_regulation_from_import(
         reg.title,
         len(data.articles),
     )
+    loaded = await get_regulation(session, reg.id)
+    return loaded or reg
+
+
+async def publish_imported_regulation(
+    session: AsyncSession,
+    reg: Regulation,
+    *,
+    published_by: uuid.UUID,
+    change_brief: str = "匯入既有現行法規",
+) -> Regulation:
+    """將剛匯入的既有法規直接標記為現行有效，並建立初始修訂快照。"""
+    now = datetime.now(UTC)
+    reg.workflow_status = RegulationWorkflowStatus.PUBLISHED
+    reg.published_at = now
+    session.add(
+        RegulationRevision(
+            regulation_id=reg.id,
+            version=reg.version,
+            change_brief=change_brief,
+            is_total_amendment=True,
+            content_snapshot=reg.content,
+            article_snapshot=_article_snapshot_json(reg.articles),
+            proposal_metadata_snapshot=reg.proposal_metadata,
+            amended_at=now,
+            amended_by=published_by,
+        )
+    )
+    await session.flush()
     loaded = await get_regulation(session, reg.id)
     return loaded or reg
 

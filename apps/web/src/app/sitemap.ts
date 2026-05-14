@@ -4,6 +4,7 @@ import { serverApiUrl } from "@/lib/config";
 
 type RegulationListItem = {
   id: string;
+  title: string;
   updated_at: string;
 };
 
@@ -55,7 +56,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${site}/public`, lastModified: now, changeFrequency: "daily", priority: 0.6 },
     { url: `${site}/public/regulations`, lastModified: now, changeFrequency: "daily", priority: 0.8 },
     ...regs.map((r) => ({
-      url: `${site}/public/regulations/${r.id}`,
+      url: `${site}/public/regulations/${encodeURIComponent(r.title)}`,
       lastModified: new Date(r.updated_at),
       changeFrequency: "weekly" as const,
       priority: 0.7,

@@ -210,15 +210,8 @@ export function PetitionStatusBadge({ status }: { status: PetitionStatus }) {
 /* ── 法規分類 ─────────────────────────────────────────────────────────────── */
 const REG_CATEGORY_MAP: Record<string, { label: string; color: string }> = {
   constitution:       { label: "憲章",       color: "#D97706" },
-  chairman:           { label: "主席相關",   color: "#7C3AED" },
-  executive_dept:     { label: "行政部門",   color: "#0891B2" },
-  student_council:    { label: "學生議會",   color: "#059669" },
-  judicial_committee: { label: "評議委員會", color: "#DC2626" },
-  executive_order:    { label: "行政命令",   color: "#2563EB" },
-  council_order:      { label: "議會命令",   color: "#16A34A" },
-  judicial_order:     { label: "評議命令",   color: "#B91C1C" },
-  election_order:     { label: "選委會命令", color: "#C026D3" },
-  other:              { label: "其他",       color: "#64748B" },
+  ordinance:          { label: "條例",       color: "#059669" },
+  procedure:          { label: "辦法",       color: "#2563EB" },
 };
 
 export function RegulationCategoryBadge({ category }: { category: string }) {

@@ -13,6 +13,14 @@ from api.models.survey import QuestionType, SurveyStatus
 # ── 問題 ─────────────────────────────────────────────────────────────────────
 
 
+DISPLAY_QUESTION_TYPES = {
+    QuestionType.SECTION_TEXT,
+    QuestionType.PAGE_BREAK,
+    QuestionType.IMAGE,
+    QuestionType.VIDEO,
+}
+
+
 class SurveyQuestionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -54,6 +62,14 @@ class SurveyQuestionCreate(BaseModel):
     @classmethod
     def validate_options(cls, v: list[str], info) -> list[str]:  # type: ignore[misc]
         return [o.strip() for o in v if o.strip()]
+
+    @field_validator("is_required")
+    @classmethod
+    def display_blocks_are_not_required(cls, v: bool, info) -> bool:  # type: ignore[misc]
+        question_type = info.data.get("question_type")
+        if question_type in DISPLAY_QUESTION_TYPES:
+            return False
+        return v
 
 
 class SurveyQuestionUpdate(BaseModel):
@@ -183,6 +199,8 @@ class QuestionStats(BaseModel):
     text_answers: list[str] = Field(default_factory=list)
     # RATING：平均分
     average_rating: float | None = None
+    suggested_chart: str = "list"
+    available_charts: list[str] = Field(default_factory=list)
 
 
 class SurveyStats(BaseModel):

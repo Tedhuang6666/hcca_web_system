@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -14,15 +15,18 @@ from api.models.document import (
     Document,
     DocumentApproval,
     DocumentStatus,
+    YearMode,
 )
-from api.schemas.document import DocumentCreate, DocumentUpdate
+from api.schemas.document import DocumentCreate, DocumentUpdate, SerialTemplateCreate
 from api.services.document import (
     _get_current_approval,
     approve_step,
     create_document,
+    create_serial_template,
     reject_step,
     submit_document,
     update_document,
+    update_serial_template,
 )
 
 # ── Fixtures ───────────────────────────────────────────────────────────────────
@@ -79,6 +83,12 @@ def _make_update_payload(**kwargs: object) -> DocumentUpdate:
     return DocumentUpdate(**kwargs)
 
 
+def _mock_scalars_result(items: list[object]) -> MagicMock:
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = items
+    return result
+
+
 # ── 建立公文 ───────────────────────────────────────────────────────────────────
 
 
@@ -105,6 +115,60 @@ async def test_create_document_generates_serial() -> None:
     assert doc.status == DocumentStatus.DRAFT
     # session.add 被呼叫 2 次：Document + DocumentRevision（初稿）
     assert session.add.call_count == 2
+
+
+# ── 字號模板 ───────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_create_president_publish_template_clears_president_default_globally() -> None:
+    """主席公布預設模板應全站唯一，不受組織限制。"""
+    session = _make_session()
+    org_id = uuid.uuid4()
+    sibling_in_other_org = SimpleNamespace(is_default_president_publish=True)
+
+    org_result = MagicMock()
+    org_result.first.return_value = ("嶺班", "主席團")
+    sibling_result = _mock_scalars_result([sibling_in_other_org])
+    session.execute = AsyncMock(side_effect=[org_result, sibling_result])
+
+    template = await create_serial_template(
+        session,
+        data=SerialTemplateCreate(
+            org_id=org_id,
+            category_char="主公",
+            year_mode=YearMode.ROC,
+            is_default_president_publish=True,
+        ),
+        created_by=uuid.uuid4(),
+    )
+
+    assert template.is_default_president_publish is True
+    assert sibling_in_other_org.is_default_president_publish is False
+
+
+@pytest.mark.asyncio
+async def test_update_president_publish_template_clears_president_default_globally() -> None:
+    """更新主席公布預設時，也會清掉其他組織的主席公布預設。"""
+    session = _make_session()
+    template = SimpleNamespace(
+        id=uuid.uuid4(),
+        org_id=uuid.uuid4(),
+        is_active=True,
+        is_default=False,
+        is_default_president_publish=False,
+    )
+    sibling_in_other_org = SimpleNamespace(is_default_president_publish=True)
+    session.execute = AsyncMock(return_value=_mock_scalars_result([sibling_in_other_org]))
+
+    updated = await update_serial_template(
+        session,
+        template,  # type: ignore[arg-type]
+        updates={"is_default_president_publish": True},
+    )
+
+    assert updated.is_default_president_publish is True
+    assert sibling_in_other_org.is_default_president_publish is False
 
 
 # ── 更新草稿 ───────────────────────────────────────────────────────────────────

@@ -20,9 +20,11 @@ RUN npm ci
 
 COPY apps/web/ .
 
-# 建置時注入公開環境變數；空值代表使用同源 /api 代理
+# 建置時注入公開環境變數；API 空值代表使用同源 /api 代理
 ARG NEXT_PUBLIC_API_URL=
+ARG NEXT_PUBLIC_WS_URL=
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
 
 RUN npm run build
 

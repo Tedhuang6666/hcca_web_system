@@ -94,7 +94,7 @@ export default function PetitionsPage() {
                 <PetitionStatusBadge status={lookup.status} />
               </div>
               <p className="text-sm" style={{ color: "var(--text-muted)" }}>{lookup.status_public_message}</p>
-              <Link href={`/petitions/${lookup.id}`} className="btn btn-ghost mt-2">查看詳情</Link>
+              <Link href={`/petitions/${caseNumber}/${verificationCode}`} className="btn btn-ghost mt-2">查看進度分享頁</Link>
             </div>
           )}
         </section>

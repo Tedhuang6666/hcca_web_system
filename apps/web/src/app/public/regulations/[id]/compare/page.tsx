@@ -42,7 +42,7 @@ export default function PublicRegulationComparePage() {
 
   useEffect(() => {
     setLoading(true);
-    fetch(apiUrl(`/regulations/${id}`))
+    fetch(apiUrl(`/regulations/${encodeURIComponent(id)}`))
       .then(r => (r.ok ? r.json() : null))
       .then(setReg)
       .finally(() => setLoading(false));
@@ -90,11 +90,12 @@ export default function PublicRegulationComparePage() {
 
   if (loading) return <div className="py-16 text-center text-sm" style={{ color: "var(--text-muted)" }}>載入中…</div>;
   if (!reg) return <div className="py-16 text-center text-sm" style={{ color: "var(--danger)" }}>找不到此法規或尚未公開</div>;
+  const publicHref = `/public/regulations/${encodeURIComponent(reg.title)}`;
 
   return (
     <div className="space-y-5">
       <div className="text-xs" style={{ color: "var(--text-muted)" }}>
-        <Link href={`/public/regulations/${id}`} className="hover:underline" style={{ color: "var(--text-muted)" }}>
+        <Link href={publicHref} className="hover:underline" style={{ color: "var(--text-muted)" }}>
           ← 返回法規
         </Link>
       </div>

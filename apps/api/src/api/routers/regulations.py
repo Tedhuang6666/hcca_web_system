@@ -30,6 +30,7 @@ from api.dependencies.permissions import require_any, require_permission
 from api.models.document import (
     DocumentCategory,
     DocumentClassification,
+    DocumentSerialTemplate,
     DocumentUrgency,
 )
 from api.models.regulation import (
@@ -77,8 +78,8 @@ CurrentUser = Annotated[User, Depends(get_current_active_user)]
 OptionalUser = Annotated[User | None, Depends(get_optional_user)]
 
 
-async def _get_reg_or_404(reg_id: uuid.UUID, session: DbDep) -> Regulation:
-    reg = await reg_svc.get_regulation(session, reg_id)
+async def _get_reg_or_404(reg_id: uuid.UUID | str, session: DbDep) -> Regulation:
+    reg = await reg_svc.get_regulation_by_identifier(session, reg_id)
     if reg is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此法規")
     return reg
@@ -99,6 +100,48 @@ def _assert_creator(reg: Regulation, user: User) -> None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="只有建立者可以執行此操作",
+        )
+
+
+class RegulationImportItemOut(BaseModel):
+    filename: str | None = None
+    ok: bool
+    regulation: RegulationOut | None = None
+    detail: str | None = None
+    article_count: int = 0
+    legislative_history: str | None = None
+    warnings: list[str] = Field(default_factory=list)
+
+
+async def _assert_regulation_create_permission(
+    session: AsyncSession,
+    user: User,
+    org_id: uuid.UUID,
+) -> None:
+    if user.is_superuser:
+        return
+    codes = await get_user_permission_codes_for_org(session, user.id, org_id)
+    if "regulation:create" not in codes:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="您在此組織下無起草法規的權限（需 regulation:create）",
+        )
+
+
+async def _assert_regulation_publish_permission(
+    session: AsyncSession,
+    user: User,
+    org_id: uuid.UUID,
+) -> None:
+    if user.is_superuser:
+        return
+    codes = await get_user_permission_codes_for_org(session, user.id, org_id)
+    if not {"regulation:publish", "regulation:president_publish", "regulation:admin"}.intersection(
+        codes
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="匯入後直接標記現行需 regulation:publish、regulation:president_publish 或 regulation:admin 權限",
         )
 
 
@@ -171,7 +214,7 @@ async def list_regulations(
         404: {"description": "法規不存在"},
     },
 )
-async def get_regulation(reg_id: uuid.UUID, session: DbDep, user: OptionalUser) -> Regulation:
+async def get_regulation(reg_id: str, session: DbDep, user: OptionalUser) -> Regulation:
     reg = await _get_reg_or_404(reg_id, session)
     # 未登入僅可查看已發布且有效的法規（避免草案外洩）
     if user is None and (reg.published_at is None or not reg.is_active):
@@ -220,9 +263,9 @@ async def create_regulation(
     "/import-docx",
     response_model=RegulationOut,
     status_code=status.HTTP_201_CREATED,
-    summary="從 Word/PDF 法規文檔匯入草稿（需 regulation:create 權限）",
+    summary="從 Word/PDF 法規文檔匯入法規（需 regulation:create 權限）",
     responses={
-        201: {"description": "已從 DOCX/PDF 建立法規草稿與結構化條文"},
+        201: {"description": "已從 DOCX/PDF 建立法規與結構化條文"},
         403: {"description": "需要 regulation:create 權限"},
         422: {"description": "文件格式無法解析"},
     },
@@ -234,17 +277,21 @@ async def import_regulation_docx(
     category: Annotated[
         RegulationCategory,
         Form(description="法規分類"),
-    ] = RegulationCategory.OTHER,
+    ] = RegulationCategory.PROCEDURE,
+    publish_immediately: Annotated[
+        bool,
+        Form(description="匯入後直接標記為現行公開法規"),
+    ] = False,
+    change_brief: Annotated[
+        str,
+        Form(description="匯入後建立初始修訂快照的摘要"),
+    ] = "匯入既有現行法規",
     file: Annotated[UploadFile, File(description="Word .docx 或 PDF 法規文檔")] = ...,
 ) -> Regulation:
-    """上傳 Word/PDF 法規文件，解析章節條文並直接建立草稿。"""
-    if not current_user.is_superuser:
-        codes = await get_user_permission_codes_for_org(session, current_user.id, org_id)
-        if "regulation:create" not in codes:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="您在此組織下無起草法規的權限（需 regulation:create）",
-            )
+    """上傳 Word/PDF 法規文件，解析章節條文與歷史沿革後建立法規。"""
+    await _assert_regulation_create_permission(session, current_user, org_id)
+    if publish_immediately:
+        await _assert_regulation_publish_permission(session, current_user, org_id)
 
     raw = await file.read()
     if not raw:
@@ -268,6 +315,13 @@ async def import_regulation_docx(
             org_id=org_id,
             created_by=current_user.id,
         )
+        if publish_immediately:
+            reg = await reg_svc.publish_imported_regulation(
+                session,
+                reg,
+                published_by=current_user.id,
+                change_brief=change_brief,
+            )
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -287,11 +341,136 @@ async def import_regulation_docx(
             "category": reg.category.value,
             "filename": file.filename,
             "article_count": len(imported.articles),
+            "legislative_history": imported.legislative_history,
             "warnings": imported.warnings,
+            "publish_immediately": publish_immediately,
         },
-        summary=f"由 Word 文件匯入法規草稿「{reg.title}」",
+        summary=f"由文件匯入法規「{reg.title}」",
     )
     return reg
+
+
+@router.post(
+    "/import-documents",
+    response_model=list[RegulationImportItemOut],
+    summary="批次從 Word/PDF 法規文檔匯入法規（需 regulation:create 權限）",
+)
+async def import_regulation_documents(
+    session: DbDep,
+    current_user: CurrentUser,
+    org_id: Annotated[uuid.UUID, Form(description="所屬組織 ID")],
+    category: Annotated[
+        RegulationCategory,
+        Form(description="法規分類"),
+    ] = RegulationCategory.PROCEDURE,
+    publish_immediately: Annotated[
+        bool,
+        Form(description="匯入後直接標記為現行公開法規"),
+    ] = False,
+    change_brief: Annotated[
+        str,
+        Form(description="匯入後建立初始修訂快照的摘要"),
+    ] = "匯入既有現行法規",
+    files: Annotated[
+        list[UploadFile],
+        File(description="多個 Word .docx 或 PDF 法規文檔"),
+    ] = ...,
+) -> list[RegulationImportItemOut]:
+    """一次上傳多份法規文件；單一檔案解析失敗不會中止整批。"""
+    await _assert_regulation_create_permission(session, current_user, org_id)
+    if publish_immediately:
+        await _assert_regulation_publish_permission(session, current_user, org_id)
+    if not files:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="請上傳檔案")
+    if len(files) > 30:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="一次最多匯入 30 份文件",
+        )
+
+    results: list[RegulationImportItemOut] = []
+    for file in files:
+        raw = await file.read()
+        if not raw:
+            results.append(
+                RegulationImportItemOut(
+                    filename=file.filename,
+                    ok=False,
+                    detail="檔案為空",
+                )
+            )
+            continue
+        if len(raw) > 10 * 1024 * 1024:
+            results.append(
+                RegulationImportItemOut(
+                    filename=file.filename,
+                    ok=False,
+                    detail="DOCX/PDF 檔案不可超過 10 MB",
+                )
+            )
+            continue
+
+        try:
+            imported = await run_in_threadpool(
+                reg_import_svc.parse_regulation_document,
+                raw,
+                file.filename,
+            )
+            reg = await reg_svc.create_regulation_from_import(
+                session,
+                data=imported,
+                category=category,
+                org_id=org_id,
+                created_by=current_user.id,
+            )
+            if publish_immediately:
+                reg = await reg_svc.publish_imported_regulation(
+                    session,
+                    reg,
+                    published_by=current_user.id,
+                    change_brief=change_brief,
+                )
+        except ValueError as e:
+            results.append(
+                RegulationImportItemOut(
+                    filename=file.filename,
+                    ok=False,
+                    detail=str(e),
+                )
+            )
+            continue
+
+        await audit_svc.record(
+            session,
+            entity_type="regulation",
+            entity_id=str(reg.id),
+            action="regulation.import_document",
+            actor_id=str(current_user.id),
+            actor_email=current_user.email,
+            meta={
+                "title": reg.title,
+                "org_id": str(reg.org_id),
+                "category": reg.category.value,
+                "filename": file.filename,
+                "article_count": len(imported.articles),
+                "legislative_history": imported.legislative_history,
+                "warnings": imported.warnings,
+                "publish_immediately": publish_immediately,
+            },
+            summary=f"由文件匯入法規「{reg.title}」",
+        )
+        results.append(
+            RegulationImportItemOut(
+                filename=file.filename,
+                ok=True,
+                regulation=RegulationOut.model_validate(reg),
+                article_count=len(imported.articles),
+                legislative_history=imported.legislative_history,
+                warnings=imported.warnings,
+            )
+        )
+
+    return results
 
 
 @router.post(
@@ -305,7 +484,7 @@ async def import_regulation_docx(
     },
 )
 async def fork_draft_from_regulation(
-    reg_id: uuid.UUID,
+    reg_id: str,
     session: DbDep,
     current_user: CurrentUser,
 ) -> Regulation:
@@ -342,7 +521,7 @@ async def fork_draft_from_regulation(
     },
 )
 async def update_regulation(
-    reg_id: uuid.UUID,
+    reg_id: str,
     payload: RegulationUpdate,
     session: DbDep,
     current_user: Annotated[User, Depends(require_permission(PermissionCode.REGULATION_EDIT))],
@@ -397,7 +576,7 @@ async def update_regulation(
     },
 )
 async def publish_regulation(
-    reg_id: uuid.UUID,
+    reg_id: str,
     payload: RegulationPublishRequest,
     session: DbDep,
     current_user: CurrentUser,
@@ -441,7 +620,7 @@ async def publish_regulation(
     },
 )
 async def archive_regulation(
-    reg_id: uuid.UUID,
+    reg_id: str,
     session: DbDep,
     current_user: CurrentUser,
 ) -> Regulation:
@@ -494,7 +673,7 @@ async def archive_regulation(
     ],
 )
 async def repeal_regulation(
-    reg_id: uuid.UUID,
+    reg_id: str,
     body: RepealRegulationRequest,
     session: DbDep,
     current_user: CurrentUser,
@@ -527,7 +706,7 @@ async def repeal_regulation(
         409: {"description": "已發布法規不可直接刪除"},
     },
 )
-async def delete_regulation(reg_id: uuid.UUID, session: DbDep, current_user: CurrentUser) -> None:
+async def delete_regulation(reg_id: str, session: DbDep, current_user: CurrentUser) -> None:
     reg = await _get_reg_or_404(reg_id, session)
     if not current_user.is_superuser and reg.created_by != current_user.id:
         global_codes = await get_user_permission_codes(session, current_user.id)
@@ -554,11 +733,11 @@ async def delete_regulation(reg_id: uuid.UUID, session: DbDep, current_user: Cur
     response_model=list[RegulationRevisionOut],
     summary="取得法規修訂歷程",
 )
-async def get_revisions(reg_id: uuid.UUID, session: DbDep, _: OptionalUser) -> list[object]:
+async def get_revisions(reg_id: str, session: DbDep, _: OptionalUser) -> list[object]:
     if _ is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此法規")
-    await _get_reg_or_404(reg_id, session)
-    return await reg_svc.list_regulation_revisions(session, reg_id)
+    reg = await _get_reg_or_404(reg_id, session)
+    return await reg_svc.list_regulation_revisions(session, reg.id)
 
 
 # ── 條文管理 ─────────────────────────────────────────────────────────────────
@@ -570,7 +749,7 @@ async def get_revisions(reg_id: uuid.UUID, session: DbDep, _: OptionalUser) -> l
     summary="取得法規條文清單（依 sort_index 排序，排除已刪除）",
 )
 async def list_articles(
-    reg_id: uuid.UUID,
+    reg_id: str,
     session: DbDep,
     _: OptionalUser,
     include_deleted: bool = Query(False, description="是否包含已刪除條文（軟刪除）"),
@@ -591,7 +770,7 @@ async def list_articles(
     summary="取得法規樹狀結構（編>章>節>條>項>款>目）",
 )
 async def get_article_tree(
-    reg_id: uuid.UUID,
+    reg_id: str,
     session: DbDep,
     _: OptionalUser,
 ) -> list[RegulationTreeNodeOut]:
@@ -612,7 +791,7 @@ async def get_article_tree(
     },
 )
 async def add_article(
-    reg_id: uuid.UUID,
+    reg_id: str,
     payload: RegulationArticleCreate,
     session: DbDep,
     current_user: Annotated[User, Depends(require_permission(PermissionCode.REGULATION_EDIT))],
@@ -650,7 +829,7 @@ async def add_article(
     },
 )
 async def update_article(
-    reg_id: uuid.UUID,
+    reg_id: str,
     article_id: uuid.UUID,
     payload: RegulationArticleUpdate,
     session: DbDep,
@@ -697,7 +876,7 @@ async def update_article(
     summary="移動節點到新父層級並更新同層排序（子樹保持相對位置）",
 )
 async def move_article(
-    reg_id: uuid.UUID,
+    reg_id: str,
     article_id: uuid.UUID,
     payload: ArticleMoveRequest,
     session: DbDep,
@@ -745,7 +924,7 @@ async def move_article(
     },
 )
 async def delete_article(
-    reg_id: uuid.UUID,
+    reg_id: str,
     article_id: uuid.UUID,
     session: DbDep,
     current_user: Annotated[User, Depends(require_permission(PermissionCode.REGULATION_EDIT))],
@@ -784,7 +963,7 @@ async def delete_article(
     summary="批次更新條文排序（拖曳排序後送出）",
 )
 async def reorder_articles(
-    reg_id: uuid.UUID,
+    reg_id: str,
     payload: ArticleReorderRequest,
     session: DbDep,
     current_user: Annotated[User, Depends(require_permission(PermissionCode.REGULATION_EDIT))],
@@ -815,7 +994,7 @@ async def reorder_articles(
     summary="自動重編條號（支援保留特殊條號）",
 )
 async def auto_renumber_articles(
-    reg_id: uuid.UUID,
+    reg_id: str,
     payload: AutoRenumberRequest,
     session: DbDep,
     current_user: Annotated[User, Depends(require_permission(PermissionCode.REGULATION_EDIT))],
@@ -845,7 +1024,7 @@ async def auto_renumber_articles(
     summary="修正對照模式（三欄：修正條文、現行條文、說明）",
 )
 async def amendment_comparison(
-    reg_id: uuid.UUID,
+    reg_id: str,
     session: DbDep,
     _: OptionalUser,
 ) -> list[AmendmentComparisonRowOut]:
@@ -861,7 +1040,7 @@ async def amendment_comparison(
     summary="檢查條文參照失效警示",
 )
 async def reference_warnings(
-    reg_id: uuid.UUID,
+    reg_id: str,
     session: DbDep,
     _: OptionalUser,
 ) -> list[ReferenceWarningOut]:
@@ -877,16 +1056,16 @@ async def reference_warnings(
     summary="Time Machine：回溯指定日期法規全貌",
 )
 async def regulation_time_machine(
-    reg_id: uuid.UUID,
+    reg_id: str,
     session: DbDep,
     _: OptionalUser,
     as_of: datetime = Query(..., description="回溯時間點（ISO8601）"),
 ) -> RegulationTimeMachineOut:
     if _ is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此法規")
-    await _get_reg_or_404(reg_id, session)
+    reg = await _get_reg_or_404(reg_id, session)
     try:
-        return await reg_svc.get_time_machine_snapshot(session, reg_id, as_of=as_of)
+        return await reg_svc.get_time_machine_snapshot(session, reg.id, as_of=as_of)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
@@ -899,11 +1078,11 @@ async def regulation_time_machine(
     response_model=list[RegulationWorkflowLogOut],
     summary="取得法規審議流程日誌",
 )
-async def get_workflow_logs(reg_id: uuid.UUID, session: DbDep, _: OptionalUser) -> list[object]:
+async def get_workflow_logs(reg_id: str, session: DbDep, _: OptionalUser) -> list[object]:
     if _ is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此法規")
-    await _get_reg_or_404(reg_id, session)
-    return await reg_svc.list_workflow_logs(session, reg_id)
+    reg = await _get_reg_or_404(reg_id, session)
+    return await reg_svc.list_workflow_logs(session, reg.id)
 
 
 # ── 修訂差異比對 ─────────────────────────────────────────────────────────────
@@ -921,7 +1100,7 @@ class _RegDiffOut(BaseModel):
     summary="比對兩個版本的法規全文差異",
 )
 async def regulation_diff(
-    reg_id: uuid.UUID,
+    reg_id: str,
     session: DbDep,
     _: OptionalUser,
     from_version: int | None = Query(None, description="起始版本號（預設為最新版本的前一版）"),
@@ -1005,7 +1184,7 @@ def _workflow_action(
     """工廠函式：產生審議流程動作的 endpoint handler"""
 
     async def handler(
-        reg_id: uuid.UUID,
+        reg_id: str,
         payload: WorkflowActionRequest,
         session: DbDep,
         current_user: CurrentUser,
@@ -1050,7 +1229,7 @@ def _workflow_action(
     summary="送交議會審議（需 regulation:submit 權限）",
 )
 async def submit_regulation(
-    reg_id: uuid.UUID,
+    reg_id: str,
     payload: WorkflowActionRequest,
     session: DbDep,
     current_user: CurrentUser,
@@ -1111,7 +1290,7 @@ router.add_api_route(
     summary="主席公布法規（需 regulation:president_publish 權限，自動建立修訂歷程）",
 )
 async def president_publish(
-    reg_id: uuid.UUID,
+    reg_id: str,
     payload: WorkflowActionRequest,
     session: DbDep,
     current_user: CurrentUser,
@@ -1266,38 +1445,46 @@ async def president_publish(
         session.add(rev)
 
         # 4. 查詢主席公布專用字號模板
-        from api.models.document import DocumentSerialTemplate
-
         tmpl_result = await session.execute(
-            _sel(DocumentSerialTemplate).where(
-                DocumentSerialTemplate.org_id == reg.org_id,
-                DocumentSerialTemplate.is_active.is_(True),
+            _sel(DocumentSerialTemplate)
+            .where(DocumentSerialTemplate.is_active.is_(True))
+            .order_by(
+                DocumentSerialTemplate.is_default_president_publish.desc(),
+                DocumentSerialTemplate.updated_at.desc(),
             )
         )
         templates = list(tmpl_result.scalars().all())
-        tmpl = next((t for t in templates if t.is_default_president_publish), None)
-        if tmpl is None:
-            tmpl = next((t for t in templates if t.is_default), None)
-        if tmpl is None:
+
+        def _pick_president_publish_template(
+            candidates: list[DocumentSerialTemplate],
+        ) -> DocumentSerialTemplate | None:
+            tmpl = next((t for t in candidates if t.is_default_president_publish), None)
+            if tmpl is not None:
+                return tmpl
             tmpl = next(
                 (
                     t
-                    for t in templates
+                    for t in candidates
                     if t.org_prefix.strip() == "嶺班" and t.category_char.strip() == "主公"
                 ),
                 None,
             )
-        if tmpl is None:
-            tmpl = next((t for t in templates if t.category_char.strip() == "主公"), None)
-        if tmpl is None:
-            tmpl = next(
+            if tmpl is not None:
+                return tmpl
+            tmpl = next((t for t in candidates if t.category_char.strip() == "主公"), None)
+            if tmpl is not None:
+                return tmpl
+            return next(
                 (
                     t
-                    for t in templates
+                    for t in candidates
                     if "主公" in f"{t.org_prefix}{t.category_char}".replace(" ", "")
                 ),
                 None,
             )
+
+        tmpl = _pick_president_publish_template(templates)
+
         if tmpl is None:
             raise ValueError(
                 "找不到可用的主席公布字號模板，請先到字號模板管理設定「主席公布預設模板」"
@@ -1329,7 +1516,7 @@ async def president_publish(
 
         pub_doc_data = DocumentCreate(
             title=f"公布《{reg.title}》",
-            org_id=reg.org_id,
+            org_id=tmpl.org_id,
             category=DocumentCategory.DECREE,
             urgency=DocumentUrgency.NORMAL,
             classification=DocumentClassification.NORMAL,
@@ -1374,7 +1561,7 @@ async def president_publish(
     summary="再修正（需 regulation:revise 權限，將法規退回草稿重新編輯）",
 )
 async def revise_regulation(
-    reg_id: uuid.UUID,
+    reg_id: str,
     payload: WorkflowActionRequest,
     session: DbDep,
     current_user: CurrentUser,
@@ -1420,7 +1607,7 @@ async def revise_regulation(
     summary="退回法規（需任一審議權限）",
 )
 async def reject_regulation(
-    reg_id: uuid.UUID,
+    reg_id: str,
     payload: WorkflowActionRequest,
     session: DbDep,
     current_user: CurrentUser,
@@ -1482,7 +1669,7 @@ async def reject_regulation(
     summary="下載法規 PDF",
 )
 async def print_regulation(
-    reg_id: uuid.UUID,
+    reg_id: str,
     session: DbDep,
     _user: OptionalUser,
 ) -> Response:
@@ -1519,7 +1706,7 @@ class FreezeRequest(BaseModel):
     summary="凍結整部法規（需 regulation:archive 或 regulation:admin）",
 )
 async def freeze_regulation(
-    reg_id: uuid.UUID,
+    reg_id: str,
     payload: FreezeRequest,
     session: DbDep,
     current_user: CurrentUser,
@@ -1566,7 +1753,7 @@ async def freeze_regulation(
     summary="解凍整部法規（需 regulation:archive 或 regulation:admin）",
 )
 async def unfreeze_regulation(
-    reg_id: uuid.UUID,
+    reg_id: str,
     session: DbDep,
     current_user: CurrentUser,
 ) -> Regulation:

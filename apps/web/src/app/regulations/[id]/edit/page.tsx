@@ -20,7 +20,7 @@ import {
 } from "@/components/regulations/RegulationEditParts";
 import LawTreeEditor from "@/components/regulations/LawTreeEditor";
 import { usePermissions } from "@/hooks/usePermissions";
-import { ApiError, regulationsApi } from "@/lib/api";
+import { ApiError, regulationsApi, regulationHref } from "@/lib/api";
 import type {
   ArticleType,
   RegulationAmendmentType,
@@ -41,7 +41,7 @@ export default function EditRegulationPage() {
 
   // 基本資訊
   const [title, setTitle] = useState("");
-  const [category, setCategory] = useState<RegulationCategory>("executive_dept");
+  const [category, setCategory] = useState<RegulationCategory>("ordinance");
   const [preface, setPreface] = useState("");
   const [content, setContent] = useState("");
   const [amendmentType, setAmendmentType] = useState<RegulationAmendmentType>("enact");
@@ -66,6 +66,7 @@ export default function EditRegulationPage() {
   // 尾部新增表單
   const [addingEnd, setAddingEnd] = useState(false);
   const [endForm, setEndForm] = useState<NewArtForm>(EMPTY_FORM);
+  const currentRegHref = reg ? regulationHref(reg) : `/regulations/${encodeURIComponent(id)}`;
 
   // ── 資料載入 ────────────────────────────────────────────────────────────────
 
@@ -103,7 +104,7 @@ export default function EditRegulationPage() {
     if (!title.trim()) { toast.error("請輸入法規名稱"); return; }
     setSavingInfo(true);
     try {
-      await regulationsApi.update(id, {
+      const updated = await regulationsApi.update(id, {
         title,
         category,
         preface: preface || undefined,
@@ -118,8 +119,26 @@ export default function EditRegulationPage() {
         legal_basis: legalBasis || null,
         proposal_metadata: proposalMetadata || null,
       });
+      setReg(updated);
+      setTitle(updated.title);
+      setCategory(updated.category);
+      setPreface(updated.preface ?? "");
+      setContent(updated.content ?? "");
+      setAmendmentType(updated.amendment_type);
+      setAmendedArticlesInput(
+        (updated.amended_articles ?? "").split(",").map(x => x.trim()).filter(Boolean).join("\n")
+      );
+      setEffectiveDate(updated.effective_date ? updated.effective_date.slice(0, 10) : "");
+      setLegislativeHistory(updated.legislative_history ?? "");
+      setLegalBasis(updated.legal_basis ?? "");
+      setProposalMetadata(updated.proposal_metadata ?? "");
+      setArticles(
+        [...updated.articles]
+          .filter(a => !a.is_deleted)
+          .sort((a, b) => a.sort_index - b.sort_index)
+      );
       toast.success("基本資訊已儲存");
-      fetchReg();
+      router.replace(`${regulationHref(updated)}/edit`);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "儲存失敗");
     } finally { setSavingInfo(false); }
@@ -302,7 +321,7 @@ export default function EditRegulationPage() {
       });
       toast.success("法規已發布");
       setShowPublish(false);
-      router.push(`/regulations/${id}`);
+      router.push(currentRegHref);
     } catch (e) { toast.error(e instanceof ApiError ? e.message : "發布失敗"); }
   };
 
@@ -325,7 +344,7 @@ export default function EditRegulationPage() {
     try {
       await regulationsApi.archive(id);
       toast.success("法規已停用");
-      router.push(`/regulations/${id}`);
+      router.push(currentRegHref);
     } catch (e) { toast.error(e instanceof ApiError ? e.message : "操作失敗"); }
     finally { setConfirmArchive(false); }
   };
@@ -427,11 +446,11 @@ export default function EditRegulationPage() {
         />
       )}
 
-      <div className="max-w-4xl mx-auto space-y-5">
+      <div className="w-full max-w-4xl mx-auto space-y-5">
         {/* 頂部 */}
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-center gap-3 min-w-0">
-            <Link href={`/regulations/${id}`}
+            <Link href={currentRegHref}
               className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center hover:opacity-80 cursor-pointer"
               style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>←</Link>
             <div className="min-w-0">
@@ -445,11 +464,11 @@ export default function EditRegulationPage() {
             </div>
           </div>
 
-          <div className="flex gap-2 flex-shrink-0">
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end sm:flex-shrink-0">
             {/* 根據 workflow_status 顯示對應主要操作 */}
             {canSubmit && (
               <button onClick={handleSubmitReview}
-                className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer"
+                className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer whitespace-nowrap"
                 style={{ background: "rgba(2,132,199,0.1)", color: "#0284c7", border: "1px solid rgba(2,132,199,0.3)" }}>
                 送交審議
               </button>
@@ -471,7 +490,7 @@ export default function EditRegulationPage() {
                     toast.error(e instanceof ApiError ? e.message : "主席公布失敗");
                   }
                 }}
-                className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer"
+                className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer whitespace-nowrap"
                 style={{ background: "var(--success-dim)", color: "var(--success)", border: "1px solid var(--success)" }}>
                 主席公布
               </button>
@@ -479,7 +498,7 @@ export default function EditRegulationPage() {
             {/* 直接發布（無審議流程的草稿，向後兼容） */}
             {wfStatus === "draft" && can("regulation:publish") && !can("regulation:submit") && (
               <button onClick={openPublishFlow}
-                className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer"
+                className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer whitespace-nowrap"
                 style={{ background: "var(--success-dim)", color: "var(--success)", border: "1px solid var(--success)" }}>
                 發布
               </button>
@@ -488,17 +507,17 @@ export default function EditRegulationPage() {
               confirmArchive ? (
                 <>
                   <button onClick={handleArchive}
-                    className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer"
+                    className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer whitespace-nowrap"
                     style={{ background: "#ef4444", color: "white", border: "1px solid #ef4444" }}>
                     確定停用
                   </button>
                   <button onClick={() => setConfirmArchive(false)}
-                    className="px-3 py-2 rounded-lg text-sm cursor-pointer"
+                    className="px-3 py-2 rounded-lg text-sm cursor-pointer whitespace-nowrap"
                     style={{ color: "var(--text-muted)" }}>取消</button>
                 </>
               ) : (
                 <button onClick={() => setConfirmArchive(true)}
-                  className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer hover:opacity-80"
+                  className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer hover:opacity-80 whitespace-nowrap"
                   style={{ background: "rgba(71,85,105,0.1)", color: "#475569", border: "1px solid rgba(71,85,105,0.3)" }}>
                   停用
                 </button>
@@ -508,17 +527,17 @@ export default function EditRegulationPage() {
               confirmDelete ? (
                 <>
                   <button onClick={handleDelete}
-                    className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer"
+                    className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer whitespace-nowrap"
                     style={{ background: "#ef4444", color: "white", border: "1px solid #ef4444" }}>
                     確定刪除
                   </button>
                   <button onClick={() => setConfirmDelete(false)}
-                    className="px-3 py-2 rounded-lg text-sm cursor-pointer"
+                    className="px-3 py-2 rounded-lg text-sm cursor-pointer whitespace-nowrap"
                     style={{ color: "var(--text-muted)" }}>取消</button>
                 </>
               ) : (
                 <button onClick={() => setConfirmDelete(true)}
-                  className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer hover:opacity-80"
+                  className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer hover:opacity-80 whitespace-nowrap"
                   style={{ background: "rgba(248,113,113,0.1)", color: "#f87171", border: "1px solid rgba(248,113,113,0.3)" }}>
                   刪除草稿
                 </button>
@@ -529,7 +548,7 @@ export default function EditRegulationPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           {/* 左：基本資訊 + 全文 + 條文 */}
-          <div className="lg:col-span-2 space-y-4">
+          <div className="min-w-0 lg:col-span-2 space-y-4">
             {/* 基本資訊 */}
             <div className="card p-4 space-y-3">
               <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>基本資訊</h3>
@@ -589,7 +608,7 @@ export default function EditRegulationPage() {
                   className="w-full bg-transparent text-sm p-2 rounded outline-none resize-y" style={inputStyle} />
               </div>
               <button onClick={saveInfo} disabled={savingInfo}
-                className="px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 cursor-pointer"
+                className="w-full px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 cursor-pointer sm:w-auto"
                 style={{ background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }}>
                 {savingInfo ? "儲存中..." : "儲存基本資訊"}
               </button>
@@ -616,18 +635,21 @@ export default function EditRegulationPage() {
 
             {/* 條文管理 */}
             <div className="card overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>
+              <div
+                className="flex flex-col gap-3 px-4 py-3 border-b sm:flex-row sm:items-center sm:justify-between"
+                style={{ borderColor: "var(--border)" }}
+              >
                 <div>
                   <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
                     條文結構 {articles.length > 0 && `(${articles.length})`}
                   </h3>
                   <p className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>
-                    滑鼠移至條文間隙可插入，移至條文可編輯排序
+                    拖曳條文可調整層級與順序，點擊條文可編輯
                   </p>
                 </div>
                 <button
                   onClick={() => { setAddingEnd(v => !v); }}
-                  className="text-xs px-3 py-1 rounded transition-all cursor-pointer"
+                  className="w-full text-xs px-3 py-1.5 rounded transition-all cursor-pointer sm:w-auto"
                   style={addingEnd
                     ? { color: "var(--text-muted)", background: "var(--bg-elevated)", border: "1px solid var(--border)" }
                     : { color: "var(--primary)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }}>
@@ -640,7 +662,7 @@ export default function EditRegulationPage() {
                   <p className="text-xs" style={{ color: "var(--text-muted)" }}>尚無條文，點擊「新增至尾部」開始建立</p>
                 </div>
               ) : (
-                <div className="px-3 py-3">
+                <div className="px-2 py-3 sm:px-3">
                   <LawTreeEditor
                     articles={articles}
                     onChangeFlat={applyFlatChanges}
@@ -667,7 +689,7 @@ export default function EditRegulationPage() {
                   <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>
                     新增條文至尾部
                   </p>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <div>
                       <label className="text-[10px] block mb-0.5" style={{ color: "var(--text-muted)" }}>層級</label>
                       <select value={endForm.article_type}
@@ -689,7 +711,7 @@ export default function EditRegulationPage() {
                     <textarea value={endForm.content} onChange={e => setEndForm(p => ({ ...p, content: e.target.value }))}
                       rows={3} className="w-full bg-transparent text-xs p-2 rounded outline-none resize-y" style={inputStyle} />
                   </div>
-                  <div className="flex gap-2">
+                  <div className="grid grid-cols-2 gap-2 sm:flex">
                     <button onClick={() => handleInsert(articles.length, endForm)} disabled={inserting}
                       className="text-xs px-4 py-1.5 rounded disabled:opacity-50 cursor-pointer"
                       style={{ background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }}>
@@ -705,7 +727,7 @@ export default function EditRegulationPage() {
           </div>
 
           {/* 右側面板 */}
-          <div className="space-y-4">
+          <div className="min-w-0 space-y-4">
             {/* 狀態卡 */}
             <div className="card p-4 space-y-3">
               <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>狀態</h3>
@@ -757,7 +779,7 @@ export default function EditRegulationPage() {
                 </div>
               )}
 
-              <Link href={`/regulations/${id}`}
+              <Link href={currentRegHref}
                 className="block text-center text-xs py-2 rounded-lg cursor-pointer"
                 style={{ color: "var(--primary)", border: "1px solid var(--border)" }}>
                 查看審議流程 →
@@ -803,7 +825,7 @@ export default function EditRegulationPage() {
                     </div>
                   ))}
                 </div>
-                <Link href={`/regulations/${id}`}
+                <Link href={currentRegHref}
                   className="mt-2 block text-xs text-center" style={{ color: "var(--primary)" }}>
                   查看完整歷程 →
                 </Link>

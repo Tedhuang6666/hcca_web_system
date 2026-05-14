@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -18,7 +19,7 @@ import {
   type DraftStatus,
 } from "@/components/regulations/AmendmentDraftParts";
 import { usePermissions } from "@/hooks/usePermissions";
-import { ApiError, regulationsApi } from "@/lib/api";
+import { ApiError, regulationsApi, regulationHref } from "@/lib/api";
 import type { RegulationOut } from "@/lib/types";
 
 // ── 主頁面 ────────────────────────────────────────────────────────────────────
@@ -38,6 +39,7 @@ export default function DraftAmendmentPage() {
   const [newDraftType, setNewDraftType] = useState<AmendmentType>("partial");
 
   const activeDraft = drafts.find(d => d.id === activeDraftId) ?? null;
+  const currentRegHref = reg ? regulationHref(reg) : `/regulations/${encodeURIComponent(id)}`;
 
   // 載入法規
   useEffect(() => {
@@ -92,8 +94,13 @@ export default function DraftAmendmentPage() {
   };
 
   const handleDelete = (draftId: string) => {
+    const draft = drafts.find(d => d.id === draftId);
+    if (draft && !window.confirm(`確定刪除「${draft.name}」？此操作只會刪除本機草稿。`)) {
+      return;
+    }
     persistDrafts(drafts.filter(d => d.id !== draftId));
     if (activeDraftId === draftId) { setActiveDraftId(null); setStep(1); }
+    toast.success("修正案草稿已刪除");
   };
 
   const handleImport = (file: File) => {
@@ -128,7 +135,7 @@ export default function DraftAmendmentPage() {
     return (
       <div className="py-20 text-center space-y-3">
         <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>您沒有起草修正案的權限</p>
-        <Link href={`/regulations/${id}`} className="btn btn-ghost text-sm">← 返回法規</Link>
+        <Link href={currentRegHref} className="btn btn-ghost text-sm">← 返回法規</Link>
       </div>
     );
   }
@@ -137,7 +144,7 @@ export default function DraftAmendmentPage() {
     <div className="max-w-4xl mx-auto space-y-5">
       {/* 頂部 */}
       <div className="flex items-start gap-3">
-        <Link href={`/regulations/${id}`}
+        <Link href={currentRegHref}
           className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center hover:opacity-80 mt-1"
           style={{ border: "1px solid var(--border)" }}>←</Link>
         <div className="flex-1">
@@ -246,6 +253,15 @@ export default function DraftAmendmentPage() {
               </p>
             </div>
             <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => handleDelete(activeDraft.id)}
+                className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg hover:opacity-80"
+                style={{ color: "var(--danger)", border: "1px solid rgba(220,38,38,0.3)", background: "rgba(220,38,38,0.08)" }}
+              >
+                <Trash2 size={13} strokeWidth={2.2} aria-hidden="true" />
+                刪除草案
+              </button>
               <button onClick={() => { setStep(1); setActiveDraftId(null); }}
                 className="text-xs px-3 py-1.5 rounded-lg hover:opacity-80"
                 style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}>

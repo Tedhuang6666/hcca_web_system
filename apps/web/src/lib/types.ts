@@ -255,15 +255,8 @@ export interface OrderCreate {
 /** 法規分類（對應後端 RegulationCategory enum） */
 export type RegulationCategory =
   | "constitution"       // 憲章
-  | "chairman"           // 主席相關
-  | "executive_dept"     // 行政部門
-  | "student_council"    // 學生議會
-  | "judicial_committee" // 評議委員會
-  | "executive_order"    // 行政命令
-  | "council_order"      // 議會命令
-  | "judicial_order"     // 評議委員會命令
-  | "election_order"     // 選舉委員會命令
-  | "other";             // 其他
+  | "ordinance"          // 條例
+  | "procedure";         // 辦法
 
 /** 條文層級（Volume > Chapter > Section > Article > Paragraph > Subparagraph > Item） */
 export type ArticleType =
@@ -636,7 +629,17 @@ export interface VendorManagerOut {
 // ── 問卷系統型別 ──────────────────────────────────────────────────────────────
 
 export type SurveyStatus = "draft" | "open" | "closed" | "archived";
-export type QuestionType = "text" | "textarea" | "single" | "multiple" | "rating" | "date";
+export type QuestionType =
+  | "text"
+  | "textarea"
+  | "single"
+  | "multiple"
+  | "rating"
+  | "date"
+  | "section_text"
+  | "page_break"
+  | "image"
+  | "video";
 
 export interface SurveyQuestionOut {
   id: string;
@@ -696,6 +699,8 @@ export interface QuestionStats {
   option_counts: Record<string, number>;
   text_answers: string[];
   average_rating: number | null;
+  suggested_chart: string;
+  available_charts: string[];
 }
 
 export interface SurveyStats {

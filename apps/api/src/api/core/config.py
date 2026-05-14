@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     ENABLE_API_DOCS: bool = False
     ALLOWED_ORIGINS: list[str] = ["http://localhost:3000"]
+    ALLOWED_HOSTS: list[str] = ["localhost", "127.0.0.1", "api"]
 
     # --- 資料庫設定 ---
     DATABASE_URL: PostgresDsn = Field(
@@ -43,6 +44,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     ACCESS_TOKEN_COOKIE_NAME: str = "hcca_access_token"
     REFRESH_TOKEN_COOKIE_NAME: str = "hcca_refresh_token"
+    SESSION_COOKIE_NAME: str = "hcca_session"
     COOKIE_SECURE: bool = False
     COOKIE_SAMESITE: str = "lax"
 
@@ -126,12 +128,18 @@ class Settings(BaseSettings):
         is_prod = self.ENVIRONMENT.lower() in {"prod", "production"}
         if is_prod and self.SECRET_KEY == _DEFAULT_SECRET:
             raise ValueError("生產環境必須設定強 SECRET_KEY，不能使用預設值")
+        if is_prod and self.DEBUG:
+            raise ValueError("生產環境不可啟用 DEBUG")
+        if is_prod and self.ENABLE_API_DOCS:
+            raise ValueError("生產環境不可公開 API 文件；請關閉 ENABLE_API_DOCS")
         if is_prod and self.SUPERUSER_EMAILS:
             raise ValueError("生產環境不可使用 SUPERUSER_EMAILS 自動繞過 RBAC")
         if is_prod and not self.COOKIE_SECURE:
             raise ValueError("生產環境必須啟用 COOKIE_SECURE")
         if "*" in self.ALLOWED_ORIGINS:
             raise ValueError("ALLOWED_ORIGINS 不可包含 '*'；請明確列出允許來源")
+        if is_prod and "*" in self.ALLOWED_HOSTS:
+            raise ValueError("生產環境 ALLOWED_HOSTS 不可包含 '*'；請明確列出允許 Host")
         return self
 
 

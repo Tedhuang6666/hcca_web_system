@@ -7,6 +7,10 @@ import { surveysApi, ApiError } from "@/lib/api";
 import type { QuestionType } from "@/lib/types";
 
 const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
+  { value: "section_text", label: "文字描述區塊" },
+  { value: "page_break",   label: "分頁" },
+  { value: "image",        label: "圖片" },
+  { value: "video",        label: "影片連結" },
   { value: "text",     label: "簡答（單行）" },
   { value: "textarea", label: "長答（多行）" },
   { value: "single",   label: "單選" },
@@ -14,6 +18,9 @@ const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: "rating",   label: "評分（1–5）" },
   { value: "date",     label: "日期" },
 ];
+
+const DISPLAY_TYPES: QuestionType[] = ["section_text", "page_break", "image", "video"];
+const isDisplayType = (type: QuestionType | undefined) => Boolean(type && DISPLAY_TYPES.includes(type));
 
 interface DraftQuestion {
   id: string;
@@ -70,7 +77,7 @@ export default function NewSurveyPage() {
   };
 
   const addQuestion = () => {
-    if (!newQ.question_text?.trim()) { toast.error("請輸入題目文字"); return; }
+    if (!newQ.question_text?.trim()) { toast.error("請輸入題目或區塊文字"); return; }
     const needsOptions = newQ.question_type === "single" || newQ.question_type === "multiple";
     if (needsOptions && (!newQ.options || newQ.options.length < 2)) {
       toast.error("選擇題至少需要 2 個選項"); return;
@@ -81,7 +88,7 @@ export default function NewSurveyPage() {
         id: crypto.randomUUID(),
         question_text: newQ.question_text!,
         question_type: newQ.question_type ?? "text",
-        is_required: newQ.is_required ?? true,
+        is_required: isDisplayType(newQ.question_type) ? false : (newQ.is_required ?? true),
         options: newQ.options ?? [],
         min_value: newQ.min_value ?? 1,
         max_value: newQ.max_value ?? 5,
@@ -99,7 +106,7 @@ export default function NewSurveyPage() {
 
   const save = async () => {
     if (!title.trim()) { toast.error("請輸入問卷標題"); return; }
-    if (questions.length === 0) { toast.error("請至少新增一道題目"); return; }
+    if (!questions.some(q => !isDisplayType(q.question_type))) { toast.error("請至少新增一道可填答題目"); return; }
     if (!orgId) { toast.error("無法取得組織資訊"); return; }
     setSaving(true);
     try {
@@ -125,7 +132,7 @@ export default function NewSurveyPage() {
         });
       }
       toast.success("問卷草稿已建立");
-      router.push(`/surveys/${survey.id}`);
+      router.push(`/surveys/${encodeURIComponent(survey.title)}`);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "建立失敗");
     } finally { setSaving(false); }
@@ -133,6 +140,8 @@ export default function NewSurveyPage() {
 
   const needsOptions = newQ.question_type === "single" || newQ.question_type === "multiple";
   const isRating = newQ.question_type === "rating";
+  const isDisplay = isDisplayType(newQ.question_type);
+  const isMedia = newQ.question_type === "image" || newQ.question_type === "video";
 
   return (
     <div className="max-w-3xl mx-auto space-y-5">
@@ -228,12 +237,12 @@ export default function NewSurveyPage() {
           <div className="card p-5 space-y-3">
             <h3 className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>新增題目</h3>
             <div>
-              <Label>題目文字 *</Label>
+              <Label>{isDisplay ? "區塊內容 / 標題 *" : "題目文字 *"}</Label>
               <textarea
                 value={newQ.question_text}
                 onChange={e => setNewQ(p => ({ ...p, question_text: e.target.value }))}
                 rows={2}
-                placeholder="請輸入題目…"
+                placeholder={isDisplay ? "請輸入要顯示給填答者的內容…" : "請輸入題目…"}
                 className="input resize-y"
               />
             </div>
@@ -241,20 +250,41 @@ export default function NewSurveyPage() {
               <div>
                 <Label>題型</Label>
                 <select value={newQ.question_type}
-                  onChange={e => setNewQ(p => ({ ...p, question_type: e.target.value as QuestionType, options: [] }))}
+                  onChange={e => {
+                    const question_type = e.target.value as QuestionType;
+                    setNewQ(p => ({
+                      ...p,
+                      question_type,
+                      is_required: isDisplayType(question_type) ? false : p.is_required,
+                      options: [],
+                    }));
+                  }}
                   className="input">
                   {QUESTION_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
               </div>
               <div className="flex items-center gap-2 mt-5">
                 <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={newQ.is_required ?? true}
+                  <input type="checkbox" checked={!isDisplay && (newQ.is_required ?? true)}
+                    disabled={isDisplay}
                     onChange={e => setNewQ(p => ({ ...p, is_required: e.target.checked }))}
                     className="accent-sky-400" />
                   <span className="text-sm" style={{ color: "var(--text-secondary)" }}>必填</span>
                 </label>
               </div>
             </div>
+
+            {isMedia && (
+              <div>
+                <Label>{newQ.question_type === "image" ? "圖片 URL" : "影片 URL"}</Label>
+                <input
+                  value={newQ.placeholder ?? ""}
+                  onChange={e => setNewQ(p => ({ ...p, placeholder: e.target.value }))}
+                  placeholder={newQ.question_type === "image" ? "https://example.com/image.jpg" : "https://youtube.com/watch?v=..."}
+                  className="input"
+                />
+              </div>
+            )}
 
             {/* 評分範圍 */}
             {isRating && (

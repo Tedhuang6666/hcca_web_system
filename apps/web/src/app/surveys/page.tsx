@@ -131,7 +131,7 @@ export default function SurveysPage() {
             return (
               <Link
                 key={survey.id}
-                href={`/surveys/${survey.id}`}
+                href={`/surveys/${encodeURIComponent(survey.title)}`}
                 className="card card-hover flex items-center gap-4 px-5 py-4"
                 style={{ textDecoration: "none" }}>
 

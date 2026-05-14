@@ -233,16 +233,18 @@ export default function ProfilePage() {
               ].map(({ label, checked, onToggle }) => (
                 <label key={label} className="flex items-center gap-3 cursor-pointer">
                   <button
+                    type="button"
                     role="switch"
                     aria-checked={checked}
+                    aria-label={label}
                     onClick={onToggle}
-                    className="relative w-10 h-5 rounded-full transition-colors flex-shrink-0"
+                    className="inline-flex h-5 w-10 flex-shrink-0 items-center rounded-full p-0.5 transition-colors"
                     style={{
                       background: checked ? "var(--primary)" : "var(--border-strong)",
                     }}>
                     <span
-                      className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform"
-                      style={{ transform: checked ? "translateX(20px)" : "translateX(2px)" }}
+                      className="block h-4 w-4 rounded-full bg-white shadow-sm transition-transform"
+                      style={{ transform: checked ? "translateX(20px)" : "translateX(0)" }}
                     />
                   </button>
                   <span className="text-sm" style={{ color: "var(--text-primary)" }}>{label}</span>

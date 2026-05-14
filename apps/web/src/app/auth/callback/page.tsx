@@ -12,35 +12,47 @@ export default function AuthCallbackPage() {
     const error = searchParams.get("error");
     const next = searchParams.get("next") || "/";
 
-    async function fetchMeFromCookie() {
+    async function fetchMeFromCookie(): Promise<boolean> {
       try {
         const res = await fetch(apiUrl("/auth/me"), {
           credentials: "include",
         });
+        if (!res.ok) return false;
         const me = await res.json();
         if (me?.id) {
           cacheCurrentUser(me);
+          return true;
         }
       } catch {
-        // 忽略 userinfo 補資料失敗，避免 callback 卡住。
-      } finally {
-        window.location.replace(next);
+        // 交由 refresh fallback 處理，避免 callback 卡住。
       }
+      return false;
     }
 
-    async function bootstrapFromCookie() {
+    async function refreshFromCookie(): Promise<boolean> {
       try {
         const res = await fetch(apiUrl("/auth/refresh"), {
           method: "POST",
           credentials: "include",
         });
-        if (!res.ok) {
-          throw new Error("refresh failed");
-        }
-        await fetchMeFromCookie();
+        return res.ok;
       } catch {
-        window.location.replace("/login?error=缺少 Token，請重新登入");
+        return false;
       }
+    }
+
+    async function bootstrapFromCookie() {
+      if (await fetchMeFromCookie()) {
+        window.location.replace(next);
+        return;
+      }
+
+      if (await refreshFromCookie() && await fetchMeFromCookie()) {
+        window.location.replace(next);
+        return;
+      }
+
+      window.location.replace("/login?error=缺少 Token，請重新登入");
     }
 
     if (error) {

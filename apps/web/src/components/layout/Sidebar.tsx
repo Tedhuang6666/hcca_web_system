@@ -115,7 +115,7 @@ const NAV_DEF: (NavItem | NavSection)[] = [
       { href: "/orgs",              iconKey: "org",         label: "組織管理", perm: "org:*" },
       { href: "/admin/permissions", iconKey: "permissions", label: "權限管理", perm: "admin:all" },
       { href: "/audit-logs",        iconKey: "audit",       label: "稽核日誌", perm: "audit:view_org" },
-      { href: "/serial-templates",  iconKey: "serial",      label: "字號模板", perm: "doc.issue" },
+      { href: "/serial-templates",  iconKey: "serial",      label: "字號模板", perm: "serial:create" },
       { href: "/shop/admin",        iconKey: "shopAdmin",   label: "商品管理", perm: "shop:manage" },
       { href: "/meal/vendor",       iconKey: "mealVendor",  label: "商家管理", perm: "meal:manage" },
       { href: "/petitions/manage",  iconKey: "petition",    label: "陳情管理", perm: "petition:*" },

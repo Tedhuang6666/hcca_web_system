@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Index, Integer, String, Text
-from sqlalchemy.dialects.postgresql import UUID, TSVECTOR
+from sqlalchemy.dialects.postgresql import TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
@@ -21,21 +21,11 @@ if TYPE_CHECKING:
 
 
 class RegulationCategory(enum.StrEnum):
-    """
-    法規分類（對應參考專案 LegislationCategory）
-    前五項為法律位階（Constitution/Law），後四項為命令位階（Order）。
-    """
+    """法規分類。"""
 
     CONSTITUTION = "constitution"  # 憲章
-    CHAIRMAN = "chairman"  # 主席與副主席相關法規
-    EXECUTIVE_DEPT = "executive_dept"  # 行政部門相關法規
-    STUDENT_COUNCIL = "student_council"  # 學生議會相關法規
-    JUDICIAL_COMMITTEE = "judicial_committee"  # 評議委員會相關法規
-    EXECUTIVE_ORDER = "executive_order"  # 行政命令
-    COUNCIL_ORDER = "council_order"  # 議會命令
-    JUDICIAL_ORDER = "judicial_order"  # 評議委員會命令
-    ELECTION_ORDER = "election_order"  # 選舉委員會命令
-    OTHER = "other"  # 其他
+    ORDINANCE = "ordinance"  # 條例
+    PROCEDURE = "procedure"  # 辦法
 
 
 class RegulationWorkflowStatus(enum.StrEnum):

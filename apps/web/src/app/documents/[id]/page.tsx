@@ -12,6 +12,7 @@ import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { OfficialText } from "@/components/ui/OfficialText";
 import { ApprovalPanel } from "@/components/documents/ApprovalPanel";
 import { VersionHistory } from "@/components/documents/VersionHistory";
+import { usePersistedZoom } from "@/hooks/usePersistedZoom";
 import { useWS } from "@/hooks/useWS";
 import { apiUrl } from "@/lib/config";
 
@@ -156,7 +157,7 @@ export default function DocumentDetailPage() {
   const [approverIds, setApproverIds] = useState<string[]>([]);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [allUsers, setAllUsers] = useState<UserSummary[]>([]);
-  const [zoom, setZoom] = useState(100);
+  const { zoom, setZoom, zoomStyle } = usePersistedZoom("hcca.viewer.zoom");
   const [printingPdf, setPrintingPdf] = useState(false);
   const { can } = usePermissions();
   const currentUserId = typeof window !== "undefined" ? localStorage.getItem("user_id") ?? "" : "";
@@ -359,22 +360,26 @@ export default function DocumentDetailPage() {
         { label: doc.serial_number ?? doc.title },
       ]} />
       {/* 頂部 */}
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
           <Link href="/documents"
-            className="w-8 h-8 rounded-lg flex items-center justify-center  hover:"
+            className="w-8 h-8 rounded-lg flex flex-shrink-0 items-center justify-center  hover:"
             style={{ border: "1px solid var(--border)" }}>←</Link>
-          <div>
-            <div className="flex items-center gap-3 mb-1">
-              <span className="text-sm font-mono" style={{ color: "var(--primary)" }}>{doc.serial_number}</span>
-              <DocumentStatusBadge status={doc.status} />
-              <UrgencyBadge urgency={doc.urgency} />
+          <div className="min-w-0 flex-1 space-y-1">
+            <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+              <span className="text-sm font-mono break-all" style={{ color: "var(--primary)" }}>
+                {doc.serial_number}
+              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <DocumentStatusBadge status={doc.status} />
+                <UrgencyBadge urgency={doc.urgency} />
+              </div>
             </div>
-            <h1 className="text-xl font-semibold ">{doc.title}</h1>
+            <h1 className="text-lg font-semibold leading-snug break-words sm:text-xl">{doc.title}</h1>
           </div>
         </div>
 
-        <div className="flex gap-2 flex-wrap justify-end">
+        <div className="flex w-full flex-wrap justify-start gap-2 sm:w-auto sm:flex-shrink-0 sm:justify-end">
           {/* 縮放控制 */}
           <div className="flex items-center gap-0.5 rounded-lg overflow-hidden"
             style={{ border: "1px solid rgba(148,163,184,0.2)" }}>
@@ -610,7 +615,7 @@ export default function DocumentDetailPage() {
           )}
 
           {/* 公文本文（官式橫書格式） */}
-          <div className="card overflow-hidden" style={{ fontSize: `${zoom}%` }}>
+          <div className="card overflow-hidden" style={zoomStyle}>
             <div className="px-5 py-3" style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
               <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>公文內容</span>
             </div>

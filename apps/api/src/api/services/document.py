@@ -134,9 +134,7 @@ async def create_serial_template(
     重複的 org_id + org_prefix + category_char 組合會觸發 UniqueConstraint 錯誤。
     """
     # 取得組織 prefix（只查詢必要欄位）
-    org_result = await session.execute(
-        select(Org.prefix, Org.name).where(Org.id == data.org_id)
-    )
+    org_result = await session.execute(select(Org.prefix, Org.name).where(Org.id == data.org_id))
     org_row = org_result.first()
     if org_row is None:
         raise ValueError("指定的組織不存在")
@@ -163,7 +161,7 @@ async def create_serial_template(
     )
     session.add(template)
     await session.flush()
-    if template.is_default or template.is_default_president_publish:
+    if template.is_default:
         result = await session.execute(
             select(DocumentSerialTemplate).where(
                 DocumentSerialTemplate.org_id == template.org_id,
@@ -172,9 +170,16 @@ async def create_serial_template(
         )
         siblings = list(result.scalars().all())
         for sibling in siblings:
-            if template.is_default and sibling.is_default:
+            if sibling.is_default:
                 sibling.is_default = False
-            if template.is_default_president_publish and sibling.is_default_president_publish:
+        await session.flush()
+    if template.is_default_president_publish:
+        result = await session.execute(
+            select(DocumentSerialTemplate).where(DocumentSerialTemplate.id != template.id)
+        )
+        siblings = list(result.scalars().all())
+        for sibling in siblings:
+            if sibling.is_default_president_publish:
                 sibling.is_default_president_publish = False
         await session.flush()
     logger.info(
@@ -243,7 +248,7 @@ async def update_serial_template(
         template.is_default = False
         template.is_default_president_publish = False
     await session.flush()
-    if template.is_default or template.is_default_president_publish:
+    if template.is_default:
         result = await session.execute(
             select(DocumentSerialTemplate).where(
                 DocumentSerialTemplate.org_id == template.org_id,
@@ -252,9 +257,16 @@ async def update_serial_template(
         )
         siblings = list(result.scalars().all())
         for sibling in siblings:
-            if template.is_default and sibling.is_default:
+            if sibling.is_default:
                 sibling.is_default = False
-            if template.is_default_president_publish and sibling.is_default_president_publish:
+        await session.flush()
+    if template.is_default_president_publish:
+        result = await session.execute(
+            select(DocumentSerialTemplate).where(DocumentSerialTemplate.id != template.id)
+        )
+        siblings = list(result.scalars().all())
+        for sibling in siblings:
+            if sibling.is_default_president_publish:
                 sibling.is_default_president_publish = False
         await session.flush()
     return template

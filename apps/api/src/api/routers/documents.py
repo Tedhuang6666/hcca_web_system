@@ -86,7 +86,7 @@ from api.schemas.document import (
 from api.services import audit as audit_svc
 from api.services import document as doc_svc
 from api.services.mail import enqueue_email
-from api.services.permission import get_user_permission_codes_for_org
+from api.services.permission import get_user_permission_codes, get_user_permission_codes_for_org
 from api.services.storage import get_storage
 
 router = APIRouter(prefix="/documents", tags=["公文系統"])
@@ -599,6 +599,11 @@ async def batch_approve_documents(
         if doc is None:
             results.append(_batch_result(doc_id, ok=False, detail="找不到此公文"))
             continue
+        if doc.status != DocumentStatus.PENDING:
+            results.append(
+                _batch_result(doc_id, ok=False, doc=doc, detail="只有待審核公文可以批量核准")
+            )
+            continue
         try:
             updated = await doc_svc.approve_step(
                 session,
@@ -613,7 +618,10 @@ async def batch_approve_documents(
                 action="batch.approve",
                 actor_id=str(current_user.id),
                 actor_email=current_user.email,
-                meta={"step": updated.current_step, "final": updated.status == DocumentStatus.APPROVED},
+                meta={
+                    "step": updated.current_step,
+                    "final": updated.status == DocumentStatus.APPROVED,
+                },
                 summary=f"批量核准公文「{updated.title}」",
             )
             bg.add_task(_ws_broadcast_bg, updated)
@@ -639,6 +647,11 @@ async def batch_reject_documents(
         doc = await doc_svc.get_document(session, doc_id)
         if doc is None:
             results.append(_batch_result(doc_id, ok=False, detail="找不到此公文"))
+            continue
+        if doc.status != DocumentStatus.PENDING:
+            results.append(
+                _batch_result(doc_id, ok=False, doc=doc, detail="只有待審核公文可以批量退件")
+            )
             continue
         try:
             if payload.mode == RejectMode.TO_PREVIOUS:
@@ -690,7 +703,9 @@ async def batch_archive_documents(
             results.append(_batch_result(doc_id, ok=False, detail="找不到此公文"))
             continue
         if doc.created_by != current_user.id and not current_user.is_superuser:
-            results.append(_batch_result(doc_id, ok=False, doc=doc, detail="只有建立者可以封存公文"))
+            results.append(
+                _batch_result(doc_id, ok=False, doc=doc, detail="只有建立者可以封存公文")
+            )
             continue
         try:
             updated = await doc_svc.archive_document(session, doc, requested_by=current_user.id)
@@ -1622,7 +1637,9 @@ async def create_document_template(
     return template
 
 
-@template_router.get("/{template_id}", response_model=DocumentTemplateOut, summary="取得公文內容範本")
+@template_router.get(
+    "/{template_id}", response_model=DocumentTemplateOut, summary="取得公文內容範本"
+)
 async def get_document_template(
     template_id: uuid.UUID,
     session: DbDep,
@@ -1734,7 +1751,9 @@ async def create_document_from_template(
             created_by=current_user.id,
         )
     except (PermissionError, ValueError) as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
     await audit_svc.record(
         session,
         entity_type="document",
@@ -1752,10 +1771,10 @@ async def create_document_from_template(
     "",
     response_model=SerialTemplateOut,
     status_code=status.HTTP_201_CREATED,
-    summary="建立字號模板（需 serial:create，限本組織）",
+    summary="建立字號模板（需 serial:create 或 admin:all，限本組織）",
     responses={
         201: {"description": "字號模板建立成功，字號格式如：嶺代生字第 1150000001 號"},
-        403: {"description": "需要 serial:create 權限（限本組織）"},
+        403: {"description": "需要 serial:create 或 admin:all 權限（限本組織）"},
         409: {"description": "相同 org_prefix + category_char 組合已存在"},
     },
 )
@@ -1765,16 +1784,18 @@ async def create_serial_template(
     current_user: CurrentUser,
 ) -> object:
     """
-    在本組織下建立字號模板，需擁有 `serial:create` 權限（org-scoped）。
+    在本組織下建立字號模板，需擁有 `serial:create` 或 `admin:all` 權限（org-scoped）。
     一個 org_prefix + category_char 組合只能建立一個模板（UniqueConstraint）。
     """
     if not current_user.is_superuser:
         codes = await get_user_permission_codes_for_org(session, current_user.id, payload.org_id)
-        if "serial:create" not in codes:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="您在此組織下無新增字號模板的權限（需 serial:create）",
-            )
+        if "serial:create" not in codes and "admin:all" not in codes:
+            global_codes = await get_user_permission_codes(session, current_user.id)
+            if "admin:all" not in global_codes:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="您在此組織下無新增字號模板的權限（需 serial:create 或 admin:all）",
+                )
     from sqlalchemy.exc import IntegrityError
 
     try:
@@ -1865,10 +1886,10 @@ async def get_serial_template(
 @serial_router.delete(
     "/{template_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="停用字號模板（需 serial:delete，限本組織）",
+    summary="停用字號模板（需 serial:delete 或 admin:all，限本組織）",
     responses={
         204: {"description": "停用成功"},
-        403: {"description": "需要 serial:delete 權限"},
+        403: {"description": "需要 serial:delete 或 admin:all 權限"},
         404: {"description": "模板不存在"},
     },
 )
@@ -1877,17 +1898,19 @@ async def deactivate_serial_template(
     session: DbDep,
     current_user: CurrentUser,
 ) -> None:
-    """停用字號模板（is_active=False），需在該模板所屬組織下擁有 serial:delete 權限。"""
+    """停用字號模板（is_active=False），需在該模板所屬組織下擁有 serial:delete 或 admin:all 權限。"""
     template = await doc_svc.get_serial_template(session, template_id)
     if template is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此字號模板")
     if not current_user.is_superuser:
         codes = await get_user_permission_codes_for_org(session, current_user.id, template.org_id)
-        if "serial:delete" not in codes:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="您在此組織下無停用字號模板的權限（需 serial:delete）",
-            )
+        if "serial:delete" not in codes and "admin:all" not in codes:
+            global_codes = await get_user_permission_codes(session, current_user.id)
+            if "admin:all" not in global_codes:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="您在此組織下無停用字號模板的權限（需 serial:delete 或 admin:all）",
+                )
     before = {
         "is_active": template.is_active,
         "is_default": template.is_default,
@@ -1919,9 +1942,9 @@ async def deactivate_serial_template(
 @serial_router.patch(
     "/{template_id}",
     response_model=SerialTemplateOut,
-    summary="更新字號模板（需 serial:create，限本組織）",
+    summary="更新字號模板（需 serial:create 或 admin:all，限本組織）",
     responses={
-        403: {"description": "需要 serial:create 權限"},
+        403: {"description": "需要 serial:create 或 admin:all 權限"},
         404: {"description": "模板不存在"},
     },
 )
@@ -1937,11 +1960,13 @@ async def update_serial_template(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此字號模板")
     if not current_user.is_superuser:
         codes = await get_user_permission_codes_for_org(session, current_user.id, template.org_id)
-        if "serial:create" not in codes:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="您在此組織下無修改字號模板的權限（需 serial:create）",
-            )
+        if "serial:create" not in codes and "admin:all" not in codes:
+            global_codes = await get_user_permission_codes(session, current_user.id)
+            if "admin:all" not in global_codes:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="您在此組織下無修改字號模板的權限（需 serial:create 或 admin:all）",
+                )
     before = {
         "description": template.description,
         "year_mode": template.year_mode.value,

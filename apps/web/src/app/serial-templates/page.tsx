@@ -42,7 +42,7 @@ export default function SerialTemplatesPage() {
   const [activeOnly, setActiveOnly] = useState(true);
   const [formTouched, setFormTouched] = useState<Record<string, boolean>>({});
 
-  // 可用的組織列表（擁有 document:create 權限）
+  // 可用的組織列表（擁有 serial:create 權限）
   const [orgs, setOrgs] = useState<OrgRead[]>([]);
   // 當前選取組織的 prefix（可能被 org:manage 使用者修改）
   const [orgPrefixInput, setOrgPrefixInput] = useState<string>("");
@@ -68,7 +68,7 @@ export default function SerialTemplatesPage() {
 
   // 載入可選的組織列表
   useEffect(() => {
-    orgsApi.myCreateOrgs()
+    orgsApi.mySerialTemplateOrgs()
       .then(setOrgs)
       .catch(() => {});
   }, []);
@@ -310,7 +310,7 @@ export default function SerialTemplatesPage() {
         <div className="card py-16 text-center">
           <p className=" text-sm">尚無字號模板</p>
           <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-            點擊「新增模板」建立第一個字號格式，需要 doc.issue 權限
+            點擊「新增模板」建立第一個字號格式，需要 serial:create 權限
           </p>
         </div>
       ) : (
@@ -341,7 +341,7 @@ export default function SerialTemplatesPage() {
           </div>
           <div className="flex gap-2">
             <dt className="font-semibold  w-24 flex-shrink-0">權限要求</dt>
-            <dd>建立/停用需要 doc.issue 權限；查詢/選用對所有有效使用者開放</dd>
+            <dd>建立/修改需要 serial:create 權限；停用需要 serial:delete 權限；查詢/選用對所有有效使用者開放</dd>
           </div>
           <div className="flex gap-2">
             <dt className="font-semibold  w-24 flex-shrink-0">預設用途</dt>

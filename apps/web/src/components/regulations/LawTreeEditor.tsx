@@ -354,6 +354,8 @@ export default function LawTreeEditor({
       transform: d.transform ? `translate(${d.transform.x}px, ${d.transform.y}px)` : undefined,
       opacity: isActive ? 0.45 : 1,
     };
+    const indent = Math.min(level * 12, 48);
+
     return (
       <div ref={d.setNodeRef} style={style} {...d.listeners} {...d.attributes}>
         <div
@@ -368,9 +370,9 @@ export default function LawTreeEditor({
             if (e.key === "Enter") { e.preventDefault(); onEnterSibling?.(node.id); }
             if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); onDemote?.(node.id); }
           }}
-          className="group relative rounded-xl px-3 py-3 mb-2 outline-none transition-shadow"
+          className="group relative rounded-xl px-2.5 py-3 mb-2 outline-none transition-shadow sm:px-3"
           style={{
-            marginLeft: `${level * 24}px`,
+            marginLeft: `${indent}px`,
             border: outlineId === node.id ? "1px solid var(--primary)" : "1px solid var(--border)",
             boxShadow: outlineId === node.id ? "0 0 0 2px var(--primary-dim)" : "none",
             background: isActive ? "var(--bg-elevated)" : "var(--bg-surface)",
@@ -394,60 +396,81 @@ export default function LawTreeEditor({
               background: outlineId === node.id ? "var(--primary)" : "var(--border-strong)",
             }}
           />
-          <div className="flex items-start gap-2">
-            <button
-              onClick={() => setCollapsed(prev => ({ ...prev, [node.id]: !node.isCollapsed }))}
-              className="w-5 h-5 text-xs rounded border"
-              style={{ borderColor: "var(--border)" }}
-              disabled={node.children.length === 0}
-            >
-              {node.children.length === 0 ? "·" : node.isCollapsed ? "▸" : "▾"}
-            </button>
-            <span className="w-28 shrink-0 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-              {numbering.get(node.id) ?? TYPE_LABEL[node.type]}
-            </span>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-                  {node.title || "（未命名）"}
-                </p>
-                {statusById[node.id] && (
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+            <div className="flex min-w-0 flex-1 items-start gap-2">
+              <button
+                onClick={() => setCollapsed(prev => ({ ...prev, [node.id]: !node.isCollapsed }))}
+                className="w-6 h-6 shrink-0 text-xs rounded border sm:w-5 sm:h-5"
+                style={{ borderColor: "var(--border)" }}
+                disabled={node.children.length === 0}
+              >
+                {node.children.length === 0 ? "·" : node.isCollapsed ? "▸" : "▾"}
+              </button>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span
-                    className="text-[10px] px-1.5 py-0.5 rounded-full"
+                    className="shrink-0 text-sm font-semibold"
+                    style={{ color: "var(--text-primary)" }}
+                  >
+                    {numbering.get(node.id) ?? TYPE_LABEL[node.type]}
+                  </span>
+                  <p
+                    className="min-w-0 text-sm font-medium break-words"
+                    style={{ color: "var(--text-primary)" }}
+                  >
+                    {node.title || "（未命名）"}
+                  </p>
+                  {statusById[node.id] && (
+                    <span
+                      className="text-[10px] px-1.5 py-0.5 rounded-full"
+                      style={{
+                        color:
+                          statusById[node.id].tone === "success"
+                            ? "var(--success)"
+                            : statusById[node.id].tone === "danger"
+                              ? "var(--danger)"
+                              : "var(--warning)",
+                        background:
+                          statusById[node.id].tone === "success"
+                            ? "var(--success-dim)"
+                            : statusById[node.id].tone === "danger"
+                              ? "rgba(220,38,38,0.1)"
+                              : "rgba(245,158,11,0.1)",
+                      }}
+                    >
+                      {statusById[node.id].label}
+                    </span>
+                  )}
+                </div>
+                {node.content && (
+                  <p
+                    className="text-sm whitespace-pre-wrap break-words"
                     style={{
-                      color:
-                        statusById[node.id].tone === "success"
-                          ? "var(--success)"
-                          : statusById[node.id].tone === "danger"
-                            ? "var(--danger)"
-                            : "var(--warning)",
-                      background:
-                        statusById[node.id].tone === "success"
-                          ? "var(--success-dim)"
-                          : statusById[node.id].tone === "danger"
-                            ? "rgba(220,38,38,0.1)"
-                            : "rgba(245,158,11,0.1)",
+                      color: "var(--text-secondary)",
+                      overflowWrap: "anywhere",
                     }}
                   >
-                    {statusById[node.id].label}
-                  </span>
+                    {node.content}
+                  </p>
                 )}
               </div>
-              {node.content && (
-                <p
-                  className="text-sm whitespace-pre-wrap"
-                  style={{
-                    color: "var(--text-secondary)",
-                    paddingLeft: "1.75rem",
-                    textIndent: "-1.75rem",
-                  }}
-                >
-                  {node.content}
-                </p>
-              )}
             </div>
-            <button onClick={() => onEdit(node.id)} className="text-xs px-2 py-1 rounded" style={{ border: "1px solid var(--border)" }}>編輯</button>
-            <button onClick={() => onDelete(node.id)} className="text-xs px-2 py-1 rounded" style={{ border: "1px solid var(--border)", color: "var(--danger)" }}>刪除</button>
+            <div className="grid grid-cols-2 gap-2 pl-8 sm:flex sm:pl-0">
+              <button
+                onClick={() => onEdit(node.id)}
+                className="text-xs px-2 py-1.5 rounded sm:py-1"
+                style={{ border: "1px solid var(--border)" }}
+              >
+                編輯
+              </button>
+              <button
+                onClick={() => onDelete(node.id)}
+                className="text-xs px-2 py-1.5 rounded sm:py-1"
+                style={{ border: "1px solid var(--border)", color: "var(--danger)" }}
+              >
+                刪除
+              </button>
+            </div>
           </div>
         </div>
         {!node.isCollapsed && node.children.map(c => <NodeRow key={c.id} node={c} level={level + 1} />)}
@@ -458,11 +481,11 @@ export default function LawTreeEditor({
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd}>
       <div className="space-y-3">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs leading-relaxed" style={{ color: "var(--text-muted)" }}>
             拖曳可整塊移動子樹，`Enter` 新增同級，`Tab` 降級。
           </p>
-          <div className="flex items-center gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
             <button
               onClick={() => void handleUndo()}
               disabled={undoStack.length === 0 || historyBusy}
@@ -482,7 +505,7 @@ export default function LawTreeEditor({
           </div>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
-        <aside className="lg:col-span-1 rounded-lg border p-2" style={{ borderColor: "var(--border)" }}>
+        <aside className="hidden lg:col-span-1 lg:block rounded-lg border p-2" style={{ borderColor: "var(--border)" }}>
           <p className="text-[11px] mb-2" style={{ color: "var(--text-muted)" }}>大綱導覽</p>
           <div className="space-y-1 max-h-[60vh] overflow-auto">
             {flat.map(a => (
@@ -504,7 +527,7 @@ export default function LawTreeEditor({
             ))}
           </div>
         </aside>
-        <section className="lg:col-span-3">
+        <section className="min-w-0 lg:col-span-3">
           {tree.map(n => <NodeRow key={n.id} node={n} level={0} />)}
         </section>
         </div>

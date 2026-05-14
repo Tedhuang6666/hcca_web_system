@@ -19,6 +19,7 @@ from api.models.survey import (
     SurveyStatus,
 )
 from api.schemas.survey import (
+    DISPLAY_QUESTION_TYPES,
     QuestionStats,
     SurveyCreate,
     SurveyQuestionCreate,
@@ -43,6 +44,23 @@ async def _survey_with_questions(session: AsyncSession, survey_id: uuid.UUID) ->
 async def get_survey(session: AsyncSession, survey_id: uuid.UUID) -> Survey | None:
     result = await session.execute(
         select(Survey).options(selectinload(Survey.questions)).where(Survey.id == survey_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def get_survey_by_identifier(session: AsyncSession, identifier: uuid.UUID | str) -> Survey | None:
+    if isinstance(identifier, uuid.UUID):
+        return await get_survey(session, identifier)
+    try:
+        return await get_survey(session, uuid.UUID(identifier))
+    except ValueError:
+        pass
+    result = await session.execute(
+        select(Survey)
+        .options(selectinload(Survey.questions))
+        .where(Survey.title == identifier)
+        .order_by((Survey.status == SurveyStatus.OPEN).desc(), Survey.updated_at.desc())
+        .limit(1)
     )
     return result.scalar_one_or_none()
 
@@ -101,8 +119,8 @@ async def update_survey(session: AsyncSession, survey: Survey, *, data: SurveyUp
 async def open_survey(session: AsyncSession, survey: Survey) -> Survey:
     if survey.status != SurveyStatus.DRAFT:
         raise ValueError("只有草稿可以開放填答")
-    if not survey.questions:
-        raise ValueError("問卷至少需要一個問題才能開放")
+    if not any(q.question_type not in DISPLAY_QUESTION_TYPES for q in survey.questions):
+        raise ValueError("問卷至少需要一個可填答題目才能開放")
     survey.status = SurveyStatus.OPEN
     await session.flush()
     return survey
@@ -136,7 +154,7 @@ async def add_question(
         survey_id=survey.id,
         question_text=data.question_text,
         question_type=data.question_type,
-        is_required=data.is_required,
+        is_required=False if data.question_type in DISPLAY_QUESTION_TYPES else data.is_required,
         options_json=json.dumps(data.options, ensure_ascii=False) if data.options else None,
         min_value=data.min_value,
         max_value=data.max_value,
@@ -234,6 +252,8 @@ async def submit_response(
     # 驗證必填欄位
     answered_ids = {a.question_id for a in data.answers}
     for q in questions.values():
+        if q.question_type in DISPLAY_QUESTION_TYPES:
+            continue
         if q.is_required and q.id not in answered_ids:
             raise ValueError(f"題目「{q.question_text[:30]}」為必填")
 
@@ -251,6 +271,8 @@ async def submit_response(
     for ans in data.answers:
         q = questions.get(ans.question_id)
         if q is None:
+            continue
+        if q.question_type in DISPLAY_QUESTION_TYPES:
             continue
         answer = SurveyAnswer(
             response_id=response.id,
@@ -290,6 +312,8 @@ async def get_survey_stats(session: AsyncSession, survey: Survey) -> SurveyStats
     # 各題統計
     question_stats: list[QuestionStats] = []
     for q in questions:
+        if q.question_type in DISPLAY_QUESTION_TYPES:
+            continue
         # 此題所有答案
         a_result = await session.execute(
             select(SurveyAnswer)
@@ -319,6 +343,8 @@ async def get_survey_stats(session: AsyncSession, survey: Survey) -> SurveyStats
                 elif a.answer_text:
                     counts[a.answer_text] = counts.get(a.answer_text, 0) + 1
             qs.option_counts = counts
+            qs.suggested_chart = "pie" if len(counts) <= 5 else "bar"
+            qs.available_charts = ["bar", "pie"]
 
         elif q.question_type == QuestionType.RATING:
             values = []
@@ -329,9 +355,22 @@ async def get_survey_stats(session: AsyncSession, survey: Survey) -> SurveyStats
                 except (ValueError, TypeError):
                     pass
             qs.average_rating = sum(values) / len(values) if values else None
+            qs.option_counts = {
+                str(n): sum(1 for value in values if int(value) == n)
+                for n in range(q.min_value or 1, (q.max_value or 5) + 1)
+            }
+            qs.suggested_chart = "bar"
+            qs.available_charts = ["bar", "pie"]
 
-        else:  # TEXT / TEXTAREA / DATE
+        elif q.question_type == QuestionType.DATE:
             qs.text_answers = [a.answer_text for a in answers if a.answer_text]
+            qs.suggested_chart = "list"
+            qs.available_charts = ["list"]
+
+        else:  # TEXT / TEXTAREA
+            qs.text_answers = [a.answer_text for a in answers if a.answer_text]
+            qs.suggested_chart = "list"
+            qs.available_charts = ["list"]
 
         question_stats.append(qs)
 

@@ -22,14 +22,22 @@ from api.core.config import settings
 
 async def seed(session: AsyncSession) -> None:
     from api.models.document import (
-        Document, DocumentCategory, DocumentClassification,
-        DocumentSerialTemplate, DocumentStatus, DocumentUrgency,
-        DocumentVisibility, YearMode,
+        Document,
+        DocumentCategory,
+        DocumentClassification,
+        DocumentSerialTemplate,
+        DocumentStatus,
+        DocumentUrgency,
+        DocumentVisibility,
+        YearMode,
     )
     from api.models.org import Org, Permission, Position, UserPosition
     from api.models.regulation import (
-        Regulation, RegulationArticle, RegulationCategory,
-        ArticleType, RegulationWorkflowStatus,
+        ArticleType,
+        Regulation,
+        RegulationArticle,
+        RegulationCategory,
+        RegulationWorkflowStatus,
     )
     from api.models.user import User
     from api.services.document import allocate_serial
@@ -152,8 +160,8 @@ async def seed(session: AsyncSession) -> None:
     # ── 6. 建立示範法規 ───────────────────────────────────────────────────────
     regs_data = [
         ("嶺東科技大學學生代表大會組織章程", RegulationCategory.CONSTITUTION, True),
-        ("嶺東科技大學學生代表大會議事規則", RegulationCategory.STUDENT_COUNCIL, True),
-        ("學生代表選舉辦法", RegulationCategory.ELECTION_ORDER, False),
+        ("嶺東科技大學學生代表大會議事規則", RegulationCategory.ORDINANCE, True),
+        ("學生代表選舉辦法", RegulationCategory.PROCEDURE, False),
     ]
     for title, category, is_published in regs_data:
         reg = Regulation(
@@ -197,7 +205,7 @@ async def seed(session: AsyncSession) -> None:
     await session.commit()
     print("✅ Demo data seed 完成！")
     print(f"   組織：{org.name}")
-    print(f"   使用者：議長/書記長/代表甲/代表乙（密碼：Demo@1234）")
+    print("   使用者：議長/書記長/代表甲/代表乙（密碼：Demo@1234）")
     print(f"   公文：{len(docs_data)} 筆，法規：{len(regs_data)} 筆")
 
 
