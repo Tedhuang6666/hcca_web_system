@@ -129,16 +129,13 @@ function computeNumbering(flat: FlatNode[]): Map<string, string> {
   const map = new Map<string, string>();
   for (const a of [...flat].sort((x, y) => x.sort_index - y.sort_index)) {
     const t = a.article_type;
-    if (a.legal_number && a.legal_number.includes("-")) {
-      map.set(a.id, `第 ${a.legal_number} 條`);
-      continue;
-    }
-    if (t === "chapter") { counters.chapter += 1; counters.section = 0; map.set(a.id, `第 ${counters.chapter} 章`); continue; }
-    if (t === "section") { counters.section += 1; map.set(a.id, `第 ${counters.section} 節`); continue; }
-    if (t === "article" || t === "clause") { counters.article += 1; counters.paragraph = counters.subparagraph = counters.item = 0; map.set(a.id, `第 ${counters.article} 條`); continue; }
-    if (t === "paragraph") { counters.paragraph += 1; counters.subparagraph = counters.item = 0; map.set(a.id, `第 ${counters.paragraph} 項`); continue; }
-    if (t === "subparagraph" || t === "subsection") { counters.subparagraph += 1; counters.item = 0; map.set(a.id, `第 ${counters.subparagraph} 款`); continue; }
-    if (t === "item") { counters.item += 1; map.set(a.id, `第 ${counters.item} 目`); continue; }
+    const legalNumber = a.legal_number?.trim();
+    if (t === "chapter") { counters.chapter += 1; counters.section = 0; map.set(a.id, `第 ${legalNumber || counters.chapter} 章`); continue; }
+    if (t === "section") { counters.section += 1; map.set(a.id, `第 ${legalNumber || counters.section} 節`); continue; }
+    if (t === "article" || t === "clause") { counters.article += 1; counters.paragraph = counters.subparagraph = counters.item = 0; map.set(a.id, `第 ${legalNumber || counters.article} 條`); continue; }
+    if (t === "paragraph") { counters.paragraph += 1; counters.subparagraph = counters.item = 0; map.set(a.id, `第 ${legalNumber || counters.paragraph} 項`); continue; }
+    if (t === "subparagraph" || t === "subsection") { counters.subparagraph += 1; counters.item = 0; map.set(a.id, `第 ${legalNumber || counters.subparagraph} 款`); continue; }
+    if (t === "item") { counters.item += 1; map.set(a.id, `第 ${legalNumber || counters.item} 目`); continue; }
     map.set(a.id, "附則");
   }
   return map;

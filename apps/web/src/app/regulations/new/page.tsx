@@ -44,11 +44,13 @@ function toArticle(id: string, type: ArticleType, parent_id: string | null, sort
 export default function NewRegulationPage() {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [orgs, setOrgs] = useState<OrgRead[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState("");
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<RegulationCategory>("executive_dept");
   const [preface, setPreface] = useState("");
+  const [importFile, setImportFile] = useState<File | null>(null);
   const [articles, setArticles] = useState<RegulationArticleOut[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [modal, setModal] = useState<DraftModal | null>(null);
@@ -107,6 +109,21 @@ export default function NewRegulationPage() {
       toast.error(e instanceof ApiError ? e.message : "建立失敗");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const importDocxDraft = async () => {
+    if (!selectedOrgId) return toast.error("請選擇所屬組織");
+    if (!importFile) return toast.error("請選擇 Word 法規文檔");
+    setImporting(true);
+    try {
+      const reg = await regulationsApi.importDocx(importFile, { org_id: selectedOrgId, category });
+      toast.success(`已匯入「${reg.title}」`);
+      router.push(`/regulations/${reg.id}/edit`);
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "匯入失敗");
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -232,6 +249,30 @@ export default function NewRegulationPage() {
         </section>
 
         <aside className="space-y-4">
+          <div className="card p-4 space-y-3">
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>Word 匯入</h3>
+              <p className="text-xs leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+                支援「第○章」「第○節」「第○條」格式，會自動建立結構化條文。
+              </p>
+            </div>
+            <input
+              type="file"
+              accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              onChange={e => setImportFile(e.target.files?.[0] ?? null)}
+              className="w-full text-xs"
+              style={{ color: "var(--text-secondary)" }}
+            />
+            <button
+              onClick={importDocxDraft}
+              disabled={importing || !selectedOrgId || !importFile}
+              className="w-full py-2.5 rounded-lg text-sm font-medium disabled:opacity-50"
+              style={{ background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }}
+            >
+              {importing ? "匯入中..." : "匯入 Word 草稿"}
+            </button>
+          </div>
+
           <div className="card p-4">
             <h3 className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>建立草稿</h3>
             <button onClick={saveDraft} disabled={saving} className="w-full py-2.5 rounded-lg text-sm font-medium disabled:opacity-50" style={{ background: "var(--primary)", color: "var(--primary-fg)" }}>

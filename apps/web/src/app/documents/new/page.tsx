@@ -1,9 +1,9 @@
 "use client";
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { documentsApi, serialTemplatesApi, orgsApi, usersApi, ApiError } from "@/lib/api";
+import { documentsApi, documentTemplatesApi, serialTemplatesApi, orgsApi, usersApi, ApiError } from "@/lib/api";
 import type {
   DocumentUrgency, DocumentClassification, DocumentCategory,
   DocumentVisibility, RecipientType, SerialTemplateOut,
@@ -147,6 +147,8 @@ const CATEGORY_OPTIONS: { value: DocumentCategory; label: string }[] = [
 
 export default function NewDocumentPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const templateId = searchParams.get("template_id");
   const [saving, setSaving] = useState(false);
   const [urgency, setUrgency] = useState<DocumentUrgency>("normal");
   const [classification, setClassification] = useState<DocumentClassification>("normal");
@@ -235,6 +237,36 @@ export default function NewDocumentPage() {
       })
       .catch(() => {});
   }, [selectedOrgId]);
+
+  useEffect(() => {
+    if (!templateId) return;
+    documentTemplatesApi
+      .get(templateId)
+      .then((template) => {
+        setSelectedOrgId(template.org_id);
+        setCategory(template.category);
+        setUrgency(template.urgency);
+        setClassification(template.classification);
+        setSubject(template.subject ?? "");
+        setDocDescription(template.doc_description ?? template.content ?? "");
+        setActionRequired(template.action_required ?? "");
+        setMeetingPurpose(template.meeting_purpose ?? "");
+        setMeetingLocation(template.meeting_location ?? "");
+        setMeetingChairperson(template.meeting_chairperson ?? "");
+        setHandlerUnit(template.handler_unit ?? "");
+        setVisibilityLevel(template.visibility_level);
+        setRecipients(
+          template.recipients.map((item) => ({
+            id: crypto.randomUUID(),
+            recipient_type: item.recipient_type,
+            name: item.name,
+            email: item.email ?? "",
+          })),
+        );
+        toast.success(`已套用公文範本「${template.name}」`);
+      })
+      .catch((e) => toast.error(e instanceof ApiError ? e.message : "套用公文範本失敗"));
+  }, [templateId]);
 
 
   const save = async () => {

@@ -1,13 +1,39 @@
 from __future__ import annotations
 
 import uuid
+from io import BytesIO
+from zipfile import ZipFile
 
 import pytest
 
-from api.models.regulation import RegulationWorkflowStatus
-from api.services.regulation_consistency import audit_regulation_document_consistency
+from api.models.regulation import ArticleType, RegulationWorkflowStatus
 from api.schemas.regulation import RegulationArticleCreate, RegulationPublishRequest
 from api.services import regulation as reg_svc
+from api.services.regulation_consistency import audit_regulation_document_consistency
+from api.services.regulation_import import parse_regulation_docx
+
+
+def _build_docx(lines: list[str]) -> bytes:
+    body = "".join(f"<w:p><w:r><w:t>{line}</w:t></w:r></w:p>" for line in lines)
+    document_xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        f"<w:body>{body}</w:body>"
+        "</w:document>"
+    )
+    content_types = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        '<Default Extension="xml" ContentType="application/xml"/>'
+        '<Override PartName="/word/document.xml" '
+        'ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+        "</Types>"
+    )
+    buf = BytesIO()
+    with ZipFile(buf, "w") as docx:
+        docx.writestr("[Content_Types].xml", content_types)
+        docx.writestr("word/document.xml", document_xml)
+    return buf.getvalue()
 
 
 def test_create_article_with_legacy_type_rejected() -> None:
@@ -18,6 +44,41 @@ def test_create_article_with_legacy_type_rejected() -> None:
             title="第一條",
             content="測試",
         )
+
+
+def test_parse_regulation_docx_maps_legal_document_to_articles() -> None:
+    raw = _build_docx(
+        [
+            "國立新竹高級中學學生代表法",
+            "114 年 12 月 15 日學生議會制訂通過",
+            "第一章總則",
+            "第一條本法依《高級中等教育法》制定之。",
+            "第二條學生代表之職權如下：一、出席會議。二、提出建議。",
+            "第二章選舉罷免與離職",
+            "第一節選舉",
+            "第三條學生代表應具會員身分。",
+        ]
+    )
+
+    draft = parse_regulation_docx(raw, "學生代表法.docx")
+
+    assert draft.title == "國立新竹高級中學學生代表法"
+    assert draft.legislative_history == "114 年 12 月 15 日學生議會制訂通過"
+    assert [row.article_type for row in draft.articles] == [
+        ArticleType.CHAPTER,
+        ArticleType.ARTICLE,
+        ArticleType.ARTICLE,
+        ArticleType.SUBPARAGRAPH,
+        ArticleType.SUBPARAGRAPH,
+        ArticleType.CHAPTER,
+        ArticleType.SECTION,
+        ArticleType.ARTICLE,
+    ]
+    assert draft.articles[1].legal_number == "1"
+    assert draft.articles[2].content == "學生代表之職權如下："
+    assert draft.articles[3].parent_key == draft.articles[2].key
+    assert draft.articles[3].legal_number == "1"
+    assert draft.articles[4].content == "提出建議。"
 
 
 @pytest.mark.asyncio

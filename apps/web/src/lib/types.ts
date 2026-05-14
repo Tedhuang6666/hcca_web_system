@@ -168,6 +168,59 @@ export interface DocumentCreate {
   recipients?: { recipient_type: RecipientType; name: string; email?: string }[];
 }
 
+export interface BatchDocumentResult {
+  document_id: string;
+  serial_number: string | null;
+  title: string | null;
+  ok: boolean;
+  status: DocumentStatus | null;
+  detail: string | null;
+}
+
+export interface BatchDocumentOperationOut {
+  total: number;
+  succeeded: number;
+  failed: number;
+  results: BatchDocumentResult[];
+}
+
+export interface DocumentTemplateOut {
+  id: string;
+  org_id: string;
+  name: string;
+  description: string | null;
+  version: number;
+  is_active: boolean;
+  issuer_full_name: string | null;
+  urgency: DocumentUrgency;
+  classification: DocumentClassification;
+  declassification_condition: DeclassificationCondition;
+  category: DocumentCategory;
+  subject: string | null;
+  doc_description: string | null;
+  action_required: string | null;
+  content: string;
+  meeting_purpose: string | null;
+  meeting_location: string | null;
+  meeting_chairperson: string | null;
+  handler_unit: string | null;
+  file_number: string | null;
+  retention_period: string | null;
+  visibility_level: DocumentVisibility;
+  recipients: { recipient_type: RecipientType; name: string; email?: string | null }[];
+  created_by: string;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type DocumentTemplateCreate = Omit<
+  DocumentTemplateOut,
+  "id" | "version" | "is_active" | "created_by" | "updated_by" | "created_at" | "updated_at"
+>;
+
+export type DocumentTemplateUpdate = Partial<DocumentTemplateCreate> & { is_active?: boolean };
+
 // ── 商店系統型別 ──────────────────────────────────────────────────────────────
 
 export type ProductStatus = "draft" | "active" | "sold_out" | "archived";

@@ -30,7 +30,7 @@ from fastapi import (
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
-from sqlalchemy import and_, extract, func, or_, select
+from sqlalchemy import and_, extract, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
@@ -57,12 +57,22 @@ from api.schemas.document import (
     ApproveRequest,
     AttachmentLinkCreate,
     AttachmentOut,
+    BatchApproveRequest,
+    BatchArchiveRequest,
+    BatchDelegateRequest,
+    BatchDocumentOperationOut,
+    BatchDocumentResult,
+    BatchRejectRequest,
     DocumentApprovalDelegationCreate,
     DocumentApprovalDelegationOut,
     DocumentApprovalDelegationUpdate,
     DocumentCreate,
     DocumentListItem,
     DocumentOut,
+    DocumentTemplateCreate,
+    DocumentTemplateDraftCreate,
+    DocumentTemplateOut,
+    DocumentTemplateUpdate,
     DocumentUpdate,
     RecallRequest,
     RecipientCreate,
@@ -81,6 +91,7 @@ from api.services.storage import get_storage
 
 router = APIRouter(prefix="/documents", tags=["公文系統"])
 serial_router = APIRouter(prefix="/document-serial-templates", tags=["字號模板（doc.issue）"])
+template_router = APIRouter(prefix="/document-templates", tags=["公文範本庫"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
@@ -183,6 +194,58 @@ async def _can_manage_delegation_for_org(
     return "document:admin" in codes or "admin:all" in codes
 
 
+async def _org_ids_with_document_permissions(session: AsyncSession, user: User) -> list[uuid.UUID]:
+    if user.is_superuser:
+        return []
+    today = date.today()
+    result = await session.execute(
+        select(Position.org_id)
+        .join(UserPosition, UserPosition.position_id == Position.id)
+        .where(
+            UserPosition.user_id == user.id,
+            UserPosition.start_date <= today,
+            or_(UserPosition.end_date.is_(None), UserPosition.end_date >= today),
+        )
+        .distinct()
+    )
+    org_ids: list[uuid.UUID] = []
+    for org_id in result.scalars().all():
+        codes = await get_user_permission_codes_for_org(session, user.id, org_id)
+        if {"document:create", "document:admin", "admin:all"} & set(codes):
+            org_ids.append(org_id)
+    return org_ids
+
+
+async def _require_document_template_manage(
+    session: AsyncSession,
+    user: User,
+    org_id: uuid.UUID,
+) -> None:
+    if user.is_superuser:
+        return
+    codes = await get_user_permission_codes_for_org(session, user.id, org_id)
+    if not ({"document:admin", "admin:all"} & set(codes)):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="您在此組織下無管理公文範本的權限（需 document:admin）",
+        )
+
+
+async def _require_document_template_use(
+    session: AsyncSession,
+    user: User,
+    org_id: uuid.UUID,
+) -> None:
+    if user.is_superuser:
+        return
+    codes = await get_user_permission_codes_for_org(session, user.id, org_id)
+    if not ({"document:create", "document:admin", "admin:all"} & set(codes)):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="您在此組織下無使用公文範本起稿的權限（需 document:create）",
+        )
+
+
 # ── 背景通知輔助 ──────────────────────────────────────────────────────────────
 
 
@@ -233,6 +296,44 @@ def _ws_broadcast_bg(doc: Document) -> None:
             loop.create_task(ws_manager.broadcast_to_room(f"org:{doc.org_id}", msg))
     except RuntimeError:
         pass  # 無事件迴圈時靜默略過（背景執行緒環境）
+
+
+def _unique_doc_ids(document_ids: list[uuid.UUID]) -> list[uuid.UUID]:
+    seen: set[uuid.UUID] = set()
+    unique: list[uuid.UUID] = []
+    for doc_id in document_ids:
+        if doc_id in seen:
+            continue
+        seen.add(doc_id)
+        unique.append(doc_id)
+    return unique
+
+
+def _batch_result(
+    doc_id: uuid.UUID,
+    *,
+    ok: bool,
+    doc: Document | None = None,
+    detail: str | None = None,
+) -> BatchDocumentResult:
+    return BatchDocumentResult(
+        document_id=doc_id,
+        serial_number=doc.serial_number if doc else None,
+        title=doc.title if doc else None,
+        ok=ok,
+        status=doc.status if doc else None,
+        detail=detail,
+    )
+
+
+def _batch_out(results: list[BatchDocumentResult]) -> BatchDocumentOperationOut:
+    succeeded = sum(1 for item in results if item.ok)
+    return BatchDocumentOperationOut(
+        total=len(results),
+        succeeded=succeeded,
+        failed=len(results) - succeeded,
+        results=results,
+    )
 
 
 # ── 統計 ──────────────────────────────────────────────────────────────────────
@@ -476,6 +577,180 @@ async def delete_document(
         await doc_svc.delete_document(session, doc)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+
+
+# ── 批量操作端點 ──────────────────────────────────────────────────────────────
+
+
+@router.post(
+    "/batch/approve",
+    response_model=BatchDocumentOperationOut,
+    summary="批量核准目前待審公文",
+)
+async def batch_approve_documents(
+    payload: BatchApproveRequest,
+    session: DbDep,
+    current_user: Annotated[User, Depends(require_permission(PermissionCode.DOCUMENT_APPROVE))],
+    bg: BackgroundTasks,
+) -> BatchDocumentOperationOut:
+    results: list[BatchDocumentResult] = []
+    for doc_id in _unique_doc_ids(payload.document_ids):
+        doc = await doc_svc.get_document(session, doc_id)
+        if doc is None:
+            results.append(_batch_result(doc_id, ok=False, detail="找不到此公文"))
+            continue
+        try:
+            updated = await doc_svc.approve_step(
+                session,
+                doc,
+                approver_id=current_user.id,
+                comment=payload.comment,
+            )
+            await audit_svc.record(
+                session,
+                entity_type="document",
+                entity_id=str(updated.id),
+                action="batch.approve",
+                actor_id=str(current_user.id),
+                actor_email=current_user.email,
+                meta={"step": updated.current_step, "final": updated.status == DocumentStatus.APPROVED},
+                summary=f"批量核准公文「{updated.title}」",
+            )
+            bg.add_task(_ws_broadcast_bg, updated)
+            results.append(_batch_result(doc_id, ok=True, doc=updated))
+        except (PermissionError, ValueError) as exc:
+            results.append(_batch_result(doc_id, ok=False, doc=doc, detail=str(exc)))
+    return _batch_out(results)
+
+
+@router.post(
+    "/batch/reject",
+    response_model=BatchDocumentOperationOut,
+    summary="批量退件目前待審公文",
+)
+async def batch_reject_documents(
+    payload: BatchRejectRequest,
+    session: DbDep,
+    current_user: Annotated[User, Depends(require_permission(PermissionCode.DOCUMENT_REJECT))],
+    bg: BackgroundTasks,
+) -> BatchDocumentOperationOut:
+    results: list[BatchDocumentResult] = []
+    for doc_id in _unique_doc_ids(payload.document_ids):
+        doc = await doc_svc.get_document(session, doc_id)
+        if doc is None:
+            results.append(_batch_result(doc_id, ok=False, detail="找不到此公文"))
+            continue
+        try:
+            if payload.mode == RejectMode.TO_PREVIOUS:
+                updated = await doc_svc.reject_to_previous_step(
+                    session,
+                    doc,
+                    approver_id=current_user.id,
+                    comment=payload.comment,
+                )
+            else:
+                updated = await doc_svc.reject_step(
+                    session,
+                    doc,
+                    approver_id=current_user.id,
+                    comment=payload.comment,
+                )
+            await audit_svc.record(
+                session,
+                entity_type="document",
+                entity_id=str(updated.id),
+                action="batch.reject",
+                actor_id=str(current_user.id),
+                actor_email=current_user.email,
+                meta={"mode": payload.mode, "comment": payload.comment},
+                summary=f"批量退件公文「{updated.title}」",
+            )
+            bg.add_task(_ws_broadcast_bg, updated)
+            results.append(_batch_result(doc_id, ok=True, doc=updated))
+        except (PermissionError, ValueError) as exc:
+            results.append(_batch_result(doc_id, ok=False, doc=doc, detail=str(exc)))
+    return _batch_out(results)
+
+
+@router.post(
+    "/batch/archive",
+    response_model=BatchDocumentOperationOut,
+    summary="批量封存已核准公文",
+)
+async def batch_archive_documents(
+    payload: BatchArchiveRequest,
+    session: DbDep,
+    current_user: Annotated[User, Depends(require_permission(PermissionCode.DOCUMENT_ARCHIVE))],
+    bg: BackgroundTasks,
+) -> BatchDocumentOperationOut:
+    results: list[BatchDocumentResult] = []
+    for doc_id in _unique_doc_ids(payload.document_ids):
+        doc = await doc_svc.get_document(session, doc_id)
+        if doc is None:
+            results.append(_batch_result(doc_id, ok=False, detail="找不到此公文"))
+            continue
+        if doc.created_by != current_user.id and not current_user.is_superuser:
+            results.append(_batch_result(doc_id, ok=False, doc=doc, detail="只有建立者可以封存公文"))
+            continue
+        try:
+            updated = await doc_svc.archive_document(session, doc, requested_by=current_user.id)
+            await audit_svc.record(
+                session,
+                entity_type="document",
+                entity_id=str(updated.id),
+                action="batch.archive",
+                actor_id=str(current_user.id),
+                actor_email=current_user.email,
+                summary=f"批量封存公文「{updated.title}」",
+            )
+            bg.add_task(_ws_broadcast_bg, updated)
+            results.append(_batch_result(doc_id, ok=True, doc=updated))
+        except ValueError as exc:
+            results.append(_batch_result(doc_id, ok=False, doc=doc, detail=str(exc)))
+    return _batch_out(results)
+
+
+@router.post(
+    "/batch/delegate",
+    response_model=BatchDocumentOperationOut,
+    summary="批量設定目前審核步驟代理人",
+)
+async def batch_delegate_documents(
+    payload: BatchDelegateRequest,
+    session: DbDep,
+    current_user: Annotated[User, Depends(require_permission(PermissionCode.DOCUMENT_FORWARD))],
+) -> BatchDocumentOperationOut:
+    results: list[BatchDocumentResult] = []
+    for doc_id in _unique_doc_ids(payload.document_ids):
+        doc = await doc_svc.get_document(session, doc_id)
+        if doc is None:
+            results.append(_batch_result(doc_id, ok=False, detail="找不到此公文"))
+            continue
+        try:
+            await doc_svc.set_delegate(
+                session,
+                doc,
+                step_order=payload.step_order or doc.current_step,
+                requesting_user_id=current_user.id,
+                delegate_id=payload.delegate_id,
+            )
+            await audit_svc.record(
+                session,
+                entity_type="document",
+                entity_id=str(doc.id),
+                action="batch.delegate",
+                actor_id=str(current_user.id),
+                actor_email=current_user.email,
+                meta={
+                    "step_order": payload.step_order or doc.current_step,
+                    "delegate_id": str(payload.delegate_id) if payload.delegate_id else None,
+                },
+                summary=f"批量設定公文代理「{doc.title}」",
+            )
+            results.append(_batch_result(doc_id, ok=True, doc=doc))
+        except (PermissionError, ValueError) as exc:
+            results.append(_batch_result(doc_id, ok=False, doc=doc, detail=str(exc)))
+    return _batch_out(results)
 
 
 # ── 狀態機端點 ────────────────────────────────────────────────────────────────
@@ -1273,6 +1548,204 @@ async def print_document(doc_id: str, session: DbDep, current_user: CurrentUser)
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
     )
+
+
+# ── 公文範本庫 ────────────────────────────────────────────────────────────────
+
+
+@template_router.get("", response_model=list[DocumentTemplateOut], summary="列出公文內容範本")
+async def list_document_templates(
+    session: DbDep,
+    current_user: CurrentUser,
+    org_id: uuid.UUID | None = Query(None, description="過濾組織"),
+    category: DocumentCategory | None = Query(None, description="過濾公文類別"),
+    active_only: bool = Query(True, description="僅顯示有效範本"),
+    keyword: str | None = Query(None, max_length=100, description="搜尋名稱、說明、主旨"),
+    limit: int = Query(100, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> list[object]:
+    if org_id is not None:
+        await _require_document_template_use(session, current_user, org_id)
+        org_ids = None
+    elif current_user.is_superuser:
+        org_ids = None
+    else:
+        org_ids = await _org_ids_with_document_permissions(session, current_user)
+    return await doc_svc.list_document_templates(
+        session,
+        org_id=org_id,
+        org_ids=org_ids,
+        category=category,
+        active_only=active_only,
+        keyword=keyword,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@template_router.post(
+    "",
+    response_model=DocumentTemplateOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="建立公文內容範本",
+)
+async def create_document_template(
+    payload: DocumentTemplateCreate,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> object:
+    await _require_document_template_manage(session, current_user, payload.org_id)
+    from sqlalchemy.exc import IntegrityError
+
+    try:
+        template = await doc_svc.create_document_template(
+            session,
+            data=payload,
+            created_by=current_user.id,
+        )
+    except IntegrityError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="同組織內已有同名同版本公文範本",
+        ) from exc
+    await audit_svc.record(
+        session,
+        entity_type="document_template",
+        entity_id=str(template.id),
+        action="document_template.create",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={"org_id": str(template.org_id), "category": template.category.value},
+        summary=f"建立公文範本「{template.name}」",
+    )
+    return template
+
+
+@template_router.get("/{template_id}", response_model=DocumentTemplateOut, summary="取得公文內容範本")
+async def get_document_template(
+    template_id: uuid.UUID,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> object:
+    template = await doc_svc.get_document_template(session, template_id)
+    if template is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此公文範本")
+    await _require_document_template_use(session, current_user, template.org_id)
+    return template
+
+
+@template_router.patch(
+    "/{template_id}",
+    response_model=DocumentTemplateOut,
+    summary="更新公文內容範本",
+)
+async def update_document_template(
+    template_id: uuid.UUID,
+    payload: DocumentTemplateUpdate,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> object:
+    template = await doc_svc.get_document_template(session, template_id)
+    if template is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此公文範本")
+    await _require_document_template_manage(session, current_user, template.org_id)
+    before = {
+        "name": template.name,
+        "version": template.version,
+        "is_active": template.is_active,
+        "category": template.category.value,
+    }
+    template = await doc_svc.update_document_template(
+        session,
+        template,
+        data=payload,
+        updated_by=current_user.id,
+    )
+    await audit_svc.record(
+        session,
+        entity_type="document_template",
+        entity_id=str(template.id),
+        action="document_template.update",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={
+            "before": before,
+            "after": {
+                "name": template.name,
+                "version": template.version,
+                "is_active": template.is_active,
+                "category": template.category.value,
+            },
+        },
+        summary=f"更新公文範本「{template.name}」",
+    )
+    return template
+
+
+@template_router.delete(
+    "/{template_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="停用公文內容範本",
+)
+async def deactivate_document_template(
+    template_id: uuid.UUID,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> None:
+    template = await doc_svc.get_document_template(session, template_id)
+    if template is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此公文範本")
+    await _require_document_template_manage(session, current_user, template.org_id)
+    await doc_svc.deactivate_document_template(session, template, updated_by=current_user.id)
+    await audit_svc.record(
+        session,
+        entity_type="document_template",
+        entity_id=str(template.id),
+        action="document_template.deactivate",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={"org_id": str(template.org_id), "version": template.version},
+        summary=f"停用公文範本「{template.name}」",
+    )
+
+
+@template_router.post(
+    "/{template_id}/draft",
+    response_model=DocumentOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="從公文範本建立草稿",
+)
+async def create_document_from_template(
+    template_id: uuid.UUID,
+    payload: DocumentTemplateDraftCreate,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> Document:
+    template = await doc_svc.get_document_template(session, template_id)
+    if template is None or not template.is_active:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此可用公文範本")
+    await _require_document_template_use(session, current_user, template.org_id)
+    try:
+        doc = await doc_svc.create_document_from_template(
+            session,
+            template=template,
+            data=payload,
+            created_by=current_user.id,
+        )
+    except (PermissionError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    await audit_svc.record(
+        session,
+        entity_type="document",
+        entity_id=str(doc.id),
+        action="document.create_from_template",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={"template_id": str(template.id), "template_name": template.name},
+        summary=f"由範本「{template.name}」建立公文「{doc.title}」",
+    )
+    return doc
 
 
 @serial_router.post(

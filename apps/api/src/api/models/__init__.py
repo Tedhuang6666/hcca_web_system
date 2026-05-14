@@ -20,6 +20,7 @@ from api.models.document import (  # noqa: F401
     DocumentRevision,
     DocumentSerialTemplate,
     DocumentStatus,
+    DocumentTemplate,
     DocumentUrgency,
     DocumentVisibility,
     RecipientType,

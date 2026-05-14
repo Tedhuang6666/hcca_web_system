@@ -138,6 +138,108 @@ class RecipientCreate(BaseModel):
     email: EmailStr | None = Field(None, description="聯絡信箱（發文後自動寄送）")
 
 
+# ── 公文內容範本 ───────────────────────────────────────────────────────────────
+
+
+class DocumentTemplateBase(BaseModel):
+    """公文內容範本共用欄位。"""
+
+    name: str = Field(..., min_length=1, max_length=120)
+    description: str | None = Field(None, max_length=500)
+    issuer_full_name: str | None = Field(None, max_length=200)
+    urgency: DocumentUrgency = DocumentUrgency.NORMAL
+    classification: DocumentClassification = DocumentClassification.NORMAL
+    declassification_condition: DeclassificationCondition = DeclassificationCondition.NONE
+    category: DocumentCategory = DocumentCategory.LETTER
+    subject: str | None = Field(None, max_length=500)
+    doc_description: str | None = None
+    action_required: str | None = None
+    content: str = ""
+    meeting_purpose: str | None = Field(None, max_length=500)
+    meeting_location: str | None = Field(None, max_length=200)
+    meeting_chairperson: str | None = Field(None, max_length=100)
+    handler_unit: str | None = Field(None, max_length=100)
+    file_number: str | None = Field(None, max_length=100)
+    retention_period: str | None = Field(None, max_length=100)
+    visibility_level: DocumentVisibility = DocumentVisibility.ORG_ONLY
+    recipients: list[RecipientCreate] = Field(default_factory=list)
+
+    @field_validator("name", "subject", "doc_description", "action_required", "content", mode="before")
+    @classmethod
+    def prevent_template_xss(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        v_lower = v.lower()
+        dangerous_patterns = ["<script", "javascript:", "onerror=", "onload=", "<iframe"]
+        for pattern in dangerous_patterns:
+            if pattern in v_lower:
+                raise ValueError(f"內容包含不允許的標籤或屬性：{pattern}")
+        return v
+
+    @model_validator(mode="after")
+    def validate_template_body(self) -> DocumentTemplateBase:
+        if self.category != DocumentCategory.MEETING_NOTICE:
+            if not self.subject or not self.subject.strip():
+                raise ValueError("非開會通知單範本需填寫主旨")
+            if len(self.subject.strip()) < 8:
+                raise ValueError("主旨長度過短，請使用正式句式")
+        elif not self.meeting_purpose or not self.meeting_location:
+            raise ValueError("開會通知單範本需填寫開會事由與地點")
+        return self
+
+
+class DocumentTemplateCreate(DocumentTemplateBase):
+    org_id: uuid.UUID
+
+
+class DocumentTemplateUpdate(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=120)
+    description: str | None = Field(None, max_length=500)
+    issuer_full_name: str | None = Field(None, max_length=200)
+    urgency: DocumentUrgency | None = None
+    classification: DocumentClassification | None = None
+    declassification_condition: DeclassificationCondition | None = None
+    category: DocumentCategory | None = None
+    subject: str | None = Field(None, max_length=500)
+    doc_description: str | None = None
+    action_required: str | None = None
+    content: str | None = None
+    meeting_purpose: str | None = Field(None, max_length=500)
+    meeting_location: str | None = Field(None, max_length=200)
+    meeting_chairperson: str | None = Field(None, max_length=100)
+    handler_unit: str | None = Field(None, max_length=100)
+    file_number: str | None = Field(None, max_length=100)
+    retention_period: str | None = Field(None, max_length=100)
+    visibility_level: DocumentVisibility | None = None
+    recipients: list[RecipientCreate] | None = None
+    is_active: bool | None = None
+
+
+class DocumentTemplateOut(DocumentTemplateBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    org_id: uuid.UUID
+    version: int
+    is_active: bool
+    created_by: uuid.UUID
+    updated_by: uuid.UUID | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class DocumentTemplateDraftCreate(BaseModel):
+    """從範本建立草稿時可覆寫的動態欄位。"""
+
+    title: str | None = Field(None, min_length=1, max_length=200)
+    serial_template_id: uuid.UUID | None = None
+    handler_name: str | None = Field(None, max_length=50)
+    handler_email: EmailStr | None = None
+    due_date: datetime | None = None
+    meeting_time: datetime | None = None
+    recipients: list[RecipientCreate] | None = None
+
+
 # ── 附件 ───────────────────────────────────────────────────────────────────────
 
 
@@ -500,6 +602,44 @@ class RejectRequest(BaseModel):
             "example": {"comment": "說明部分需補充法律依據，請修正後重送", "mode": "to_creator"}
         }
     )
+
+
+class BatchDocumentIds(BaseModel):
+    document_ids: list[uuid.UUID] = Field(..., min_length=1, max_length=100)
+
+
+class BatchApproveRequest(BatchDocumentIds):
+    comment: str | None = Field(None, max_length=1000)
+
+
+class BatchRejectRequest(BatchDocumentIds):
+    comment: str = Field(..., min_length=1, max_length=1000)
+    mode: RejectMode = RejectMode.TO_CREATOR
+
+
+class BatchArchiveRequest(BatchDocumentIds):
+    pass
+
+
+class BatchDelegateRequest(BatchDocumentIds):
+    delegate_id: uuid.UUID | None = Field(None, description="代理人 ID；null 表示清除代理")
+    step_order: int | None = Field(None, ge=1, description="不填時使用公文目前步驟")
+
+
+class BatchDocumentResult(BaseModel):
+    document_id: uuid.UUID
+    serial_number: str | None = None
+    title: str | None = None
+    ok: bool
+    status: DocumentStatus | None = None
+    detail: str | None = None
+
+
+class BatchDocumentOperationOut(BaseModel):
+    total: int
+    succeeded: int
+    failed: int
+    results: list[BatchDocumentResult]
 
 
 class RecallRequest(BaseModel):

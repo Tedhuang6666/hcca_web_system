@@ -1,5 +1,7 @@
 import type {
   DocumentOut, DocumentListItem, DocumentCreate,
+  DocumentTemplateCreate, DocumentTemplateOut, DocumentTemplateUpdate,
+  BatchDocumentOperationOut,
   DocumentApprovalDelegationOut,
   ProductOut, OrderOut, OrderListItem, OrderCreate,
   RegulationOut, RegulationListItem,
@@ -161,6 +163,21 @@ export const documentsApi = {
     post<DocumentOut>(`/documents/${id}/reject`, { comment, mode }),
   recall: (id: string) => post<DocumentOut>(`/documents/${id}/recall`),
   archive: (id: string) => post<DocumentOut>(`/documents/${id}/archive`),
+  batchApprove: (document_ids: string[], comment?: string) =>
+    post<BatchDocumentOperationOut>("/documents/batch/approve", { document_ids, comment }),
+  batchReject: (
+    document_ids: string[],
+    comment: string,
+    mode: "to_creator" | "to_previous" = "to_creator",
+  ) => post<BatchDocumentOperationOut>("/documents/batch/reject", { document_ids, comment, mode }),
+  batchArchive: (document_ids: string[]) =>
+    post<BatchDocumentOperationOut>("/documents/batch/archive", { document_ids }),
+  batchDelegate: (document_ids: string[], delegate_id: string | null, step_order?: number) =>
+    post<BatchDocumentOperationOut>("/documents/batch/delegate", {
+      document_ids,
+      delegate_id,
+      step_order,
+    }),
   issueDirect: (id: string, comment?: string) =>
     post<DocumentOut>(`/documents/${id}/issue-direct`, { comment }),
   suggestApprovers: (id: string) =>
@@ -294,6 +311,39 @@ export const regulationsApi = {
     proposal_metadata?: string | null;
   }) =>
     post<RegulationOut>("/regulations", body),
+  importDocx: async (file: File, body: { org_id: string; category: string }) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("org_id", body.org_id);
+    fd.append("category", body.category);
+
+    const doFetch = () =>
+      fetch(`${BASE}/regulations/import-docx`, {
+        method: "POST",
+        credentials: "include",
+        headers: csrfHeaders("POST"),
+        body: fd,
+      });
+
+    let res = await doFetch();
+    if (res.status === 401) {
+      const ok = await silentRefresh();
+      if (ok) res = await doFetch();
+      else {
+        if (typeof window !== "undefined" && localStorage.getItem("user_id")) {
+          window.location.replace("/login");
+        }
+        throw new ApiError(401, "登入已過期，請重新登入");
+      }
+    }
+
+    if (!res.ok) {
+      let detail = res.statusText;
+      try { detail = (await res.json()).detail ?? detail; } catch { /* ignore */ }
+      throw new ApiError(res.status, detail);
+    }
+    return res.json() as Promise<RegulationOut>;
+  },
   update: (id: string, body: Partial<{
     title: string; category: string; content: string; preface: string; change_brief: string;
     amendment_type: "enact" | "amend" | "abolish";
@@ -353,6 +403,46 @@ export const regulationsApi = {
     get<{ as_of: string; version: number; amended_at: string; content_snapshot: string; tree: RegulationTreeNodeOut[] }>(
       `/regulations/${id}/time-machine?${new URLSearchParams({ as_of: asOfIso }).toString()}`
     ),
+};
+
+// ── 公文範本庫 ────────────────────────────────────────────────────────────────
+
+export const documentTemplatesApi = {
+  list: (params?: {
+    org_id?: string;
+    category?: string;
+    active_only?: boolean;
+    keyword?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const p: Record<string, string> = {};
+    if (params?.org_id) p.org_id = params.org_id;
+    if (params?.category) p.category = params.category;
+    if (params?.active_only !== undefined) p.active_only = String(params.active_only);
+    if (params?.keyword) p.keyword = params.keyword;
+    if (params?.limit !== undefined) p.limit = String(params.limit);
+    if (params?.offset !== undefined) p.offset = String(params.offset);
+    const qs = Object.keys(p).length ? "?" + new URLSearchParams(p).toString() : "";
+    return get<DocumentTemplateOut[]>(`/document-templates${qs}`);
+  },
+  get: (id: string) => get<DocumentTemplateOut>(`/document-templates/${id}`),
+  create: (body: DocumentTemplateCreate) => post<DocumentTemplateOut>("/document-templates", body),
+  update: (id: string, body: DocumentTemplateUpdate) =>
+    patch<DocumentTemplateOut>(`/document-templates/${id}`, body),
+  deactivate: (id: string) => del<void>(`/document-templates/${id}`),
+  createDraft: (
+    id: string,
+    body: {
+      title?: string;
+      serial_template_id?: string | null;
+      handler_name?: string;
+      handler_email?: string;
+      due_date?: string;
+      meeting_time?: string;
+      recipients?: { recipient_type: string; name: string; email?: string | null }[];
+    } = {},
+  ) => post<DocumentOut>(`/document-templates/${id}/draft`, body),
 };
 
 // ── 字號模板 ──────────────────────────────────────────────────────────────────

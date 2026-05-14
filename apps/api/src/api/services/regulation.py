@@ -35,6 +35,7 @@ from api.schemas.regulation import (
     RegulationTreeNodeOut,
     RegulationUpdate,
 )
+from api.services.regulation_import import ImportedRegulationDraft
 
 logger = logging.getLogger(__name__)
 _PARENT_RULES: dict[ArticleType | None, set[ArticleType]] = {
@@ -255,6 +256,61 @@ async def create_regulation(
     await session.flush()
     logger.info("法規建立 id=%s title=%s", reg.id, reg.title)
     # 重新查詢以載入所有關聯（避免 async 環境下的 MissingGreenlet）
+    loaded = await get_regulation(session, reg.id)
+    return loaded or reg
+
+
+async def create_regulation_from_import(
+    session: AsyncSession,
+    *,
+    data: ImportedRegulationDraft,
+    category: RegulationCategory,
+    org_id: uuid.UUID,
+    created_by: uuid.UUID,
+) -> Regulation:
+    """由 DOCX 匯入結果建立法規草稿與結構化條文。"""
+    reg = Regulation(
+        title=data.title,
+        category=category,
+        content=data.content,
+        preface=data.preface,
+        legislative_history=data.legislative_history,
+        org_id=org_id,
+        created_by=created_by,
+        version=1,
+        is_active=True,
+        workflow_status=RegulationWorkflowStatus.DRAFT,
+    )
+    session.add(reg)
+    await session.flush()
+
+    id_map: dict[str, uuid.UUID] = {}
+    for row in data.articles:
+        article_id = uuid.uuid4()
+        id_map[row.key] = article_id
+        session.add(
+            RegulationArticle(
+                id=article_id,
+                regulation_id=reg.id,
+                sort_index=row.sort_index,
+                order_index=row.order_index,
+                parent_id=id_map.get(row.parent_key) if row.parent_key else None,
+                article_type=row.article_type,
+                title=row.title,
+                subtitle="",
+                legal_number=row.legal_number,
+                content=row.content,
+                is_deleted=False,
+            )
+        )
+
+    await session.flush()
+    logger.info(
+        "法規 DOCX 匯入建立 id=%s title=%s articles=%d",
+        reg.id,
+        reg.title,
+        len(data.articles),
+    )
     loaded = await get_regulation(session, reg.id)
     return loaded or reg
 

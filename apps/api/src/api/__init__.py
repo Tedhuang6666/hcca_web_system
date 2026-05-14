@@ -34,7 +34,7 @@ from api.routers import (
     users,
     ws,
 )
-from api.routers.documents import serial_router
+from api.routers.documents import serial_router, template_router
 
 
 @asynccontextmanager
@@ -92,6 +92,7 @@ def create_app() -> FastAPI:
     app.include_router(positions.router)
     app.include_router(user_positions.router)
     app.include_router(documents.router)
+    app.include_router(template_router)
     app.include_router(serial_router)
     app.include_router(regulations.router)
     app.include_router(saved_filters.router)

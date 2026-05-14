@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
@@ -67,6 +67,7 @@ from api.schemas.regulation import (
 from api.services import audit as audit_svc
 from api.services import document as doc_svc
 from api.services import regulation as reg_svc
+from api.services import regulation_import as reg_import_svc
 from api.services.permission import get_user_permission_codes, get_user_permission_codes_for_org
 
 router = APIRouter(prefix="/regulations", tags=["法規系統"])
@@ -211,6 +212,84 @@ async def create_regulation(
         actor_email=current_user.email,
         meta={"title": reg.title, "org_id": str(reg.org_id), "category": reg.category.value},
         summary=f"建立法規草稿「{reg.title}」",
+    )
+    return reg
+
+
+@router.post(
+    "/import-docx",
+    response_model=RegulationOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="從 Word 法規文檔匯入草稿（需 regulation:create 權限）",
+    responses={
+        201: {"description": "已從 DOCX 建立法規草稿與結構化條文"},
+        403: {"description": "需要 regulation:create 權限"},
+        422: {"description": "文件格式無法解析"},
+    },
+)
+async def import_regulation_docx(
+    session: DbDep,
+    current_user: CurrentUser,
+    org_id: Annotated[uuid.UUID, Form(description="所屬組織 ID")],
+    category: Annotated[
+        RegulationCategory,
+        Form(description="法規分類"),
+    ] = RegulationCategory.OTHER,
+    file: Annotated[UploadFile, File(description="Word .docx 法規文檔")] = ...,
+) -> Regulation:
+    """上傳 Word 法規文件，解析章節條文並直接建立草稿。"""
+    if not current_user.is_superuser:
+        codes = await get_user_permission_codes_for_org(session, current_user.id, org_id)
+        if "regulation:create" not in codes:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="您在此組織下無起草法規的權限（需 regulation:create）",
+            )
+
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="檔案為空")
+    if len(raw) > 10 * 1024 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="DOCX 檔案不可超過 10 MB",
+        )
+
+    try:
+        imported = await run_in_threadpool(
+            reg_import_svc.parse_regulation_docx,
+            raw,
+            file.filename,
+        )
+        reg = await reg_svc.create_regulation_from_import(
+            session,
+            data=imported,
+            category=category,
+            org_id=org_id,
+            created_by=current_user.id,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        ) from e
+
+    await audit_svc.record(
+        session,
+        entity_type="regulation",
+        entity_id=str(reg.id),
+        action="regulation.import_docx",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={
+            "title": reg.title,
+            "org_id": str(reg.org_id),
+            "category": reg.category.value,
+            "filename": file.filename,
+            "article_count": len(imported.articles),
+            "warnings": imported.warnings,
+        },
+        summary=f"由 Word 文件匯入法規草稿「{reg.title}」",
     )
     return reg
 
@@ -423,9 +502,7 @@ async def repeal_regulation(
     """廢止法規，並可選設定替代法規"""
     reg = await _get_reg_or_404(reg_id, session)
     try:
-        result = await reg_svc.repeal_regulation(
-            session, reg, body.reason, body.replacement_id
-        )
+        result = await reg_svc.repeal_regulation(session, reg, body.reason, body.replacement_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     await audit_svc.record(

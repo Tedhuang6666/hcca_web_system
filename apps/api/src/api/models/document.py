@@ -24,6 +24,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
 from api.models.base import TimestampMixin
+from api.models.types import JSONDict
 
 if TYPE_CHECKING:
     from api.models.org import Org
@@ -183,6 +184,110 @@ class DocumentSerialTemplate(Base, TimestampMixin):
 
     org: Mapped[Org] = relationship("Org")
     creator: Mapped[User] = relationship("User")
+
+
+# ── 公文內容範本 ───────────────────────────────────────────────────────────────
+
+
+class DocumentTemplate(Base, TimestampMixin):
+    """公文內容範本，供同組織成員快速起稿。"""
+
+    __tablename__ = "document_templates"
+    __table_args__ = (
+        UniqueConstraint("org_id", "name", "version", name="uq_document_template_version"),
+        Index("ix_document_templates_org_active", "org_id", "is_active"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("orgs.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+
+    issuer_full_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    urgency: Mapped[DocumentUrgency] = mapped_column(
+        Enum(
+            DocumentUrgency,
+            name="documenturgency",
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
+        nullable=False,
+        default=DocumentUrgency.NORMAL,
+    )
+    classification: Mapped[DocumentClassification] = mapped_column(
+        Enum(
+            DocumentClassification,
+            name="documentclassification",
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
+        nullable=False,
+        default=DocumentClassification.NORMAL,
+    )
+    declassification_condition: Mapped[DeclassificationCondition] = mapped_column(
+        Enum(
+            DeclassificationCondition,
+            name="declassificationcondition",
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
+        nullable=False,
+        default=DeclassificationCondition.NONE,
+    )
+    category: Mapped[DocumentCategory] = mapped_column(
+        Enum(
+            DocumentCategory,
+            name="documentcategory",
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
+        nullable=False,
+        default=DocumentCategory.LETTER,
+        index=True,
+    )
+    subject: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    doc_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    action_required: Mapped[str | None] = mapped_column(Text, nullable=True)
+    content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+    meeting_purpose: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    meeting_location: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    meeting_chairperson: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    handler_unit: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    file_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    retention_period: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    visibility_level: Mapped[DocumentVisibility] = mapped_column(
+        Enum(
+            DocumentVisibility,
+            name="documentvisibility",
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
+        nullable=False,
+        default=DocumentVisibility.ORG_ONLY,
+    )
+    recipients: Mapped[list[dict]] = mapped_column(
+        JSONDict, nullable=False, default=list, server_default="[]"
+    )
+
+    created_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    updated_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    org: Mapped[Org] = relationship("Org")
+    creator: Mapped[User] = relationship("User", foreign_keys=[created_by])
+    updater: Mapped[User | None] = relationship("User", foreign_keys=[updated_by])
 
 
 # ── 主表：公文 ────────────────────────────────────────────────────────────────

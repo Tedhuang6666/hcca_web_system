@@ -3,9 +3,9 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { documentsApi, orgsApi, savedFiltersApi, ApiError } from "@/lib/api";
-import type { OrgRead } from "@/lib/api";
-import type { DocumentListItem, DocumentStatus, SavedFilterOut } from "@/lib/types";
+import { documentsApi, orgsApi, savedFiltersApi, usersApi, ApiError } from "@/lib/api";
+import type { OrgRead, UserSummary } from "@/lib/api";
+import type { BatchDocumentOperationOut, DocumentListItem, DocumentStatus, SavedFilterOut } from "@/lib/types";
 import { DocumentStatusBadge, UrgencyBadge } from "@/components/ui/StatusBadge";
 import { usePermissions } from "@/hooks/usePermissions";
 
@@ -110,6 +110,11 @@ export default function DocumentListPage() {
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [batchBusy, setBatchBusy] = useState(false);
+  const [delegateQuery, setDelegateQuery] = useState("");
+  const [delegateId, setDelegateId] = useState<string | null>(null);
+  const [delegateSuggestions, setDelegateSuggestions] = useState<UserSummary[]>([]);
   const PAGE_SIZE = 20;
   const { can } = usePermissions();
 
@@ -190,7 +195,11 @@ export default function DocumentListPage() {
     setOffset(0);
     documentsApi
       .list(params)
-      .then(data => { setDocs(data); setHasMore(data.length === PAGE_SIZE); })
+      .then(data => {
+        setDocs(data);
+        setHasMore(data.length === PAGE_SIZE);
+        setSelectedIds(new Set());
+      })
       .catch((e) => toast.error(e instanceof ApiError ? e.message : "載入失敗"))
       .finally(() => setLoading(false));
   }, [
@@ -329,6 +338,116 @@ export default function DocumentListPage() {
     }
   });
 
+  const selectedList = sorted.filter((doc) => selectedIds.has(doc.id));
+  const selectedArray = selectedList.map((doc) => doc.id);
+  const allVisibleSelected = sorted.length > 0 && sorted.every((doc) => selectedIds.has(doc.id));
+
+  const summarizeBatch = (result: BatchDocumentOperationOut) => {
+    const failed = result.results.filter((item) => !item.ok);
+    if (result.succeeded > 0) {
+      toast.success(`完成 ${result.succeeded} 筆，失敗 ${result.failed} 筆`);
+    } else {
+      toast.error("批量操作未完成任何公文");
+    }
+    if (failed.length > 0) {
+      console.table(failed.map((item) => ({
+        serial: item.serial_number,
+        title: item.title,
+        reason: item.detail,
+      })));
+    }
+  };
+
+  const reloadCurrent = async () => {
+    const params: Record<string, string> = { limit: String(PAGE_SIZE), offset: "0" };
+    if (activeTab !== "all") params.status = activeTab;
+    if (search.trim()) params.keyword = search.trim();
+    if (filterCategory) params.category = filterCategory;
+    if (filterClassification) params.classification = filterClassification;
+    if (filterVisibility) params.visibility = filterVisibility;
+    if (filterDateFrom) params.date_from = filterDateFrom;
+    if (filterDateTo) params.date_to = filterDateTo;
+    if (filterIssuedFrom) params.issued_from = filterIssuedFrom;
+    if (filterIssuedTo) params.issued_to = filterIssuedTo;
+    if (filterRocYear) params.roc_year = filterRocYear;
+    if (filterSerialPrefix) params.serial_prefix = filterSerialPrefix;
+    if (filterHandlerKeyword) params.handler_keyword = filterHandlerKeyword;
+    if (filterRecipientKeyword) params.recipient_keyword = filterRecipientKeyword;
+    if (filterMyOnly) params.my_only = "true";
+    if (filterOrgId) params.org_id = filterOrgId;
+    const data = await documentsApi.list(params);
+    setDocs(data);
+    setOffset(0);
+    setHasMore(data.length === PAGE_SIZE);
+    setSelectedIds(new Set());
+  };
+
+  const runBatch = async (action: "approve" | "reject" | "archive" | "delegate") => {
+    if (selectedArray.length === 0) return;
+    setBatchBusy(true);
+    try {
+      let result: BatchDocumentOperationOut;
+      if (action === "approve") {
+        const comment = prompt("批量核准意見（可留空）：", "") ?? undefined;
+        result = await documentsApi.batchApprove(selectedArray, comment);
+      } else if (action === "reject") {
+        const comment = prompt("請輸入批量退件原因：", "");
+        if (!comment?.trim()) return;
+        result = await documentsApi.batchReject(selectedArray, comment.trim());
+      } else if (action === "archive") {
+        if (!confirm(`封存 ${selectedArray.length} 份已核准公文？`)) return;
+        result = await documentsApi.batchArchive(selectedArray);
+      } else {
+        if (!delegateId) {
+          toast.error("請先選擇代理人");
+          return;
+        }
+        result = await documentsApi.batchDelegate(selectedArray, delegateId);
+      }
+      summarizeBatch(result);
+      await reloadCurrent();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "批量操作失敗");
+    } finally {
+      setBatchBusy(false);
+    }
+  };
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAllVisible = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) {
+        sorted.forEach((doc) => next.delete(doc.id));
+      } else {
+        sorted.forEach((doc) => next.add(doc.id));
+      }
+      return next;
+    });
+  };
+
+  const searchDelegate = async (q: string) => {
+    setDelegateQuery(q);
+    setDelegateId(null);
+    if (!q.trim()) {
+      setDelegateSuggestions([]);
+      return;
+    }
+    try {
+      setDelegateSuggestions((await usersApi.listForSearch(q)).slice(0, 5));
+    } catch {
+      setDelegateSuggestions([]);
+    }
+  };
+
   return (
     <div className="space-y-5 max-w-6xl mx-auto">
 
@@ -346,6 +465,11 @@ export default function DocumentListPage() {
           {isLoggedIn && (
             <Link href="/documents/delegations" className="btn btn-ghost">
               簽核代理
+            </Link>
+          )}
+          {can("document:create") && (
+            <Link href="/document-templates" className="btn btn-ghost">
+              公文範本
             </Link>
           )}
           {can("document:create") && (
@@ -649,6 +773,87 @@ export default function DocumentListPage() {
         )}
       </div>
 
+      {selectedArray.length > 0 && (
+        <div className="card p-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+                已選取 {selectedArray.length} 筆
+              </span>
+              <button
+                className="btn btn-ghost text-xs"
+                onClick={() => setSelectedIds(new Set())}
+                disabled={batchBusy}>
+                清除選取
+              </button>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {can("document:approve") && (
+                <button
+                  className="btn btn-primary text-xs"
+                  disabled={batchBusy}
+                  onClick={() => runBatch("approve")}>
+                  批量核准
+                </button>
+              )}
+              {can("document:reject") && (
+                <button
+                  className="btn btn-danger text-xs"
+                  disabled={batchBusy}
+                  onClick={() => runBatch("reject")}>
+                  批量退件
+                </button>
+              )}
+              {can("document:archive") && (
+                <button
+                  className="btn btn-ghost text-xs"
+                  disabled={batchBusy}
+                  onClick={() => runBatch("archive")}>
+                  批量封存
+                </button>
+              )}
+              {can("document:forward") && (
+                <div className="relative flex flex-wrap items-center gap-2">
+                  <input
+                    value={delegateQuery}
+                    onChange={(e) => void searchDelegate(e.target.value)}
+                    placeholder="搜尋代理人"
+                    className="input h-9 w-40 text-xs"
+                    disabled={batchBusy}
+                  />
+                  <button
+                    className="btn btn-ghost text-xs"
+                    disabled={batchBusy || !delegateId}
+                    onClick={() => runBatch("delegate")}>
+                    批量轉代理
+                  </button>
+                  {delegateSuggestions.length > 0 && !delegateId && (
+                    <div className="absolute right-0 top-full z-30 mt-1 w-64 overflow-hidden rounded-lg shadow-lg"
+                      style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+                      {delegateSuggestions.map((user) => (
+                        <button
+                          key={user.id}
+                          className="block w-full px-3 py-2 text-left text-xs hover:opacity-80"
+                          onClick={() => {
+                            setDelegateId(user.id);
+                            setDelegateQuery(`${user.display_name} <${user.email}>`);
+                            setDelegateSuggestions([]);
+                          }}>
+                          <span className="block font-medium" style={{ color: "var(--text-primary)" }}>
+                            {user.display_name}
+                          </span>
+                          <span style={{ color: "var(--text-muted)" }}>{user.email}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 統計列 */}
       {!loading && (
         <div className="flex items-center gap-3">
@@ -688,6 +893,15 @@ export default function DocumentListPage() {
               <table className="w-full text-sm" role="table" aria-label="公文列表">
                 <thead>
                   <tr style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-hover)" }}>
+                    <th className="px-5 py-3.5 text-left" scope="col">
+                      <input
+                        type="checkbox"
+                        checked={allVisibleSelected}
+                        onChange={toggleAllVisible}
+                        aria-label="選取目前列表所有公文"
+                        className="accent-blue-600"
+                      />
+                    </th>
                     <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted)" }} scope="col">字號</th>
                     <SortTh label="標題" sk="title_asc" sortKey={sortKey} onToggle={(sk) => setSortKey(p => p === sk ? "created_desc" : sk)} />
                     <SortTh label="速別" sk="urgency_desc" sortKey={sortKey} onToggle={(sk) => setSortKey(p => p === sk ? "created_desc" : sk)} />
@@ -704,6 +918,15 @@ export default function DocumentListPage() {
                       style={idx < docs.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}}
                       onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
                       onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+                      <td className="px-5 py-4">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(doc.id)}
+                          onChange={() => toggleSelected(doc.id)}
+                          aria-label={`選取公文 ${doc.serial_number}`}
+                          className="accent-blue-600"
+                        />
+                      </td>
                       <td className="px-5 py-4">
                         <span className="text-xs font-mono" style={{ color: "var(--primary)" }}>
                           {doc.serial_number}
@@ -796,6 +1019,13 @@ export default function DocumentListPage() {
                     <div className="flex items-start justify-between gap-2 px-4 py-4 transition-colors"
                       onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
                       onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(doc.id)}
+                      onChange={() => toggleSelected(doc.id)}
+                      aria-label={`選取公文 ${doc.serial_number}`}
+                      className="mt-1 flex-shrink-0 accent-blue-600"
+                    />
                     <Link
                       href={`/documents/${encodeURIComponent(doc.serial_number)}`}
                       className="flex items-start justify-between gap-3 flex-1 min-w-0"

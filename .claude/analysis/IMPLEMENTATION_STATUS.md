@@ -22,8 +22,8 @@
 | 3 | 2FA / TOTP 認證 | ✅ 完成 | `apps/api/src/api/routers/auth.py` OAuth callback 已接入短效 MFA challenge；`apps/api/src/api/routers/mfa.py` 提供登入挑戰驗證、TOTP 二次驗證、備用碼重產；`apps/api/src/api/services/mfa.py` 已加密 MFA secret、HMAC 雜湊 backup codes 並一次性消耗；`apps/api/src/api/models/user.py` 與 `2f3e4d5c6b7a_complete_mfa_persistence.py` 已補持久化欄位；`apps/web/src/app/auth/mfa/page.tsx`、`settings/security/page.tsx`、`lib/api.ts`、`types.ts` 已同步；`apps/api/tests/test_mfa_service.py` 已覆蓋啟用與備用碼一次性使用。 | 可再補 WebAuthn / 硬體金鑰與完整瀏覽器 E2E，但 TOTP 核心流程已完成。 |
 | 4 | 法規對比檢視 | ✅ 完成 | `GET /regulations/{reg_id}/diff` 已存在；後台詳情頁與公開比較頁使用 diff 高亮。 | 可再補 UX 細節與測試，但核心功能已可用。 |
 | 5 | 廢止法規管理 | ✅ 完成 | `Regulation` 已有 `is_repealed`、`repealed_date`、`repeal_reason`、`repeal_replacement_id`；`POST /regulations/{reg_id}/repeal` 已存在；migration 已加入欄位；`apps/web/src/app/regulations/[id]/page.tsx` 已接上廢止理由與替代法規 UI。 | 可再補後端/前端整合測試。 |
-| 6 | 公文範本庫 | ⬜ 未完成 | 目前只有「字號模板」`document_serial_templates`，不等同內容範本庫。 | 需新增 `DocumentTemplate` model/schema/service/router/migration、從範本起稿 UI、版本管理、測試。 |
-| 7 | 批量操作（多公文簽核/轉發/封存） | ⬜ 未完成 | 學餐有批次確認 UI，但公文未見 `/documents/batch/*` 或 `BatchApprove`。 | 需新增批次 API、權限/逐筆錯誤回報、前端多選操作、測試。 |
+| 6 | 公文範本庫 | ✅ 完成 | `DocumentTemplate` model/schema/service/router 已落地；`/document-templates` 提供列表、建立、更新、停用與 `/draft` 從範本建立草稿；`9a8b7c6d5e4f_add_document_templates.py` migration 已建立；`apps/web/src/app/document-templates/page.tsx` 提供管理頁；`apps/web/src/app/documents/new/page.tsx` 支援 `template_id` 套用範本起稿；`lib/api.ts`、`lib/types.ts` 已同步；`apps/api/tests/test_document_templates.py` 已覆蓋 CRUD、停用與起稿。 | 可再補瀏覽器 E2E 與範本匯入/複製，但核心範本庫已可用。 |
+| 7 | 批量操作（多公文簽核/轉發/封存） | ✅ 完成 | `apps/api/src/api/routers/documents.py` 已新增 `/documents/batch/approve`、`/batch/reject`、`/batch/archive`、`/batch/delegate`；`apps/api/src/api/schemas/document.py` 已有批量請求與逐筆結果 schema；前端 `apps/web/src/app/documents/page.tsx` 已支援列表多選、批量核准/退件/封存/轉代理；`lib/api.ts`、`lib/types.ts` 已同步；`apps/api/tests/test_document_batch_routes.py` 已覆蓋逐筆成功/失敗與去重。 | 可再補通知內容聚合與瀏覽器 E2E，但核心批量操作已可用。 |
 | 8 | 雙重授權（Dual Approval） | ⬜ 未完成 | 只有 `/auth/mfa/verify` 可作二次確認素材，未見 `DualApprovalRequest` 或二人確認流程。 | 需新增資料模型、待確認佇列、敏感操作攔截、通知、UI、測試。 |
 | 9 | 簽核期限管理 / 自動催辦 | 🟡 部分完成 | 公文有 `due_date` 與待簽超時分析 API。 | 尚無 `DocumentApproval.deadline`、Celery 催辦 task、超期郵件/通知、逐步簽核期限 UI。 |
 | 10 | 委託代理管理 UI | ✅ 完成 | `DocumentApprovalDelegation` model/schema/service/router/migration 已存在；`apps/web/src/app/documents/delegations/page.tsx` 已有管理頁。 | 可補更多測試與稽核細節。 |
@@ -91,7 +91,7 @@
 
 ## 五、下一批建議執行順序
 
-1. **啟動新模型功能**：公文範本庫、批量操作、雙重授權、評論線程，這些需要 model/schema/service/router/migration/UI 一次做完整。
+1. **啟動新模型功能**：雙重授權、評論線程，這些需要 model/schema/service/router/migration/UI 一次做完整。
 2. **補系統性可驗證性**：針對 CSRF、rate limit fallback、analytics、repeal、audit logs 補 router/service 測試與必要 E2E。
 3. **補排程型流程**：簽核期限自動催辦、法規生效排程、法規變更訂閱通知。
 
@@ -107,6 +107,33 @@
 - ✅ 新增 `/auth/mfa` 登入挑戰頁，支援 TOTP 或未使用過的備用碼。
 - ✅ 新增 `2f3e4d5c6b7a_complete_mfa_persistence.py` migration，補齊 backup code hash 欄位並擴大 MFA secret 欄位型別。
 - ✅ 驗證：`ruff check`、`pytest apps/api/tests/test_mfa_service.py apps/api/tests/test_security.py -v --asyncio-mode=auto`、`eslint .`、`next build --webpack` 皆通過。
+
+---
+
+## 九、本輪改動紀錄（2026-05-14 — 公文範本庫完整化）
+
+- ✅ 新增 `DocumentTemplate` ORM 與 `document_templates` 資料表 migration：支援組織、分類、速別、密等、主旨、說明、辦法、開會通知單欄位、預設受文者、版本號與停用狀態。
+- ✅ 新增公文範本 service：列表、建立、更新、停用，以及從範本建立草稿；更新時會重新驗證合併後範本內容，避免無效範本被保存。
+- ✅ 新增 `/document-templates` API：含權限限制，管理需 `document:admin`，使用/起稿需 `document:create`。
+- ✅ 新增前端 `/document-templates` 管理頁：可搜尋、篩選、建立、編輯、停用與一鍵使用範本。
+- ✅ 新增 `/documents/new?template_id=...` 套用範本流程，會帶入公文類別、主旨、說明、辦法、開會資訊、承辦單位、受文者與可見度。
+- ✅ 前端 `lib/types.ts` / `lib/api.ts` 已同步公文範本型別與 API。
+- ✅ 新增 `apps/api/tests/test_document_templates.py`，覆蓋範本 CRUD、停用預設隱藏與從範本建立草稿。
+- ✅ 驗證：`ruff check`、`pytest apps/api/tests/test_document_templates.py apps/api/tests/test_document_service.py -v --asyncio-mode=auto`、`alembic heads`、`eslint .`、`next build --webpack` 皆通過。
+
+---
+
+## 十、本輪改動紀錄（2026-05-14 — 公文批量操作）
+
+- ✅ 新增公文批量操作 schema：批量公文 ID、批量核准、批量退件、批量封存、批量轉代理，以及逐筆成功/失敗結果回傳。
+- ✅ 新增 `/documents/batch/approve`：可一次核准多份目前輪到自己的待審公文，逐筆回報不可核准原因。
+- ✅ 新增 `/documents/batch/reject`：可一次退件多份目前輪到自己的待審公文，支援既有退件模式。
+- ✅ 新增 `/documents/batch/archive`：可一次封存多份已核准且自己可封存的公文。
+- ✅ 新增 `/documents/batch/delegate`：可一次將多份目前審核步驟設定為指定代理人，對應既有 `document:forward` 權限。
+- ✅ 公文列表頁新增多選核取方塊、全選目前列表、批量操作列、代理人搜尋與批量轉代理操作。
+- ✅ 前端 `lib/types.ts` / `lib/api.ts` 已同步批量操作型別與 API。
+- ✅ 新增 `apps/api/tests/test_document_batch_routes.py`，覆蓋批量核准逐筆成功/失敗與批量封存去重。
+- ✅ 驗證：`ruff check`、`pytest apps/api/tests/test_document_batch_routes.py apps/api/tests/test_document_service.py -v --asyncio-mode=auto`、`eslint`、`next build --webpack` 皆通過。
 
 ---
 

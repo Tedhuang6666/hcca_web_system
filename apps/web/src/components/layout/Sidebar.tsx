@@ -6,6 +6,7 @@ import {
   LayoutGrid,
   FileText,
   FilePlus,
+  Files,
   BookOpen,
   PenTool,
   Barcode,
@@ -27,6 +28,7 @@ const Icons: Record<string, React.ComponentType<{ size: number; "aria-hidden": b
   dashboard: ({ size, "aria-hidden": ariaHidden }) => <LayoutGrid size={size} aria-hidden={ariaHidden} />,
   documents: ({ size, "aria-hidden": ariaHidden }) => <FileText size={size} aria-hidden={ariaHidden} />,
   documentNew: ({ size, "aria-hidden": ariaHidden }) => <FilePlus size={size} aria-hidden={ariaHidden} />,
+  documentTemplates: ({ size, "aria-hidden": ariaHidden }) => <Files size={size} aria-hidden={ariaHidden} />,
   regulations: ({ size, "aria-hidden": ariaHidden }) => <BookOpen size={size} aria-hidden={ariaHidden} />,
   regulationNew: ({ size, "aria-hidden": ariaHidden }) => <PenTool size={size} aria-hidden={ariaHidden} />,
   serial: ({ size, "aria-hidden": ariaHidden }) => <Barcode size={size} aria-hidden={ariaHidden} />,
@@ -69,6 +71,12 @@ const NAV_DEF: (NavItem | NavSection)[] = [
         label: "新增公文",
         perm: "document:create",
         currentOnly: true,
+      },
+      {
+        href: "/document-templates",
+        iconKey: "documentTemplates",
+        label: "公文範本",
+        perm: "document:create",
       },
       { href: "/regulations",      iconKey: "regulations",   label: "法規查詢" },
       {

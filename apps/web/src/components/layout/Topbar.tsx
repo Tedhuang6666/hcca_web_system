@@ -11,6 +11,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/":                  "儀表板",
   "/documents":         "公文系統",
   "/documents/new":     "新增公文",
+  "/document-templates": "公文範本",
   "/documents/delegations": "簽核代理",
   "/regulations":       "法規查詢",
   "/regulations/new":   "新增法規",
