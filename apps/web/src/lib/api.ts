@@ -311,7 +311,7 @@ export const regulationsApi = {
     proposal_metadata?: string | null;
   }) =>
     post<RegulationOut>("/regulations", body),
-  importDocx: async (file: File, body: { org_id: string; category: string }) => {
+  importDocument: async (file: File, body: { org_id: string; category: string }) => {
     const fd = new FormData();
     fd.append("file", file);
     fd.append("org_id", body.org_id);

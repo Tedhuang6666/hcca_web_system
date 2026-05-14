@@ -1,6 +1,6 @@
-"""DOCX 法規文檔匯入器。
+"""法規文檔匯入器。
 
-將一般 Word 法規文字轉為現有 Regulation / RegulationArticle 可用的中介結構。
+將一般 Word/PDF 法規文字轉為現有 Regulation / RegulationArticle 可用的中介結構。
 """
 
 from __future__ import annotations
@@ -11,6 +11,9 @@ from dataclasses import dataclass
 from io import BytesIO
 from xml.etree import ElementTree as ET
 from zipfile import BadZipFile, ZipFile
+
+from pypdf import PdfReader
+from pypdf.errors import PdfReadError
 
 from api.models.regulation import ArticleType
 
@@ -53,12 +56,25 @@ class ImportedRegulationDraft:
     warnings: list[str]
 
 
+def parse_regulation_document(
+    file_bytes: bytes, filename: str | None = None
+) -> ImportedRegulationDraft:
+    return _parse_regulation_paragraphs(_extract_paragraphs(file_bytes, filename=filename))
+
+
 def parse_regulation_docx(
     file_bytes: bytes, filename: str | None = None
 ) -> ImportedRegulationDraft:
-    paragraphs = _extract_docx_paragraphs(file_bytes, filename=filename)
+    return _parse_regulation_paragraphs(_extract_docx_paragraphs(file_bytes, filename=filename))
+
+
+def parse_regulation_pdf(file_bytes: bytes, filename: str | None = None) -> ImportedRegulationDraft:
+    return _parse_regulation_paragraphs(_extract_pdf_paragraphs(file_bytes, filename=filename))
+
+
+def _parse_regulation_paragraphs(paragraphs: list[str]) -> ImportedRegulationDraft:
     if not paragraphs:
-        raise ValueError("DOCX 內沒有可匯入的文字內容")
+        raise ValueError("文件內沒有可匯入的文字內容")
 
     first_structural_index = _find_first_structural_index(paragraphs)
     if first_structural_index is None:
@@ -171,6 +187,15 @@ def parse_regulation_docx(
     )
 
 
+def _extract_paragraphs(file_bytes: bytes, *, filename: str | None = None) -> list[str]:
+    suffix = (filename or "").lower().rsplit(".", maxsplit=1)[-1]
+    if suffix == "docx":
+        return _extract_docx_paragraphs(file_bytes, filename=filename)
+    if suffix == "pdf":
+        return _extract_pdf_paragraphs(file_bytes, filename=filename)
+    raise ValueError("請上傳 .docx 或 .pdf 文件")
+
+
 def _extract_docx_paragraphs(file_bytes: bytes, *, filename: str | None = None) -> list[str]:
     if filename and not filename.lower().endswith(".docx"):
         raise ValueError("請上傳 .docx Word 文件")
@@ -188,6 +213,39 @@ def _extract_docx_paragraphs(file_bytes: bytes, *, filename: str | None = None) 
         if line:
             paragraphs.append(_normalize_spacing(line))
     return paragraphs
+
+
+def _extract_pdf_paragraphs(file_bytes: bytes, *, filename: str | None = None) -> list[str]:
+    if filename and not filename.lower().endswith(".pdf"):
+        raise ValueError("請上傳 .pdf 文件")
+    try:
+        reader = PdfReader(BytesIO(file_bytes))
+    except PdfReadError as exc:
+        raise ValueError("無法讀取 PDF 內容，請確認檔案格式正確") from exc
+
+    paragraphs: list[str] = []
+    for page in reader.pages:
+        text = page.extract_text() or ""
+        for line in text.splitlines():
+            normalized = _normalize_spacing(line)
+            if normalized:
+                paragraphs.append(normalized)
+    if not paragraphs:
+        raise ValueError("PDF 內沒有可匯入的文字內容，若為掃描檔需先 OCR")
+    return _merge_pdf_continuation_lines(paragraphs)
+
+
+def _merge_pdf_continuation_lines(lines: list[str]) -> list[str]:
+    merged: list[str] = []
+    for line in lines:
+        if not merged or _STRUCTURAL_RE.match(line) or _ARTICLE_RE.match(line):
+            merged.append(line)
+            continue
+        if _looks_like_history(line):
+            merged.append(line)
+            continue
+        merged[-1] = f"{merged[-1]}{line}"
+    return merged
 
 
 def _find_first_structural_index(paragraphs: list[str]) -> int | None:

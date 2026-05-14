@@ -10,7 +10,7 @@ from api.models.regulation import ArticleType, RegulationWorkflowStatus
 from api.schemas.regulation import RegulationArticleCreate, RegulationPublishRequest
 from api.services import regulation as reg_svc
 from api.services.regulation_consistency import audit_regulation_document_consistency
-from api.services.regulation_import import parse_regulation_docx
+from api.services.regulation_import import parse_regulation_document, parse_regulation_docx
 
 
 def _build_docx(lines: list[str]) -> bytes:
@@ -79,6 +79,38 @@ def test_parse_regulation_docx_maps_legal_document_to_articles() -> None:
     assert draft.articles[3].parent_key == draft.articles[2].key
     assert draft.articles[3].legal_number == "1"
     assert draft.articles[4].content == "提出建議。"
+
+
+def test_parse_regulation_pdf_maps_text_pdf_to_articles(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakePage:
+        def extract_text(self) -> str:
+            return "\n".join(
+                [
+                    "國立新竹高級中學學生代表法",
+                    "114 年 12 月 15 日學生議會制訂通過",
+                    "第一章總則",
+                    "第一條本法依《高級中等教育法》制定之。",
+                    "第二條學生代表之職權如下：",
+                    "一、出席會議。",
+                    "二、提出建議。",
+                ]
+            )
+
+    class FakePdfReader:
+        def __init__(self, _stream: BytesIO) -> None:
+            self.pages = [FakePage()]
+
+    monkeypatch.setattr("api.services.regulation_import.PdfReader", FakePdfReader)
+
+    draft = parse_regulation_document(b"%PDF", "學生代表法.pdf")
+
+    assert draft.title == "國立新竹高級中學學生代表法"
+    assert draft.articles[0].article_type == ArticleType.CHAPTER
+    assert draft.articles[1].legal_number == "1"
+    assert draft.articles[2].legal_number == "2"
+    assert draft.articles[2].content == "學生代表之職權如下："
+    assert draft.articles[3].article_type == ArticleType.SUBPARAGRAPH
+    assert draft.articles[3].content == "出席會議。"
 
 
 @pytest.mark.asyncio

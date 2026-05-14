@@ -220,9 +220,9 @@ async def create_regulation(
     "/import-docx",
     response_model=RegulationOut,
     status_code=status.HTTP_201_CREATED,
-    summary="從 Word 法規文檔匯入草稿（需 regulation:create 權限）",
+    summary="從 Word/PDF 法規文檔匯入草稿（需 regulation:create 權限）",
     responses={
-        201: {"description": "已從 DOCX 建立法規草稿與結構化條文"},
+        201: {"description": "已從 DOCX/PDF 建立法規草稿與結構化條文"},
         403: {"description": "需要 regulation:create 權限"},
         422: {"description": "文件格式無法解析"},
     },
@@ -235,9 +235,9 @@ async def import_regulation_docx(
         RegulationCategory,
         Form(description="法規分類"),
     ] = RegulationCategory.OTHER,
-    file: Annotated[UploadFile, File(description="Word .docx 法規文檔")] = ...,
+    file: Annotated[UploadFile, File(description="Word .docx 或 PDF 法規文檔")] = ...,
 ) -> Regulation:
-    """上傳 Word 法規文件，解析章節條文並直接建立草稿。"""
+    """上傳 Word/PDF 法規文件，解析章節條文並直接建立草稿。"""
     if not current_user.is_superuser:
         codes = await get_user_permission_codes_for_org(session, current_user.id, org_id)
         if "regulation:create" not in codes:
@@ -257,7 +257,7 @@ async def import_regulation_docx(
 
     try:
         imported = await run_in_threadpool(
-            reg_import_svc.parse_regulation_docx,
+            reg_import_svc.parse_regulation_document,
             raw,
             file.filename,
         )

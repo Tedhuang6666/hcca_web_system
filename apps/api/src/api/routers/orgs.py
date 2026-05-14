@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.cache import cache_get, cache_set, cache_invalidate
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
@@ -27,13 +28,35 @@ CurrentUser = Annotated[User, Depends(get_current_active_user)]
 
 @router.get("", response_model=list[OrgRead], summary="列出所有組織節點（扁平）")
 async def list_orgs(db: DbDep, _: CurrentUser) -> list:
-    return await org_svc.get_orgs(db)
+    # 檢查快取
+    cached = await cache_get("org:list")
+    if cached is not None:
+        return cached
+
+    # 查詢並序列化
+    orgs = await org_svc.get_orgs(db)
+    result = [OrgRead.model_validate(o).model_dump(mode="json") for o in orgs]
+
+    # 快取 300 秒
+    await cache_set("org:list", result, ttl=300)
+    return result
 
 
 @router.get("/tree", response_model=list[OrgTree], summary="取得完整組織樹")
 async def get_org_tree(db: DbDep, _: CurrentUser) -> list:
+    # 檢查快取
+    cached = await cache_get("org:tree")
+    if cached is not None:
+        return cached
+
+    # 查詢並構建樹狀結構
     orgs = await org_svc.get_orgs(db)
-    return org_svc.build_org_tree(orgs)
+    tree = org_svc.build_org_tree(orgs)
+    result = [OrgTree.model_validate(t).model_dump(mode="json") for t in tree]
+
+    # 快取 300 秒
+    await cache_set("org:tree", result, ttl=300)
+    return result
 
 
 @router.get(
@@ -85,6 +108,9 @@ async def create_org(data: OrgCreate, db: DbDep, current_user: CurrentUser) -> o
         meta=data.model_dump(mode="json"),
         summary=f"建立組織「{org.name}」",
     )
+    # 清除快存
+    await cache_invalidate("org:list")
+    await cache_invalidate("org:tree")
     return org
 
 
@@ -133,6 +159,9 @@ async def update_org(
         },
         summary=f"更新組織「{org.name}」",
     )
+    # 清除快存
+    await cache_invalidate("org:list")
+    await cache_invalidate("org:tree")
     return org
 
 
@@ -158,6 +187,9 @@ async def deactivate_org(org_id: uuid.UUID, db: DbDep, current_user: CurrentUser
         meta={"before": before, "after": {"is_active": org.is_active}},
         summary=f"停用組織「{org.name}」",
     )
+    # 清除快存
+    await cache_invalidate("org:list")
+    await cache_invalidate("org:tree")
     return org
 
 
@@ -183,6 +215,9 @@ async def activate_org(org_id: uuid.UUID, db: DbDep, current_user: CurrentUser) 
         meta={"before": before, "after": {"is_active": org.is_active}},
         summary=f"啟用組織「{org.name}」",
     )
+    # 清除快存
+    await cache_invalidate("org:list")
+    await cache_invalidate("org:tree")
     return org
 
 
@@ -224,3 +259,7 @@ async def delete_org(org_id: uuid.UUID, db: DbDep, current_user: CurrentUser) ->
             status_code=status.HTTP_409_CONFLICT,
             detail="此組織仍被其他資料引用，無法刪除；請改為停用組織",
         ) from e
+
+    # 清除快存
+    await cache_invalidate("org:list")
+    await cache_invalidate("org:tree")

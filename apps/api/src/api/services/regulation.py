@@ -162,9 +162,7 @@ async def list_regulations(
             tsquery_str = " & ".join(word.strip() for word in keyword.split() if word.strip())
             if tsquery_str:
                 q = q.where(
-                    Regulation.search_vector.op("@@")(
-                        func.to_tsquery("simple", tsquery_str)
-                    )
+                    Regulation.search_vector.op("@@")(func.to_tsquery("simple", tsquery_str))
                 )
             else:
                 # keyword 為空或只有空格，fallback 到 LIKE

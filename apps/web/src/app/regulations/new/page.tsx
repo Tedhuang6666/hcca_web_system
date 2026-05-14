@@ -114,10 +114,10 @@ export default function NewRegulationPage() {
 
   const importDocxDraft = async () => {
     if (!selectedOrgId) return toast.error("請選擇所屬組織");
-    if (!importFile) return toast.error("請選擇 Word 法規文檔");
+    if (!importFile) return toast.error("請選擇 Word 或 PDF 法規文檔");
     setImporting(true);
     try {
-      const reg = await regulationsApi.importDocx(importFile, { org_id: selectedOrgId, category });
+      const reg = await regulationsApi.importDocument(importFile, { org_id: selectedOrgId, category });
       toast.success(`已匯入「${reg.title}」`);
       router.push(`/regulations/${reg.id}/edit`);
     } catch (e) {
@@ -251,14 +251,14 @@ export default function NewRegulationPage() {
         <aside className="space-y-4">
           <div className="card p-4 space-y-3">
             <div>
-              <h3 className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>Word 匯入</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>文件匯入</h3>
               <p className="text-xs leading-relaxed" style={{ color: "var(--text-secondary)" }}>
-                支援「第○章」「第○節」「第○條」格式，會自動建立結構化條文。
+                支援 Word/PDF 的「第○章」「第○節」「第○條」格式，會自動建立結構化條文。
               </p>
             </div>
             <input
               type="file"
-              accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              accept=".docx,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf"
               onChange={e => setImportFile(e.target.files?.[0] ?? null)}
               className="w-full text-xs"
               style={{ color: "var(--text-secondary)" }}
@@ -269,7 +269,7 @@ export default function NewRegulationPage() {
               className="w-full py-2.5 rounded-lg text-sm font-medium disabled:opacity-50"
               style={{ background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }}
             >
-              {importing ? "匯入中..." : "匯入 Word 草稿"}
+              {importing ? "匯入中..." : "匯入文件草稿"}
             </button>
           </div>
 
