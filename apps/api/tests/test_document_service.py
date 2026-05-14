@@ -14,13 +14,24 @@ from api.models.document import (
     DelegateSource,
     Document,
     DocumentApproval,
+    DocumentCategory,
+    DocumentClassification,
     DocumentStatus,
+    DocumentVisibility,
     YearMode,
 )
-from api.schemas.document import DocumentCreate, DocumentUpdate, SerialTemplateCreate
+from api.schemas.document import (
+    DocumentCreate,
+    DocumentTemplateCreate,
+    DocumentUpdate,
+    SerialTemplateCreate,
+)
 from api.services.document import (
     _get_current_approval,
     approve_step,
+    build_document_list_items,
+    can_anonymous_access_document,
+    check_document_access,
     create_document,
     create_serial_template,
     reject_step,
@@ -28,6 +39,7 @@ from api.services.document import (
     update_document,
     update_serial_template,
 )
+from api.services.official_print import render_document_print_html
 
 # ── Fixtures ───────────────────────────────────────────────────────────────────
 
@@ -83,10 +95,103 @@ def _make_update_payload(**kwargs: object) -> DocumentUpdate:
     return DocumentUpdate(**kwargs)
 
 
+def _make_list_doc(**kwargs: object) -> Document:
+    defaults = {
+        "id": uuid.uuid4(),
+        "serial_number": "DOC-2026-LIST",
+        "title": "列表公文",
+        "org_id": uuid.uuid4(),
+        "created_by": uuid.uuid4(),
+        "status": DocumentStatus.DRAFT,
+        "urgency": "normal",
+        "classification": "normal",
+        "category": "letter",
+        "subject": "為測試列表公文顯示，請 鑒核。",
+        "created_at": datetime.now(UTC),
+    }
+    defaults.update(kwargs)
+    doc = Document(**defaults)
+    doc.approvals = []
+    return doc
+
+
 def _mock_scalars_result(items: list[object]) -> MagicMock:
     result = MagicMock()
     result.scalars.return_value.all.return_value = items
     return result
+
+
+def _mock_scalar_none_result() -> MagicMock:
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = None
+    return result
+
+
+# ── 令格式驗證 ───────────────────────────────────────────────────────────────
+
+
+def test_decree_create_allows_empty_subject() -> None:
+    """令可直接以正文起稿，不需要主旨欄位。"""
+    payload = _make_create_payload(
+        category=DocumentCategory.DECREE,
+        subject=None,
+        doc_description="茲修正發布「學生自治組織設置辦法」第5條條文。",
+    )
+
+    assert payload.category == DocumentCategory.DECREE
+    assert payload.subject is None
+
+
+def test_decree_template_allows_empty_subject() -> None:
+    """令範本也可不填主旨。"""
+    template = DocumentTemplateCreate(
+        org_id=uuid.uuid4(),
+        name="法規發布令",
+        category=DocumentCategory.DECREE,
+        subject=None,
+        doc_description="茲修正發布「學生自治組織設置辦法」第5條條文。",
+    )
+
+    assert template.category == DocumentCategory.DECREE
+    assert template.subject is None
+
+
+@pytest.mark.asyncio
+async def test_decree_print_hides_empty_recipient_and_subject() -> None:
+    """令列印格式不輸出空受文者，也不顯示主旨段落。"""
+    doc = SimpleNamespace(
+        title="法規發布令",
+        issuer_full_name=None,
+        org=SimpleNamespace(name="學生會"),
+        category=DocumentCategory.DECREE,
+        urgency="normal",
+        classification="normal",
+        declassification_condition="none",
+        confidentiality_expires_at=None,
+        recipients=[],
+        attachments=[],
+        issued_at=None,
+        completed_at=None,
+        created_at=datetime(2026, 5, 14, tzinfo=UTC),
+        serial_number="竹中學字第115000021號",
+        file_number=None,
+        retention_period=None,
+        handler_name="王大明",
+        handler_unit="主席",
+        handler_email=None,
+        approvals=[],
+        doc_description="茲修正發布「學生自治組織設置辦法」第5條條文。",
+        content="",
+        action_required=None,
+        subject=None,
+    )
+
+    html = await render_document_print_html(_make_session(), doc)
+
+    assert "發文字號：" in html
+    assert "茲修正發布" in html
+    assert "受文者：" not in html
+    assert "主旨：" not in html
 
 
 # ── 建立公文 ───────────────────────────────────────────────────────────────────
@@ -400,3 +505,63 @@ async def test_local_storage_rejects_unsupported_type() -> None:
         await backend.save(fake_file)
 
     shutil.rmtree("test_uploads_tmp", ignore_errors=True)
+
+
+@pytest.mark.asyncio
+async def test_public_normal_document_allows_logged_in_viewer() -> None:
+    session = _make_session()
+    session.scalar = AsyncMock(return_value=SimpleNamespace(email="viewer-public@example.com"))
+    session.execute = AsyncMock(return_value=_mock_scalar_none_result())
+    viewer_id = uuid.uuid4()
+
+    doc = _make_list_doc(
+        serial_number="DOC-2026-PUBLIC",
+        title="登入公開公文",
+        visibility_level=DocumentVisibility.PUBLIC,
+    )
+
+    assert await check_document_access(session, doc, viewer_id) is True
+
+
+@pytest.mark.asyncio
+async def test_sensitive_public_document_is_redacted_without_full_access() -> None:
+    session = _make_session()
+    session.scalar = AsyncMock(return_value=SimpleNamespace(email="viewer-secret@example.com"))
+    session.execute = AsyncMock(return_value=_mock_scalar_none_result())
+    viewer_id = uuid.uuid4()
+
+    doc = _make_list_doc(
+        serial_number="DOC-2026-SECRET",
+        title="不可外洩標題",
+        visibility_level=DocumentVisibility.PUBLICLY_OPEN,
+        classification=DocumentClassification.SECRET,
+        subject="不可外洩主旨",
+    )
+
+    assert can_anonymous_access_document(doc) is False
+    assert await check_document_access(session, doc, viewer_id) is False
+
+    [item] = await build_document_list_items(session, [doc], viewer_id=viewer_id)
+    assert item.is_redacted is True
+    assert item.title == "(此公文為密件)"
+    assert item.subject is None
+
+
+@pytest.mark.asyncio
+async def test_sensitive_document_creator_sees_list_content() -> None:
+    session = _make_session()
+    creator_id = uuid.uuid4()
+
+    doc = _make_list_doc(
+        serial_number="DOC-2026-SECRET-FULL",
+        title="建立者可見標題",
+        created_by=creator_id,
+        visibility_level=DocumentVisibility.PUBLIC,
+        classification=DocumentClassification.CONFIDENTIAL,
+        subject="建立者可見主旨",
+    )
+
+    [item] = await build_document_list_items(session, [doc], viewer_id=creator_id)
+    assert item.is_redacted is False
+    assert item.title == "建立者可見標題"
+    assert item.subject == "建立者可見主旨"

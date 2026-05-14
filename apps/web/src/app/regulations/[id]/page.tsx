@@ -613,14 +613,17 @@ export default function RegulationDetailPage() {
               <WorkflowStatusBadge status={reg.workflow_status} />
             </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <h1 className="min-w-0 text-lg font-semibold leading-snug break-words sm:text-xl" style={{ color: "var(--text-primary)" }}>
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <h1
+                className="w-full min-w-0 text-lg font-semibold leading-snug sm:text-xl lg:w-auto"
+                style={{ color: "var(--text-primary)", wordBreak: "keep-all" }}
+              >
                 {!reg.is_active && <span style={{ color: "var(--danger)" }}>(失效) </span>}
                 {reg.title}
               </h1>
 
               {/* 工具列 */}
-              <div className="no-print flex w-full flex-wrap items-center justify-start gap-2 sm:w-auto sm:flex-shrink-0 sm:justify-end">
+              <div className="no-print flex w-full flex-wrap items-center justify-start gap-2 lg:w-auto lg:flex-shrink-0 lg:justify-end">
                 {/* 縮放 */}
                 <div className="flex items-center gap-1 rounded-lg overflow-hidden"
                   style={{ border: "1px solid var(--border)" }}>
@@ -687,8 +690,7 @@ export default function RegulationDetailPage() {
                   複製連結
                 </button>
 
-                {/* 列印 */}
-                {/* 列印/匯出法規（帶 token 避免 401） */}
+                {/* 匯出法規 PDF（帶 token 避免 401） */}
                 <button
                   onClick={async () => {
                     if (printingPdf) return;
@@ -733,7 +735,7 @@ export default function RegulationDetailPage() {
                       <rect x="6" y="14" width="12" height="8"/>
                     </svg>
                   )}
-                  {printingPdf ? "正在處理檔案" : "列印法規"}
+                  {printingPdf ? "正在處理檔案" : "匯出 PDF"}
                 </button>
 
                 {/* 編輯（限建立者或管理員） */}
@@ -919,7 +921,6 @@ export default function RegulationDetailPage() {
                   className="space-y-1 text-sm"
                   style={{
                     color: "var(--text-secondary)",
-                    fontFamily: '"標楷體", "DFKai-SB", serif',
                     lineHeight: 1.8,
                     overflowWrap: "anywhere",
                     whiteSpace: "pre-wrap",

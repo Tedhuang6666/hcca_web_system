@@ -1,10 +1,11 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { surveysApi, ApiError } from "@/lib/api";
 import type { QuestionType } from "@/lib/types";
+import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 
 const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: "section_text", label: "文字描述區塊" },
@@ -33,6 +34,18 @@ interface DraftQuestion {
   placeholder: string;
   order_index: number;
 }
+
+type SurveyDraft = {
+  title: string;
+  description: string;
+  isAnonymous: boolean;
+  allowMultiple: boolean;
+  closesAt: string;
+  orgId: string;
+  questions: DraftQuestion[];
+  newQ: Partial<DraftQuestion>;
+  optionInput: string;
+};
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
@@ -64,6 +77,61 @@ export default function NewSurveyPage() {
   useEffect(() => {
     setOrgId(localStorage.getItem("org_id") ?? "");
   }, []);
+
+  const draftValue = useMemo<SurveyDraft>(() => ({
+    title,
+    description,
+    isAnonymous,
+    allowMultiple,
+    closesAt,
+    orgId,
+    questions,
+    newQ,
+    optionInput,
+  }), [
+    allowMultiple,
+    closesAt,
+    description,
+    isAnonymous,
+    newQ,
+    optionInput,
+    orgId,
+    questions,
+    title,
+  ]);
+  const restoreDraft = useCallback((draft: SurveyDraft) => {
+    setTitle(draft.title ?? "");
+    setDescription(draft.description ?? "");
+    setIsAnonymous(Boolean(draft.isAnonymous));
+    setAllowMultiple(Boolean(draft.allowMultiple));
+    setClosesAt(draft.closesAt ?? "");
+    setOrgId(draft.orgId ?? localStorage.getItem("org_id") ?? "");
+    setQuestions(draft.questions ?? []);
+    setNewQ(draft.newQ ?? {
+      question_text: "",
+      question_type: "text",
+      is_required: true,
+      options: [],
+      min_value: 1,
+      max_value: 5,
+      placeholder: "",
+    });
+    setOptionInput(draft.optionInput ?? "");
+    toast.info("已復原未送出的問卷草稿");
+  }, []);
+  const { clearDraft, flushDraft } = useDraftAutosave({
+    key: "surveys:new",
+    value: draftValue,
+    onRestore: restoreDraft,
+    isEmpty: useCallback((draft: SurveyDraft) => (
+      !(draft.title ?? "").trim()
+      && !(draft.description ?? "").trim()
+      && !draft.closesAt
+      && (draft.questions ?? []).length === 0
+      && !(draft.newQ.question_text ?? "").trim()
+      && !(draft.optionInput ?? "").trim()
+    ), []),
+  });
 
   const addOption = () => {
     const opt = optionInput.trim();
@@ -131,9 +199,11 @@ export default function NewSurveyPage() {
           order_index: q.order_index,
         });
       }
+      clearDraft();
       toast.success("問卷草稿已建立");
       router.push(`/surveys/${encodeURIComponent(survey.title)}`);
     } catch (e) {
+      flushDraft();
       toast.error(e instanceof ApiError ? e.message : "建立失敗");
     } finally { setSaving(false); }
   };

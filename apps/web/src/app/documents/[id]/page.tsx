@@ -270,37 +270,15 @@ export default function DocumentDetailPage() {
     }
   };
 
-  const [isFullscreen, setIsFullscreen] = useState(false);
-
-  useEffect(() => {
-    const handler = () => setIsFullscreen(Boolean(document.fullscreenElement));
-    document.addEventListener("fullscreenchange", handler);
-    return () => document.removeEventListener("fullscreenchange", handler);
-  }, []);
-
-  const handleShare = async () => {
-    const shareData = { title: doc?.title ?? "公文", url: window.location.href };
-    if (typeof navigator.share === "function") {
-      try { await navigator.share(shareData); return; } catch {}
-    }
-    try { await navigator.clipboard.writeText(window.location.href); toast.success("連結已複製到剪貼簿"); }
-    catch { toast.error("複製失敗"); }
-  };
-
-  const handleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
-    } else {
-      document.exitFullscreen().catch(() => {});
-    }
-  };
-
   const [newLinkUrl, setNewLinkUrl] = useState("");
   const [newLinkText, setNewLinkText] = useState("");
   const [addingLink, setAddingLink] = useState(false);
   const [editingAttachmentId, setEditingAttachmentId] = useState<string | null>(null);
   const [editingAttachmentName, setEditingAttachmentName] = useState("");
   const [showAllAttachments, setShowAllAttachments] = useState(false);
+  const [showDocumentInfo, setShowDocumentInfo] = useState(false);
+  const [showAttachments, setShowAttachments] = useState(false);
+  const [showVersions, setShowVersions] = useState(false);
   const addLink = async () => {
     if (!newLinkUrl.trim()) return;
     setAddingLink(true);
@@ -350,6 +328,31 @@ export default function DocumentDetailPage() {
         && (a.approver.id === currentUserId || a.delegate?.id === currentUserId),
     );
   const isDraft = doc.status === "draft";
+  const docInfoRows: [string, string][] = [
+    ["字號", doc.serial_number || "（未分配）"],
+    ["類別", catLabel],
+    ["密等", CLASS_LABEL[doc.classification] ?? doc.classification],
+    ["建立日期", new Date(doc.created_at).toLocaleDateString("zh-TW")],
+    ["送審日期", doc.submitted_at ? new Date(doc.submitted_at).toLocaleDateString("zh-TW") : "—"],
+    ["限辦日期", doc.due_date ? new Date(doc.due_date).toLocaleDateString("zh-TW") : "—"],
+    [
+      "承辦人",
+      doc.handler_name
+        ? `${doc.handler_name}${doc.handler_unit ? ` / ${doc.handler_unit}` : ""}`
+        : "—",
+    ],
+  ];
+  const primaryRecipients = doc.recipients
+    .filter(r => r.recipient_type === "main" || r.recipient_type === "primary");
+  const recipientSummary = primaryRecipients.length > 0
+    ? primaryRecipients.map(r => r.name).join("、")
+    : "—";
+  const isDecree = doc.category === "decree";
+  const decreeBody = doc.doc_description || doc.content || doc.action_required || doc.subject;
+  const attachmentNames = doc.attachments
+    .map(a => a.display_name || a.filename)
+    .filter(Boolean)
+    .join("、");
 
   return (
     <>
@@ -471,34 +474,6 @@ export default function DocumentDetailPage() {
               封存
             </button>
           )}
-          {/* 分享 */}
-          <button onClick={handleShare}
-            className="px-3 py-2 rounded-lg text-sm inline-flex items-center gap-1.5 transition-colors hover:opacity-80"
-            style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}
-            title="分享">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-              <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
-              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
-            </svg>
-            分享
-          </button>
-
-          {/* 全螢幕 */}
-          <button onClick={handleFullscreen}
-            className="px-2.5 py-2 rounded-lg text-sm transition-colors hover:opacity-80"
-            style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}
-            title={isFullscreen ? "退出全螢幕" : "全螢幕"}>
-            {isFullscreen ? (
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>
-              </svg>
-            ) : (
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
-              </svg>
-            )}
-          </button>
-
           {/* 官式公文列印（後端格式，帶 token 避免 401） */}
           <button
             onClick={async () => {
@@ -572,68 +547,47 @@ export default function DocumentDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* 左：公文內容 */}
         <div className="lg:col-span-2 space-y-4">
-          {/* 元資料 */}
-          <div className="card p-4">
-            <dl className="grid grid-cols-2 gap-3 text-xs">
-              {([
-                ["字號", doc.serial_number],
-                ["類別", catLabel],
-                ["密等", { normal: "普通", confidential: "機密", secret: "秘密" }[doc.classification] ?? doc.classification],
-                ["建立日期", new Date(doc.created_at).toLocaleDateString("zh-TW")],
-                ["送審日期", doc.submitted_at ? new Date(doc.submitted_at).toLocaleDateString("zh-TW") : "—"],
-                ["限辦日期", doc.due_date ? new Date(doc.due_date).toLocaleDateString("zh-TW") : "—"],
-                ["承辦人", doc.handler_name
-                  ? `${doc.handler_name}${doc.handler_unit ? ` / ${doc.handler_unit}` : ""}`
-                  : "—"],
-              ] as [string, string][]).map(([k, v]) => (
-                <div key={k}>
-                  <dt style={{ color: "var(--text-muted)" }}>{k}</dt>
-                  <dd className="mt-0.5 ">{v}</dd>
-                </div>
-              ))}
-            </dl>
-            {doc.handler_email && (
-              <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
-                聯絡：{doc.handler_email}
-              </p>
-            )}
-          </div>
-
-          {/* 受文者 */}
-          {doc.recipients.length > 0 && (
-            <div className="card p-4">
-              <h3 className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>受文者</h3>
-              <div className="flex flex-wrap gap-2">
-                {doc.recipients.map(r => (
-                  <span key={r.id} className="text-xs px-2.5 py-1 rounded-full"
-                    style={{ color: "var(--primary)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }}>
-                    {{ main: "受文者", primary: "正本", copy: "副本" }[r.recipient_type]} {r.name}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
           {/* 公文本文（官式橫書格式） */}
           <div className="card overflow-hidden" style={zoomStyle}>
-            <div className="px-5 py-3" style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
-              <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>公文內容</span>
+            <div className="px-5 py-3 space-y-2" style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>公文內容</span>
+                <span className="text-xs font-mono" style={{ color: "var(--primary)" }}>
+                  {doc.serial_number || "未分配字號"}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs" style={{ color: "var(--text-secondary)" }}>
+                <span>{catLabel}</span>
+                <span>{CLASS_LABEL[doc.classification] ?? doc.classification}</span>
+                <span>{URGENCY_LABEL[doc.urgency] ?? doc.urgency}</span>
+                <span>發文日期：{toROCDate(doc.completed_at ?? doc.submitted_at ?? doc.created_at)}</span>
+                {(!isDecree || primaryRecipients.length > 0) && (
+                  <span className="min-w-0 break-words">受文者：{recipientSummary}</span>
+                )}
+              </div>
             </div>
 
             {/* 官式公文標頭區塊 */}
             <div className="px-6 pt-5 pb-3" style={{
-              fontFamily: '"標楷體", "DFKai-SB", serif',
               borderBottom: "1px solid var(--border)",
             }}>
+              {isDecree && (
+                <div className="mb-4 text-center text-2xl tracking-[0.35em]" style={{ color: "var(--text-primary)" }}>
+                  {doc.issuer_full_name && (
+                    <span className="tracking-normal">{doc.issuer_full_name} </span>
+                  )}
+                  令
+                </div>
+              )}
               {/* 公文字號 + 發文日期 */}
-              <div className="flex items-center justify-between text-sm">
-                <span style={{ color: "var(--text-secondary)" }}>
-                  公文字號：
+              <div className="flex flex-col gap-1 text-sm sm:flex-row sm:items-center sm:justify-between">
+                <span className="min-w-0 break-words" style={{ color: "var(--text-secondary)" }}>
+                  {isDecree ? "發文字號：" : "公文字號："}
                   <span className="font-mono font-semibold" style={{ color: "var(--primary)" }}>
                     {doc.serial_number || "（未分配）"}
                   </span>
                 </span>
-                <span style={{ color: "var(--text-secondary)" }}>
+                <span className="sm:flex-shrink-0" style={{ color: "var(--text-secondary)" }}>
                   發文日期：{toROCDate(doc.completed_at ?? doc.submitted_at ?? doc.created_at)}
                 </span>
               </div>
@@ -649,9 +603,9 @@ export default function DocumentDetailPage() {
                 </div>
               )}
               {/* 受文者（函/令） */}
-              {doc.category !== "announcement" && doc.recipients.filter(r => r.recipient_type === "main" || r.recipient_type === "primary").length > 0 && (
+              {doc.category !== "announcement" && primaryRecipients.length > 0 && (
                 <div className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
-                  受文者：{doc.recipients.filter(r => r.recipient_type === "main" || r.recipient_type === "primary").map(r => r.name).join("、")}
+                  受文者：{primaryRecipients.map(r => r.name).join("、")}
                 </div>
               )}
             </div>
@@ -710,6 +664,21 @@ export default function DocumentDetailPage() {
                     </div>
                   )}
                 </div>
+              ) : isDecree ? (
+                <div className="space-y-5" style={{ color: "var(--text-primary)" }}>
+                  {decreeBody && <OfficialText value={decreeBody} className="text-sm" />}
+                  {attachmentNames && (
+                    <div>
+                      <p>附件：</p>
+                      <div className="pl-[2em]">
+                        <OfficialText value={attachmentNames} />
+                      </div>
+                    </div>
+                  )}
+                  {!decreeBody && !attachmentNames && (
+                    <p className="text-sm" style={{ color: "var(--text-muted)" }}>（尚無令文內容）</p>
+                  )}
+                </div>
               ) : (
                 <>
                   {doc.subject && (
@@ -762,7 +731,6 @@ export default function DocumentDetailPage() {
                               <p className="text-3xl tracking-[0.15em]"
                                 style={{
                                   color: "var(--primary)",
-                                  fontFamily: '"Segoe Print","Bradley Hand ITC","HanziPen SC","Yuji Syuku","DFKai-SB","標楷體",cursive',
                                 }}>
                                 {signature.name}
                               </p>
@@ -780,7 +748,6 @@ export default function DocumentDetailPage() {
                               <p className="text-3xl tracking-[0.15em]"
                                 style={{
                                   color: "var(--primary)",
-                                  fontFamily: '"Segoe Print","Bradley Hand ITC","HanziPen SC","Yuji Syuku","DFKai-SB","標楷體",cursive',
                                 }}>
                                 {doc.handler_name}
                               </p>
@@ -797,7 +764,60 @@ export default function DocumentDetailPage() {
             </div>
           </div>
 
+          <div className="no-print flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setShowDocumentInfo(v => !v)}
+              className="btn btn-ghost btn-sm"
+            >
+              {showDocumentInfo ? "收合公文資料" : "公文資料"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowAttachments(v => !v)}
+              className="btn btn-ghost btn-sm"
+            >
+              {showAttachments ? "收合附件" : `附件 ${doc.attachments.length ? `(${doc.attachments.length})` : ""}`}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowVersions(v => !v)}
+              className="btn btn-ghost btn-sm"
+            >
+              {showVersions ? "收合歷程" : `版本歷程 ${doc.revisions.length ? `(${doc.revisions.length})` : ""}`}
+            </button>
+          </div>
+
+          {showDocumentInfo && (
+            <div className="card p-4">
+              <dl className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-3">
+                {docInfoRows.map(([k, v]) => (
+                  <div key={k}>
+                    <dt style={{ color: "var(--text-muted)" }}>{k}</dt>
+                    <dd className="mt-0.5" style={{ color: "var(--text-primary)" }}>{v}</dd>
+                  </div>
+                ))}
+              </dl>
+              {doc.handler_email && (
+                <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+                  聯絡：{doc.handler_email}
+                </p>
+              )}
+              {doc.recipients.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+                  {doc.recipients.map(r => (
+                    <span key={r.id} className="text-xs px-2.5 py-1 rounded-full"
+                      style={{ color: "var(--primary)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }}>
+                      {{ main: "受文者", primary: "正本", copy: "副本" }[r.recipient_type]} {r.name}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* 附件 */}
+          {showAttachments && (
           <div className="card p-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
@@ -958,9 +978,10 @@ export default function DocumentDetailPage() {
               </div>
             )}
           </div>
+          )}
 
           {/* PDF / Google Drive 預覽 */}
-          {(() => {
+          {showAttachments && (() => {
             const previews: Array<{ key: string; label: string; src: string }> = [];
 
             // Google Drive 連結
@@ -1002,7 +1023,7 @@ export default function DocumentDetailPage() {
           })()}
 
           {/* 版本歷程 */}
-          <VersionHistory revisions={doc.revisions} />
+          {showVersions && <VersionHistory revisions={doc.revisions} />}
         </div>
 
         {/* 右：審核面板 */}

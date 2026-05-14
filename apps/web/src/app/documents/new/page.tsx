@@ -10,6 +10,7 @@ import type {
 } from "@/lib/types";
 import type { OrgRead, UserSummary } from "@/lib/api";
 import GongwenEditor from "@/components/ui/GongwenEditor";
+import { useDraftAutosave, useFileDraftAutosave } from "@/hooks/useDraftAutosave";
 
 interface Recipient {
   id: string;
@@ -17,6 +18,41 @@ interface Recipient {
   name: string;
   email: string;
 }
+
+interface LinkDraft {
+  id: string;
+  url: string;
+  display_text: string;
+}
+
+type DocumentDraft = {
+  urgency: DocumentUrgency;
+  classification: DocumentClassification;
+  subject: string;
+  category: DocumentCategory;
+  selectedOrgId: string;
+  docDescription: string;
+  actionRequired: string;
+  meetingPurpose: string;
+  meetingTime: string;
+  meetingLocation: string;
+  meetingChairperson: string;
+  handlerName: string;
+  handlerUnit: string;
+  handlerEmail: string;
+  showEmail: boolean;
+  dueDate: string;
+  visibilityLevel: DocumentVisibility;
+  recipients: Recipient[];
+  pendingLinks: LinkDraft[];
+  newLink: LinkDraftInput;
+  selectedTemplateId: string;
+};
+
+type LinkDraftInput = {
+  url: string;
+  display_text: string;
+};
 
 function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -156,6 +192,7 @@ export default function NewDocumentPage() {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [category, setCategory] = useState<DocumentCategory>("letter");
   const isMeetingNotice = category === "meeting_notice";
+  const isDecree = category === "decree";
   const docType = CATEGORY_OPTIONS.find(o => o.value === category)?.label ?? "";
 
   // 組織列表
@@ -171,7 +208,7 @@ export default function NewDocumentPage() {
 
   const fieldError = {
     org:     !selectedOrgId                          ? "請選擇發文組織" : "",
-    subject: !isMeetingNotice && !subject.trim()     ? "主旨為必填"     : "",
+    subject: !isMeetingNotice && !isDecree && !subject.trim() ? "主旨為必填" : "",
   };
   const hasErrors = Object.values(fieldError).some(Boolean);
   const markTouched = (key: string) => setTouched(p => ({ ...p, [key]: true }));
@@ -197,10 +234,9 @@ export default function NewDocumentPage() {
   const [recipients, setRecipients] = useState<Recipient[]>([]);
 
   // 連結附件（草稿建立後逐一新增）
-  interface LinkDraft { id: string; url: string; display_text: string }
   const [pendingLinks, setPendingLinks] = useState<LinkDraft[]>([]);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
-  const [newLink, setNewLink] = useState({ url: "", display_text: "" });
+  const [newLink, setNewLink] = useState<LinkDraftInput>({ url: "", display_text: "" });
   const addPendingLink = () => {
     if (!newLink.url.trim()) return;
     setPendingLinks(p => [...p, { id: crypto.randomUUID(), ...newLink }]);
@@ -209,6 +245,105 @@ export default function NewDocumentPage() {
   const [templates, setTemplates] = useState<SerialTemplateOut[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const selectedTemplate = templates.find((t) => t.id === selectedTemplateId) ?? null;
+  const draftKey = templateId ? `documents:new:template:${templateId}` : "documents:new";
+  const draftValue = useMemo<DocumentDraft>(() => ({
+    urgency,
+    classification,
+    subject,
+    category,
+    selectedOrgId,
+    docDescription,
+    actionRequired,
+    meetingPurpose,
+    meetingTime,
+    meetingLocation,
+    meetingChairperson,
+    handlerName,
+    handlerUnit,
+    handlerEmail,
+    showEmail,
+    dueDate,
+    visibilityLevel,
+    recipients,
+    pendingLinks,
+    newLink,
+    selectedTemplateId,
+  }), [
+    actionRequired,
+    category,
+    classification,
+    docDescription,
+    dueDate,
+    handlerEmail,
+    handlerName,
+    handlerUnit,
+    meetingChairperson,
+    meetingLocation,
+    meetingPurpose,
+    meetingTime,
+    newLink,
+    pendingLinks,
+    recipients,
+    selectedOrgId,
+    selectedTemplateId,
+    showEmail,
+    subject,
+    urgency,
+    visibilityLevel,
+  ]);
+  const restoreDraft = useCallback((draft: DocumentDraft) => {
+    setUrgency(draft.urgency ?? "normal");
+    setClassification(draft.classification ?? "normal");
+    setSubject(draft.subject ?? "");
+    setCategory(draft.category ?? "letter");
+    setSelectedOrgId(draft.selectedOrgId ?? "");
+    setDocDescription(draft.docDescription ?? "");
+    setActionRequired(draft.actionRequired ?? "");
+    setMeetingPurpose(draft.meetingPurpose ?? "");
+    setMeetingTime(draft.meetingTime ?? "");
+    setMeetingLocation(draft.meetingLocation ?? "");
+    setMeetingChairperson(draft.meetingChairperson ?? "");
+    setHandlerName(draft.handlerName ?? "");
+    setHandlerUnit(draft.handlerUnit ?? "");
+    setHandlerEmail(draft.handlerEmail ?? "");
+    setShowEmail(draft.showEmail ?? true);
+    setDueDate(draft.dueDate ?? "");
+    setVisibilityLevel(draft.visibilityLevel ?? "org_only");
+    setRecipients(draft.recipients ?? []);
+    setPendingLinks(draft.pendingLinks ?? []);
+    setNewLink(draft.newLink ?? { url: "", display_text: "" });
+    setSelectedTemplateId(draft.selectedTemplateId ?? "");
+    toast.info("已復原未儲存的公文草稿");
+  }, []);
+  const { clearDraft, flushDraft } = useDraftAutosave({
+    key: draftKey,
+    value: draftValue,
+    onRestore: restoreDraft,
+    isEmpty: useCallback((draft: DocumentDraft) => (
+      !(draft.subject ?? "").trim()
+      && !(draft.docDescription ?? "").trim()
+      && !(draft.actionRequired ?? "").trim()
+      && !(draft.meetingPurpose ?? "").trim()
+      && !draft.meetingTime
+      && !(draft.meetingLocation ?? "").trim()
+      && !(draft.meetingChairperson ?? "").trim()
+      && !(draft.handlerUnit ?? "").trim()
+      && !draft.dueDate
+      && (draft.recipients ?? []).length === 0
+      && (draft.pendingLinks ?? []).length === 0
+      && !(draft.newLink?.url ?? "").trim()
+      && !(draft.newLink?.display_text ?? "").trim()
+    ), []),
+  });
+  const restoreFileDraft = useCallback((files: File[]) => {
+    setPendingFiles(files);
+    toast.info("已復原未上傳的公文附件草稿");
+  }, []);
+  const { clearDraftFiles, flushDraftFiles } = useFileDraftAutosave({
+    key: `${draftKey}:files`,
+    files: pendingFiles,
+    onRestore: restoreFileDraft,
+  });
 
   // 載入使用者資料與組織
   useEffect(() => {
@@ -277,9 +412,9 @@ export default function NewDocumentPage() {
       const doc = await documentsApi.create({
         title: autoTitle, urgency, classification, category,
         serial_template_id: selectedTemplateId || null,
-        subject: subject || undefined,
+        subject: isDecree ? undefined : subject || undefined,
         doc_description: docDescription || undefined,
-        action_required: actionRequired || undefined,
+        action_required: isDecree ? undefined : actionRequired || undefined,
         meeting_purpose: category === "meeting_notice" ? (meetingPurpose || undefined) : undefined,
         meeting_time: category === "meeting_notice" && meetingTime ? meetingTime : undefined,
         meeting_location: category === "meeting_notice" ? (meetingLocation || undefined) : undefined,
@@ -302,9 +437,13 @@ export default function NewDocumentPage() {
       for (const file of pendingFiles) {
         await documentsApi.uploadAttachment(doc.id, file);
       }
+      clearDraft();
+      clearDraftFiles();
       toast.success("草稿已儲存");
       router.push(`/documents/${encodeURIComponent(doc.serial_number)}`);
     } catch (e) {
+      flushDraft();
+      flushDraftFiles();
       toast.error(e instanceof ApiError ? e.message : "儲存失敗");
     } finally {
       setSaving(false);
@@ -439,9 +578,9 @@ export default function NewDocumentPage() {
           )}
 
           {/* 公文主體 */}
-          <FormSection title={isMeetingNotice ? "議事日程" : "公文內容"}>
+          <FormSection title={isMeetingNotice ? "議事日程" : isDecree ? "令文內容" : "公文內容"}>
             {/* 主旨（開會通知單不顯示） */}
-            {!isMeetingNotice && (
+            {!isMeetingNotice && !isDecree && (
               <div>
                 <Label required>主旨</Label>
                 <textarea
@@ -475,7 +614,7 @@ export default function NewDocumentPage() {
             )}
             <div>
               <Label>
-                {isMeetingNotice ? "議事日程" : "說明"}
+                {isMeetingNotice ? "議事日程" : isDecree ? "正文" : "說明"}
                 <span className="ml-2 font-normal opacity-60 text-[10px]">
                   Tab 降級 ／ Shift+Tab 升級 ／ Enter 續編
                 </span>
@@ -486,11 +625,13 @@ export default function NewDocumentPage() {
                 minRows={6}
                 placeholder={isMeetingNotice
                   ? "一、審查「…」案。\n二、討論「…」案。\n三、臨時動議。"
+                  : isDecree
+                    ? "茲修正發布「…」第…條條文，自即日生效。\n\n附修正條文1份。"
                   : "一、說明事由…\n　　（一）依據：\n　　（二）辦理進度：\n　　　　1. 第一階段…"}
               />
             </div>
             {/* 辦法（開會通知單不顯示） */}
-            {!isMeetingNotice && (
+            {!isMeetingNotice && !isDecree && (
               <div>
                 <Label>辦法</Label>
                 <GongwenEditor
@@ -504,7 +645,13 @@ export default function NewDocumentPage() {
           </FormSection>
 
           {/* 受文者 / 出席者 */}
-          <FormSection title={isMeetingNotice ? "受文者 / 正本（出席） / 副本（列席）" : "受文者"}>
+          <FormSection title={
+            isMeetingNotice
+              ? "受文者 / 正本（出席） / 副本（列席）"
+              : isDecree
+                ? "受文者（選填）"
+                : "受文者"
+          }>
             {recipients.length > 0 && (
               <ul className="space-y-1.5">
                 {recipients.map((r) => (

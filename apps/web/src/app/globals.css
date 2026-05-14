@@ -2,7 +2,7 @@
 
 /* ══════════════════════════════════════════════════════════════════════════
    HCCA Campus Platform — Design System v3
-   Navy × Gold · 沉穩金質 · 宋體美學
+   Neutral × Gold · high-contrast governance UI
    Light / Dark 兩套完整主題
    ══════════════════════════════════════════════════════════════════════════ */
 
@@ -18,9 +18,9 @@
 
   /* 文字 */
   --text-primary:   #1a1a2e;
-  --text-secondary: #6b7280;
-  --text-muted:     #9ca3af;
-  --text-disabled:  #d1d5db;
+  --text-secondary: #475569;
+  --text-muted:     #64748b;
+  --text-disabled:  #94a3b8;
 
   /* 邊框（淡土黃） */
   --border:         #e8e2d6;
@@ -218,8 +218,7 @@ html {
 body {
   background-color: var(--bg-base);
   color: var(--text-primary);
-  /* Noto Sans TC 作為內文字型，現代乾淨 */
-  font-family: 'Noto Sans TC', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   font-size: 0.9375rem;
   line-height: 1.7;
   -webkit-font-smoothing: antialiased;
@@ -228,11 +227,10 @@ body {
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-/* 標題使用 Noto Serif TC，展現古典優雅氣質 */
 h1, h2, h3, h4, h5, h6 {
-  font-family: 'Noto Serif TC', 'Noto Sans TC', Georgia, serif;
+  font-family: inherit;
   line-height: 1.4;
-  letter-spacing: 0.02em;
+  letter-spacing: 0;
   color: var(--text-primary);
 }
 
@@ -298,8 +296,8 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   border-radius: var(--radius-md);
   font-size: 0.8125rem;
   font-weight: 500;
-  font-family: 'Noto Sans TC', sans-serif;
-  letter-spacing: 0.03em;
+  font-family: inherit;
+  letter-spacing: 0;
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
@@ -399,7 +397,7 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   font-size: 0.875rem;
-  font-family: 'Noto Sans TC', sans-serif;
+  font-family: inherit;
   line-height: 1.5;
   outline: none;
   transition: border-color var(--transition), box-shadow var(--transition);
@@ -422,7 +420,7 @@ select {
   color: var(--text-primary);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  font-family: 'Noto Sans TC', sans-serif;
+  font-family: inherit;
   font-size: 0.875rem;
   line-height: 1.5;
   outline: none;
@@ -457,7 +455,7 @@ select option {
   color: var(--text-primary);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  font-family: 'Noto Sans TC', sans-serif;
+  font-family: inherit;
   font-size: 0.8125rem;
   line-height: 1.5;
   outline: none;
@@ -603,8 +601,8 @@ select.input-field {
   flex-shrink: 0;
 }
 .page-header h1, .page-header h2 {
-  font-family: 'Noto Serif TC', serif;
-  letter-spacing: 0.04em;
+  font-family: inherit;
+  letter-spacing: 0;
 }
 
 .page-body {
@@ -654,7 +652,7 @@ select.input-field {
   border-radius: var(--radius-md);
   font-size: 0.8125rem;
   font-weight: 500;
-  font-family: 'Noto Sans TC', sans-serif;
+  font-family: inherit;
   color: var(--sidebar-text);
   text-decoration: none;
   border-left: 2px solid transparent;
@@ -761,12 +759,12 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
 /* ── Prose（Markdown 內容） ───────────────────────────────────────────── */
 .prose { color: var(--text-primary); max-width: none; }
 .prose h1, .prose h2, .prose h3 {
-  font-family: 'Noto Serif TC', serif;
+  font-family: inherit;
   color: var(--text-primary);
   font-weight: 600;
   margin-top: 1.5em;
   margin-bottom: 0.5em;
-  letter-spacing: 0.03em;
+  letter-spacing: 0;
 }
 .prose p   { color: var(--text-secondary); line-height: 1.8; margin-bottom: 1em; }
 .prose a   { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
@@ -790,7 +788,7 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
   padding-left: 1rem;
   color: var(--text-muted);
   font-style: italic;
-  font-family: 'Noto Serif TC', serif;
+  font-family: inherit;
 }
 .prose table { border-collapse: collapse; width: 100%; }
 .prose th {
@@ -800,8 +798,8 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
   border: 1px solid var(--border);
   font-weight: 600;
   text-align: left;
-  font-family: 'Noto Serif TC', serif;
-  letter-spacing: 0.03em;
+  font-family: inherit;
+  letter-spacing: 0;
 }
 .prose td {
   padding: 0.5rem 0.75rem;

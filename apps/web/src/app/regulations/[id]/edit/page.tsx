@@ -20,6 +20,7 @@ import {
 } from "@/components/regulations/RegulationEditParts";
 import LawTreeEditor from "@/components/regulations/LawTreeEditor";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import { ApiError, regulationsApi, regulationHref } from "@/lib/api";
 import type {
   ArticleType,
@@ -30,6 +31,23 @@ import type {
 } from "@/lib/types";
 
 // ── 主頁面 ────────────────────────────────────────────────────────────────────
+
+type RegulationEditDraft = {
+  title: string;
+  category: RegulationCategory;
+  preface: string;
+  amendmentType: RegulationAmendmentType;
+  amendedArticlesInput: string;
+  effectiveDate: string;
+  legislativeHistory: string;
+  legalBasis: string;
+  proposalMetadata: string;
+  publishSummary: string;
+  publishAmendDesc: string;
+  articles: RegulationArticleOut[];
+  addingEnd: boolean;
+  endForm: NewArtForm;
+};
 
 export default function EditRegulationPage() {
   const { id } = useParams<{ id: string }>();
@@ -67,6 +85,89 @@ export default function EditRegulationPage() {
   const [addingEnd, setAddingEnd] = useState(false);
   const [endForm, setEndForm] = useState<NewArtForm>(EMPTY_FORM);
   const currentRegHref = reg ? regulationHref(reg) : `/regulations/${encodeURIComponent(id)}`;
+  const draftValue = useMemo<RegulationEditDraft>(() => ({
+    title,
+    category,
+    preface,
+    amendmentType,
+    amendedArticlesInput,
+    effectiveDate,
+    legislativeHistory,
+    legalBasis,
+    proposalMetadata,
+    publishSummary,
+    publishAmendDesc,
+    articles,
+    addingEnd,
+    endForm,
+  }), [
+    addingEnd,
+    amendedArticlesInput,
+    amendmentType,
+    articles,
+    category,
+    effectiveDate,
+    endForm,
+    legalBasis,
+    legislativeHistory,
+    preface,
+    proposalMetadata,
+    publishAmendDesc,
+    publishSummary,
+    title,
+  ]);
+  const originalDraft = useMemo<RegulationEditDraft | null>(() => {
+    if (!reg) return null;
+    return {
+      title: reg.title,
+      category: reg.category,
+      preface: reg.preface ?? "",
+      amendmentType: reg.amendment_type,
+      amendedArticlesInput: (reg.amended_articles ?? "")
+        .split(",")
+        .map(x => x.trim())
+        .filter(Boolean)
+        .join("\n"),
+      effectiveDate: reg.effective_date ? reg.effective_date.slice(0, 10) : "",
+      legislativeHistory: reg.legislative_history ?? "",
+      legalBasis: reg.legal_basis ?? "",
+      proposalMetadata: reg.proposal_metadata ?? "",
+      publishSummary: "",
+      publishAmendDesc: "",
+      articles: [...reg.articles]
+        .filter(a => !a.is_deleted)
+        .sort((a, b) => a.sort_index - b.sort_index),
+      addingEnd: false,
+      endForm: EMPTY_FORM,
+    };
+  }, [reg]);
+  const restoreDraft = useCallback((draft: RegulationEditDraft) => {
+    setTitle(draft.title ?? "");
+    setCategory(draft.category ?? "ordinance");
+    setPreface(draft.preface ?? "");
+    setAmendmentType(draft.amendmentType ?? "enact");
+    setAmendedArticlesInput(draft.amendedArticlesInput ?? "");
+    setEffectiveDate(draft.effectiveDate ?? "");
+    setLegislativeHistory(draft.legislativeHistory ?? "");
+    setLegalBasis(draft.legalBasis ?? "");
+    setProposalMetadata(draft.proposalMetadata ?? "");
+    setPublishSummary(draft.publishSummary ?? "");
+    setPublishAmendDesc(draft.publishAmendDesc ?? "");
+    setArticles(draft.articles ?? []);
+    setAddingEnd(Boolean(draft.addingEnd));
+    setEndForm(draft.endForm ?? EMPTY_FORM);
+    toast.info("已復原未儲存的法規編輯草稿");
+  }, []);
+  const { flushDraft } = useDraftAutosave({
+    key: `regulations:${id}:edit`,
+    value: draftValue,
+    onRestore: restoreDraft,
+    enabled: Boolean(reg),
+    isEmpty: useCallback((draft: RegulationEditDraft) => {
+      if (!originalDraft) return true;
+      return JSON.stringify(draft) === JSON.stringify(originalDraft);
+    }, [originalDraft]),
+  });
 
   // ── 資料載入 ────────────────────────────────────────────────────────────────
 
@@ -140,6 +241,7 @@ export default function EditRegulationPage() {
       toast.success("基本資訊已儲存");
       router.replace(`${regulationHref(updated)}/edit`);
     } catch (e) {
+      flushDraft();
       toast.error(e instanceof ApiError ? e.message : "儲存失敗");
     } finally { setSavingInfo(false); }
   };
@@ -203,6 +305,7 @@ export default function EditRegulationPage() {
       toast.success("條文已插入");
       setAddingEnd(false); setEndForm(EMPTY_FORM);
     } catch (e) {
+      flushDraft();
       toast.error(e instanceof ApiError ? e.message : "插入失敗");
     } finally { setInserting(false); }
   };

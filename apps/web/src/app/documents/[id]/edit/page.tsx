@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -11,8 +11,27 @@ import type {
   DocumentCategory, RecipientType, SerialTemplateOut,
 } from "@/lib/types";
 import GongwenEditor from "@/components/ui/GongwenEditor";
+import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 
 interface Recipient { id: string; recipient_type: RecipientType; name: string; email: string }
+
+type DocumentEditDraft = {
+  title: string;
+  urgency: DocumentUrgency;
+  classification: DocumentClassification;
+  category: DocumentCategory;
+  subject: string;
+  docDescription: string;
+  actionRequired: string;
+  handlerName: string;
+  handlerUnit: string;
+  handlerEmail: string;
+  dueDate: string;
+  changeNote: string;
+  recipients: Recipient[];
+  newRecipient: { name: string; email: string; recipient_type: RecipientType };
+  selectedTemplateId: string;
+};
 
 export default function EditDocumentPage() {
   const { id } = useParams<{ id: string }>();
@@ -40,6 +59,90 @@ export default function EditDocumentPage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [uploadingFile, setUploadingFile] = useState(false);
   const [doc, setDoc] = useState<DocumentOut | null>(null);
+  const draftValue = useMemo<DocumentEditDraft>(() => ({
+    title,
+    urgency,
+    classification,
+    category,
+    subject,
+    docDescription,
+    actionRequired,
+    handlerName,
+    handlerUnit,
+    handlerEmail,
+    dueDate,
+    changeNote,
+    recipients,
+    newRecipient,
+    selectedTemplateId,
+  }), [
+    actionRequired,
+    category,
+    changeNote,
+    classification,
+    docDescription,
+    dueDate,
+    handlerEmail,
+    handlerName,
+    handlerUnit,
+    newRecipient,
+    recipients,
+    selectedTemplateId,
+    subject,
+    title,
+    urgency,
+  ]);
+  const originalDraft = useMemo<DocumentEditDraft | null>(() => doc ? ({
+    title: doc.title,
+    urgency: doc.urgency,
+    classification: doc.classification,
+    category: doc.category,
+    subject: doc.subject ?? "",
+    docDescription: doc.doc_description ?? "",
+    actionRequired: doc.action_required ?? "",
+    handlerName: doc.handler_name ?? "",
+    handlerUnit: doc.handler_unit ?? "",
+    handlerEmail: doc.handler_email ?? "",
+    dueDate: doc.due_date ? doc.due_date.split("T")[0] : "",
+    changeNote: "",
+    recipients: doc.recipients.map(r => ({
+      id: r.id,
+      recipient_type: r.recipient_type,
+      name: r.name,
+      email: r.email ?? "",
+    })),
+    newRecipient: { name: "", email: "", recipient_type: "main" },
+    selectedTemplateId: doc.serial_template_id ?? "",
+  }) : null, [doc]);
+  const restoreDraft = useCallback((draft: DocumentEditDraft) => {
+    setTitle(draft.title ?? "");
+    setUrgency(draft.urgency ?? "normal");
+    setClassification(draft.classification ?? "normal");
+    setCategory(draft.category ?? "letter");
+    setSubject(draft.subject ?? "");
+    setDocDescription(draft.docDescription ?? "");
+    setActionRequired(draft.actionRequired ?? "");
+    setHandlerName(draft.handlerName ?? "");
+    setHandlerUnit(draft.handlerUnit ?? "");
+    setHandlerEmail(draft.handlerEmail ?? "");
+    setDueDate(draft.dueDate ?? "");
+    setChangeNote(draft.changeNote ?? "");
+    setRecipients(draft.recipients ?? []);
+    setNewRecipient(draft.newRecipient ?? { name: "", email: "", recipient_type: "main" });
+    setSelectedTemplateId(draft.selectedTemplateId ?? "");
+    toast.info("已復原未儲存的公文編輯草稿");
+  }, []);
+  const { clearDraft, flushDraft } = useDraftAutosave({
+    key: `documents:${id}:edit`,
+    value: draftValue,
+    onRestore: restoreDraft,
+    enabled: Boolean(doc),
+    isEmpty: useCallback((draft: DocumentEditDraft) => {
+      if (!originalDraft) return true;
+      if (!draft.newRecipient) return true;
+      return JSON.stringify(draft) === JSON.stringify(originalDraft);
+    }, [originalDraft]),
+  });
 
   const fetchDoc = useCallback(async () => {
     try {
@@ -102,8 +205,9 @@ export default function EditDocumentPage() {
       await documentsApi.update(id, {
         title, urgency, classification, category,
         serial_template_id: selectedTemplateId || null,
-        subject: subject || undefined, doc_description: docDescription || undefined,
-        action_required: actionRequired || undefined,
+        subject: category === "decree" ? null : subject || undefined,
+        doc_description: docDescription || undefined,
+        action_required: category === "decree" ? null : actionRequired || undefined,
         handler_name: handlerName || undefined, handler_unit: handlerUnit || undefined,
         handler_email: handlerEmail || undefined,
         due_date: dueDate || undefined, change_note: changeNote || undefined,
@@ -112,9 +216,11 @@ export default function EditDocumentPage() {
       await documentsRecipientsApi.update(id, recipients.map(r => ({
         recipient_type: r.recipient_type, name: r.name, email: r.email || undefined,
       })));
+      clearDraft();
       toast.success("公文已更新");
       router.push(`/documents/${id}`);
     } catch (e) {
+      flushDraft();
       toast.error(e instanceof ApiError ? e.message : "儲存失敗");
     } finally { setSaving(false); }
   };
@@ -146,6 +252,7 @@ export default function EditDocumentPage() {
   const selectStyle = { background: "var(--bg-elevated)", border: "1px solid var(--border)" };
   const inputStyle = { border: "1px solid var(--border)" };
   const selectedTemplate = templates.find(t => t.id === selectedTemplateId) ?? null;
+  const isDecree = category === "decree";
 
   return (
     <div className="max-w-4xl mx-auto space-y-5">
@@ -194,35 +301,47 @@ export default function EditDocumentPage() {
 
           {/* 公文內容 */}
           <div className="card p-4 space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>公文內容（主旨／說明／辦法）</h3>
+            <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+              {isDecree ? "令文內容" : "公文內容（主旨／說明／辦法）"}
+            </h3>
+            {!isDecree && (
+              <div>
+                <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>一、主旨</label>
+                <textarea value={subject} onChange={e => setSubject(e.target.value)} rows={2}
+                  placeholder="一句話概述目的，結尾用「請 鑒核」等語。"
+                  wrap="soft"
+                  className="w-full bg-transparent  text-sm p-2 rounded outline-none resize-y"
+                  style={{
+                    ...inputStyle,
+                    overflowWrap: "anywhere",
+                    wordBreak: "break-word",
+                    overflowX: "hidden",
+                  }} />
+              </div>
+            )}
             <div>
-              <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>一、主旨</label>
-              <textarea value={subject} onChange={e => setSubject(e.target.value)} rows={2}
-                placeholder="一句話概述目的，結尾用「請 鑒核」等語。"
-                wrap="soft"
-                className="w-full bg-transparent  text-sm p-2 rounded outline-none resize-y"
-                style={{
-                  ...inputStyle,
-                  overflowWrap: "anywhere",
-                  wordBreak: "break-word",
-                  overflowX: "hidden",
-                }} />
-            </div>
-            <div>
-              <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>二、說明</label>
+              <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>
+                {isDecree ? "正文" : "二、說明"}
+              </label>
               <GongwenEditor value={docDescription} onChange={setDocDescription} minRows={5}
-                placeholder="詳細說明事由、依據、背景資訊..." />
+                placeholder={isDecree
+                  ? "茲修正發布「…」第…條條文，自即日生效。\n\n附修正條文1份。"
+                  : "詳細說明事由、依據、背景資訊..."} />
             </div>
-            <div>
-              <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>三、辦法</label>
-              <GongwenEditor value={actionRequired} onChange={setActionRequired} minRows={3}
-                placeholder="具體請求事項或行動方案..." />
-            </div>
+            {!isDecree && (
+              <div>
+                <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>三、辦法</label>
+                <GongwenEditor value={actionRequired} onChange={setActionRequired} minRows={3}
+                  placeholder="具體請求事項或行動方案..." />
+              </div>
+            )}
           </div>
 
           {/* 受文者 */}
           <div className="card p-4 space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>受文者</h3>
+            <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+              {isDecree ? "受文者（選填）" : "受文者"}
+            </h3>
             {recipients.map(r => (
               <div key={r.id} className="flex items-center gap-2 text-xs px-3 py-2 rounded"
                 style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>

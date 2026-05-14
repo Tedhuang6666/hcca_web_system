@@ -164,7 +164,9 @@ class DocumentTemplateBase(BaseModel):
     visibility_level: DocumentVisibility = DocumentVisibility.ORG_ONLY
     recipients: list[RecipientCreate] = Field(default_factory=list)
 
-    @field_validator("name", "subject", "doc_description", "action_required", "content", mode="before")
+    @field_validator(
+        "name", "subject", "doc_description", "action_required", "content", mode="before"
+    )
     @classmethod
     def prevent_template_xss(cls, v: str | None) -> str | None:
         if v is None:
@@ -178,12 +180,14 @@ class DocumentTemplateBase(BaseModel):
 
     @model_validator(mode="after")
     def validate_template_body(self) -> DocumentTemplateBase:
-        if self.category != DocumentCategory.MEETING_NOTICE:
+        if self.category not in (DocumentCategory.MEETING_NOTICE, DocumentCategory.DECREE):
             if not self.subject or not self.subject.strip():
-                raise ValueError("非開會通知單範本需填寫主旨")
+                raise ValueError("此類公文範本需填寫主旨")
             if len(self.subject.strip()) < 8:
                 raise ValueError("主旨長度過短，請使用正式句式")
-        elif not self.meeting_purpose or not self.meeting_location:
+        elif self.category == DocumentCategory.MEETING_NOTICE and (
+            not self.meeting_purpose or not self.meeting_location
+        ):
             raise ValueError("開會通知單範本需填寫開會事由與地點")
         return self
 
@@ -442,6 +446,7 @@ class DocumentListItem(BaseModel):
     submitted_at: datetime | None
     completed_at: datetime | None
     created_at: datetime
+    is_redacted: bool = False
 
 
 # ── 請求體 ─────────────────────────────────────────────────────────────────────
@@ -511,7 +516,9 @@ class DocumentCreate(BaseModel):
     # 受文者（可隨建立一起傳入）
     recipients: list[RecipientCreate] = Field(default_factory=list, description="受文者清單")
 
-    @field_validator("title", "subject", "doc_description", "action_required", "content", mode="before")
+    @field_validator(
+        "title", "subject", "doc_description", "action_required", "content", mode="before"
+    )
     @classmethod
     def prevent_xss_attacks(cls, v: str | None) -> str | None:
         """防止 XSS 攻擊 - 檢查常見的危險標籤"""
@@ -529,7 +536,7 @@ class DocumentCreate(BaseModel):
         if self.category == DocumentCategory.MEETING_NOTICE:
             if not self.meeting_purpose or not self.meeting_time or not self.meeting_location:
                 raise ValueError("開會通知單需填寫開會事由、時間與地點")
-        else:
+        elif self.category != DocumentCategory.DECREE:
             if not self.subject or not self.subject.strip():
                 raise ValueError("主旨為必填且不可為空白")
             if self.subject and len(self.subject.strip()) < 8:

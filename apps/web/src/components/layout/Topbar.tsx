@@ -175,9 +175,8 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
           className="text-sm truncate"
           style={{
             color: "var(--text-primary)",
-            fontFamily: "'Noto Serif TC', serif",
             fontWeight: 600,
-            letterSpacing: "0.06em",
+            letterSpacing: 0,
           }}>
           {pageTitle}
         </h1>
@@ -329,7 +328,6 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
                     background: "linear-gradient(135deg, rgba(201,168,76,0.18) 0%, rgba(201,168,76,0.08) 100%)",
                     color: "var(--primary)",
                     border: "1.5px solid rgba(201,168,76,0.35)",
-                    fontFamily: "'Noto Serif TC', serif",
                   }}
                   aria-hidden="true">
                   {initials}

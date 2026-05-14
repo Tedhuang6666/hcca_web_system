@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -9,6 +9,12 @@ import type { AnnouncementMediaOut, AnnouncementOut } from "@/lib/types";
 import AnnouncementEditor from "@/components/announcements/AnnouncementEditor";
 import { contentFromMarkdown, markdownFromContent } from "@/components/announcements/AnnouncementMarkdown";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useDraftAutosave } from "@/hooks/useDraftAutosave";
+
+type AnnouncementEditDraft = {
+  title: string;
+  markdown: string;
+};
 
 export default function EditAnnouncementPage() {
   const { id } = useParams<{ id: string }>();
@@ -26,6 +32,26 @@ export default function EditAnnouncementPage() {
   const canPublish = can("announcement:publish");
   const canUrgent = can("announcement:set_urgent");
   const canMedia = can("announcement:media_manage");
+  const draftValue = useMemo<AnnouncementEditDraft>(() => ({ title, markdown }), [markdown, title]);
+  const originalDraft = useMemo<AnnouncementEditDraft | null>(() => item ? ({
+    title: item.title,
+    markdown: markdownFromContent(item.content),
+  }) : null, [item]);
+  const restoreDraft = useCallback((draft: AnnouncementEditDraft) => {
+    setTitle(draft.title ?? "");
+    setMarkdown(draft.markdown ?? "");
+    toast.info("已復原未儲存的公告編輯草稿");
+  }, []);
+  const { clearDraft, flushDraft } = useDraftAutosave({
+    key: `announcements:${id}:edit`,
+    value: draftValue,
+    onRestore: restoreDraft,
+    enabled: Boolean(item),
+    isEmpty: useCallback((draft: AnnouncementEditDraft) => {
+      if (!originalDraft) return true;
+      return JSON.stringify(draft) === JSON.stringify(originalDraft);
+    }, [originalDraft]),
+  });
 
   useEffect(() => {
     announcementsApi.get(id)
@@ -53,8 +79,10 @@ export default function EditAnnouncementPage() {
         content: contentFromMarkdown(markdown),
       });
       setItem(updated);
+      clearDraft();
       toast.success("公告已儲存");
     } catch (e) {
+      flushDraft();
       toast.error(e instanceof ApiError ? e.message : "儲存失敗");
     } finally {
       setSaving(false);

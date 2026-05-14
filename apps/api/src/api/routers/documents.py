@@ -115,11 +115,20 @@ async def _get_doc_or_404(doc_id: str, session: DbDep) -> Document:
 
 async def _assert_access(session: AsyncSession, doc: Document, user: User) -> None:
     """組織可見性守衛：無訪問權限時拋出 403"""
+    if user.is_superuser:
+        return
+    codes = await get_user_permission_codes(session, user.id)
+    if {
+        str(PermissionCode.ADMIN_ALL),
+        str(PermissionCode.DOCUMENT_VIEW_ALL),
+        str(PermissionCode.DOCUMENT_ADMIN),
+    } & set(codes):
+        return
     ok = await doc_svc.check_document_access(session, doc, user.id)
     if not ok:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="您無權查看此公文（非建立者、審核人或同組織成員）",
+            detail="您無權查看此公文",
         )
 
 
@@ -478,8 +487,20 @@ async def list_documents(
     my_only: bool = Query(False, description="僅顯示我建立的公文"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
-) -> list[Document]:
-    return await doc_svc.list_documents(
+) -> list[DocumentListItem]:
+    can_view_all = False
+    if current_user is not None:
+        codes = await get_user_permission_codes(session, current_user.id)
+        can_view_all = current_user.is_superuser or bool(
+            {
+                str(PermissionCode.ADMIN_ALL),
+                str(PermissionCode.DOCUMENT_VIEW_ALL),
+                str(PermissionCode.DOCUMENT_ADMIN),
+            }
+            & set(codes)
+        )
+
+    docs = await doc_svc.list_documents(
         session,
         org_id=org_id,
         status=status_filter,
@@ -499,7 +520,13 @@ async def list_documents(
         limit=limit,
         offset=offset,
         public_only=(current_user is None),  # 未登入僅顯示公開公文
-        viewer_id=(current_user.id if current_user else None),
+        viewer_id=None if can_view_all else (current_user.id if current_user else None),
+    )
+    return await doc_svc.build_document_list_items(
+        session,
+        docs,
+        viewer_id=current_user.id if current_user else None,
+        reveal_sensitive=can_view_all,
     )
 
 
@@ -516,7 +543,7 @@ async def list_documents(
 async def get_document(doc_id: str, session: DbDep, current_user: OptionalUser) -> Document:
     doc = await _get_doc_or_404(doc_id, session)
     if current_user is None:
-        if not doc.is_public:
+        if not doc_svc.can_anonymous_access_document(doc):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此公文")
         await _attach_approval_titles(session, doc)
         return doc
@@ -1256,7 +1283,7 @@ async def list_attachments(
 ) -> list[DocumentAttachment]:
     doc = await _get_doc_or_404(doc_id, session)
     if current_user is None:
-        if not doc.is_public:
+        if not doc_svc.can_anonymous_access_document(doc):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此公文")
     else:
         await _assert_access(session, doc, current_user)
@@ -1427,7 +1454,7 @@ async def download_attachment(
 ) -> FileResponse:
     doc = await _get_doc_or_404(doc_id, session)
     if current_user is None:
-        if not doc.is_public:
+        if not doc_svc.can_anonymous_access_document(doc):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此公文")
     else:
         await _assert_access(session, doc, current_user)
@@ -1469,7 +1496,7 @@ async def preview_attachment(
 ) -> FileResponse:
     doc = await _get_doc_or_404(doc_id, session)
     if current_user is None:
-        if not doc.is_public:
+        if not doc_svc.can_anonymous_access_document(doc):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此公文")
     else:
         await _assert_access(session, doc, current_user)

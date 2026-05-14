@@ -8,6 +8,7 @@ import { announcementsApi, ApiError } from "@/lib/api";
 import type { AnnouncementOut } from "@/lib/types";
 import AnnouncementMarkdown from "@/components/announcements/AnnouncementMarkdown";
 import { usePermissions } from "@/hooks/usePermissions";
+import { API_BASE } from "@/lib/config";
 
 export default function AnnouncementDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -66,6 +67,25 @@ export default function AnnouncementDetailPage() {
         </div>
         <h1 className="text-2xl font-semibold leading-tight">{item.title}</h1>
       </header>
+
+      {item.media.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {item.media.map((media, index) => {
+            const href = media.url.startsWith("/uploads/") ? `${API_BASE}${media.url}` : media.url;
+            return (
+              <a
+                key={media.id}
+                href={href}
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-ghost btn-sm"
+              >
+                圖片 {index + 1}
+              </a>
+            );
+          })}
+        </div>
+      )}
 
       <div className="card p-5 md:p-7">
         <AnnouncementMarkdown content={item.content} />

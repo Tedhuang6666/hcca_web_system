@@ -566,6 +566,20 @@ export function ArticleRow({
         onCopyLink(shareUrl);
       }
     : undefined;
+  const labelLink = (label: string, title?: string | null) => {
+    const text = title ? `${label}　${title}` : label;
+    if (!shareUrl) return <span>{text}</span>;
+    return (
+      <a
+        href={shareUrl}
+        className="rounded-sm underline-offset-4 hover:underline"
+        style={{ color: "inherit", textDecorationColor: "var(--primary)" }}
+        title={`${text}連結`}
+      >
+        {text}
+      </a>
+    );
+  };
   const clearHighlightButton = highlighted && onClearHighlight ? (
     <button
       type="button"
@@ -596,7 +610,6 @@ export function ArticleRow({
         style={{
           color: "var(--text-primary)",
           fontSize: "1rem",
-          fontFamily: '"標楷體", "DFKai-SB", serif',
           ...dividerStyle,
           marginTop: index > 0 ? "0.5rem" : "0",
           ...highlightedStyle,
@@ -605,7 +618,7 @@ export function ArticleRow({
         }}>
         <span id={legacyAnchorId} aria-hidden="true" />
         <div className="flex flex-col items-center justify-center gap-2 sm:flex-row sm:gap-3">
-          <span>{displayLabel}　{a.title ?? ""}</span>
+          {labelLink(displayLabel, a.title)}
           {copyButton}
           {clearHighlightButton}
           {a.article_type === "chapter" && onToggleChapter && (
@@ -644,7 +657,6 @@ export function ArticleRow({
         onContextMenu={copyOnContextMenu}
         className="scroll-mt-20 px-3 py-3 sm:px-5 sm:py-2"
         style={{
-          fontFamily: '"標楷體", "DFKai-SB", serif',
           lineHeight: "1.9",
           fontSize: "0.9375rem",
           ...dividerStyle,
@@ -654,7 +666,7 @@ export function ArticleRow({
         <span id={legacyAnchorId} aria-hidden="true" />
         <div className="flex flex-col gap-1 sm:flex-row sm:gap-0" style={{ textIndent: 0, ...deletedStyle }}>
           <span className="flex items-center gap-1.5 font-bold sm:flex-shrink-0 sm:min-w-[5em]" style={{ color: "var(--text-primary)" }}>
-            <span>{displayLabel}</span>
+            {labelLink(displayLabel)}
             {copyButton}
             {clearHighlightButton}
           </span>
@@ -694,7 +706,6 @@ export function ArticleRow({
       onContextMenu={copyOnContextMenu}
       className="scroll-mt-20 px-3 py-2 sm:px-5 sm:py-1"
       style={{
-        fontFamily: '"標楷體", "DFKai-SB", serif',
         lineHeight: "1.8",
         fontSize: "0.9375rem",
         paddingLeft: `clamp(16px, ${4 + indentLevel * 6}vw, ${indentPx}px)`,
@@ -705,7 +716,7 @@ export function ArticleRow({
       <span id={legacyAnchorId} aria-hidden="true" />
       <div className="flex flex-col gap-1 sm:flex-row sm:gap-2" style={deletedStyle}>
         <span className="flex items-center gap-1.5 font-medium sm:flex-shrink-0 sm:min-w-[4.5em]" style={{ color: "var(--text-primary)" }}>
-          <span>{displayLabel}</span>
+          {labelLink(displayLabel)}
           {copyButton}
           {clearHighlightButton}
         </span>

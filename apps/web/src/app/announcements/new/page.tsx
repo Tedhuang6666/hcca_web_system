@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -8,14 +8,49 @@ import { announcementsApi, ApiError } from "@/lib/api";
 import AnnouncementEditor from "@/components/announcements/AnnouncementEditor";
 import { contentFromMarkdown } from "@/components/announcements/AnnouncementMarkdown";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useDraftAutosave } from "@/hooks/useDraftAutosave";
+
+type AnnouncementDraft = {
+  title: string;
+  markdown: string;
+  isUrgent: boolean;
+  urgentUntil: string;
+};
 
 export default function NewAnnouncementPage() {
   const router = useRouter();
   const { can } = usePermissions();
   const [title, setTitle] = useState("");
   const [markdown, setMarkdown] = useState("");
+  const [isUrgent, setIsUrgent] = useState(false);
+  const [urgentUntil, setUrgentUntil] = useState("");
   const [saving, setSaving] = useState(false);
   const canPublish = can("announcement:publish");
+  const canUrgent = can("announcement:set_urgent");
+  const draftValue = useMemo<AnnouncementDraft>(() => ({
+    title,
+    markdown,
+    isUrgent,
+    urgentUntil,
+  }), [isUrgent, markdown, title, urgentUntil]);
+  const restoreDraft = useCallback((draft: AnnouncementDraft) => {
+    setTitle(draft.title ?? "");
+    setMarkdown(draft.markdown ?? "");
+    setIsUrgent(Boolean(draft.isUrgent));
+    setUrgentUntil(draft.urgentUntil ?? "");
+    toast.info("已復原未送出的公告草稿");
+  }, []);
+  const { clearDraft, flushDraft } = useDraftAutosave({
+    key: "announcements:new",
+    value: draftValue,
+    onRestore: restoreDraft,
+    isEmpty: useCallback((draft: AnnouncementDraft) => (
+      !(draft.title ?? "").trim()
+      && !(draft.markdown ?? "").trim()
+      && !draft.isUrgent
+      && !draft.urgentUntil
+    ), []),
+  });
 
   const save = async (publish: boolean) => {
     if (!title.trim()) {
@@ -27,13 +62,19 @@ export default function NewAnnouncementPage() {
       const created = await announcementsApi.create({
         title: title.trim(),
         content: contentFromMarkdown(markdown),
+        is_urgent: canUrgent ? isUrgent : false,
+        urgent_until: canUrgent && isUrgent && urgentUntil
+          ? new Date(urgentUntil).toISOString()
+          : null,
       });
       if (publish && canPublish) {
         await announcementsApi.publish(created.id);
       }
+      clearDraft();
       toast.success(publish && canPublish ? "公告已發布" : "公告草稿已建立");
       router.push(`/announcements/${created.id}/edit`);
     } catch (e) {
+      flushDraft();
       toast.error(e instanceof ApiError ? e.message : "建立公告失敗");
     } finally {
       setSaving(false);
@@ -66,6 +107,31 @@ export default function NewAnnouncementPage() {
         media={[]}
         canManageMedia={false}
       />
+
+      {canUrgent && (
+        <section className="card p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={isUrgent}
+                onChange={(e) => setIsUrgent(e.target.checked)}
+              />
+              緊急公告
+            </label>
+            <input
+              type="datetime-local"
+              value={urgentUntil}
+              onChange={(e) => setUrgentUntil(e.target.value)}
+              className="input sm:w-64"
+              disabled={!isUrgent}
+            />
+          </div>
+          <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+            不設定截止時間時，緊急公告會持續顯示到手動關閉。
+          </p>
+        </section>
+      )}
 
       <div className="flex justify-end gap-2">
         <button type="button" className="btn btn-secondary" disabled={saving} onClick={() => save(false)}>

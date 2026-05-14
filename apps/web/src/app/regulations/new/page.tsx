@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useCallback, useMemo, useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import LawTreeEditor, { inferParentIdByPrevious } from "@/components/regulations/LawTreeEditor";
 import { ApiError, orgsApi, regulationsApi, regulationHref, type OrgRead } from "@/lib/api";
 import type { ArticleType, RegulationArticleOut, RegulationCategory } from "@/lib/types";
+import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 
 const CATEGORIES: [RegulationCategory, string][] = [
   ["constitution", "憲章"],
@@ -19,6 +20,17 @@ type DraftModal = {
   article_type: ArticleType;
   title: string;
   content: string;
+};
+
+type RegulationDraft = {
+  selectedOrgId: string;
+  title: string;
+  category: RegulationCategory;
+  preface: string;
+  publishImported: boolean;
+  articles: RegulationArticleOut[];
+  activeId: string | null;
+  modal: DraftModal | null;
 };
 
 function toArticle(id: string, type: ArticleType, parent_id: string | null, sort: number, order: number): RegulationArticleOut {
@@ -64,6 +76,39 @@ export default function NewRegulationPage() {
     }).catch(() => {});
   }, []);
 
+  const draftValue = useMemo<RegulationDraft>(() => ({
+    selectedOrgId,
+    title,
+    category,
+    preface,
+    publishImported,
+    articles,
+    activeId,
+    modal,
+  }), [activeId, articles, category, modal, preface, publishImported, selectedOrgId, title]);
+  const restoreDraft = useCallback((draft: RegulationDraft) => {
+    setSelectedOrgId(draft.selectedOrgId ?? "");
+    setTitle(draft.title ?? "");
+    setCategory(draft.category ?? "ordinance");
+    setPreface(draft.preface ?? "");
+    setPublishImported(Boolean(draft.publishImported));
+    setArticles(draft.articles ?? []);
+    setActiveId(draft.activeId ?? null);
+    setModal(draft.modal ?? null);
+    toast.info("已復原未建立的法規草案");
+  }, []);
+  const { clearDraft, flushDraft } = useDraftAutosave({
+    key: "regulations:new",
+    value: draftValue,
+    onRestore: restoreDraft,
+    isEmpty: useCallback((draft: RegulationDraft) => (
+      !(draft.title ?? "").trim()
+      && !(draft.preface ?? "").trim()
+      && (draft.articles ?? []).length === 0
+      && !draft.modal
+    ), []),
+  });
+
   const flat = useMemo(() => [...articles].sort((a, b) => a.sort_index - b.sort_index), [articles]);
 
   const addNode = (type: ArticleType, afterId?: string) => {
@@ -104,9 +149,11 @@ export default function NewRegulationPage() {
         });
         idMap.set(a.id, created.id);
       }
+      clearDraft();
       toast.success("法規草案已建立");
       router.push(`${regulationHref(reg)}/edit`);
     } catch (e) {
+      flushDraft();
       toast.error(e instanceof ApiError ? e.message : "建立失敗");
     } finally {
       setSaving(false);

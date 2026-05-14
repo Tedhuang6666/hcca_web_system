@@ -338,7 +338,8 @@ export default function DocumentListPage() {
     }
   });
 
-  const selectedList = sorted.filter((doc) => selectedIds.has(doc.id));
+  const selectableDocs = sorted.filter((doc) => !doc.is_redacted);
+  const selectedList = selectableDocs.filter((doc) => selectedIds.has(doc.id));
   const selectedArray = selectedList.map((doc) => doc.id);
   const selectedPendingArray = selectedList
     .filter((doc) => doc.status === "pending")
@@ -346,7 +347,8 @@ export default function DocumentListPage() {
   const selectedApprovedArray = selectedList
     .filter((doc) => doc.status === "approved")
     .map((doc) => doc.id);
-  const allVisibleSelected = sorted.length > 0 && sorted.every((doc) => selectedIds.has(doc.id));
+  const allVisibleSelected =
+    selectableDocs.length > 0 && selectableDocs.every((doc) => selectedIds.has(doc.id));
 
   const summarizeBatch = (result: BatchDocumentOperationOut) => {
     const failed = result.results.filter((item) => !item.ok);
@@ -428,6 +430,7 @@ export default function DocumentListPage() {
   };
 
   const toggleSelected = (id: string) => {
+    if (docs.find((doc) => doc.id === id)?.is_redacted) return;
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -440,9 +443,9 @@ export default function DocumentListPage() {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (allVisibleSelected) {
-        sorted.forEach((doc) => next.delete(doc.id));
+        selectableDocs.forEach((doc) => next.delete(doc.id));
       } else {
-        sorted.forEach((doc) => next.add(doc.id));
+        selectableDocs.forEach((doc) => next.add(doc.id));
       }
       return next;
     });
@@ -915,6 +918,7 @@ export default function DocumentListPage() {
                         type="checkbox"
                         checked={allVisibleSelected}
                         onChange={toggleAllVisible}
+                        disabled={selectableDocs.length === 0}
                         aria-label="選取目前列表所有公文"
                         className="accent-blue-600"
                       />
@@ -940,6 +944,7 @@ export default function DocumentListPage() {
                           type="checkbox"
                           checked={selectedIds.has(doc.id)}
                           onChange={() => toggleSelected(doc.id)}
+                          disabled={doc.is_redacted}
                           aria-label={`選取公文 ${doc.serial_number}`}
                           className="accent-blue-600"
                         />
@@ -950,12 +955,18 @@ export default function DocumentListPage() {
                         </span>
                       </td>
                       <td className="px-5 py-4 max-w-xs">
-                        <Link
-                          href={`/documents/${encodeURIComponent(doc.serial_number)}`}
-                          className="font-medium hover:underline transition-colors"
-                          style={{ color: "var(--text-primary)" }}>
-                          {doc.title}
-                        </Link>
+                        {doc.is_redacted ? (
+                          <span className="font-medium" style={{ color: "var(--text-muted)" }}>
+                            {doc.title}
+                          </span>
+                        ) : (
+                          <Link
+                            href={`/documents/${encodeURIComponent(doc.serial_number)}`}
+                            className="font-medium hover:underline transition-colors"
+                            style={{ color: "var(--text-primary)" }}>
+                            {doc.title}
+                          </Link>
+                        )}
                         {doc.subject && (
                           <p className="text-xs mt-0.5 truncate" style={{ color: "var(--text-muted)" }}>
                             {doc.subject}
@@ -991,32 +1002,40 @@ export default function DocumentListPage() {
                       </td>
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-2">
-                          <Link
-                            href={`/documents/${encodeURIComponent(doc.serial_number)}`}
-                            className="btn btn-ghost text-xs px-3 py-1.5"
-                            style={{ minHeight: "auto" }}>
-                            查看
-                          </Link>
-                          <button
-                            onClick={async (e) => {
-                              e.preventDefault();
-                              const url = `${window.location.origin}/documents/${encodeURIComponent(doc.serial_number)}`;
-                              try {
-                                await navigator.clipboard.writeText(url);
-                                toast.success("連結已複製");
-                              } catch {
-                                toast.error("複製失敗");
-                              }
-                            }}
-                            className="p-1.5 rounded hover:opacity-80 transition-opacity"
-                            style={{ color: "var(--text-muted)" }}
-                            title="複製連結">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                              strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-                            </svg>
-                          </button>
+                          {doc.is_redacted ? (
+                            <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                              無權限
+                            </span>
+                          ) : (
+                            <>
+                              <Link
+                                href={`/documents/${encodeURIComponent(doc.serial_number)}`}
+                                className="btn btn-ghost text-xs px-3 py-1.5"
+                                style={{ minHeight: "auto" }}>
+                                查看
+                              </Link>
+                              <button
+                                onClick={async (e) => {
+                                  e.preventDefault();
+                                  const url = `${window.location.origin}/documents/${encodeURIComponent(doc.serial_number)}`;
+                                  try {
+                                    await navigator.clipboard.writeText(url);
+                                    toast.success("連結已複製");
+                                  } catch {
+                                    toast.error("複製失敗");
+                                  }
+                                }}
+                                className="p-1.5 rounded hover:opacity-80 transition-opacity"
+                                style={{ color: "var(--text-muted)" }}
+                                title="複製連結">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                  strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                                </svg>
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1040,9 +1059,28 @@ export default function DocumentListPage() {
                       type="checkbox"
                       checked={selectedIds.has(doc.id)}
                       onChange={() => toggleSelected(doc.id)}
+                      disabled={doc.is_redacted}
                       aria-label={`選取公文 ${doc.serial_number}`}
                       className="mt-1 flex-shrink-0 accent-blue-600"
                     />
+                    {doc.is_redacted ? (
+                      <div
+                        className="flex items-start justify-between gap-3 flex-1 min-w-0"
+                        style={{ textDecoration: "none" }}>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate" style={{ color: "var(--text-muted)" }}>
+                            {doc.title}
+                          </p>
+                          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+                            建立 {new Date(doc.created_at).toLocaleDateString("zh-TW")}
+                          </p>
+                        </div>
+                        <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                          <DocumentStatusBadge status={doc.status} />
+                          <UrgencyBadge urgency={doc.urgency} />
+                        </div>
+                      </div>
+                    ) : (
                     <Link
                       href={`/documents/${encodeURIComponent(doc.serial_number)}`}
                       className="flex items-start justify-between gap-3 flex-1 min-w-0"
@@ -1071,20 +1109,23 @@ export default function DocumentListPage() {
                         <UrgencyBadge urgency={doc.urgency} />
                       </div>
                     </Link>
-                    <button
-                      onClick={async () => {
-                        const url = `${window.location.origin}/documents/${encodeURIComponent(doc.serial_number)}`;
-                        try { await navigator.clipboard.writeText(url); toast.success("連結已複製"); }
-                        catch { toast.error("複製失敗"); }
-                      }}
-                      className="p-2 rounded flex-shrink-0 hover:opacity-80"
-                      style={{ color: "var(--text-muted)" }} title="複製連結">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                        strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-                      </svg>
-                    </button>
+                    )}
+                    {!doc.is_redacted && (
+                      <button
+                        onClick={async () => {
+                          const url = `${window.location.origin}/documents/${encodeURIComponent(doc.serial_number)}`;
+                          try { await navigator.clipboard.writeText(url); toast.success("連結已複製"); }
+                          catch { toast.error("複製失敗"); }
+                        }}
+                        className="p-2 rounded flex-shrink-0 hover:opacity-80"
+                        style={{ color: "var(--text-muted)" }} title="複製連結">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                          strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                        </svg>
+                      </button>
+                    )}
                     </div>
                   </li>
                 );

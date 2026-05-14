@@ -32,6 +32,7 @@ from api.schemas.document import (
     DocumentApprovalDelegationCreate,
     DocumentApprovalDelegationUpdate,
     DocumentCreate,
+    DocumentListItem,
     DocumentTemplateCreate,
     DocumentTemplateDraftCreate,
     DocumentTemplateUpdate,
@@ -41,6 +42,11 @@ from api.schemas.document import (
 )
 
 logger = logging.getLogger(__name__)
+
+REDACTED_CONFIDENTIAL_TEXT = "(此公文為密件)"
+SENSITIVE_DOCUMENT_CLASSIFICATIONS = frozenset(
+    {DocumentClassification.CONFIDENTIAL, DocumentClassification.SECRET}
+)
 
 
 def _active_assignment_exists_for_viewer(
@@ -604,25 +610,33 @@ async def get_document_by_serial(session: AsyncSession, serial_number: str) -> D
     return result.scalar_one_or_none()
 
 
-async def check_document_access(
+def is_sensitive_document(doc: Document) -> bool:
+    """密等非普通者，列表需依完整讀取權限遮蔽內容。"""
+    return doc.classification in SENSITIVE_DOCUMENT_CLASSIFICATIONS
+
+
+def can_anonymous_access_document(doc: Document) -> bool:
+    """未登入訪客僅可查看公開且非密件的公文全文。"""
+    return (
+        doc.visibility_level == DocumentVisibility.PUBLICLY_OPEN
+        and not is_sensitive_document(doc)
+    )
+
+
+async def user_has_full_document_access(
     session: AsyncSession,
     doc: Document,
     user_id: uuid.UUID,
 ) -> bool:
     """
-    檢查使用者是否有權限查看此公文。
-    有以下任一身份者可查看：
-    1. 公文建立者
-    2. 任一審核步驟的審核人
-    3. 與公文同組織的成員（透過 UserPosition -> Position -> Org 確認）
+    檢查使用者是否可查看完整公文內容。
+    完整權限包含：建立者、審核人/有效代理、受文者、現任同組織成員。
     """
     from api.models.org import Position, UserPosition
 
-    # 1. 建立者
     if doc.created_by == user_id:
         return True
 
-    # 2. 審核人
     approver_ids = {a.approver_id for a in doc.approvals}
     delegate_ids = {a.delegate_id for a in doc.approvals if a.delegate_id}
     if user_id in approver_ids:
@@ -641,16 +655,51 @@ async def check_document_access(
             if assignment and assignment.delegate_user_id == user_id:
                 return True
 
-    # 3. 同組織成員（UserPosition -> Position.org_id）
+    viewer = await session.scalar(select(User).where(User.id == user_id))
+    if viewer and viewer.email:
+        recipient_result = await session.execute(
+            select(DocumentRecipient.id).where(
+                DocumentRecipient.document_id == doc.id,
+                DocumentRecipient.email.is_not(None),
+                DocumentRecipient.email == viewer.email,
+            )
+        )
+        if recipient_result.scalar_one_or_none() is not None:
+            return True
+
+    today = date.today()
     result = await session.execute(
-        select(UserPosition)
+        select(UserPosition.id)
         .join(Position, UserPosition.position_id == Position.id)
         .where(
             Position.org_id == doc.org_id,
             UserPosition.user_id == user_id,
+            UserPosition.start_date <= today,
+            or_(UserPosition.end_date.is_(None), UserPosition.end_date >= today),
         )
     )
     return result.scalar_one_or_none() is not None
+
+
+async def check_document_access(
+    session: AsyncSession,
+    doc: Document,
+    user_id: uuid.UUID,
+) -> bool:
+    """
+    檢查使用者是否有權限查看此公文。
+    有以下任一身份者可查看：
+    1. 公文建立者
+    2. 任一審核步驟的審核人
+    3. 與公文同組織的成員（透過 UserPosition -> Position -> Org 確認）
+    """
+    if await user_has_full_document_access(session, doc, user_id):
+        return True
+
+    return (
+        doc.visibility_level in {DocumentVisibility.PUBLIC, DocumentVisibility.PUBLICLY_OPEN}
+        and not is_sensitive_document(doc)
+    )
 
 
 async def _build_visibility_filter(
@@ -672,7 +721,11 @@ async def _build_visibility_filter(
     org_ids_result = await session.execute(
         select(Position.org_id)
         .join(UserPosition, UserPosition.position_id == Position.id)
-        .where(UserPosition.user_id == viewer_id)
+        .where(
+            UserPosition.user_id == viewer_id,
+            UserPosition.start_date <= date.today(),
+            or_(UserPosition.end_date.is_(None), UserPosition.end_date >= date.today()),
+        )
         .distinct()
     )
     viewer_org_ids = list(org_ids_result.scalars().all())
@@ -723,6 +776,35 @@ async def _build_visibility_filter(
             ),
         ),
     ]
+
+
+async def build_document_list_items(
+    session: AsyncSession,
+    docs: list[Document],
+    *,
+    viewer_id: uuid.UUID | None,
+    reveal_sensitive: bool = False,
+) -> list[DocumentListItem]:
+    """將公文 ORM 轉為列表項目，並遮蔽無完整權限者看到的密件內容。"""
+    items: list[DocumentListItem] = []
+    for doc in docs:
+        item = DocumentListItem.model_validate(doc)
+        if is_sensitive_document(doc) and not reveal_sensitive:
+            has_full_access = (
+                viewer_id is not None
+                and await user_has_full_document_access(session, doc, viewer_id)
+            )
+            if not has_full_access:
+                item = item.model_copy(
+                    update={
+                        "serial_number": REDACTED_CONFIDENTIAL_TEXT,
+                        "title": REDACTED_CONFIDENTIAL_TEXT,
+                        "subject": None,
+                        "is_redacted": True,
+                    }
+                )
+        items.append(item)
+    return items
 
 
 async def list_documents(

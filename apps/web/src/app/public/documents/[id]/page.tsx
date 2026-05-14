@@ -55,7 +55,8 @@ export async function generateMetadata(
   const { id } = await params;
   const doc = await fetchDoc(encodeURIComponent(id));
   const title = doc?.title ?? "公文";
-  const desc = doc?.subject?.slice(0, 80) || "公開公文查閱。";
+  const desc = (doc?.category === "decree" ? doc.doc_description : doc?.subject)?.slice(0, 80)
+    || "公開公文查閱。";
   return {
     title,
     description: desc,
@@ -82,6 +83,11 @@ export default async function PublicDocumentDetailPage({
       </div>
     );
   }
+
+  const isDecree = doc.category === "decree";
+  const primaryRecipients = doc.recipients
+    .filter(r => r.recipient_type === "main" || r.recipient_type === "primary");
+  const decreeBody = doc.doc_description || doc.content || doc.action_required || doc.subject;
 
   return (
     <div className="space-y-5">
@@ -124,40 +130,62 @@ export default async function PublicDocumentDetailPage({
             </span>
           </div>
           <div className="p-6 space-y-5">
-            {doc.subject && (
-              <div>
-                <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                  主旨
-                </p>
-                <p className="mt-1 text-sm whitespace-pre-wrap" style={{ color: "var(--text-primary)" }}>
-                  {doc.subject}
-                </p>
-              </div>
-            )}
-            {doc.doc_description && (
-              <div>
-                <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                  說明
-                </p>
-                <div className="mt-1 text-sm whitespace-pre-wrap" style={{ color: "var(--text-primary)" }}>
-                  {doc.doc_description}
+            {isDecree ? (
+              <div className="space-y-4">
+                <div className="text-sm" style={{ color: "var(--text-secondary)" }}>
+                  <p>發文字號：{doc.serial_number}</p>
+                  <p>發文日期：{new Date(doc.completed_at ?? doc.submitted_at ?? doc.created_at).toLocaleDateString("zh-TW")}</p>
+                  {primaryRecipients.length > 0 && (
+                    <p>受文者：{primaryRecipients.map(r => r.name).join("、")}</p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                    令文
+                  </p>
+                  <div className="mt-2 text-sm whitespace-pre-wrap" style={{ color: "var(--text-primary)" }}>
+                    {decreeBody || "（尚無令文內容）"}
+                  </div>
                 </div>
               </div>
-            )}
-            {doc.action_required && (
-              <div>
-                <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                  辦法
-                </p>
-                <p className="mt-1 text-sm whitespace-pre-wrap" style={{ color: "var(--text-primary)" }}>
-                  {doc.action_required}
-                </p>
-              </div>
-            )}
-            {!doc.subject && !doc.doc_description && !doc.action_required && doc.content && (
-              <div className="prose prose-sm max-w-none" style={{ color: "var(--text-primary)" }}>
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{doc.content}</ReactMarkdown>
-              </div>
+            ) : (
+              <>
+                {doc.subject && (
+                  <div>
+                    <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                      主旨
+                    </p>
+                    <p className="mt-1 text-sm whitespace-pre-wrap" style={{ color: "var(--text-primary)" }}>
+                      {doc.subject}
+                    </p>
+                  </div>
+                )}
+                {doc.doc_description && (
+                  <div>
+                    <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                      說明
+                    </p>
+                    <div className="mt-1 text-sm whitespace-pre-wrap" style={{ color: "var(--text-primary)" }}>
+                      {doc.doc_description}
+                    </div>
+                  </div>
+                )}
+                {doc.action_required && (
+                  <div>
+                    <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                      辦法
+                    </p>
+                    <p className="mt-1 text-sm whitespace-pre-wrap" style={{ color: "var(--text-primary)" }}>
+                      {doc.action_required}
+                    </p>
+                  </div>
+                )}
+                {!doc.subject && !doc.doc_description && !doc.action_required && doc.content && (
+                  <div className="prose prose-sm max-w-none" style={{ color: "var(--text-primary)" }}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{doc.content}</ReactMarkdown>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </article>

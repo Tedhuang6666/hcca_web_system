@@ -1,11 +1,12 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { surveysApi, ApiError } from "@/lib/api";
 import type { SurveyOut, SurveyQuestionOut, SurveyStats } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 
 const DISPLAY_TYPES = new Set(["section_text", "page_break", "image", "video"]);
 
@@ -338,6 +339,20 @@ export default function SurveyDetailPage() {
   const [viewStats, setViewStats] = useState(false);
   const [closing, setClosing] = useState(false);
   const [opening, setOpening] = useState(false);
+  const answerDraft = useMemo(() => answers, [answers]);
+  const restoreAnswerDraft = useCallback((draft: typeof answers) => {
+    setAnswers(prev => ({ ...prev, ...draft }));
+    toast.info("已復原未送出的問卷填答草稿");
+  }, []);
+  const { clearDraft, flushDraft } = useDraftAutosave({
+    key: `surveys:${id}:response`,
+    value: answerDraft,
+    onRestore: restoreAnswerDraft,
+    enabled: Boolean(survey && survey.status === "open" && !submitted && !viewStats),
+    isEmpty: useCallback((draft: typeof answers) => (
+      Object.values(draft).every(ans => !(ans.text ?? "").trim() && (ans.options ?? []).length === 0)
+    ), []),
+  });
 
   const load = useCallback(() => {
     setLoading(true);
@@ -385,9 +400,11 @@ export default function SurveyDetailPage() {
           })),
         anon_token,
       });
+      clearDraft();
       toast.success("填答成功，感謝您的參與！");
       setSubmitted(true);
     } catch (e) {
+      flushDraft();
       if (e instanceof ApiError && e.status === 409) {
         toast.error("您已填答過此問卷");
       } else {

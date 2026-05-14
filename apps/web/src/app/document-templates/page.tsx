@@ -138,8 +138,8 @@ export default function DocumentTemplatesPage() {
       toast.error("請選擇組織並填寫範本名稱");
       return;
     }
-    if (form.category !== "meeting_notice" && !form.subject?.trim()) {
-      toast.error("非開會通知單範本需填寫主旨");
+    if (form.category !== "meeting_notice" && form.category !== "decree" && !form.subject?.trim()) {
+      toast.error("此類公文範本需填寫主旨");
       return;
     }
     if (form.category === "meeting_notice" && (!form.meeting_purpose || !form.meeting_location)) {
@@ -148,11 +148,16 @@ export default function DocumentTemplatesPage() {
     }
     setSaving(true);
     try {
+      const payload = cleanForm(form);
+      if (payload.category === "decree") {
+        payload.subject = null;
+        payload.action_required = null;
+      }
       if (editingId) {
-        await documentTemplatesApi.update(editingId, cleanForm(form));
+        await documentTemplatesApi.update(editingId, payload);
         toast.success("公文範本已更新");
       } else {
-        await documentTemplatesApi.create(cleanForm(form));
+        await documentTemplatesApi.create(payload);
         toast.success("公文範本已建立");
       }
       resetForm();
@@ -256,7 +261,7 @@ export default function DocumentTemplatesPage() {
                         )}
                       </div>
                       <p className="mt-1 line-clamp-2 text-sm" style={{ color: "var(--text-secondary)" }}>
-                        {item.subject || item.meeting_purpose || "未填主旨"}
+                        {item.subject || item.meeting_purpose || item.doc_description || "未填內容"}
                       </p>
                       {item.description && (
                         <p className="mt-1 line-clamp-2 text-xs" style={{ color: "var(--text-muted)" }}>
@@ -356,7 +361,7 @@ export default function DocumentTemplatesPage() {
                   style={inputStyle}
                 />
               </>
-            ) : (
+            ) : form.category === "decree" ? null : (
               <textarea
                 value={form.subject ?? ""}
                 onChange={(e) => setForm((prev) => ({ ...prev, subject: e.target.value }))}
@@ -368,11 +373,17 @@ export default function DocumentTemplatesPage() {
             <textarea
               value={form.doc_description ?? ""}
               onChange={(e) => setForm((prev) => ({ ...prev, doc_description: e.target.value }))}
-              placeholder={form.category === "meeting_notice" ? "議事日程" : "說明"}
+              placeholder={
+                form.category === "meeting_notice"
+                  ? "議事日程"
+                  : form.category === "decree"
+                    ? "令文正文"
+                    : "說明"
+              }
               rows={5}
               style={{ ...inputStyle, resize: "vertical" }}
             />
-            {form.category !== "meeting_notice" && (
+            {form.category !== "meeting_notice" && form.category !== "decree" && (
               <textarea
                 value={form.action_required ?? ""}
                 onChange={(e) => setForm((prev) => ({ ...prev, action_required: e.target.value }))}

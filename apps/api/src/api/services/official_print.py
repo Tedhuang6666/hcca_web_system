@@ -372,6 +372,7 @@ async def render_document_print_html(
     """Render a ROC-style official document or meeting notice print page."""
     cat = _enum_value(doc.category)
     is_meeting = cat == "meeting_notice"
+    is_decree = cat == "decree"
     issuer = _esc(_full_org_name(doc))
     category_label = {
         "letter": "函",
@@ -395,7 +396,8 @@ async def render_document_print_html(
     main_recipients = _recipient_names(doc, "main")
     primary_recipients = _recipient_names(doc, "primary")
     copy_recipients = _recipient_names(doc, "copy")
-    addressed_to = _join_names(main_recipients or primary_recipients) or "（未填）"
+    recipient_text = _join_names(main_recipients or primary_recipients)
+    addressed_to = recipient_text or "（未填）"
     attachment_summary = _attachment_summary(doc)
     issue_date = _roc_date(doc.issued_at or doc.completed_at or doc.created_at)
     serial = _esc(doc.serial_number)
@@ -452,6 +454,21 @@ async def render_document_print_html(
         if issuer:
             meeting_body += f'<section class="meeting-seal">{issuer}</section>'
         body_html = meeting_body
+    elif is_decree:
+        decree_body_text = doc.doc_description or doc.content or doc.action_required or doc.subject
+        decree_rows = [
+            _meta_row("發文字號：", serial),
+            _meta_row("發文日期：", issue_date),
+        ]
+        if recipient_text:
+            decree_rows.append(_meta_row("受文者：", recipient_text))
+        if attachment_summary:
+            decree_rows.append(_meta_row("附件：", attachment_summary))
+        body_html = (
+            f'<section class="decree-meta">{"".join(decree_rows)}</section>'
+            f'<section class="decree-body">{_hanging_text(decree_body_text)}</section>'
+            f"{signature}"
+        )
     else:
         body_html = (
             f'<section class="recipient-line">受文者：{addressed_to}</section>'
@@ -611,6 +628,17 @@ async def render_document_print_html(
       padding-left: 16mm;
       font-size: 15pt;
       line-height: 1.9;
+    }}
+    .decree-meta {{
+      margin: 0 0 10mm;
+      font-size: 12pt;
+      line-height: 1.65;
+    }}
+    .decree-body {{
+      margin: 8mm 0 0;
+      font-size: 15pt;
+      line-height: 1.9;
+      white-space: normal;
     }}
     .hanging-line {{
       display: grid;

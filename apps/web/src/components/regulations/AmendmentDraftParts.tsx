@@ -296,7 +296,7 @@ export function ArticleEditorModal({
             <textarea value={form.content ?? ""} rows={6}
               onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
               className="w-full text-sm px-3 py-2 rounded-lg outline-none resize-none"
-              style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: '"標楷體", "DFKai-SB", serif' }}
+              style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
               placeholder="條文正文…" />
           </div>
         </div>

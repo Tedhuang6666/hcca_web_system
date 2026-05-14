@@ -241,13 +241,12 @@ export default function Sidebar() {
         className="flex items-center gap-3 px-5 flex-shrink-0"
         style={{ height: "60px", borderBottom: "1px solid var(--sidebar-border)" }}>
         <Link href="/" className="flex items-center gap-3 min-w-0" aria-label="回到儀表板">
-          {/* 金色徽章：宋體「自」字 */}
+          {/* 金色徽章 */}
           <div
             className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-base"
             style={{
               background: "linear-gradient(135deg, #c9a84c 0%, #b8962f 100%)",
               color: "#1a1a2e",
-              fontFamily: "'Noto Serif TC', serif",
               fontWeight: 700,
               boxShadow: "0 2px 10px rgba(201,168,76,0.35)",
               letterSpacing: "0.02em",
@@ -259,9 +258,8 @@ export default function Sidebar() {
               className="text-sm leading-tight truncate"
               style={{
                 color: "var(--sidebar-text-hover)",
-                fontFamily: "'Noto Serif TC', serif",
                 fontWeight: 600,
-                letterSpacing: "0.06em",
+                letterSpacing: 0,
               }}>
               校園自治平台
             </p>
@@ -328,7 +326,6 @@ export default function Sidebar() {
                   background: "linear-gradient(135deg, rgba(201,168,76,0.18) 0%, rgba(201,168,76,0.08) 100%)",
                   color: "var(--primary)",
                   border: "1.5px solid rgba(201,168,76,0.35)",
-                  fontFamily: "'Noto Serif TC', serif",
                 }}
                 aria-hidden="true">
                 {initials}

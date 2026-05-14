@@ -147,6 +147,7 @@ export interface DocumentListItem {
   subject: string | null; status: DocumentStatus;
   org_id: string; created_by: string;
   due_date: string | null; submitted_at: string | null; completed_at: string | null; created_at: string;
+  is_redacted: boolean;
 }
 
 export interface DocumentCreate {
@@ -156,7 +157,7 @@ export interface DocumentCreate {
   urgency?: DocumentUrgency; classification?: DocumentClassification; category?: DocumentCategory;
   declassification_condition?: DeclassificationCondition;
   confidentiality_expires_at?: string | null;
-  subject?: string; doc_description?: string; action_required?: string;
+  subject?: string | null; doc_description?: string | null; action_required?: string | null;
   content?: string;
   meeting_purpose?: string; meeting_time?: string;
   meeting_location?: string; meeting_chairperson?: string;

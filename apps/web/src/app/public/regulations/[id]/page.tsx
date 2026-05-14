@@ -145,8 +145,8 @@ export default async function PublicRegulationDetailPage({
 
   return (
     <div className="space-y-5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+      <div className="flex flex-col items-start justify-between gap-3 lg:flex-row">
+        <div className="min-w-0 flex-1">
           <div className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>
             <Link href="/public/regulations" className="hover:underline" style={{ color: "var(--text-muted)" }}>
               公開法規
@@ -154,7 +154,7 @@ export default async function PublicRegulationDetailPage({
             <span> / </span>
             <span className="truncate">{reg.title}</span>
           </div>
-          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
+          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)", wordBreak: "keep-all" }}>
             {!reg.is_active && <span style={{ color: "var(--danger)" }}>(失效) </span>}
             {highlight(reg.title)}
           </h1>
@@ -164,7 +164,7 @@ export default async function PublicRegulationDetailPage({
             {"　·　"}更新 {new Date(reg.updated_at).toLocaleDateString("zh-TW")}
           </p>
         </div>
-        <div className="flex gap-2 flex-wrap justify-end">
+        <div className="flex gap-2 flex-wrap justify-start lg:justify-end">
           <Link
             href={`${publicHref}${q ? `?q=${encodeURIComponent(q)}` : ""}`}
             className="px-3 py-1.5 rounded-lg text-xs hover:opacity-80"
@@ -273,7 +273,7 @@ export default async function PublicRegulationDetailPage({
                         </p>
                       )}
                       {a.content && (
-                        <pre className="mt-3 whitespace-pre-wrap text-sm" style={{ color: "var(--text-primary)", fontFamily: '"標楷體", "DFKai-SB", serif', lineHeight: 1.9 }}>
+                        <pre className="mt-3 whitespace-pre-wrap text-sm" style={{ color: "var(--text-primary)", lineHeight: 1.9 }}>
                           {q ? highlight(a.content) : a.content}
                         </pre>
                       )}
@@ -294,7 +294,6 @@ export default async function PublicRegulationDetailPage({
                 style={{
                   border: "1px solid var(--border)",
                   color: "var(--text-secondary)",
-                  fontFamily: '"標楷體", "DFKai-SB", serif',
                   lineHeight: 1.8,
                   overflowWrap: "anywhere",
                   whiteSpace: "pre-wrap",

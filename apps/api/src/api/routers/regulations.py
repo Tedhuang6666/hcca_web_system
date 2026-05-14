@@ -1490,7 +1490,7 @@ async def president_publish(
                 "找不到可用的主席公布字號模板，請先到字號模板管理設定「主席公布預設模板」"
             )
 
-        # 5. 公布令本文（行政院公文格式）
+        # 5. 公布令本文
         action_verb = "修正" if prev_rev else "制定"
         # change_desc：使用者填寫的條文說明（如「第七條」「第一條、第二條」）
         change_desc = (payload.note or "").strip()
@@ -1499,16 +1499,8 @@ async def president_publish(
         else:
             decree_line = f"茲{action_verb}《{reg.title}》，公布之。"
 
-        from datetime import date as _date
-
-        today = _date.today()
-        roc_year = today.year - 1911
-        date_str = f"中華民國 {roc_year} 年 {today.month} 月 {today.day} 日"
-
         doc_body = (
             f"{decree_line}\n\n"
-            f"主席　{current_user.display_name}\n"
-            f"{date_str}\n\n"
             f"修正條文整理：\n{amendment_body}\n\n"
             f"附件：修正條文對照表\n\n"
             f"{diff_text}"
@@ -1520,8 +1512,8 @@ async def president_publish(
             category=DocumentCategory.DECREE,
             urgency=DocumentUrgency.NORMAL,
             classification=DocumentClassification.NORMAL,
-            subject=decree_line,
-            doc_description=decree_line,
+            subject=None,
+            doc_description=doc_body,
             content=doc_body,
             handler_name=current_user.display_name,
             handler_unit="主席",

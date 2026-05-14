@@ -26,6 +26,7 @@ export default function AnnouncementEditor({
   const [imageAlt, setImageAlt] = useState("");
   const [imageWidth, setImageWidth] = useState("720");
   const [uploading, setUploading] = useState(false);
+  const [showImageTools, setShowImageTools] = useState(false);
 
   const previewContent = useMemo(() => ({ markdown: value }), [value]);
 
@@ -74,10 +75,77 @@ export default function AnnouncementEditor({
             </button>
           ))}
         </div>
-        <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-          Markdown
-        </span>
+        <button
+          type="button"
+          onClick={() => setShowImageTools(v => !v)}
+          className="btn btn-sm"
+          style={showImageTools
+            ? { background: "var(--primary-dim)", color: "var(--primary)", borderColor: "var(--border-strong)" }
+            : undefined}
+        >
+          {showImageTools ? "收合圖片" : "圖片"}
+        </button>
       </div>
+
+      {showImageTools && (
+        <div className="grid gap-3 p-4 md:grid-cols-[1fr_110px_auto]"
+          style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
+          <input
+            value={imageUrl}
+            onChange={(e) => setImageUrl(e.target.value)}
+            className="input"
+            placeholder="圖片 URL"
+            aria-label="圖片 URL"
+          />
+          <input
+            value={imageWidth}
+            onChange={(e) => setImageWidth(e.target.value)}
+            className="input"
+            inputMode="numeric"
+            placeholder="寬度"
+            aria-label="圖片寬度"
+          />
+          <button type="button" className="btn btn-secondary" onClick={() => insertImage(imageUrl)}>
+            插入圖片
+          </button>
+          <input
+            value={imageAlt}
+            onChange={(e) => setImageAlt(e.target.value)}
+            className="input md:col-span-2"
+            placeholder="圖片說明"
+            aria-label="圖片說明"
+          />
+          <label className={`btn btn-ghost ${(!announcementId || !canManageMedia) ? "opacity-50 cursor-not-allowed" : ""}`}>
+            {uploading ? "上傳中" : "本地上傳"}
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/gif,image/webp"
+              className="hidden"
+              disabled={!announcementId || !canManageMedia || uploading}
+              onChange={(e) => handleUpload(e.target.files?.[0] ?? null)}
+            />
+          </label>
+          {(!announcementId || !canManageMedia) && (
+            <p className="text-xs md:col-span-3" style={{ color: "var(--text-muted)" }}>
+              儲存公告草稿後，可從編輯頁使用本地上傳。
+            </p>
+          )}
+          {media.length > 0 && (
+            <div className="flex gap-2 overflow-x-auto md:col-span-3">
+              {media.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => insertImage(item.url, item.filename)}
+                  className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs"
+                  style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+                  {item.filename}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {tab === "write" ? (
         <textarea
@@ -93,59 +161,6 @@ export default function AnnouncementEditor({
         </div>
       )}
 
-      <div className="grid gap-3 p-4 md:grid-cols-[1fr_110px_auto]"
-        style={{ borderTop: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
-        <input
-          value={imageUrl}
-          onChange={(e) => setImageUrl(e.target.value)}
-          className="input"
-          placeholder="圖片 URL"
-          aria-label="圖片 URL"
-        />
-        <input
-          value={imageWidth}
-          onChange={(e) => setImageWidth(e.target.value)}
-          className="input"
-          inputMode="numeric"
-          placeholder="寬度"
-          aria-label="圖片寬度"
-        />
-        <button type="button" className="btn btn-secondary" onClick={() => insertImage(imageUrl)}>
-          插入圖片
-        </button>
-        <input
-          value={imageAlt}
-          onChange={(e) => setImageAlt(e.target.value)}
-          className="input md:col-span-2"
-          placeholder="圖片說明"
-          aria-label="圖片說明"
-        />
-        <label className={`btn btn-ghost ${(!announcementId || !canManageMedia) ? "opacity-50 cursor-not-allowed" : ""}`}>
-          {uploading ? "上傳中" : "上傳圖片"}
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/gif,image/webp"
-            className="hidden"
-            disabled={!announcementId || !canManageMedia || uploading}
-            onChange={(e) => handleUpload(e.target.files?.[0] ?? null)}
-          />
-        </label>
-      </div>
-
-      {media.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto p-4 pt-0" style={{ background: "var(--bg-elevated)" }}>
-          {media.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => insertImage(item.url, item.filename)}
-              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs"
-              style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
-              {item.filename}
-            </button>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
