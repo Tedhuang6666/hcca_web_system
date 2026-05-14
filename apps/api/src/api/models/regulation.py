@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Index, Integer, String, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
@@ -189,6 +189,8 @@ class Regulation(Base, TimestampMixin):
         nullable=True,
         index=True,
     )
+    # 全文搜尋向量（由 trigger 自動更新）
+    search_vector: Mapped[str | None] = mapped_column(TSVECTOR(), nullable=True)
 
     org: Mapped[Org] = relationship("Org")
     published_document: Mapped[Document | None] = relationship(

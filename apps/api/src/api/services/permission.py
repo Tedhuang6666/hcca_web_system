@@ -27,10 +27,18 @@ async def get_user_permission_codes(
     """
     查詢使用者在指定日期（預設今天）的所有有效權限碼（跨所有組織）。
 
-    使用單一 JOIN 查詢，效能最優。
+    使用單一 JOIN 查詢，效能最優。有 Redis 快取支援。
     回傳 frozenset 方便快速 `in` 檢查。
     """
     check_date = on_date or date.today()
+
+    # 僅在查詢今天的權限時使用快取（避免過期日期的快取複雜度）
+    if on_date is None:
+        from api.core.cache import cache_get, cache_set
+        cache_key = f"perm:{user_id}"
+        cached = await cache_get(cache_key)
+        if cached is not None:
+            return frozenset(cached)
 
     result = await db.execute(
         select(Permission.code)
@@ -42,7 +50,14 @@ async def get_user_permission_codes(
         )
         .distinct()
     )
-    return frozenset(result.scalars().all())
+    codes = frozenset(result.scalars().all())
+
+    # 快取今天的權限結果（180 秒 TTL）
+    if on_date is None:
+        from api.core.cache import cache_set
+        await cache_set(cache_key, list(codes), ttl=180)
+
+    return codes
 
 
 async def get_user_permission_codes_for_org(

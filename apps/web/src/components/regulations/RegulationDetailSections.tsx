@@ -120,24 +120,25 @@ export function buildArticleDisplayRows(
 
   return articles.map((article, index) => {
     let displayLabel = ARTICLE_TYPE_LABEL[article.article_type] ?? article.article_type;
+    const legalNumber = article.legal_number?.trim();
 
     switch (article.article_type) {
       case "volume":
         volumeCount += 1;
         chapterCount = 0;
         sectionCount = 0;
-        displayLabel = `第 ${volumeCount} 編`;
+        displayLabel = `第 ${legalNumber || volumeCount} 編`;
         currentChapterId = null;
         break;
       case "chapter":
         chapterCount += 1;
         sectionCount = 0;
-        displayLabel = `第 ${chapterCount} 章`;
+        displayLabel = `第 ${legalNumber || chapterCount} 章`;
         currentChapterId = article.id;
         break;
       case "section":
         sectionCount += 1;
-        displayLabel = `第 ${sectionCount} 節`;
+        displayLabel = `第 ${legalNumber || sectionCount} 節`;
         break;
       case "article":
       case "clause":
@@ -145,25 +146,23 @@ export function buildArticleDisplayRows(
         paragraphCount = 0;
         subparagraphCount = 0;
         itemCount = 0;
-        displayLabel = article.legal_number?.includes("-")
-          ? `第 ${article.legal_number} 條`
-          : `第 ${articleCount} 條`;
+        displayLabel = `第 ${legalNumber || articleCount} 條`;
         break;
       case "paragraph":
         paragraphCount += 1;
         subparagraphCount = 0;
         itemCount = 0;
-        displayLabel = `第 ${paragraphCount} 項`;
+        displayLabel = `第 ${legalNumber || paragraphCount} 項`;
         break;
       case "subparagraph":
       case "subsection":
         subparagraphCount += 1;
         itemCount = 0;
-        displayLabel = `第 ${subparagraphCount} 款`;
+        displayLabel = `第 ${legalNumber || subparagraphCount} 款`;
         break;
       case "item":
         itemCount += 1;
-        displayLabel = `第 ${itemCount} 目`;
+        displayLabel = `第 ${legalNumber || itemCount} 目`;
         break;
       case "special_clause":
         displayLabel = "附則";

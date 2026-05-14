@@ -9,7 +9,7 @@ from collections import defaultdict
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -156,14 +156,36 @@ async def list_regulations(
     if published_only:
         q = q.where(Regulation.published_at.is_not(None))
     if keyword:
-        pattern = f"%{keyword}%"
-        q = q.where(
-            or_(
-                Regulation.title.ilike(pattern),
-                Regulation.content.ilike(pattern),
-                Regulation.preface.ilike(pattern),
+        # 使用 tsvector 全文搜尋；對包含特殊字符的查詢 fallback 到 LIKE
+        try:
+            # 簡單的 AND 查詢：keyword 的每個詞都必須出現
+            tsquery_str = " & ".join(word.strip() for word in keyword.split() if word.strip())
+            if tsquery_str:
+                q = q.where(
+                    Regulation.search_vector.op("@@")(
+                        func.to_tsquery("simple", tsquery_str)
+                    )
+                )
+            else:
+                # keyword 為空或只有空格，fallback 到 LIKE
+                pattern = f"%{keyword}%"
+                q = q.where(
+                    or_(
+                        Regulation.title.ilike(pattern),
+                        Regulation.content.ilike(pattern),
+                        Regulation.preface.ilike(pattern),
+                    )
+                )
+        except Exception:
+            # 若 tsvector 查詢失敗（如特殊字符），fallback 到傳統 LIKE
+            pattern = f"%{keyword}%"
+            q = q.where(
+                or_(
+                    Regulation.title.ilike(pattern),
+                    Regulation.content.ilike(pattern),
+                    Regulation.preface.ilike(pattern),
+                )
             )
-        )
     q = q.order_by(Regulation.updated_at.desc()).limit(limit).offset(offset)
     result = await session.execute(q)
     return list(result.scalars().all())
