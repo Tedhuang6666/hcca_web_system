@@ -27,7 +27,6 @@ apps/web/.next/
 # Alembic local/history
 /alembic.ini
 /alembic/
-apps/api/alembic/versions/*.py
 
 # Uploads and local references
 uploads/
