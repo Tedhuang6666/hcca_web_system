@@ -1,58 +1,51 @@
-# Python-generated files
+# Python
 __pycache__/
-*.py[oc]
+*.py[cod]
 build/
 dist/
 wheels/
 *.egg-info
 
 # Virtual environments
-.venv
-node_modules/
-/node_modules/
-/package.json
-/package-lock.json
+.venv/
 
-# 排除快取
+# Node
+node_modules/
+
+# Cache
 .ruff_cache/
 .pytest_cache/
 .next/
 apps/web/.next/
-.venv/
 
-# 本機環境與敏感設定
+# Environment files
 .env
 .env.*
 !.env.example
 !.env.production.example
-.en
 
-# 排除資料庫遷移歷史
+# Alembic local/history
 /alembic.ini
 /alembic/
 apps/api/alembic/versions/*.py
-# 但保留最新的 1-2 個（手動在插件檢索時排除）
 
-# 排除上傳與本地參考資料
+# Uploads and local references
 uploads/
 參考/
 文件範例/
 
-# Next.js/Vercel starter assets，不屬於 HCCA 產品資產
+# Starter assets
 apps/web/public/file.svg
 apps/web/public/globe.svg
 apps/web/public/next.svg
 apps/web/public/vercel.svg
 apps/web/public/window.svg
 
-# 臨時檔案
+# Temp files
 test.txt
 RegulationArticleCreate
 
-.env
-.env.*
-!.env.example
-
+# AI/editor local files
 .claude/
 .codex/
 .cursor/
