@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.cache import cache_invalidate
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
@@ -87,6 +88,7 @@ async def create_user_position(
         meta=data.model_dump(mode="json"),
         summary="新增使用者任期記錄",
     )
+    await cache_invalidate(f"perm:{up.user_id}")
     ups = await org_svc.get_active_positions_by_date(db, up.user_id)
     matched = next((x for x in ups if x.id == up.id), None)
     return UserPositionRead.from_orm_with_details(matched or up)
@@ -134,6 +136,7 @@ async def update_user_position(
         },
         summary="更新使用者任期",
     )
+    await cache_invalidate(f"perm:{up.user_id}")
     return up
 
 
@@ -167,4 +170,5 @@ async def delete_user_position(
         },
         summary="刪除使用者任期記錄",
     )
+    await cache_invalidate(f"perm:{up.user_id}")
     await db.delete(up)
