@@ -4,14 +4,20 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from pydantic import BaseModel, Field
 from jwt.exceptions import InvalidTokenError
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.config import settings
 from api.core.database import get_db
-from api.core.security import create_access_token, create_refresh_token, decode_token
+from api.core.security import (
+    add_to_blacklist,
+    create_access_token,
+    create_refresh_token,
+    decode_token,
+    is_blacklisted,
+)
 from api.dependencies.auth import get_current_active_user
 from api.models.user import User
 from api.services import mfa as mfa_svc
@@ -118,6 +124,8 @@ async def verify_mfa_login(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="2FA 登入挑戰已失效，請重新登入",
     )
+    if await is_blacklisted(payload.challenge_token):
+        raise credentials_exception
     try:
         decoded = decode_token(payload.challenge_token)
     except InvalidTokenError as e:
@@ -144,6 +152,7 @@ async def verify_mfa_login(
 
     access_token = create_access_token(subject=str(user.id))
     refresh_token = create_refresh_token(subject=str(user.id))
+    await add_to_blacklist(payload.challenge_token)
     _set_auth_cookies(response, access_token, refresh_token)
     return {"message": "ok"}
 

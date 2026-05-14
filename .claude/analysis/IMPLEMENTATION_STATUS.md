@@ -19,7 +19,7 @@
 |---|---|---|---|---|
 | 1 | 參與率統計模組 | 🟡 部分完成 | `apps/api/src/api/routers/analytics.py` 已有公告閱讀與問卷回應統計；`announcement_reads` migration 已存在；`apps/web/src/lib/api.ts`、`types.ts` 已有 analytics 型別/API；`apps/web/src/app/analytics/page.tsx` 已提供公告閱讀與問卷回應入口。 | 尚無統一 `ParticipationMetric` 聚合表、Celery 每日統計、文件簽核參與率、測試。 |
 | 2 | 公文處理效率統計 | 🟡 部分完成 | `GET /analytics/documents/efficiency`、`/dept-ranking`、`/pending-alerts` 已存在；公文 `due_date` 已進 model/schema/UI；`apps/web/src/app/analytics/page.tsx` 已有公文效率與部門排行頁面。 | 尚缺按簽核人工作量排行、通過/退回率、趨勢圖、測試。 |
-| 3 | 2FA / TOTP 認證 | 🟡 部分完成 | `apps/api/src/api/routers/mfa.py`、`services/mfa.py`、`models/user.py` MFA 欄位、`pyotp` 依賴、`e4b8a1c9d2f0_add_user_mfa_fields.py` migration 已存在；`apps/web/src/app/settings/security/page.tsx` 已提供前端啟用/停用設定頁；`lib/api.ts`、`types.ts` 已有 MFA API/type。 | 尚缺登入流程完整二階段挑戰、backup codes 持久化/雜湊、MFA secret 加密、測試。 |
+| 3 | 2FA / TOTP 認證 | ✅ 完成 | `apps/api/src/api/routers/auth.py` OAuth callback 已接入短效 MFA challenge；`apps/api/src/api/routers/mfa.py` 提供登入挑戰驗證、TOTP 二次驗證、備用碼重產；`apps/api/src/api/services/mfa.py` 已加密 MFA secret、HMAC 雜湊 backup codes 並一次性消耗；`apps/api/src/api/models/user.py` 與 `2f3e4d5c6b7a_complete_mfa_persistence.py` 已補持久化欄位；`apps/web/src/app/auth/mfa/page.tsx`、`settings/security/page.tsx`、`lib/api.ts`、`types.ts` 已同步；`apps/api/tests/test_mfa_service.py` 已覆蓋啟用與備用碼一次性使用。 | 可再補 WebAuthn / 硬體金鑰與完整瀏覽器 E2E，但 TOTP 核心流程已完成。 |
 | 4 | 法規對比檢視 | ✅ 完成 | `GET /regulations/{reg_id}/diff` 已存在；後台詳情頁與公開比較頁使用 diff 高亮。 | 可再補 UX 細節與測試，但核心功能已可用。 |
 | 5 | 廢止法規管理 | ✅ 完成 | `Regulation` 已有 `is_repealed`、`repealed_date`、`repeal_reason`、`repeal_replacement_id`；`POST /regulations/{reg_id}/repeal` 已存在；migration 已加入欄位；`apps/web/src/app/regulations/[id]/page.tsx` 已接上廢止理由與替代法規 UI。 | 可再補後端/前端整合測試。 |
 | 6 | 公文範本庫 | ⬜ 未完成 | 目前只有「字號模板」`document_serial_templates`，不等同內容範本庫。 | 需新增 `DocumentTemplate` model/schema/service/router/migration、從範本起稿 UI、版本管理、測試。 |
@@ -58,7 +58,7 @@
 | S9 | `dependencies/auth.py` 寬泛 JWT 捕捉 | ✅ 完成 | 已改為 `ExpiredSignatureError` / `InvalidTokenError` 類型處理。 | 可補 invalid/expired token 測試。 |
 | S10 | CSP / X-Frame-Options / HSTS | ✅ 完成 | `apps/api/src/api/core/security_headers.py` 已新增 `SecurityHeadersMiddleware`；`apps/api/src/api/__init__.py` 已掛載；`core/config.py` 提供 CSP、HSTS max-age 與啟用設定。 | HSTS 會依 `COOKIE_SECURE` 啟用；正式部署仍需確認反向代理未覆寫標頭。 |
 | S11 | 依賴套件安全掃描 | ⬜ 未完成 | 未見 pip-audit/safety/npm audit CI 設定。 | 需加入 CI 或例行檢查流程。 |
-| S12 | 敏感欄位加密 | 🟡 部分完成 | JWT/secret 設定有啟動驗證；MFA 已有欄位。 | `mfa_secret` 尚未加密；其他敏感欄位也未見欄位級加密策略。 |
+| S12 | 敏感欄位加密 | ✅ 完成 | JWT/secret 設定有啟動驗證；`apps/api/src/api/services/mfa.py` 已用 Fernet 加密 `mfa_secret` / `mfa_pending_secret`，並以 HMAC-SHA256 雜湊 backup codes；`MFA_SECRET_ENCRYPTION_KEY` 可獨立設定，未設定時由 `SECRET_KEY` 派生。 | 若未來新增第三方 API token 或付款資料，仍需依欄位另設加密策略。 |
 
 ---
 
@@ -91,9 +91,22 @@
 
 ## 五、下一批建議執行順序
 
-1. **把已部分完成的安全項補齊**：MFA 登入流程、MFA secret 加密、backup code 持久化。
-2. **補可驗證性**：針對 CSRF、rate limit fallback、MFA、analytics、repeal、audit logs 補測試。
-3. **再啟動新模型功能**：公文範本庫、批量操作、雙重授權、評論線程。
+1. **啟動新模型功能**：公文範本庫、批量操作、雙重授權、評論線程，這些需要 model/schema/service/router/migration/UI 一次做完整。
+2. **補系統性可驗證性**：針對 CSRF、rate limit fallback、analytics、repeal、audit logs 補 router/service 測試與必要 E2E。
+3. **補排程型流程**：簽核期限自動催辦、法規生效排程、法規變更訂閱通知。
+
+---
+
+## 八、本輪改動紀錄（2026-05-14 — MFA 完整化）
+
+- ✅ OAuth 登入流程已接上 2FA 二階段挑戰：已啟用 MFA 的使用者不會直接取得 access/refresh cookie，而是導向 `/auth/mfa?challenge=...` 完成驗證。
+- ✅ MFA challenge token 為短效 JWT，成功使用後加入 Redis 黑名單，避免有效期內重放。
+- ✅ MFA secret / pending secret 已用 Fernet 加密存放，支援 `MFA_SECRET_ENCRYPTION_KEY`，並保留舊明文資料的向前相容解密路徑。
+- ✅ Backup codes 已改為只回傳一次明文、資料庫只保存 HMAC-SHA256 hash；驗證成功後會立即消耗並 flush。
+- ✅ 新增 backup codes 重產 API 與前端安全設定 UI，可查看剩餘組數並重新產生。
+- ✅ 新增 `/auth/mfa` 登入挑戰頁，支援 TOTP 或未使用過的備用碼。
+- ✅ 新增 `2f3e4d5c6b7a_complete_mfa_persistence.py` migration，補齊 backup code hash 欄位並擴大 MFA secret 欄位型別。
+- ✅ 驗證：`ruff check`、`pytest apps/api/tests/test_mfa_service.py apps/api/tests/test_security.py -v --asyncio-mode=auto`、`eslint .`、`next build --webpack` 皆通過。
 
 ---
 

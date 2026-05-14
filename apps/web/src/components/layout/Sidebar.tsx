@@ -17,7 +17,7 @@ import {
   Bell,
   Lock,
   ClipboardList,
-  Sitemap,
+  Network,
   User,
   ChevronRight,
 } from "lucide-react";
@@ -41,7 +41,7 @@ const Icons: Record<string, React.ComponentType<{ size: number; "aria-hidden": b
   notifications: ({ size, "aria-hidden": ariaHidden }) => <Bell size={size} aria-hidden={ariaHidden} />,
   permissions: ({ size, "aria-hidden": ariaHidden }) => <Lock size={size} aria-hidden={ariaHidden} />,
   audit: ({ size, "aria-hidden": ariaHidden }) => <ClipboardList size={size} aria-hidden={ariaHidden} />,
-  org: ({ size, "aria-hidden": ariaHidden }) => <Sitemap size={size} aria-hidden={ariaHidden} />,
+  org: ({ size, "aria-hidden": ariaHidden }) => <Network size={size} aria-hidden={ariaHidden} />,
   profile: ({ size, "aria-hidden": ariaHidden }) => <User size={size} aria-hidden={ariaHidden} />,
   chevronRight: ({ size, "aria-hidden": ariaHidden }) => <ChevronRight size={size} aria-hidden={ariaHidden} />,
 };

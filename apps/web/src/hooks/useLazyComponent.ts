@@ -1,4 +1,5 @@
 import dynamic from "next/dynamic";
+import { createElement } from "react";
 import type { ComponentType } from "react";
 
 /**
@@ -12,8 +13,8 @@ import type { ComponentType } from "react";
 export function useLazyComponent<P extends object>(
   importFn: () => Promise<{ default: ComponentType<P> }>
 ): ComponentType<P> {
-  return dynamic(importFn as any, {
+  return dynamic<P>(importFn, {
     ssr: true,
-    loading: () => <div className="animate-pulse" />,
+    loading: () => createElement("div", { className: "animate-pulse" }),
   }) as ComponentType<P>;
 }
