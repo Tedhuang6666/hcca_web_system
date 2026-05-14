@@ -1,5 +1,0 @@
-{
-    "yaml.schemas": {
-        "https://www.schemastore.org/github-workflow.json": "file://wsl.localhost/Ubuntu/home/ted98/projects/0413/.github/workflows/ci.yml"
-    }
-}
