@@ -238,7 +238,8 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
         user.google_sub = google_sub
         user.avatar_url = avatar_url
         user.display_name = display_name
-        user.is_superuser = is_superuser  # 每次登入時更新超級管理員狀態
+        if is_superuser_candidate:
+            user.is_superuser = True  # SUPERUSER_EMAILS 可授予超管，但不覆蓋手動設定的值
         if student_id and not user.student_id:
             user.student_id = student_id  # 補填學號（若尚未設定）
 

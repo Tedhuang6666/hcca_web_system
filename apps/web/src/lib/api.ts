@@ -34,7 +34,7 @@ export class ApiError extends Error {
 
 let refreshPromise: Promise<boolean> | null = null;
 
-async function silentRefresh(): Promise<boolean> {
+export async function silentRefresh(): Promise<boolean> {
   refreshPromise ??= fetch(apiUrl("/auth/refresh"), {
     method: "POST",
     credentials: "include",
