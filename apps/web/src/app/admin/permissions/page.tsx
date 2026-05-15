@@ -22,6 +22,11 @@ const highRisk = (code: string) =>
   code.includes("publish") ||
   code.includes("issue_direct");
 
+function uniquePositionsById(positions: PositionSummary[]) {
+  return Array.from(new Map(positions.map((position) => [position.id, position])).values())
+    .sort((a, b) => `${a.org_name} ${a.name}`.localeCompare(`${b.org_name} ${b.name}`, "zh-Hant"));
+}
+
 function displayError(e: unknown, fallback: string) {
   toast.error(e instanceof ApiError ? e.message : fallback);
 }
@@ -859,7 +864,8 @@ function UserPanel({
   const [positionId, setPositionId] = useState("");
   const [start, setStart] = useState(today());
   const [end, setEnd] = useState("");
-  const available = positions.filter((p) => !user.positions.some((up) => up.id === p.id));
+  const available = uniquePositionsById(positions)
+    .filter((p) => !user.positions.some((up) => up.id === p.id));
   const add = async () => {
     if (!positionId) return;
     try {
@@ -905,7 +911,7 @@ function UserPanel({
       <section className="rounded-xl p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
         <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>指派新職位</h3>
         <div className="grid grid-cols-1 sm:grid-cols-[1fr_130px_130px_auto] gap-2 items-end">
-          <SelectInput value={positionId} onChange={(e) => setPositionId(e.target.value)}><option value="">選擇職位</option>{available.map((p) => <option key={p.id} value={p.id}>{p.org_name} · {p.name}</option>)}</SelectInput>
+          <SelectInput value={positionId} onChange={(e) => setPositionId(e.target.value)}><option value="">選擇職位（套用職位權限）</option>{available.map((p) => <option key={p.id} value={p.id}>{p.org_name} · {p.name}</option>)}</SelectInput>
           <TextInput type="date" value={start} onChange={(e) => setStart(e.target.value)} style={{ colorScheme: "dark" }} />
           <TextInput type="date" value={end} onChange={(e) => setEnd(e.target.value)} style={{ colorScheme: "dark" }} />
           <SmallButton onClick={add} tone="primary">指派</SmallButton>
@@ -1029,7 +1035,8 @@ function OnboardingWizard({
   const [end, setEnd] = useState("");
   const [customOrgId, setCustomOrgId] = useState("");
   const [customCodes, setCustomCodes] = useState<string[]>([]);
-  const selectedPosition = positions.find((p) => p.id === positionId);
+  const uniquePositions = uniquePositionsById(positions);
+  const selectedPosition = uniquePositions.find((p) => p.id === positionId);
   const previewCodes = Array.from(new Set([...(selectedPosition?.permission_codes ?? []), ...customCodes]));
   const submit = async () => {
     try {
@@ -1088,13 +1095,13 @@ function OnboardingWizard({
             </div>
           )}
           <div className="grid grid-cols-1 sm:grid-cols-[1fr_150px_150px] gap-3">
-            <SelectInput value={positionId} onChange={(e) => setPositionId(e.target.value)}><option value="">選擇職位</option>{positions.map((p) => <option key={p.id} value={p.id}>{p.org_name} · {p.name}</option>)}</SelectInput>
+            <SelectInput value={positionId} onChange={(e) => setPositionId(e.target.value)}><option value="">選擇職位（套用職位權限）</option>{uniquePositions.map((p) => <option key={p.id} value={p.id}>{p.org_name} · {p.name}</option>)}</SelectInput>
             <TextInput type="date" value={start} onChange={(e) => setStart(e.target.value)} style={{ colorScheme: "dark" }} />
             <TextInput type="date" value={end} onChange={(e) => setEnd(e.target.value)} style={{ colorScheme: "dark" }} />
           </div>
           {mode === "new" && (
             <div className="space-y-2">
-              <SelectInput value={customOrgId} onChange={(e) => setCustomOrgId(e.target.value)}><option value="">不設定個人自訂權限</option>{orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</SelectInput>
+              <SelectInput value={customOrgId} onChange={(e) => setCustomOrgId(e.target.value)}><option value="">不疊加個人自訂權限</option>{orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</SelectInput>
               {customOrgId && <PermCheckboxes selected={customCodes} onChange={setCustomCodes} permCodes={permCodes} />}
             </div>
           )}

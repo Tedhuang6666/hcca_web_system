@@ -1309,7 +1309,7 @@ export default function RegulationDetailPage() {
 
       {/* ── 凍結 Modal ──────────────────────────────────────────────────────── */}
       {showFreeze && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center"
           style={{ background: "var(--bg-overlay)" }} role="dialog" aria-modal="true">
           <div className="absolute inset-0" onClick={() => setShowFreeze(false)} aria-hidden="true" />
           <div className="relative rounded-2xl p-5 space-y-4 shadow-2xl w-full max-w-sm"
@@ -1352,10 +1352,10 @@ export default function RegulationDetailPage() {
 
       {/* ── 廢止 Modal ──────────────────────────────────────────────────────── */}
       {showRepeal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center"
           style={{ background: "var(--bg-overlay)" }} role="dialog" aria-modal="true">
           <div className="absolute inset-0" onClick={() => setShowRepeal(false)} aria-hidden="true" />
-          <div className="relative w-full max-w-lg rounded-2xl p-5 shadow-2xl"
+          <div className="relative my-auto max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-2xl p-5 shadow-2xl"
             style={{ background: "var(--bg-surface)", border: "1px solid var(--danger-border)" }}>
             <div>
               <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--danger)" }}>

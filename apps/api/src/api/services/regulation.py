@@ -13,6 +13,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.models.document import Document, DocumentStatus
 from api.models.regulation import (
     ArticleType,
     Regulation,
@@ -38,6 +39,7 @@ from api.schemas.regulation import (
 from api.services.regulation_import import ImportedRegulationDraft
 
 logger = logging.getLogger(__name__)
+_PUBLICATION_DOCUMENT_STATUSES = (DocumentStatus.APPROVED, DocumentStatus.ARCHIVED)
 _PARENT_RULES: dict[ArticleType | None, set[ArticleType]] = {
     None: {ArticleType.VOLUME, ArticleType.CHAPTER, ArticleType.SECTION, ArticleType.ARTICLE},
     ArticleType.VOLUME: {ArticleType.CHAPTER},
@@ -74,6 +76,25 @@ def _attach_display_names(regs: list[Regulation]) -> list[Regulation]:
             amender = rev.__dict__.get("amender")
             rev.__dict__["amended_by_name"] = getattr(amender, "display_name", None)
     return regs
+
+
+def _where_publicly_effective(q):
+    """Require both legal publication metadata and a completed publication document."""
+    return q.join(Document, Regulation.published_document_id == Document.id).where(
+        Regulation.published_at.is_not(None),
+        Regulation.published_document_id.is_not(None),
+        Document.status.in_(_PUBLICATION_DOCUMENT_STATUSES),
+    )
+
+
+async def is_publicly_effective(session: AsyncSession, reg: Regulation) -> bool:
+    """A law is public only after its publication decree is actually completed."""
+    if not reg.is_active or reg.published_at is None or reg.published_document_id is None:
+        return False
+    result = await session.execute(
+        select(Document.status).where(Document.id == reg.published_document_id)
+    )
+    return result.scalar_one_or_none() in _PUBLICATION_DOCUMENT_STATUSES
 
 
 def _normalize_type(v: ArticleType) -> ArticleType:
@@ -180,7 +201,7 @@ async def list_regulations(
     if is_active is not None:
         q = q.where(Regulation.is_active == is_active)
     if published_only:
-        q = q.where(Regulation.published_at.is_not(None))
+        q = _where_publicly_effective(q)
     if keyword:
         # 使用 tsvector 全文搜尋；對包含特殊字符的查詢 fallback 到 LIKE
         try:
@@ -237,7 +258,7 @@ async def search_regulations(
     if active_only:
         q = q.where(Regulation.is_active.is_(True))
     if published_only:
-        q = q.where(Regulation.published_at.is_not(None))
+        q = _where_publicly_effective(q)
     q = q.where(
         or_(
             Regulation.title.ilike(pattern),

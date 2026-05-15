@@ -95,7 +95,7 @@ export function ArticleEditModal({
   const inputStyle = { border: "1px solid var(--border)" };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4"
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-3 sm:items-center sm:p-4"
       style={{ background: "rgba(0,0,0,0.7)" }} onClick={onClose}>
       <div className="w-full max-w-lg rounded-xl p-4 space-y-4 max-h-[90vh] overflow-y-auto sm:p-5"
         style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
@@ -192,7 +192,7 @@ export function DiffModal({
   const hasChanges = addedCount > 0 || removedCount > 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center"
       style={{ background: "rgba(0,0,0,0.75)" }} onClick={onClose}>
       <div className="w-full max-w-3xl rounded-xl flex flex-col"
         style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", maxHeight: "85vh" }}
@@ -338,7 +338,7 @@ export function PublishModal({
   const inputStyle = { border: "1px solid var(--border)" };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4"
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-3 sm:items-center sm:p-4"
       style={{ background: "rgba(0,0,0,0.7)" }} onClick={onClose}>
       <div className="w-full max-w-md rounded-xl p-4 space-y-4 max-h-[90vh] overflow-y-auto sm:p-5"
         style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}

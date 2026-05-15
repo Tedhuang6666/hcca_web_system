@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import QRCode from "qrcode";
 import { toast } from "sonner";
 import { ApiError, mfaApi } from "@/lib/api";
 import type { MFASetupOut, MFAStatusOut } from "@/lib/types";
@@ -13,6 +14,7 @@ export default function SecuritySettingsPage() {
   const [disableCode, setDisableCode] = useState("");
   const [regenerateCode, setRegenerateCode] = useState("");
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
+  const [qrDataUrl, setQrDataUrl] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
@@ -27,6 +29,28 @@ export default function SecuritySettingsPage() {
   useEffect(() => {
     loadStatus();
   }, []);
+
+  useEffect(() => {
+    if (!setup?.qr_uri) {
+      setQrDataUrl("");
+      return;
+    }
+    let cancelled = false;
+    QRCode.toDataURL(setup.qr_uri, {
+      width: 220,
+      margin: 2,
+      color: { dark: "#111827", light: "#ffffff" },
+    })
+      .then((url) => {
+        if (!cancelled) setQrDataUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) setQrDataUrl("");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [setup?.qr_uri]);
 
   const startSetup = async () => {
     setBusy(true);
@@ -197,11 +221,26 @@ export default function SecuritySettingsPage() {
           </div>
         ) : setup ? (
           <div className="space-y-4 p-5">
-            <div className="rounded-lg p-4" style={{ background: "var(--bg-hover)" }}>
-              <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>手動輸入密鑰</p>
-              <p className="mt-2 break-all font-mono text-sm" style={{ color: "var(--text-primary)" }}>
-                {setup.secret}
-              </p>
+            <div className="grid gap-4 sm:grid-cols-[240px_1fr]">
+              <div className="rounded-lg p-4" style={{ background: "var(--bg-hover)" }}>
+                <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>掃描 QRCode</p>
+                <div
+                  className="mt-3 flex min-h-[220px] items-center justify-center rounded-lg bg-white p-2"
+                  style={{ border: "1px solid var(--border)" }}>
+                  {qrDataUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={qrDataUrl} alt="2FA TOTP QRCode" className="h-[220px] w-[220px]" />
+                  ) : (
+                    <span className="text-xs" style={{ color: "var(--text-muted)" }}>產生中</span>
+                  )}
+                </div>
+              </div>
+              <div className="rounded-lg p-4" style={{ background: "var(--bg-hover)" }}>
+                <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>手動輸入密鑰</p>
+                <p className="mt-2 break-all font-mono text-sm" style={{ color: "var(--text-primary)" }}>
+                  {setup.secret}
+                </p>
+              </div>
             </div>
             <label className="block space-y-1.5">
               <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>

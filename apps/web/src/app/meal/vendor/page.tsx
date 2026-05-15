@@ -15,7 +15,8 @@ import {
   type ScheduleForm,
   type Tab,
 } from "@/components/meal/VendorPageParts";
-import { mealApi } from "@/lib/api";
+import { mealApi, orgsApi } from "@/lib/api";
+import type { OrgRead } from "@/lib/api";
 import type {
   MealOrderListItem,
   MealOrderStatus,
@@ -36,6 +37,7 @@ export default function VendorPage() {
   const [schedules, setSchedules] = useState<MenuScheduleListItem[]>([]);
   const [scheduleDetails, setScheduleDetails] = useState<Record<string, MenuScheduleOut>>({});
   const [orders, setOrders] = useState<MealOrderListItem[]>([]);
+  const [orgs, setOrgs] = useState<OrgRead[]>([]);
   const [loading, setLoading] = useState(true);
 
   // ── 篩選狀態 ─────────────────────────────────────────────────────────────
@@ -110,6 +112,17 @@ export default function VendorPage() {
     (async () => {
       setLoading(true);
       try {
+        const orgItems = await orgsApi.list().catch(() => []);
+        if (mounted) {
+          setOrgs(orgItems);
+          const storedOrgId = localStorage.getItem("org_id") ?? "";
+          if (storedOrgId || orgItems.length === 1) {
+            setVendorForm(prev => ({
+              ...prev,
+              org_id: prev.org_id || storedOrgId || orgItems[0]?.id || "",
+            }));
+          }
+        }
         await loadVendors();
       } finally { if (mounted) setLoading(false); }
     })();
@@ -871,10 +884,10 @@ export default function VendorPage() {
           Modal：新增排程
       ════════════════════════════════════════════════════════════════════ */}
       {showSchForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center"
           style={{ background: "rgba(0,0,0,0.6)" }}
           onClick={e => { if (e.target === e.currentTarget) setShowSchForm(false); }}>
-          <div className="w-full max-w-md rounded-2xl p-6 space-y-4"
+          <div className="my-auto max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl p-6 space-y-4"
             style={{ background: "var(--card-bg)", border: "1px solid var(--border)" }}>
             <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>新增菜單排程</h2>
             <div className="space-y-3">
@@ -921,10 +934,10 @@ export default function VendorPage() {
           Modal：新增商家
       ════════════════════════════════════════════════════════════════════ */}
       {showVendorForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center"
           style={{ background: "rgba(0,0,0,0.6)" }}
           onClick={e => { if (e.target === e.currentTarget) setShowVendorForm(false); }}>
-          <div className="w-full max-w-md rounded-2xl p-6 space-y-4"
+          <div className="my-auto max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl p-6 space-y-4"
             style={{ background: "var(--card-bg)", border: "1px solid var(--border)" }}>
             <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>新增學餐商家</h2>
             <div className="space-y-3">
@@ -950,8 +963,11 @@ export default function VendorPage() {
               </div>
               <div>
                 <label className="label-sm">組織 ID *</label>
-                <input className="input-field w-full" placeholder="UUID" value={vendorForm.org_id}
-                  onChange={e => setVendorForm(f => ({ ...f, org_id: e.target.value }))} />
+                <select className="input-field w-full" value={vendorForm.org_id}
+                  onChange={e => setVendorForm(f => ({ ...f, org_id: e.target.value }))}>
+                  <option value="">選擇組織…</option>
+                  {orgs.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
+                </select>
               </div>
             </div>
             <div className="flex gap-2 pt-2">

@@ -38,7 +38,17 @@ function fmtPickup(date: string, deadline: string) {
 // ── 倒數標籤 ─────────────────────────────────────────────────────────────────
 
 function DeadlineBadge({ schedule }: { schedule: MenuScheduleListItem }) {
-  const now = Date.now();
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    setNow(Date.now());
+  }, []);
+  if (now === null) {
+    return (
+      <span className="badge" style={{ color: "var(--text-muted)", background: "var(--bg-elevated)", borderColor: "var(--border)" }}>
+        計算中
+      </span>
+    );
+  }
   const deadline = new Date(schedule.order_deadline).getTime();
   const openTime = schedule.order_open_time ? new Date(schedule.order_open_time).getTime() : null;
   const diff = Math.round((deadline - now) / 60000);
@@ -164,7 +174,7 @@ function OrderModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto p-4 sm:items-center"
       style={{ background: "rgba(0,0,0,0.65)" }}
       role="dialog" aria-modal="true">
       <div className="absolute inset-0" onClick={step === "success" ? undefined : onClose} aria-hidden="true" />

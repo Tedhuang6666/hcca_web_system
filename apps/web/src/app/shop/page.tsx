@@ -82,7 +82,7 @@ function OrderModal({ product, onClose, onDone }: {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto p-4 sm:items-center"
       style={{ background: "var(--bg-overlay)" }}
       role="dialog"
       aria-modal="true"
@@ -91,7 +91,7 @@ function OrderModal({ product, onClose, onDone }: {
       <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
 
       <div
-        className="relative w-full max-w-md card p-6 space-y-4 animate-scale-in"
+        className="relative max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto card p-6 space-y-4 animate-scale-in"
         style={{ boxShadow: "var(--shadow-xl)" }}>
         {/* 標頭 */}
         <div className="flex items-center justify-between">

@@ -17,17 +17,20 @@ export default function Modal({
 }: ModalProps) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center"
       style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}
       role="dialog"
       aria-modal="true"
       aria-label={title}
     >
       <div
-        className={`w-full ${maxWidthClassName} rounded-2xl p-5 space-y-4 shadow-2xl`}
+        className={`my-auto flex max-h-[calc(100vh-2rem)] w-full ${maxWidthClassName} flex-col rounded-2xl shadow-2xl`}
         style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
       >
-        <div className="flex items-center justify-between">
+        <div
+          className="flex flex-shrink-0 items-center justify-between gap-3 p-5 pb-3"
+          style={{ borderBottom: "1px solid var(--border)" }}
+        >
           <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
             {title}
           </h2>
@@ -52,9 +55,8 @@ export default function Modal({
             </svg>
           </button>
         </div>
-        {children}
+        <div className="min-h-0 flex-1 overflow-y-auto p-5 pt-4">{children}</div>
       </div>
     </div>
   );
 }
-

@@ -1104,6 +1104,7 @@ async def issue_document_directly(
 
     now = datetime.now(UTC)
     doc.status = DocumentStatus.APPROVED
+    doc.issued_at = now
     doc.submitted_at = now
     doc.completed_at = now
 

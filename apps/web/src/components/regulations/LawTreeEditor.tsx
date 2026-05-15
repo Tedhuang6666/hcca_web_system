@@ -65,6 +65,11 @@ function canNestInside(parentType: ArticleType, childType: ArticleType): boolean
   return parentRank >= 0 && childRank >= 0 && childRank === parentRank + 1;
 }
 
+function childTypeOf(parentType: ArticleType): ArticleType | null {
+  const rank = typeRank(parentType);
+  return rank >= 0 && rank < TYPE_ORDER.length - 1 ? TYPE_ORDER[rank + 1] : null;
+}
+
 export function inferParentIdByPrevious(flat: FlatNode[], index: number, nextType: ArticleType): string | null {
   for (let i = index - 1; i >= 0; i--) {
     const prev = flat[i];
@@ -170,6 +175,22 @@ function moveSubtree(tree: LawNode[], movingId: string, targetId: string, mode: 
     return false;
   };
   insert(copy);
+  return copy;
+}
+
+function moveWithinSiblings(tree: LawNode[], nodeId: string, direction: -1 | 1): LawNode[] {
+  const copy = structuredClone(tree) as LawNode[];
+  const move = (nodes: LawNode[]): boolean => {
+    const index = nodes.findIndex(node => node.id === nodeId);
+    if (index >= 0) {
+      const nextIndex = index + direction;
+      if (nextIndex < 0 || nextIndex >= nodes.length) return true;
+      [nodes[index], nodes[nextIndex]] = [nodes[nextIndex], nodes[index]];
+      return true;
+    }
+    return nodes.some(node => move(node.children));
+  };
+  move(copy);
   return copy;
 }
 
@@ -282,6 +303,31 @@ export default function LawTreeEditor({
     await applyFlat(next);
   };
 
+  const handleMoveSibling = async (nodeId: string, direction: -1 | 1) => {
+    const nextTree = moveWithinSiblings(tree, nodeId, direction);
+    await applyTree(nextTree);
+  };
+
+  const handleDemoteNode = async (nodeId: string) => {
+    const sorted = snapshotFlat(flat).sort((a, b) => a.sort_index - b.sort_index);
+    const index = sorted.findIndex(item => item.id === nodeId);
+    if (index <= 0) {
+      onDemote?.(nodeId);
+      return;
+    }
+    const previous = sorted[index - 1];
+    const nextType = childTypeOf(previous.article_type);
+    if (!nextType) {
+      onDemote?.(nodeId);
+      return;
+    }
+    await applyFlat(sorted.map(item => (
+      item.id === nodeId
+        ? { ...item, parent_id: previous.id, article_type: nextType }
+        : item
+    )));
+  };
+
   const handleUndo = async () => {
     if (undoStack.length === 0 || historyBusy) return;
     const previous = snapshotFlat(undoStack[undoStack.length - 1]);
@@ -368,7 +414,7 @@ export default function LawTreeEditor({
           }}
           onKeyDown={e => {
             if (e.key === "Enter") { e.preventDefault(); onEnterSibling?.(node.id); }
-            if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); onDemote?.(node.id); }
+            if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); void handleDemoteNode(node.id); }
           }}
           className="group relative rounded-xl px-2.5 py-3 mb-2 outline-none transition-shadow sm:px-3"
           style={{
@@ -455,7 +501,23 @@ export default function LawTreeEditor({
                 )}
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-2 pl-8 sm:flex sm:pl-0">
+            <div className="grid grid-cols-4 gap-2 pl-8 sm:flex sm:pl-0">
+              <button
+                onClick={() => void handleMoveSibling(node.id, -1)}
+                className="text-xs px-2 py-1.5 rounded sm:py-1"
+                style={{ border: "1px solid var(--border)" }}
+                title="向上移動"
+              >
+                ↑
+              </button>
+              <button
+                onClick={() => void handleMoveSibling(node.id, 1)}
+                className="text-xs px-2 py-1.5 rounded sm:py-1"
+                style={{ border: "1px solid var(--border)" }}
+                title="向下移動"
+              >
+                ↓
+              </button>
               <button
                 onClick={() => onEdit(node.id)}
                 className="text-xs px-2 py-1.5 rounded sm:py-1"

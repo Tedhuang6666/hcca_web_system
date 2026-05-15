@@ -77,12 +77,25 @@ DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
 OptionalUser = Annotated[User | None, Depends(get_optional_user)]
 
+_EDITABLE_WORKFLOW_STATUSES = {
+    RegulationWorkflowStatus.DRAFT,
+    RegulationWorkflowStatus.REJECTED,
+}
+
 
 async def _get_reg_or_404(reg_id: uuid.UUID | str, session: DbDep) -> Regulation:
     reg = await reg_svc.get_regulation_by_identifier(session, reg_id)
     if reg is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此法規")
     return reg
+
+
+def _assert_regulation_editable(reg: Regulation) -> None:
+    if reg.workflow_status not in _EDITABLE_WORKFLOW_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="此法規已進入審議或公布流程，請退回草稿或另開修正草案後再編輯",
+        )
 
 
 async def _get_article_or_404(
@@ -217,7 +230,7 @@ async def list_regulations(
 async def get_regulation(reg_id: str, session: DbDep, user: OptionalUser) -> Regulation:
     reg = await _get_reg_or_404(reg_id, session)
     # 未登入僅可查看已發布且有效的法規（避免草案外洩）
-    if user is None and (reg.published_at is None or not reg.is_active):
+    if user is None and not await reg_svc.is_publicly_effective(session, reg):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此法規")
     return reg
 
@@ -527,6 +540,7 @@ async def update_regulation(
     current_user: Annotated[User, Depends(require_permission(PermissionCode.REGULATION_EDIT))],
 ) -> Regulation:
     reg = await _get_reg_or_404(reg_id, session)
+    _assert_regulation_editable(reg)
     if reg.created_by != current_user.id and not current_user.is_superuser:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有建立者可以編輯")
     before = {
@@ -797,6 +811,7 @@ async def add_article(
     current_user: Annotated[User, Depends(require_permission(PermissionCode.REGULATION_EDIT))],
 ) -> RegulationArticle:
     reg = await _get_reg_or_404(reg_id, session)
+    _assert_regulation_editable(reg)
     if reg.created_by != current_user.id and not current_user.is_superuser:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有建立者可以新增條文")
     article = await reg_svc.add_article(session, reg, data=payload)
@@ -836,6 +851,7 @@ async def update_article(
     current_user: Annotated[User, Depends(require_permission(PermissionCode.REGULATION_EDIT))],
 ) -> RegulationArticle:
     reg = await _get_reg_or_404(reg_id, session)
+    _assert_regulation_editable(reg)
     if reg.created_by != current_user.id and not current_user.is_superuser:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有建立者可以修改條文")
     article = await _get_article_or_404(reg, article_id, session)
@@ -883,6 +899,7 @@ async def move_article(
     current_user: Annotated[User, Depends(require_permission(PermissionCode.REGULATION_EDIT))],
 ) -> RegulationArticle:
     reg = await _get_reg_or_404(reg_id, session)
+    _assert_regulation_editable(reg)
     if reg.created_by != current_user.id and not current_user.is_superuser:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有建立者可以移動條文")
     article = await _get_article_or_404(reg, article_id, session)
@@ -931,6 +948,7 @@ async def delete_article(
     hard: bool = Query(False, description="硬刪除（物理移除，無法復原）"),
 ) -> None:
     reg = await _get_reg_or_404(reg_id, session)
+    _assert_regulation_editable(reg)
     if reg.created_by != current_user.id and not current_user.is_superuser:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有建立者可以刪除條文")
     article = await _get_article_or_404(reg, article_id, session)
@@ -969,6 +987,7 @@ async def reorder_articles(
     current_user: Annotated[User, Depends(require_permission(PermissionCode.REGULATION_EDIT))],
 ) -> list[RegulationArticle]:
     reg = await _get_reg_or_404(reg_id, session)
+    _assert_regulation_editable(reg)
     if reg.created_by != current_user.id and not current_user.is_superuser:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有建立者可以重新排序")
     try:
@@ -1000,6 +1019,7 @@ async def auto_renumber_articles(
     current_user: Annotated[User, Depends(require_permission(PermissionCode.REGULATION_EDIT))],
 ) -> list[RegulationArticle]:
     reg = await _get_reg_or_404(reg_id, session)
+    _assert_regulation_editable(reg)
     if reg.created_by != current_user.id and not current_user.is_superuser:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有建立者可以重編條號")
     articles = await reg_svc.auto_renumber_articles(
@@ -1524,6 +1544,12 @@ async def president_publish(
         )
         pub_doc.is_public = True
         pub_doc.regulation_id = reg.id
+        pub_doc = await doc_svc.issue_document_directly(
+            session,
+            pub_doc,
+            issued_by=current_user.id,
+            comment="主席公布法規自動發文",
+        )
         reg.published_document_id = pub_doc.id
 
         await session.flush()

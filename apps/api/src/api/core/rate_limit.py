@@ -95,7 +95,7 @@ class SimpleRateLimitMiddleware:
                 )
                 await response(scope, receive, send)
                 return
-        except RedisError as e:
+        except RedisError:
             logger.error(
                 "Rate limit Redis connection failed, degrading to memory-based limit",
                 exc_info=True,
@@ -110,18 +110,19 @@ class SimpleRateLimitMiddleware:
                 )
                 await response(scope, receive, send)
                 return
-        except Exception as e:
-            logger.error(
-                "Unexpected error in rate limit middleware",
+        except Exception:
+            logger.warning(
+                "Unexpected rate limit failure, degrading to memory-based limit",
                 exc_info=True,
                 extra={"client_ip": client_host, "path": request.url.path},
             )
-            # 未預期的錯誤時，拒絕請求確保安全
-            response = JSONResponse(
-                {"detail": "伺服器內部錯誤"},
-                status_code=500,
-            )
-            await response(scope, receive, send)
-            return
+            if self._check_memory_rate_limit(key, req_limit, win):
+                response = JSONResponse(
+                    {"detail": "請求過於頻繁，請稍後再試"},
+                    status_code=429,
+                    headers={"Retry-After": str(win)},
+                )
+                await response(scope, receive, send)
+                return
 
         await self.app(scope, receive, send)

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import TSVECTOR, UUID
+from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
@@ -18,6 +19,11 @@ if TYPE_CHECKING:
     from api.models.document import Document
     from api.models.org import Org
     from api.models.user import User
+
+
+@compiles(TSVECTOR, "sqlite")
+def _compile_tsvector_sqlite(*_: object, **__: object) -> str:
+    return "TEXT"
 
 
 class RegulationCategory(enum.StrEnum):

@@ -257,7 +257,7 @@ export function ArticleEditorModal({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center"
       style={{ background: "var(--bg-overlay)" }} role="dialog" aria-modal="true">
       <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
       <div className="relative rounded-2xl overflow-hidden flex flex-col"

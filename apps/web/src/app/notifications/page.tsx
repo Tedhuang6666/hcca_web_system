@@ -54,8 +54,9 @@ function getMeta(type: string) {
   };
 }
 
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
+function timeAgo(iso: string, now: number | null): string {
+  if (now === null) return "";
+  const diff = now - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return "剛剛";
   if (mins < 60) return `${mins} 分鐘前`;
@@ -69,10 +70,11 @@ function timeAgo(iso: string): string {
 // ── 單則通知卡片 ──────────────────────────────────────────────────────────────
 
 function NotificationCard({
-  n, onRead,
+  n, onRead, now,
 }: {
   n: NotificationItem;
   onRead: (id: string) => void;
+  now: number | null;
 }) {
   const meta = getMeta(n.type);
   const safeInternalLink = typeof n.link === "string" && n.link.startsWith("/") ? n.link : null;
@@ -121,7 +123,7 @@ function NotificationCard({
             {meta.label}
           </span>
           <span className="text-[10px]" style={{ color: "var(--text-disabled)" }}>
-            {timeAgo(n.created_at)}
+            {timeAgo(n.created_at, now)}
           </span>
         </div>
       </div>
@@ -149,9 +151,11 @@ export default function NotificationsPage() {
   const [dateTo, setDateTo] = useState("");
   const [unreadCount, setUnreadCount] = useState(0);
   const [wsRoom, setWsRoom] = useState<string | null>(null);
+  const [now, setNow] = useState<number | null>(null);
 
   // 取得使用者 ID 以訂閱專屬 WS 房間
   useEffect(() => {
+    setNow(Date.now());
     const userId = localStorage.getItem("user_id");
     if (userId) setWsRoom(`user:${userId}`);
   }, []);
@@ -336,7 +340,7 @@ export default function NotificationsPage() {
         <ol className="space-y-2 list-none" aria-label="通知列表" aria-live="polite">
           {displayed.map(n => (
             <li key={n.id}>
-              <NotificationCard n={n} onRead={handleRead} />
+              <NotificationCard n={n} onRead={handleRead} now={now} />
             </li>
           ))}
         </ol>

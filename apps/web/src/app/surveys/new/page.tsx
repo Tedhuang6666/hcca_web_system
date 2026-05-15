@@ -3,7 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { surveysApi, ApiError } from "@/lib/api";
+import { surveysApi, orgsApi, ApiError } from "@/lib/api";
+import type { OrgRead } from "@/lib/api";
 import type { QuestionType } from "@/lib/types";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 
@@ -66,6 +67,7 @@ export default function NewSurveyPage() {
   const [allowMultiple, setAllowMultiple] = useState(false);
   const [closesAt, setClosesAt] = useState("");
   const [orgId, setOrgId] = useState("");
+  const [orgs, setOrgs] = useState<OrgRead[]>([]);
 
   // 題目列表
   const [questions, setQuestions] = useState<DraftQuestion[]>([]);
@@ -75,7 +77,16 @@ export default function NewSurveyPage() {
   const [optionInput, setOptionInput] = useState("");
 
   useEffect(() => {
-    setOrgId(localStorage.getItem("org_id") ?? "");
+    const storedOrgId = localStorage.getItem("org_id") ?? "";
+    setOrgId(storedOrgId);
+    orgsApi.list()
+      .then((items) => {
+        setOrgs(items);
+        if (!storedOrgId && items.length === 1) setOrgId(items[0].id);
+      })
+      .catch(() => {
+        // 建立時仍會由後端權限檢查；這裡只避免 UI 直接卡死。
+      });
   }, []);
 
   const draftValue = useMemo<SurveyDraft>(() => ({
@@ -262,6 +273,13 @@ export default function NewSurveyPage() {
               <Label>截止時間（選填）</Label>
               <input type="datetime-local" value={closesAt} onChange={e => setClosesAt(e.target.value)}
                 className="input" style={{ colorScheme: "dark" }} />
+            </div>
+            <div>
+              <Label>所屬組織 *</Label>
+              <select value={orgId} onChange={e => setOrgId(e.target.value)} className="input">
+                <option value="">選擇組織…</option>
+                {orgs.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
+              </select>
             </div>
           </div>
 

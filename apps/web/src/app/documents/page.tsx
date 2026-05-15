@@ -44,9 +44,13 @@ type SortKey = "created_desc" | "created_asc" | "title_asc" | "due_asc" | "urgen
 
 const URGENCY_ORDER: Record<string, number> = { express: 2, priority: 1, normal: 0 };
 
-function dueDateUrgency(dateStr: string | null): "overdue" | "soon" | "ok" | null {
+function dueDateUrgency(
+  dateStr: string | null,
+  now: number | null,
+): "overdue" | "soon" | "ok" | null {
+  if (now === null) return null;
   if (!dateStr) return null;
-  const diff = (new Date(dateStr).getTime() - Date.now()) / 86400000;
+  const diff = (new Date(dateStr).getTime() - now) / 86400000;
   if (diff < 0)  return "overdue";
   if (diff <= 3) return "soon";
   return "ok";
@@ -83,6 +87,7 @@ export default function DocumentListPage() {
 
   const [docs, setDocs] = useState<DocumentListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [now, setNow] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<DocumentStatus | "all">(
     initialStatus && TABS.some(t => t.key === initialStatus) ? initialStatus : "all"
   );
@@ -127,6 +132,7 @@ export default function DocumentListPage() {
   );
 
   useEffect(() => {
+    setNow(Date.now());
     const userId = typeof window !== "undefined" ? localStorage.getItem("user_id") : null;
     setIsLoggedIn(!!userId);
 
@@ -984,7 +990,7 @@ export default function DocumentListPage() {
                       </td>
                       <td className="px-5 py-4 text-xs whitespace-nowrap">
                         {(() => {
-                          const urg = dueDateUrgency(doc.due_date);
+                          const urg = dueDateUrgency(doc.due_date, now);
                           if (!urg || urg === "ok") return (
                             <span style={{ color: "var(--text-muted)" }}>
                               {doc.due_date ? new Date(doc.due_date).toLocaleDateString("zh-TW") : "—"}
@@ -1047,7 +1053,7 @@ export default function DocumentListPage() {
             {/* 手機卡片列表（md 以下顯示） */}
             <ul className="md:hidden divide-y" style={{ borderColor: "var(--border)" }} aria-label="公文列表">
               {sorted.map((doc) => {
-                const urg = dueDateUrgency(doc.due_date);
+                const urg = dueDateUrgency(doc.due_date, now);
                 const isOverdue = urg === "overdue";
                 const isSoon = urg === "soon";
                 return (

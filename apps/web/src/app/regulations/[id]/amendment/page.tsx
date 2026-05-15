@@ -35,7 +35,7 @@ export default function DraftAmendmentPage() {
   const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [newDraftName, setNewDraftName] = useState(`${new Date().toLocaleDateString("zh-TW")} 修正草案`);
+  const [newDraftName, setNewDraftName] = useState("修正草案");
   const [newDraftType, setNewDraftType] = useState<AmendmentType>("partial");
 
   const activeDraft = drafts.find(d => d.id === activeDraftId) ?? null;
@@ -43,6 +43,7 @@ export default function DraftAmendmentPage() {
 
   // 載入法規
   useEffect(() => {
+    setNewDraftName(`${new Date().toLocaleDateString("zh-TW")} 修正草案`);
     regulationsApi.get(id)
       .then(r => { setReg(r); setLoading(false); })
       .catch(e => { toast.error(e instanceof ApiError ? e.message : "載入失敗"); setLoading(false); });

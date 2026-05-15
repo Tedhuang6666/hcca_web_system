@@ -108,7 +108,7 @@ async def update_product(
     product_id: uuid.UUID, payload: ProductUpdate, session: DbDep, current_user: CurrentUser
 ) -> Product:
     product = await _get_product_or_404(product_id, session)
-    if product.created_by != current_user.id:
+    if product.created_by != current_user.id and not current_user.is_superuser:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有建立者可以編輯")
     before = {
         "name": product.name,
@@ -151,7 +151,7 @@ async def activate_product(
     product_id: uuid.UUID, session: DbDep, current_user: CurrentUser
 ) -> Product:
     product = await _get_product_or_404(product_id, session)
-    if product.created_by != current_user.id:
+    if product.created_by != current_user.id and not current_user.is_superuser:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有建立者可以上架")
     try:
         product = await shop_svc.activate_product(session, product)
@@ -180,7 +180,7 @@ async def deactivate_product(
     product_id: uuid.UUID, session: DbDep, current_user: CurrentUser
 ) -> Product:
     product = await _get_product_or_404(product_id, session)
-    if product.created_by != current_user.id:
+    if product.created_by != current_user.id and not current_user.is_superuser:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有建立者可以下架")
     try:
         product = await shop_svc.deactivate_product(session, product)
@@ -253,7 +253,9 @@ async def list_orders(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ) -> list[Order]:
-    if not my_only:
+    if current_user.is_superuser:
+        my_only = False
+    elif not my_only:
         codes = await get_user_permission_codes(session, str(current_user.id))
         if "shop:manage" not in codes and "admin:all" not in codes and "finance:view" not in codes:
             my_only = True
@@ -270,7 +272,7 @@ async def list_orders(
 @router.get("/orders/{order_id}", response_model=OrderOut, summary="取得訂單詳細")
 async def get_order(order_id: uuid.UUID, session: DbDep, current_user: CurrentUser) -> Order:
     order = await _get_order_or_404(order_id, session)
-    if order.user_id != current_user.id:
+    if order.user_id != current_user.id and not current_user.is_superuser:
         codes = await get_user_permission_codes(session, str(current_user.id))
         if "shop:manage" not in codes and "admin:all" not in codes and "finance:view" not in codes:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此訂單")

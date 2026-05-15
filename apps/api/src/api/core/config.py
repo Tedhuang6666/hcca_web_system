@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     ENABLE_API_DOCS: bool = False
     ALLOWED_ORIGINS: list[str] = ["http://localhost:3000"]
-    ALLOWED_HOSTS: list[str] = ["localhost", "127.0.0.1", "api"]
+    ALLOWED_HOSTS: list[str] = ["localhost", "127.0.0.1", "api", "test"]
 
     # --- 資料庫設定 ---
     DATABASE_URL: PostgresDsn = Field(
@@ -52,6 +52,14 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str = Field(default="")
     GOOGLE_CLIENT_SECRET: str = Field(default="")
     GOOGLE_REDIRECT_URI: str = "http://localhost:8000/auth/google/callback"
+    LOGIN_ALLOWED_EMAIL_DOMAINS: list[str] = Field(
+        default_factory=lambda: ["hchs.hc.edu.tw"],
+        description="允許一般使用者登入的 Email 網域；不含 @",
+    )
+    LOGIN_EMAIL_ALLOWLIST: list[str] = Field(
+        default_factory=list,
+        description="額外允許登入的完整 Email，適合管理員 Gmail 例外",
+    )
 
     # --- Email / SMTP 設定 ---
     MAIL_USERNAME: str = Field(default="")
@@ -64,6 +72,10 @@ class Settings(BaseSettings):
     MAIL_SSL_TLS: bool = Field(default=False)
 
     # --- 超級管理員 ---
+    OWNER_EMAILS: list[str] = Field(
+        default_factory=list,
+        description="最高擁有者帳號，不可由後台停用或降級；同時可作為登入 allowlist",
+    )
     # 生產環境禁用自動授予，改用 API + IP 白名單
     SUPERUSER_EMAILS: list[str] = Field(default_factory=list)
     ADMIN_IP_WHITELIST: list[str] = Field(
@@ -122,6 +134,16 @@ class Settings(BaseSettings):
         if normalized not in {"lax", "strict", "none"}:
             raise ValueError("COOKIE_SAMESITE 必須是 lax、strict 或 none")
         return normalized
+
+    @field_validator(
+        "LOGIN_ALLOWED_EMAIL_DOMAINS",
+        "LOGIN_EMAIL_ALLOWLIST",
+        "OWNER_EMAILS",
+        "SUPERUSER_EMAILS",
+    )
+    @classmethod
+    def normalize_email_settings(cls, values: list[str]) -> list[str]:
+        return [value.strip().lower().lstrip("@") for value in values if value.strip()]
 
     @model_validator(mode="after")
     def production_security_must_be_explicit(self) -> "Settings":

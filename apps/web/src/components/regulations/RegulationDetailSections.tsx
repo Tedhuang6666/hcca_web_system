@@ -294,7 +294,7 @@ export function DiffModal({
   const removeCount = diffResult.filter(r => r.type === "remove").length;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center"
       style={{ background: "var(--bg-overlay)" }}
       role="dialog" aria-modal="true">
       <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
@@ -903,7 +903,7 @@ export function RevisionCard({
       )}
       {showProposal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center"
           style={{ background: "var(--bg-overlay)" }}
           role="dialog"
           aria-modal="true"
@@ -1059,7 +1059,7 @@ export function WfNoteModal({
   const [submitting, setSubmitting] = useState(false);
   const isPresidentPublish = label.includes("主席公布");
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center"
       style={{ background: "var(--bg-overlay)" }} role="dialog" aria-modal="true">
       <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
       <div className="relative rounded-2xl overflow-hidden"

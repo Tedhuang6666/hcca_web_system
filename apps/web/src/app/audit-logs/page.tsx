@@ -577,7 +577,8 @@ export default function AuditLogsPage() {
             </label>
             {(actorOptions.length > 0 || searchingUsers) && !actor && (
               <div
-                className="absolute z-20 mt-1 w-full overflow-hidden rounded-lg shadow-lg"
+                className="absolute z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-lg shadow-lg"
+                role="listbox"
                 style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
                 {searchingUsers ? (
                   <p className="px-3 py-2 text-xs" style={{ color: "var(--text-muted)" }}>搜尋中</p>
@@ -585,6 +586,8 @@ export default function AuditLogsPage() {
                   <button
                     key={user.id}
                     className="block w-full px-3 py-2 text-left text-sm transition-colors hover:opacity-80"
+                    role="option"
+                    aria-selected={false}
                     style={{ color: "var(--text-primary)", borderBottom: "1px solid var(--border)" }}
                     onClick={() => {
                       setActor(user);
@@ -702,7 +705,7 @@ export default function AuditLogsPage() {
 
       {selectedLog && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-end p-4 sm:p-6"
+          className="fixed inset-0 z-50 flex items-start justify-end overflow-y-auto p-4 sm:items-end sm:p-6"
           style={{ background: "rgba(0,0,0,0.45)" }}
           onClick={() => setSelectedLog(null)}>
           <aside

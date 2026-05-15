@@ -101,6 +101,17 @@ def _safe_next_path(value: str | None) -> str:
     return value
 
 
+def _email_can_login(email: str) -> bool:
+    normalized = email.strip().lower()
+    domain = normalized.rsplit("@", maxsplit=1)[-1] if "@" in normalized else ""
+    return (
+        domain in settings.LOGIN_ALLOWED_EMAIL_DOMAINS
+        or normalized in settings.LOGIN_EMAIL_ALLOWLIST
+        or normalized in settings.OWNER_EMAILS
+        or normalized in settings.SUPERUSER_EMAILS
+    )
+
+
 def _set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
     response.set_cookie(
         settings.ACCESS_TOKEN_COOKIE_NAME,
@@ -176,9 +187,17 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
     user_info = token_data.get("userinfo") or await google.userinfo(token=token_data)
 
     google_sub: str = user_info["sub"]
-    email: str = user_info["email"]
+    email: str = user_info["email"].strip().lower()
     display_name: str = user_info.get("name", email.split("@")[0])
     avatar_url: str | None = user_info.get("picture")
+
+    if not _email_can_login(email):
+        logger.warning(
+            "Rejected Google login from disallowed email domain",
+            extra={"email": email, "client_ip": client_ip},
+        )
+        error_qs = urlencode({"error": "僅允許竹中 Google 帳號或已核准的管理員帳號登入"})
+        return RedirectResponse(url=f"{frontend_origin}/login?{error_qs}")
 
     # 從學校信箱自動提取學號（格式：g0{student_id}@hchs.hc.edu.tw）
     student_id: str | None = None
@@ -195,7 +214,7 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
         user = result.scalar_one_or_none()
 
     # 檢查是否為超級管理員候選人
-    is_superuser_candidate = email in settings.SUPERUSER_EMAILS
+    is_superuser_candidate = email in settings.SUPERUSER_EMAILS or email in settings.OWNER_EMAILS
     is_superuser = False
 
     if is_superuser_candidate:
@@ -237,7 +256,6 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
     else:
         user.google_sub = google_sub
         user.avatar_url = avatar_url
-        user.display_name = display_name
         if is_superuser_candidate:
             user.is_superuser = True  # SUPERUSER_EMAILS 可授予超管，但不覆蓋手動設定的值
         if student_id and not user.student_id:

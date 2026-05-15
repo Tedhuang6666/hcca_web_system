@@ -18,7 +18,7 @@ import {
   type LawNode,
   type NewArtForm,
 } from "@/components/regulations/RegulationEditParts";
-import LawTreeEditor from "@/components/regulations/LawTreeEditor";
+import LawTreeEditor, { inferParentIdByPrevious } from "@/components/regulations/LawTreeEditor";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import { ApiError, regulationsApi, regulationHref } from "@/lib/api";
@@ -203,6 +203,10 @@ export default function EditRegulationPage() {
 
   const saveInfo = async () => {
     if (!title.trim()) { toast.error("請輸入法規名稱"); return; }
+    if (reg && !["draft", "rejected"].includes(reg.workflow_status)) {
+      toast.error("已送審或已公布的法規不可直接編輯，請退回草稿或另開修正草案");
+      return;
+    }
     setSavingInfo(true);
     try {
       const updated = await regulationsApi.update(id, {
@@ -253,18 +257,23 @@ export default function EditRegulationPage() {
   //       最後 post-normalize 整理。
 
   const handleInsert = async (position: number, form: NewArtForm) => {
+    if (reg && !["draft", "rejected"].includes(reg.workflow_status)) {
+      toast.error("已送審或已公布的法規不可直接編輯，請退回草稿或另開修正草案");
+      return;
+    }
     if (!form.title.trim() && !form.content.trim()) {
       toast.error("標題或內容至少填一項");
       return;
     }
     setInserting(true);
     try {
+      const sortedArticles = [...articles].sort((a, b) => a.sort_index - b.sort_index);
       // 1. Pre-normalize（只在非標準時才呼叫，避免多餘 API）
-      const needsNorm = articles.some((a, i) => a.sort_index !== (i + 1) * 10);
-      if (needsNorm && articles.length > 0) {
+      const needsNorm = sortedArticles.some((a, i) => a.sort_index !== (i + 1) * 10);
+      if (needsNorm && sortedArticles.length > 0) {
         await regulationsApi.reorderArticles(
           id,
-          articles.map((a, i) => ({ id: a.id, sort_index: (i + 1) * 10 })),
+          sortedArticles.map((a, i) => ({ id: a.id, sort_index: (i + 1) * 10 })),
         );
       }
 
@@ -273,16 +282,32 @@ export default function EditRegulationPage() {
       //    插入前 0：sort_index = 5（< 10）
       //    插入 N 與 N+1 之間：sort_index = N*10 + 5（在兩者中間）
       //    插入尾部：sort_index = (len+1)*10
+      const insertPosition = Math.min(Math.max(position, 0), sortedArticles.length);
+      const flatForParent = sortedArticles.map((a, i) => ({
+        id: a.id,
+        parent_id: a.parent_id ?? null,
+        order_index: a.order_index ?? i,
+        sort_index: (i + 1) * 10,
+        article_type: a.article_type,
+        title: a.title ?? "",
+        subtitle: a.subtitle ?? "",
+        content: a.content ?? "",
+        legal_number: a.legal_number ?? null,
+      }));
+      const parentId = inferParentIdByPrevious(flatForParent, insertPosition, form.article_type);
+      const orderIndex = sortedArticles.filter(a => (a.parent_id ?? null) === parentId).length;
       const sortIndex =
-        position === 0
+        insertPosition === 0
           ? 5
-          : position >= articles.length
-          ? (articles.length + 1) * 10
-          : position * 10 + 5;
+          : insertPosition >= sortedArticles.length
+          ? (sortedArticles.length + 1) * 10
+          : insertPosition * 10 + 5;
 
       // 3. 建立條文
       await regulationsApi.addArticle(id, {
         sort_index: sortIndex,
+        order_index: orderIndex,
+        parent_id: parentId,
         article_type: form.article_type,
         title: form.title || undefined,
         content: form.content || undefined,

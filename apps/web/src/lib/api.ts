@@ -34,6 +34,55 @@ export class ApiError extends Error {
 
 let refreshPromise: Promise<boolean> | null = null;
 
+function formatErrorDetail(detail: unknown, fallback: string): string {
+  if (!detail) return fallback;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (!item || typeof item !== "object") return String(item);
+        const record = item as Record<string, unknown>;
+        const msg = typeof record.msg === "string" ? record.msg : undefined;
+        const loc = Array.isArray(record.loc)
+          ? record.loc.filter((part) => part !== "body").join(".")
+          : undefined;
+        if (msg && loc) return `${loc}: ${msg}`;
+        if (msg) return msg;
+        return JSON.stringify(record);
+      })
+      .filter(Boolean);
+    return messages.length ? messages.join("；") : fallback;
+  }
+  if (typeof detail === "object") {
+    const record = detail as Record<string, unknown>;
+    for (const key of ["message", "msg", "error", "detail"]) {
+      const value = record[key];
+      if (typeof value === "string" && value.trim()) return value;
+    }
+    try {
+      return JSON.stringify(record);
+    } catch {
+      return fallback;
+    }
+  }
+  return String(detail);
+}
+
+async function errorMessageFromResponse(res: Response): Promise<string> {
+  let detail: unknown = res.statusText;
+  try {
+    const payload: unknown = await res.json();
+    detail =
+      payload && typeof payload === "object" && "detail" in payload
+        ? (payload as { detail?: unknown }).detail
+        : payload;
+  } catch {
+    // ignore non-JSON error bodies
+  }
+  return formatErrorDetail(detail, res.statusText || "請求失敗");
+}
+
 export async function silentRefresh(): Promise<boolean> {
   refreshPromise ??= fetch(apiUrl("/auth/refresh"), {
     method: "POST",
@@ -102,9 +151,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
         if (retry.status === 204) return undefined as T;
         return retry.json();
       }
-      let detail = retry.statusText;
-      try { detail = (await retry.json()).detail ?? detail; } catch { /* ignore */ }
-      throw new ApiError(retry.status, detail);
+      throw new ApiError(retry.status, await errorMessageFromResponse(retry));
     }
     // refresh 失敗：
     // - 若本地「看起來已登入」（有 user_id），視為 session 過期 → 清除並導回登入
@@ -120,9 +167,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
 
   if (!res.ok) {
-    let detail = res.statusText;
-    try { detail = (await res.json()).detail ?? detail; } catch { /* ignore */ }
-    throw new ApiError(res.status, detail);
+    throw new ApiError(res.status, await errorMessageFromResponse(res));
   }
   if (res.status === 204) return undefined as T;
   return res.json();
@@ -240,9 +285,7 @@ export const documentsApi = {
     }
 
     if (!res.ok) {
-      let detail = res.statusText;
-      try { detail = (await res.json()).detail ?? detail; } catch { /* ignore */ }
-      throw new ApiError(res.status, detail);
+      throw new ApiError(res.status, await errorMessageFromResponse(res));
     }
     return res.json();
   },
@@ -366,9 +409,7 @@ export const regulationsApi = {
     }
 
     if (!res.ok) {
-      let detail = res.statusText;
-      try { detail = (await res.json()).detail ?? detail; } catch { /* ignore */ }
-      throw new ApiError(res.status, detail);
+      throw new ApiError(res.status, await errorMessageFromResponse(res));
     }
     return res.json() as Promise<RegulationOut>;
   },
@@ -406,9 +447,7 @@ export const regulationsApi = {
     }
 
     if (!res.ok) {
-      let detail = res.statusText;
-      try { detail = (await res.json()).detail ?? detail; } catch { /* ignore */ }
-      throw new ApiError(res.status, detail);
+      throw new ApiError(res.status, await errorMessageFromResponse(res));
     }
     return res.json() as Promise<RegulationImportItem[]>;
   },
@@ -924,9 +963,7 @@ async function uploadPetitionFile<T>(path: string, fd: FormData): Promise<T> {
     if (ok) res = await doFetch();
   }
   if (!res.ok) {
-    let detail = res.statusText;
-    try { detail = (await res.json()).detail ?? detail; } catch { /* ignore */ }
-    throw new ApiError(res.status, detail);
+    throw new ApiError(res.status, await errorMessageFromResponse(res));
   }
   return res.json();
 }
@@ -1050,9 +1087,7 @@ export const announcementsApi = {
       if (ok) res = await doFetch();
     }
     if (!res.ok) {
-      let detail = res.statusText;
-      try { detail = (await res.json()).detail ?? detail; } catch { /* ignore */ }
-      throw new ApiError(res.status, detail);
+      throw new ApiError(res.status, await errorMessageFromResponse(res));
     }
     return res.json();
   },

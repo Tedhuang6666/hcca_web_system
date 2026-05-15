@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.core.config import settings
 from api.core.database import get_db
 from api.core.permission_codes import (
     ALL_PERMISSION_CODES,
@@ -373,6 +374,17 @@ async def update_user(
         "is_active": user.is_active,
         "is_superuser": user.is_superuser,
     }
+    is_owner = user.email.lower() in settings.OWNER_EMAILS
+    if is_owner and body.is_active is False:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Owner 帳號不可停用",
+        )
+    if is_owner and body.is_superuser is False:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Owner 帳號不可移除超級管理員身分",
+        )
     if body.display_name is not None:
         user.display_name = body.display_name
     if body.is_active is not None:

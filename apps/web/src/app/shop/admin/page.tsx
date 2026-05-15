@@ -2,7 +2,8 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { shopApi, ApiError } from "@/lib/api";
+import { shopApi, orgsApi, ApiError } from "@/lib/api";
+import type { OrgRead } from "@/lib/api";
 import type { ProductOut, ProductStatus } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useRouter } from "next/navigation";
@@ -24,11 +25,12 @@ interface ProductFormValues {
   is_unlimited: boolean;
   sale_start: string;
   sale_end: string;
+  org_id: string;
 }
 
 const EMPTY_FORM: ProductFormValues = {
   name: "", description: "", price: "", stock_quantity: "0",
-  is_unlimited: false, sale_start: "", sale_end: "",
+  is_unlimited: false, sale_start: "", sale_end: "", org_id: "",
 };
 
 function productToForm(p: ProductOut): ProductFormValues {
@@ -40,6 +42,7 @@ function productToForm(p: ProductOut): ProductFormValues {
     is_unlimited: p.is_unlimited,
     sale_start: p.sale_start ? p.sale_start.slice(0, 16) : "",
     sale_end:   p.sale_end   ? p.sale_end.slice(0, 16)   : "",
+    org_id: p.org_id,
   };
 }
 
@@ -55,6 +58,7 @@ export default function ShopAdminPage() {
   }, [can, router]);
 
   const [products, setProducts] = useState<ProductOut[]>([]);
+  const [orgs, setOrgs] = useState<OrgRead[]>([]);
   const [loading, setLoading] = useState(true);
 
   // 新增/編輯 Modal
@@ -66,8 +70,12 @@ export default function ShopAdminPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await shopApi.listProducts();
+      const [data, orgItems] = await Promise.all([
+        shopApi.listProducts(),
+        orgsApi.list().catch(() => []),
+      ]);
       setProducts(data);
+      setOrgs(orgItems);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "載入失敗");
     } finally {
@@ -78,7 +86,11 @@ export default function ShopAdminPage() {
   useEffect(() => { load(); }, [load]);
 
   function openCreate() {
-    setForm(EMPTY_FORM);
+    const storedOrgId = localStorage.getItem("org_id") ?? "";
+    setForm({
+      ...EMPTY_FORM,
+      org_id: storedOrgId || (orgs.length === 1 ? orgs[0].id : ""),
+    });
     setEditTarget(null);
     setModal("create");
   }
@@ -93,6 +105,7 @@ export default function ShopAdminPage() {
 
   async function handleSave() {
     if (!form.name.trim()) { toast.error("請填寫商品名稱"); return; }
+    if (modal === "create" && !form.org_id) { toast.error("請選擇所屬組織"); return; }
     const price = parseFloat(form.price);
     if (isNaN(price) || price < 0) { toast.error("價格格式錯誤"); return; }
 
@@ -109,6 +122,7 @@ export default function ShopAdminPage() {
       };
 
       if (modal === "create") {
+        body.org_id = form.org_id;
         await shopApi.createProduct(body);
         toast.success("商品已建立");
       } else if (editTarget) {
@@ -258,11 +272,11 @@ export default function ShopAdminPage() {
       {/* 新增/編輯 Modal */}
       {modal !== "none" && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center"
           style={{ background: "rgba(0,0,0,0.6)" }}
           onClick={e => { if (e.target === e.currentTarget) closeModal(); }}>
           <div
-            className="w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden"
+            className="my-auto max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-2xl shadow-2xl"
             style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
 
             {/* Modal 標頭 */}
@@ -296,6 +310,21 @@ export default function ShopAdminPage() {
                   maxLength={100}
                 />
               </div>
+
+              {modal === "create" && (
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-muted)" }}>
+                    所屬組織 <span style={{ color: "var(--danger)" }}>*</span>
+                  </label>
+                  <select
+                    className="input w-full"
+                    value={form.org_id}
+                    onChange={e => setForm(f => ({ ...f, org_id: e.target.value }))}>
+                    <option value="">選擇組織…</option>
+                    {orgs.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-muted)" }}>
