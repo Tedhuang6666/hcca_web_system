@@ -392,6 +392,7 @@ export interface UserRead {
   show_email: boolean;
   is_active: boolean;
   is_verified: boolean;
+  allow_external_login: boolean;
   is_superuser: boolean;
   /** Owner 為 OWNER_EMAILS 環境變數驅動的最高權限角色，由路由層注入 */
   is_owner: boolean;
@@ -482,6 +483,7 @@ export interface AdminUserDetail {
   student_id: string | null;
   avatar_url: string | null;
   is_active: boolean;
+  allow_external_login: boolean;
   is_superuser: boolean;
   /** Owner 為 OWNER_EMAILS 環境變數驅動的最高權限角色 */
   is_owner: boolean;

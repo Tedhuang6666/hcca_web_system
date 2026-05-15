@@ -181,7 +181,7 @@ export default function PermissionsAdminPage() {
   };
   const selectDetail = (next: Detail) => {
     setDetail(next);
-    setMobileDetailOpen(true);
+    setMobileDetailOpen(typeof window !== "undefined" && window.innerWidth < 1024);
   };
 
   return (
@@ -283,12 +283,8 @@ export default function PermissionsAdminPage() {
       {showNewOrg && <OrgCreateModal orgs={orgs} onClose={() => setShowNewOrg(false)} onDone={() => { setShowNewOrg(false); load(); }} />}
       {showWizard && <OnboardingWizard users={users} positions={positions} orgs={orgs} permCodes={permCodes} onClose={() => setShowWizard(false)} onDone={() => { setShowWizard(false); load(); }} />}
       {!loading && mobileDetailOpen && detail && (
-        <div className="fixed inset-0 z-50 lg:hidden" style={{ background: "rgba(0,0,0,0.55)" }}>
-          <div className="absolute inset-y-0 right-0 w-full max-w-[92vw] overflow-y-auto" style={{ background: "var(--bg-surface)", borderLeft: "1px solid var(--border)" }}>
-            <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3" style={{ background: "var(--bg-surface)", borderBottom: "1px solid var(--border)" }}>
-              <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>管理詳情</p>
-              <SmallButton onClick={() => setMobileDetailOpen(false)}>關閉</SmallButton>
-            </div>
+        <div className="lg:hidden">
+          <Modal title="管理詳情" onClose={() => setMobileDetailOpen(false)}>
             <DetailPanel
               detail={detail}
               orgs={orgs}
@@ -303,7 +299,7 @@ export default function PermissionsAdminPage() {
               onConfirm={setConfirmState}
               metrics={{ orphanPositions, noPermPositions, riskyUsers, expiringAssignments }}
             />
-          </div>
+          </Modal>
         </div>
       )}
       {confirmState && (
@@ -393,7 +389,7 @@ function OrgWorkbenchSidebar({
 }
 
 function WorkbenchList({
-  mode, query, org, users, positions, permCodes, detail, onSelect,
+  mode, query, org, orgs, users, positions, permCodes, detail, onSelect,
 }: {
   mode: Mode;
   query: string;
@@ -406,8 +402,6 @@ function WorkbenchList({
   onSelect: (detail: Detail) => void;
 }) {
   const q = query.trim().toLowerCase();
-  const orgPositions = positions.filter((p) => !org || p.org_id === org.id);
-  const orgUsers = users.filter((u) => orgPositions.some((p) => u.positions.some((up) => up.id === p.id)));
   const filterText = (text: string) => !q || text.toLowerCase().includes(q);
   if (mode === "members") {
     const rows = users.filter((u) => filterText(`${u.display_name} ${u.email} ${u.student_id ?? ""} ${u.positions.map((p) => p.name).join(" ")}`));
@@ -421,6 +415,7 @@ function WorkbenchList({
                 <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{u.display_name}</p>
                 {u.is_owner && <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold" style={{ color: "#dc2626", background: "rgba(220,38,38,0.12)" }}>擁有者</span>}
                 {u.is_superuser && !u.is_owner && <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ color: "#f59e0b", background: "rgba(245,158,11,0.12)" }}>超管</span>}
+                {u.allow_external_login && <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ color: "var(--primary)", background: "var(--primary-dim)" }}>校外登入</span>}
                 {!u.is_active && <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ color: "#f87171", background: "rgba(248,113,113,0.1)" }}>停用</span>}
               </div>
               <p className="text-xs truncate" style={{ color: "var(--text-muted)" }}>{u.email}</p>
@@ -466,25 +461,95 @@ function WorkbenchList({
       </div>
     );
   }
-  const rows = orgPositions.filter((p) => filterText(`${p.org_name} ${p.name} ${p.description ?? ""} ${p.permission_codes.join(" ")}`));
+  const childCount = (orgId: string) => orgs.filter((item) => item.parent_id === orgId).length;
+  const orgMemberCount = (orgId: string) => {
+    const orgPositionIds = new Set(
+      positions.filter((position) => position.org_id === orgId).map((position) => position.id),
+    );
+    return users.filter((user) => user.positions.some((position) => orgPositionIds.has(position.id))).length;
+  };
+  const depthOf = (target: OrgRead) => {
+    let depth = 0;
+    let parentId = target.parent_id;
+    const seen = new Set<string>();
+    while (parentId && !seen.has(parentId)) {
+      seen.add(parentId);
+      const parent = orgs.find((candidate) => candidate.id === parentId);
+      if (!parent) break;
+      depth += 1;
+      parentId = parent.parent_id;
+    }
+    return depth;
+  };
+  const childrenOf = (parentId: string | null) =>
+    orgs
+      .filter((candidate) => candidate.parent_id === parentId)
+      .sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
+  const visited = new Set<string>();
+  const orderedOrgs: OrgRead[] = [];
+  const appendBranch = (branch: OrgRead[]) => {
+    branch.forEach((item) => {
+      if (visited.has(item.id)) return;
+      visited.add(item.id);
+      orderedOrgs.push(item);
+      appendBranch(childrenOf(item.id));
+    });
+  };
+  appendBranch(childrenOf(null));
+  appendBranch(
+    orgs
+      .filter((candidate) => candidate.parent_id && !orgs.some((parent) => parent.id === candidate.parent_id))
+      .sort((a, b) => a.name.localeCompare(b.name, "zh-Hant")),
+  );
+  const matchedOrgs = orderedOrgs.filter((item) =>
+    filterText(`${item.name} ${item.description ?? ""} ${item.prefix ?? ""}`),
+  );
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="p-4" style={{ borderBottom: "1px solid var(--border)" }}>
-        <button onClick={() => org && onSelect({ type: "org", id: org.id })} className="w-full text-left rounded-xl p-3 cursor-pointer" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>目前組織</p>
-          <p className="text-base font-semibold mt-0.5" style={{ color: "var(--text-primary)" }}>{org?.name ?? "未選擇"}</p>
-          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>{rows.length} 個職位 · {orgUsers.length} 位成員</p>
-        </button>
+        <div className="rounded-xl p-3" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>組織總覽</p>
+          <p className="text-base font-semibold mt-0.5" style={{ color: "var(--text-primary)" }}>
+            {orgs.length} 個組織
+          </p>
+          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+            目前選取：{org?.name ?? "未選擇"}
+          </p>
+        </div>
       </div>
-      {rows.map((p) => {
-        const members = users.filter((u) => u.positions.some((up) => up.id === p.id));
+      {matchedOrgs.map((item) => {
+        const itemPositions = positions.filter((position) => position.org_id === item.id);
+        const depth = depthOf(item);
         return (
-          <button key={p.id} onClick={() => onSelect({ type: "position", id: p.id })} className="w-full px-4 py-3 text-left cursor-pointer transition-colors" style={detail?.type === "position" && detail.id === p.id ? { background: "var(--primary-dim)" } : { borderBottom: "1px solid var(--border)" }}>
+          <button
+            key={item.id}
+            onClick={() => onSelect({ type: "org", id: item.id })}
+            className="w-full px-4 py-3 text-left cursor-pointer transition-colors"
+            style={{
+              ...(detail?.type === "org" && detail.id === item.id
+                ? { background: "var(--primary-dim)" }
+                : { borderBottom: "1px solid var(--border)" }),
+              paddingLeft: `${1 + depth * 0.75}rem`,
+            }}
+          >
             <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{p.name}</p>
-              <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}>權重 {p.weight}</span>
+              <div className="min-w-0">
+                <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{item.name}</p>
+                {item.parent_id && (
+                  <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                    階層 {depth + 1}
+                  </p>
+                )}
+              </div>
+              {!item.is_active && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ color: "#f59e0b", border: "1px solid rgba(245,158,11,0.3)" }}>
+                  已停用
+                </span>
+              )}
             </div>
-            <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{members.length} 人 · {p.permission_codes.length} 權限</p>
+            <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+              {itemPositions.length} 個職位 · {orgMemberCount(item.id)} 位成員 · {childCount(item.id)} 個下層組織
+            </p>
           </button>
         );
       })}
@@ -882,13 +947,23 @@ function UserPanel({
   };
   return (
     <div className="w-full p-5 space-y-5">
-      <div className="flex items-start justify-between gap-3">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>幹部任期</p>
-          <h2 className="text-xl font-semibold mt-1" style={{ color: "var(--text-primary)" }}>{user.display_name}</h2>
-          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>{user.email}{user.student_id ? ` · #${user.student_id}` : ""}</p>
+          <h2 className="text-xl font-semibold mt-1 break-words" style={{ color: "var(--text-primary)" }}>
+            {user.display_name}
+          </h2>
+          <div className="mt-2 space-y-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            <p className="break-all">Email：{user.email}</p>
+            <p>學號：{user.student_id ?? "未設定"}</p>
+          </div>
+          {user.allow_external_login && (
+            <p className="text-[11px] mt-1" style={{ color: "var(--primary)" }}>
+              已允許校外信箱登入
+            </p>
+          )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 sm:justify-end">
           <SmallButton
             tone={user.is_active ? "danger" : "primary"}
             disabled={user.is_owner && user.is_active}
@@ -900,6 +975,18 @@ function UserPanel({
             })}
           >
             {user.is_active ? "停用" : "啟用"}
+          </SmallButton>
+          <SmallButton
+            tone={user.allow_external_login ? "warning" : "primary"}
+            onClick={() => onConfirm({
+              title: user.allow_external_login ? "取消校外登入" : "允許校外登入",
+              body: `確定要${user.allow_external_login ? "取消" : "允許"}「${user.display_name}」使用校外信箱登入？這只影響登入門禁，不會改變任何 RBAC 權限。`,
+              action: () => adminApi.updateUser(user.id, {
+                allow_external_login: !user.allow_external_login,
+              }),
+            })}
+          >
+            {user.allow_external_login ? "禁校外登入" : "允許校外登入"}
           </SmallButton>
           <SmallButton
             tone="warning"
@@ -1036,6 +1123,7 @@ function OnboardingWizard({
   const [userId, setUserId] = useState("");
   const [studentId, setStudentId] = useState("");
   const [email, setEmail] = useState("");
+  const [allowExternalLogin, setAllowExternalLogin] = useState(false);
   const [name, setName] = useState("");
   const [positionId, setPositionId] = useState("");
   const [start, setStart] = useState(today());
@@ -1062,6 +1150,7 @@ function OnboardingWizard({
           display_name: name.trim(),
           student_id: studentId.trim() || null,
           email: email.trim() || null,
+          allow_external_login: allowExternalLogin,
           position_ids: positionId ? [positionId] : [],
           start_date: start,
           end_date: end || null,
@@ -1099,6 +1188,17 @@ function OnboardingWizard({
               <TextInput value={name} onChange={(e) => setName(e.target.value)} placeholder="姓名" />
               <TextInput value={studentId} onChange={(e) => setStudentId(e.target.value)} placeholder="學號（擇一）" />
               <TextInput value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email（擇一）" className="sm:col-span-2" />
+              <label
+                className="sm:col-span-2 flex items-center gap-2 text-xs"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                <input
+                  type="checkbox"
+                  checked={allowExternalLogin}
+                  onChange={(e) => setAllowExternalLogin(e.target.checked)}
+                />
+                允許此帳號以校外信箱登入（僅登入門禁，不影響下方職位與權限）
+              </label>
             </div>
           )}
           <div className="grid grid-cols-1 sm:grid-cols-[1fr_150px_150px] gap-3">

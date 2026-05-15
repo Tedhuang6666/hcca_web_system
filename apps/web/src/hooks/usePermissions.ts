@@ -10,13 +10,15 @@ import { useCallback, useMemo } from "react";
  *   if (can("document:create")) { ... }
  */
 export function usePermissions() {
-  const { permissions, isAdmin } = useMemo(() => {
-    if (typeof window === "undefined") return { permissions: new Set<string>(), isAdmin: false };
+  const { permissions, isAdmin, isOwner } = useMemo(() => {
+    if (typeof window === "undefined") return { permissions: new Set<string>(), isAdmin: false, isOwner: false };
     const raw = localStorage.getItem("permissions");
     const superuser = localStorage.getItem("is_superuser") === "true";
+    const owner = localStorage.getItem("is_owner") === "true";
     let perms: string[] = [];
     try { perms = raw ? JSON.parse(raw) : []; } catch { /* ignore */ }
-    return { permissions: new Set<string>(perms), isAdmin: superuser };
+    // Owner 視為超管：自動擁有所有權限
+    return { permissions: new Set<string>(perms), isAdmin: superuser || owner, isOwner: owner };
   }, []);
 
   /** 是否擁有指定權限（超管自動通過） */
@@ -39,5 +41,5 @@ export function usePermissions() {
     [isAdmin, permissions],
   );
 
-  return { can, canAny, isAdmin, permissions };
+  return { can, canAny, isAdmin, isOwner, permissions };
 }

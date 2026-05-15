@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, MouseEvent } from "react";
 import { diffLines } from "diff";
 import { AlertTriangle } from "lucide-react";
@@ -12,6 +12,10 @@ import type {
   RegulationWorkflowLogOut,
   RegulationWorkflowStatus,
 } from "@/lib/types";
+import {
+  ARTICLE_TYPE_LABEL as STRUCT_LABEL,
+  ARTICLE_IS_STRUCTURAL as STRUCT_IS_STRUCTURAL,
+} from "@/lib/regulationStructure";
 
 export type Tab = "content" | "revisions" | "workflow";
 
@@ -19,20 +23,8 @@ export function isTab(value: string | null): value is Tab {
   return value === "content" || value === "revisions" || value === "workflow";
 }
 
-export const ARTICLE_TYPE_LABEL: Record<ArticleType, string> = {
-  volume: "編", chapter: "章", section: "節",
-  article: "條", paragraph: "項", subparagraph: "款", item: "目",
-  special_clause: "附則",
-  // 舊值向下相容
-  clause: "條", subsection: "款",
-};
-export const ARTICLE_IS_STRUCTURAL: Record<ArticleType, boolean> = {
-  volume: true, chapter: true, section: true,
-  article: false, paragraph: false, subparagraph: false, item: false,
-  special_clause: false,
-  // 舊值向下相容
-  clause: false, subsection: false,
-};
+export const ARTICLE_TYPE_LABEL = STRUCT_LABEL as Record<ArticleType, string>;
+export const ARTICLE_IS_STRUCTURAL = STRUCT_IS_STRUCTURAL as Record<ArticleType, boolean>;
 
 type ProposalChangeCard = {
   status: string;
@@ -517,6 +509,13 @@ export function ArticleRow({
   highlighted?: boolean;
   onClearHighlight?: () => void;
 }) {
+  // Hooks 必須在 early return 之前宣告（React Rules of Hooks）
+  const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (copyTimerRef.current) window.clearTimeout(copyTimerRef.current);
+  }, []);
+
   if (hidden) return null;
   const isStructural = ARTICLE_IS_STRUCTURAL[a.article_type] ?? false;
   const stableAnchorId = `a-${a.id}`;
@@ -540,24 +539,43 @@ export function ArticleRow({
   const highlightedStyle: CSSProperties = highlighted ? {
     background: "rgba(14,165,233,0.12)",
     boxShadow: "inset 0 0 0 1px rgba(14,165,233,0.45)",
-  } : {};
+    transition: "background 600ms ease, box-shadow 600ms ease",
+  } : {
+    transition: "background 600ms ease, box-shadow 600ms ease",
+  };
   const copyButton = shareUrl && onCopyLink ? (
     <button
       type="button"
       onClick={(event) => {
         event.stopPropagation();
         onCopyLink(shareUrl);
+        setCopied(true);
+        if (copyTimerRef.current) window.clearTimeout(copyTimerRef.current);
+        copyTimerRef.current = window.setTimeout(() => setCopied(false), 1000);
       }}
-      className="no-print inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md opacity-70 transition-opacity hover:opacity-100"
-      style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}
-      title="複製此條連結"
+      className="no-print inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md transition-all"
+      style={{
+        color: copied ? "#10b981" : "var(--text-muted)",
+        border: `1px solid ${copied ? "rgba(16,185,129,0.4)" : "var(--border)"}`,
+        background: copied ? "rgba(16,185,129,0.08)" : "transparent",
+        opacity: copied ? 1 : 0.75,
+        transform: copied ? "scale(1.06)" : "scale(1)",
+      }}
+      title={copied ? "已複製" : "複製此條連結"}
       aria-label={`複製${displayLabel}連結`}
     >
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-        strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-      </svg>
+      {copied ? (
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+      ) : (
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+        </svg>
+      )}
     </button>
   ) : null;
   const copyOnContextMenu = shareUrl && onCopyLink

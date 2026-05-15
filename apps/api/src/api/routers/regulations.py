@@ -200,6 +200,9 @@ async def list_regulations(
     org_id: uuid.UUID | None = Query(None, description="過濾組織"),
     category: RegulationCategory | None = Query(None, description="過濾分類"),
     active_only: bool = Query(False, description="僅顯示有效法規"),
+    workflow_status: RegulationWorkflowStatus | None = Query(
+        None, description="過濾審議狀態（如 under_review 用於議長集中待審清單）"
+    ),
     keyword: str | None = Query(None, max_length=100, description="關鍵字搜尋（標題/內容）"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
@@ -212,6 +215,7 @@ async def list_regulations(
         category=category,
         is_active=True if active_only else None,
         published_only=(user is None),
+        workflow_status=workflow_status,
         keyword=keyword,
         limit=limit,
         offset=offset,

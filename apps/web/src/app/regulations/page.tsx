@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { regulationsApi, ApiError, regulationHref } from "@/lib/api";
 import type { RegulationListItem, RegulationCategory, RegulationWorkflowStatus } from "@/lib/types";
 import { RegulationCategoryBadge } from "@/components/ui/StatusBadge";
+import Toggle from "@/components/ui/Toggle";
 import { usePermissions } from "@/hooks/usePermissions";
 
 const CATEGORIES: { key: RegulationCategory | "all"; label: string }[] = [
@@ -76,18 +77,22 @@ export default function RegulationsPage() {
         </div>
         <div className="flex items-center gap-2">
           {canManage && (
-            <label className="flex items-center gap-2 cursor-pointer">
-              <button
-                role="switch"
-                aria-checked={showAll}
-                onClick={() => setShowAll(v => !v)}
-                className="relative w-8 h-4 rounded-full transition-colors flex-shrink-0"
-                style={{ background: showAll ? "var(--primary)" : "var(--border-strong)" }}>
-                <span className="absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform"
-                  style={{ transform: showAll ? "translateX(16px)" : "translateX(2px)" }} />
-              </button>
-              <span className="text-xs" style={{ color: "var(--text-muted)" }}>顯示草稿</span>
-            </label>
+            <Toggle
+              checked={showAll}
+              onChange={setShowAll}
+              label="顯示草稿"
+            />
+          )}
+          {(can("regulation:schedule") || can("regulation:council_approve") || can("regulation:president_publish") || can("regulation:admin")) && (
+            <Link href="/regulations/pending" className="btn btn-ghost">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="18" rx="2" />
+                <line x1="9" y1="9" x2="15" y2="9" /><line x1="9" y1="13" x2="15" y2="13" />
+                <line x1="9" y1="17" x2="13" y2="17" />
+              </svg>
+              待審案件
+            </Link>
           )}
           {can("regulation:create") && (
             <Link href="/regulations/new" className="btn btn-primary">

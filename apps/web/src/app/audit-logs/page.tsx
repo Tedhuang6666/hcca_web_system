@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { ApiError, auditLogsApi, usersApi, type UserSummary } from "@/lib/api";
 import type { AuditLogOut } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
+import Modal from "@/components/ui/Modal";
 
 const PAGE_SIZE = 50;
 
@@ -704,30 +705,22 @@ export default function AuditLogsPage() {
       )}
 
       {selectedLog && (
-        <div
-          className="fixed inset-0 z-50 flex items-start justify-end overflow-y-auto p-4 sm:items-end sm:p-6"
-          style={{ background: "rgba(0,0,0,0.45)" }}
-          onClick={() => setSelectedLog(null)}>
-          <aside
-            className="max-h-[88vh] w-full max-w-2xl overflow-y-auto rounded-xl p-5 shadow-2xl"
-            style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
-            onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--primary)" }}>
-                  {actionLabel(selectedLog.action)}
-                </p>
-                <h2 className="mt-1 text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
-                  {selectedLog.summary || `${entityLabel(selectedLog.entity_type)}操作紀錄`}
-                </h2>
-                <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-                  {formatFullDateTime(selectedLog.created_at)}
-                </p>
-              </div>
-              <button className="btn btn-ghost btn-sm" onClick={() => setSelectedLog(null)}>關閉</button>
+        <Modal
+          title={selectedLog.summary || `${entityLabel(selectedLog.entity_type)}操作紀錄`}
+          onClose={() => setSelectedLog(null)}
+          maxWidthClassName="max-w-2xl"
+        >
+          <div className="space-y-4">
+            <div>
+              <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--primary)" }}>
+                {actionLabel(selectedLog.action)}
+              </p>
+              <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+                {formatFullDateTime(selectedLog.created_at)}
+              </p>
             </div>
 
-            <dl className="mt-5 grid gap-3 sm:grid-cols-2">
+            <dl className="grid gap-3 sm:grid-cols-2">
               {[
                 ["操作者", selectedLog.actor_email ?? "系統"],
                 ["使用者 ID", selectedLog.actor_id ?? "-"],
@@ -743,7 +736,7 @@ export default function AuditLogsPage() {
               ))}
             </dl>
 
-            <div className="mt-4">
+            <div>
               <p className="mb-2 text-xs font-medium" style={{ color: "var(--text-muted)" }}>附加資料</p>
               <pre
                 className="max-h-72 overflow-auto rounded-lg p-3 text-xs leading-relaxed"
@@ -751,8 +744,8 @@ export default function AuditLogsPage() {
                 {JSON.stringify(selectedLog.meta, null, 2)}
               </pre>
             </div>
-          </aside>
-        </div>
+          </div>
+        </Modal>
       )}
     </div>
   );

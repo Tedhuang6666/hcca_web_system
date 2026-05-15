@@ -711,56 +711,95 @@ export default function DocumentDetailPage() {
                 </>
               )}
 
-              {/* 簽署區（核准後顯示） — 右下角顯示「機關首長 姓名」 */}
-              {(doc.status === "approved" || doc.status === "archived") && (
-                <div className="mt-8 pt-5" style={{ borderTop: "1px solid var(--border)" }}>
-                  <div className="flex justify-end">
-                    <div className="text-right space-y-2">
-                      {(() => {
-                        const approved = doc.approvals
-                          .filter(a => a.status === "approved")
-                          .sort((a, b) => b.step_order - a.step_order);
-                        const step = approved[0];
-                        const signature = formatActingSignature(step);
-                        if (signature) {
-                          return (
-                            <>
-                              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                                {signature.title}
-                              </p>
-                              <p className="text-3xl tracking-[0.15em]"
-                                style={{
-                                  color: "var(--primary)",
-                                }}>
-                                {signature.name}
-                              </p>
-                              <p className="text-xs" style={{ color: "var(--text-muted)" }}>（蓋章處）</p>
-                            </>
-                          );
-                        }
-                        // 無簽核人時，以 handler_unit/handler_name 作為簽署資訊（如主席公布令）
-                        if (doc.handler_name) {
-                          return (
-                            <>
-                              {doc.handler_unit && (
-                                <p className="text-xs" style={{ color: "var(--text-muted)" }}>{doc.handler_unit}</p>
-                              )}
-                              <p className="text-3xl tracking-[0.15em]"
-                                style={{
-                                  color: "var(--primary)",
-                                }}>
-                                {doc.handler_name}
-                              </p>
-                              <p className="text-xs" style={{ color: "var(--text-muted)" }}>（蓋章處）</p>
-                            </>
-                          );
-                        }
-                        return <p className="text-xs" style={{ color: "var(--text-muted)" }}>（蓋章處）</p>;
-                      })()}
+              {/* 簽署區（核准後顯示） — DECREE 使用大型置中署名，仿正式公文視覺 */}
+              {(doc.status === "approved" || doc.status === "archived") && (() => {
+                const isDecree = doc.category === "decree";
+                const approved = doc.approvals
+                  .filter(a => a.status === "approved")
+                  .sort((a, b) => b.step_order - a.step_order);
+                const step = approved[0];
+                const signature = formatActingSignature(step);
+                const sigTitle = signature?.title ?? doc.handler_unit ?? "";
+                const sigName = signature?.name ?? doc.handler_name ?? "";
+                const issuedDate = doc.issued_at
+                  ? (() => {
+                      const d = new Date(doc.issued_at);
+                      return `中華民國 ${d.getFullYear() - 1911} 年 ${d.getMonth() + 1} 月 ${d.getDate()} 日`;
+                    })()
+                  : "";
+
+                if (isDecree && sigName) {
+                  return (
+                    <div
+                      className="mt-12 pt-8"
+                      style={{ borderTop: "2px double var(--border-strong)" }}
+                    >
+                      <div className="flex flex-col items-center text-center space-y-4">
+                        {sigTitle && (
+                          <p
+                            className="text-base sm:text-lg font-semibold tracking-[0.4em]"
+                            style={{ color: "var(--text-secondary)" }}
+                          >
+                            {sigTitle}
+                          </p>
+                        )}
+                        <p
+                          className="font-bold tracking-[0.3em]"
+                          style={{
+                            color: "var(--primary)",
+                            fontSize: "clamp(3rem, 8vw, 5.5rem)",
+                            lineHeight: 1.05,
+                          }}
+                        >
+                          {sigName}
+                        </p>
+                        <div
+                          className="inline-flex items-center justify-center w-24 h-24 sm:w-28 sm:h-28 rounded-full text-sm font-medium"
+                          style={{
+                            border: "3px solid var(--primary)",
+                            color: "var(--primary)",
+                            opacity: 0.55,
+                            letterSpacing: "0.2em",
+                          }}
+                        >
+                          蓋章處
+                        </div>
+                        {issuedDate && (
+                          <p
+                            className="text-sm font-medium mt-2"
+                            style={{ color: "var(--text-secondary)", letterSpacing: "0.15em" }}
+                          >
+                            {issuedDate}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
+
+                // 一般公文：右下角小型署名
+                return (
+                  <div className="mt-8 pt-5" style={{ borderTop: "1px solid var(--border)" }}>
+                    <div className="flex justify-end">
+                      <div className="text-right space-y-2">
+                        {sigName ? (
+                          <>
+                            {sigTitle && (
+                              <p className="text-xs" style={{ color: "var(--text-muted)" }}>{sigTitle}</p>
+                            )}
+                            <p className="text-3xl tracking-[0.15em]" style={{ color: "var(--primary)" }}>
+                              {sigName}
+                            </p>
+                            <p className="text-xs" style={{ color: "var(--text-muted)" }}>（蓋章處）</p>
+                          </>
+                        ) : (
+                          <p className="text-xs" style={{ color: "var(--text-muted)" }}>（蓋章處）</p>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           </div>
 

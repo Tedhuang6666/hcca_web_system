@@ -101,7 +101,7 @@ def _safe_next_path(value: str | None) -> str:
     return value
 
 
-def _email_can_login(email: str) -> bool:
+def _email_can_login(email: str, existing_user: User | None = None) -> bool:
     normalized = email.strip().lower()
     domain = normalized.rsplit("@", maxsplit=1)[-1] if "@" in normalized else ""
     return (
@@ -109,6 +109,7 @@ def _email_can_login(email: str) -> bool:
         or normalized in settings.LOGIN_EMAIL_ALLOWLIST
         or normalized in settings.OWNER_EMAILS
         or normalized in settings.SUPERUSER_EMAILS
+        or bool(existing_user and existing_user.is_active and existing_user.allow_external_login)
     )
 
 
@@ -191,7 +192,10 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
     display_name: str = user_info.get("name", email.split("@")[0])
     avatar_url: str | None = user_info.get("picture")
 
-    if not _email_can_login(email):
+    existing_user_by_email_result = await db.execute(select(User).where(User.email == email))
+    existing_user_by_email = existing_user_by_email_result.scalar_one_or_none()
+
+    if not _email_can_login(email, existing_user_by_email):
         logger.warning(
             "Rejected Google login from disallowed email domain",
             extra={"email": email, "client_ip": client_ip},
@@ -210,8 +214,7 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
 
     if user is None:
         # 嘗試用 email 找到現有帳號並關聯
-        result = await db.execute(select(User).where(User.email == email))
-        user = result.scalar_one_or_none()
+        user = existing_user_by_email
 
     # 檢查是否為超級管理員候選人
     is_superuser_candidate = email in settings.SUPERUSER_EMAILS or email in settings.OWNER_EMAILS
@@ -349,6 +352,7 @@ async def get_me(
         "email": current_user.email,
         "display_name": current_user.display_name,
         "avatar_url": current_user.avatar_url,
+        "allow_external_login": current_user.allow_external_login,
         "is_superuser": current_user.is_superuser,
         "is_owner": current_user.email.lower() in settings.OWNER_EMAILS,
         "permissions": sorted(codes),

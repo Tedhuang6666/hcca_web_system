@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { shopApi, orgsApi, ApiError } from "@/lib/api";
 import type { OrgRead } from "@/lib/api";
 import type { ProductOut, ProductStatus } from "@/lib/types";
+import Modal from "@/components/ui/Modal";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useRouter } from "next/navigation";
 
@@ -271,33 +272,12 @@ export default function ShopAdminPage() {
 
       {/* 新增/編輯 Modal */}
       {modal !== "none" && (
-        <div
-          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center"
-          style={{ background: "rgba(0,0,0,0.6)" }}
-          onClick={e => { if (e.target === e.currentTarget) closeModal(); }}>
-          <div
-            className="my-auto max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-2xl shadow-2xl"
-            style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
-
-            {/* Modal 標頭 */}
-            <div className="px-6 py-4 flex items-center justify-between"
-              style={{ borderBottom: "1px solid var(--border)" }}>
-              <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
-                {modal === "create" ? "新增商品" : "編輯商品"}
-              </h2>
-              <button onClick={closeModal}
-                className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors"
-                style={{ color: "var(--text-muted)" }}
-                onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-hover)")}
-                onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Modal 內容 */}
-            <div className="px-6 py-5 space-y-4">
+        <Modal
+          title={modal === "create" ? "新增商品" : "編輯商品"}
+          onClose={closeModal}
+          maxWidthClassName="max-w-lg"
+        >
+          <div className="space-y-4">
               <div>
                 <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-muted)" }}>
                   商品名稱 <span style={{ color: "var(--danger)" }}>*</span>
@@ -397,20 +377,19 @@ export default function ShopAdminPage() {
                   />
                 </div>
               </div>
-            </div>
-
-            {/* Modal 底部 */}
-            <div className="px-6 py-4 flex justify-end gap-3"
-              style={{ borderTop: "1px solid var(--border)" }}>
-              <button onClick={closeModal} className="btn btn-ghost" disabled={saving}>
-                取消
-              </button>
-              <button onClick={handleSave} className="btn btn-primary" disabled={saving}>
-                {saving ? "儲存中…" : (modal === "create" ? "建立商品" : "儲存變更")}
-              </button>
-            </div>
           </div>
-        </div>
+
+          {/* Modal 底部 */}
+          <div className="pt-4 mt-4 flex justify-end gap-3"
+            style={{ borderTop: "1px solid var(--border)" }}>
+            <button onClick={closeModal} className="btn btn-ghost" disabled={saving}>
+              取消
+            </button>
+            <button onClick={handleSave} className="btn btn-primary" disabled={saving}>
+              {saving ? "儲存中…" : (modal === "create" ? "建立商品" : "儲存變更")}
+            </button>
+          </div>
+        </Modal>
       )}
     </div>
   );

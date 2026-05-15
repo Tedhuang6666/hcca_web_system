@@ -3,8 +3,19 @@ import type { Metadata } from "next";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import {
+  ArticleClearHighlightButton,
+  ArticleCopyButton,
+  ArticleHashWrapper,
+} from "@/components/regulations/ArticleHashAnchor";
 import { serverApiUrl } from "@/lib/config";
 import { formatGeneratedHistoryRows, splitLegislativeHistory } from "@/lib/regulationHistory";
+import {
+  ARTICLE_IS_STRUCTURAL,
+  STRUCTURAL_INDENT,
+  computeArticleDisplayLabels,
+  normalizeArticleType,
+} from "@/lib/regulationStructure";
 
 type RegulationArticleOut = {
   id: string;
@@ -88,7 +99,8 @@ export async function generateMetadata(
 }
 
 function isStructural(t: string) {
-  return t === "volume" || t === "chapter" || t === "section";
+  const norm = normalizeArticleType(t);
+  return ARTICLE_IS_STRUCTURAL[norm] ?? false;
 }
 
 export default async function PublicRegulationDetailPage({
@@ -110,8 +122,10 @@ export default async function PublicRegulationDetailPage({
     );
   }
 
-  const articles = (reg.articles ?? []).filter((a) => !a.is_deleted);
+  const articles = [...(reg.articles ?? []).filter((a) => !a.is_deleted)]
+    .sort((a, b) => a.sort_index - b.sort_index);
   const structural = articles.filter((a) => isStructural(a.article_type));
+  const displayLabels = computeArticleDisplayLabels(articles);
   const sortedRevs = [...(reg.revisions ?? [])].sort(
     (a, b) => new Date(a.amended_at).getTime() - new Date(b.amended_at).getTime(),
   );
@@ -154,7 +168,14 @@ export default async function PublicRegulationDetailPage({
             <span> / </span>
             <span className="truncate">{reg.title}</span>
           </div>
-          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)", wordBreak: "keep-all" }}>
+          <h1
+            className="break-words text-xl font-semibold"
+            style={{
+              color: "var(--text-primary)",
+              overflowWrap: "anywhere",
+              wordBreak: "break-word",
+            }}
+          >
             {!reg.is_active && <span style={{ color: "var(--danger)" }}>(失效) </span>}
             {highlight(reg.title)}
           </h1>
@@ -233,19 +254,27 @@ export default async function PublicRegulationDetailPage({
             ) : (
               <div className="divide-y" style={{ borderColor: "var(--border)" }}>
                 {articles.map((a) => {
-                  const anchorId = `a-${a.id}`;
                   const frozen = Boolean(a.frozen_by);
+                  const indent = STRUCTURAL_INDENT[normalizeArticleType(a.article_type)] ?? 0;
+                  const structural = isStructural(a.article_type);
+                  const label = displayLabels[a.id] ?? "";
                   return (
-                    <div
+                    <ArticleHashWrapper
                       key={a.id}
-                      id={anchorId}
-                      className="py-4 scroll-mt-24"
-                      style={frozen ? { borderLeft: "3px solid #fb923c", paddingLeft: 12, background: "rgba(251,146,60,0.04)" } : {}}
+                      articleId={a.id}
+                      className="py-4 px-2 scroll-mt-24"
+                      style={{
+                        marginLeft: `${indent * 12}px`,
+                        ...(frozen ? { borderLeft: "3px solid #fb923c", paddingLeft: 12, background: "rgba(251,146,60,0.04)" } : {}),
+                      }}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                            {a.title ? highlight(a.title) : (isStructural(a.article_type) ? "（結構標題）" : "（條文）")}
+                          <p
+                            className={structural ? "text-base font-bold" : "text-sm font-semibold"}
+                            style={{ color: "var(--text-primary)" }}
+                          >
+                            {label ? highlight(label) : (a.title ? highlight(a.title) : "（條文）")}
                           </p>
                           {a.subtitle && (
                             <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
@@ -254,17 +283,8 @@ export default async function PublicRegulationDetailPage({
                           )}
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
-                          <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ border: "1px solid var(--border)", color: "var(--text-muted)" }}>
-                            {a.article_type}
-                          </span>
-                          <a
-                            href={`#${anchorId}`}
-                            className="text-xs hover:underline"
-                            style={{ color: "var(--primary)" }}
-                            title="條文永久連結"
-                          >
-                            ¶
-                          </a>
+                          <ArticleClearHighlightButton />
+                          <ArticleCopyButton ariaLabel={`複製${label || a.title || "條文"}連結`} />
                         </div>
                       </div>
                       {frozen && (
@@ -273,11 +293,11 @@ export default async function PublicRegulationDetailPage({
                         </p>
                       )}
                       {a.content && (
-                        <pre className="mt-3 whitespace-pre-wrap text-sm" style={{ color: "var(--text-primary)", lineHeight: 1.9 }}>
+                        <pre className="mt-3 whitespace-pre-wrap text-sm" style={{ color: "var(--text-primary)", lineHeight: 1.9, fontFamily: "inherit" }}>
                           {q ? highlight(a.content) : a.content}
                         </pre>
                       )}
-                    </div>
+                    </ArticleHashWrapper>
                   );
                 })}
               </div>
@@ -397,7 +417,8 @@ export default async function PublicRegulationDetailPage({
               分享
             </p>
             <p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>
-              直接複製網址列即可。條文永久連結格式：<span style={{ color: "var(--text-secondary)" }}>#a-條文ID</span>
+              點條文右側的<span style={{ color: "var(--text-secondary)" }}> 複製 </span>按鈕即可取得永久連結；
+              收件人開啟連結後會自動跳轉並高亮該條文（3 秒後褪色）。
             </p>
             {!reg.is_active && reg.workflow_note && (
               <p className="text-xs mt-3" style={{ color: "var(--danger)" }}>

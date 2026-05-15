@@ -6,6 +6,16 @@ type OfficialLine = {
   level: number;
 };
 
+type AmendmentRow = {
+  status: string;
+  articleNo: string;
+  content: string;
+};
+
+type OfficialBlock =
+  | { type: "line"; line: string; index: number }
+  | { type: "amendment_table"; rows: AmendmentRow[]; index: number };
+
 const LINE_RE = /^(　*)([一二三四五六七八九十百零〇]+、|（[一二三四五六七八九十百零〇]+）|\d+\.|\(\d+\))\s*(.*)$/;
 
 function parseLine(line: string): OfficialLine {
@@ -21,6 +31,72 @@ function parseLine(line: string): OfficialLine {
   };
 }
 
+function parseAmendmentRow(line: string): AmendmentRow | null {
+  const match = line.match(/^(\S+)\s{2,}(.+?)\s{2,}(.+)$/);
+  if (!match) return null;
+  return {
+    status: match[1],
+    articleNo: match[2],
+    content: match[3],
+  };
+}
+
+function buildBlocks(lines: string[]): OfficialBlock[] {
+  const blocks: OfficialBlock[] = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const next = lines[index + 1] ?? "";
+    const rule = lines[index + 2] ?? "";
+
+    if (
+      line.trim() === "修正條文整理："
+      && next.includes("異動")
+      && next.includes("條號")
+      && next.includes("內容")
+      && /^─+/.test(rule.trim())
+    ) {
+      const rows: AmendmentRow[] = [];
+      let cursor = index + 3;
+      while (cursor < lines.length && lines[cursor].trim()) {
+        const row = parseAmendmentRow(lines[cursor]);
+        if (!row) break;
+        rows.push(row);
+        cursor += 1;
+      }
+      blocks.push({ type: "line", line, index });
+      if (rows.length > 0) {
+        blocks.push({ type: "amendment_table", rows, index: index + 1 });
+        index = cursor - 1;
+        continue;
+      }
+    }
+
+    blocks.push({ type: "line", line, index });
+  }
+
+  return blocks;
+}
+
+function amendmentStatusStyle(status: string) {
+  if (status === "新增") {
+    return {
+      color: "var(--success)",
+      background: "var(--success-dim)",
+    };
+  }
+  if (status === "刪除") {
+    return {
+      color: "var(--danger)",
+      background: "rgba(220,38,38,0.1)",
+    };
+  }
+  return {
+    color: "var(--warning)",
+    background: "rgba(245,158,11,0.1)",
+  };
+}
+
 export function OfficialText({
   value,
   className = "",
@@ -29,6 +105,7 @@ export function OfficialText({
   className?: string;
 }) {
   const lines = value.split(/\r?\n/);
+  const blocks = buildBlocks(lines);
 
   return (
     <div className={`official-text ${className}`}>
@@ -66,8 +143,107 @@ export function OfficialText({
         .official-text-line.level-1 { margin-left: 0; }
         .official-text-line.level-2 { margin-left: 2em; }
         .official-text-line.level-3 { margin-left: 4em; }
+        .official-amendment-table {
+          margin: 0.75rem 0 1rem;
+        }
+        .official-amendment-table table {
+          width: 100%;
+          table-layout: fixed;
+          border-collapse: collapse;
+        }
+        .official-amendment-table th,
+        .official-amendment-table td {
+          padding: 0.6rem 0.7rem;
+          vertical-align: top;
+          border-top: 1px solid var(--border);
+          overflow-wrap: anywhere;
+          word-break: break-word;
+        }
+        .official-amendment-table thead th {
+          border-top: 0;
+          text-align: left;
+          font-size: 0.75rem;
+          color: var(--text-muted);
+        }
+        .official-amendment-mobile {
+          display: none;
+        }
+        @media (max-width: 639px) {
+          .official-amendment-desktop {
+            display: none;
+          }
+          .official-amendment-mobile {
+            display: grid;
+            gap: 0.6rem;
+          }
+          .official-amendment-card {
+            border: 1px solid var(--border);
+            border-radius: 0.75rem;
+            padding: 0.75rem;
+            background: var(--bg-elevated);
+          }
+        }
       `}</style>
-      {lines.map((line, index) => {
+      {blocks.map((block) => {
+        if (block.type === "amendment_table") {
+          return (
+            <div key={`amendment-${block.index}`} className="official-amendment-table">
+              <div
+                className="official-amendment-desktop overflow-hidden rounded-xl"
+                style={{ border: "1px solid var(--border)" }}
+              >
+                <table>
+                  <colgroup>
+                    <col style={{ width: "5rem" }} />
+                    <col style={{ width: "7.5rem" }} />
+                    <col />
+                  </colgroup>
+                  <thead style={{ background: "var(--bg-elevated)" }}>
+                    <tr>
+                      <th>異動</th>
+                      <th>條號</th>
+                      <th>內容</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {block.rows.map((row, rowIndex) => (
+                      <tr key={`${row.status}-${row.articleNo}-${rowIndex}`}>
+                        <td>
+                          <span
+                            className="inline-flex rounded px-1.5 py-0.5 text-[11px]"
+                            style={amendmentStatusStyle(row.status)}
+                          >
+                            {row.status}
+                          </span>
+                        </td>
+                        <td>{row.articleNo}</td>
+                        <td className="whitespace-pre-wrap">{row.content}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="official-amendment-mobile">
+                {block.rows.map((row, rowIndex) => (
+                  <article key={`${row.status}-${row.articleNo}-${rowIndex}`} className="official-amendment-card">
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                      <span
+                        className="inline-flex rounded px-1.5 py-0.5 text-[11px]"
+                        style={amendmentStatusStyle(row.status)}
+                      >
+                        {row.status}
+                      </span>
+                      <span className="text-sm font-medium">{row.articleNo}</span>
+                    </div>
+                    <p className="whitespace-pre-wrap text-sm">{row.content}</p>
+                  </article>
+                ))}
+              </div>
+            </div>
+          );
+        }
+
+        const { line, index } = block;
         if (!line.trim()) {
           return <div key={index} className="official-text-line blank" />;
         }

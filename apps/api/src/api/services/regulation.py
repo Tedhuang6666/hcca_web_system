@@ -17,6 +17,7 @@ from api.models.document import Document, DocumentStatus
 from api.models.regulation import (
     ArticleType,
     Regulation,
+    RegulationAmendmentType,
     RegulationArticle,
     RegulationCategory,
     RegulationRevision,
@@ -194,6 +195,7 @@ async def list_regulations(
     category: RegulationCategory | None = None,
     is_active: bool | None = None,
     published_only: bool = False,
+    workflow_status: RegulationWorkflowStatus | None = None,
     keyword: str | None = None,
     limit: int = 20,
     offset: int = 0,
@@ -206,6 +208,8 @@ async def list_regulations(
         q = q.where(Regulation.category == category)
     if is_active is not None:
         q = q.where(Regulation.is_active == is_active)
+    if workflow_status is not None:
+        q = q.where(Regulation.workflow_status == workflow_status)
     if published_only:
         q = _where_publicly_effective(q)
     if keyword:
@@ -429,12 +433,19 @@ async def fork_regulation_draft(
 
     會複製條文結構（含 parent 關係），並將 legacy clause/subsection 映射到 article/subparagraph。
     """
+    # fork 出的草案若來自已發布法規，預設為「修正」而非繼承原 amendment_type
+    # （避免修正案被誤判為新法）
+    forked_amendment_type = (
+        RegulationAmendmentType.AMEND
+        if reg.published_at is not None
+        else reg.amendment_type
+    )
     new_reg = Regulation(
         title=reg.title,
         category=reg.category,
         content=reg.content,
         preface=reg.preface,
-        amendment_type=reg.amendment_type,
+        amendment_type=forked_amendment_type,
         amended_articles=reg.amended_articles,
         effective_date=reg.effective_date,
         legislative_history=reg.legislative_history,

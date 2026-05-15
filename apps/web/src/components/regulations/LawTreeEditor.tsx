@@ -15,6 +15,15 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import type { ArticleType, RegulationArticleOut } from "@/lib/types";
+import {
+  ARTICLE_TYPE_LABEL as TYPE_LABEL,
+  typeRank as typeRankFn,
+  canNestInside as canNestInsideFn,
+  childTypeOf as childTypeOfFn,
+} from "@/lib/regulationStructure";
+import { inferParentIdByPrevious as inferParentIdByPreviousFn } from "@/lib/articleTree";
+
+export { inferParentIdByPreviousFn as inferParentIdByPrevious };
 
 export type LawNode = {
   id: string;
@@ -38,46 +47,11 @@ type FlatNode = {
   legal_number?: string | null;
 };
 
-const TYPE_ORDER: ArticleType[] = [
-  "volume", "chapter", "section", "article", "paragraph", "subparagraph", "item",
-];
-
-const TYPE_LABEL: Record<ArticleType, string> = {
-  volume: "編",
-  chapter: "章",
-  section: "節",
-  article: "條",
-  paragraph: "項",
-  subparagraph: "款",
-  item: "目",
-  special_clause: "附則",
-  clause: "條",
-  subsection: "款",
-};
-
-function typeRank(t: ArticleType): number {
-  return TYPE_ORDER.indexOf(t as ArticleType);
-}
-
-function canNestInside(parentType: ArticleType, childType: ArticleType): boolean {
-  const parentRank = typeRank(parentType);
-  const childRank = typeRank(childType);
-  return parentRank >= 0 && childRank >= 0 && childRank === parentRank + 1;
-}
-
-function childTypeOf(parentType: ArticleType): ArticleType | null {
-  const rank = typeRank(parentType);
-  return rank >= 0 && rank < TYPE_ORDER.length - 1 ? TYPE_ORDER[rank + 1] : null;
-}
-
-export function inferParentIdByPrevious(flat: FlatNode[], index: number, nextType: ArticleType): string | null {
-  for (let i = index - 1; i >= 0; i--) {
-    const prev = flat[i];
-    if (typeRank(prev.article_type) < typeRank(nextType)) return prev.id;
-    if (typeRank(prev.article_type) === typeRank(nextType)) return prev.parent_id;
-  }
-  return null;
-}
+const typeRank = (t: ArticleType): number => typeRankFn(t);
+const canNestInside = (parentType: ArticleType, childType: ArticleType): boolean =>
+  canNestInsideFn(parentType, childType);
+const childTypeOf = (parentType: ArticleType): ArticleType | null =>
+  childTypeOfFn(parentType) as ArticleType | null;
 
 function toTree(rows: FlatNode[], collapsed: Record<string, boolean>): LawNode[] {
   const map = new Map<string, LawNode>();

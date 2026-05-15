@@ -586,6 +586,7 @@ export const authApi = {
     display_name: string;
     email: string;
     avatar_url?: string | null;
+    allow_external_login?: boolean;
     is_superuser?: boolean;
     permissions: string[];
   }>("/auth/me"),
@@ -673,11 +674,17 @@ export const adminApi = {
   getUser: (id: string) => get<AdminUserDetail>(`/admin/users/${id}`),
   preRegister: (body: {
     student_id?: string | null; email?: string | null; display_name: string;
+    allow_external_login?: boolean;
     position_ids?: string[]; start_date?: string; end_date?: string | null;
     custom_permission_org_id?: string | null;
     custom_permission_codes?: string[];
   }) => post<AdminUserDetail>("/admin/users/pre-register", body),
-  updateUser: (id: string, body: { display_name?: string; is_active?: boolean; is_superuser?: boolean }) =>
+  updateUser: (id: string, body: {
+    display_name?: string;
+    is_active?: boolean;
+    allow_external_login?: boolean;
+    is_superuser?: boolean;
+  }) =>
     patch<AdminUserDetail>(`/admin/users/${id}`, body),
   addUserPosition: (userId: string, body: { position_id: string; start_date?: string; end_date?: string | null }) =>
     post<AdminUserDetail>(`/admin/users/${userId}/positions`, body),

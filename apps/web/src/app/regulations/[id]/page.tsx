@@ -333,17 +333,39 @@ export default function RegulationDetailPage() {
   );
   const allChaptersCollapsed = chapterArticles.length > 0
     && chapterArticles.every((article) => chapterCollapsedMap[article.id]);
+  /**
+   * 章節目錄（TOC）：依條文順序計算 volume/chapter/section 編號，
+   * 確保新增、刪除、調整層級後目錄即時同步。
+   */
   const tocItems = useMemo(() => {
-    let chapterNumber = 0;
-    return chapterArticles.map((article) => {
-      chapterNumber += 1;
-      return {
-        id: article.id,
-        anchor: `a-${article.id}`,
-        label: `第 ${chapterNumber} 章 ${article.title ?? ""}`.trim(),
-      };
-    });
-  }, [chapterArticles]);
+    const labelOf: Record<string, string> = { volume: "編", chapter: "章", section: "節" };
+    const counters: Record<string, number> = { volume: 0, chapter: 0, section: 0 };
+    const ordered = [...activeArticles].sort((a, b) => a.sort_index - b.sort_index);
+    return ordered
+      .filter((article) => article.article_type in labelOf)
+      .map((article) => {
+        const type = article.article_type as keyof typeof labelOf;
+        // 進入新 volume 時重置 chapter 與 section；進入新 chapter 時重置 section
+        if (type === "volume") {
+          counters.volume += 1;
+          counters.chapter = 0;
+          counters.section = 0;
+        } else if (type === "chapter") {
+          counters.chapter += 1;
+          counters.section = 0;
+        } else {
+          counters.section += 1;
+        }
+        const num = counters[type];
+        const indent = type === "volume" ? 0 : type === "chapter" ? 1 : 2;
+        return {
+          id: article.id,
+          anchor: `a-${article.id}`,
+          label: `第 ${num} ${labelOf[type]} ${article.title ?? ""}`.trim(),
+          indent,
+        };
+      });
+  }, [activeArticles]);
   const articleDisplayRows = useMemo(
     () => buildArticleDisplayRows(activeArticles, chapterCollapsedMap),
     [activeArticles, chapterCollapsedMap],
@@ -441,6 +463,13 @@ export default function RegulationDetailPage() {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  // 條文高亮 3 秒後自動褪色（仍保留手動 X 清除）
+  useEffect(() => {
+    if (!highlightedArticleId) return;
+    const timer = window.setTimeout(() => setHighlightedArticleId(null), 3000);
+    return () => window.clearTimeout(timer);
+  }, [highlightedArticleId]);
 
   useEffect(() => {
     if (!reg || tab !== "content" || deepLinkRefs.length === 0) return;
@@ -615,8 +644,12 @@ export default function RegulationDetailPage() {
 
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <h1
-                className="w-full min-w-0 text-lg font-semibold leading-snug sm:text-xl lg:w-auto"
-                style={{ color: "var(--text-primary)", wordBreak: "keep-all" }}
+                className="w-full min-w-0 break-words text-lg font-semibold leading-snug sm:text-xl lg:w-auto"
+                style={{
+                  color: "var(--text-primary)",
+                  overflowWrap: "anywhere",
+                  wordBreak: "break-word",
+                }}
               >
                 {!reg.is_active && <span style={{ color: "var(--danger)" }}>(失效) </span>}
                 {reg.title}
@@ -906,19 +939,22 @@ export default function RegulationDetailPage() {
               </div>
             )}
             {hasHistoryRows && (
-              <section
-                className="mb-6 rounded-xl p-4"
+              <details
+                className="mb-6 rounded-xl"
                 style={{
                   background: "var(--bg-elevated)",
                   border: "1px solid var(--border)",
                   ...zoomStyle,
                 }}
               >
-                <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
-                  法規沿革
-                </h2>
+                <summary
+                  className="cursor-pointer px-4 py-2.5 text-xs font-semibold uppercase tracking-wider select-none"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  法規沿革（點此展開）
+                </summary>
                 <div
-                  className="space-y-1 text-sm"
+                  className="px-4 pb-4 space-y-1 text-sm"
                   style={{
                     color: "var(--text-secondary)",
                     lineHeight: 1.8,
@@ -930,7 +966,7 @@ export default function RegulationDetailPage() {
                   {legislativeHistoryRows.map((row, index) => <p key={`manual-${index}-${row}`}>{row}</p>)}
                   {generatedHistoryRows.map((row, index) => <p key={`generated-${index}-${row}`}>{row}</p>)}
                 </div>
-              </section>
+              </details>
             )}
             {activeArticles.length === 0 && reg.content ? (
               <div className={PROSE} style={zoomStyle}>
@@ -999,9 +1035,11 @@ export default function RegulationDetailPage() {
                             }}
                             className="w-full text-left text-xs px-2 py-1 rounded hover:opacity-80"
                             style={{
+                              paddingLeft: `${0.5 + item.indent * 0.75}rem`,
                               color: activeAnchorId === item.anchor ? "var(--primary)" : "var(--text-secondary)",
                               background: activeAnchorId === item.anchor ? "var(--primary-dim)" : "transparent",
                               border: activeAnchorId === item.anchor ? "1px solid var(--border-strong)" : "1px solid transparent",
+                              fontWeight: item.indent === 0 ? 600 : 400,
                             }}
                           >
                             {item.label}

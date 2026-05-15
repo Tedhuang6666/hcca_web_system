@@ -1,7 +1,7 @@
 """add source_regulation_id to regulations
 
-Revision ID: a1b2c3d4e5f6
-Revises: fbc1a34fda7d
+Revision ID: 20260515140000
+Revises: 20260514143000
 Create Date: 2026-05-15 14:00:00.000000
 
 """
@@ -13,8 +13,8 @@ from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
 
 # revision identifiers, used by Alembic.
-revision: str = "a1b2c3d4e5f6"
-down_revision: str | Sequence[str] | None = "fbc1a34fda7d"
+revision: str = "20260515140000"
+down_revision: str | Sequence[str] | None = "20260514143000"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

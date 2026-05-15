@@ -115,3 +115,47 @@ async def test_update_missing_user_position_returns_404(
     )
 
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_admin_can_pre_register_external_email_with_login_permission(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin, _, org, position, _ = await _seed_admin_data(db_session)
+    _override_user(admin)
+
+    response = await client.post(
+        "/admin/users/pre-register",
+        json={
+            "display_name": "外部顧問",
+            "email": "advisor@gmail.com",
+            "allow_external_login": True,
+            "position_ids": [str(position.id)],
+            "custom_permission_org_id": str(org.id),
+            "custom_permission_codes": [],
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["email"] == "advisor@gmail.com"
+    assert payload["allow_external_login"] is True
+    assert payload["positions"][0]["id"] == str(position.id)
+
+
+@pytest.mark.asyncio
+async def test_admin_can_toggle_external_login_permission(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin, member, _, _, _ = await _seed_admin_data(db_session)
+    _override_user(admin)
+
+    response = await client.patch(
+        f"/admin/users/{member.id}",
+        json={"allow_external_login": True},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["allow_external_login"] is True

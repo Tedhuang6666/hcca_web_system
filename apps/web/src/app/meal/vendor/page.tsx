@@ -15,6 +15,7 @@ import {
   type ScheduleForm,
   type Tab,
 } from "@/components/meal/VendorPageParts";
+import Modal from "@/components/ui/Modal";
 import { mealApi, orgsApi } from "@/lib/api";
 import type { OrgRead } from "@/lib/api";
 import type {
@@ -880,104 +881,88 @@ export default function VendorPage() {
         />
       )}
 
-      {/* ════════════════════════════════════════════════════════════════════
-          Modal：新增排程
-      ════════════════════════════════════════════════════════════════════ */}
+      {/* Modal：新增排程 */}
       {showSchForm && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center"
-          style={{ background: "rgba(0,0,0,0.6)" }}
-          onClick={e => { if (e.target === e.currentTarget) setShowSchForm(false); }}>
-          <div className="my-auto max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl p-6 space-y-4"
-            style={{ background: "var(--card-bg)", border: "1px solid var(--border)" }}>
-            <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>新增菜單排程</h2>
-            <div className="space-y-3">
-              <div>
-                <label className="label-sm">商家</label>
-                <select className="input-field w-full" value={schForm.vendor_id}
-                  onChange={e => setSchForm(f => ({ ...f, vendor_id: e.target.value }))}>
-                  <option value="">選擇商家…</option>
-                  {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="label-sm">服務日期 *</label>
-                <input className="input-field w-full" type="date" value={schForm.date}
-                  onChange={e => setSchForm(f => ({ ...f, date: e.target.value }))} />
-              </div>
-              <div>
-                <label className="label-sm">訂餐開放時間（留空=立即開放）</label>
-                <input className="input-field w-full" type="datetime-local" value={schForm.order_open_time}
-                  onChange={e => setSchForm(f => ({ ...f, order_open_time: e.target.value }))} />
-              </div>
-              <div>
-                <label className="label-sm">結單截止時間 *</label>
-                <input className="input-field w-full" type="datetime-local" value={schForm.order_deadline}
-                  onChange={e => setSchForm(f => ({ ...f, order_deadline: e.target.value }))} />
-              </div>
-              <div>
-                <label className="label-sm">備註</label>
-                <input className="input-field w-full" placeholder="選填" value={schForm.note}
-                  onChange={e => setSchForm(f => ({ ...f, note: e.target.value }))} />
-              </div>
+        <Modal title="新增菜單排程" onClose={() => setShowSchForm(false)} maxWidthClassName="max-w-md">
+          <div className="space-y-3">
+            <div>
+              <label className="label-sm">商家</label>
+              <select className="input-field w-full" value={schForm.vendor_id}
+                onChange={e => setSchForm(f => ({ ...f, vendor_id: e.target.value }))}>
+                <option value="">選擇商家…</option>
+                {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+              </select>
             </div>
-            <div className="flex gap-2 pt-2">
-              <button className="flex-1 btn btn-primary" disabled={schSaving} onClick={handleCreateSchedule}>
-                {schSaving ? "建立中…" : "建立排程"}
-              </button>
-              <button className="flex-1 btn" onClick={() => setShowSchForm(false)}>取消</button>
+            <div>
+              <label className="label-sm">服務日期 *</label>
+              <input className="input-field w-full" type="date" value={schForm.date}
+                onChange={e => setSchForm(f => ({ ...f, date: e.target.value }))} />
+            </div>
+            <div>
+              <label className="label-sm">訂餐開放時間（留空=立即開放）</label>
+              <input className="input-field w-full" type="datetime-local" value={schForm.order_open_time}
+                onChange={e => setSchForm(f => ({ ...f, order_open_time: e.target.value }))} />
+            </div>
+            <div>
+              <label className="label-sm">結單截止時間 *</label>
+              <input className="input-field w-full" type="datetime-local" value={schForm.order_deadline}
+                onChange={e => setSchForm(f => ({ ...f, order_deadline: e.target.value }))} />
+            </div>
+            <div>
+              <label className="label-sm">備註</label>
+              <input className="input-field w-full" placeholder="選填" value={schForm.note}
+                onChange={e => setSchForm(f => ({ ...f, note: e.target.value }))} />
             </div>
           </div>
-        </div>
+          <div className="flex gap-2 pt-4">
+            <button className="flex-1 btn btn-primary" disabled={schSaving} onClick={handleCreateSchedule}>
+              {schSaving ? "建立中…" : "建立排程"}
+            </button>
+            <button className="flex-1 btn" onClick={() => setShowSchForm(false)}>取消</button>
+          </div>
+        </Modal>
       )}
 
-      {/* ════════════════════════════════════════════════════════════════════
-          Modal：新增商家
-      ════════════════════════════════════════════════════════════════════ */}
+      {/* Modal：新增商家 */}
       {showVendorForm && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center"
-          style={{ background: "rgba(0,0,0,0.6)" }}
-          onClick={e => { if (e.target === e.currentTarget) setShowVendorForm(false); }}>
-          <div className="my-auto max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl p-6 space-y-4"
-            style={{ background: "var(--card-bg)", border: "1px solid var(--border)" }}>
-            <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>新增學餐商家</h2>
-            <div className="space-y-3">
-              <div>
-                <label className="label-sm">商家名稱 *</label>
-                <input className="input-field w-full" placeholder="例：阿明便當" value={vendorForm.name}
-                  onChange={e => setVendorForm(f => ({ ...f, name: e.target.value }))} />
-              </div>
-              <div>
-                <label className="label-sm">描述</label>
-                <input className="input-field w-full" placeholder="選填" value={vendorForm.description}
-                  onChange={e => setVendorForm(f => ({ ...f, description: e.target.value }))} />
-              </div>
-              <div>
-                <label className="label-sm">聯絡電話</label>
-                <input className="input-field w-full" placeholder="選填" value={vendorForm.contact_phone}
-                  onChange={e => setVendorForm(f => ({ ...f, contact_phone: e.target.value }))} />
-              </div>
-              <div>
-                <label className="label-sm">聯絡信箱</label>
-                <input className="input-field w-full" type="email" placeholder="選填" value={vendorForm.contact_email}
-                  onChange={e => setVendorForm(f => ({ ...f, contact_email: e.target.value }))} />
-              </div>
-              <div>
-                <label className="label-sm">組織 ID *</label>
-                <select className="input-field w-full" value={vendorForm.org_id}
-                  onChange={e => setVendorForm(f => ({ ...f, org_id: e.target.value }))}>
-                  <option value="">選擇組織…</option>
-                  {orgs.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
-                </select>
-              </div>
+        <Modal title="新增學餐商家" onClose={() => setShowVendorForm(false)} maxWidthClassName="max-w-md">
+          <div className="space-y-3">
+            <div>
+              <label className="label-sm">商家名稱 *</label>
+              <input className="input-field w-full" placeholder="例：阿明便當" value={vendorForm.name}
+                onChange={e => setVendorForm(f => ({ ...f, name: e.target.value }))} />
             </div>
-            <div className="flex gap-2 pt-2">
-              <button className="flex-1 btn btn-primary" disabled={vendorSaving} onClick={handleCreateVendor}>
-                {vendorSaving ? "建立中…" : "建立商家"}
-              </button>
-              <button className="flex-1 btn" onClick={() => setShowVendorForm(false)}>取消</button>
+            <div>
+              <label className="label-sm">描述</label>
+              <input className="input-field w-full" placeholder="選填" value={vendorForm.description}
+                onChange={e => setVendorForm(f => ({ ...f, description: e.target.value }))} />
+            </div>
+            <div>
+              <label className="label-sm">聯絡電話</label>
+              <input className="input-field w-full" placeholder="選填" value={vendorForm.contact_phone}
+                onChange={e => setVendorForm(f => ({ ...f, contact_phone: e.target.value }))} />
+            </div>
+            <div>
+              <label className="label-sm">聯絡信箱</label>
+              <input className="input-field w-full" type="email" placeholder="選填" value={vendorForm.contact_email}
+                onChange={e => setVendorForm(f => ({ ...f, contact_email: e.target.value }))} />
+            </div>
+            <div>
+              <label className="label-sm">組織 ID *</label>
+              <select className="input-field w-full" value={vendorForm.org_id}
+                onChange={e => setVendorForm(f => ({ ...f, org_id: e.target.value }))}>
+                <option value="">選擇組織…</option>
+                {orgs.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
+              </select>
             </div>
           </div>
-        </div>
+          <div className="flex gap-2 pt-4">
+            <button className="flex-1 btn btn-primary" disabled={vendorSaving} onClick={handleCreateVendor}>
+              {vendorSaving ? "建立中…" : "建立商家"}
+            </button>
+            <button className="flex-1 btn" onClick={() => setShowVendorForm(false)}>取消</button>
+          </div>
+        </Modal>
       )}
     </div>
   );
