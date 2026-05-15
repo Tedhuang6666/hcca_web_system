@@ -350,6 +350,7 @@ async def get_me(
         "display_name": current_user.display_name,
         "avatar_url": current_user.avatar_url,
         "is_superuser": current_user.is_superuser,
+        "is_owner": current_user.email.lower() in settings.OWNER_EMAILS,
         "permissions": sorted(codes),
     }
 

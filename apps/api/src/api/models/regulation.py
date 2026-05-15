@@ -185,6 +185,13 @@ class Regulation(Base, TimestampMixin):
         nullable=True,
         index=True,
     )
+    # 來源法規 ID（若由既有法規 fork 而來，記錄原始法規 ID 以建立血緣鏈）
+    source_regulation_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("regulations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     # 全文搜尋向量（由 trigger 自動更新）
     search_vector: Mapped[str | None] = mapped_column(TSVECTOR(), nullable=True)
 
@@ -199,6 +206,11 @@ class Regulation(Base, TimestampMixin):
         "Regulation",
         remote_side=[id],
         foreign_keys=[repeal_replacement_id],
+    )
+    source_regulation: Mapped[Regulation | None] = relationship(
+        "Regulation",
+        remote_side=[id],
+        foreign_keys=[source_regulation_id],
     )
     creator: Mapped[User] = relationship("User", foreign_keys=[created_by])
     revisions: Mapped[list[RegulationRevision]] = relationship(

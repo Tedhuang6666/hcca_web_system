@@ -362,6 +362,8 @@ export interface RegulationOut {
   repealed_date: string | null;
   repeal_reason: string | null;
   repeal_replacement_id: string | null;
+  /** 血緣鏈：若由既有法規 fork 而來，記錄原始法規 ID */
+  source_regulation_id: string | null;
   articles: RegulationArticleOut[];
   revisions: RegulationRevisionOut[];
   workflow_logs: RegulationWorkflowLogOut[];
@@ -391,6 +393,8 @@ export interface UserRead {
   is_active: boolean;
   is_verified: boolean;
   is_superuser: boolean;
+  /** Owner 為 OWNER_EMAILS 環境變數驅動的最高權限角色，由路由層注入 */
+  is_owner: boolean;
 }
 
 export interface MFAStatusOut {
@@ -479,6 +483,8 @@ export interface AdminUserDetail {
   avatar_url: string | null;
   is_active: boolean;
   is_superuser: boolean;
+  /** Owner 為 OWNER_EMAILS 環境變數驅動的最高權限角色 */
+  is_owner: boolean;
   created_at: string;
   positions: PositionSummary[];
   effective_permissions: string[];

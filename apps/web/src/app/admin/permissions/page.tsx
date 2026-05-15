@@ -43,12 +43,13 @@ function Icon({ name }: { name: "org" | "users" | "shield" | "plus" | "search" |
 }
 
 function SmallButton({
-  children, onClick, tone = "neutral", disabled = false,
+  children, onClick, tone = "neutral", disabled = false, title,
 }: {
   children: React.ReactNode;
   onClick: () => void;
   tone?: "neutral" | "primary" | "danger" | "warning";
   disabled?: boolean;
+  title?: string;
 }) {
   const styles = {
     neutral: { color: "var(--text-secondary)", border: "1px solid var(--border)" },
@@ -60,7 +61,8 @@ function SmallButton({
     <button
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors disabled:opacity-45"
+      title={title}
+      className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors disabled:opacity-45 disabled:cursor-not-allowed"
       style={styles}
     >
       {children}
@@ -417,7 +419,8 @@ function WorkbenchList({
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5 flex-wrap">
                 <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{u.display_name}</p>
-                {u.is_superuser && <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ color: "#f59e0b", background: "rgba(245,158,11,0.12)" }}>超管</span>}
+                {u.is_owner && <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold" style={{ color: "#dc2626", background: "rgba(220,38,38,0.12)" }}>擁有者</span>}
+                {u.is_superuser && !u.is_owner && <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ color: "#f59e0b", background: "rgba(245,158,11,0.12)" }}>超管</span>}
                 {!u.is_active && <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ color: "#f87171", background: "rgba(248,113,113,0.1)" }}>停用</span>}
               </div>
               <p className="text-xs truncate" style={{ color: "var(--text-muted)" }}>{u.email}</p>
@@ -888,6 +891,8 @@ function UserPanel({
         <div className="flex gap-2">
           <SmallButton
             tone={user.is_active ? "danger" : "primary"}
+            disabled={user.is_owner && user.is_active}
+            title={user.is_owner && user.is_active ? "Owner 帳號不可停用" : undefined}
             onClick={() => onConfirm({
               title: user.is_active ? "停用帳號" : "啟用帳號",
               body: `確定要${user.is_active ? "停用" : "啟用"}「${user.display_name}」？`,
@@ -898,6 +903,8 @@ function UserPanel({
           </SmallButton>
           <SmallButton
             tone="warning"
+            disabled={user.is_owner && user.is_superuser}
+            title={user.is_owner && user.is_superuser ? "Owner 帳號不可移除超管身分" : undefined}
             onClick={() => onConfirm({
               title: user.is_superuser ? "取消超管" : "設定超管",
               body: `確定要${user.is_superuser ? "取消" : "賦予"}「${user.display_name}」超級管理員權限？此權限會跳過所有 RBAC 檢查。`,

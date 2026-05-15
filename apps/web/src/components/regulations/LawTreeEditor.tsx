@@ -237,6 +237,7 @@ type Props = {
   onDelete: (id: string) => void;
   onEnterSibling?: (id: string) => void;
   onDemote?: (id: string) => void;
+  onPromote?: (id: string) => void;
   statusById?: Record<string, { label: string; tone: "success" | "warning" | "danger" }>;
   onSelect?: (id: string) => void;
 };
@@ -248,6 +249,7 @@ export default function LawTreeEditor({
   onDelete,
   onEnterSibling,
   onDemote,
+  onPromote,
   statusById = {},
   onSelect,
 }: Props) {
@@ -324,6 +326,25 @@ export default function LawTreeEditor({
     await applyFlat(sorted.map(item => (
       item.id === nodeId
         ? { ...item, parent_id: previous.id, article_type: nextType }
+        : item
+    )));
+  };
+
+  const handlePromoteNode = async (nodeId: string) => {
+    const sorted = snapshotFlat(flat).sort((a, b) => a.sort_index - b.sort_index);
+    const target = sorted.find(item => item.id === nodeId);
+    if (!target || !target.parent_id) {
+      onPromote?.(nodeId);
+      return;
+    }
+    const parent = sorted.find(item => item.id === target.parent_id);
+    if (!parent) {
+      onPromote?.(nodeId);
+      return;
+    }
+    await applyFlat(sorted.map(item => (
+      item.id === nodeId
+        ? { ...item, parent_id: parent.parent_id, article_type: parent.article_type }
         : item
     )));
   };
@@ -414,7 +435,11 @@ export default function LawTreeEditor({
           }}
           onKeyDown={e => {
             if (e.key === "Enter") { e.preventDefault(); onEnterSibling?.(node.id); }
-            if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); void handleDemoteNode(node.id); }
+            if (e.key === "Tab") {
+              e.preventDefault();
+              if (e.shiftKey) void handlePromoteNode(node.id);
+              else void handleDemoteNode(node.id);
+            }
           }}
           className="group relative rounded-xl px-2.5 py-3 mb-2 outline-none transition-shadow sm:px-3"
           style={{

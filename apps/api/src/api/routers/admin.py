@@ -64,6 +64,8 @@ class UserDetail(BaseModel):
     avatar_url: str | None
     is_active: bool
     is_superuser: bool
+    # Owner 為環境變數 OWNER_EMAILS 驅動的最高權限角色，由路由層注入
+    is_owner: bool = False
     created_at: str
     positions: list[PositionSummary] = []
     effective_permissions: list[str] = []
@@ -177,6 +179,7 @@ async def _enrich_user(db: AsyncSession, user: User) -> UserDetail:
         avatar_url=user.avatar_url,
         is_active=user.is_active,
         is_superuser=user.is_superuser,
+        is_owner=user.email.lower() in settings.OWNER_EMAILS,
         created_at=user.created_at.isoformat(),
         positions=positions,
         effective_permissions=sorted(effective),

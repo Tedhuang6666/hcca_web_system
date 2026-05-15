@@ -247,6 +247,7 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
         </div>
       )}
 
+      <div className="space-y-2 overflow-y-auto" style={{ maxHeight: "min(60vh, 480px)" }}>
       {permGroups.map((g) => {
         const groupCodes = g.items.map((item) => item.code);
         if (!groupCodes.length) return null;
@@ -341,6 +342,7 @@ export function PermCheckboxes({ selected, onChange, permCodes }: PermCheckboxes
           </div>
         );
       })}
+      </div>
     </div>
   );
 }

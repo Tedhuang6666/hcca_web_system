@@ -40,6 +40,12 @@ from api.services.regulation_import import ImportedRegulationDraft
 
 logger = logging.getLogger(__name__)
 _PUBLICATION_DOCUMENT_STATUSES = (DocumentStatus.APPROVED, DocumentStatus.ARCHIVED)
+# Service 層編輯保護：僅 DRAFT 或 REJECTED 可被 update_regulation 修改，
+# 其他狀態（UNDER_REVIEW / SCHEDULED / COUNCIL_APPROVED / PUBLISHED / ARCHIVED）
+# 必須先 fork_regulation_draft 開新草案。
+_EDITABLE_WORKFLOW_STATUSES: frozenset[RegulationWorkflowStatus] = frozenset(
+    {RegulationWorkflowStatus.DRAFT, RegulationWorkflowStatus.REJECTED}
+)
 _PARENT_RULES: dict[ArticleType | None, set[ArticleType]] = {
     None: {ArticleType.VOLUME, ArticleType.CHAPTER, ArticleType.SECTION, ArticleType.ARTICLE},
     ArticleType.VOLUME: {ArticleType.CHAPTER},
@@ -445,6 +451,7 @@ async def fork_regulation_draft(
         freeze_reason=None,
         freeze_at=None,
         freeze_document_id=None,
+        source_regulation_id=reg.id,
     )
     session.add(new_reg)
     await session.flush()
@@ -508,6 +515,11 @@ async def update_regulation(
     updated_by: uuid.UUID,
 ) -> Regulation:
     """更新法規內容，若有變更則遞增版本號並自動建立修訂快照草稿"""
+    if reg.workflow_status not in _EDITABLE_WORKFLOW_STATUSES:
+        raise ValueError(
+            f"法規目前狀態為「{reg.workflow_status.value}」不可編輯，"
+            "請改用 fork_regulation_draft 建立新草案"
+        )
     changed = False
     for field in (
         "title",

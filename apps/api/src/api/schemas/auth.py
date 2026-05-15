@@ -40,3 +40,5 @@ class UserRead(BaseModel):
     is_active: bool
     is_verified: bool
     is_superuser: bool = False
+    # Owner 為環境變數 OWNER_EMAILS 驅動的最高權限角色，不存於資料庫，由路由層注入。
+    is_owner: bool = False

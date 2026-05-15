@@ -189,6 +189,8 @@ class RegulationOut(BaseModel):
     repealed_date: datetime | None = None
     repeal_reason: str | None = None
     repeal_replacement_id: uuid.UUID | None = None
+    # 血緣鏈：若由既有法規 fork 而來，記錄原始法規 ID
+    source_regulation_id: uuid.UUID | None = None
     created_at: datetime
     updated_at: datetime
     articles: list[RegulationArticleOut] = []
