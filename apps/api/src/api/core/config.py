@@ -60,6 +60,14 @@ class Settings(BaseSettings):
         default_factory=list,
         description="額外允許登入的完整 Email，適合管理員 Gmail 例外",
     )
+    LOGIN_ALLOW_EXTERNAL_USERS: bool = Field(
+        default=True,
+        description=(
+            "允許任何 Google 帳號登入；校外/外校帳號登入後不會被分配職位，"
+            "僅有公開頁等級的檢視權限與陳情送件功能。"
+            "設為 False 則恢復僅限 LOGIN_ALLOWED_EMAIL_DOMAINS / allowlist。"
+        ),
+    )
 
     # --- Email / SMTP 設定 ---
     MAIL_USERNAME: str = Field(default="")
@@ -70,6 +78,10 @@ class Settings(BaseSettings):
     MAIL_SERVER: str = Field(default="smtp.gmail.com")
     MAIL_STARTTLS: bool = Field(default=True)
     MAIL_SSL_TLS: bool = Field(default=False)
+    # 前端基底 URL — email 內絕對連結用（退訂連結、CTA、通知偏好頁）
+    FRONTEND_BASE_URL: str = Field(default="http://localhost:3000")
+    # 每位使用者每日透過平台寄送 email 的「人次」上限（防濫用）
+    EMAIL_DAILY_QUOTA_PER_USER: int = Field(default=500)
 
     # --- 超級管理員 ---
     OWNER_EMAILS: list[str] = Field(

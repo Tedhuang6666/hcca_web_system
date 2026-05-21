@@ -24,19 +24,10 @@ function decodePathPart(value: string) {
 
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const parts = pathname.split("/").filter(Boolean);
-  const decodedParts = parts.map(decodePathPart);
 
-  if (decodedParts[0] === "regulations" && decodedParts.length >= 3 && decodedParts[2].startsWith("第")) {
-    const url = req.nextUrl.clone();
-    url.pathname = `/regulations/${decodedParts[1]}`;
-    decodedParts.slice(2).forEach((part, index) => {
-      url.searchParams.set(`ref${index}`, part);
-    });
-    url.searchParams.set("article_ref", decodedParts[2]);
-    if (decodedParts[3]) url.searchParams.set("unit_ref", decodedParts[3]);
-    return NextResponse.rewrite(url);
-  }
+  // 注意：法規條文深度連結 /regulations/{id}/第N章/第N條 由
+  // app/regulations/[id]/[...refs]/page.tsx 原生路由處理，
+  // 不在此改寫——改寫會讓 client 端 useParams() 拿不到 refs。
 
   // 只處理一層路徑（/xxx），不匹配 /documents/... 等現有路由
   if (pathname.split("/").length === 2) {

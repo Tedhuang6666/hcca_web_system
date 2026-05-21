@@ -40,6 +40,7 @@ from api.schemas.document import (
     RecipientCreate,
     SerialTemplateCreate,
 )
+from api.services.permission import active_tenure_filter
 
 logger = logging.getLogger(__name__)
 
@@ -513,8 +514,7 @@ async def _has_active_org_membership(
         .where(
             UserPosition.user_id == user_id,
             Position.org_id == org_id,
-            UserPosition.start_date <= day,
-            or_(UserPosition.end_date.is_(None), UserPosition.end_date >= day),
+            *active_tenure_filter(day),
         )
         .limit(1)
     )
@@ -617,9 +617,8 @@ def is_sensitive_document(doc: Document) -> bool:
 
 def can_anonymous_access_document(doc: Document) -> bool:
     """未登入訪客僅可查看公開且非密件的公文全文。"""
-    return (
-        doc.visibility_level == DocumentVisibility.PUBLICLY_OPEN
-        and not is_sensitive_document(doc)
+    return doc.visibility_level == DocumentVisibility.PUBLICLY_OPEN and not is_sensitive_document(
+        doc
     )
 
 
@@ -674,8 +673,7 @@ async def user_has_full_document_access(
         .where(
             Position.org_id == doc.org_id,
             UserPosition.user_id == user_id,
-            UserPosition.start_date <= today,
-            or_(UserPosition.end_date.is_(None), UserPosition.end_date >= today),
+            *active_tenure_filter(today),
         )
     )
     return result.scalar_one_or_none() is not None
@@ -696,10 +694,10 @@ async def check_document_access(
     if await user_has_full_document_access(session, doc, user_id):
         return True
 
-    return (
-        doc.visibility_level in {DocumentVisibility.PUBLIC, DocumentVisibility.PUBLICLY_OPEN}
-        and not is_sensitive_document(doc)
-    )
+    return doc.visibility_level in {
+        DocumentVisibility.PUBLIC,
+        DocumentVisibility.PUBLICLY_OPEN,
+    } and not is_sensitive_document(doc)
 
 
 async def _build_visibility_filter(
@@ -723,8 +721,7 @@ async def _build_visibility_filter(
         .join(UserPosition, UserPosition.position_id == Position.id)
         .where(
             UserPosition.user_id == viewer_id,
-            UserPosition.start_date <= date.today(),
-            or_(UserPosition.end_date.is_(None), UserPosition.end_date >= date.today()),
+            *active_tenure_filter(date.today()),
         )
         .distinct()
     )
@@ -790,9 +787,8 @@ async def build_document_list_items(
     for doc in docs:
         item = DocumentListItem.model_validate(doc)
         if is_sensitive_document(doc) and not reveal_sensitive:
-            has_full_access = (
-                viewer_id is not None
-                and await user_has_full_document_access(session, doc, viewer_id)
+            has_full_access = viewer_id is not None and await user_has_full_document_access(
+                session, doc, viewer_id
             )
             if not has_full_access:
                 item = item.model_copy(
@@ -1137,8 +1133,6 @@ async def suggest_approvers(
     """
     from datetime import date
 
-    from sqlalchemy import or_
-
     from api.models.org import Permission, Position, UserPosition
     from api.models.user import User as UserModel
 
@@ -1152,9 +1146,7 @@ async def suggest_approvers(
             Position.org_id == org_id,
             Permission.code == "document:approve",
             UserModel.is_active == True,  # noqa: E712
-            # 任期有效：start_date <= today AND (end_date IS NULL OR end_date >= today)
-            or_(UserPosition.start_date == None, UserPosition.start_date <= today),  # noqa: E711
-            or_(UserPosition.end_date == None, UserPosition.end_date >= today),  # noqa: E711
+            *active_tenure_filter(today),
         )
         .distinct()
         .order_by(UserModel.display_name)

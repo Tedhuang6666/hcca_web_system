@@ -16,10 +16,12 @@ import {
   MessageCircle,
   MessageSquare,
   Bell,
+  Mail,
   Lock,
   ClipboardList,
   Network,
   User,
+  Landmark,
   ChevronRight,
 } from "lucide-react";
 
@@ -41,10 +43,12 @@ const Icons: Record<string, React.ComponentType<{ size: number; "aria-hidden": b
   announcement: ({ size, "aria-hidden": ariaHidden }) => <MessageCircle size={size} aria-hidden={ariaHidden} />,
   petition: ({ size, "aria-hidden": ariaHidden }) => <MessageSquare size={size} aria-hidden={ariaHidden} />,
   notifications: ({ size, "aria-hidden": ariaHidden }) => <Bell size={size} aria-hidden={ariaHidden} />,
+  email: ({ size, "aria-hidden": ariaHidden }) => <Mail size={size} aria-hidden={ariaHidden} />,
   permissions: ({ size, "aria-hidden": ariaHidden }) => <Lock size={size} aria-hidden={ariaHidden} />,
   audit: ({ size, "aria-hidden": ariaHidden }) => <ClipboardList size={size} aria-hidden={ariaHidden} />,
   org: ({ size, "aria-hidden": ariaHidden }) => <Network size={size} aria-hidden={ariaHidden} />,
   profile: ({ size, "aria-hidden": ariaHidden }) => <User size={size} aria-hidden={ariaHidden} />,
+  meetings: ({ size, "aria-hidden": ariaHidden }) => <Landmark size={size} aria-hidden={ariaHidden} />,
   chevronRight: ({ size, "aria-hidden": ariaHidden }) => <ChevronRight size={size} aria-hidden={ariaHidden} />,
 };
 
@@ -65,6 +69,7 @@ const NAV_DEF: (NavItem | NavSection)[] = [
     heading: "公文與法規",
     items: [
       { href: "/documents",        iconKey: "documents",     label: "公文系統" },
+      { href: "/meetings",         iconKey: "meetings",      label: "議事系統" },
       {
         href: "/documents/new",
         iconKey: "documentNew",
@@ -99,7 +104,8 @@ const NAV_DEF: (NavItem | NavSection)[] = [
         perm: "announcement:create",
         currentOnly: true,
       },
-      { href: "/shop",        iconKey: "shop",       label: "訂購系統" },
+      { href: "/shop",        iconKey: "shop",       label: "校商訂購" },
+      { href: "/shop/class-orders", iconKey: "shopAdmin", label: "班級訂單結單" },
       { href: "/meal",        iconKey: "meal",       label: "學餐訂購" },
       { href: "/surveys",     iconKey: "survey",     label: "問卷填答" },
       { href: "/petitions",   iconKey: "petition",   label: "陳情系統" },
@@ -112,11 +118,13 @@ const NAV_DEF: (NavItem | NavSection)[] = [
     heading: "管理",
     items: [
       { href: "/analytics",         iconKey: "dashboard",   label: "績效統計", perm: "analytics:view" },
+      { href: "/email",             iconKey: "email",       label: "電子郵件", perm: "email:*" },
       { href: "/orgs",              iconKey: "org",         label: "組織管理", perm: "org:*" },
       { href: "/admin/permissions", iconKey: "permissions", label: "權限管理", perm: "admin:all" },
       { href: "/audit-logs",        iconKey: "audit",       label: "稽核日誌", perm: "audit:view_org" },
       { href: "/serial-templates",  iconKey: "serial",      label: "字號模板", perm: "serial:create" },
-      { href: "/shop/admin",        iconKey: "shopAdmin",   label: "商品管理", perm: "shop:manage" },
+      { href: "/shop/admin",        iconKey: "shopAdmin",   label: "校商後台", perm: "shop:manage" },
+      { href: "/admin/classes",     iconKey: "org",         label: "班級管理", perm: "class:manage" },
       { href: "/meal/vendor",       iconKey: "mealVendor",  label: "商家管理", perm: "meal:manage" },
       { href: "/petitions/manage",  iconKey: "petition",    label: "陳情管理", perm: "petition:*" },
     ],

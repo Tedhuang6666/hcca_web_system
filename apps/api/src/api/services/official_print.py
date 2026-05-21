@@ -292,24 +292,84 @@ def _parse_official_line(raw: str) -> _OfficialLine:
     return _OfficialLine(indent + mark, match.group("body"), level)
 
 
+def _hanging_line_html(raw: str) -> str:
+    if not raw.strip():
+        return '<div class="hanging-line blank-line"></div>'
+    parsed = _parse_official_line(raw)
+    if parsed.prefix:
+        return (
+            f'<div class="hanging-line level-{parsed.level}">'
+            f'<span class="hanging-prefix">{_esc(parsed.prefix)}</span>'
+            f'<span class="hanging-body">{_esc(parsed.body)}</span>'
+            "</div>"
+        )
+    return f'<div class="hanging-line plain-line">{_esc(parsed.body)}</div>'
+
+
 def _hanging_text(text: str | None) -> str:
     if not text:
         return ""
+    return "".join(_hanging_line_html(raw) for raw in text.splitlines())
+
+
+_AMENDMENT_ROW_RE = re.compile(r"^(\S+)\s{2,}(.+?)\s{2,}(.+)$")
+
+
+def _amendment_table_html(rows: list[tuple[str, str, str]]) -> str:
+    head = (
+        "<thead><tr>"
+        '<th class="amd-status">異動</th>'
+        '<th class="amd-no">條號</th>'
+        '<th class="amd-content">內容</th>'
+        "</tr></thead>"
+    )
+    body = "".join(
+        "<tr>"
+        f'<td class="amd-status">{_esc(status)}</td>'
+        f'<td class="amd-no">{_esc(article_no)}</td>'
+        f'<td class="amd-content">{_esc(content)}</td>'
+        "</tr>"
+        for status, article_no, content in rows
+    )
+    return f'<table class="amendment-table">{head}<tbody>{body}</tbody></table>'
+
+
+def _render_decree_body(text: str | None) -> str:
+    """渲染主令本文，並將「修正條文整理」對照表還原為真正的 HTML 表格。
+
+    主席公布令本文含一段固定寬度 ASCII 對照表（異動／條號／內容）。若以非等寬
+    字體逐行直接輸出，欄位會完全錯位無法閱讀，故在此偵測並重建為表格。
+    """
+    if not text:
+        return ""
+    lines = text.splitlines()
+    total = len(lines)
     chunks: list[str] = []
-    for raw in text.splitlines():
-        if not raw.strip():
-            chunks.append('<div class="hanging-line blank-line"></div>')
-            continue
-        parsed = _parse_official_line(raw)
-        if parsed.prefix:
-            chunks.append(
-                f'<div class="hanging-line level-{parsed.level}">'
-                f'<span class="hanging-prefix">{_esc(parsed.prefix)}</span>'
-                f'<span class="hanging-body">{_esc(parsed.body)}</span>'
-                "</div>"
-            )
-        else:
-            chunks.append(f'<div class="hanging-line plain-line">{_esc(parsed.body)}</div>')
+    index = 0
+    while index < total:
+        line = lines[index]
+        header = lines[index + 1] if index + 1 < total else ""
+        rule = lines[index + 2] if index + 2 < total else ""
+        if (
+            line.strip() == "修正條文整理："
+            and all(token in header for token in ("異動", "條號", "內容"))
+            and rule.strip().startswith("─")
+        ):
+            rows: list[tuple[str, str, str]] = []
+            cursor = index + 3
+            while cursor < total and lines[cursor].strip():
+                match = _AMENDMENT_ROW_RE.match(lines[cursor])
+                if match is None:
+                    break
+                rows.append((match.group(1), match.group(2), match.group(3)))
+                cursor += 1
+            if rows:
+                chunks.append(_hanging_line_html(line))
+                chunks.append(_amendment_table_html(rows))
+                index = cursor
+                continue
+        chunks.append(_hanging_line_html(line))
+        index += 1
     return "".join(chunks)
 
 
@@ -373,12 +433,15 @@ async def render_document_print_html(
     cat = _enum_value(doc.category)
     is_meeting = cat == "meeting_notice"
     is_decree = cat == "decree"
+    is_record = cat == "record"
     issuer = _esc(_full_org_name(doc))
     category_label = {
         "letter": "函",
         "decree": "令",
         "announcement": "公告",
         "report": "報告",
+        "record": "紀錄",
+        "consultation": "咨",
         "meeting_notice": "開會通知單",
         "other": "書函",
     }.get(cat, "函")
@@ -466,16 +529,36 @@ async def render_document_print_html(
             decree_rows.append(_meta_row("附件：", attachment_summary))
         body_html = (
             f'<section class="decree-meta">{"".join(decree_rows)}</section>'
-            f'<section class="decree-body">{_hanging_text(decree_body_text)}</section>'
+            f'<section class="decree-body">{_render_decree_body(decree_body_text)}</section>'
+            f"{signature}"
+        )
+    elif is_record:
+        body_html = (
+            f'<section class="recipient-line">時間：{_esc(_roc_datetime(doc.meeting_time))}</section>'
+            f'<section class="meta">'
+            f"{_meta_row('地點：', _esc(doc.meeting_location or ''))}"
+            f"{_meta_row('主席：', _esc(doc.meeting_chairperson or ''))}"
+            f"{_meta_row('記錄者：', _esc(doc.handler_name or ''))}"
+            f"{_meta_row('出席者：', _join_names(primary_recipients or main_recipients))}"
+            f"{_meta_row('列席者：', _join_names(copy_recipients))}"
+            f"{_meta_row('附件：', attachment_summary)}"
+            f"</section>"
+            f"{_document_section('討論事項：', doc.doc_description)}"
+            f"{_document_section('決議：', doc.action_required)}"
             f"{signature}"
         )
     else:
+        description_label = "公告事項：" if cat == "announcement" else "說明："
+        action_label = {
+            "report": "建議事項：",
+            "consultation": "辦法或事項：",
+        }.get(cat, "辦法：")
         body_html = (
             f'<section class="recipient-line">受文者：{addressed_to}</section>'
             f'<section class="meta">{"".join(meta_rows)}</section>'
             f"{_subject_section(doc.subject)}"
-            f"{_document_section('說明：', doc.doc_description)}"
-            f"{_document_section('辦法：', doc.action_required)}"
+            f"{_document_section(description_label, doc.doc_description)}"
+            f"{_document_section(action_label, doc.action_required)}"
         )
         if not (doc.subject or doc.doc_description or doc.action_required) and doc.content:
             body_html += _document_section("說明：", doc.content)
@@ -640,6 +723,25 @@ async def render_document_print_html(
       line-height: 1.9;
       white-space: normal;
     }}
+    .amendment-table {{
+      width: 100%;
+      border-collapse: collapse;
+      margin: 3mm 0 5mm;
+      font-size: 12pt;
+      line-height: 1.6;
+      break-inside: auto;
+    }}
+    .amendment-table th,
+    .amendment-table td {{
+      border: 1px solid #000;
+      padding: 1.6mm 2.2mm;
+      text-align: left;
+      vertical-align: top;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }}
+    .amendment-table .amd-status {{ width: 16mm; white-space: nowrap; }}
+    .amendment-table .amd-no {{ width: 26mm; white-space: nowrap; }}
     .hanging-line {{
       display: grid;
       grid-template-columns: max-content minmax(0, 1fr);

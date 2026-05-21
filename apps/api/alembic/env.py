@@ -15,6 +15,7 @@ import api.models.announcement  # noqa: F401
 import api.models.shop  # noqa: F401
 import api.models.notification  # noqa: F401
 import api.models.meal  # noqa: F401
+import api.models.meeting  # noqa: F401
 import api.models.survey  # noqa: F401
 import api.models.petition  # noqa: F401
 from api.core.config import settings

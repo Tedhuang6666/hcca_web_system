@@ -102,6 +102,10 @@ def _safe_next_path(value: str | None) -> str:
 
 
 def _email_can_login(email: str, existing_user: User | None = None) -> bool:
+    # 開放外校/校外帳號登入：登入後無任何 RBAC 權限，等同公開頁檢視層級，
+    # 並可使用陳情送件功能。如需恢復校內限定，將 LOGIN_ALLOW_EXTERNAL_USERS 設為 False。
+    if settings.LOGIN_ALLOW_EXTERNAL_USERS:
+        return True
     normalized = email.strip().lower()
     domain = normalized.rsplit("@", maxsplit=1)[-1] if "@" in normalized else ""
     return (

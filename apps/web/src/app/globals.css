@@ -873,6 +873,458 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
   padding-left: 0.75rem;
 }
 
+/* ── 法規條文：唯讀展示行（LawArticleRow，用於詳細頁）──────────────────── */
+
+.law-row-shell {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+@media (min-width: 768px) {
+  .law-row-shell {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 0.625rem;
+  }
+}
+.law-row {
+  background: var(--bg-surface);
+  border-radius: 8px;
+  transition: background 160ms ease, box-shadow 160ms ease;
+}
+.law-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+/* 鍵盤提示樣式 */
+.kbd-hint {
+  display: inline-block;
+  padding: 0 0.25rem;
+  min-width: 1.4em;
+  font-size: 10px;
+  font-family: ui-monospace, monospace;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  line-height: 1.4;
+  text-align: center;
+}
+
+/* ── 樹狀大綱編輯器（LawTreeEditor）─────────────────────────────────────── */
+
+.law-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.law-tree-hint {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.85rem;
+  font-size: 11px;
+  color: var(--text-muted);
+  padding-bottom: 0.15rem;
+}
+.law-tree-body {
+  display: flex;
+  flex-direction: column;
+}
+.law-tree-empty {
+  padding: 2.5rem 1rem;
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.law-tree-item {
+  position: relative;
+}
+.law-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 36px;
+  padding: 0.15rem 0.4rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.law-tree-row:hover {
+  background: var(--bg-hover);
+}
+.law-tree-row:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -2px;
+}
+/* 結構層級（編 / 章 / 節）：較高、淡背景，與下方條文形成節奏感 */
+.law-tree-row.is-structural {
+  min-height: 42px;
+  background: var(--bg-hover);
+  margin-top: 0.4rem;
+}
+.law-tree-row.is-structural:hover {
+  background: var(--bg-active);
+}
+
+/* 階層連接線 */
+.law-guide {
+  flex: 0 0 auto;
+  width: 18px;
+  align-self: stretch;
+  border-left: 1.5px solid var(--border);
+  margin-left: 8px;
+}
+
+/* 展開 / 收合 caret */
+.law-caret {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.law-caret:hover {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+/* 層級徽章 */
+.law-badge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.45rem;
+  border-radius: 5px;
+  border: 1px solid;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* 標題 + 內容 */
+.law-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  overflow: hidden;
+}
+.law-title {
+  flex: 0 1 auto;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.law-tree-row.is-structural .law-title {
+  font-weight: 600;
+  font-size: 0.9375rem;
+}
+.law-preview {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.law-empty-text {
+  font-size: 0.875rem;
+  color: var(--text-disabled);
+  font-style: italic;
+}
+
+/* 異動狀態小標 */
+.law-status {
+  flex: 0 0 auto;
+  font-size: 10px;
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.law-status.tone-success { color: var(--success); background: var(--success-dim); }
+.law-status.tone-danger { color: var(--danger); background: var(--danger-dim); }
+.law-status.tone-warning { color: var(--warning); background: var(--warning-dim); }
+
+/* 操作區（桌面 hover 顯示，手機常駐） */
+.law-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.05rem;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.law-tree-row:hover .law-actions,
+.law-tree-row:focus-within .law-actions {
+  opacity: 1;
+}
+.law-handle,
+.law-act {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.law-handle {
+  cursor: grab;
+  touch-action: none;
+}
+.law-handle:active { cursor: grabbing; }
+.law-handle:hover,
+.law-act:hover {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+@media (max-width: 767px) {
+  /* 操作區常駐顯示、靠頂部對齊 */
+  .law-actions {
+    opacity: 1;
+    align-self: flex-start;
+    gap: 0;
+  }
+  .law-handle,
+  .law-act { width: 32px; height: 32px; }
+  .law-caret {
+    width: 24px;
+    height: 24px;
+    margin-top: 1px;
+  }
+  /* 縮排線變窄，避免深層節點吃光寬度 */
+  .law-guide {
+    width: 8px;
+    margin-left: 3px;
+    border-left-width: 1px;
+  }
+  /* 一行改為頂部對齊（內容可能多行），高度自動 */
+  .law-tree-row {
+    gap: 0.3rem;
+    align-items: flex-start;
+    padding: 0.5rem 0.3rem;
+    min-height: auto;
+  }
+  .law-tree-row.is-structural { min-height: auto; }
+  .law-badge { margin-top: 1px; }
+  /* 標題與內容改直列、允許換行 — 解決「文字擠成一直行」 */
+  .law-label {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.15rem;
+  }
+  .law-title {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    line-height: 1.45;
+  }
+  .law-preview {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    line-height: 1.45;
+  }
+}
+
+/* ⋯ 更多操作選單 */
+.law-menu-wrap { position: relative; }
+.law-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 30;
+  min-width: 184px;
+  padding: 0.35rem;
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.law-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+}
+.law-menu-item:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.law-menu-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.law-menu-item.is-danger { color: var(--danger); }
+.law-menu-item.is-danger:hover:not(:disabled) { background: var(--danger-dim); }
+.law-menu-ic {
+  width: 1.2em;
+  text-align: center;
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
+.law-menu-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 0.2rem 0.15rem;
+}
+
+/* 拖拉 ghost */
+.law-tree-ghost {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.7rem;
+  border-radius: 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-lg);
+  font-size: 0.875rem;
+  max-width: min(28rem, 80vw);
+}
+.law-ghost-title {
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 移動後脈衝高亮 */
+@keyframes law-row-pulse {
+  0% { background-color: rgba(201,168,76,0.22); }
+  100% { background-color: transparent; }
+}
+[data-just-moved="true"] .law-tree-row {
+  animation: law-row-pulse 800ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-just-moved="true"] .law-tree-row { animation: none; }
+}
+
+/* ── Drawer / Bottom Sheet（給 components/ui/Drawer.tsx 使用）────────────── */
+.drawer-panel {
+  position: fixed;
+}
+
+/* 預設（auto / bottom）：手機由底部 sheet 滑入 */
+.drawer-panel[data-side="auto"],
+.drawer-panel[data-side="bottom"] {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  max-height: var(--drawer-sheet-height, 85vh);
+  height: auto;
+  border-top-left-radius: 16px;
+  border-top-right-radius: 16px;
+  transform: translate3d(0, 100%, 0);
+  transition: transform 240ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+.drawer-panel[data-side="auto"][data-entered="true"],
+.drawer-panel[data-side="bottom"][data-entered="true"] {
+  transform: translate3d(0, 0, 0);
+}
+
+/* right：兩端固定，從右側滑入 */
+.drawer-panel[data-side="right"] {
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: var(--drawer-width, 480px);
+  max-width: 100%;
+  height: 100%;
+  transform: translate3d(100%, 0, 0);
+  transition: transform 240ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+.drawer-panel[data-side="right"][data-entered="true"] {
+  transform: translate3d(0, 0, 0);
+}
+
+/* left：兩端固定，從左側滑入 */
+.drawer-panel[data-side="left"] {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--drawer-width, 480px);
+  max-width: 100%;
+  height: 100%;
+  transform: translate3d(-100%, 0, 0);
+  transition: transform 240ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+.drawer-panel[data-side="left"][data-entered="true"] {
+  transform: translate3d(0, 0, 0);
+}
+
+/* 桌面：auto 模式改為右側 drawer */
+@media (min-width: 1024px) {
+  .drawer-panel[data-side="auto"] {
+    left: auto;
+    bottom: 0;
+    top: 0;
+    right: 0;
+    width: var(--drawer-width, 480px);
+    max-width: 100%;
+    height: 100%;
+    max-height: 100vh;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    transform: translate3d(100%, 0, 0);
+  }
+  .drawer-panel[data-side="auto"][data-entered="true"] {
+    transform: translate3d(0, 0, 0);
+  }
+  /* 桌面隱藏 handle bar */
+  .drawer-panel[data-side="auto"] .drawer-handle {
+    display: none;
+  }
+}
+
+/* 減少動態時關閉滑入動畫 */
+@media (prefers-reduced-motion: reduce) {
+  .drawer-panel {
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
 /* ── 毛玻璃表面 ───────────────────────────────────────────────────────── */
 .glass {
   backdrop-filter: blur(12px) saturate(160%);
@@ -928,6 +1380,35 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
 @keyframes progress-enter {
   from { opacity: 0; transform: scaleX(0); }
   to   { opacity: 1; transform: scaleX(1); }
+}
+
+/* ── 條文深度連結「到達高亮」：亮起一下 + 跳一下 + 緩慢褪色 ──────────────────
+   套用在 ArticleHashWrapper（公開頁）與 LawArticleRow（已登入頁）的條文列。 */
+@keyframes article-arrive {
+  0%   { background-color: rgba(14,165,233,0);    box-shadow: inset 0 0 0 0 rgba(14,165,233,0);      transform: translateY(0); }
+  9%   { background-color: rgba(14,165,233,0.38); box-shadow: inset 0 0 0 2.5px rgba(14,165,233,0.78); transform: translateY(-8px); }
+  18%  { transform: translateY(3px); }
+  26%  { transform: translateY(-2px); }
+  33%  { background-color: rgba(14,165,233,0.20); box-shadow: inset 0 0 0 2px rgba(14,165,233,0.52);  transform: translateY(0); }
+  80%  { background-color: rgba(14,165,233,0.16); box-shadow: inset 0 0 0 2px rgba(14,165,233,0.40); }
+  100% { background-color: rgba(14,165,233,0);    box-shadow: inset 0 0 0 0 rgba(14,165,233,0);      transform: translateY(0); }
+}
+/* 偏好減少動態：保留亮起、移除跳動 */
+@keyframes article-arrive-reduced {
+  0%   { background-color: rgba(14,165,233,0);    box-shadow: inset 0 0 0 0 rgba(14,165,233,0); }
+  9%   { background-color: rgba(14,165,233,0.38); box-shadow: inset 0 0 0 2.5px rgba(14,165,233,0.72); }
+  33%  { background-color: rgba(14,165,233,0.20); box-shadow: inset 0 0 0 2px rgba(14,165,233,0.52); }
+  80%  { background-color: rgba(14,165,233,0.16); box-shadow: inset 0 0 0 2px rgba(14,165,233,0.40); }
+  100% { background-color: rgba(14,165,233,0);    box-shadow: inset 0 0 0 0 rgba(14,165,233,0); }
+}
+.article-arrive {
+  animation: article-arrive 4.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+  border-radius: 10px;
+  position: relative;
+  z-index: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .article-arrive { animation: article-arrive-reduced 4.2s ease-out both; }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════

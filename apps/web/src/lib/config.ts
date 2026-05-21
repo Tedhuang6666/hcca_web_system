@@ -10,3 +10,9 @@ export function apiUrl(path: string): string {
 export function serverApiUrl(path: string): string {
   return `${API_INTERNAL_BASE}${path}`;
 }
+
+/** 將後端回傳的 /uploads/... 相對路徑解析成可在瀏覽器顯示的完整 URL。 */
+export function uploadUrl(url: string | null | undefined): string {
+  if (!url) return "";
+  return url.startsWith("/uploads/") ? `${API_BASE}${url}` : url;
+}

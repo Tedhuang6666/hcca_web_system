@@ -1,19 +1,23 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
+import { SOCIAL_IMAGE, SOCIAL_SHARE_TITLE, SOCIAL_SITE_NAME } from "@/lib/social-metadata";
+
 export const metadata: Metadata = {
-  title: "陳情案件進度",
+  title: SOCIAL_SHARE_TITLE,
   description: "校園自治平台陳情案件進度查詢。",
   openGraph: {
-    title: "陳情案件進度",
+    title: SOCIAL_SHARE_TITLE,
     description: "校園自治平台陳情案件進度查詢。",
     type: "website",
-    siteName: "HCCA 校園自治整合平台",
+    siteName: SOCIAL_SITE_NAME,
+    images: [SOCIAL_IMAGE],
   },
   twitter: {
-    card: "summary",
-    title: "陳情案件進度",
+    card: "summary_large_image",
+    title: SOCIAL_SHARE_TITLE,
     description: "校園自治平台陳情案件進度查詢。",
+    images: [SOCIAL_IMAGE.url],
   },
 };
 

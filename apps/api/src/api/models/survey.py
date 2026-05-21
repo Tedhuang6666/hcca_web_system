@@ -51,6 +51,16 @@ class QuestionType(enum.StrEnum):
     VIDEO = "video"  # 影片連結
 
 
+class ValidationRule(enum.StrEnum):
+    """文字題型的自訂格式驗證規則。"""
+
+    EMAIL = "email"  # 電子郵件格式
+    NUMBER = "number"  # 數字（可含小數）
+    INTEGER = "integer"  # 整數
+    URL = "url"  # 網址
+    PHONE = "phone"  # 電話號碼
+
+
 # ── 問卷主表 ──────────────────────────────────────────────────────────────────
 
 
@@ -78,6 +88,14 @@ class Survey(Base, TimestampMixin):
     # 可選的開放/截止時間
     opens_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     closes_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # 填答對象控制：is_public=True 時未登入者也可填答
+    is_public: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    # 限制名單（JSON 陣列字串）；三者皆空代表「任何登入者皆可填」
+    allowed_org_ids_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    allowed_user_ids_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    allowed_domains_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     org_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -139,6 +157,19 @@ class SurveyQuestion(Base, TimestampMixin):
     max_value: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # 提示文字
     placeholder: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    # 附加圖片 URL（IMAGE 題型作為單獨顯示；其他題型則與題目合併顯示）
+    image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # 自訂驗證規則（TEXT / TEXTAREA 題型）：字數下/上限
+    min_length: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_length: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 格式驗證規則代碼（對應 ValidationRule 的值，如 email / number）
+    validation_rule: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # 評分題型的端點敘述標籤（如「非常不滿意」「非常滿意」）
+    min_label: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    max_label: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # 顯示條件 JSON：{"question_id": "...", "operator": "equals|contains", "value": "..."}
+    # 設定後，此題（或分頁）僅在來源題目的答案符合條件時才顯示／需作答
+    condition_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     survey: Mapped[Survey] = relationship("Survey", back_populates="questions")
     answers: Mapped[list[SurveyAnswer]] = relationship(
@@ -177,6 +208,8 @@ class SurveyResponse(Base, TimestampMixin):
     )
     # 匿名：記錄隨機 token 防重複（無法反推身份）
     anon_token: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    # 非匿名問卷記錄填答者 email；匿名問卷恆為 NULL 以保障匿名性
+    respondent_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     survey: Mapped[Survey] = relationship("Survey", back_populates="responses")
@@ -225,4 +258,5 @@ __all__ = [
     "SurveyQuestion",
     "SurveyResponse",
     "SurveyStatus",
+    "ValidationRule",
 ]

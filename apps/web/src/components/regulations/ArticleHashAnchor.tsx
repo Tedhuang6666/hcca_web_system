@@ -10,7 +10,7 @@ import {
 } from "react";
 import type { CSSProperties, MouseEvent, ReactNode } from "react";
 
-const HIGHLIGHT_FADE_MS = 3000;
+const HIGHLIGHT_FADE_MS = 5000;
 const COPY_FEEDBACK_MS = 1000;
 
 type HashCtxValue = {
@@ -23,8 +23,9 @@ const HashCtx = createContext<HashCtxValue | null>(null);
 
 /**
  * 監聽 URL hash 是否為 `#a-{articleId}`。
- * 命中時：開啟高亮、平滑捲動到中央（若不在視窗內）、3 秒後自動褪色。
- * 手動 clear 會同時把 hash 從 URL 上清除，避免重新整理又被觸發。
+ * 命中時：先平滑捲動到該條文，待捲動大致結束（最後到達時）才開啟高亮
+ * （CSS .article-arrive 動畫：亮起 + 跳一下 + 緩慢褪色），5 秒後清除狀態。
+ * 手動 clear 會把 hash 從 URL 上清除，避免重新整理又被觸發。
  */
 function useHashHighlight(articleId: string) {
   const [active, setActive] = useState(false);
@@ -32,25 +33,37 @@ function useHashHighlight(articleId: string) {
 
   useEffect(() => {
     const targetHash = `#a-${articleId}`;
-    const trigger = () => {
+    const lightUp = () => {
       setActive(true);
       if (timerRef.current) window.clearTimeout(timerRef.current);
       timerRef.current = window.setTimeout(() => setActive(false), HIGHLIGHT_FADE_MS);
+    };
+    const trigger = () => {
       const el = document.getElementById(`a-${articleId}`);
       if (!el) return;
       const rect = el.getBoundingClientRect();
-      const alreadyInView = rect.top >= 0 && rect.bottom <= window.innerHeight;
-      if (!alreadyInView) {
-        requestAnimationFrame(() => el.scrollIntoView({ behavior: "smooth", block: "center" }));
+      const vh = window.innerHeight;
+      const wellInView = rect.top >= vh * 0.15 && rect.bottom <= vh * 0.85;
+      if (wellInView) {
+        lightUp();
+        return;
       }
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      // 捲動結束後才亮起 + 跳動
+      window.setTimeout(lightUp, 520);
     };
     const check = () => {
-      if (typeof window !== "undefined" && window.location.hash === targetHash) trigger();
+      if (typeof window === "undefined") return;
+      if (window.location.hash === targetHash) trigger();
     };
     check();
-    window.addEventListener("hashchange", check);
+    // 防呆：首次 check 可能在 layout 穩定前太早執行，補一次延遲檢查。
+    const retryId = window.setTimeout(check, 250);
+    const onHashChange = () => check();
+    window.addEventListener("hashchange", onHashChange);
     return () => {
-      window.removeEventListener("hashchange", check);
+      window.removeEventListener("hashchange", onHashChange);
+      window.clearTimeout(retryId);
       if (timerRef.current) window.clearTimeout(timerRef.current);
     };
   }, [articleId]);
@@ -83,15 +96,8 @@ export function ArticleHashWrapper({
     <HashCtx.Provider value={{ articleId, active, clear }}>
       <div
         id={`a-${articleId}`}
-        className={className}
-        style={{
-          transition: "background 600ms ease, box-shadow 600ms ease",
-          ...style,
-          ...(active && {
-            background: "rgba(14,165,233,0.12)",
-            boxShadow: "inset 0 0 0 1px rgba(14,165,233,0.45)",
-          }),
-        }}
+        className={`${className ?? ""}${active ? " article-arrive" : ""}`}
+        style={style}
       >
         {children}
       </div>

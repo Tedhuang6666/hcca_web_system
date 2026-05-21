@@ -1,0 +1,19 @@
+<mj-attributes>
+  <mj-all font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans TC', 'Microsoft JhengHei', Helvetica, Arial, sans-serif" />
+  <mj-text font-size="15px" line-height="1.75" color="#334155" padding="0 0 14px" />
+  <mj-section padding="0" />
+</mj-attributes>
+<mj-style>
+  a { color: #9b7a18; }
+  .hcca-body p { margin: 0 0 14px; }
+  .hcca-body ul, .hcca-body ol { margin: 0 0 14px; padding-left: 22px; }
+  .hcca-body li { margin: 0 0 4px; }
+  .hcca-body h1, .hcca-body h2, .hcca-body h3, .hcca-body h4 { color: #1a1a2e; margin: 18px 0 10px; line-height: 1.4; }
+  .hcca-body blockquote { margin: 0 0 14px; padding: 14px 18px; border-left: 0; border-radius: 14px; background:#fff8df; color: #475569; }
+  .hcca-body a { color: #9b7a18; }
+  .hcca-kicker { color:#9b7a18;font-size:12px;font-weight:800;letter-spacing:2px;text-transform:uppercase; }
+  .hcca-highlight-label { color:#8a6a12;font-size:12px;font-weight:800;letter-spacing:1.6px;text-transform:uppercase; }
+  .hcca-highlight-value { color:#111827;font-size:24px;font-weight:850;line-height:1.42;margin-top:8px; }
+  .hcca-note-label { color:#64748b;font-size:12px;font-weight:800;letter-spacing:.6px;text-transform:uppercase; }
+  .hcca-note-value { color:#1f2937;font-size:15px;font-weight:700;line-height:1.6;margin-top:4px; }
+</mj-style>

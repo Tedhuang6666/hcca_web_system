@@ -394,7 +394,7 @@ export function PickupTab({
                     <div key={item.id} className="flex justify-between text-xs">
                       <span style={{ color: "var(--text-muted)" }}>× {item.quantity}</span>
                       <span className="font-medium flex-1 mx-2" style={{ color: "var(--text-primary)" }}>
-                        （品項 ID: {item.menu_item_id.slice(0, 8)}…）
+                        {item.product_name_snapshot ?? `（品項 ID: ${(item.menu_item_id ?? item.availability_id ?? "").slice(0, 8)}…）`}
                       </span>
                       <span style={{ color: "var(--primary)" }}>NT${item.subtotal}</span>
                     </div>

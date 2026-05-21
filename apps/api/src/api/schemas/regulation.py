@@ -24,6 +24,7 @@ class RegulationArticleOut(BaseModel):
 
     id: uuid.UUID
     regulation_id: uuid.UUID
+    lineage_id: uuid.UUID
     sort_index: int
     order_index: int
     parent_id: uuid.UUID | None
@@ -92,6 +93,9 @@ class WorkflowActionRequest(BaseModel):
     """審議流程動作請求（送審/排程/核定/退回）"""
 
     note: str | None = Field(None, max_length=500, description="備註或退回原因")
+    meeting_id: uuid.UUID | None = Field(
+        None, description="排入議程時，同步加入指定議事會議的議程"
+    )
 
 
 class ArticleReorderItem(BaseModel):
@@ -278,7 +282,7 @@ class RepealRegulationRequest(BaseModel):
 
 
 class RegulationSearchResult(BaseModel):
-    """全文搜尋結果（輕量版）"""
+    """全文搜尋結果（RegulationListItem 的超集，額外帶命中條文）"""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -287,9 +291,16 @@ class RegulationSearchResult(BaseModel):
     category: RegulationCategory
     version: int
     is_active: bool
+    is_repealed: bool = False
+    workflow_status: RegulationWorkflowStatus
     org_id: uuid.UUID
     published_at: datetime | None
-    # 命中的條文摘要
+    repealed_date: datetime | None = None
+    freeze_reason: str | None = None
+    freeze_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+    # 命中的條文摘要（關鍵字出現在標題/副標題/內容的條文）
     matched_articles: list[RegulationArticleOut] = []
 
 

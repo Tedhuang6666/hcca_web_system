@@ -177,7 +177,7 @@ export default function LoginPage() {
                 歡迎回來
               </h1>
               <p className="text-sm mt-1.5" style={{ color: "var(--text-muted)" }}>
-                請使用授權的 Google 帳號登入系統
+                請使用 Google 帳號登入系統
               </p>
             </div>
 
@@ -231,7 +231,7 @@ export default function LoginPage() {
             </a>
 
             <p className="text-center text-xs leading-relaxed mt-5" style={{ color: "var(--text-disabled)" }}>
-              僅限授權人員使用本系統<br />
+              校內成員享完整功能；校外帳號可檢視公開資料與送出陳情<br />
               登入即表示同意相關使用規範
             </p>
           </div>

@@ -6,7 +6,7 @@ import uuid
 from datetime import date
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Date, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -21,12 +21,17 @@ class Org(Base, TimestampMixin):
     """組織節點（支援 Adjacency List 樹狀結構）"""
 
     __tablename__ = "orgs"
+    __table_args__ = (Index("ix_orgs_parent_active", "parent_id", "is_active"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 字號前綴：用於組合字號模板的 org_prefix（如「嶺代」「嶺學」），選填
     prefix: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # 法案審議階段：標記此組織在議事流程的角色（值對應 MeetingBillStage：
+    # standing_committee=常務委員會 / council=議會）。此組織所辦會議的議程會依此
+    # 自動偵測待審法案；None 表一般組織。
+    bill_stage: Mapped[str | None] = mapped_column(String(30), nullable=True)
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="true", index=True
     )
@@ -91,6 +96,7 @@ class UserPosition(Base, TimestampMixin):
     """使用者擔任職位的任期記錄"""
 
     __tablename__ = "user_positions"
+    __table_args__ = (Index("ix_user_positions_user_end_date", "user_id", "end_date"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(

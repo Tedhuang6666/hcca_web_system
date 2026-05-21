@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -20,8 +21,10 @@ from api.routers import (
     audit,
     auth,
     documents,
+    email,
     line_webhook,
     meal,
+    meetings,
     mfa,
     notifications,
     orgs,
@@ -29,6 +32,7 @@ from api.routers import (
     positions,
     regulations,
     saved_filters,
+    school_class,
     shop,
     survey,
     user_positions,
@@ -105,12 +109,20 @@ def create_app() -> FastAPI:
     app.include_router(regulations.router)
     app.include_router(saved_filters.router)
     app.include_router(shop.router)
+    app.include_router(school_class.router)
     app.include_router(meal.router)
+    app.include_router(meetings.router)
+    app.include_router(meetings.public_router)
     app.include_router(survey.router)
     app.include_router(notifications.router)
+    app.include_router(email.router)
     app.include_router(analytics.router)
     app.include_router(line_webhook.router)
     app.include_router(ws.router)
+
+    # 使用者上傳檔案（公告媒體、問卷圖片等）的靜態存取；
+    # 生產環境通常由反向代理直接服務，此處確保開發環境也可正常顯示。
+    app.mount("/uploads", StaticFiles(directory="uploads", check_dir=False), name="uploads")
 
     @app.get("/health", tags=["系統"], summary="健康檢查")
     async def health_check() -> dict[str, str]:

@@ -81,6 +81,16 @@ class PermissionCode(StrEnum):
     SHOP_VIEW_ALL = "shop:view_all"
     FINANCE_VIEW = "finance:view"
 
+    CLASS_MANAGE = "class:manage"
+    CLASS_VIEW_MEMBERS = "class:view_members"
+    CLASS_MANAGE_MEMBERS = "class:manage_members"
+    CLASS_MANAGE_ROLES = "class:manage_roles"
+    CLASS_SHOP_COLLECT = "class:shop_collect"
+    CLASS_SHOP_CLOSE = "class:shop_close"
+    CLASS_MEAL_COLLECT = "class:meal_collect"
+    CLASS_MEAL_CLOSE = "class:meal_close"
+    CLASS_MEAL_PICKUP = "class:meal_pickup"
+
     ANNOUNCEMENT_CREATE = "announcement:create"
     ANNOUNCEMENT_PUBLISH = "announcement:publish"
     ANNOUNCEMENT_EDIT = "announcement:edit"
@@ -89,6 +99,17 @@ class PermissionCode(StrEnum):
     ANNOUNCEMENT_VIEW_STATS = "announcement:view_stats"
 
     ANALYTICS_VIEW = "analytics:view"
+
+    EMAIL_SEND = "email:send"
+    EMAIL_SEND_BULK = "email:send_bulk"
+    EMAIL_VIEW_LOGS = "email:view_logs"
+
+    MEETING_CREATE = "meeting:create"
+    MEETING_MANAGE = "meeting:manage"
+    MEETING_CHAIR = "meeting:chair"
+    MEETING_VOTE = "meeting:vote"
+    MEETING_VIEW_ALL = "meeting:view_all"
+    MEETING_EXPORT = "meeting:export"
 
 
 ALL_PERMISSION_CODES: list[dict[str, str]] = [
@@ -456,7 +477,7 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "group": "商品系統",
         "code": PermissionCode.SHOP_MANAGE,
         "label": "管理商品",
-        "desc": "管理商品庫存、上下架",
+        "desc": "管理主題 / 系列 / 商品 / 變體、庫存與上下架",
     },
     {
         "group": "商品系統",
@@ -475,6 +496,60 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "code": PermissionCode.FINANCE_VIEW,
         "label": "財務查閱",
         "desc": "查看財務報表與統計",
+    },
+    {
+        "group": "班級管理",
+        "code": PermissionCode.CLASS_MANAGE,
+        "label": "管理班級",
+        "desc": "建立 / 編輯班級、設定學號區間、指定幹部、逐年重設班級",
+    },
+    {
+        "group": "班級管理",
+        "code": PermissionCode.CLASS_VIEW_MEMBERS,
+        "label": "查看本班成員",
+        "desc": "查看任職班級的名冊與訂購彙整",
+    },
+    {
+        "group": "班級管理",
+        "code": PermissionCode.CLASS_MEAL_PICKUP,
+        "label": "本班學餐領取",
+        "desc": "取得本班同商家同時段的班級領取碼並處理領餐",
+    },
+    {
+        "group": "班級管理",
+        "code": PermissionCode.CLASS_MEAL_COLLECT,
+        "label": "本班學餐收款",
+        "desc": "標示本班學餐訂單收款狀態",
+    },
+    {
+        "group": "班級管理",
+        "code": PermissionCode.CLASS_SHOP_COLLECT,
+        "label": "本班商品收款",
+        "desc": "標示本班商品訂單收款狀態",
+    },
+    {
+        "group": "班級管理",
+        "code": PermissionCode.CLASS_MANAGE_MEMBERS,
+        "label": "管理本班成員",
+        "desc": "維護任職班級的名冊",
+    },
+    {
+        "group": "班級管理",
+        "code": PermissionCode.CLASS_MANAGE_ROLES,
+        "label": "管理本班職位",
+        "desc": "任命或調整任職班級的職位",
+    },
+    {
+        "group": "班級管理",
+        "code": PermissionCode.CLASS_SHOP_CLOSE,
+        "label": "本班商品結單",
+        "desc": "處理本班商品結單彙整",
+    },
+    {
+        "group": "班級管理",
+        "code": PermissionCode.CLASS_MEAL_CLOSE,
+        "label": "本班學餐結單",
+        "desc": "處理本班學餐結單彙整",
     },
     {
         "group": "公告系統",
@@ -517,6 +592,60 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "code": PermissionCode.ANALYTICS_VIEW,
         "label": "查看數據分析",
         "desc": "查看公文效率統計、部門排名與待辦警告",
+    },
+    {
+        "group": "通知與郵件",
+        "code": PermissionCode.EMAIL_SEND,
+        "label": "寄送 Email（個別）",
+        "desc": "透過平台寄送 Email 給個別使用者",
+    },
+    {
+        "group": "通知與郵件",
+        "code": PermissionCode.EMAIL_SEND_BULK,
+        "label": "批次寄送 Email",
+        "desc": "對特定職位、機關全體成員或全平台批次寄送 Email",
+    },
+    {
+        "group": "通知與郵件",
+        "code": PermissionCode.EMAIL_VIEW_LOGS,
+        "label": "查看寄信紀錄",
+        "desc": "查看所有寄信稽核紀錄與實際收件清單",
+    },
+    {
+        "group": "議事系統",
+        "code": PermissionCode.MEETING_CREATE,
+        "label": "建立會議",
+        "desc": "建立議會會議與基本門檻設定",
+    },
+    {
+        "group": "議事系統",
+        "code": PermissionCode.MEETING_MANAGE,
+        "label": "管理議程與出席",
+        "desc": "管理議程、出列席、投影大屏與現場名冊",
+    },
+    {
+        "group": "議事系統",
+        "code": PermissionCode.MEETING_CHAIR,
+        "label": "主席場控",
+        "desc": "開始/暫停/結束會議，開啟與關閉現場表決",
+    },
+    {
+        "group": "議事系統",
+        "code": PermissionCode.MEETING_VOTE,
+        "label": "議員表決",
+        "desc": "列入預設表決權名冊並可在現場投票",
+    },
+    {
+        "group": "議事系統",
+        "code": PermissionCode.MEETING_VIEW_ALL,
+        "label": "查看所有會議",
+        "desc": "跨組織查看會議資料",
+    },
+    {
+        "group": "議事系統",
+        "code": PermissionCode.MEETING_EXPORT,
+        "label": "匯出會議紀錄",
+        "desc": "查看會後紀錄、匯出或轉成公文草稿",
     },
 ]
 

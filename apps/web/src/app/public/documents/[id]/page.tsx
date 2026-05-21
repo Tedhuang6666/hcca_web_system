@@ -4,6 +4,12 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { serverApiUrl } from "@/lib/config";
+import {
+  SOCIAL_IMAGE,
+  SOCIAL_SHARE_TITLE,
+  SOCIAL_SITE_NAME,
+  socialDescription,
+} from "@/lib/social-metadata";
 
 type RecipientOut = { id: string; recipient_type: string; name: string; email: string | null };
 type AttachmentOut = {
@@ -54,13 +60,29 @@ export async function generateMetadata(
 ): Promise<Metadata> {
   const { id } = await params;
   const doc = await fetchDoc(encodeURIComponent(id));
-  const title = doc?.title ?? "公文";
-  const desc = (doc?.category === "decree" ? doc.doc_description : doc?.subject)?.slice(0, 80)
-    || "公開公文查閱。";
+  const docTitle = doc?.title ?? "公文";
+  const detail = doc
+    ? `${doc.title}${doc.serial_number ? `｜${doc.serial_number}` : ""}`
+    : docTitle;
+  const desc = socialDescription("公文", detail, "公開公文查閱。");
   return {
-    title,
+    title: SOCIAL_SHARE_TITLE,
     description: desc,
     alternates: { canonical: `/public/documents/${id}` },
+    openGraph: {
+      title: SOCIAL_SHARE_TITLE,
+      description: desc,
+      type: "article",
+      url: `/public/documents/${id}`,
+      siteName: SOCIAL_SITE_NAME,
+      images: [SOCIAL_IMAGE],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: SOCIAL_SHARE_TITLE,
+      description: desc,
+      images: [SOCIAL_IMAGE.url],
+    },
   };
 }
 

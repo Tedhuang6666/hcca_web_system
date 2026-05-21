@@ -113,14 +113,15 @@ export default function VendorPage() {
     (async () => {
       setLoading(true);
       try {
-        const orgItems = await orgsApi.list().catch(() => []);
+        const orgItems = await orgsApi.list({ active_only: true }).catch(() => []);
         if (mounted) {
           setOrgs(orgItems);
           const storedOrgId = localStorage.getItem("org_id") ?? "";
-          if (storedOrgId || orgItems.length === 1) {
+          const usableStoredOrgId = orgItems.some((org) => org.id === storedOrgId) ? storedOrgId : "";
+          if (usableStoredOrgId || orgItems.length === 1) {
             setVendorForm(prev => ({
               ...prev,
-              org_id: prev.org_id || storedOrgId || orgItems[0]?.id || "",
+              org_id: prev.org_id || usableStoredOrgId || orgItems[0]?.id || "",
             }));
           }
         }
@@ -162,7 +163,7 @@ export default function VendorPage() {
 
   const todayOrders = useMemo(() => {
     const todayIds = new Set(todaySchedules.map(s => s.id));
-    return orders.filter(o => todayIds.has(o.schedule_id));
+    return orders.filter(o => o.schedule_id !== null && todayIds.has(o.schedule_id));
   }, [orders, todaySchedules]);
 
   // ── 新增排程 ─────────────────────────────────────────────────────────────

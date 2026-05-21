@@ -90,6 +90,8 @@ class DocumentCategory(enum.StrEnum):
     LETTER = "letter"  # 函
     ANNOUNCEMENT = "announcement"  # 公告
     REPORT = "report"  # 報告
+    RECORD = "record"  # 紀錄
+    CONSULTATION = "consultation"  # 咨
     MEETING_NOTICE = "meeting_notice"  # 開會通知單
     OTHER = "other"  # 其他
 
@@ -305,6 +307,7 @@ class Document(Base, TimestampMixin):
         Index("ix_documents_org_status", "org_id", "status"),
         Index("ix_documents_created_by_status", "created_by", "status"),
         Index("ix_documents_status_created_at", "status", "created_at"),
+        Index("ix_documents_created_at_desc", "created_at"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -350,7 +353,7 @@ class Document(Base, TimestampMixin):
     confidentiality_expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    # 公文類別（令/函/公告/報告）
+    # 公文類別（令/函/公告/報告/紀錄/咨）
     category: Mapped[DocumentCategory] = mapped_column(
         Enum(
             DocumentCategory,
@@ -516,7 +519,10 @@ class DocumentApproval(Base, TimestampMixin):
     """審核流程步驟（多層級，按 step_order 排序逐一審核）"""
 
     __tablename__ = "document_approvals"
-    __table_args__ = (UniqueConstraint("document_id", "step_order", name="uq_doc_approval_step"),)
+    __table_args__ = (
+        UniqueConstraint("document_id", "step_order", name="uq_doc_approval_step"),
+        Index("ix_document_approvals_status", "status"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     document_id: Mapped[uuid.UUID] = mapped_column(

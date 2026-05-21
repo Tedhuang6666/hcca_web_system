@@ -5,11 +5,24 @@ import { toast } from "sonner";
 
 import { ensurePermissionCatalog, PermCheckboxes } from "@/components/admin/PermissionCatalog";
 import Modal from "@/components/ui/Modal";
-import { adminApi, ApiError, orgsApi } from "@/lib/api";
+import { adminApi, ApiError, classApi, orgsApi, withFallback } from "@/lib/api";
 import type { OrgRead } from "@/lib/api";
-import type { AdminUserDetail, PermissionCodeInfo, PositionSummary } from "@/lib/types";
+import type {
+  AdminUserDetail,
+  MeetingBillStage,
+  PermissionCodeInfo,
+  PositionSummary,
+  SchoolClassListItem,
+} from "@/lib/types";
 
 type Mode = "orgs" | "members" | "audit";
+
+// 組織在議事流程的角色：影響此組織所辦會議的議程是否自動偵測待審法案
+const BILL_STAGE_OPTIONS: { value: "" | MeetingBillStage; label: string }[] = [
+  { value: "", label: "一般組織（不審議法案）" },
+  { value: "standing_committee", label: "常務委員會（審議新提案）" },
+  { value: "council", label: "議會（審議常委會通過案）" },
+];
 type Detail = { type: "org"; id: string } | { type: "position"; id: string } | { type: "user"; id: string };
 type ConfirmState = { title: string; body: string; action: () => Promise<unknown> } | null;
 
@@ -104,6 +117,7 @@ export default function PermissionsAdminPage() {
   const [positions, setPositions] = useState<PositionSummary[]>([]);
   const [permCodes, setPermCodes] = useState<PermissionCodeInfo[]>([]);
   const [orgs, setOrgs] = useState<OrgRead[]>([]);
+  const [classes, setClasses] = useState<SchoolClassListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<Mode>("orgs");
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -116,29 +130,32 @@ export default function PermissionsAdminPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    try {
-      const [loadedUsers, loadedPositions, loadedPerms, loadedOrgs] = await Promise.all([
-        adminApi.listUsers({ limit: 200 }),
-        adminApi.listPositions(),
-        adminApi.listPermissionCodes(),
-        orgsApi.list(),
-      ]);
-      setUsers(loadedUsers);
-      setPositions(loadedPositions);
-      setPermCodes(ensurePermissionCatalog(loadedPerms));
-      setOrgs(loadedOrgs);
-      setDetail((current) => {
-        if (!current && loadedOrgs[0]) return { type: "org", id: loadedOrgs[0].id };
-        if (current?.type === "org" && !loadedOrgs.some((o) => o.id === current.id)) return loadedOrgs[0] ? { type: "org", id: loadedOrgs[0].id } : null;
-        if (current?.type === "position" && !loadedPositions.some((p) => p.id === current.id)) return loadedOrgs[0] ? { type: "org", id: loadedOrgs[0].id } : null;
-        if (current?.type === "user" && !loadedUsers.some((u) => u.id === current.id)) return loadedOrgs[0] ? { type: "org", id: loadedOrgs[0].id } : null;
-        return current;
-      });
-    } catch (e) {
-      displayError(e, "載入管理資料失敗，請確認您有 admin:all 權限");
-    } finally {
-      setLoading(false);
+    const failedSections: string[] = [];
+    const noteFailure = (label: string) => () => failedSections.push(label);
+    const [loadedUsers, loadedPositions, loadedPerms, loadedOrgs, loadedClasses] = await Promise.all([
+      withFallback(adminApi.listUsers({ limit: 200 }), [], noteFailure("使用者")),
+      withFallback(adminApi.listPositions(), [], noteFailure("職位")),
+      withFallback(adminApi.listPermissionCodes(), [], noteFailure("權限代碼")),
+      withFallback(orgsApi.list(), [], noteFailure("組織")),
+      withFallback(classApi.list({ is_active: "true" }), [], noteFailure("班級")),
+    ]);
+    setUsers(loadedUsers);
+    setPositions(loadedPositions);
+    setPermCodes(ensurePermissionCatalog(loadedPerms));
+    setOrgs(loadedOrgs);
+    setClasses(loadedClasses);
+    setDetail((current) => {
+      const firstActiveOrg = loadedOrgs.find((org) => org.is_active) ?? loadedOrgs[0];
+      if (!current && firstActiveOrg) return { type: "org", id: firstActiveOrg.id };
+      if (current?.type === "org" && !loadedOrgs.some((o) => o.id === current.id)) return loadedOrgs[0] ? { type: "org", id: loadedOrgs[0].id } : null;
+      if (current?.type === "position" && !loadedPositions.some((p) => p.id === current.id)) return loadedOrgs[0] ? { type: "org", id: loadedOrgs[0].id } : null;
+      if (current?.type === "user" && !loadedUsers.some((u) => u.id === current.id)) return loadedOrgs[0] ? { type: "org", id: loadedOrgs[0].id } : null;
+      return current;
+    });
+    if (failedSections.length) {
+      toast.warning(`${failedSections.join("、")}暫時無法載入，其餘管理資料仍可使用`);
     }
+    setLoading(false);
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -151,6 +168,8 @@ export default function PermissionsAdminPage() {
   const selectedOrg = orgs.find((o) => o.id === selectedOrgId) ?? orgs[0] ?? null;
   const selectedPosition = detail?.type === "position" ? positions.find((p) => p.id === detail.id) ?? null : null;
   const selectedUser = detail?.type === "user" ? users.find((u) => u.id === detail.id) ?? null : null;
+  const activeOrgs = orgs.filter((o) => o.is_active);
+  const activePositions = positions.filter((p) => p.org_is_active);
   const orphanPositions = positions.filter((p) => !users.some((u) => u.positions.some((up) => up.id === p.id)));
   const noPermPositions = positions.filter((p) => p.permission_codes.length === 0);
   const riskyUsers = users.filter((u) => u.is_superuser || u.effective_permissions.some(highRisk));
@@ -190,7 +209,7 @@ export default function PermissionsAdminPage() {
         <div className="min-w-0">
           <h1 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>自治管理工作台</h1>
           <p className="text-xs mt-0.5 truncate" style={{ color: "var(--text-muted)" }}>
-            {loading ? "載入中..." : `${orgs.length} 個組織 · ${positions.length} 個職位 · ${users.length} 位使用者`}
+            {loading ? "載入中..." : `${activeOrgs.length} 個有效組織 · ${orgs.length - activeOrgs.length} 個停用 · ${activePositions.length} 個可指派職位`}
           </p>
         </div>
         <div className="grid grid-cols-3 gap-2 sm:flex sm:items-center">
@@ -267,6 +286,7 @@ export default function PermissionsAdminPage() {
               orgs={orgs}
               users={users}
               positions={positions}
+              classes={classes}
               permCodes={permCodes}
               selectedOrg={selectedOrg}
               selectedPosition={selectedPosition}
@@ -280,8 +300,8 @@ export default function PermissionsAdminPage() {
         </main>
       )}
 
-      {showNewOrg && <OrgCreateModal orgs={orgs} onClose={() => setShowNewOrg(false)} onDone={() => { setShowNewOrg(false); load(); }} />}
-      {showWizard && <OnboardingWizard users={users} positions={positions} orgs={orgs} permCodes={permCodes} onClose={() => setShowWizard(false)} onDone={() => { setShowWizard(false); load(); }} />}
+      {showNewOrg && <OrgCreateModal orgs={activeOrgs} onClose={() => setShowNewOrg(false)} onDone={() => { setShowNewOrg(false); load(); }} />}
+      {showWizard && <OnboardingWizard users={users} positions={activePositions} orgs={activeOrgs} permCodes={permCodes} onClose={() => setShowWizard(false)} onDone={() => { setShowWizard(false); load(); }} />}
       {!loading && mobileDetailOpen && detail && (
         <div className="lg:hidden">
           <Modal title="管理詳情" onClose={() => setMobileDetailOpen(false)}>
@@ -290,6 +310,7 @@ export default function PermissionsAdminPage() {
               orgs={orgs}
               users={users}
               positions={positions}
+              classes={classes}
               permCodes={permCodes}
               selectedOrg={selectedOrg}
               selectedPosition={selectedPosition}
@@ -349,10 +370,16 @@ function OrgWorkbenchSidebar({
             });
           }}
           className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left cursor-pointer transition-colors"
-          style={selectedOrgId === org.id && !selectedPositionId ? { background: "var(--primary-dim)", color: "var(--primary)" } : { color: "var(--text-secondary)" }}
+          style={{
+            ...(selectedOrgId === org.id && !selectedPositionId
+              ? { background: "var(--primary-dim)", color: "var(--primary)" }
+              : { color: org.is_active ? "var(--text-secondary)" : "var(--text-muted)" }),
+            opacity: org.is_active ? 1 : 0.62,
+          }}
         >
           <span className="text-[10px]" style={{ transform: open ? "rotate(90deg)" : "none" }}>›</span>
           <span className="flex-1 truncate text-xs font-semibold">{org.name}</span>
+          {!org.is_active && <span className="text-[10px]">停用</span>}
           <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}>{orgPositions.length}</span>
         </button>
         {open && (
@@ -379,6 +406,7 @@ function OrgWorkbenchSidebar({
     <div className="h-full flex flex-col">
       <div className="px-4 py-3 flex-shrink-0" style={{ borderBottom: "1px solid var(--border)" }}>
         <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>組織與職位</p>
+        <p className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}>停用組織保留歷史資料，但不會進入新建與指派流程。</p>
       </div>
       <nav className="flex-1 overflow-y-auto p-2 space-y-0.5">
         {childrenOf(null).map((org) => renderOrg(org))}
@@ -510,10 +538,10 @@ function WorkbenchList({
         <div className="rounded-xl p-3" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
           <p className="text-xs" style={{ color: "var(--text-muted)" }}>組織總覽</p>
           <p className="text-base font-semibold mt-0.5" style={{ color: "var(--text-primary)" }}>
-            {orgs.length} 個組織
+            {orgs.filter((item) => item.is_active).length} 個有效組織
           </p>
           <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-            目前選取：{org?.name ?? "未選擇"}
+            {orgs.filter((item) => !item.is_active).length} 個停用 · 目前選取：{org?.name ?? "未選擇"}
           </p>
         </div>
       </div>
@@ -548,7 +576,7 @@ function WorkbenchList({
               )}
             </div>
             <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-              {itemPositions.length} 個職位 · {orgMemberCount(item.id)} 位成員 · {childCount(item.id)} 個下層組織
+              {item.is_active ? "可建立與指派" : "僅保留歷史資料"} · {itemPositions.length} 個職位 · {orgMemberCount(item.id)} 位成員 · {childCount(item.id)} 個下層組織
             </p>
           </button>
         );
@@ -558,13 +586,14 @@ function WorkbenchList({
 }
 
 function DetailPanel({
-  detail, orgs, users, positions, permCodes, selectedOrg, selectedPosition, selectedUser,
+  detail, orgs, users, positions, classes, permCodes, selectedOrg, selectedPosition, selectedUser,
   onRefresh, onSelect, onConfirm, metrics,
 }: {
   detail: Detail | null;
   orgs: OrgRead[];
   users: AdminUserDetail[];
   positions: PositionSummary[];
+  classes: SchoolClassListItem[];
   permCodes: PermissionCodeInfo[];
   selectedOrg: OrgRead | null;
   selectedPosition: PositionSummary | null;
@@ -583,7 +612,7 @@ function DetailPanel({
     return <PositionPanel position={selectedPosition} positions={positions} users={users} permCodes={permCodes} onRefresh={onRefresh} onSelect={onSelect} onConfirm={onConfirm} />;
   }
   if (detail?.type === "user" && selectedUser) {
-    return <UserPanel user={selectedUser} positions={positions} permCodes={permCodes} onRefresh={onRefresh} onConfirm={onConfirm} />;
+    return <UserPanel user={selectedUser} positions={positions} classes={classes} permCodes={permCodes} onRefresh={onRefresh} onConfirm={onConfirm} />;
   }
   if (selectedOrg) {
     return <OrgPanel org={selectedOrg} orgs={orgs} positions={positions} users={users} permCodes={permCodes} onRefresh={onRefresh} onSelect={onSelect} onConfirm={onConfirm} metrics={metrics} />;
@@ -612,6 +641,7 @@ function OrgPanel({
   const [name, setName] = useState(org.name);
   const [description, setDescription] = useState(org.description ?? "");
   const [prefix, setPrefix] = useState(org.prefix ?? "");
+  const [billStage, setBillStage] = useState<"" | MeetingBillStage>(org.bill_stage ?? "");
   const [parentId, setParentId] = useState(org.parent_id ?? "");
   const [newPositionName, setNewPositionName] = useState("");
   const [newWeight, setNewWeight] = useState(0);
@@ -633,6 +663,7 @@ function OrgPanel({
     setName(org.name);
     setDescription(org.description ?? "");
     setPrefix(org.prefix ?? "");
+    setBillStage(org.bill_stage ?? "");
     setParentId(org.parent_id ?? "");
   }, [org]);
 
@@ -642,6 +673,7 @@ function OrgPanel({
         name: name.trim(),
         description: description.trim() || null,
         prefix: prefix.trim() || null,
+        bill_stage: billStage || null,
         parent_id: parentId || null,
       });
       toast.success("組織已更新");
@@ -651,6 +683,10 @@ function OrgPanel({
     }
   };
   const createPosition = async () => {
+    if (!org.is_active) {
+      toast.error("此組織已停用，請先啟用後再建立職位");
+      return;
+    }
     if (!newPositionName.trim()) {
       toast.error("請填寫職位名稱");
       return;
@@ -754,18 +790,24 @@ function OrgPanel({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="text-xs" style={{ color: "var(--text-muted)" }}>名稱<TextInput value={name} onChange={(e) => setName(e.target.value)} className="mt-1" /></label>
           <label className="text-xs" style={{ color: "var(--text-muted)" }}>字號前綴<TextInput value={prefix} onChange={(e) => setPrefix(e.target.value)} className="mt-1" placeholder="例：嶺代" /></label>
+          <label className="text-xs sm:col-span-2" style={{ color: "var(--text-muted)" }}>議事角色（法案審議階段）<SelectInput value={billStage} onChange={(e) => setBillStage(e.target.value as "" | MeetingBillStage)} className="mt-1">{BILL_STAGE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</SelectInput><span className="block mt-1 text-[10px]" style={{ color: "var(--text-disabled)" }}>設定後，此組織所辦會議的議程會自動偵測對應階段的待審法案。</span></label>
           <label className="text-xs sm:col-span-2" style={{ color: "var(--text-muted)" }}>描述<TextInput value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1" /></label>
-          <label className="text-xs sm:col-span-2" style={{ color: "var(--text-muted)" }}>上層組織<SelectInput value={parentId} onChange={(e) => setParentId(e.target.value)} className="mt-1"><option value="">無（頂層）</option>{orgs.filter((o) => o.id !== org.id && !descendantIds.has(o.id)).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</SelectInput></label>
+          <label className="text-xs sm:col-span-2" style={{ color: "var(--text-muted)" }}>上層組織<SelectInput value={parentId} onChange={(e) => setParentId(e.target.value)} className="mt-1"><option value="">無（頂層）</option>{orgs.filter((o) => o.is_active && o.id !== org.id && !descendantIds.has(o.id)).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</SelectInput></label>
         </div>
       </section>
       <section className="rounded-xl p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
-        <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>新增職位</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_120px_auto] gap-2 items-end">
-          <label className="text-xs" style={{ color: "var(--text-muted)" }}>職位名稱<TextInput value={newPositionName} onChange={(e) => setNewPositionName(e.target.value)} className="mt-1" /></label>
-          <label className="text-xs" style={{ color: "var(--text-muted)" }}>權重<TextInput type="number" min={0} value={newWeight} onChange={(e) => setNewWeight(Number(e.target.value))} className="mt-1" /></label>
-          <SmallButton onClick={createPosition} tone="primary"><Icon name="plus" />建立</SmallButton>
+        <div>
+          <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>新增職位</h3>
+          {!org.is_active && (
+            <p className="text-xs mt-1" style={{ color: "#f59e0b" }}>停用組織不可新增職位或指派新任期。</p>
+          )}
         </div>
-        <PermCheckboxes selected={newCodes} onChange={setNewCodes} permCodes={permCodes} />
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr_120px_auto] gap-2 items-end">
+          <label className="text-xs" style={{ color: "var(--text-muted)" }}>職位名稱<TextInput value={newPositionName} onChange={(e) => setNewPositionName(e.target.value)} disabled={!org.is_active} className="mt-1" /></label>
+          <label className="text-xs" style={{ color: "var(--text-muted)" }}>權重<TextInput type="number" min={0} value={newWeight} onChange={(e) => setNewWeight(Number(e.target.value))} disabled={!org.is_active} className="mt-1" /></label>
+          <SmallButton onClick={createPosition} tone="primary" disabled={!org.is_active}><Icon name="plus" />建立</SmallButton>
+        </div>
+        {org.is_active && <PermCheckboxes selected={newCodes} onChange={setNewCodes} permCodes={permCodes} />}
       </section>
     </div>
   );
@@ -813,6 +855,10 @@ function PositionPanel({
     }
   };
   const addMember = async () => {
+    if (!position.org_is_active) {
+      toast.error("此職位所屬組織已停用，無法新增任期");
+      return;
+    }
     if (!memberUserId) {
       toast.error("請選擇成員");
       return;
@@ -834,6 +880,9 @@ function PositionPanel({
           <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>職位 / 幹部</p>
           <h2 className="text-xl font-semibold mt-1" style={{ color: "var(--text-primary)" }}>{position.name}</h2>
           <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>{position.org_name} · {members.length} 位成員 · {position.permission_codes.length} 個權限</p>
+          {!position.org_is_active && (
+            <p className="text-xs mt-1" style={{ color: "#f59e0b" }}>所屬組織已停用：只保留既有任期，不可新增指派。</p>
+          )}
         </div>
         <SmallButton
           tone="danger"
@@ -864,10 +913,10 @@ function PositionPanel({
           <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>成員任期</h3>
         </div>
         <div className="p-4 grid grid-cols-1 sm:grid-cols-[1fr_130px_130px_auto] gap-2 items-end" style={{ borderBottom: "1px solid var(--border)" }}>
-          <SelectInput value={memberUserId} onChange={(e) => setMemberUserId(e.target.value)}><option value="">選擇新增成員</option>{candidates.map((u) => <option key={u.id} value={u.id}>{u.display_name} · {u.email}</option>)}</SelectInput>
+          <SelectInput value={memberUserId} onChange={(e) => setMemberUserId(e.target.value)} disabled={!position.org_is_active}><option value="">選擇新增成員</option>{candidates.map((u) => <option key={u.id} value={u.id}>{u.display_name} · {u.email}</option>)}</SelectInput>
           <TextInput type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ colorScheme: "dark" }} />
           <TextInput type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={{ colorScheme: "dark" }} />
-          <SmallButton onClick={addMember} tone="primary">新增</SmallButton>
+          <SmallButton onClick={addMember} tone="primary" disabled={!position.org_is_active}>新增</SmallButton>
         </div>
         {members.map((u) => <AssignmentRow key={u.id} user={u} positionId={position.id} onRefresh={onRefresh} onSelect={onSelect} onConfirm={onConfirm} />)}
       </section>
@@ -921,18 +970,22 @@ function AssignmentRow({
 }
 
 function UserPanel({
-  user, positions, permCodes, onRefresh, onConfirm,
+  user, positions, classes, permCodes, onRefresh, onConfirm,
 }: {
   user: AdminUserDetail;
   positions: PositionSummary[];
+  classes: SchoolClassListItem[];
   permCodes: PermissionCodeInfo[];
   onRefresh: () => Promise<void>;
   onConfirm: (state: ConfirmState) => void;
 }) {
   const [positionId, setPositionId] = useState("");
+  const [classId, setClassId] = useState("");
+  const [asCadre, setAsCadre] = useState(false);
   const [start, setStart] = useState(today());
   const [end, setEnd] = useState("");
   const available = uniquePositionsById(positions)
+    .filter((p) => p.org_is_active)
     .filter((p) => !user.positions.some((up) => up.id === p.id));
   const add = async () => {
     if (!positionId) return;
@@ -943,6 +996,19 @@ function UserPanel({
       await onRefresh();
     } catch (e) {
       displayError(e, "指派職位失敗");
+    }
+  };
+  const addClassMember = async () => {
+    if (!classId) return;
+    try {
+      await classApi.addMember(classId, user.id);
+      if (asCadre) await classApi.addCadre(classId, user.id);
+      toast.success(asCadre ? "已加入班級並設定為班級幹部" : "已加入班級");
+      setClassId("");
+      setAsCadre(false);
+      await onRefresh();
+    } catch (e) {
+      displayError(e, "加入班級失敗");
     }
   };
   return (
@@ -1009,6 +1075,37 @@ function UserPanel({
           <TextInput type="date" value={start} onChange={(e) => setStart(e.target.value)} style={{ colorScheme: "dark" }} />
           <TextInput type="date" value={end} onChange={(e) => setEnd(e.target.value)} style={{ colorScheme: "dark" }} />
           <SmallButton onClick={add} tone="primary">指派</SmallButton>
+        </div>
+      </section>
+      <section className="rounded-xl p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
+        <div>
+          <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+            加入班級
+          </h3>
+          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+            手動加入班級不會修改學號；勾選班級幹部後，該使用者可管理本班訂單與繳費狀態。
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2 items-center">
+          <SelectInput value={classId} onChange={(e) => setClassId(e.target.value)}>
+            <option value="">選擇班級</option>
+            {classes.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.academic_year} 學年度 · {c.label ?? `${c.class_code} 班`}
+              </option>
+            ))}
+          </SelectInput>
+          <label className="flex items-center gap-2 text-xs px-2" style={{ color: "var(--text-muted)" }}>
+            <input
+              type="checkbox"
+              checked={asCadre}
+              onChange={(e) => setAsCadre(e.target.checked)}
+            />
+            設為班級幹部
+          </label>
+          <SmallButton onClick={addClassMember} tone="primary" disabled={!classId}>
+            加入
+          </SmallButton>
         </div>
       </section>
       <section className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
@@ -1079,6 +1176,7 @@ function OrgCreateModal({ orgs, onClose, onDone }: { orgs: OrgRead[]; onClose: (
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [prefix, setPrefix] = useState("");
+  const [billStage, setBillStage] = useState<"" | MeetingBillStage>("");
   const [parentId, setParentId] = useState("");
   const submit = async () => {
     if (!name.trim()) {
@@ -1086,7 +1184,7 @@ function OrgCreateModal({ orgs, onClose, onDone }: { orgs: OrgRead[]; onClose: (
       return;
     }
     try {
-      await adminApi.createOrg({ name: name.trim(), description: description.trim() || undefined, prefix: prefix.trim() || null, parent_id: parentId || null });
+      await adminApi.createOrg({ name: name.trim(), description: description.trim() || undefined, prefix: prefix.trim() || null, bill_stage: billStage || null, parent_id: parentId || null });
       toast.success("組織已建立");
       onDone();
     } catch (e) {
@@ -1099,6 +1197,7 @@ function OrgCreateModal({ orgs, onClose, onDone }: { orgs: OrgRead[]; onClose: (
         <TextInput value={name} onChange={(e) => setName(e.target.value)} placeholder="組織名稱" />
         <TextInput value={prefix} onChange={(e) => setPrefix(e.target.value)} placeholder="字號前綴（選填）" />
         <TextInput value={description} onChange={(e) => setDescription(e.target.value)} placeholder="描述（選填）" />
+        <SelectInput value={billStage} onChange={(e) => setBillStage(e.target.value as "" | MeetingBillStage)}>{BILL_STAGE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</SelectInput>
         <SelectInput value={parentId} onChange={(e) => setParentId(e.target.value)}><option value="">無上層組織</option>{orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</SelectInput>
       </div>
       <div className="flex justify-end gap-2">

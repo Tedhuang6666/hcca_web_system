@@ -3,7 +3,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { orgsApi, adminApi, ApiError } from "@/lib/api";
+import { orgsApi, adminApi, ApiError, withFallback } from "@/lib/api";
 import { apiUrl } from "@/lib/config";
 import type { OrgRead } from "@/lib/api";
 import type { OrgWithPositions, AdminUserDetail } from "@/lib/types";
@@ -30,11 +30,12 @@ export default function OrgDetailPage() {
 
     Promise.all([
       orgsApi.get(id),
-      orgsApi.list(),
+      withFallback(orgsApi.list(), []),
     ]).then(([o, all]) => {
       setOrg(o);
       setAllOrgs(all);
-    }).catch(e => toast.error(e instanceof ApiError ? e.message : "載入組織資訊失敗"));
+    }).catch(e => toast.error(e instanceof ApiError ? e.message : "載入組織資訊失敗"))
+      .finally(() => setLoading(false));
 
     // 嘗試載入職位（帶 permission codes）
     adminApi.listOrgsWithPositions()
@@ -59,7 +60,6 @@ export default function OrgDetailPage() {
       .then(setUsers)
       .catch(() => setUsers([]));
 
-    setLoading(false);
   }, [id]);
 
   const parent = useMemo(() => allOrgs.find(o => o.id === org?.parent_id), [allOrgs, org]);

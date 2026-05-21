@@ -82,10 +82,12 @@ class Regulation(Base, TimestampMixin):
 
     __tablename__ = "regulations"
     __table_args__ = (
-        # 全文搜尋輔助索引（使用 PostgreSQL GIN/tsvector，於 Migration 中建立）
         Index("ix_regulations_title", "title"),
         Index("ix_regulations_category", "category"),
         Index("ix_regulations_is_active", "is_active"),
+        Index("ix_regulations_is_active_workflow", "is_active", "workflow_status"),
+        # 全文搜尋 GIN 索引（PostgreSQL tsvector）
+        Index("ix_regulations_search_vector", "search_vector", postgresql_using="gin"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -291,6 +293,11 @@ class RegulationArticle(Base, TimestampMixin):
         ForeignKey("regulations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
+    )
+    # 沿革識別碼：同一條文跨版本（修正案 fork）保持不變，
+    # 使「重新排序」可被辨識為同一條，而非刪除＋重新建立。
+    lineage_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, default=uuid.uuid4
     )
     # 排序索引（同法規內唯一，由服務層管理）
     sort_index: Mapped[int] = mapped_column(Integer, nullable=False)

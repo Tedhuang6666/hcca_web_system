@@ -1,0 +1,166 @@
+"""電子郵件路由測試 — happy path / 401 / 403 / 404 / 批次權限（Phase 3）"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import date
+
+import pytest
+from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from api import app
+from api.dependencies.auth import get_current_active_user
+from api.models.org import Org, Permission, Position, UserPosition
+from api.models.user import User
+
+
+async def _seed_user(
+    db: AsyncSession, email: str, codes: list[str], *, superuser: bool = False
+) -> User:
+    """建立測試使用者，並透過職位授予指定權限碼。"""
+    user = User(
+        email=email,
+        display_name="測試使用者",
+        is_active=True,
+        is_verified=True,
+        is_superuser=superuser,
+    )
+    db.add(user)
+    await db.flush()
+    if codes:
+        org = Org(name="測試組織")
+        db.add(org)
+        await db.flush()
+        position = Position(org_id=org.id, name="測試職位")
+        db.add(position)
+        await db.flush()
+        for code in codes:
+            db.add(Permission(position_id=position.id, code=code))
+        db.add(
+            UserPosition(
+                user_id=user.id,
+                position_id=position.id,
+                start_date=date.today(),
+                end_date=None,
+            )
+        )
+        await db.flush()
+    return user
+
+
+def _override_user(user: User) -> None:
+    async def override() -> User:
+        return user
+
+    app.dependency_overrides[get_current_active_user] = override
+
+
+@pytest.mark.asyncio
+async def test_create_draft_message_succeeds(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await _seed_user(db_session, "sender@school.edu", ["email:send"])
+    _override_user(user)
+
+    resp = await client.post(
+        "/email/messages",
+        json={"subject": "測試信件", "action": "draft"},
+    )
+
+    assert resp.status_code == 201
+    assert resp.json()["status"] == "draft"
+
+
+@pytest.mark.asyncio
+async def test_create_message_without_auth_returns_401(client: AsyncClient) -> None:
+    resp = await client.post("/email/messages", json={"subject": "x", "action": "draft"})
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_create_message_without_permission_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await _seed_user(db_session, "nobody@school.edu", [])
+    _override_user(user)
+
+    resp = await client.post("/email/messages", json={"subject": "x", "action": "draft"})
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_get_missing_message_returns_404(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await _seed_user(db_session, "sender2@school.edu", ["email:send"])
+    _override_user(user)
+
+    resp = await client.get(f"/email/messages/{uuid.uuid4()}")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_bulk_recipients_without_bulk_permission_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await _seed_user(db_session, "sender3@school.edu", ["email:send"])
+    _override_user(user)
+
+    resp = await client.post(
+        "/email/messages",
+        json={
+            "subject": "群發信",
+            "action": "draft",
+            "recipients": {"org_ids": [str(uuid.uuid4())]},
+        },
+    )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_preview_recipients_resolves_position_members(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    sender = await _seed_user(db_session, "bulk@school.edu", ["email:send_bulk"])
+    # sender 的職位即可作為收件目標（sender 本人在任）
+    position_id = (
+        await db_session.execute(
+            select(UserPosition.position_id).where(UserPosition.user_id == sender.id)
+        )
+    ).scalar_one()
+    _override_user(sender)
+
+    resp = await client.post(
+        "/email/preview-recipients",
+        json={"position_ids": [str(position_id)]},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["recipient_count"] == 1
+    assert "測試使用者" in body["sample_names"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_recipients_include_school_filters_by_domain(
+    db_session: AsyncSession,
+) -> None:
+    from api.services.recipient import resolve_recipients
+
+    school = User(
+        email="stu@hchs.hc.edu.tw", display_name="校內生", is_active=True, is_verified=True
+    )
+    external = User(
+        email="admin@gmail.com", display_name="校外管理員", is_active=True, is_verified=True
+    )
+    db_session.add_all([school, external])
+    await db_session.flush()
+
+    _u1, school_emails = await resolve_recipients(db_session, include_school=True)
+    assert "stu@hchs.hc.edu.tw" in school_emails
+    assert "admin@gmail.com" not in school_emails
+
+    _u2, all_emails = await resolve_recipients(db_session, include_all=True)
+    assert "stu@hchs.hc.edu.tw" in all_emails
+    assert "admin@gmail.com" in all_emails

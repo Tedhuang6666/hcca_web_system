@@ -31,7 +31,10 @@ export default function SurveysPage() {
   useEffect(() => {
     setLoading(true);
     const params = tab === "open" ? { status: "open" } : undefined;
-    surveysApi.list(params)
+    // 未登入者改用公開問卷列表（僅 is_public 且開放/已截止的問卷）
+    const isLoggedIn = typeof window !== "undefined" && !!localStorage.getItem("user_id");
+    const req = isLoggedIn ? surveysApi.list(params) : surveysApi.listPublic(params);
+    req
       .then(setSurveys)
       .catch(e => toast.error(e instanceof ApiError ? e.message : "載入失敗"))
       .finally(() => setLoading(false));

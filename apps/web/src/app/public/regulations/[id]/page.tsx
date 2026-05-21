@@ -16,6 +16,12 @@ import {
   computeArticleDisplayLabels,
   normalizeArticleType,
 } from "@/lib/regulationStructure";
+import {
+  SOCIAL_IMAGE,
+  SOCIAL_SHARE_TITLE,
+  SOCIAL_SITE_NAME,
+  socialDescription,
+} from "@/lib/social-metadata";
 
 type RegulationArticleOut = {
   id: string;
@@ -79,19 +85,29 @@ export async function generateMetadata(
 ): Promise<Metadata> {
   const { id } = await params;
   const reg = await fetchReg(id);
-  const title = reg?.title ?? "法規";
-  const desc = reg?.preface?.slice(0, 80) || "公開法規條文與沿革查詢。";
+  const regTitle = reg?.title ?? "法規";
+  const desc = socialDescription(
+    "法規",
+    reg ? `${reg.title}${reg.preface ? `｜${reg.preface.slice(0, 80)}` : ""}` : regTitle,
+    "公開法規條文與沿革查詢。",
+  );
   return {
-    title,
+    title: SOCIAL_SHARE_TITLE,
     description: desc,
     openGraph: {
-      title,
+      title: SOCIAL_SHARE_TITLE,
       description: desc,
       type: "article",
       url: reg ? publicRegulationHref(reg) : `/public/regulations/${encodeURIComponent(id)}`,
-      siteName: "HCCA 校園自治整合平台",
+      siteName: SOCIAL_SITE_NAME,
+      images: [SOCIAL_IMAGE],
     },
-    twitter: { card: "summary", title, description: desc },
+    twitter: {
+      card: "summary_large_image",
+      title: SOCIAL_SHARE_TITLE,
+      description: desc,
+      images: [SOCIAL_IMAGE.url],
+    },
     alternates: {
       canonical: reg ? publicRegulationHref(reg) : `/public/regulations/${encodeURIComponent(id)}`,
     },

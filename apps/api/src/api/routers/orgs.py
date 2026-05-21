@@ -3,7 +3,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,18 +27,23 @@ CurrentUser = Annotated[User, Depends(get_current_active_user)]
 
 
 @router.get("", response_model=list[OrgRead], summary="列出所有組織節點（扁平）")
-async def list_orgs(db: DbDep, _: CurrentUser) -> list:
+async def list_orgs(
+    db: DbDep,
+    _: CurrentUser,
+    active_only: bool = Query(False, description="僅回傳啟用中的組織"),
+) -> list:
     # 檢查快取
-    cached = await cache_get("org:list")
+    cache_key = f"org:list:active_only={active_only}"
+    cached = await cache_get(cache_key)
     if cached is not None:
         return cached
 
     # 查詢並序列化
-    orgs = await org_svc.get_orgs(db)
+    orgs = await org_svc.get_orgs(db, active_only=active_only)
     result = [OrgRead.model_validate(o).model_dump(mode="json") for o in orgs]
 
     # 快取 300 秒
-    await cache_set("org:list", result, ttl=300)
+    await cache_set(cache_key, result, ttl=300)
     return result
 
 
@@ -158,6 +163,8 @@ async def create_org(data: OrgCreate, db: DbDep, current_user: CurrentUser) -> o
     )
     # 清除快存
     await cache_invalidate("org:list")
+    await cache_invalidate("org:list:active_only=False")
+    await cache_invalidate("org:list:active_only=True")
     await cache_invalidate("org:tree")
     return org
 
@@ -182,6 +189,7 @@ async def update_org(
         "description": org.description,
         "parent_id": str(org.parent_id) if org.parent_id else None,
         "prefix": org.prefix,
+        "bill_stage": org.bill_stage,
         "is_active": org.is_active,
     }
     try:
@@ -202,6 +210,7 @@ async def update_org(
                 "description": org.description,
                 "parent_id": str(org.parent_id) if org.parent_id else None,
                 "prefix": org.prefix,
+                "bill_stage": org.bill_stage,
                 "is_active": org.is_active,
             },
         },
@@ -209,6 +218,8 @@ async def update_org(
     )
     # 清除快存
     await cache_invalidate("org:list")
+    await cache_invalidate("org:list:active_only=False")
+    await cache_invalidate("org:list:active_only=True")
     await cache_invalidate("org:tree")
     return org
 
@@ -237,6 +248,8 @@ async def deactivate_org(org_id: uuid.UUID, db: DbDep, current_user: CurrentUser
     )
     # 清除快存
     await cache_invalidate("org:list")
+    await cache_invalidate("org:list:active_only=False")
+    await cache_invalidate("org:list:active_only=True")
     await cache_invalidate("org:tree")
     return org
 
@@ -265,6 +278,8 @@ async def activate_org(org_id: uuid.UUID, db: DbDep, current_user: CurrentUser) 
     )
     # 清除快存
     await cache_invalidate("org:list")
+    await cache_invalidate("org:list:active_only=False")
+    await cache_invalidate("org:list:active_only=True")
     await cache_invalidate("org:tree")
     return org
 
@@ -310,4 +325,6 @@ async def delete_org(org_id: uuid.UUID, db: DbDep, current_user: CurrentUser) ->
 
     # 清除快存
     await cache_invalidate("org:list")
+    await cache_invalidate("org:list:active_only=False")
+    await cache_invalidate("org:list:active_only=True")
     await cache_invalidate("org:tree")

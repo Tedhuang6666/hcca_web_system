@@ -38,6 +38,7 @@ from api.schemas.petition import (
     PetitionTypeCreate,
     PetitionTypeUpdate,
 )
+from api.services.permission import active_tenure_filter
 
 STATUS_LABELS: dict[PetitionStatus, str] = {
     PetitionStatus.SUBMITTED: "已收件",
@@ -278,7 +279,9 @@ async def list_cases(
         stmt = stmt.where(PetitionCase.status == status)
     if keyword:
         pattern = f"%{keyword.strip()}%"
-        stmt = stmt.where(PetitionCase.title.ilike(pattern) | PetitionCase.case_number.ilike(pattern))
+        stmt = stmt.where(
+            PetitionCase.title.ilike(pattern) | PetitionCase.case_number.ilike(pattern)
+        )
     result = await session.execute(stmt)
     return list(result.scalars().all())
 
@@ -307,7 +310,9 @@ async def assign_case(
         title="已指派承辦人",
         content=data.internal_note,
         actor_id=actor_id,
-        visibility=PetitionEventVisibility.INTERNAL if data.internal_note else PetitionEventVisibility.PUBLIC,
+        visibility=PetitionEventVisibility.INTERNAL
+        if data.internal_note
+        else PetitionEventVisibility.PUBLIC,
         from_status=previous.value,
         to_status=case_obj.status.value,
     )
@@ -538,8 +543,7 @@ async def _user_in_org(session: AsyncSession, user_id: uuid.UUID, org_id: uuid.U
         .where(
             UserPosition.user_id == user_id,
             Position.org_id == org_id,
-            UserPosition.start_date <= today,
-            (UserPosition.end_date.is_(None)) | (UserPosition.end_date >= today),
+            *active_tenure_filter(today),
         )
         .limit(1)
     )
@@ -572,7 +576,9 @@ async def stats(
     now = datetime.now(UTC)
     out = PetitionStatsOut(
         total=len(cases),
-        pending_assignment=sum(1 for c in cases if c.assigned_to_id is None and c.status == PetitionStatus.SUBMITTED),
+        pending_assignment=sum(
+            1 for c in cases if c.assigned_to_id is None and c.status == PetitionStatus.SUBMITTED
+        ),
         my_assigned=sum(1 for c in cases if c.assigned_to_id == user_id),
         needs_info=sum(1 for c in cases if c.status == PetitionStatus.NEEDS_INFO),
         in_progress=sum(1 for c in cases if c.status == PetitionStatus.IN_PROGRESS),
@@ -605,8 +611,7 @@ async def org_stats(
             func.sum(case((PetitionCase.status == PetitionStatus.CLOSED, 1), else_=0)),
             func.sum(case((PetitionCase.status == PetitionStatus.REJECTED, 1), else_=0)),
             func.avg(
-                extract("epoch", PetitionCase.first_response_at - PetitionCase.submitted_at)
-                / 3600
+                extract("epoch", PetitionCase.first_response_at - PetitionCase.submitted_at) / 3600
             ),
             func.avg(extract("epoch", PetitionCase.closed_at - PetitionCase.submitted_at) / 3600),
         )

@@ -100,9 +100,10 @@ interface Props {
   placeholder?: string;
   minRows?: number;
   className?: string;
+  onBlur?: () => void;
 }
 
-export default function GongwenEditor({ value, onChange, placeholder, minRows = 5, className }: Props) {
+export default function GongwenEditor({ value, onChange, placeholder, minRows = 5, className, onBlur }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
 
   // ── 歷史紀錄（Undo/Redo）─────────────────────────────────────────────────────
@@ -334,6 +335,7 @@ export default function GongwenEditor({ value, onChange, placeholder, minRows = 
           onChange(e.target.value);
         }}
         onKeyDown={handleKeyDown}
+        onBlur={onBlur}
         placeholder={placeholder}
         rows={minRows}
         wrap="soft"

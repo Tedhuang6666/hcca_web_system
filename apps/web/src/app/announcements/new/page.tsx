@@ -6,9 +6,18 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { announcementsApi, ApiError } from "@/lib/api";
 import AnnouncementEditor from "@/components/announcements/AnnouncementEditor";
+import AnnouncementAudiencePicker, {
+  type AudienceValue,
+} from "@/components/announcements/AnnouncementAudiencePicker";
 import { contentFromMarkdown } from "@/components/announcements/AnnouncementMarkdown";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
+
+const DEFAULT_AUDIENCE: AudienceValue = {
+  audience_type: "all",
+  audience_org_ids: [],
+  audience_user_ids: [],
+};
 
 type AnnouncementDraft = {
   title: string;
@@ -24,6 +33,7 @@ export default function NewAnnouncementPage() {
   const [markdown, setMarkdown] = useState("");
   const [isUrgent, setIsUrgent] = useState(false);
   const [urgentUntil, setUrgentUntil] = useState("");
+  const [audience, setAudience] = useState<AudienceValue>(DEFAULT_AUDIENCE);
   const [saving, setSaving] = useState(false);
   const canPublish = can("announcement:publish");
   const canUrgent = can("announcement:set_urgent");
@@ -57,6 +67,14 @@ export default function NewAnnouncementPage() {
       toast.error("請輸入公告標題");
       return;
     }
+    if (audience.audience_type === "orgs" && audience.audience_org_ids.length === 0) {
+      toast.error("對象為特定組織時，請至少選擇一個組織");
+      return;
+    }
+    if (audience.audience_type === "members" && audience.audience_user_ids.length === 0) {
+      toast.error("對象為特定成員時，請至少選擇一位成員");
+      return;
+    }
     setSaving(true);
     try {
       const created = await announcementsApi.create({
@@ -66,6 +84,9 @@ export default function NewAnnouncementPage() {
         urgent_until: canUrgent && isUrgent && urgentUntil
           ? new Date(urgentUntil).toISOString()
           : null,
+        audience_type: audience.audience_type,
+        audience_org_ids: audience.audience_org_ids,
+        audience_user_ids: audience.audience_user_ids,
       });
       if (publish && canPublish) {
         await announcementsApi.publish(created.id);
@@ -107,6 +128,8 @@ export default function NewAnnouncementPage() {
         media={[]}
         canManageMedia={false}
       />
+
+      <AnnouncementAudiencePicker onChange={setAudience} />
 
       {canUrgent && (
         <section className="card p-4">

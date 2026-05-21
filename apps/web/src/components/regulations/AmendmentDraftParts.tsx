@@ -40,6 +40,8 @@ export interface Draft {
 
 export interface DraftTreeArticle {
   id: string;
+  /** 沿革識別碼：對應原法規條文，送審時用以辨識「同一條」而非刪除重建 */
+  lineage_id?: string | null;
   parent_id: string | null;
   sort_index: number;
   order_index: number;
@@ -57,19 +59,58 @@ export const ARTICLE_TYPE_LABEL: Record<string, string> = {
   special_clause: "附則",
 };
 
-// ── localStorage 工具 ─────────────────────────────────────────────────────────
+// ── localStorage 工具（含 schema versioning） ─────────────────────────────────
+
+/**
+ * localStorage 草案儲存格式版本。
+ * 版本 0：純陣列 `Draft[]`（舊格式）。
+ * 版本 1：`{ version: 1, drafts: Draft[] }`（envelope 形式，方便日後遷移）。
+ */
+const DRAFT_SCHEMA_VERSION = 1;
+
+interface DraftEnvelope {
+  version: number;
+  drafts: Draft[];
+}
 
 export function storageKey(regId: string) { return `amendment_drafts_${regId}`; }
 
+function migrateDrafts(rawDrafts: unknown[]): Draft[] {
+  // version 0 → 1：只做基本結構驗證（資料結構未變）。
+  return rawDrafts.filter((draft): draft is Draft => {
+    if (!draft || typeof draft !== "object") return false;
+    const d = draft as Record<string, unknown>;
+    return typeof d.id === "string" && typeof d.name === "string";
+  });
+}
+
 export function loadDrafts(regId: string): Draft[] {
+  if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(storageKey(regId));
-    return raw ? JSON.parse(raw) : [];
-  } catch { return []; }
+    const raw = window.localStorage.getItem(storageKey(regId));
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      // 舊格式（pre-versioning）
+      return migrateDrafts(parsed);
+    }
+    if (parsed && typeof parsed === "object" && Array.isArray((parsed as DraftEnvelope).drafts)) {
+      const envelope = parsed as DraftEnvelope;
+      return migrateDrafts(envelope.drafts);
+    }
+    return [];
+  } catch {
+    // 損壞時靜默回傳空，避免整頁壞掉
+    return [];
+  }
 }
 
 export function saveDrafts(regId: string, drafts: Draft[]) {
-  try { localStorage.setItem(storageKey(regId), JSON.stringify(drafts)); } catch { /* ignore */ }
+  if (typeof window === "undefined") return;
+  try {
+    const envelope: DraftEnvelope = { version: DRAFT_SCHEMA_VERSION, drafts };
+    window.localStorage.setItem(storageKey(regId), JSON.stringify(envelope));
+  } catch { /* ignore quota or serialization errors */ }
 }
 
 export function newId() { return `d${Date.now()}_${Math.random().toString(36).slice(2, 7)}`; }
@@ -81,6 +122,7 @@ export function articleToContent(a: RegulationArticleOut): DraftArticleContent {
 export function articleToTreeArticle(a: RegulationArticleOut): DraftTreeArticle {
   return {
     id: a.id,
+    lineage_id: a.lineage_id ?? null,
     parent_id: a.parent_id ?? null,
     sort_index: a.sort_index,
     order_index: a.order_index ?? 0,
@@ -141,7 +183,25 @@ export function getTreeChangeSummary(draft: Draft) {
     ]),
   );
   const currentIds = new Set(current.map(item => item.id));
-  const rows: Array<{ id: string; status: "新增" | "修改" | "刪除"; type: ArticleType; title: string }> = [];
+  // 共同條文的相對序位（rank）：用來辨識「移動」。以 rank 比對可避開
+  // 絕對 sort_index 重編造成的誤判，也不受其他條文新增/刪除影響。
+  const commonIds = new Set([...currentIds].filter(id => original.has(id)));
+  const rankIn = (items: DraftTreeArticle[]) =>
+    new Map(
+      items
+        .filter(item => commonIds.has(item.id))
+        .slice()
+        .sort((a, b) => a.sort_index - b.sort_index)
+        .map((item, index) => [item.id, index] as const),
+    );
+  const baseRank = rankIn(baseline);
+  const currRank = rankIn(current);
+  const rows: Array<{
+    id: string;
+    status: "新增" | "修改" | "移動" | "刪除";
+    type: ArticleType;
+    title: string;
+  }> = [];
 
   for (const item of current) {
     const base = original.get(item.id);
@@ -149,14 +209,17 @@ export function getTreeChangeSummary(draft: Draft) {
       rows.push({ id: item.id, status: "新增", type: item.article_type, title: item.title || "（未命名）" });
       continue;
     }
-    if (
+    const contentChanged =
       base.article_type !== item.article_type ||
       base.title !== item.title ||
-      base.content !== item.content ||
-      base.parent_id !== item.parent_id ||
-      base.order_index !== item.order_index
-    ) {
+      base.content !== item.content;
+    // 內容未變但層級位置 / 序位改變 → 視為「移動」（條次調整也算變更）
+    const moved =
+      base.parent_id !== item.parent_id || baseRank.get(item.id) !== currRank.get(item.id);
+    if (contentChanged) {
       rows.push({ id: item.id, status: "修改", type: item.article_type, title: item.title || "（未命名）" });
+    } else if (moved) {
+      rows.push({ id: item.id, status: "移動", type: item.article_type, title: item.title || "（未命名）" });
     }
   }
 
@@ -184,9 +247,17 @@ export function buildDraftComparisonRows(draft: Draft) {
 
   const originalById = new Map(baseline.map(item => [item.id, item]));
   const currentById = new Map(current.map(item => [item.id, item]));
+  // 共同條文相對序位，用來辨識條次調整（移動）
+  const commonIds = new Set(current.filter(item => originalById.has(item.id)).map(item => item.id));
+  const baseRank = new Map(
+    baseline.filter(item => commonIds.has(item.id)).map((item, index) => [item.id, index] as const),
+  );
+  const currRank = new Map(
+    current.filter(item => commonIds.has(item.id)).map((item, index) => [item.id, index] as const),
+  );
   const rows: Array<{
     id: string;
-    status: "新增" | "修改" | "刪除";
+    status: "新增" | "修改" | "移動" | "刪除";
     revised_text: string;
     current_text: string;
     note: string;
@@ -206,15 +277,14 @@ export function buildDraftComparisonRows(draft: Draft) {
       continue;
     }
     const originalText = [original.title, original.content].filter(Boolean).join("　").trim();
-    if (
-      original.title !== item.title
-      || original.content !== item.content
-      || original.parent_id !== item.parent_id
-      || original.sort_index !== item.sort_index
-    ) {
+    const contentChanged = original.title !== item.title || original.content !== item.content;
+    // 內容未變但位置 / 序位改變 → 條次調整（移動），仍算一項變更
+    const moved =
+      original.parent_id !== item.parent_id || baseRank.get(item.id) !== currRank.get(item.id);
+    if (contentChanged || moved) {
       rows.push({
         id: item.id,
-        status: "修改",
+        status: contentChanged ? "修改" : "移動",
         revised_text: revisedText || "—",
         current_text: originalText || "—",
         note: item.comment?.trim() || "",
@@ -329,6 +399,7 @@ export function StepEditTree({
     return {
       id: item.id,
       regulation_id: "draft-amendment",
+      lineage_id: item.lineage_id ?? item.id,
       sort_index: item.sort_index,
       order_index: item.order_index,
       parent_id: item.parent_id,
@@ -679,26 +750,64 @@ export function StepSubmit({
           changes ? `修正條文整理：\n${changes}` : "",
         ].filter(Boolean).join("\n\n"),
       });
-      const roots = latest.articles.filter(article => !article.is_deleted && !article.parent_id);
-      for (const root of roots) {
-        await regulationsApi.deleteArticle(draftReg.id, root.id, false);
+      // 以 lineage_id 對照 fork 複製來的條文：重新排序 / 編輯就地更新，
+      // 不再整批刪除重建，條文身分（沿革識別碼、歷程連結）得以保留。
+      const forkArticles = latest.articles.filter(article => !article.is_deleted);
+      const forkByLineage = new Map(
+        forkArticles
+          .filter(article => article.lineage_id)
+          .map(article => [article.lineage_id, article]),
+      );
+      const draftItems = fallbackTreeContent(draft).slice().sort((a, b) => a.sort_index - b.sort_index);
+
+      // draftItemId → 實際 fork 條文 id（既有沿用 / 新建後填入）
+      const idMap = new Map<string, string>();
+      const keptForkIds = new Set<string>();
+      for (const item of draftItems) {
+        const existing = item.lineage_id ? forkByLineage.get(item.lineage_id) : undefined;
+        if (existing) {
+          idMap.set(item.id, existing.id);
+          keptForkIds.add(existing.id);
+        }
       }
 
-      const sourceItems = fallbackTreeContent(draft).slice().sort((a, b) => a.sort_index - b.sort_index);
-      const idMap = new Map<string, string>();
-      for (let index = 0; index < sourceItems.length; index += 1) {
-        const item = sourceItems[index];
-        const created = await regulationsApi.addArticle(draftReg.id, {
-          sort_index: index + 1,
-          order_index: item.order_index,
-          parent_id: item.parent_id ? (idMap.get(item.parent_id) ?? null) : null,
-          article_type: item.article_type,
-          title: item.title || undefined,
-          subtitle: undefined,
-          content: item.content || undefined,
-          legal_number: item.legal_number ?? undefined,
-        });
-        idMap.set(item.id, created.id);
+      // 依排序逐條套用（父節點排序必在子節點之前，故 parent 可即時解析）：
+      // 既有條文 → updateArticle 就地更新；新條文 → addArticle。
+      for (let index = 0; index < draftItems.length; index += 1) {
+        const item = draftItems[index];
+        const parentRealId = item.parent_id ? (idMap.get(item.parent_id) ?? null) : null;
+        const existingId = idMap.get(item.id);
+        if (existingId) {
+          await regulationsApi.updateArticle(draftReg.id, existingId, {
+            sort_index: index + 1,
+            order_index: item.order_index,
+            parent_id: parentRealId,
+            article_type: item.article_type,
+            title: item.title,
+            content: item.content,
+            legal_number: item.legal_number ?? undefined,
+          });
+        } else {
+          const created = await regulationsApi.addArticle(draftReg.id, {
+            sort_index: index + 1,
+            order_index: item.order_index,
+            parent_id: parentRealId,
+            article_type: item.article_type,
+            title: item.title || undefined,
+            subtitle: undefined,
+            content: item.content || undefined,
+            legal_number: item.legal_number ?? undefined,
+          });
+          idMap.set(item.id, created.id);
+        }
+      }
+
+      // 草案中已移除的條文：等所有保留條文重新接好父節點後才刪除，
+      // 避免刪除舊父節點時級聯誤刪到已被改掛他處的保留條文。
+      for (const article of forkArticles) {
+        if (!keptForkIds.has(article.id)) {
+          await regulationsApi.deleteArticle(draftReg.id, article.id, false);
+        }
       }
 
       await regulationsApi.autoRenumber(draftReg.id, false);

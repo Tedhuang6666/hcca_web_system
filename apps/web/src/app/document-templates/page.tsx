@@ -19,6 +19,8 @@ const CATEGORY_OPTIONS: { value: DocumentCategory; label: string }[] = [
   { value: "decree", label: "令" },
   { value: "announcement", label: "公告" },
   { value: "report", label: "報告" },
+  { value: "record", label: "紀錄" },
+  { value: "consultation", label: "咨" },
   { value: "meeting_notice", label: "開會通知單" },
   { value: "other", label: "其他" },
 ];
@@ -138,8 +140,17 @@ export default function DocumentTemplatesPage() {
       toast.error("請選擇組織並填寫範本名稱");
       return;
     }
-    if (form.category !== "meeting_notice" && form.category !== "decree" && !form.subject?.trim()) {
+    if (
+      form.category !== "meeting_notice"
+      && form.category !== "decree"
+      && form.category !== "record"
+      && !form.subject?.trim()
+    ) {
       toast.error("此類公文範本需填寫主旨");
+      return;
+    }
+    if (form.category === "record" && (!form.doc_description || !form.action_required)) {
+      toast.error("紀錄範本需填寫討論事項與決議");
       return;
     }
     if (form.category === "meeting_notice" && (!form.meeting_purpose || !form.meeting_location)) {
@@ -361,7 +372,7 @@ export default function DocumentTemplatesPage() {
                   style={inputStyle}
                 />
               </>
-            ) : form.category === "decree" ? null : (
+            ) : form.category === "decree" || form.category === "record" ? null : (
               <textarea
                 value={form.subject ?? ""}
                 onChange={(e) => setForm((prev) => ({ ...prev, subject: e.target.value }))}
@@ -375,10 +386,16 @@ export default function DocumentTemplatesPage() {
               onChange={(e) => setForm((prev) => ({ ...prev, doc_description: e.target.value }))}
               placeholder={
                 form.category === "meeting_notice"
-                  ? "議事日程"
-                  : form.category === "decree"
-                    ? "令文正文"
-                    : "說明"
+	                  ? "議事日程"
+	                  : form.category === "decree"
+	                    ? "令文正文"
+	                    : form.category === "record"
+	                      ? "討論事項"
+	                      : form.category === "announcement"
+	                        ? "公告事項"
+	                        : form.category === "report"
+	                          ? "說明／分析"
+	                          : "說明"
               }
               rows={5}
               style={{ ...inputStyle, resize: "vertical" }}
@@ -387,7 +404,15 @@ export default function DocumentTemplatesPage() {
               <textarea
                 value={form.action_required ?? ""}
                 onChange={(e) => setForm((prev) => ({ ...prev, action_required: e.target.value }))}
-                placeholder="辦法"
+                placeholder={
+                  form.category === "record"
+                    ? "決議"
+                    : form.category === "report"
+                      ? "建議事項"
+                      : form.category === "consultation"
+                        ? "辦法或事項"
+                        : "辦法"
+                }
                 rows={3}
                 style={{ ...inputStyle, resize: "vertical" }}
               />

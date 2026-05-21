@@ -1,0 +1,44 @@
+<mjml>
+  <mj-head>
+    <mj-include path="./_head.mjml" />
+    <mj-title>{{ subject }}</mj-title>
+    <mj-preview>{{ preview_text }}</mj-preview>
+  </mj-head>
+  <mj-body background-color="#eef2f7">
+    <mj-include path="./_header.mjml" />
+    <mj-section background-color="#eef2f7" padding="24px 18px 28px">
+      <mj-column>
+        <mj-text padding="0">
+          <div style="background-color:#ffffff;border:1px solid #e5e7eb;border-radius:24px;padding:32px 30px 30px;box-shadow:0 14px 34px rgba(15,23,42,.08);">
+            <div class="hcca-kicker" style="margin-bottom:10px;">Official Message</div>
+            <div style="color:#111827;font-size:26px;font-weight:850;line-height:1.32;margin-bottom:22px;">{{ heading or subject }}</div>
+            {% if card_rows %}
+              <div style="margin:0 0 22px;">
+                {% for row in card_rows %}
+                  {% if loop.first %}
+                    <div style="background:#fff4c7;border-radius:20px;padding:22px 22px 24px;margin:0 0 12px;">
+                      <div class="hcca-highlight-label">{{ row.label }}</div>
+                      <div class="hcca-highlight-value">{{ row.value }}</div>
+                    </div>
+                  {% else %}
+                    <div style="background:#f4f7fb;border-radius:16px;padding:15px 18px;margin:0 0 10px;">
+                      <div class="hcca-note-label">{{ row.label }}</div>
+                      <div class="hcca-note-value">{{ row.value }}</div>
+                    </div>
+                  {% endif %}
+                {% endfor %}
+              </div>
+            {% endif %}
+            <div class="hcca-body">{{ body_html | safe }}</div>
+            {% if cta_url %}
+              <div style="padding:24px 0 0;">
+                <a href="{{ cta_url }}" style="display:inline-block;background-color:#111827;color:#ffffff;font-size:15px;font-weight:800;text-decoration:none;padding:14px 28px;border-radius:12px;">{{ cta_label or '查看詳情' }}</a>
+              </div>
+            {% endif %}
+          </div>
+        </mj-text>
+      </mj-column>
+    </mj-section>
+    <mj-include path="./_footer.mjml" />
+  </mj-body>
+</mjml>

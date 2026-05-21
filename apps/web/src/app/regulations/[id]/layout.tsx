@@ -2,6 +2,12 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 import { serverApiUrl } from "@/lib/config";
+import {
+  SOCIAL_IMAGE,
+  SOCIAL_SHARE_TITLE,
+  SOCIAL_SITE_NAME,
+  socialDescription,
+} from "@/lib/social-metadata";
 
 type RegulationMeta = {
   title: string;
@@ -22,24 +28,30 @@ export async function generateMetadata(
 ): Promise<Metadata> {
   const { id } = await params;
   const reg = await fetchReg(id);
-  const title = reg?.title ?? decodeURIComponent(id);
-  const description = reg?.preface?.slice(0, 120) || "校園自治平台法規條文查詢。";
-  const path = `/regulations/${encodeURIComponent(title)}`;
+  const regTitle = reg?.title ?? decodeURIComponent(id);
+  const description = socialDescription(
+    "法規",
+    reg ? `${reg.title}${reg.preface ? `｜${reg.preface.slice(0, 80)}` : ""}` : regTitle,
+    "法規條文查詢。",
+  );
+  const path = `/regulations/${encodeURIComponent(regTitle)}`;
   return {
-    title,
+    title: SOCIAL_SHARE_TITLE,
     description,
     alternates: { canonical: path },
     openGraph: {
-      title,
+      title: SOCIAL_SHARE_TITLE,
       description,
       type: "article",
       url: path,
-      siteName: "HCCA 校園自治整合平台",
+      siteName: SOCIAL_SITE_NAME,
+      images: [SOCIAL_IMAGE],
     },
     twitter: {
-      card: "summary",
-      title,
+      card: "summary_large_image",
+      title: SOCIAL_SHARE_TITLE,
       description,
+      images: [SOCIAL_IMAGE.url],
     },
   };
 }

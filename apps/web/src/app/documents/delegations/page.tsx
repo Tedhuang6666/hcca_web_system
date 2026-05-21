@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
-import { ApiError, documentsApi, orgsApi, usersApi } from "@/lib/api";
+import { ApiError, documentsApi, orgsApi, usersApi, withFallback } from "@/lib/api";
 import type { OrgRead, UserSummary } from "@/lib/api";
 import type { DocumentApprovalDelegationOut, UserPositionRead } from "@/lib/types";
 
@@ -51,26 +51,30 @@ export default function DocumentDelegationsPage() {
 
   const load = async () => {
     setLoading(true);
-    try {
-      const [delegationRows, orgRows, userRows, myPositions] = await Promise.all([
+    const failedSections: string[] = [];
+    const noteFailure = (label: string) => () => failedSections.push(label);
+    const [delegationRows, orgRows, userRows, myPositions] = await Promise.all([
+      withFallback(
         documentsApi.listDelegations({ include_inactive: showInactive }),
-        orgsApi.list(),
-        usersApi.list(),
-        usersApi.myPositions(true),
-      ]);
-      setDelegations(delegationRows);
-      setOrgs(orgRows);
-      setUsers(userRows);
-      setPositions(myPositions);
-      const defaultOrgId = myPositions[0]?.position_org_id ?? "";
-      if (!form.org_id && defaultOrgId) {
-        setForm((prev) => ({ ...prev, org_id: defaultOrgId }));
-      }
-    } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "載入代理設定失敗");
-    } finally {
-      setLoading(false);
+        [],
+        noteFailure("代理清單"),
+      ),
+      withFallback(orgsApi.list({ active_only: true }), [], noteFailure("組織")),
+      withFallback(usersApi.list(), [], noteFailure("使用者")),
+      withFallback(usersApi.myPositions(true), [], noteFailure("我的職位")),
+    ]);
+    setDelegations(delegationRows);
+    setOrgs(orgRows);
+    setUsers(userRows);
+    setPositions(myPositions);
+    const defaultOrgId = myPositions[0]?.position_org_id ?? "";
+    if (!form.org_id && defaultOrgId) {
+      setForm((prev) => ({ ...prev, org_id: defaultOrgId }));
     }
+    if (failedSections.length) {
+      toast.warning(`${failedSections.join("、")}暫時無法載入，其餘代理設定仍可使用`);
+    }
+    setLoading(false);
   };
 
   useEffect(() => {

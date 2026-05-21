@@ -7,8 +7,8 @@ import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 import UrgentAnnouncementPopup from "@/components/announcements/UrgentAnnouncementPopup";
 
-/** 完全裸頁（不渲染 Shell）：login、auth callback */
-const BARE_PATHS = ["/login", "/auth", "/profile/complete", "/public"];
+/** 完全裸頁（不渲染 Shell）：login、auth callback、Email 退訂落地頁 */
+const BARE_PATHS = ["/login", "/auth", "/profile/complete", "/public", "/unsubscribe"];
 
 function isBare(pathname: string) {
   return BARE_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
@@ -18,12 +18,30 @@ function isBare(pathname: string) {
 function requiresAuth(pathname: string): boolean {
   if (isBare(pathname)) return false;
   if (pathname === "/regulations") return false;
-  if (/^\/regulations\/[^/]+$/.test(pathname)) return false;
+  // 法規詳細頁與條文深度連結（/regulations/{id}/第N條...）皆為公開可讀；
+  // 僅 /edit、/amendment 子頁需要登入。
+  const regMatch = pathname.match(/^\/regulations\/([^/]+)(\/.*)?$/);
+  if (regMatch) {
+    const [, regId, rest = ""] = regMatch;
+    if (regId !== "new" && regId !== "pending") {
+      if (
+        rest !== "/edit"
+        && rest !== "/amendment"
+        && !rest.startsWith("/edit/")
+        && !rest.startsWith("/amendment/")
+      ) {
+        return false;
+      }
+    }
+  }
   if (pathname === "/documents") return false;
   if (pathname === "/documents/delegations") return true;
   if (/^\/documents\/[^/]+$/.test(pathname) && !pathname.endsWith("/edit")) return false;
   if (pathname === "/announcements") return false;
   if (/^\/announcements\/[^/]+$/.test(pathname)) return false;
+  // 問卷列表與詳情頁皆公開可讀（依問卷的開放對象設定）；/surveys/new 仍需登入
+  if (pathname === "/surveys") return false;
+  if (/^\/surveys\/[^/]+$/.test(pathname) && pathname !== "/surveys/new") return false;
   if (pathname === "/petitions") return false;
   if (pathname === "/petitions/new") return false;
   return true;

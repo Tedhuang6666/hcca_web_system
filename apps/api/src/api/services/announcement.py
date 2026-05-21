@@ -3,21 +3,116 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, UploadFile, status
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql.elements import ColumnElement
 
-from api.models.announcement import Announcement, AnnouncementMedia, AnnouncementRead
+from api.models.announcement import (
+    Announcement,
+    AnnouncementAudience,
+    AnnouncementMedia,
+    AnnouncementRead,
+    announcement_audience_orgs,
+    announcement_audience_users,
+)
+from api.models.org import Org
 from api.models.user import User
 from api.schemas.announcement import AnnouncementCreate, AnnouncementStatsOut, AnnouncementUpdate
 from api.services.storage import StorageBackend
 
 _MEDIA_ALLOWED_TYPES = frozenset({"image/jpeg", "image/png", "image/gif", "image/webp"})
 _MEDIA_MAX_SIZE = 10 * 1024 * 1024  # 10 MB
+
+
+@dataclass(frozen=True)
+class ViewerScope:
+    """檢視者的可見範圍判定依據（由 router 層組裝）。"""
+
+    user_id: uuid.UUID | None = None
+    org_ids: frozenset[uuid.UUID] = field(default_factory=frozenset)
+    is_school: bool = False
+
+
+def _audience_clause(scope: ViewerScope) -> ColumnElement[bool]:
+    """組裝公告對象的 SQL 可見性條件（OR 邏輯）。"""
+    conds: list[ColumnElement[bool]] = [
+        Announcement.audience_type == AnnouncementAudience.ALL.value
+    ]
+    if scope.is_school:
+        conds.append(Announcement.audience_type == AnnouncementAudience.SCHOOL.value)
+    if scope.org_ids:
+        conds.append(
+            and_(
+                Announcement.audience_type == AnnouncementAudience.ORGS.value,
+                Announcement.id.in_(
+                    select(announcement_audience_orgs.c.announcement_id).where(
+                        announcement_audience_orgs.c.org_id.in_(scope.org_ids)
+                    )
+                ),
+            )
+        )
+    if scope.user_id is not None:
+        conds.append(
+            and_(
+                Announcement.audience_type == AnnouncementAudience.MEMBERS.value,
+                Announcement.id.in_(
+                    select(announcement_audience_users.c.announcement_id).where(
+                        announcement_audience_users.c.user_id == scope.user_id
+                    )
+                ),
+            )
+        )
+        # 作者一律看得到自己發布的公告
+        conds.append(Announcement.author_id == scope.user_id)
+    return or_(*conds)
+
+
+def is_visible_to(ann: Announcement, scope: ViewerScope) -> bool:
+    """判斷單一公告是否落在檢視者的可見範圍內（detail 端點用）。"""
+    if scope.user_id is not None and ann.author_id == scope.user_id:
+        return True
+    if ann.audience_type == AnnouncementAudience.ALL.value:
+        return True
+    if ann.audience_type == AnnouncementAudience.SCHOOL.value:
+        return scope.is_school
+    if ann.audience_type == AnnouncementAudience.ORGS.value:
+        return any(o.id in scope.org_ids for o in ann.audience_orgs)
+    if ann.audience_type == AnnouncementAudience.MEMBERS.value:
+        return scope.user_id is not None and any(u.id == scope.user_id for u in ann.audience_users)
+    return False
+
+
+async def _resolve_audience(
+    db: AsyncSession,
+    audience_type: AnnouncementAudience,
+    org_ids: list[uuid.UUID],
+    user_ids: list[uuid.UUID],
+) -> tuple[list[Org], list[User]]:
+    """依對象類型查出並驗證目標組織/成員。"""
+    if audience_type == AnnouncementAudience.ORGS:
+        if not org_ids:
+            raise ValueError("對象為特定組織時，至少需選擇一個組織")
+        result = await db.execute(select(Org).where(Org.id.in_(org_ids)))
+        orgs = list(result.scalars().all())
+        if len(orgs) != len(set(org_ids)):
+            raise ValueError("部分指定的組織不存在")
+        return orgs, []
+    if audience_type == AnnouncementAudience.MEMBERS:
+        if not user_ids:
+            raise ValueError("對象為特定成員時，至少需選擇一位成員")
+        result = await db.execute(select(User).where(User.id.in_(user_ids)))
+        users = list(result.scalars().all())
+        if len(users) != len(set(user_ids)):
+            raise ValueError("部分指定的成員不存在")
+        return [], users
+    # ALL / SCHOOL 不需要明細，並清空舊有關聯
+    return [], []
 
 
 async def _get_or_404(ann_id: uuid.UUID, db: AsyncSession) -> Announcement:
@@ -37,6 +132,9 @@ async def create(
     author: User,
     body: AnnouncementCreate,
 ) -> Announcement:
+    orgs, users = await _resolve_audience(
+        db, body.audience_type, body.audience_org_ids, body.audience_user_ids
+    )
     ann = Announcement(
         title=body.title,
         content=body.content,
@@ -44,10 +142,13 @@ async def create(
         urgent_until=body.urgent_until,
         org_id=body.org_id,
         author_id=author.id,
+        audience_type=body.audience_type.value,
     )
+    ann.audience_orgs = orgs
+    ann.audience_users = users
     db.add(ann)
     await db.flush()
-    await db.refresh(ann, ["media", "author"])
+    await db.refresh(ann, ["media", "author", "audience_orgs", "audience_users"])
     return ann
 
 
@@ -63,7 +164,9 @@ async def list_announcements(
     urgent_only: bool = False,
     skip: int = 0,
     limit: int = 20,
+    scope: ViewerScope | None = None,
 ) -> list[Announcement]:
+    """列出公告；傳入 scope 時依公告對象過濾可見範圍（None = 不過濾，管理端用）。"""
     q = select(Announcement).options(
         selectinload(Announcement.media), selectinload(Announcement.author)
     )
@@ -76,6 +179,8 @@ async def list_announcements(
             Announcement.is_published == True,  # noqa: E712
             (Announcement.urgent_until == None) | (Announcement.urgent_until >= now),  # noqa: E711
         )
+    if scope is not None:
+        q = q.where(_audience_clause(scope))
     if org_id is not None:
         q = q.where(Announcement.org_id == org_id)
     q = q.order_by(Announcement.published_at.desc().nullslast(), Announcement.created_at.desc())
@@ -100,7 +205,18 @@ async def update(
         ann.is_urgent = body.is_urgent
     if "urgent_until" in fields:
         ann.urgent_until = body.urgent_until
+    if body.audience_type is not None:
+        orgs, users = await _resolve_audience(
+            db,
+            body.audience_type,
+            body.audience_org_ids or [],
+            body.audience_user_ids or [],
+        )
+        ann.audience_type = body.audience_type.value
+        ann.audience_orgs = orgs
+        ann.audience_users = users
     await db.flush()
+    await db.refresh(ann, ["audience_orgs", "audience_users"])
     return ann
 
 
@@ -210,9 +326,11 @@ async def get_stats(db: AsyncSession, ann_id: uuid.UUID) -> AnnouncementStatsOut
     )
 
 
-async def get_active_urgent(db: AsyncSession) -> Announcement | None:
+async def get_active_urgent(
+    db: AsyncSession, scope: ViewerScope | None = None
+) -> Announcement | None:
     now = datetime.now(UTC)
-    result = await db.execute(
+    q = (
         select(Announcement)
         .where(
             Announcement.is_urgent == True,  # noqa: E712
@@ -223,4 +341,7 @@ async def get_active_urgent(db: AsyncSession) -> Announcement | None:
         .order_by(Announcement.published_at.desc().nullslast())
         .limit(1)
     )
+    if scope is not None:
+        q = q.where(_audience_clause(scope))
+    result = await db.execute(q)
     return result.scalar_one_or_none()

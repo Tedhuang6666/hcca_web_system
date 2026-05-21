@@ -77,7 +77,7 @@ export default function PetitionManagePage() {
   }, [assignedToMe, effectiveStatus, keyword]);
 
   useEffect(() => { load().catch(() => toast.error("載入陳情工作台失敗")); }, [load]);
-  useEffect(() => { orgsApi.list().then(setOrgs).catch(() => null); }, []);
+  useEffect(() => { orgsApi.list({ active_only: true }).then(setOrgs).catch(() => null); }, []);
 
   const resetForm = () => {
     setPublicText("");

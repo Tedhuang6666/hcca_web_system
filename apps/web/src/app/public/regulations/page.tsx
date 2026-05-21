@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 
 import { serverApiUrl } from "@/lib/config";
+import { SOCIAL_IMAGE, SOCIAL_SHARE_TITLE, SOCIAL_SITE_NAME } from "@/lib/social-metadata";
 
 type RegulationListItem = {
   id: string;
@@ -17,18 +18,20 @@ type RegulationListItem = {
 };
 
 export const metadata: Metadata = {
-  title: "法規資料庫",
+  title: SOCIAL_SHARE_TITLE,
   description: "公開法規查詢：條文目錄、穩定連結、沿革與版本比對。",
   openGraph: {
-    title: "法規資料庫",
+    title: SOCIAL_SHARE_TITLE,
     description: "公開法規查詢：條文目錄、穩定連結、沿革與版本比對。",
     type: "website",
-    siteName: "HCCA 校園自治整合平台",
+    siteName: SOCIAL_SITE_NAME,
+    images: [SOCIAL_IMAGE],
   },
   twitter: {
-    card: "summary",
-    title: "法規資料庫",
+    card: "summary_large_image",
+    title: SOCIAL_SHARE_TITLE,
     description: "公開法規查詢：條文目錄、穩定連結、沿革與版本比對。",
+    images: [SOCIAL_IMAGE.url],
   },
 };
 

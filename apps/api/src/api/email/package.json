@@ -1,0 +1,12 @@
+{
+  "name": "hcca-email-templates",
+  "version": "1.0.0",
+  "private": true,
+  "description": "校園自治平台 email MJML 範本；templates/*.mjml 編譯為 compiled/*.html 供後端 renderer 讀取。",
+  "scripts": {
+    "build": "mjml templates/notification.mjml -o compiled/notification.html && mjml templates/generic.mjml -o compiled/generic.html"
+  },
+  "devDependencies": {
+    "mjml": "^4.15.3"
+  }
+}

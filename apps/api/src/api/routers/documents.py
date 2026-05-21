@@ -85,7 +85,6 @@ from api.schemas.document import (
 )
 from api.services import audit as audit_svc
 from api.services import document as doc_svc
-from api.services.mail import enqueue_email
 from api.services.permission import get_user_permission_codes, get_user_permission_codes_for_org
 from api.services.storage import get_storage
 
@@ -256,37 +255,8 @@ async def _require_document_template_use(
 
 
 # ── 背景通知輔助 ──────────────────────────────────────────────────────────────
-
-
-def _notify_approver_bg(approver_email: str, approver_name: str, doc: Document) -> None:
-    """通知下一位審核人（由 BackgroundTasks 在回應後執行）"""
-    subject = f"【待審核】{doc.serial_number} {doc.title}"
-    body = (
-        f"<p>您好 {approver_name}，</p>"
-        f"<p>公文 <strong>{doc.serial_number}</strong>「{doc.title}」已送達，請至系統審核。</p>"
-        f"<p>主旨：{doc.subject or '（未填）'}</p>"
-    )
-    try:
-        enqueue_email(approver_email, subject, body)
-    except Exception as exc:
-        import logging
-
-        logging.getLogger(__name__).warning("無法發送審核通知信: %s", exc)
-
-
-def _notify_creator_bg(creator_email: str, creator_name: str, doc: Document, result: str) -> None:
-    """通知建立者公文狀態變更（核准/退件）"""
-    subject = f"【{result}】{doc.serial_number} {doc.title}"
-    body = (
-        f"<p>您好 {creator_name}，</p>"
-        f"<p>您的公文 <strong>{doc.serial_number}</strong>「{doc.title}」已{result}。</p>"
-    )
-    try:
-        enqueue_email(creator_email, subject, body)
-    except Exception as exc:
-        import logging
-
-        logging.getLogger(__name__).warning("無法發送狀態通知信: %s", exc)
+# 公文簽核信（待審/核准/退回）已收斂至 routers.notifications.create_notification，
+# 由使用者通知偏好的 Email 管道統一驅動品牌化寄送，不再於此硬編碼。
 
 
 def _ws_broadcast_bg(doc: Document) -> None:
@@ -836,7 +806,6 @@ async def submit_document(
             link=f"/documents/{updated.id}",
             related_id=updated.id,
         )
-        bg.add_task(_notify_approver_bg, approver.email, approver.display_name, updated)
     bg.add_task(_ws_broadcast_bg, updated)
     return updated
 
@@ -890,9 +859,6 @@ async def approve_document(
             link=f"/documents/{updated.id}",
             related_id=updated.id,
         )
-        bg.add_task(
-            _notify_creator_bg, updated.creator.email, updated.creator.display_name, updated, "核准"
-        )
     else:
         # 推進下一關：通知下一位審核人
         next_step = next(
@@ -909,7 +875,6 @@ async def approve_document(
                 link=f"/documents/{updated.id}",
                 related_id=updated.id,
             )
-            bg.add_task(_notify_approver_bg, recipient.email, recipient.display_name, updated)
     bg.add_task(_ws_broadcast_bg, updated)
     return updated
 
@@ -972,9 +937,6 @@ async def reject_document(
             link=f"/documents/{updated.id}",
             related_id=updated.id,
         )
-        bg.add_task(
-            _notify_creator_bg, updated.creator.email, updated.creator.display_name, updated, "退件"
-        )
     else:
         prev_step = next(
             (a for a in updated.approvals if a.step_order == updated.current_step), None
@@ -990,7 +952,6 @@ async def reject_document(
                 link=f"/documents/{updated.id}",
                 related_id=updated.id,
             )
-            bg.add_task(_notify_approver_bg, recipient.email, recipient.display_name, updated)
     bg.add_task(_ws_broadcast_bg, updated)
     return updated
 

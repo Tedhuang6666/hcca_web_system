@@ -20,13 +20,24 @@ from api.models.meal import MealOrder, MealVendor, MenuItem, MenuSchedule
 from api.models.user import User
 from api.schemas.meal import (
     ItemStatOut,
+    MealAvailabilityCreate,
+    MealAvailabilityOut,
+    MealClassPickupCodeOut,
     MealOrderCancelRequest,
     MealOrderCreate,
     MealOrderListItem,
     MealOrderOut,
+    MealPickupLookupOut,
+    MealProductCreate,
+    MealProductOut,
+    MealProductUpdate,
+    MealVendorApplicationCreate,
+    MealVendorApplicationOut,
+    MealVendorApplicationReview,
     MealVendorCreate,
     MealVendorOut,
     MealVendorUpdate,
+    MealWeeklyAvailabilityCreate,
     MenuItemCreate,
     MenuItemOut,
     MenuItemUpdate,
@@ -76,6 +87,21 @@ async def _vendor_or_404(vendor_id: uuid.UUID, session: DbDep) -> MealVendor:
     return v
 
 
+async def _require_vendor_manager(
+    session: AsyncSession, vendor_id: uuid.UUID, user: User
+) -> None:
+    if user.is_superuser:
+        return
+    from api.services.permission import get_user_permission_codes
+
+    codes = await get_user_permission_codes(session, user.id)
+    if PermissionCode.ADMIN_ALL in codes or PermissionCode.MEAL_MANAGE in codes:
+        return
+    if await meal_svc.is_vendor_manager(session, vendor_id, user.id):
+        return
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權管理此商家")
+
+
 async def _schedule_or_404(schedule_id: uuid.UUID, session: DbDep) -> MenuSchedule:
     s = await meal_svc.get_schedule(session, schedule_id)
     if s is None:
@@ -114,6 +140,59 @@ async def list_vendors(
     return await meal_svc.list_vendors(
         session, org_id=org_id, active_only=active_only, limit=limit, offset=offset
     )
+
+
+@router.post(
+    "/vendor-applications",
+    response_model=MealVendorApplicationOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="送出店家入駐申請",
+)
+async def create_vendor_application(
+    payload: MealVendorApplicationCreate, session: DbDep, _: CurrentUser
+) -> object:
+    return await meal_svc.create_vendor_application(session, data=payload)
+
+
+@router.get(
+    "/vendor-applications",
+    response_model=list[MealVendorApplicationOut],
+    summary="列出店家入駐申請（meal:manage）",
+    dependencies=[Depends(require_permission(PermissionCode.MEAL_MANAGE))],
+)
+async def list_vendor_applications(
+    session: DbDep,
+    _: CurrentUser,
+    status_filter: str | None = Query(None, alias="status"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> list:
+    return await meal_svc.list_vendor_applications(
+        session, status=status_filter, limit=limit, offset=offset
+    )
+
+
+@router.post(
+    "/vendor-applications/{application_id}/review",
+    response_model=MealVendorApplicationOut,
+    summary="審核店家入駐申請（meal:manage）",
+    dependencies=[Depends(require_permission(PermissionCode.MEAL_MANAGE))],
+)
+async def review_vendor_application(
+    application_id: uuid.UUID,
+    payload: MealVendorApplicationReview,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> object:
+    app = await meal_svc.get_vendor_application(session, application_id)
+    if app is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此申請")
+    try:
+        return await meal_svc.review_vendor_application(
+            session, app, data=payload, reviewer_id=current_user.id
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
 
 
 @router.get("/vendors/{vendor_id}", response_model=MealVendorOut, summary="取得商家詳細")
@@ -219,6 +298,149 @@ async def assign_vendor_manager(
         summary=f"指派學餐商家「{vendor.name}」管理員",
     )
     return manager
+
+
+@router.get(
+    "/vendors/{vendor_id}/managers",
+    response_model=list[VendorManagerOut],
+    summary="列出商家管理人",
+)
+async def list_vendor_managers(
+    vendor_id: uuid.UUID, session: DbDep, current_user: CurrentUser
+) -> list[dict]:
+    await _require_vendor_manager(session, vendor_id, current_user)
+    managers = await meal_svc.list_vendor_managers(session, vendor_id)
+    return [
+        {
+            "user_id": manager.user_id,
+            "display_name": manager.user.display_name if manager.user else "",
+            "email": manager.user.email if manager.user else "",
+            "position_id": manager.position_id,
+            "user_position_id": manager.user_position_id,
+        }
+        for manager in managers
+    ]
+
+
+@router.delete(
+    "/vendors/{vendor_id}/managers/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="移除商家管理人（admin:all）",
+    dependencies=[Depends(require_permission(PermissionCode.ADMIN_ALL))],
+)
+async def remove_vendor_manager(
+    vendor_id: uuid.UUID, user_id: uuid.UUID, session: DbDep, _: CurrentUser
+) -> None:
+    if not await meal_svc.remove_vendor_manager(session, vendor_id, user_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此管理人")
+
+
+@router.get("/products", response_model=list[MealProductOut], summary="列出學餐商品")
+async def list_products(
+    session: DbDep,
+    _: CurrentUser,
+    vendor_id: uuid.UUID | None = Query(None),
+    active_only: bool = Query(True),
+    limit: int = Query(100, ge=1, le=300),
+    offset: int = Query(0, ge=0),
+) -> list:
+    return await meal_svc.list_products(
+        session, vendor_id=vendor_id, active_only=active_only, limit=limit, offset=offset
+    )
+
+
+@router.post(
+    "/products",
+    response_model=MealProductOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="建立商家商品",
+)
+async def create_product(
+    payload: MealProductCreate, session: DbDep, current_user: CurrentUser
+) -> object:
+    await _require_vendor_manager(session, payload.vendor_id, current_user)
+    try:
+        return await meal_svc.create_product(session, data=payload)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+
+
+@router.patch("/products/{product_id}", response_model=MealProductOut, summary="更新商家商品")
+async def update_product(
+    product_id: uuid.UUID,
+    payload: MealProductUpdate,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> object:
+    product = await meal_svc.get_product(session, product_id)
+    if product is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此商品")
+    await _require_vendor_manager(session, product.vendor_id, current_user)
+    return await meal_svc.update_product(session, product, data=payload)
+
+
+@router.get(
+    "/availabilities",
+    response_model=list[MealAvailabilityOut],
+    summary="列出商品上架",
+)
+async def list_availabilities(
+    session: DbDep,
+    _: CurrentUser,
+    vendor_id: uuid.UUID | None = Query(None),
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    active_only: bool = Query(True),
+    limit: int = Query(100, ge=1, le=300),
+    offset: int = Query(0, ge=0),
+) -> list:
+    return await meal_svc.list_availabilities(
+        session,
+        vendor_id=vendor_id,
+        date_from=date_from,
+        date_to=date_to,
+        active_only=active_only,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.post(
+    "/availabilities",
+    response_model=MealAvailabilityOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="建立商品上架與取餐時段",
+)
+async def create_availability(
+    payload: MealAvailabilityCreate, session: DbDep, current_user: CurrentUser
+) -> object:
+    product = await meal_svc.get_product(session, payload.product_id)
+    if product is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此商品")
+    await _require_vendor_manager(session, product.vendor_id, current_user)
+    try:
+        return await meal_svc.create_availability(session, data=payload)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+
+
+@router.post(
+    "/availabilities/weekly",
+    response_model=list[MealAvailabilityOut],
+    status_code=status.HTTP_201_CREATED,
+    summary="批次建立整週商品上架",
+)
+async def bulk_create_weekly_availabilities(
+    payload: MealWeeklyAvailabilityCreate, session: DbDep, current_user: CurrentUser
+) -> list:
+    first_product = await meal_svc.get_product(session, payload.product_ids[0])
+    if first_product is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此商品")
+    await _require_vendor_manager(session, first_product.vendor_id, current_user)
+    try:
+        return await meal_svc.bulk_create_weekly_availabilities(session, data=payload)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -612,6 +834,82 @@ async def list_meal_orders(
 
 
 @router.get(
+    "/orders/class",
+    response_model=list[MealOrderListItem],
+    summary="午餐股長查看本班學餐訂單",
+)
+async def list_class_meal_orders(
+    session: DbDep,
+    current_user: CurrentUser,
+    vendor_id: uuid.UUID | None = Query(None),
+    pickup_slot_id: uuid.UUID | None = Query(None),
+    is_paid: bool | None = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+) -> list:
+    from api.services import school_class as class_svc
+
+    class_ids = list(await class_svc.get_cadre_class_ids(session, current_user.id))
+    return await meal_svc.list_class_meal_orders(
+        session,
+        class_ids=class_ids,
+        vendor_id=vendor_id,
+        pickup_slot_id=pickup_slot_id,
+        is_paid=is_paid,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.post(
+    "/orders/{order_id}/payment",
+    response_model=MealOrderOut,
+    summary="午餐股長標示本班學餐收款",
+)
+async def update_meal_order_payment(
+    order_id: uuid.UUID,
+    session: DbDep,
+    current_user: CurrentUser,
+    is_paid: bool = Query(...),
+) -> MealOrder:
+    from api.services import school_class as class_svc
+
+    order = await _order_or_404(order_id, session)
+    class_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
+    if not current_user.is_superuser and order.class_id not in class_ids:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權標示此訂單收款")
+    return await meal_svc.set_order_paid(
+        session, order, is_paid=is_paid, actor_id=current_user.id
+    )
+
+
+@router.post(
+    "/orders/class-pickup-code",
+    response_model=MealClassPickupCodeOut,
+    summary="午餐股長取得同班同商家同時段整班隨機領取碼",
+)
+async def get_class_pickup_code(
+    session: DbDep,
+    current_user: CurrentUser,
+    class_id: uuid.UUID = Query(...),
+    vendor_id: uuid.UUID = Query(...),
+    pickup_slot_id: uuid.UUID = Query(...),
+) -> dict:
+    from api.services import school_class as class_svc
+
+    class_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
+    if not current_user.is_superuser and class_id not in class_ids:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權取得此班領取碼")
+    return await meal_svc.get_or_create_class_pickup_code(
+        session,
+        class_id=class_id,
+        vendor_id=vendor_id,
+        pickup_slot_id=pickup_slot_id,
+        issued_to_id=current_user.id,
+    )
+
+
+@router.get(
     "/orders/lookup",
     response_model=MealOrderOut,
     summary="以取餐代碼（5 碼）或字號查詢訂單（meal:manage，核銷用）",
@@ -636,6 +934,25 @@ async def lookup_order(
         if vendor.org_id not in user_org_ids:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權限存取此訂單")
     return order
+
+
+@router.post(
+    "/pickup/lookup",
+    response_model=MealPickupLookupOut,
+    summary="商家輸入個人五碼或班級隨機碼核銷",
+)
+async def pickup_lookup(
+    session: DbDep,
+    current_user: MealManagerUser,
+    code: str = Query(...),
+    redeem: bool = Query(True),
+) -> dict:
+    try:
+        return await meal_svc.lookup_and_redeem_pickup_code(
+            session, code=code, actor_id=current_user.id, redeem=redeem
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
 @router.get(

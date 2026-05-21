@@ -1,8 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { usersApi, ApiError } from "@/lib/api";
-import type { UserRead, UserPositionRead } from "@/lib/types";
+import { usersApi, classApi, ApiError } from "@/lib/api";
+import type { UserRead, UserPositionRead, SchoolClassListItem } from "@/lib/types";
 
 /* ─── Inline edit field ─────────────────────────────────────────────────────── */
 function EditableField({
@@ -81,6 +81,7 @@ export default function ProfilePage() {
   const [user, setUser] = useState<UserRead | null>(null);
   const [positions, setPositions] = useState<UserPositionRead[]>([]);
   const [permissions, setPermissions] = useState<string[]>([]);
+  const [myClass, setMyClass] = useState<SchoolClassListItem | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -92,6 +93,8 @@ export default function ProfilePage() {
       if (u) setUser(u);
       setPositions(pos as UserPositionRead[]);
     }).finally(() => setLoading(false));
+
+    classApi.myClass().then(setMyClass).catch(() => setMyClass(null));
 
     // 從 localStorage 讀取有效權限
     try {
@@ -210,6 +213,14 @@ export default function ProfilePage() {
             maxLength={20}
             onSave={saveStudentId}
           />
+          <div>
+            <p className="text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>目前班級</p>
+            <p className="text-sm" style={{ color: "var(--text-primary)" }}>
+              {myClass
+                ? (myClass.label ?? `${myClass.academic_year} 學年度 ${myClass.class_code} 班`)
+                : "尚未歸班（由管理員依學號區間設定）"}
+            </p>
+          </div>
           <div>
             <p className="text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>電子郵件</p>
             <p className="text-sm" style={{ color: "var(--text-primary)" }}>{user?.email ?? "—"}</p>

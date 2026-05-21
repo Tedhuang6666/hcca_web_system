@@ -6,7 +6,6 @@ import { toast } from "sonner";
 
 import {
   ARTICLE_TYPES,
-  ArticleEditModal,
   CATEGORIES,
   DiffModal,
   EMPTY_FORM,
@@ -19,9 +18,11 @@ import {
   type NewArtForm,
 } from "@/components/regulations/RegulationEditParts";
 import LawTreeEditor, { inferParentIdByPrevious } from "@/components/regulations/LawTreeEditor";
+import { ArticleDrawer } from "@/components/regulations/ArticleDrawer";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import { ApiError, regulationsApi, regulationHref } from "@/lib/api";
+import { ARTICLE_TYPE_LABEL, canNestInside } from "@/lib/regulationStructure";
 import type {
   ArticleType,
   RegulationAmendmentType,
@@ -268,26 +269,14 @@ export default function EditRegulationPage() {
     setInserting(true);
     try {
       const sortedArticles = [...articles].sort((a, b) => a.sort_index - b.sort_index);
-      // 1. Pre-normalize（只在非標準時才呼叫，避免多餘 API）
-      const needsNorm = sortedArticles.some((a, i) => a.sort_index !== (i + 1) * 10);
-      if (needsNorm && sortedArticles.length > 0) {
-        await regulationsApi.reorderArticles(
-          id,
-          sortedArticles.map((a, i) => ({ id: a.id, sort_index: (i + 1) * 10 })),
-        );
-      }
-
-      // 2. 計算目標 sort_index（整數，保證不衝突）
-      //    歸一化後：第 N 個條文 sort_index = N*10
-      //    插入前 0：sort_index = 5（< 10）
-      //    插入 N 與 N+1 之間：sort_index = N*10 + 5（在兩者中間）
-      //    插入尾部：sort_index = (len+1)*10
       const insertPosition = Math.min(Math.max(position, 0), sortedArticles.length);
+
+      // 推算父節點與初始 sort_index（用浮點中位數避開衝突，後續 reorder 整理）
       const flatForParent = sortedArticles.map((a, i) => ({
         id: a.id,
         parent_id: a.parent_id ?? null,
         order_index: a.order_index ?? i,
-        sort_index: (i + 1) * 10,
+        sort_index: a.sort_index,
         article_type: a.article_type,
         title: a.title ?? "",
         subtitle: a.subtitle ?? "",
@@ -295,17 +284,21 @@ export default function EditRegulationPage() {
         legal_number: a.legal_number ?? null,
       }));
       const parentId = inferParentIdByPrevious(flatForParent, insertPosition, form.article_type);
+      // 防呆：確認新型別在 parent 之下合法（避免「款」「目」單獨存在，或「章」下放「目」）
+      const parentArticle = parentId ? sortedArticles.find(a => a.id === parentId) : null;
+      const parentType = parentArticle?.article_type ?? null;
+      if (!canNestInside(parentType, form.article_type)) {
+        const parentLabel = parentType ? ARTICLE_TYPE_LABEL[parentType] : "頂層";
+        toast.error(`${ARTICLE_TYPE_LABEL[form.article_type]} 不能加在 ${parentLabel} 之下`);
+        setInserting(false);
+        return;
+      }
       const orderIndex = sortedArticles.filter(a => (a.parent_id ?? null) === parentId).length;
-      const sortIndex =
-        insertPosition === 0
-          ? 5
-          : insertPosition >= sortedArticles.length
-          ? (sortedArticles.length + 1) * 10
-          : insertPosition * 10 + 5;
+      // 用 1,000,000 起跳的 sort_index 確保不衝突；reorder 階段重新編號
+      const tempSortIndex = 1_000_000 + insertPosition;
 
-      // 3. 建立條文
       await regulationsApi.addArticle(id, {
-        sort_index: sortIndex,
+        sort_index: tempSortIndex,
         order_index: orderIndex,
         parent_id: parentId,
         article_type: form.article_type,
@@ -313,19 +306,25 @@ export default function EditRegulationPage() {
         content: form.content || undefined,
       });
 
-      // 4. 取得最新資料並 post-normalize
+      // 取最新資料並一次性 reorder：將新條文擺到 insertPosition，全列重編 sort_index
       const r = await regulationsApi.get(id);
-      const sorted = [...r.articles]
-        .filter(a => !a.is_deleted)
+      const all = [...r.articles].filter(a => !a.is_deleted);
+      const created = all.find(a => a.sort_index === tempSortIndex);
+      const others = all
+        .filter(a => a.id !== created?.id)
         .sort((a, b) => a.sort_index - b.sort_index);
-      const normItems = sorted.map((a, i) => ({ id: a.id, sort_index: (i + 1) * 10 }));
-      await regulationsApi.reorderArticles(id, normItems);
+      const targetList = created ? [...others] : others;
+      if (created) targetList.splice(insertPosition, 0, created);
 
-      // 5. 更新本地狀態
+      const reordered = await regulationsApi.reorderArticles(
+        id,
+        targetList.map((a, i) => ({ id: a.id, sort_index: (i + 1) * 10 })),
+      );
+
       setReg(r);
       setTitle(r.title); setCategory(r.category);
       setPreface(r.preface ?? ""); setContent(r.content ?? "");
-      setArticles(sorted.map((a, i) => ({ ...a, sort_index: (i + 1) * 10 })));
+      setArticles(reordered.sort((a, b) => a.sort_index - b.sort_index));
 
       toast.success("條文已插入");
       setAddingEnd(false); setEndForm(EMPTY_FORM);
@@ -338,14 +337,14 @@ export default function EditRegulationPage() {
   // ── 條文編輯 ─────────────────────────────────────────────────────────────────
 
   const handleEditArticle = async (art: RegulationArticleOut, data: {
-    article_type: ArticleType; title: string; content: string
+    article_type: ArticleType; title: string; subtitle: string; content: string;
   }) => {
     try {
       await regulationsApi.updateArticle(id, art.id, {
         article_type: data.article_type,
-        title: data.title || undefined,
-        subtitle: undefined,
-        content: data.content || undefined,
+        title: data.title,
+        subtitle: data.subtitle,
+        content: data.content,
       });
       toast.success("條文已更新");
       setEditingArt(null);
@@ -520,17 +519,20 @@ export default function EditRegulationPage() {
   ) => {
     const map = new Map(articles.map(a => [a.id, a]));
     const prev = articles;
-    const local = next.map(n => ({
-      ...(map.get(n.id) as RegulationArticleOut),
-      parent_id: n.parent_id,
-      order_index: n.order_index,
-      sort_index: n.sort_index,
-      article_type: n.article_type,
-      title: n.title,
-      subtitle: "",
-      content: n.content,
-      legal_number: n.legal_number ?? null,
-    })).sort((a, b) => a.sort_index - b.sort_index);
+    const local = next.map(n => {
+      const src = map.get(n.id);
+      return {
+        ...(src as RegulationArticleOut),
+        parent_id: n.parent_id,
+        order_index: n.order_index,
+        sort_index: n.sort_index,
+        article_type: n.article_type,
+        title: n.title,
+        subtitle: src?.subtitle ?? "",
+        content: n.content,
+        legal_number: n.legal_number ?? src?.legal_number ?? null,
+      };
+    }).sort((a, b) => a.sort_index - b.sort_index);
     setArticles(local);
     try {
       await Promise.all(next.map(n => regulationsApi.updateArticle(id, n.id, {
@@ -539,11 +541,16 @@ export default function EditRegulationPage() {
         sort_index: n.sort_index,
         article_type: n.article_type,
         title: n.title,
-        subtitle: undefined,
         content: n.content,
         legal_number: n.legal_number ?? undefined,
       })));
-      await regulationsApi.autoRenumber(id, false);
+      // 自動重編「第 N 條」連號，並把後端回傳的 legal_number 同步回前端 articles
+      const renumbered = await regulationsApi.autoRenumber(id, false);
+      const renumberedMap = new Map(renumbered.map(a => [a.id, a.legal_number]));
+      setArticles(curr => curr.map(a => {
+        const ln = renumberedMap.get(a.id);
+        return ln !== undefined ? { ...a, legal_number: ln } : a;
+      }));
     } catch (e) {
       setArticles(prev);
       throw e;
@@ -552,13 +559,16 @@ export default function EditRegulationPage() {
 
   return (
     <>
-      {editingArt && (
-        <ArticleEditModal
-          art={editingArt}
-          onSave={data => handleEditArticle(editingArt, data)}
-          onClose={() => setEditingArt(null)}
-        />
-      )}
+      <ArticleDrawer
+        open={editingArt !== null}
+        article={editingArt}
+        onClose={() => setEditingArt(null)}
+        onSave={async (data) => {
+          if (editingArt) await handleEditArticle(editingArt, data);
+        }}
+        readOnly={Boolean(reg && !["draft", "rejected"].includes(reg.workflow_status))}
+      />
+
       {showDiff && (
         <DiffModal
           oldContent={lastSnapshot} newContent={content} version={reg.version}
@@ -574,7 +584,7 @@ export default function EditRegulationPage() {
         />
       )}
 
-      <div className="w-full max-w-4xl mx-auto space-y-5">
+      <div className="w-full max-w-7xl mx-auto space-y-5">
         {/* 頂部 */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-center gap-3 min-w-0">
@@ -689,7 +699,7 @@ export default function EditRegulationPage() {
               <div>
                 <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>分類</label>
                 <select value={category} onChange={e => setCategory(e.target.value as RegulationCategory)}
-                  className="w-full text-xs outline-none rounded px-2 py-1.5"
+                  className="w-full text-sm outline-none rounded px-2 py-1.5"
                   style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
                   {CATEGORIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
@@ -702,7 +712,7 @@ export default function EditRegulationPage() {
               <div>
                 <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>制定/修正/廢止</label>
                 <select value={amendmentType} onChange={e => setAmendmentType(e.target.value as RegulationAmendmentType)}
-                  className="w-full text-xs outline-none rounded px-2 py-1.5"
+                  className="w-full text-sm outline-none rounded px-2 py-1.5"
                   style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
                   <option value="enact">制定</option>
                   <option value="amend">修正</option>
@@ -798,6 +808,10 @@ export default function EditRegulationPage() {
                       const target = articles.find(a => a.id === nodeId);
                       if (target) setEditingArt(target);
                     }}
+                    onSelect={nodeId => {
+                      const target = articles.find(a => a.id === nodeId);
+                      if (target) setEditingArt(target);
+                    }}
                     onDelete={nodeId => {
                       const target = articles.find(a => a.id === nodeId);
                       if (target) void handleDeleteArticle(target);
@@ -822,7 +836,7 @@ export default function EditRegulationPage() {
                       <label className="text-[10px] block mb-0.5" style={{ color: "var(--text-muted)" }}>層級</label>
                       <select value={endForm.article_type}
                         onChange={e => setEndForm(p => ({ ...p, article_type: e.target.value as ArticleType }))}
-                        className="w-full text-xs outline-none rounded px-2 py-1.5"
+                        className="w-full text-sm outline-none rounded px-2 py-1.5"
                         style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
                         {ARTICLE_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                       </select>
@@ -831,13 +845,13 @@ export default function EditRegulationPage() {
                       <label className="text-[10px] block mb-0.5" style={{ color: "var(--text-muted)" }}>標題</label>
                       <input value={endForm.title} onChange={e => setEndForm(p => ({ ...p, title: e.target.value }))}
                         placeholder="第一條"
-                        className="w-full bg-transparent text-xs px-2 py-1.5 rounded outline-none" style={inputStyle} />
+                        className="w-full bg-transparent text-sm px-2 py-1.5 rounded outline-none" style={inputStyle} />
                     </div>
                   </div>
                   <div>
                     <label className="text-[10px] block mb-0.5" style={{ color: "var(--text-muted)" }}>內容</label>
                     <textarea value={endForm.content} onChange={e => setEndForm(p => ({ ...p, content: e.target.value }))}
-                      rows={3} className="w-full bg-transparent text-xs p-2 rounded outline-none resize-y" style={inputStyle} />
+                      rows={3} className="w-full bg-transparent text-sm p-2 rounded outline-none resize-y" style={inputStyle} />
                   </div>
                   <div className="grid grid-cols-2 gap-2 sm:flex">
                     <button onClick={() => handleInsert(articles.length, endForm)} disabled={inserting}

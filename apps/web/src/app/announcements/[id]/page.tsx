@@ -10,6 +10,13 @@ import AnnouncementMarkdown from "@/components/announcements/AnnouncementMarkdow
 import { usePermissions } from "@/hooks/usePermissions";
 import { API_BASE } from "@/lib/config";
 
+const AUDIENCE_LABEL: Record<string, string> = {
+  all: "全體",
+  school: "全體竹中生",
+  orgs: "特定組織",
+  members: "特定成員",
+};
+
 export default function AnnouncementDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [item, setItem] = useState<AnnouncementOut | null>(null);
@@ -59,12 +66,27 @@ export default function AnnouncementDetailPage() {
               草稿
             </span>
           )}
+          {item.audience_type !== "all" && (
+            <span className="badge" style={{ color: "var(--primary)", background: "var(--primary-dim)", borderColor: "var(--border-strong)" }}>
+              對象：{AUDIENCE_LABEL[item.audience_type] ?? item.audience_type}
+            </span>
+          )}
           <span className="text-xs" style={{ color: "var(--text-muted)" }}>
             {item.published_at
               ? new Date(item.published_at).toLocaleString("zh-TW")
               : new Date(item.created_at).toLocaleString("zh-TW")}
           </span>
         </div>
+        {item.audience_type === "orgs" && item.audience_orgs.length > 0 && (
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+            對象組織：{item.audience_orgs.map((o) => o.name).join("、")}
+          </p>
+        )}
+        {item.audience_type === "members" && item.audience_members.length > 0 && (
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+            對象成員：{item.audience_members.map((m) => m.name).join("、")}
+          </p>
+        )}
         <h1 className="text-2xl font-semibold leading-tight">{item.title}</h1>
       </header>
 

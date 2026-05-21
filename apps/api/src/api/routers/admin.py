@@ -47,6 +47,7 @@ class PositionSummary(BaseModel):
     name: str
     org_id: uuid.UUID
     org_name: str = ""
+    org_is_active: bool = True
     description: str | None = None
     weight: int = 0
     parent_id: uuid.UUID | None = None
@@ -168,6 +169,7 @@ async def _enrich_user(db: AsyncSession, user: User) -> UserDetail:
                 name=pos.name,
                 org_id=pos.org_id,
                 org_name=pos.org.name if pos.org else "",
+                org_is_active=pos.org.is_active if pos.org else True,
                 description=pos.description,
                 weight=pos.weight,
                 parent_id=pos.parent_id,
@@ -279,11 +281,19 @@ async def pre_register_user(
 
     # 指派職位
     for pos_id in body.position_ids:
-        pos_check = await db.execute(select(Position).where(Position.id == pos_id))
-        if not pos_check.scalar_one_or_none():
+        pos_check = await db.execute(
+            select(Position).options(selectinload(Position.org)).where(Position.id == pos_id)
+        )
+        position = pos_check.scalar_one_or_none()
+        if not position:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"職位 {pos_id} 不存在",
+            )
+        if position.org and not position.org.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"職位 {position.name} 所屬組織已停用，無法指派",
             )
         db.add(
             UserPosition(
@@ -311,6 +321,11 @@ async def pre_register_user(
         org = org_check.scalar_one_or_none()
         if org is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="自訂權限組織不存在")
+        if not org.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="自訂權限組織已停用，無法使用",
+            )
 
         custom_pos = Position(
             org_id=org.id,
@@ -442,10 +457,17 @@ async def add_user_position(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="使用者不存在")
 
-    pos_check = await db.execute(select(Position).where(Position.id == body.position_id))
+    pos_check = await db.execute(
+        select(Position).options(selectinload(Position.org)).where(Position.id == body.position_id)
+    )
     position = pos_check.scalar_one_or_none()
     if not position:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="職位不存在")
+    if position.org and not position.org.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="此職位所屬組織已停用，無法新增任期",
+        )
 
     user_position = UserPosition(
         user_id=user_id,
@@ -613,6 +635,7 @@ async def list_all_positions(
             name=p.name,
             org_id=p.org_id,
             org_name=p.org.name if p.org else "",
+            org_is_active=p.org.is_active if p.org else True,
             description=p.description,
             weight=p.weight,
             parent_id=p.parent_id,
@@ -643,6 +666,8 @@ async def create_position_with_perms(
     org = org_check.scalar_one_or_none()
     if not org:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="組織不存在")
+    if not org.is_active:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="組織已停用，無法建立職位")
     if body.parent_id is not None:
         parent_result = await db.execute(select(Position).where(Position.id == body.parent_id))
         parent = parent_result.scalar_one_or_none()
@@ -686,6 +711,7 @@ async def create_position_with_perms(
         name=position.name,
         org_id=position.org_id,
         org_name=org.name,
+        org_is_active=org.is_active,
         description=position.description,
         weight=position.weight,
         parent_id=position.parent_id,
@@ -758,6 +784,7 @@ async def update_position(
         name=position.name,
         org_id=position.org_id,
         org_name=position.org.name if position.org else "",
+        org_is_active=position.org.is_active if position.org else True,
         description=position.description,
         weight=position.weight,
         parent_id=position.parent_id,
@@ -823,6 +850,7 @@ async def replace_position_permissions(
         name=position.name,
         org_id=position.org_id,
         org_name=position.org.name if position.org else "",
+        org_is_active=position.org.is_active if position.org else True,
         description=position.description,
         weight=position.weight,
         parent_id=position.parent_id,

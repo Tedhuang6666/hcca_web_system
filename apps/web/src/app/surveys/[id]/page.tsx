@@ -3,12 +3,71 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
+import QRCode from "qrcode";
 import { surveysApi, ApiError } from "@/lib/api";
-import type { SurveyOut, SurveyQuestionOut, SurveyStats } from "@/lib/types";
+import type { SurveyOut, SurveyQuestionOut, SurveyStats, SurveyResponseAdminItem, ConditionRule } from "@/lib/types";
+import { uploadUrl } from "@/lib/config";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 
 const DISPLAY_TYPES = new Set(["section_text", "page_break", "image", "video"]);
+
+const VALIDATION_LABELS: Record<string, string> = {
+  email: "電子郵件", number: "數字", integer: "整數", url: "網址", phone: "電話號碼",
+};
+
+/** 組出文字題型的填答提示（字數限制 / 格式）。 */
+function validationHint(q: SurveyQuestionOut): string {
+  const parts: string[] = [];
+  if (q.min_length != null) parts.push(`最少 ${q.min_length} 字`);
+  if (q.max_length != null) parts.push(`最多 ${q.max_length} 字`);
+  if (q.validation_rule) parts.push(`格式需為${VALIDATION_LABELS[q.validation_rule] ?? q.validation_rule}`);
+  return parts.join(" · ");
+}
+
+type AnswerMap = Record<string, { text: string; options: string[] }>;
+
+/** 評估單一條件規則。 */
+function evalRule(rule: ConditionRule, answers: AnswerMap): boolean {
+  const ans = answers[rule.question_id];
+  if (!ans) return false;
+  const text = (ans.text ?? "").trim();
+  const opts = ans.options ?? [];
+  const val = (rule.value ?? "").trim();
+  if (rule.operator === "contains") {
+    return val !== "" && (text.includes(val) || opts.some(o => o.includes(val)));
+  }
+  return text === val || opts.includes(val);
+}
+
+/** 評估顯示條件（多規則由上到下依序左結合：且／或）。 */
+function conditionMet(cond: NonNullable<SurveyQuestionOut["condition"]>, answers: AnswerMap): boolean {
+  const rules = cond.rules ?? [];
+  if (rules.length === 0) return true;
+  let result = evalRule(rules[0], answers);
+  for (let i = 1; i < rules.length; i += 1) {
+    result = rules[i].connector === "or"
+      ? result || evalRule(rules[i], answers)
+      : result && evalRule(rules[i], answers);
+  }
+  return result;
+}
+
+/** 依顯示條件計算目前應隱藏的題目 id（分頁條件未成立時，整頁題目皆隱藏）。 */
+function computeHidden(questions: SurveyQuestionOut[], answers: AnswerMap): Set<string> {
+  const hidden = new Set<string>();
+  let pageHidden = false;
+  for (const q of questions) {
+    if (q.question_type === "page_break") {
+      pageHidden = q.condition ? !conditionMet(q.condition, answers) : false;
+      if (pageHidden) hidden.add(q.id);
+      continue;
+    }
+    if (pageHidden) { hidden.add(q.id); continue; }
+    if (q.condition && !conditionMet(q.condition, answers)) hidden.add(q.id);
+  }
+  return hidden;
+}
 
 /* ── 各題型的填答元件 ─────────────────────────────────────────────────────── */
 function QuestionInput({
@@ -33,15 +92,19 @@ function QuestionInput({
     return <hr style={{ borderColor: "var(--border)" }} />;
   }
   if (type === "image") {
+    const src = uploadUrl(question.image_url || placeholder || "");
     return (
       <figure className="space-y-2">
-        {placeholder && (
+        {src && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={placeholder} alt={question.question_text} className="max-h-80 w-full rounded-lg object-contain" />
+          <img src={src} alt={question.question_text || "問卷圖片"}
+            className="max-h-80 w-full rounded-lg object-contain" />
         )}
-        <figcaption className="text-sm whitespace-pre-wrap" style={{ color: "var(--text-muted)" }}>
-          {question.question_text}
-        </figcaption>
+        {question.question_text && (
+          <figcaption className="text-sm whitespace-pre-wrap" style={{ color: "var(--text-muted)" }}>
+            {question.question_text}
+          </figcaption>
+        )}
       </figure>
     );
   }
@@ -61,24 +124,34 @@ function QuestionInput({
   }
 
   if (type === "text") {
+    const hint = validationHint(question);
     return (
-      <input
-        value={value.text}
-        onChange={e => onChange({ ...value, text: e.target.value })}
-        placeholder={placeholder ?? "請輸入…"}
-        className="input"
-      />
+      <div className="space-y-1">
+        <input
+          value={value.text}
+          onChange={e => onChange({ ...value, text: e.target.value })}
+          placeholder={placeholder ?? "請輸入…"}
+          maxLength={question.max_length ?? undefined}
+          className="input"
+        />
+        {hint && <p className="text-xs" style={{ color: "var(--text-muted)" }}>{hint}</p>}
+      </div>
     );
   }
   if (type === "textarea") {
+    const hint = validationHint(question);
     return (
-      <textarea
-        value={value.text}
-        onChange={e => onChange({ ...value, text: e.target.value })}
-        rows={3}
-        placeholder={placeholder ?? "請輸入…"}
-        className="input resize-y"
-      />
+      <div className="space-y-1">
+        <textarea
+          value={value.text}
+          onChange={e => onChange({ ...value, text: e.target.value })}
+          rows={3}
+          placeholder={placeholder ?? "請輸入…"}
+          maxLength={question.max_length ?? undefined}
+          className="input resize-y"
+        />
+        {hint && <p className="text-xs" style={{ color: "var(--text-muted)" }}>{hint}</p>}
+      </div>
     );
   }
   if (type === "date") {
@@ -160,7 +233,7 @@ function QuestionInput({
           </button>
         ))}
         <span className="self-center text-xs ml-2" style={{ color: "var(--text-muted)" }}>
-          {minV} 最低 → {maxV} 最高
+          {minV}（{question.min_label || "最低"}） → {maxV}（{question.max_label || "最高"}）
         </span>
       </div>
     );
@@ -168,18 +241,110 @@ function QuestionInput({
   return null;
 }
 
+/* ── 分享問卷（複製連結 + QR code） ───────────────────────────────────────── */
+function ShareModal({ title, onClose }: { title: string; onClose: () => void }) {
+  const [qr, setQr] = useState("");
+  const shareUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/surveys/${encodeURIComponent(title)}`
+      : "";
+
+  useEffect(() => {
+    if (!shareUrl) return;
+    QRCode.toDataURL(shareUrl, { width: 240, margin: 1 })
+      .then(setQr)
+      .catch(() => setQr(""));
+  }, [shareUrl]);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      toast.success("已複製填答連結");
+    } catch {
+      toast.error("複製失敗，請手動複製");
+    }
+  };
+
+  const downloadQr = () => {
+    if (!qr) return;
+    const a = document.createElement("a");
+    a.href = qr;
+    a.download = `${title}-QRcode.png`;
+    a.click();
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "var(--bg-overlay)" }}
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="分享問卷">
+      <div className="card p-6 w-full max-w-sm space-y-4" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>分享問卷</h3>
+          <button onClick={onClose} className="topbar-icon-btn" aria-label="關閉">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+          掃描 QR code 或複製連結，邀請他人填答此問卷。
+        </p>
+        {qr && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={qr} alt="問卷 QR code" className="mx-auto rounded-lg"
+            style={{ width: 200, height: 200 }} />
+        )}
+        <div className="flex gap-2">
+          <input readOnly value={shareUrl} className="input flex-1 text-xs"
+            onFocus={e => e.target.select()} aria-label="填答連結" />
+          <button onClick={copy} className="btn btn-primary flex-shrink-0 text-xs">複製連結</button>
+        </div>
+        <button onClick={downloadQr} disabled={!qr} className="btn btn-ghost w-full text-xs">
+          下載 QR code 圖片
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ── 統計視圖（管理員） ───────────────────────────────────────────────────── */
 function StatsView({ surveyId }: { surveyId: string }) {
   const [stats, setStats] = useState<SurveyStats | null>(null);
+  const [responses, setResponses] = useState<SurveyResponseAdminItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [chartTypes, setChartTypes] = useState<Record<string, string>>({});
+  const [exporting, setExporting] = useState(false);
+  const [view, setView] = useState<"charts" | "responses">("charts");
 
   useEffect(() => {
-    surveysApi.stats(surveyId)
-      .then(setStats)
+    Promise.all([surveysApi.stats(surveyId), surveysApi.responses(surveyId)])
+      .then(([s, r]) => { setStats(s); setResponses(r); })
       .catch(() => toast.error("載入統計失敗"))
       .finally(() => setLoading(false));
   }, [surveyId]);
+
+  const exportXlsx = async () => {
+    setExporting(true);
+    try {
+      const blob = await surveysApi.exportSpreadsheet(surveyId);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${stats?.title ?? "問卷回應"}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("試算表已開始下載");
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "匯出失敗");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   if (loading) return <div className="py-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>統計載入中…</div>;
   if (!stats) return null;
@@ -217,7 +382,9 @@ function StatsView({ surveyId }: { surveyId: string }) {
             <div key={opt} className="flex items-center gap-2 text-xs">
               <span className="h-2.5 w-2.5 rounded-full" style={{ background: colors[index % colors.length] }} />
               <span style={{ color: "var(--text-secondary)" }}>{opt}</span>
-              <span style={{ color: "var(--text-muted)" }}>{count}</span>
+              <span className="tabular-nums" style={{ color: "var(--text-muted)" }}>
+                {count}（{Math.round((count / total) * 100)}%）
+              </span>
             </div>
           ))}
         </div>
@@ -225,16 +392,50 @@ function StatsView({ surveyId }: { surveyId: string }) {
     );
   };
 
+  const questionLabels = new Map(stats.questions.map(q => [q.question_id, q.question_text]));
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3 px-5 py-3 rounded-xl"
+      <div className="flex flex-wrap items-center gap-3 px-5 py-3 rounded-xl"
         style={{ background: "var(--info-dim)", border: "1px solid rgba(37,99,235,0.2)" }}>
         <p className="text-sm" style={{ color: "var(--info)" }}>
           共 <strong>{stats.total_responses}</strong> 份回應
         </p>
+        <div className="flex gap-1 ml-auto p-1 rounded-lg" style={{ background: "var(--bg-surface)" }}>
+          {(["charts", "responses"] as const).map(v => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setView(v)}
+              className="px-2.5 py-1 rounded-md text-xs font-medium transition-all"
+              style={view === v
+                ? { background: "var(--primary)", color: "var(--primary-fg)" }
+                : { color: "var(--text-muted)" }}>
+              {v === "charts" ? "圖表統計" : "個別回應"}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={exportXlsx}
+          disabled={exporting}
+          className="btn btn-ghost text-xs flex-shrink-0"
+          aria-busy={exporting}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          {exporting ? "匯出中…" : "匯出試算表"}
+        </button>
       </div>
 
-      {stats.questions.map(qs => (
+      {view === "charts" && stats.total_responses === 0 && (
+        <div className="card p-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+          尚無填答回應
+        </div>
+      )}
+
+      {view === "charts" && stats.questions.map(qs => (
         <div key={qs.question_id} className="card p-5 space-y-3">
           <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
             {qs.question_text}
@@ -321,6 +522,51 @@ function StatsView({ surveyId }: { surveyId: string }) {
           )}
         </div>
       ))}
+
+      {view === "responses" && (
+        responses.length === 0 ? (
+          <div className="card p-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+            尚無填答回應
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {responses.map((r, idx) => (
+              <div key={r.id} className="card p-4 space-y-2">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                  <span className="font-semibold" style={{ color: "var(--primary)" }}>
+                    #{responses.length - idx}
+                  </span>
+                  <span style={{ color: "var(--text-secondary)" }}>
+                    {r.respondent_email ?? "匿名填答"}
+                  </span>
+                  <span className="ml-auto" style={{ color: "var(--text-muted)" }}>
+                    {new Date(r.submitted_at).toLocaleString("zh-TW")}
+                  </span>
+                </div>
+                <div className="space-y-1.5" style={{ borderTop: "1px solid var(--border)" }}>
+                  {r.answers.length === 0 ? (
+                    <p className="text-xs pt-2" style={{ color: "var(--text-muted)" }}>（無作答內容）</p>
+                  ) : (
+                    r.answers.map(a => {
+                      const label = questionLabels.get(a.question_id) ?? "題目";
+                      const val = a.answer_options.length
+                        ? a.answer_options.join("、")
+                        : (a.answer_text || "—");
+                      return (
+                        <div key={a.id} className="text-xs pt-1.5">
+                          <span style={{ color: "var(--text-muted)" }}>{label}</span>
+                          <p className="mt-0.5 whitespace-pre-wrap break-words"
+                            style={{ color: "var(--text-primary)" }}>{val}</p>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      )}
     </div>
   );
 }
@@ -339,7 +585,25 @@ export default function SurveyDetailPage() {
   const [viewStats, setViewStats] = useState(false);
   const [closing, setClosing] = useState(false);
   const [opening, setOpening] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [emailCopy, setEmailCopy] = useState(false);
   const answerDraft = useMemo(() => answers, [answers]);
+  const hiddenIds = useMemo(
+    () => (survey ? computeHidden(survey.questions, answers) : new Set<string>()),
+    [survey, answers],
+  );
+  const numberMap = useMemo(() => {
+    const m = new Map<string, number>();
+    if (!survey) return m;
+    let n = 0;
+    for (const q of survey.questions) {
+      if (!DISPLAY_TYPES.has(q.question_type) && !hiddenIds.has(q.id)) {
+        n += 1;
+        m.set(q.id, n);
+      }
+    }
+    return m;
+  }, [survey, hiddenIds]);
   const restoreAnswerDraft = useCallback((draft: typeof answers) => {
     setAnswers(prev => ({ ...prev, ...draft }));
     toast.info("已復原未送出的問卷填答草稿");
@@ -356,7 +620,10 @@ export default function SurveyDetailPage() {
 
   const load = useCallback(() => {
     setLoading(true);
-    surveysApi.get(id)
+    // 未登入者改用公開端點（僅開放未登入填答的問卷可取得）
+    const loggedIn = typeof window !== "undefined" && Boolean(localStorage.getItem("user_id"));
+    const fetcher = loggedIn ? surveysApi.get(id) : surveysApi.getPublic(id);
+    fetcher
       .then(s => {
         setSurvey(s);
         // 初始化答案狀態
@@ -374,9 +641,10 @@ export default function SurveyDetailPage() {
 
   const submit = async () => {
     if (!survey) return;
-    // 驗證必填
+    // 驗證必填（略過顯示條件未成立的題目）
     for (const q of survey.questions) {
       if (DISPLAY_TYPES.has(q.question_type)) continue;
+      if (hiddenIds.has(q.id)) continue;
       if (!q.is_required) continue;
       const ans = answers[q.id];
       const hasText = ans?.text.trim();
@@ -392,13 +660,14 @@ export default function SurveyDetailPage() {
       const anon_token = survey.is_anonymous ? crypto.randomUUID() : undefined;
       await surveysApi.submit(id, {
         answers: survey.questions
-          .filter(q => !DISPLAY_TYPES.has(q.question_type))
+          .filter(q => !DISPLAY_TYPES.has(q.question_type) && !hiddenIds.has(q.id))
           .map(q => ({
             question_id: q.id,
             answer_text: answers[q.id]?.text || undefined,
             answer_options: answers[q.id]?.options,
           })),
         anon_token,
+        email_copy: emailCopy,
       });
       clearDraft();
       toast.success("填答成功，感謝您的參與！");
@@ -448,47 +717,69 @@ export default function SurveyDetailPage() {
 
   const isAdmin = can("survey:manage");
   const isOpen = survey.status === "open";
+  const questionCount = survey.questions.filter(q => !DISPLAY_TYPES.has(q.question_type)).length;
 
   return (
     <div className="max-w-3xl mx-auto space-y-5">
       {/* 頁首 */}
-      <div className="flex items-center gap-3">
-        <Link href="/surveys" className="topbar-icon-btn" aria-label="返回問卷列表">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-            <polyline points="15 18 9 12 15 6" />
-          </svg>
-        </Link>
-        <div className="flex-1 min-w-0">
-          <h1 className="text-xl font-semibold truncate" style={{ color: "var(--text-primary)" }}>
-            {survey.title}
-          </h1>
-          {survey.description && (
-            <p className="text-sm mt-0.5 line-clamp-2" style={{ color: "var(--text-muted)" }}>
-              {survey.description}
-            </p>
-          )}
-        </div>
-        {/* 管理員操作 */}
-        {isAdmin && (
-          <div className="flex gap-2 flex-shrink-0">
-            {(survey.status === "draft" || survey.status === "open") && (
-              <button
-                onClick={toggleStatus}
-                disabled={opening || closing}
-                className="btn btn-ghost text-xs"
-                style={survey.status === "open" ? { color: "var(--danger)" } : {}}>
-                {opening ? "開放中…" : closing ? "關閉中…" : survey.status === "draft" ? "開放填答" : "關閉問卷"}
-              </button>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <Link href="/surveys" className="topbar-icon-btn flex-shrink-0" aria-label="返回問卷列表">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </Link>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-xl font-semibold truncate" style={{ color: "var(--text-primary)" }}>
+              {survey.title}
+            </h1>
+            {survey.description && (
+              <p className="text-sm mt-0.5 line-clamp-2" style={{ color: "var(--text-muted)" }}>
+                {survey.description}
+              </p>
             )}
+          </div>
+        </div>
+        {/* 操作列 */}
+        <div className="flex gap-2 flex-wrap sm:flex-shrink-0">
+          <button
+            onClick={() => setShareOpen(true)}
+            className="btn btn-ghost text-xs"
+            aria-label="分享問卷">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+            </svg>
+            分享
+          </button>
+          {isAdmin && (survey.status === "draft" || survey.status === "open") && (
+            <Link
+              href={`/surveys/${encodeURIComponent(survey.title)}/edit`}
+              className="btn btn-ghost text-xs">
+              編輯題目
+            </Link>
+          )}
+          {isAdmin && (survey.status === "draft" || survey.status === "open") && (
+            <button
+              onClick={toggleStatus}
+              disabled={opening || closing}
+              className="btn btn-ghost text-xs"
+              style={survey.status === "open" ? { color: "var(--danger)" } : {}}>
+              {opening ? "開放中…" : closing ? "關閉中…" : survey.status === "draft" ? "開放填答" : "關閉問卷"}
+            </button>
+          )}
+          {isAdmin && (
             <button
               onClick={() => setViewStats(v => !v)}
               className="btn btn-ghost text-xs"
               style={viewStats ? { color: "var(--primary)" } : {}}>
               {viewStats ? "填答表單" : "查看統計"}
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* 資訊列 */}
@@ -506,7 +797,7 @@ export default function SurveyDetailPage() {
             匿名問卷
           </span>
         )}
-        <span>{survey.questions.filter(q => !DISPLAY_TYPES.has(q.question_type)).length} 道題目</span>
+        <span>{questionCount} 道題目</span>
         {isAdmin && <span>{survey.response_count} 份回應</span>}
         {survey.closes_at && (
           <span>截止 {new Date(survey.closes_at).toLocaleDateString("zh-TW")}</span>
@@ -535,14 +826,15 @@ export default function SurveyDetailPage() {
         </div>
       ) : (
         <form onSubmit={e => { e.preventDefault(); submit(); }} className="space-y-4">
-          {survey.questions.map((q, idx) => {
+          {survey.questions.map((q) => {
+            if (hiddenIds.has(q.id)) return null;
             const isDisplay = DISPLAY_TYPES.has(q.question_type);
             return (
             <div key={q.id} className={isDisplay ? "py-2 space-y-3" : "card p-5 space-y-3"}>
               <div className="flex items-start gap-2">
                 {!isDisplay && (
                   <span className="text-xs font-bold mt-0.5 flex-shrink-0"
-                    style={{ color: "var(--primary)" }}>Q{idx + 1}</span>
+                    style={{ color: "var(--primary)" }}>Q{numberMap.get(q.id)}</span>
                 )}
                 <div className="flex-1">
                   <p className={isDisplay ? "sr-only" : "text-sm font-medium"} style={{ color: "var(--text-primary)" }}>
@@ -551,6 +843,12 @@ export default function SurveyDetailPage() {
                   </p>
                 </div>
               </div>
+              {q.image_url && q.question_type !== "image" && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={uploadUrl(q.image_url)} alt=""
+                  className="max-h-72 w-full rounded-lg object-contain"
+                  style={{ border: "1px solid var(--border)" }} />
+              )}
               <QuestionInput
                 question={q}
                 value={answers[q.id] ?? { text: "", options: [] }}
@@ -559,6 +857,18 @@ export default function SurveyDetailPage() {
             </div>
             );
           })}
+
+          <label className="flex items-center gap-2 cursor-pointer pt-1">
+            <input
+              type="checkbox"
+              checked={emailCopy}
+              onChange={e => setEmailCopy(e.target.checked)}
+              className="accent-sky-400"
+            />
+            <span className="text-sm" style={{ color: "var(--text-secondary)" }}>
+              將回答副本寄送到我的電子郵件信箱
+            </span>
+          </label>
 
           <div className="flex gap-3 pt-2">
             <button
@@ -577,6 +887,8 @@ export default function SurveyDetailPage() {
           )}
         </form>
       )}
+
+      {shareOpen && <ShareModal title={survey.title} onClose={() => setShareOpen(false)} />}
     </div>
   );
 }

@@ -3,7 +3,6 @@
 import json
 from typing import Any
 
-from api.core.config import settings
 from api.core.security import redis_client
 
 

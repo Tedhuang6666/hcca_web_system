@@ -3,13 +3,29 @@ import type {
   DocumentTemplateCreate, DocumentTemplateOut, DocumentTemplateUpdate,
   BatchDocumentOperationOut,
   DocumentApprovalDelegationOut,
-  ProductOut, OrderOut, OrderListItem, OrderCreate,
-  RegulationOut, RegulationListItem, RegulationCategory,
+  ProductOut, OrderOut, OrderListItem, CartOut, OrderSummaryOut,
+  ProductCategoryOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut,
+  CatalogCategoryOut,
+  SchoolClassOut, SchoolClassListItem, SchoolClassBulkCreate, SchoolClassBulkCreateOut,
+  ClassMemberOut, ClassStudentRangeOut, ClassCadreOut, ClassManualMemberOut,
+  ClassMembershipOut, ClassRoleBindingOut,
+  RegulationOut, RegulationListItem, RegulationCategory, RegulationSearchResult,
   RegulationArticleOut, RegulationRevisionOut, RegulationWorkflowLogOut, RegulationTreeNodeOut,
   SerialTemplateOut,
-  MealVendorOut, MenuScheduleOut, MenuScheduleListItem, MenuItemOut,
+  MeetingListItem, MeetingOut, MeetingScreenOut, MeetingMinutesOut, MeetingWorkspaceOut,
+  MeetingJoinOut, MeetingScreenStateOut, MeetingArtifactLinkOut,
+  MeetingAttendanceSourcePreviewOut, MeetingAttendanceSourceOut,
+  MeetingMotionOut, MeetingDecisionOut,
+  MeetingAgendaAttachmentOut, MeetingAgendaItemOut, MeetingAttendanceOut, MeetingVoteOut, MeetingBallotOut,
+  MeetingRequestOut, MeetingBillStage, MeetingRegulationBrief,
+  AgendaItemType, AttendanceRole, AttendanceStatus, VoteVisibility, BallotChoice,
+  MeetingRequestStatus, MeetingRequestType, AttendanceSourceType, MeetingArtifactType,
+  MeetingMotionType, MeetingMotionStatus, MeetingDecisionStatus, MeetingScreenReadingMode,
+  MealAvailabilityOut, MealClassPickupCodeOut, MealPickupLookupOut,
+  MealProductOut, MealVendorApplicationOut, MealVendorOut,
+  MenuScheduleOut, MenuScheduleListItem, MenuItemOut,
   MealOrderOut, MealOrderListItem, ItemStatOut, PickupListItemOut, VendorManagerOut,
-  SurveyOut, SurveyListItem, SurveyResponseOut, SurveyStats,
+  SurveyOut, SurveyListItem, SurveyQuestionOut, SurveyResponseOut, SurveyResponseAdminItem, SurveyStats,
   AnnouncementOut, AnnouncementListItem, AnnouncementCreate, AnnouncementUpdate, AnnouncementMediaOut,
   AnnouncementStatsOut,
   SavedFilterOut,
@@ -21,6 +37,8 @@ import type {
   NotificationPreferences,
   DocumentEfficiencyOut, DeptRankingItem, PendingAlertItem, AnnouncementParticipationItem,
   SurveyParticipationItem,
+  EmailComposePayload, EmailMessageCreate, EmailMessageOut, EmailMessageDetailOut,
+  RecipientSelector, RecipientPreviewOut, EmailPosition,
 } from "./types";
 import { API_BASE, apiUrl } from "./config";
 
@@ -30,6 +48,19 @@ const BASE = API_BASE;
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
+}
+
+export async function withFallback<T>(
+  promise: Promise<T>,
+  fallback: T,
+  onError?: (error: unknown) => void,
+): Promise<T> {
+  try {
+    return await promise;
+  } catch (error) {
+    onError?.(error);
+    return fallback;
+  }
 }
 
 let refreshPromise: Promise<boolean> | null = null;
@@ -307,29 +338,149 @@ export const documentsApi = {
 // ── 商店 ──────────────────────────────────────────────────────────────────────
 
 export const shopApi = {
+  // 瀏覽
+  catalog: (orgId?: string) =>
+    get<CatalogCategoryOut[]>(`/shop/catalog${orgId ? `?org_id=${orgId}` : ""}`),
   listProducts: (params?: Record<string, string>) => {
     const qs = params ? "?" + new URLSearchParams(params).toString() : "";
     return get<ProductOut[]>(`/shop/products${qs}`);
   },
   getProduct: (id: string) => get<ProductOut>(`/shop/products/${id}`),
-  createOrder: (body: OrderCreate) => post<OrderOut>("/shop/orders", body),
+
+  // 購物車
+  getCart: () => get<CartOut>("/shop/cart"),
+  addCartItem: (body: { product_id: string; quantity: number; option_ids: string[] }) =>
+    post<CartOut>("/shop/cart/items", body),
+  updateCartItem: (itemId: string, quantity: number) =>
+    patch<CartOut>(`/shop/cart/items/${itemId}`, { quantity }),
+  removeCartItem: (itemId: string) => del<CartOut>(`/shop/cart/items/${itemId}`),
+  clearCart: () => del<CartOut>("/shop/cart"),
+  checkout: (notes?: string) => post<OrderOut[]>("/shop/cart/checkout", { notes }),
+
+  // 訂單
   listOrders: (params?: Record<string, string>) => {
     const qs = params ? "?" + new URLSearchParams(params).toString() : "";
     return get<OrderListItem[]>(`/shop/orders${qs}`);
   },
+  listClassOrders: (params?: Record<string, string>) => {
+    const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+    return get<OrderListItem[]>(`/shop/orders/class${qs}`);
+  },
+  orderSummary: (params: {
+    group_by: "class" | "grade" | "user";
+    org_id?: string;
+    product_id?: string;
+    grade?: string;
+    class_id?: string;
+    user_id?: string;
+    status?: string;
+    is_paid?: string;
+    date_from?: string;
+    date_to?: string;
+  }) => {
+    const p = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value) p.set(key, value);
+    });
+    return get<OrderSummaryOut>(`/shop/orders/summary?${p.toString()}`);
+  },
   getOrder: (id: string) => get<OrderOut>(`/shop/orders/${id}`),
   cancelOrder: (id: string, reason?: string) =>
     post<OrderOut>(`/shop/orders/${id}/cancel`, { reason }),
-  downloadReport: (format: "xlsx" | "csv") => {
-    return fetch(`${BASE}/shop/reports/orders.${format}`, {
-      credentials: "include",
-    });
+  setOrderPaid: (id: string, isPaid: boolean) =>
+    patch<OrderOut>(`/shop/orders/${id}/payment`, { is_paid: isPaid }),
+  downloadReport: (format: "xlsx" | "csv") =>
+    fetch(`${BASE}/shop/reports/orders.${format}`, { credentials: "include" }),
+
+  // 分類管理（shop:manage）
+  listCategories: (params?: Record<string, string>) => {
+    const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+    return get<ProductCategoryOut[]>(`/shop/categories${qs}`);
   },
-  // 商品管理（shop:manage）
+  createCategory: (body: Record<string, unknown>) =>
+    post<ProductCategoryOut>("/shop/categories", body),
+  updateCategory: (id: string, body: Record<string, unknown>) =>
+    patch<ProductCategoryOut>(`/shop/categories/${id}`, body),
+  deleteCategory: (id: string) => del<void>(`/shop/categories/${id}`),
+  listSeries: (params?: Record<string, string>) => {
+    const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+    return get<ProductSeriesOut[]>(`/shop/series${qs}`);
+  },
+  createSeries: (body: Record<string, unknown>) =>
+    post<ProductSeriesOut>("/shop/series", body),
+  updateSeries: (id: string, body: Record<string, unknown>) =>
+    patch<ProductSeriesOut>(`/shop/series/${id}`, body),
+  deleteSeries: (id: string) => del<void>(`/shop/series/${id}`),
+
+  // 商品管理
   createProduct: (body: Record<string, unknown>) => post<ProductOut>("/shop/products", body),
-  updateProduct: (id: string, body: Record<string, unknown>) => patch<ProductOut>(`/shop/products/${id}`, body),
+  updateProduct: (id: string, body: Record<string, unknown>) =>
+    patch<ProductOut>(`/shop/products/${id}`, body),
   activateProduct: (id: string) => post<ProductOut>(`/shop/products/${id}/activate`, {}),
   deactivateProduct: (id: string) => post<ProductOut>(`/shop/products/${id}/deactivate`, {}),
+
+  // 變體管理
+  addVariantGroup: (productId: string, body: Record<string, unknown>) =>
+    post<ProductVariantGroupOut>(`/shop/products/${productId}/variant-groups`, body),
+  updateVariantGroup: (groupId: string, body: Record<string, unknown>) =>
+    patch<ProductVariantGroupOut>(`/shop/variant-groups/${groupId}`, body),
+  deleteVariantGroup: (groupId: string) => del<void>(`/shop/variant-groups/${groupId}`),
+  addVariantOption: (groupId: string, body: Record<string, unknown>) =>
+    post<ProductVariantOptionOut>(`/shop/variant-groups/${groupId}/options`, body),
+  updateVariantOption: (optionId: string, body: Record<string, unknown>) =>
+    patch<ProductVariantOptionOut>(`/shop/variant-options/${optionId}`, body),
+  deleteVariantOption: (optionId: string) => del<void>(`/shop/variant-options/${optionId}`),
+
+  // 圖片上傳
+  uploadImage: async (file: File): Promise<{ url: string }> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const doFetch = () =>
+      fetch(`${BASE}/shop/images`, {
+        method: "POST",
+        credentials: "include",
+        headers: csrfHeaders("POST"),
+        body: fd,
+      });
+    let res = await doFetch();
+    if (res.status === 401 && (await silentRefresh())) res = await doFetch();
+    if (!res.ok) throw new ApiError(res.status, await errorMessageFromResponse(res));
+    return res.json();
+  },
+};
+
+// ── 班級 ──────────────────────────────────────────────────────────────────────
+
+export const classApi = {
+  list: (params?: Record<string, string>) => {
+    const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+    return get<SchoolClassListItem[]>(`/classes${qs}`);
+  },
+  get: (id: string) => get<SchoolClassOut>(`/classes/${id}`),
+  myClass: () => get<SchoolClassListItem | null>("/classes/me"),
+  create: (body: Record<string, unknown>) => post<SchoolClassOut>("/classes", body),
+  bulkCreate: (body: SchoolClassBulkCreate) => post<SchoolClassBulkCreateOut>("/classes/bulk", body),
+  update: (id: string, body: Record<string, unknown>) =>
+    patch<SchoolClassOut>(`/classes/${id}`, body),
+  remove: (id: string) => del<void>(`/classes/${id}`),
+  members: (id: string) => get<ClassMemberOut[]>(`/classes/${id}/members`),
+  memberships: (id: string) => get<ClassMembershipOut[]>(`/classes/${id}/memberships`),
+  addMembership: (id: string, body: { user_id: string; source?: string; start_date?: string | null }) =>
+    post<ClassMembershipOut>(`/classes/${id}/memberships`, body),
+  endMembership: (id: string, userId: string) =>
+    del<void>(`/classes/${id}/memberships/${userId}`),
+  roles: (id: string) => get<ClassRoleBindingOut[]>(`/classes/${id}/roles`),
+  assignRole: (id: string, roleKey: string, body: { user_id: string; start_date?: string | null; end_date?: string | null }) =>
+    post<{ user_position_id: string; position_id: string }>(`/classes/${id}/roles/${roleKey}/assign`, body),
+  addMember: (id: string, userId: string) =>
+    post<ClassManualMemberOut>(`/classes/${id}/members`, { user_id: userId }),
+  removeMember: (id: string, userId: string) => del<void>(`/classes/${id}/members/${userId}`),
+  addRange: (id: string, body: { student_id_start: string; student_id_end: string }) =>
+    post<ClassStudentRangeOut>(`/classes/${id}/ranges`, body),
+  deleteRange: (id: string, rangeId: string) => del<void>(`/classes/${id}/ranges/${rangeId}`),
+  addCadre: (id: string, userId: string) =>
+    post<ClassCadreOut>(`/classes/${id}/cadres`, { user_id: userId }),
+  removeCadre: (id: string, userId: string) => del<void>(`/classes/${id}/cadres/${userId}`),
 };
 
 // ── 法規 ──────────────────────────────────────────────────────────────────────
@@ -362,7 +513,9 @@ export const regulationsApi = {
   },
   search: (keyword: string, params?: Record<string, string>) => {
     const base: Record<string, string> = { keyword, ...params };
-    return get<RegulationListItem[]>(`/regulations/search?${new URLSearchParams(base).toString()}`);
+    return get<RegulationSearchResult[]>(
+      `/regulations/search?${new URLSearchParams(base).toString()}`,
+    );
   },
   get: (id: string) => get<RegulationOut>(regulationPath(id)),
   create: (body: {
@@ -473,7 +626,8 @@ export const regulationsApi = {
   listWorkflowLogs: (id: string) => get<RegulationWorkflowLogOut[]>(`${regulationPath(id)}/workflow_logs`),
   submitReview: (id: string, note?: string) => post<RegulationOut>(`${regulationPath(id)}/submit`, { note }),
   forkDraft: (id: string) => post<RegulationOut>(`${regulationPath(id)}/fork_draft`, {}),
-  scheduleAgenda: (id: string, note?: string) => post<RegulationOut>(`${regulationPath(id)}/schedule`, { note }),
+  scheduleAgenda: (id: string, note?: string, meetingId?: string) =>
+    post<RegulationOut>(`${regulationPath(id)}/schedule`, { note, meeting_id: meetingId }),
   councilApprove: (id: string, note?: string) => post<RegulationOut>(`${regulationPath(id)}/council_approve`, { note }),
   presidentPublish: (id: string, note?: string) => post<RegulationOut>(`${regulationPath(id)}/president_publish`, { note }),
   rejectRegulation: (id: string, note: string) => post<RegulationOut>(`${regulationPath(id)}/reject`, { note }),
@@ -615,6 +769,12 @@ export const usersApi = {
     const qs = keyword ? `?search=${encodeURIComponent(keyword)}` : "";
     return get<UserSummary[]>(`/users${qs}`);
   },
+  /** 依 ID 批次取得使用者（用於回填已選名單）*/
+  listByIds: (ids: string[]) => {
+    if (ids.length === 0) return Promise.resolve([] as UserSummary[]);
+    const qs = ids.map((id) => `ids=${encodeURIComponent(id)}`).join("&");
+    return get<UserSummary[]>(`/users?${qs}`);
+  },
   me: () => get<import("@/lib/types").UserRead>("/users/me"),
   updateMe: (body: {
     display_name?: string; student_id?: string;
@@ -631,7 +791,10 @@ export const usersApi = {
 export type { OrgRead } from "./types";
 
 export const orgsApi = {
-  list: () => get<OrgRead[]>("/orgs"),
+  list: (params?: { active_only?: boolean }) => {
+    const qs = params?.active_only ? "?active_only=true" : "";
+    return get<OrgRead[]>(`/orgs${qs}`);
+  },
   get: (id: string) => get<OrgRead>(`/orgs/${id}`),
   /** 取得組織樹（巢狀結構） */
   tree: () => get<(OrgRead & { children: OrgRead[] })[]>("/orgs/tree"),
@@ -736,13 +899,19 @@ export const adminApi = {
   listOrgsWithPositions: () => get<OrgWithPositions[]>("/admin/orgs-with-positions"),
 
   // 組織管理
-  createOrg: (body: { name: string; description?: string; parent_id?: string | null; prefix?: string | null }) =>
-    post<OrgRead>("/orgs", body),
+  createOrg: (body: {
+    name: string;
+    description?: string;
+    parent_id?: string | null;
+    prefix?: string | null;
+    bill_stage?: MeetingBillStage | null;
+  }) => post<OrgRead>("/orgs", body),
   updateOrg: (id: string, body: {
     name?: string;
     description?: string | null;
     parent_id?: string | null;
     prefix?: string | null;
+    bill_stage?: MeetingBillStage | null;
     note?: string | null;
     remark?: string | null;
     is_active?: boolean;
@@ -836,6 +1005,11 @@ export const notificationsApi = {
   getPreferences: () => get<NotificationPreferences>("/notifications/preferences"),
   updatePreferences: (body: Partial<NotificationPreferences>) =>
     put<NotificationPreferences>("/notifications/preferences", body),
+  unsubscribe: (token: string) =>
+    post<{ status: string; type: string; message: string }>(
+      "/notifications/unsubscribe",
+      { token },
+    ),
 };
 
 // ── 常用篩選（Saved Filters）───────────────────────────────────────────────────
@@ -896,10 +1070,76 @@ export const mealApi = {
   updateVendor: (id: string, body: {
     name?: string; description?: string | null;
     contact_phone?: string | null; contact_email?: string | null; is_active?: boolean;
+    status?: string; review_note?: string | null;
   }) => patch<MealVendorOut>(`/meal/vendors/${id}`, body),
+  createVendorApplication: (body: {
+    name: string; org_id: string; description?: string | null;
+    contact_name?: string | null; contact_phone?: string | null; contact_email?: string | null;
+  }) => post<MealVendorApplicationOut>("/meal/vendor-applications", body),
+  listVendorApplications: (params?: { status?: string; limit?: number; offset?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.status) q.set("status", params.status);
+    if (params?.limit !== undefined) q.set("limit", String(params.limit));
+    if (params?.offset !== undefined) q.set("offset", String(params.offset));
+    return get<MealVendorApplicationOut[]>(`/meal/vendor-applications?${q}`);
+  },
+  reviewVendorApplication: (id: string, body: { approved: boolean; review_note?: string | null }) =>
+    post<MealVendorApplicationOut>(`/meal/vendor-applications/${id}/review`, body),
+  listVendorManagers: (vendorId: string) =>
+    get<VendorManagerOut[]>(`/meal/vendors/${vendorId}/managers`),
+  removeVendorManager: (vendorId: string, userId: string) =>
+    del<void>(`/meal/vendors/${vendorId}/managers/${userId}`),
+  listProducts: (params?: { vendor_id?: string; active_only?: boolean; limit?: number; offset?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.vendor_id) q.set("vendor_id", params.vendor_id);
+    if (params?.active_only !== undefined) q.set("active_only", String(params.active_only));
+    if (params?.limit !== undefined) q.set("limit", String(params.limit));
+    if (params?.offset !== undefined) q.set("offset", String(params.offset));
+    return get<MealProductOut[]>(`/meal/products?${q}`);
+  },
+  createProduct: (body: {
+    vendor_id: string; name: string; description?: string | null; category?: string | null;
+    image_url?: string | null; price: number; default_max_quantity?: number | null;
+  }) => post<MealProductOut>("/meal/products", body),
+  updateProduct: (id: string, body: Partial<{
+    name: string; description: string | null; category: string | null; image_url: string | null;
+    price: number; default_max_quantity: number | null; is_active: boolean;
+  }>) => patch<MealProductOut>(`/meal/products/${id}`, body),
+  listAvailabilities: (params?: {
+    vendor_id?: string; date_from?: string; date_to?: string; active_only?: boolean; limit?: number; offset?: number;
+  }) => {
+    const q = new URLSearchParams();
+    if (params?.vendor_id) q.set("vendor_id", params.vendor_id);
+    if (params?.date_from) q.set("date_from", params.date_from);
+    if (params?.date_to) q.set("date_to", params.date_to);
+    if (params?.active_only !== undefined) q.set("active_only", String(params.active_only));
+    if (params?.limit !== undefined) q.set("limit", String(params.limit));
+    if (params?.offset !== undefined) q.set("offset", String(params.offset));
+    return get<MealAvailabilityOut[]>(`/meal/availabilities?${q}`);
+  },
+  createAvailability: (body: {
+    product_id: string; service_date: string; sale_start?: string | null; sale_end?: string | null;
+    price?: number | null; max_quantity?: number | null; note?: string | null;
+    pickup_slots?: {
+      label: string; sort_order?: number; pickup_start: string; pickup_end: string;
+      order_deadline: string; capacity?: number | null;
+    }[];
+  }) => post<MealAvailabilityOut>("/meal/availabilities", body),
+  bulkCreateWeeklyAvailabilities: (body: {
+    product_ids: string[]; date_from: string; date_to: string; weekdays: number[];
+    sale_start_time?: string | null; sale_end_time?: string | null;
+    pickup_slots?: {
+      label: string; sort_order?: number; pickup_start: string; pickup_end: string;
+      order_deadline: string; capacity?: number | null;
+    }[];
+  }) => post<MealAvailabilityOut[]>("/meal/availabilities/weekly", body),
 
   // 訂單
-  createOrder: (body: { schedule_id: string; items: { menu_item_id: string; quantity: number }[]; notes?: string }) =>
+  createOrder: (body: {
+    schedule_id?: string | null; pickup_slot_id?: string | null;
+    items: { menu_item_id?: string | null; availability_id?: string | null; quantity: number }[];
+    notes?: string;
+  }) =>
     post<MealOrderOut>("/meal/orders", body),
   listOrders: (params?: { my_only?: boolean; schedule_id?: string; vendor_id?: string; limit?: number; offset?: number }) => {
     const q = new URLSearchParams();
@@ -915,7 +1155,24 @@ export const mealApi = {
     post<MealOrderOut>(`/meal/orders/${id}/cancel`, { reason }),
   confirmOrder: (id: string) => post<MealOrderOut>(`/meal/orders/${id}/confirm`),
   completeOrder: (id: string) => post<MealOrderOut>(`/meal/orders/${id}/complete`),
+  setOrderPaid: (id: string, isPaid: boolean) =>
+    post<MealOrderOut>(`/meal/orders/${id}/payment?is_paid=${String(isPaid)}`),
+  listClassOrders: (params?: { vendor_id?: string; pickup_slot_id?: string; is_paid?: boolean; limit?: number; offset?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.vendor_id) q.set("vendor_id", params.vendor_id);
+    if (params?.pickup_slot_id) q.set("pickup_slot_id", params.pickup_slot_id);
+    if (params?.is_paid !== undefined) q.set("is_paid", String(params.is_paid));
+    if (params?.limit !== undefined) q.set("limit", String(params.limit));
+    if (params?.offset !== undefined) q.set("offset", String(params.offset));
+    return get<MealOrderListItem[]>(`/meal/orders/class?${q}`);
+  },
+  getClassPickupCode: (params: { class_id: string; vendor_id: string; pickup_slot_id: string }) => {
+    const q = new URLSearchParams(params);
+    return post<MealClassPickupCodeOut>(`/meal/orders/class-pickup-code?${q}`);
+  },
   lookupByCode: (code: string) => get<MealOrderOut>(`/meal/orders/lookup?code=${encodeURIComponent(code)}`),
+  pickupLookup: (code: string, redeem = true) =>
+    post<MealPickupLookupOut>(`/meal/pickup/lookup?code=${encodeURIComponent(code)}&redeem=${String(redeem)}`),
   getScheduleItemStats: (scheduleId: string) => get<ItemStatOut[]>(`/meal/schedules/${scheduleId}/item-stats`),
   getPickupList: (scheduleId: string) => get<PickupListItemOut[]>(`/meal/schedules/${scheduleId}/pickup-list`),
   assignVendorManager: (vendorId: string, email: string) =>
@@ -933,25 +1190,86 @@ export const mealApi = {
 
 // ── 問卷系統 ──────────────────────────────────────────────────────────────────
 
+export type SurveyQuestionBody = {
+  question_text?: string;
+  question_type?: string;
+  is_required?: boolean;
+  options?: string[];
+  min_value?: number;
+  max_value?: number;
+  placeholder?: string;
+  image_url?: string;
+  min_length?: number;
+  max_length?: number;
+  validation_rule?: string;
+  min_label?: string;
+  max_label?: string;
+  condition?: { rules: { question_id: string; operator: string; value: string; connector: string }[] } | null;
+  order_index?: number;
+};
+
 export const surveysApi = {
   list: (params?: { status?: string; org_id?: string }) => {
     const q = new URLSearchParams();
     if (params?.status) q.set("status", params.status);
     if (params?.org_id) q.set("org_id", params.org_id);
-    return get<SurveyListItem[]>(`/surveys/?${q}`);
+    const qs = q.toString();
+    return get<SurveyListItem[]>(`/surveys${qs ? `?${qs}` : ""}`);
+  },
+  /** 公開問卷列表（未登入可用，僅回傳 is_public 且開放/已截止的問卷） */
+  listPublic: (params?: { status?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.status) q.set("status", params.status);
+    const qs = q.toString();
+    return get<SurveyListItem[]>(`/surveys/public${qs ? `?${qs}` : ""}`);
   },
   get: (id: string) => get<SurveyOut>(`/surveys/${pathSegment(id)}`),
   getPublic: (id: string) => get<SurveyOut>(`/surveys/public/${pathSegment(id)}`),
-  create: (body: { title: string; description?: string; is_anonymous?: boolean; allow_multiple?: boolean; opens_at?: string; closes_at?: string; org_id: string }) =>
-    post<SurveyOut>("/surveys/", body),
+  create: (body: { title: string; description?: string; is_anonymous?: boolean; allow_multiple?: boolean; opens_at?: string; closes_at?: string; org_id: string; is_public?: boolean; allowed_org_ids?: string[]; allowed_user_ids?: string[]; allowed_domains?: string[] }) =>
+    post<SurveyOut>("/surveys", body),
+  update: (id: string, body: { title?: string; description?: string; opens_at?: string; closes_at?: string; is_public?: boolean; allowed_org_ids?: string[]; allowed_user_ids?: string[]; allowed_domains?: string[] }) =>
+    patch<SurveyOut>(`/surveys/${pathSegment(id)}`, body),
   open: (id: string) => post<SurveyOut>(`/surveys/${pathSegment(id)}/open`),
   close: (id: string) => post<SurveyOut>(`/surveys/${pathSegment(id)}/close`),
-  addQuestion: (id: string, body: { question_text: string; question_type: string; is_required?: boolean; options?: string[]; min_value?: number; max_value?: number; placeholder?: string; order_index?: number }) =>
-    post<{ id: string; question_text: string; question_type: string; options: string[] }>(`/surveys/${pathSegment(id)}/questions`, body),
+  addQuestion: (id: string, body: SurveyQuestionBody & { question_text: string; question_type: string }) =>
+    post<SurveyQuestionOut>(`/surveys/${pathSegment(id)}/questions`, body),
+  updateQuestion: (questionId: string, body: SurveyQuestionBody) =>
+    patch<SurveyQuestionOut>(`/surveys/questions/${questionId}`, body),
   deleteQuestion: (questionId: string) => del<void>(`/surveys/questions/${questionId}`),
-  submit: (id: string, body: { answers: { question_id: string; answer_text?: string; answer_options?: string[] }[]; anon_token?: string }) =>
+  submit: (id: string, body: { answers: { question_id: string; answer_text?: string; answer_options?: string[] }[]; anon_token?: string; email_copy?: boolean }) =>
     post<SurveyResponseOut>(`/surveys/${pathSegment(id)}/submit`, body),
   stats: (id: string) => get<SurveyStats>(`/surveys/${pathSegment(id)}/stats`),
+  responses: (id: string) =>
+    get<SurveyResponseAdminItem[]>(`/surveys/${pathSegment(id)}/responses`),
+  uploadImage: async (file: File): Promise<{ url: string; filename: string }> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const doFetch = () =>
+      fetch(`${BASE}/surveys/images`, {
+        method: "POST",
+        credentials: "include",
+        headers: csrfHeaders("POST"),
+        body: fd,
+      });
+    let res = await doFetch();
+    if (res.status === 401) {
+      const ok = await silentRefresh();
+      if (ok) res = await doFetch();
+    }
+    if (!res.ok) throw new ApiError(res.status, await errorMessageFromResponse(res));
+    return res.json();
+  },
+  exportSpreadsheet: async (id: string): Promise<Blob> => {
+    const doFetch = () =>
+      fetch(`${BASE}/surveys/${pathSegment(id)}/export`, { credentials: "include" });
+    let res = await doFetch();
+    if (res.status === 401) {
+      const ok = await silentRefresh();
+      if (ok) res = await doFetch();
+    }
+    if (!res.ok) throw new ApiError(res.status, await errorMessageFromResponse(res));
+    return res.blob();
+  },
 };
 
 // ── 陳情系統 ──────────────────────────────────────────────────────────────────
@@ -1143,4 +1461,276 @@ export const analyticsApi = {
       `/analytics/surveys/participation${q.size ? `?${q}` : ""}`
     );
   },
+};
+
+// ── 議事系統 ──────────────────────────────────────────────────────────────────
+
+export const meetingsApi = {
+  workspace: () => get<MeetingWorkspaceOut>("/meetings/workspace"),
+  list: (params?: { org_id?: string; status?: string; limit?: number; offset?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.org_id) q.set("org_id", params.org_id);
+    if (params?.status) q.set("status", params.status);
+    if (params?.limit) q.set("limit", String(params.limit));
+    if (params?.offset) q.set("offset", String(params.offset));
+    return get<MeetingListItem[]>(`/meetings${q.size ? `?${q}` : ""}`);
+  },
+  get: (id: string) => get<MeetingOut>(`/meetings/${id}`),
+  join: (token: string) => get<MeetingJoinOut>(`/meetings/join/${encodeURIComponent(token)}`),
+  create: (body: {
+    title: string;
+    org_id: string;
+    description?: string | null;
+    location?: string | null;
+    chair_name?: string | null;
+    starts_at?: string | null;
+    ends_at?: string | null;
+    expected_voters?: number;
+    quorum_count?: number;
+    default_pass_threshold?: number;
+    bill_stage?: MeetingBillStage | null;
+  }) => post<MeetingOut>("/meetings", body),
+  update: (id: string, body: Partial<{
+    title: string;
+    description: string | null;
+    location: string | null;
+    chair_name: string | null;
+    starts_at: string | null;
+    ends_at: string | null;
+    expected_voters: number;
+    quorum_count: number;
+    default_pass_threshold: number;
+    bill_stage: MeetingBillStage | null;
+    current_agenda_item_id: string | null;
+    screen_focus_title: string | null;
+    screen_focus_body: string | null;
+  }>) => patch<MeetingOut>(`/meetings/${id}`, body),
+  start: (id: string) => post<MeetingOut>(`/meetings/${id}/start`),
+  pause: (id: string) => post<MeetingOut>(`/meetings/${id}/pause`),
+  close: (id: string) => post<MeetingOut>(`/meetings/${id}/close`),
+  addAgendaItem: (id: string, body: {
+    title: string;
+    description?: string | null;
+    item_type?: AgendaItemType;
+    order_index?: number;
+    regulation_id?: string | null;
+    document_id?: string | null;
+    notes?: string | null;
+    resolution?: string | null;
+  }) => post<MeetingAgendaItemOut>(`/meetings/${id}/agenda-items`, body),
+  updateAgendaItem: (id: string, itemId: string, body: Partial<{
+    title: string;
+    description: string | null;
+    item_type: AgendaItemType;
+    order_index: number;
+    regulation_id: string | null;
+    document_id: string | null;
+    notes: string | null;
+    resolution: string | null;
+  }>) => patch<MeetingAgendaItemOut>(`/meetings/${id}/agenda-items/${itemId}`, body),
+  reorderAgendaItems: (id: string, orderedIds: string[]) =>
+    patch<MeetingAgendaItemOut[]>(`/meetings/${id}/agenda-items/reorder`, orderedIds),
+  uploadAgendaAttachment: async (
+    id: string,
+    itemId: string,
+    file: File,
+  ): Promise<MeetingAgendaAttachmentOut> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const doFetch = () =>
+      fetch(`${BASE}/meetings/${id}/agenda-items/${itemId}/attachments`, {
+        method: "POST",
+        credentials: "include",
+        headers: csrfHeaders("POST"),
+        body: fd,
+      });
+    let res = await doFetch();
+    if (res.status === 401) {
+      const ok = await silentRefresh();
+      if (ok) res = await doFetch();
+    }
+    if (!res.ok) throw new ApiError(res.status, await errorMessageFromResponse(res));
+    return res.json();
+  },
+  addAgendaAttachmentLink: (
+    id: string,
+    itemId: string,
+    body: { url: string; display_text?: string | null },
+  ) =>
+    post<MeetingAgendaAttachmentOut>(
+      `/meetings/${id}/agenda-items/${itemId}/attachments/link`,
+      body,
+    ),
+  deleteAgendaAttachment: (id: string, itemId: string, attachmentId: string) =>
+    del<void>(`/meetings/${id}/agenda-items/${itemId}/attachments/${attachmentId}`),
+  agendaAttachmentDownloadUrl: (id: string, itemId: string, attachmentId: string) =>
+    `${BASE}/meetings/${id}/agenda-items/${itemId}/attachments/${attachmentId}/download`,
+  addArtifactLink: (id: string, itemId: string, body: {
+    artifact_type: MeetingArtifactType;
+    object_id?: string | null;
+    title: string;
+    url?: string | null;
+    summary?: string | null;
+  }) => post<MeetingArtifactLinkOut>(`/meetings/${id}/agenda-items/${itemId}/artifact-links`, body),
+  updateArtifactLink: (id: string, itemId: string, linkId: string, body: Partial<{
+    title: string;
+    url: string | null;
+    summary: string | null;
+  }>) => patch<MeetingArtifactLinkOut>(
+    `/meetings/${id}/agenda-items/${itemId}/artifact-links/${linkId}`,
+    body,
+  ),
+  deleteArtifactLink: (id: string, itemId: string, linkId: string) =>
+    del<void>(`/meetings/${id}/agenda-items/${itemId}/artifact-links/${linkId}`),
+  deleteAgendaItem: (id: string, itemId: string) =>
+    del<void>(`/meetings/${id}/agenda-items/${itemId}`),
+  confirm: (id: string) => post<MeetingOut>(`/meetings/${id}/confirm`),
+  proposableRegulations: (id: string) =>
+    get<MeetingRegulationBrief[]>(`/meetings/${id}/proposable-regulations`),
+  syncProposals: (id: string) =>
+    post<MeetingOut>(`/meetings/${id}/agenda-items/sync-proposals`),
+  advanceAgendaRegulation: (id: string, itemId: string) =>
+    post<MeetingAgendaItemOut>(`/meetings/${id}/agenda-items/${itemId}/advance-regulation`),
+  checkIn: (id: string, token?: string) =>
+    post<MeetingAttendanceOut>(
+      `/meetings/${id}/check-in${token ? `?token=${encodeURIComponent(token)}` : ""}`,
+    ),
+  resolveAttendanceSource: (id: string, body: {
+    source_type: AttendanceSourceType;
+    source_id?: string | null;
+    user_ids?: string[];
+    role?: AttendanceRole;
+    is_voting_eligible?: boolean;
+  }) => post<MeetingAttendanceSourcePreviewOut>(`/meetings/${id}/attendance/sources/resolve`, body),
+  importAttendanceSource: (id: string, body: {
+    source_type: AttendanceSourceType;
+    source_id?: string | null;
+    user_ids?: string[];
+    role?: AttendanceRole;
+    is_voting_eligible?: boolean;
+    label?: string | null;
+  }) => post<MeetingAttendanceSourceOut>(`/meetings/${id}/attendance/sources`, body),
+  upsertAttendance: (id: string, body: {
+    user_id: string;
+    role?: AttendanceRole;
+    status?: AttendanceStatus;
+    is_voting_eligible?: boolean;
+    proxy_for_user_id?: string | null;
+    note?: string | null;
+  }) => post<MeetingAttendanceOut>(`/meetings/${id}/attendance`, body),
+  updateAttendance: (id: string, attendanceId: string, body: Partial<{
+    role: AttendanceRole;
+    status: AttendanceStatus;
+    is_voting_eligible: boolean;
+    proxy_for_user_id: string | null;
+    note: string | null;
+  }>) => patch<MeetingAttendanceOut>(`/meetings/${id}/attendance/${attendanceId}`, body),
+  createVote: (id: string, body: {
+    title: string;
+    description?: string | null;
+    agenda_item_id?: string | null;
+    visibility?: VoteVisibility;
+    pass_threshold?: number;
+  }) => post<MeetingVoteOut>(`/meetings/${id}/votes`, body),
+  updateVote: (id: string, voteId: string, body: Partial<{
+    title: string;
+    description: string | null;
+    visibility: VoteVisibility;
+    pass_threshold: number;
+    result_note: string | null;
+  }>) => patch<MeetingVoteOut>(`/meetings/${id}/votes/${voteId}`, body),
+  createMotion: (id: string, body: {
+    agenda_item_id?: string | null;
+    proposer_id?: string | null;
+    motion_type?: MeetingMotionType;
+    title: string;
+    content?: string | null;
+    vote_id?: string | null;
+  }) => post<MeetingMotionOut>(`/meetings/${id}/motions`, body),
+  updateMotion: (id: string, motionId: string, body: Partial<{
+    agenda_item_id: string | null;
+    proposer_id: string | null;
+    motion_type: MeetingMotionType;
+    title: string;
+    content: string | null;
+    status: MeetingMotionStatus;
+    vote_id: string | null;
+  }>) => patch<MeetingMotionOut>(`/meetings/${id}/motions/${motionId}`, body),
+  createDecision: (id: string, body: {
+    agenda_item_id: string;
+    motion_id?: string | null;
+    vote_id?: string | null;
+    title: string;
+    content: string;
+    status?: MeetingDecisionStatus;
+    regulation_transition_to?: string | null;
+  }) => post<MeetingDecisionOut>(`/meetings/${id}/decisions`, body),
+  updateDecision: (id: string, decisionId: string, body: Partial<{
+    motion_id: string | null;
+    vote_id: string | null;
+    title: string;
+    content: string;
+    status: MeetingDecisionStatus;
+    regulation_transition_to: string | null;
+  }>) => patch<MeetingDecisionOut>(`/meetings/${id}/decisions/${decisionId}`, body),
+  openVote: (id: string, voteId: string) =>
+    post<MeetingVoteOut>(`/meetings/${id}/votes/${voteId}/open`),
+  closeVote: (id: string, voteId: string) =>
+    post<MeetingVoteOut>(`/meetings/${id}/votes/${voteId}/close`),
+  castBallot: (id: string, voteId: string, choice: BallotChoice) =>
+    post<MeetingBallotOut>(`/meetings/${id}/votes/${voteId}/ballot`, { choice }),
+  createRequest: (id: string, body: {
+    request_type: MeetingRequestType;
+    agenda_item_id?: string | null;
+    content?: string | null;
+  }) => post<MeetingRequestOut>(`/meetings/${id}/requests`, body),
+  updateRequest: (id: string, requestId: string, status: MeetingRequestStatus) =>
+    patch<MeetingRequestOut>(`/meetings/${id}/requests/${requestId}`, { status }),
+  screen: (id: string) => get<MeetingScreenOut>(`/meetings/${id}/screen`),
+  updateScreenState: (id: string, body: Partial<{
+    agenda_item_id: string | null;
+    reading_mode: MeetingScreenReadingMode;
+    title: string | null;
+    body: string | null;
+    active_attachment_id: string | null;
+    scroll_position: number;
+    auto_scroll: boolean;
+    scroll_speed: number;
+    is_fullscreen: boolean;
+  }>) => patch<MeetingScreenStateOut>(`/meetings/${id}/screen-state`, body),
+  publicScreen: (token: string) =>
+    get<MeetingScreenOut>(`/public/meetings/screen/${encodeURIComponent(token)}`),
+  minutes: (id: string) => get<MeetingMinutesOut>(`/meetings/${id}/minutes`),
+  createMinutesDocument: (id: string) =>
+    post<{ document_id: string; title: string; status: string }>(
+      `/meetings/${id}/minutes/document-draft`,
+    ),
+};
+
+// ── 電子郵件 ──────────────────────────────────────────────────────────────────
+
+export const emailApi = {
+  previewRecipients: (sel: RecipientSelector) =>
+    post<RecipientPreviewOut>("/email/preview-recipients", sel),
+  preview: (body: EmailComposePayload) =>
+    post<{ html: string }>("/email/preview", body),
+  test: (body: EmailComposePayload) =>
+    post<{ status: string; sent_to: string }>("/email/test", body),
+  createMessage: (body: EmailMessageCreate) =>
+    post<EmailMessageOut>("/email/messages", body),
+  updateMessage: (
+    id: string,
+    body: Partial<EmailComposePayload> & { scheduled_at?: string | null },
+  ) => patch<EmailMessageOut>(`/email/messages/${id}`, body),
+  sendMessage: (id: string) => post<EmailMessageOut>(`/email/messages/${id}/send`),
+  deleteMessage: (id: string) => del<void>(`/email/messages/${id}`),
+  listMessages: (params?: { status?: string; limit?: number; offset?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.status) q.set("status", params.status);
+    if (params?.limit) q.set("limit", String(params.limit));
+    if (params?.offset) q.set("offset", String(params.offset));
+    return get<EmailMessageOut[]>(`/email/messages${q.size ? `?${q}` : ""}`);
+  },
+  getMessage: (id: string) => get<EmailMessageDetailOut>(`/email/messages/${id}`),
+  orgPositions: (orgId: string) => get<EmailPosition[]>(`/orgs/${orgId}/positions`),
 };

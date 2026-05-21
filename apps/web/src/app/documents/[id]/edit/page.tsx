@@ -15,6 +15,28 @@ import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 
 interface Recipient { id: string; recipient_type: RecipientType; name: string; email: string }
 
+const CATEGORY_OPTIONS: Array<[DocumentCategory, string]> = [
+  ["letter", "函"],
+  ["decree", "令"],
+  ["announcement", "公告"],
+  ["report", "報告"],
+  ["record", "紀錄"],
+  ["consultation", "咨"],
+  ["meeting_notice", "開會通知單"],
+  ["other", "其他"],
+];
+
+const CONTENT_LABELS: Record<DocumentCategory, { title: string; subject?: string; desc: string; action?: string }> = {
+  letter: { title: "公文內容（主旨／說明／辦法）", subject: "一、主旨", desc: "二、說明", action: "三、辦法" },
+  decree: { title: "令文內容", desc: "正文" },
+  announcement: { title: "公告內容", subject: "主旨", desc: "公告事項" },
+  report: { title: "報告內容", subject: "主旨", desc: "說明／分析", action: "建議事項" },
+  record: { title: "討論與決議", desc: "討論事項", action: "決議" },
+  consultation: { title: "咨文內容", subject: "主旨", desc: "說明", action: "辦法或事項" },
+  meeting_notice: { title: "議事日程", desc: "議事日程" },
+  other: { title: "公文內容（主旨／說明／辦法）", subject: "一、主旨", desc: "二、說明", action: "三、辦法" },
+};
+
 type DocumentEditDraft = {
   title: string;
   urgency: DocumentUrgency;
@@ -47,6 +69,10 @@ export default function EditDocumentPage() {
   const [subject, setSubject] = useState("");
   const [docDescription, setDocDescription] = useState("");
   const [actionRequired, setActionRequired] = useState("");
+  const [meetingPurpose, setMeetingPurpose] = useState("");
+  const [meetingTime, setMeetingTime] = useState("");
+  const [meetingLocation, setMeetingLocation] = useState("");
+  const [meetingChairperson, setMeetingChairperson] = useState("");
 
   const [handlerName, setHandlerName] = useState("");
   const [handlerUnit, setHandlerUnit] = useState("");
@@ -160,6 +186,10 @@ export default function EditDocumentPage() {
       setSubject(d.subject ?? "");
       setDocDescription(d.doc_description ?? "");
       setActionRequired(d.action_required ?? "");
+      setMeetingPurpose(d.meeting_purpose ?? "");
+      setMeetingTime(d.meeting_time ? d.meeting_time.slice(0, 16) : "");
+      setMeetingLocation(d.meeting_location ?? "");
+      setMeetingChairperson(d.meeting_chairperson ?? "");
 
       setHandlerName(d.handler_name ?? "");
       setHandlerUnit(d.handler_unit ?? "");
@@ -208,6 +238,10 @@ export default function EditDocumentPage() {
         subject: category === "decree" ? null : subject || undefined,
         doc_description: docDescription || undefined,
         action_required: category === "decree" ? null : actionRequired || undefined,
+        meeting_purpose: category === "meeting_notice" ? meetingPurpose || undefined : undefined,
+        meeting_time: (category === "meeting_notice" || category === "record") && meetingTime ? meetingTime : undefined,
+        meeting_location: (category === "meeting_notice" || category === "record") ? meetingLocation || undefined : undefined,
+        meeting_chairperson: (category === "meeting_notice" || category === "record") ? meetingChairperson || undefined : undefined,
         handler_name: handlerName || undefined, handler_unit: handlerUnit || undefined,
         handler_email: handlerEmail || undefined,
         due_date: dueDate || undefined, change_note: changeNote || undefined,
@@ -253,6 +287,9 @@ export default function EditDocumentPage() {
   const inputStyle = { border: "1px solid var(--border)" };
   const selectedTemplate = templates.find(t => t.id === selectedTemplateId) ?? null;
   const isDecree = category === "decree";
+  const isMeetingNotice = category === "meeting_notice";
+  const isRecord = category === "record";
+  const contentLabels = CONTENT_LABELS[category];
 
   return (
     <div className="max-w-4xl mx-auto space-y-5">
@@ -286,7 +323,7 @@ export default function EditDocumentPage() {
                 { label: "密等", value: classification, setter: setClassification as (v: string) => void,
                   options: [["normal","普通"],["confidential","機密"],["secret","秘密"]] },
                 { label: "類別", value: category, setter: setCategory as (v: string) => void,
-                  options: [["letter","函"],["decree","令"],["announcement","公告"],["report","報告"],["other","其他"]] },
+                  options: CATEGORY_OPTIONS },
               ].map(({ label, value, setter, options }) => (
                 <div key={label}>
                   <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>{label}</label>
@@ -299,14 +336,37 @@ export default function EditDocumentPage() {
             </div>
           </div>
 
+          {(isMeetingNotice || isRecord) && (
+            <div className="card p-4 space-y-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+                {isRecord ? "紀錄資訊" : "開會資訊"}
+              </h3>
+              {isMeetingNotice && (
+                <input value={meetingPurpose} onChange={e => setMeetingPurpose(e.target.value)}
+                  placeholder="開會事由"
+                  className="w-full bg-transparent text-sm p-2 rounded outline-none" style={inputStyle} />
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <input type="datetime-local" value={meetingTime} onChange={e => setMeetingTime(e.target.value)}
+                  className="w-full bg-transparent text-sm p-2 rounded outline-none" style={inputStyle} />
+                <input value={meetingLocation} onChange={e => setMeetingLocation(e.target.value)}
+                  placeholder={isRecord ? "地點" : "開會地點"}
+                  className="w-full bg-transparent text-sm p-2 rounded outline-none" style={inputStyle} />
+                <input value={meetingChairperson} onChange={e => setMeetingChairperson(e.target.value)}
+                  placeholder={isRecord ? "主席" : "主持人"}
+                  className="w-full bg-transparent text-sm p-2 rounded outline-none sm:col-span-2" style={inputStyle} />
+              </div>
+            </div>
+          )}
+
           {/* 公文內容 */}
           <div className="card p-4 space-y-3">
             <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
-              {isDecree ? "令文內容" : "公文內容（主旨／說明／辦法）"}
+              {contentLabels.title}
             </h3>
-            {!isDecree && (
+            {contentLabels.subject && (
               <div>
-                <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>一、主旨</label>
+                <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>{contentLabels.subject}</label>
                 <textarea value={subject} onChange={e => setSubject(e.target.value)} rows={2}
                   placeholder="一句話概述目的，結尾用「請 鑒核」等語。"
                   wrap="soft"
@@ -321,16 +381,16 @@ export default function EditDocumentPage() {
             )}
             <div>
               <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>
-                {isDecree ? "正文" : "二、說明"}
+                {contentLabels.desc}
               </label>
               <GongwenEditor value={docDescription} onChange={setDocDescription} minRows={5}
                 placeholder={isDecree
                   ? "茲修正發布「…」第…條條文，自即日生效。\n\n附修正條文1份。"
                   : "詳細說明事由、依據、背景資訊..."} />
             </div>
-            {!isDecree && (
+            {contentLabels.action && (
               <div>
-                <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>三、辦法</label>
+                <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>{contentLabels.action}</label>
                 <GongwenEditor value={actionRequired} onChange={setActionRequired} minRows={3}
                   placeholder="具體請求事項或行動方案..." />
               </div>

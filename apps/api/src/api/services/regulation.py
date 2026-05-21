@@ -86,8 +86,13 @@ def _attach_display_names(regs: list[Regulation]) -> list[Regulation]:
 
 
 def _where_publicly_effective(q):
-    """Require both legal publication metadata and a completed publication document."""
+    """Require both legal publication metadata and a completed publication document.
+
+    停用 / 廢止 / 被修正版本取代（is_active=False）的法規不再對外現行有效，
+    必須排除，否則公開列表會同時出現修正前與修正後兩個版本。
+    """
     return q.join(Document, Regulation.published_document_id == Document.id).where(
+        Regulation.is_active.is_(True),
         Regulation.published_at.is_not(None),
         Regulation.published_document_id.is_not(None),
         Document.status.in_(_PUBLICATION_DOCUMENT_STATUSES),
@@ -274,10 +279,14 @@ async def search_regulations(
             Regulation.title.ilike(pattern),
             Regulation.content.ilike(pattern),
             Regulation.preface.ilike(pattern),
-            # 子查詢：條文內容含關鍵字的法規
+            # 子查詢：標題/副標題/內容含關鍵字的條文所屬法規
             Regulation.id.in_(
                 select(RegulationArticle.regulation_id).where(
-                    RegulationArticle.content.ilike(pattern),
+                    or_(
+                        RegulationArticle.title.ilike(pattern),
+                        RegulationArticle.subtitle.ilike(pattern),
+                        RegulationArticle.content.ilike(pattern),
+                    ),
                     RegulationArticle.is_deleted.is_(False),
                 )
             ),
@@ -287,16 +296,18 @@ async def search_regulations(
     result = await session.execute(q)
     regs = _attach_display_names(list(result.scalars().unique().all()))
 
-    # 為每個法規篩選命中的條文（過濾 is_deleted）
+    # 挑出每部法規中命中關鍵字的條文，存入 matched_articles
+    # （不覆寫 reg.articles，列表頁仍需完整條文做其他用途）
+    needle = keyword.lower()
     for reg in regs:
-        reg.articles = [
+        reg.__dict__["matched_articles"] = [
             a
             for a in reg.articles
             if not a.is_deleted
             and (
-                keyword.lower() in (a.title or "").lower()
-                or keyword.lower() in (a.subtitle or "").lower()
-                or keyword.lower() in (a.content or "").lower()
+                needle in (a.title or "").lower()
+                or needle in (a.subtitle or "").lower()
+                or needle in (a.content or "").lower()
             )
         ]
     return regs
@@ -436,9 +447,7 @@ async def fork_regulation_draft(
     # fork 出的草案若來自已發布法規，預設為「修正」而非繼承原 amendment_type
     # （避免修正案被誤判為新法）
     forked_amendment_type = (
-        RegulationAmendmentType.AMEND
-        if reg.published_at is not None
-        else reg.amendment_type
+        RegulationAmendmentType.AMEND if reg.published_at is not None else reg.amendment_type
     )
     new_reg = Regulation(
         title=reg.title,
@@ -473,6 +482,9 @@ async def fork_regulation_draft(
     for a in src_articles:
         na = RegulationArticle(
             regulation_id=new_reg.id,
+            # 保留沿革識別碼：fork 出的條文與原條文視為同一條，
+            # 重新排序時才不會被誤判為刪除＋新建。
+            lineage_id=a.lineage_id,
             sort_index=a.sort_index,
             order_index=a.order_index,
             parent_id=None,
@@ -710,7 +722,9 @@ async def update_article(
         val = getattr(data, field, None)
         if val is not None:
             setattr(article, field, val)
-    if data.parent_id is not None:
+    # parent_id 需區分「未提供」與「明確設為 null（移到頂層）」：
+    # 用 model_fields_set 判斷，否則條文無法被移出原父節點。
+    if "parent_id" in data.model_fields_set:
         article.parent_id = data.parent_id
     if data.order_index is not None:
         article.order_index = data.order_index
@@ -915,10 +929,30 @@ async def auto_renumber_articles(
     return articles
 
 
+def _lineage_match_key(lineage_id: object, legal_number: object, title: object) -> str:
+    """跨版本比對鍵：優先用 lineage_id（重新排序時穩定），
+    舊快照無 lineage_id 時 fallback 到法號/標題。"""
+    if lineage_id:
+        return f"lin:{lineage_id}"
+    return f"num:{str(legal_number or '').strip() or str(title or '').strip()}"
+
+
+def _article_display_label(legal_number: object, title: object) -> str:
+    ln = str(legal_number or "").strip()
+    if ln:
+        return f"第 {ln} 條"
+    return str(title or "").strip() or "（未命名條文）"
+
+
 async def compare_amendment(
     session: AsyncSession,
     reg: Regulation,
 ) -> list[AmendmentComparisonRowOut]:
+    """比對目前條文與最近一次修訂快照，產生逐條對照。
+
+    以 lineage_id 比對 → 重新排序（條號改變但仍為同一條）會正確標為「未變更」，
+    不再被誤判為刪除＋新增。
+    """
     result = await session.execute(
         select(RegulationRevision)
         .where(RegulationRevision.regulation_id == reg.id)
@@ -931,9 +965,8 @@ async def compare_amendment(
         for a in reg.articles
         if not a.is_deleted and _normalize_type(a.article_type) == ArticleType.ARTICLE
     ]
-    current_map = {a.legal_number or a.title: a.content or "" for a in current_articles}
 
-    previous_map: dict[str, str] = {}
+    previous: dict[str, dict[str, str]] = {}
     if latest:
         import json
 
@@ -941,31 +974,53 @@ async def compare_amendment(
         for row in snapshot:
             if row.get("is_deleted"):
                 continue
-            if row.get("article_type") not in (ArticleType.ARTICLE.value, ArticleType.CLAUSE.value):
+            if row.get("article_type") not in (
+                ArticleType.ARTICLE.value,
+                ArticleType.CLAUSE.value,
+            ):
                 continue
-            key = row.get("legal_number") or row.get("title")
-            if key:
-                previous_map[key] = row.get("content") or ""
+            key = _lineage_match_key(
+                row.get("lineage_id"), row.get("legal_number"), row.get("title")
+            )
+            previous[key] = {
+                "label": _article_display_label(row.get("legal_number"), row.get("title")),
+                "content": row.get("content") or "",
+            }
 
-    keys = sorted(set(previous_map.keys()) | set(current_map.keys()))
     rows: list[AmendmentComparisonRowOut] = []
-    for key in keys:
-        cur = current_map.get(key, "")
-        prev = previous_map.get(key, "")
-        if key not in previous_map:
+    seen: set[str] = set()
+    for a in current_articles:
+        key = _lineage_match_key(a.lineage_id, a.legal_number, a.title)
+        seen.add(key)
+        prev = previous.get(key)
+        cur_content = a.content or ""
+        cur_label = _article_display_label(a.legal_number, a.title)
+        if prev is None:
             note = "新增"
-        elif key not in current_map:
-            note = "刪除"
-        elif cur != prev:
+        elif prev["content"].strip() != cur_content.strip():
             note = "修正"
+        elif prev["label"] != cur_label:
+            # 內容相同但條號變了（重新排序 / 插入造成）→ 條次調整，仍算一項變更
+            note = "條次調整"
         else:
             note = "未變更"
         rows.append(
             AmendmentComparisonRowOut(
-                article_key=str(key),
-                revised_text=cur,
-                current_text=prev,
+                article_key=cur_label,
+                revised_text=cur_content,
+                current_text=prev["content"] if prev else "",
                 note=note,
+            )
+        )
+    for key, prev in previous.items():
+        if key in seen:
+            continue
+        rows.append(
+            AmendmentComparisonRowOut(
+                article_key=prev["label"],
+                revised_text="",
+                current_text=prev["content"],
+                note="刪除",
             )
         )
     _ = session

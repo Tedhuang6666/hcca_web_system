@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { analyticsApi, ApiError } from "@/lib/api";
+import { analyticsApi, withFallback } from "@/lib/api";
 import type {
   AnnouncementParticipationItem,
   DeptRankingItem,
@@ -58,24 +58,34 @@ export default function AnalyticsPage() {
       return;
     }
     setLoading(true);
-    try {
-      const [eff, ranks, ann, survey, alerts] = await Promise.all([
-        analyticsApi.documentEfficiency(filterParams),
-        analyticsApi.deptRanking(filterParams),
+    const failedSections: string[] = [];
+    const noteFailure = (label: string) => () => failedSections.push(label);
+    const [eff, ranks, ann, survey, alerts] = await Promise.all([
+      withFallback(analyticsApi.documentEfficiency(filterParams), null, noteFailure("公文效率")),
+      withFallback(analyticsApi.deptRanking(filterParams), [], noteFailure("部門排行")),
+      withFallback(
         analyticsApi.announcementParticipation({ ...filterParams, limit: 8 }),
+        [],
+        noteFailure("公告閱讀"),
+      ),
+      withFallback(
         analyticsApi.surveyParticipation({ ...filterParams, limit: 8 }),
-        canViewPending ? analyticsApi.pendingAlerts(48) : Promise.resolve([]),
-      ]);
-      setEfficiency(eff);
-      setRanking(ranks);
-      setAnnouncements(ann);
-      setSurveys(survey);
-      setPending(alerts);
-    } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "載入統計資料失敗");
-    } finally {
-      setLoading(false);
+        [],
+        noteFailure("問卷回應"),
+      ),
+      canViewPending
+        ? withFallback(analyticsApi.pendingAlerts(48), [], noteFailure("待簽核警告"))
+        : Promise.resolve([]),
+    ]);
+    setEfficiency(eff);
+    setRanking(ranks);
+    setAnnouncements(ann);
+    setSurveys(survey);
+    setPending(alerts);
+    if (failedSections.length) {
+      toast.warning(`${failedSections.join("、")}暫時無法載入，其餘資料已更新`);
     }
+    setLoading(false);
   }, [canView, canViewPending, filterParams]);
 
   useEffect(() => {

@@ -38,6 +38,7 @@ function toArticle(id: string, type: ArticleType, parent_id: string | null, sort
   return {
     id,
     regulation_id: "draft-local",
+    lineage_id: id,
     sort_index: sort,
     order_index: order,
     parent_id,

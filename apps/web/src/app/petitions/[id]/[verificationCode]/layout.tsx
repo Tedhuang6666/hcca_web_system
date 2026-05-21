@@ -2,6 +2,12 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 import { serverApiUrl } from "@/lib/config";
+import {
+  SOCIAL_IMAGE,
+  SOCIAL_SHARE_TITLE,
+  SOCIAL_SITE_NAME,
+  socialDescription,
+} from "@/lib/social-metadata";
 
 type PetitionMeta = {
   case_number: string;
@@ -22,21 +28,30 @@ export async function generateMetadata(
 ): Promise<Metadata> {
   const { id, verificationCode } = await params;
   const item = await fetchPetition(id, verificationCode);
-  const title = item ? `陳情案件 ${item.case_number}：${item.title}` : `陳情案件 ${id}`;
-  const description = item?.status_public_message ?? "校園自治平台陳情案件進度查詢。";
+  const description = socialDescription(
+    "陳情案件",
+    item ? `${item.case_number}｜${item.title}` : id,
+    "陳情案件進度查詢。",
+  );
   const path = `/petitions/${id}/${verificationCode}`;
   return {
-    title,
+    title: SOCIAL_SHARE_TITLE,
     description,
     alternates: { canonical: path },
     openGraph: {
-      title,
+      title: SOCIAL_SHARE_TITLE,
       description,
       type: "article",
       url: path,
-      siteName: "HCCA 校園自治整合平台",
+      siteName: SOCIAL_SITE_NAME,
+      images: [SOCIAL_IMAGE],
     },
-    twitter: { card: "summary", title, description },
+    twitter: {
+      card: "summary_large_image",
+      title: SOCIAL_SHARE_TITLE,
+      description,
+      images: [SOCIAL_IMAGE.url],
+    },
   };
 }
 

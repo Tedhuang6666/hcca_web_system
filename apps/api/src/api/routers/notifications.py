@@ -1,21 +1,29 @@
-"""通知路由 — Email 發送 + 站內通知收件匣"""
+"""通知路由 — Email 發送 + 站內通知收件匣 + 通知偏好（站內 / Email 多管道）"""
 
+import logging
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from itsdangerous import BadData
 from pydantic import BaseModel, ConfigDict, EmailStr
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.config import settings
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_permission
+from api.email.renderer import make_unsubscribe_token, parse_unsubscribe_token
+from api.email.sender import send_branded_email
 from api.models.notification import Notification
 from api.models.user import User
 from api.services.mail import enqueue_email
+from api.services.notification_pref import TYPE_LABELS, normalize_preferences
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/notifications", tags=["通知"])
 
@@ -70,24 +78,33 @@ class NotificationCountOut(BaseModel):
     total: int
 
 
-class NotificationPreferencesOut(BaseModel):
-    model_config = ConfigDict(from_attributes=False)
+class ChannelPref(BaseModel):
+    """單一通知類型的接收管道設定。"""
 
-    document_pending: bool = True
-    document_approved: bool = True
-    document_rejected: bool = True
-    document_recalled: bool = True
-    announcement: bool = True
-    system: bool = True
+    inapp: bool = True
+    email: bool = False
+
+
+class NotificationPreferencesOut(BaseModel):
+    document_pending: ChannelPref
+    document_approved: ChannelPref
+    document_rejected: ChannelPref
+    document_recalled: ChannelPref
+    announcement: ChannelPref
+    system: ChannelPref
 
 
 class NotificationPreferencesIn(BaseModel):
-    document_pending: bool | None = None
-    document_approved: bool | None = None
-    document_rejected: bool | None = None
-    document_recalled: bool | None = None
-    announcement: bool | None = None
-    system: bool | None = None
+    document_pending: ChannelPref | None = None
+    document_approved: ChannelPref | None = None
+    document_rejected: ChannelPref | None = None
+    document_recalled: ChannelPref | None = None
+    announcement: ChannelPref | None = None
+    system: ChannelPref | None = None
+
+
+class UnsubscribeRequest(BaseModel):
+    token: str
 
 
 # ── 站內通知收件匣 ────────────────────────────────────────────────────────────
@@ -175,22 +192,13 @@ async def mark_all_read(db: DbDep, current_user: CurrentUser) -> dict[str, int]:
     return {"marked_read": count}
 
 
-# ── 通知偏好設定 ──────────────────────────────────────────────────────────────
-
-_DEFAULT_PREFS = {
-    "document_pending": True,
-    "document_approved": True,
-    "document_rejected": True,
-    "document_recalled": True,
-    "announcement": True,
-    "system": True,
-}
+# ── 通知偏好設定（多管道：站內 / Email）──────────────────────────────────────
 
 
 @router.get("/preferences", response_model=NotificationPreferencesOut, summary="取得我的通知偏好")
 async def get_preferences(current_user: CurrentUser) -> NotificationPreferencesOut:
-    prefs = {**_DEFAULT_PREFS, **(current_user.notification_preferences or {})}
-    return NotificationPreferencesOut(**prefs)
+    normalized = normalize_preferences(current_user.notification_preferences)
+    return NotificationPreferencesOut(**normalized)
 
 
 @router.put("/preferences", response_model=NotificationPreferencesOut, summary="更新通知偏好")
@@ -199,12 +207,36 @@ async def update_preferences(
     db: DbDep,
     current_user: CurrentUser,
 ) -> NotificationPreferencesOut:
-    existing = {**_DEFAULT_PREFS, **(current_user.notification_preferences or {})}
-    updates = body.model_dump(exclude_none=True)
-    merged = {**existing, **updates}
+    merged = normalize_preferences(current_user.notification_preferences)
+    for ntype, channel in body.model_dump(exclude_none=True).items():
+        merged[ntype] = {"inapp": bool(channel["inapp"]), "email": bool(channel["email"])}
     current_user.notification_preferences = merged
     await db.flush()
     return NotificationPreferencesOut(**merged)
+
+
+@router.post("/unsubscribe", summary="透過 Email 退訂連結關閉某類 Email 通知（免登入）")
+async def unsubscribe_via_token(body: UnsubscribeRequest, db: DbDep) -> dict[str, str]:
+    """退訂連結端點：驗證簽章 token 後關閉該使用者該類型的 Email 管道。"""
+    try:
+        user_id, ntype = parse_unsubscribe_token(body.token)
+    except (BadData, ValueError, KeyError, TypeError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="退訂連結無效或已失效"
+        ) from exc
+    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="使用者不存在")
+    prefs = normalize_preferences(user.notification_preferences)
+    if ntype in prefs:
+        prefs[ntype]["email"] = False
+    user.notification_preferences = prefs
+    await db.flush()
+    return {
+        "status": "ok",
+        "type": ntype,
+        "message": f"已關閉「{TYPE_LABELS.get(ntype, ntype)}」的 Email 通知",
+    }
 
 
 # ── Email 發送（原有功能保留）────────────────────────────────────────────────
@@ -246,6 +278,27 @@ async def get_task_status(
 # ── 工具函式（供其他 router 呼叫）────────────────────────────────────────────
 
 
+def _send_notification_email(
+    user: User, ntype: str, title: str, body: str | None, link: str | None
+) -> None:
+    """渲染品牌通知信並排入寄送佇列（含退訂連結）。"""
+    base = settings.FRONTEND_BASE_URL.rstrip("/")
+    token = make_unsubscribe_token(user.id, ntype)
+    send_branded_email(
+        to=[user.email],
+        subject=f"【{TYPE_LABELS.get(ntype, '通知')}】{title}",
+        template="notification",
+        context={
+            "heading": title,
+            "body_text": body or "",
+            "preview_text": (body or title)[:80],
+            "cta_url": f"{base}{link}" if link else "",
+            "cta_label": "前往查看",
+            "unsubscribe_url": f"{base}/unsubscribe?token={token}",
+        },
+    )
+
+
 async def create_notification(
     db: AsyncSession,
     *,
@@ -256,21 +309,30 @@ async def create_notification(
     link: str | None = None,
     related_id: uuid.UUID | None = None,
 ) -> None:
-    """在 DB 建立站內通知（不 commit，由呼叫者控制 transaction）。
-    若使用者已關閉該類型的通知偏好則靜默略過。
+    """依使用者偏好建立站內通知並（若開啟）寄送品牌 Email。
+
+    不 commit，由呼叫者控制 transaction。站內與 Email 兩管道分別依
+    notification_preferences 判定；Email 排程失敗只記錄、不影響業務交易。
     """
-    user_result = await db.execute(select(User).where(User.id == user_id))
-    user = user_result.scalar_one_or_none()
-    if user is not None:
-        prefs = user.notification_preferences or {}
-        if not prefs.get(type, True):
-            return
-    n = Notification(
-        user_id=user_id,
-        type=type,
-        title=title,
-        body=body,
-        link=link,
-        related_id=related_id,
+    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if user is None:
+        return
+    channel = normalize_preferences(user.notification_preferences).get(
+        type, {"inapp": True, "email": False}
     )
-    db.add(n)
+    if channel["inapp"]:
+        db.add(
+            Notification(
+                user_id=user_id,
+                type=type,
+                title=title,
+                body=body,
+                link=link,
+                related_id=related_id,
+            )
+        )
+    if channel["email"] and user.email:
+        try:
+            _send_notification_email(user, type, title, body, link)
+        except Exception:
+            logger.warning("通知 Email 排程失敗 user=%s type=%s", user_id, type, exc_info=True)

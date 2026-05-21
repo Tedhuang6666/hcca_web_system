@@ -153,7 +153,9 @@ function OrderRow({
                       style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
                       {item.quantity}
                     </span>
-                    <span style={{ color: "var(--text-secondary)" }}>品項 #{item.menu_item_id.slice(-6)}</span>
+                    <span style={{ color: "var(--text-secondary)" }}>
+                      {item.product_name_snapshot ?? `品項 #${(item.menu_item_id ?? item.availability_id ?? "").slice(-6)}`}
+                    </span>
                   </div>
                   <span style={{ color: "var(--text-primary)" }}>
                     NT${item.subtotal.toLocaleString()}

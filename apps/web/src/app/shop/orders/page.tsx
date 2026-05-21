@@ -156,7 +156,7 @@ export default function OrdersPage() {
           <table className="w-full text-sm" role="table" aria-label="訂單列表">
             <thead>
               <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                {["訂單編號", tab === "all" ? "用戶" : null, "狀態", "金額", "下單時間"]
+                {["訂單編號", tab === "all" ? "用戶" : null, "班級", "狀態", "繳費", "金額", "下單時間"]
                   .filter(Boolean)
                   .map(h => (
                     <th key={h!} className="px-5 py-3.5 text-left text-xs font-semibold"
@@ -178,10 +178,21 @@ export default function OrdersPage() {
                   </td>
                   {tab === "all" && (
                     <td className="px-5 py-4 text-xs" style={{ color: "var(--text-muted)" }}>
-                      {order.user_id.slice(0, 8)}…
+                      {order.user_name ?? `${order.user_id.slice(0, 8)}…`}
                     </td>
                   )}
+                  <td className="px-5 py-4 text-xs" style={{ color: "var(--text-muted)" }}>
+                    {order.class_label ?? "—"}
+                  </td>
                   <td className="px-5 py-4"><OrderStatusBadge status={order.status} /></td>
+                  <td className="px-5 py-4">
+                    <span className="text-xs font-medium px-2 py-0.5 rounded-full"
+                      style={order.is_paid
+                        ? { background: "rgba(34,197,94,0.12)", color: "#16a34a" }
+                        : { background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
+                      {order.is_paid ? "已繳費" : "未繳費"}
+                    </span>
+                  </td>
                   <td className="px-5 py-4 text-sm font-medium" style={{ color: "var(--text-primary)" }}>
                     NT${order.total_price.toLocaleString()}
                   </td>

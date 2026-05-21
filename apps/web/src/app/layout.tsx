@@ -4,10 +4,33 @@ import { Toaster } from "sonner";
 import AppShell from "@/components/layout/AppShell";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import ScrollProgressBar from "@/components/ui/ScrollProgressBar";
+import { SOCIAL_IMAGE, SOCIAL_SHARE_TITLE, SOCIAL_SITE_NAME } from "@/lib/social-metadata";
+
+const DEFAULT_DESCRIPTION = "服務學生代表大會的數位治理工具，整合公文、法規、購票、學餐與問卷。";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL
+  || process.env.FRONTEND_BASE_URL
+  || "http://localhost:3000";
 
 export const metadata: Metadata = {
-  title: { default: "校園自治整合平台", template: "%s · HCCA" },
-  description: "Campus Self-Governance Integration Platform — 服務學生代表大會的數位治理工具",
+  metadataBase: new URL(SITE_URL),
+  applicationName: SOCIAL_SITE_NAME,
+  title: { default: SOCIAL_SHARE_TITLE, template: SOCIAL_SHARE_TITLE },
+  description: DEFAULT_DESCRIPTION,
+  openGraph: {
+    type: "website",
+    locale: "zh_TW",
+    siteName: SOCIAL_SITE_NAME,
+    title: SOCIAL_SHARE_TITLE,
+    description: DEFAULT_DESCRIPTION,
+    url: "/",
+    images: [SOCIAL_IMAGE],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SOCIAL_SHARE_TITLE,
+    description: DEFAULT_DESCRIPTION,
+    images: [SOCIAL_IMAGE.url],
+  },
 };
 
 function ThemeScript() {

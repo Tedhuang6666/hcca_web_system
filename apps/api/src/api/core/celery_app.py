@@ -38,6 +38,9 @@ celery_app.conf.update(
 celery_app.conf.include = list(celery_app.conf.include or []) + [
     "api.services.outbox_tasks",
     "api.services.regulation_tasks",
+    "api.services.email_tasks",
+    "api.services.shop_tasks",
+    "api.services.meeting_tasks",
 ]
 
 celery_app.conf.beat_schedule = {
@@ -62,5 +65,20 @@ celery_app.conf.beat_schedule = {
     "audit-regulation-consistency-daily": {
         "task": "api.services.regulation_tasks.audit_regulation_consistency",
         "schedule": 86400.0,
+    },
+    # 每 60 秒寄出已到期的預約郵件
+    "process-scheduled-emails-every-60s": {
+        "task": "api.services.email_tasks.process_scheduled_emails",
+        "schedule": 60.0,
+    },
+    # 每 5 分鐘檢查剛截止的校商商品，通知班級幹部結單
+    "notify-class-cadres-on-deadline-every-5min": {
+        "task": "api.services.shop_tasks.notify_class_cadres_on_deadline",
+        "schedule": 300.0,
+    },
+    # 每 60 秒檢查即將開始的會議並推播開會提醒
+    "send-meeting-start-reminders-every-60s": {
+        "task": "api.services.meeting_tasks.send_meeting_start_reminders",
+        "schedule": 60.0,
     },
 }

@@ -107,7 +107,7 @@ const PRODUCT_STATUS: Record<ProductStatus, BadgeDef> = {
     bg: "var(--danger-dim)",
     border: "var(--danger-border)",
   },
-  archived: {
+  cancelled: {
     label: "已下架",
     color: "var(--text-muted)",
     bg: "var(--bg-hover)",

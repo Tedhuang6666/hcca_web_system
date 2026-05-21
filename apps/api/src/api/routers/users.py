@@ -31,6 +31,7 @@ class UserSummary(BaseModel):
     id: uuid.UUID
     display_name: str
     email: str = ""
+    student_id: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -40,13 +41,25 @@ async def list_users(
     db: DbDep,
     current_user: CurrentUser,
     search: str | None = Query(None, description="關鍵字（顯示名稱、信箱或學號）"),
+    ids: list[uuid.UUID] | None = Query(None, description="依使用者 ID 批次取得（供回填已選名單）"),
     limit: int = Query(50, ge=1, le=50),
 ) -> list[User]:
-    """回傳使用者列表，可依關鍵字過濾（支援姓名/信箱/學號），用於審核人、受文者選取等場合"""
-    if not search or len(search.strip()) < 2:
-        return []
+    """回傳使用者列表，可依關鍵字過濾或依 ID 批次取得，用於審核人、受文者選取等場合"""
     codes = await get_user_permission_codes(db, current_user.id)
     allow_sensitive_search = "admin:all" in codes or current_user.is_superuser
+    # 依 ID 批次取得：用於回填「已選使用者」名單
+    if ids:
+        result = await db.execute(
+            select(User).where(User.id.in_(ids[:200]), User.is_active == True)  # noqa: E712
+        )
+        users = list(result.scalars().all())
+        if not allow_sensitive_search:
+            for u in users:
+                u.email = ""
+                u.student_id = None
+        return users
+    if not search or len(search.strip()) < 2:
+        return []
     q = select(User).where(User.is_active == True)  # noqa: E712
     pattern = f"%{search.strip()}%"
     if allow_sensitive_search:
@@ -66,6 +79,7 @@ async def list_users(
         return users
     for u in users:
         u.email = ""
+        u.student_id = None
     return users
 
 

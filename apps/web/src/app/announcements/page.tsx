@@ -7,6 +7,13 @@ import { announcementsApi, ApiError } from "@/lib/api";
 import type { AnnouncementListItem } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
 
+const AUDIENCE_LABEL: Record<string, string> = {
+  all: "全體",
+  school: "全體竹中生",
+  orgs: "特定組織",
+  members: "特定成員",
+};
+
 function StatusBadge({ item }: { item: AnnouncementListItem }) {
   if (item.is_urgent) {
     return (
@@ -108,6 +115,11 @@ export default function AnnouncementsPage() {
                 <div className="min-w-0">
                   <div className="mb-2 flex flex-wrap items-center gap-2">
                     <StatusBadge item={item} />
+                    {item.audience_type !== "all" && (
+                      <span className="badge" style={{ color: "var(--primary)", background: "var(--primary-dim)", borderColor: "var(--border-strong)" }}>
+                        {AUDIENCE_LABEL[item.audience_type] ?? item.audience_type}
+                      </span>
+                    )}
                     <span className="text-xs" style={{ color: "var(--text-muted)" }}>
                       {item.published_at
                         ? new Date(item.published_at).toLocaleString("zh-TW")

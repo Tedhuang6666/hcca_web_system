@@ -1,56 +1,130 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 interface DrawerProps {
+  /** 由父層控制開關，false → 觸發收起動畫後 unmount。 */
+  open: boolean;
   title: string;
   onClose: () => void;
   children: ReactNode;
-  /** 抽屜浮現方向：right（右側 - 預設）、left、bottom */
-  side?: "right" | "left" | "bottom";
-  maxWidthClassName?: string;
+  /** 底部 sticky 動作列。 */
+  footer?: ReactNode;
+  /**
+   * 開啟方向：
+   * - `auto`（預設）：桌面右側、手機底部 sheet。
+   * - `right` / `left`：兩側固定。
+   * - `bottom`：底部 sheet。
+   */
+  side?: "right" | "left" | "bottom" | "auto";
+  /** 桌面寬度（CSS length）。auto / right / left 時生效。 */
+  width?: string;
+  /** Bottom sheet 高度（CSS length）。auto / bottom 時生效。 */
+  sheetHeight?: string;
+  /** 點擊背景是否關閉（預設 true）。 */
+  closeOnBackdrop?: boolean;
+  ariaLabel?: string;
 }
 
 /**
- * 全站統一抽屜（Drawer）元件。
- * 支援右側、左側、底部三個方向；內建 overflow-y-auto 與 viewport 高度限制。
- * 與共用 Modal.tsx 互補：modal 用於置中對話框、drawer 用於側邊細節面板。
+ * 共用抽屜元件。
+ * - `auto` 模式：桌面（>=1024px）由右側滑入、手機由底部 sheet 滑入，響應式由 globals.css `.drawer-panel` 規則處理。
+ * - 240ms 滑入 / 淡出動畫。controlled by `open`，關閉時延遲 unmount 以播放動畫。
  */
 export default function Drawer({
+  open,
   title,
   onClose,
   children,
-  side = "right",
-  maxWidthClassName = "max-w-2xl",
+  footer,
+  side = "auto",
+  width = "480px",
+  sheetHeight = "85vh",
+  closeOnBackdrop = true,
+  ariaLabel,
 }: DrawerProps) {
-  const containerClass = (() => {
-    if (side === "left") return "items-start justify-start sm:items-stretch";
-    if (side === "bottom") return "items-end justify-center";
-    return "items-start justify-end sm:items-stretch";
-  })();
+  const [mounted, setMounted] = useState(open);
+  const [entered, setEntered] = useState(false);
 
-  const panelClass = (() => {
-    if (side === "bottom") return `w-full ${maxWidthClassName} max-h-[88vh] rounded-t-2xl sm:rounded-2xl`;
-    return `w-full ${maxWidthClassName} max-h-[100vh] sm:max-h-[calc(100vh-2rem)] sm:my-4 rounded-2xl`;
-  })();
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      const id = requestAnimationFrame(() => setEntered(true));
+      return () => cancelAnimationFrame(id);
+    }
+    if (mounted) {
+      setEntered(false);
+      const timer = window.setTimeout(() => setMounted(false), 240);
+      return () => window.clearTimeout(timer);
+    }
+    return;
+  }, [open, mounted]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [open, onClose]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [mounted]);
+
+  if (!mounted) return null;
+
+  const panelStyle: CSSProperties = {
+    background: "var(--bg-surface)",
+    border: "1px solid var(--border)",
+    // 透過 CSS variable 給 .drawer-panel 規則使用
+    ["--drawer-width" as string]: width,
+    ["--drawer-sheet-height" as string]: sheetHeight,
+  };
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex overflow-y-auto p-3 sm:p-4 ${containerClass}`}
-      style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)" }}
+      className="fixed inset-0 z-50"
       role="dialog"
       aria-modal="true"
-      aria-label={title}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+      aria-label={ariaLabel ?? title}
     >
+      <div
+        className="absolute inset-0 transition-opacity"
+        style={{
+          background: "rgba(0,0,0,0.55)",
+          backdropFilter: "blur(4px)",
+          opacity: entered ? 1 : 0,
+          transitionDuration: "240ms",
+        }}
+        onClick={closeOnBackdrop ? onClose : undefined}
+        aria-hidden="true"
+      />
       <aside
-        className={`flex flex-col overflow-hidden shadow-2xl ${panelClass}`}
-        style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
+        data-side={side}
+        data-entered={entered ? "true" : "false"}
+        className="drawer-panel flex flex-col overflow-hidden shadow-2xl"
+        style={panelStyle}
       >
+        {/* Sheet handle bar (僅 bottom / auto-mobile) */}
+        {(side === "bottom" || side === "auto") && (
+          <div className="drawer-handle flex justify-center pt-2 pb-1">
+            <div
+              aria-hidden="true"
+              className="h-1 w-10 rounded-full"
+              style={{ background: "var(--border-strong)" }}
+            />
+          </div>
+        )}
         <header
-          className="flex flex-shrink-0 items-center justify-between gap-3 px-5 py-4"
+          className="flex flex-shrink-0 items-center justify-between gap-3 px-5 py-3.5"
           style={{ borderBottom: "1px solid var(--border)" }}
         >
           <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
@@ -71,6 +145,14 @@ export default function Drawer({
           </button>
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        {footer && (
+          <div
+            className="flex flex-shrink-0 items-center justify-end gap-2 px-5 py-3 flex-wrap"
+            style={{ borderTop: "1px solid var(--border)", background: "var(--bg-elevated)" }}
+          >
+            {footer}
+          </div>
+        )}
       </aside>
     </div>
   );

@@ -1,8 +1,8 @@
 """安全審計中間件 - 記錄敏感操作"""
 
 import logging
+from collections.abc import Callable
 from datetime import datetime
-from typing import Callable
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request

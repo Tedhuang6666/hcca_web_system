@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { documentsApi, orgsApi, savedFiltersApi, usersApi, ApiError } from "@/lib/api";
+import { documentsApi, orgsApi, savedFiltersApi, usersApi, ApiError, withFallback } from "@/lib/api";
 import type { OrgRead, UserSummary } from "@/lib/api";
 import type { BatchDocumentOperationOut, DocumentListItem, DocumentStatus, SavedFilterOut } from "@/lib/types";
 import { DocumentStatusBadge, UrgencyBadge } from "@/components/ui/StatusBadge";
@@ -23,6 +23,8 @@ const DOC_CATEGORIES: { key: string; label: string }[] = [
   { key: "decree",        label: "令" },
   { key: "announcement",  label: "公告" },
   { key: "report",        label: "報告" },
+  { key: "record",        label: "紀錄" },
+  { key: "consultation",  label: "咨" },
   { key: "meeting_notice", label: "開會通知" },
   { key: "other",         label: "其他" },
 ];
@@ -137,16 +139,12 @@ export default function DocumentListPage() {
     setIsLoggedIn(!!userId);
 
     const loadInitialData = async () => {
-      try {
-        const [orgsRes, savedFiltersRes] = await Promise.all([
-          orgsApi.list(),
-          userId ? savedFiltersApi.list("documents") : Promise.resolve([]),
-        ]);
-        setOrgs(orgsRes);
-        setSavedFilters(savedFiltersRes);
-      } catch {
-        // API errors handled silently; defaults used
-      }
+      const [orgsRes, savedFiltersRes] = await Promise.all([
+        withFallback(orgsApi.list(), []),
+        userId ? withFallback(savedFiltersApi.list("documents"), []) : Promise.resolve([]),
+      ]);
+      setOrgs(orgsRes);
+      setSavedFilters(savedFiltersRes);
     };
 
     loadInitialData();

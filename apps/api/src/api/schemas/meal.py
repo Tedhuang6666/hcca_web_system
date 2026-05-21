@@ -25,6 +25,8 @@ class MealVendorOut(BaseModel):
     contact_phone: str | None
     contact_email: str | None
     is_active: bool
+    status: str = "approved"
+    review_note: str | None = None
     org_id: uuid.UUID
     created_by: uuid.UUID
     created_at: datetime
@@ -37,6 +39,7 @@ class MealVendorCreate(BaseModel):
     contact_phone: str | None = Field(None, max_length=20, description="聯絡電話")
     contact_email: EmailStr | None = Field(None, description="聯絡信箱")
     org_id: uuid.UUID = Field(..., description="所屬組織 ID")
+    status: str | None = Field(None, description="審核狀態；管理員手動新增預設 approved")
 
 
 class MealVendorUpdate(BaseModel):
@@ -45,6 +48,138 @@ class MealVendorUpdate(BaseModel):
     contact_phone: str | None = Field(None, max_length=20)
     contact_email: EmailStr | None = None
     is_active: bool | None = None
+    status: str | None = None
+    review_note: str | None = None
+
+
+class MealVendorApplicationCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    description: str | None = None
+    contact_name: str | None = Field(None, max_length=100)
+    contact_phone: str | None = Field(None, max_length=20)
+    contact_email: EmailStr | None = None
+    org_id: uuid.UUID
+
+
+class MealVendorApplicationReview(BaseModel):
+    approved: bool
+    review_note: str | None = None
+
+
+class MealVendorApplicationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    description: str | None
+    contact_name: str | None
+    contact_phone: str | None
+    contact_email: str | None
+    org_id: uuid.UUID
+    status: str
+    review_note: str | None
+    reviewed_by_id: uuid.UUID | None
+    reviewed_at: datetime | None
+    vendor_id: uuid.UUID | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class MealProductCreate(BaseModel):
+    vendor_id: uuid.UUID
+    name: str = Field(..., min_length=1, max_length=200)
+    description: str | None = None
+    category: str | None = Field(None, max_length=80)
+    image_url: str | None = Field(None, max_length=500)
+    price: int = Field(..., ge=0)
+    default_max_quantity: int | None = Field(None, ge=1)
+
+
+class MealProductUpdate(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=200)
+    description: str | None = None
+    category: str | None = Field(None, max_length=80)
+    image_url: str | None = Field(None, max_length=500)
+    price: int | None = Field(None, ge=0)
+    default_max_quantity: int | None = Field(None, ge=1)
+    is_active: bool | None = None
+
+
+class MealProductOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    vendor_id: uuid.UUID
+    name: str
+    description: str | None
+    category: str | None
+    image_url: str | None
+    price: int
+    default_max_quantity: int | None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class MealPickupSlotCreate(BaseModel):
+    label: str = Field(..., min_length=1, max_length=80)
+    sort_order: int = 0
+    pickup_start: datetime
+    pickup_end: datetime
+    order_deadline: datetime
+    capacity: int | None = Field(None, ge=1)
+
+
+class MealPickupSlotOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    availability_id: uuid.UUID
+    label: str
+    sort_order: int
+    pickup_start: datetime
+    pickup_end: datetime
+    order_deadline: datetime
+    capacity: int | None
+    is_active: bool
+
+
+class MealAvailabilityCreate(BaseModel):
+    product_id: uuid.UUID
+    service_date: _Date
+    sale_start: datetime | None = None
+    sale_end: datetime | None = None
+    price: int | None = Field(None, ge=0)
+    max_quantity: int | None = Field(None, ge=1)
+    note: str | None = None
+    pickup_slots: list[MealPickupSlotCreate] = Field(default_factory=list)
+
+
+class MealWeeklyAvailabilityCreate(BaseModel):
+    product_ids: list[uuid.UUID] = Field(..., min_length=1)
+    date_from: _Date
+    date_to: _Date
+    weekdays: list[int] = Field(..., min_length=1, description="0=Monday ... 6=Sunday")
+    sale_start_time: str | None = Field(None, description="HH:MM")
+    sale_end_time: str | None = Field(None, description="HH:MM")
+    pickup_slots: list[MealPickupSlotCreate] = Field(default_factory=list)
+
+
+class MealAvailabilityOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    product_id: uuid.UUID
+    vendor_id: uuid.UUID
+    service_date: _Date
+    sale_start: datetime | None
+    sale_end: datetime | None
+    price: int
+    max_quantity: int | None
+    is_available: bool
+    note: str | None
+    product: MealProductOut | None = None
+    pickup_slots: list[MealPickupSlotOut] = []
 
 
 # ── 菜單排程 ─────────────────────────────────────────────────────────────────
@@ -115,7 +250,7 @@ class MenuItemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    schedule_id: uuid.UUID
+    schedule_id: uuid.UUID | None
     name: str
     description: str | None
     price: int
@@ -147,7 +282,9 @@ class MealOrderItemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    menu_item_id: uuid.UUID
+    menu_item_id: uuid.UUID | None = None
+    availability_id: uuid.UUID | None = None
+    product_name_snapshot: str | None = None
     quantity: int
     unit_price: int
     subtotal: int = 0
@@ -160,7 +297,8 @@ class MealOrderItemOut(BaseModel):
 
 
 class MealOrderItemCreate(BaseModel):
-    menu_item_id: uuid.UUID = Field(..., description="菜單品項 ID")
+    menu_item_id: uuid.UUID | None = Field(None, description="舊版菜單品項 ID")
+    availability_id: uuid.UUID | None = Field(None, description="商品上架 ID")
     quantity: int = Field(..., ge=1, le=20, description="購買數量")
 
 
@@ -171,10 +309,17 @@ class MealOrderOut(BaseModel):
     serial_number: str
     pickup_code: str
     user_id: uuid.UUID
-    schedule_id: uuid.UUID
+    schedule_id: uuid.UUID | None
     vendor_id: uuid.UUID
+    availability_id: uuid.UUID | None = None
+    pickup_slot_id: uuid.UUID | None = None
+    class_id: uuid.UUID | None = None
     status: MealOrderStatus
     total_price: int
+    is_paid: bool = False
+    paid_at: datetime | None = None
+    pickup_status: str = "not_picked"
+    pickup_at: datetime | None = None
     notes: str | None
     reminder_sent_at: datetime | None = None
     is_no_show: bool = False
@@ -192,14 +337,19 @@ class MealOrderListItem(BaseModel):
     user_id: uuid.UUID
     schedule_id: uuid.UUID
     vendor_id: uuid.UUID
+    pickup_slot_id: uuid.UUID | None = None
+    class_id: uuid.UUID | None = None
     status: MealOrderStatus
     total_price: int
+    is_paid: bool = False
+    pickup_status: str = "not_picked"
     is_no_show: bool = False
     created_at: datetime
 
 
 class MealOrderCreate(BaseModel):
-    schedule_id: uuid.UUID = Field(..., description="菜單排程 ID")
+    schedule_id: uuid.UUID | None = Field(None, description="舊版菜單排程 ID")
+    pickup_slot_id: uuid.UUID | None = Field(None, description="取餐時段 ID")
     items: list[MealOrderItemCreate] = Field(..., min_length=1, description="訂單品項（至少一項）")
     notes: str | None = Field(None, max_length=500, description="備註")
 
@@ -232,6 +382,24 @@ class PickupListItemOut(BaseModel):
     display_name: str
     student_id: str | None
     is_no_show: bool
+
+
+class MealClassPickupCodeOut(BaseModel):
+    code: str
+    class_id: uuid.UUID
+    vendor_id: uuid.UUID
+    pickup_slot_id: uuid.UUID
+    expires_at: datetime | None
+    order_count: int
+
+
+class MealPickupLookupOut(BaseModel):
+    kind: str
+    code: str
+    matched_orders: int
+    completed_orders: int
+    total_price: int
+    message: str
 
 
 class VendorManagerAssignRequest(BaseModel):

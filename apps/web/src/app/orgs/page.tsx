@@ -8,6 +8,7 @@ import type { OrgRead } from "@/lib/api";
 export default function OrgsPage() {
   const [orgs, setOrgs] = useState<OrgRead[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showInactive, setShowInactive] = useState(false);
 
   useEffect(() => {
     orgsApi.list()
@@ -17,8 +18,9 @@ export default function OrgsPage() {
   }, []);
 
   // 建立樹狀結構（頂層：parent_id == null）
-  const roots = orgs.filter(o => !o.parent_id);
-  const childrenOf = (id: string) => orgs.filter(o => o.parent_id === id);
+  const visibleOrgs = showInactive ? orgs : orgs.filter(o => o.is_active);
+  const roots = visibleOrgs.filter(o => !o.parent_id || !visibleOrgs.some(parent => parent.id === o.parent_id));
+  const childrenOf = (id: string) => visibleOrgs.filter(o => o.parent_id === id);
 
   function OrgCard({ org, depth = 0 }: { org: OrgRead; depth?: number }) {
     const children = childrenOf(org.id);
@@ -36,11 +38,16 @@ export default function OrgsPage() {
             </div>
           )}
           <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0"
-            style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
+            style={{ background: org.is_active ? "var(--primary-dim)" : "var(--bg-surface)", color: org.is_active ? "var(--primary)" : "var(--text-muted)" }}>
             {org.name.charAt(0)}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{org.name}</p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{org.name}</p>
+              {!org.is_active && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ color: "#f59e0b", border: "1px solid rgba(245,158,11,0.3)" }}>停用</span>
+              )}
+            </div>
             {org.description && (
               <p className="text-xs truncate mt-0.5" style={{ color: "var(--text-muted)" }}>{org.description}</p>
             )}
@@ -61,13 +68,22 @@ export default function OrgsPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-5">
+    <div className="max-w-3xl mx-auto space-y-5">
       {/* 頁首 */}
-      <div>
-        <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>組織總覽</h1>
-        <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>
-          點擊組織查看職位與成員詳情
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>組織總覽</h1>
+          <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>
+            {orgs.filter(o => o.is_active).length} 個有效組織 · {orgs.filter(o => !o.is_active).length} 個停用組織
+          </p>
+        </div>
+        <button
+          onClick={() => setShowInactive(v => !v)}
+          className="text-xs px-3 py-2 rounded-lg cursor-pointer"
+          style={{ border: "1px solid var(--border)", color: showInactive ? "var(--primary)" : "var(--text-secondary)", background: showInactive ? "var(--primary-dim)" : "transparent" }}
+        >
+          {showInactive ? "隱藏停用組織" : "顯示停用組織"}
+        </button>
       </div>
 
       {loading ? (
@@ -75,17 +91,13 @@ export default function OrgsPage() {
           <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
             style={{ borderColor: "var(--primary)", borderTopColor: "transparent" }} />
         </div>
-      ) : orgs.length === 0 ? (
+      ) : visibleOrgs.length === 0 ? (
         <div className="py-16 text-center rounded-2xl" style={{ border: "1px dashed var(--border)" }}>
           <p className="text-sm" style={{ color: "var(--text-muted)" }}>尚未建立任何組織</p>
         </div>
       ) : (
         <div className="space-y-1.5">
           {roots.map(org => <OrgCard key={org.id} org={org} />)}
-          {/* 孤立節點（parent_id 指向不存在的 org）*/}
-          {orgs.filter(o => o.parent_id && !orgs.some(p => p.id === o.parent_id)).map(org => (
-            <OrgCard key={org.id} org={org} />
-          ))}
         </div>
       )}
     </div>

@@ -180,7 +180,11 @@ class DocumentTemplateBase(BaseModel):
 
     @model_validator(mode="after")
     def validate_template_body(self) -> DocumentTemplateBase:
-        if self.category not in (DocumentCategory.MEETING_NOTICE, DocumentCategory.DECREE):
+        if self.category not in (
+            DocumentCategory.MEETING_NOTICE,
+            DocumentCategory.DECREE,
+            DocumentCategory.RECORD,
+        ):
             if not self.subject or not self.subject.strip():
                 raise ValueError("此類公文範本需填寫主旨")
             if len(self.subject.strip()) < 8:
@@ -189,6 +193,10 @@ class DocumentTemplateBase(BaseModel):
             not self.meeting_purpose or not self.meeting_location
         ):
             raise ValueError("開會通知單範本需填寫開會事由與地點")
+        elif self.category == DocumentCategory.RECORD and (
+            not self.doc_description or not self.action_required
+        ):
+            raise ValueError("紀錄範本需填寫討論事項與決議")
         return self
 
 
@@ -536,6 +544,19 @@ class DocumentCreate(BaseModel):
         if self.category == DocumentCategory.MEETING_NOTICE:
             if not self.meeting_purpose or not self.meeting_time or not self.meeting_location:
                 raise ValueError("開會通知單需填寫開會事由、時間與地點")
+        elif self.category == DocumentCategory.RECORD:
+            if not self.meeting_time or not self.meeting_location:
+                raise ValueError("紀錄需填寫時間與地點")
+            if not self.meeting_chairperson or not self.meeting_chairperson.strip():
+                raise ValueError("紀錄需填寫主席")
+            if not self.handler_name or not self.handler_name.strip():
+                raise ValueError("紀錄需填寫記錄者")
+            if not self.doc_description or not self.doc_description.strip():
+                raise ValueError("紀錄需填寫討論事項")
+            if not self.action_required or not self.action_required.strip():
+                raise ValueError("紀錄需填寫決議")
+            if not self.recipients:
+                raise ValueError("紀錄需填寫出席者")
         elif self.category != DocumentCategory.DECREE:
             if not self.subject or not self.subject.strip():
                 raise ValueError("主旨為必填且不可為空白")

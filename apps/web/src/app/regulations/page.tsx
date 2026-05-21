@@ -1,9 +1,15 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, type ReactNode } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { regulationsApi, ApiError, regulationHref } from "@/lib/api";
-import type { RegulationListItem, RegulationCategory, RegulationWorkflowStatus } from "@/lib/types";
+import type {
+  RegulationArticleOut,
+  RegulationCategory,
+  RegulationListItem,
+  RegulationSearchResult,
+  RegulationWorkflowStatus,
+} from "@/lib/types";
 import { RegulationCategoryBadge } from "@/components/ui/StatusBadge";
 import Toggle from "@/components/ui/Toggle";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -35,8 +41,60 @@ function WorkflowBadge({ status }: { status: RegulationWorkflowStatus }) {
   );
 }
 
+// ── 搜尋命中片段高亮 ──────────────────────────────────────────────────────────
+
+function HighlightedSnippet({
+  text, keyword, max = 96,
+}: {
+  text: string;
+  keyword: string;
+  max?: number;
+}) {
+  if (!text) return null;
+  const kw = keyword.trim().toLowerCase();
+  let display = text;
+  const hit = kw ? text.toLowerCase().indexOf(kw) : -1;
+  if (text.length > max) {
+    if (hit > 40) {
+      const start = hit - 30;
+      display = `…${text.slice(start, start + max)}${start + max < text.length ? "…" : ""}`;
+    } else {
+      display = `${text.slice(0, max)}…`;
+    }
+  }
+  if (!kw) return <>{display}</>;
+  const parts: ReactNode[] = [];
+  const lower = display.toLowerCase();
+  let cursor = 0;
+  let markKey = 0;
+  for (;;) {
+    const found = lower.indexOf(kw, cursor);
+    if (found < 0) {
+      parts.push(display.slice(cursor));
+      break;
+    }
+    if (found > cursor) parts.push(display.slice(cursor, found));
+    parts.push(
+      <mark
+        key={markKey++}
+        style={{ background: "var(--primary-dim)", color: "var(--primary)", borderRadius: 3, padding: "0 2px" }}
+      >
+        {display.slice(found, found + kw.length)}
+      </mark>,
+    );
+    cursor = found + kw.length;
+  }
+  return <>{parts}</>;
+}
+
+function articleLabel(article: RegulationArticleOut): string {
+  const ln = (article.legal_number ?? "").trim();
+  if (ln) return `第 ${ln} 條`;
+  return article.title?.trim() || article.subtitle?.trim() || "條文";
+}
+
 export default function RegulationsPage() {
-  const [allRegs, setAllRegs] = useState<RegulationListItem[]>([]);
+  const [allRegs, setAllRegs] = useState<Array<RegulationListItem | RegulationSearchResult>>([]);
   const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState<RegulationCategory | "all">("all");
   const [search, setSearch] = useState("");
@@ -162,7 +220,7 @@ export default function RegulationsPage() {
       ) : (
         <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))" }}>
           {sorted.map((reg) => (
-            <RegCard key={reg.id} reg={reg} />
+            <RegCard key={reg.id} reg={reg} keyword={search.trim()} />
           ))}
         </div>
       )}
@@ -170,8 +228,14 @@ export default function RegulationsPage() {
   );
 }
 
-function RegCard({ reg }: { reg: RegulationListItem }) {
+function RegCard({
+  reg, keyword,
+}: {
+  reg: RegulationListItem | RegulationSearchResult;
+  keyword: string;
+}) {
   const isArchived = !reg.is_active || reg.workflow_status === "archived";
+  const matched = "matched_articles" in reg ? reg.matched_articles : [];
 
   return (
     <div className="card p-5 flex flex-col gap-3 reg-card-link" style={{ opacity: isArchived ? 0.6 : 1 }}>
@@ -217,6 +281,39 @@ function RegCard({ reg }: { reg: RegulationListItem }) {
         )}
       </div>
     </Link>
+    {/* 搜尋命中的條文 */}
+    {matched.length > 0 && (
+      <div
+        className="space-y-1 rounded-lg p-2.5"
+        style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
+      >
+        <p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
+          命中 {matched.length} 條相關條文
+        </p>
+        {matched.slice(0, 4).map((article) => (
+          <Link
+            key={article.id}
+            href={`${regulationHref(reg)}#a-${article.id}`}
+            className="block rounded px-1.5 py-1 leading-snug hover:opacity-80"
+          >
+            <span className="text-[11px] font-medium" style={{ color: "var(--primary)" }}>
+              {articleLabel(article)}
+            </span>
+            <span className="ml-1.5 text-[11px]" style={{ color: "var(--text-secondary)" }}>
+              <HighlightedSnippet
+                text={article.content || article.title || article.subtitle || ""}
+                keyword={keyword}
+              />
+            </span>
+          </Link>
+        ))}
+        {matched.length > 4 && (
+          <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+            還有 {matched.length - 4} 條…
+          </p>
+        )}
+      </div>
+    )}
     {/* 底部工具列 */}
     <div className="flex items-center justify-end gap-2 pt-1" style={{ borderTop: "1px solid var(--border)" }}>
       <button

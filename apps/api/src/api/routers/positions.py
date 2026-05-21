@@ -63,6 +63,8 @@ async def create_position(
     org = result.scalar_one_or_none()
     if not org:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="組織節點不存在")
+    if not org.is_active:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="組織已停用，無法建立職位")
     position = await org_svc.create_position(db, org_id, data)
     await audit_svc.record(
         db,

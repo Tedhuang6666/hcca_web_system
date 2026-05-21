@@ -26,8 +26,11 @@ from api.schemas.org import (
 # ── Org ──────────────────────────────────────────────────────────────────────
 
 
-async def get_orgs(db: AsyncSession) -> list[Org]:
-    result = await db.execute(select(Org).order_by(Org.name))
+async def get_orgs(db: AsyncSession, active_only: bool = False) -> list[Org]:
+    query = select(Org).order_by(Org.name)
+    if active_only:
+        query = query.where(Org.is_active.is_(True))
+    result = await db.execute(query)
     return list(result.scalars().all())
 
 

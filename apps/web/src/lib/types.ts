@@ -5,8 +5,16 @@ export type DocumentStatus = "draft" | "pending" | "approved" | "rejected" | "ar
 export type DocumentUrgency = "normal" | "priority" | "express";
 export type DocumentClassification = "normal" | "confidential" | "secret";
 export type DeclassificationCondition = "none" | "auto_at_date" | "manual_approval";
-/** 公文類別：函 / 令 / 公告 / 報告 / 開會通知單 / 其他 */
-export type DocumentCategory = "letter" | "decree" | "announcement" | "report" | "meeting_notice" | "other";
+/** 公文類別：函 / 令 / 公告 / 報告 / 紀錄 / 咨 / 開會通知單 / 其他 */
+export type DocumentCategory =
+  | "letter"
+  | "decree"
+  | "announcement"
+  | "report"
+  | "record"
+  | "consultation"
+  | "meeting_notice"
+  | "other";
 /** 可見度：僅當事人 / 機關成員 / 全體登入 / 公開（含未登入） */
 export type DocumentVisibility = "subject_only" | "org_only" | "public" | "publicly_open";
 export type RecipientType = "main" | "primary" | "copy";
@@ -224,31 +232,189 @@ export type DocumentTemplateUpdate = Partial<DocumentTemplateCreate> & { is_acti
 
 // ── 商店系統型別 ──────────────────────────────────────────────────────────────
 
-export type ProductStatus = "draft" | "active" | "sold_out" | "archived";
+export type ProductStatus = "draft" | "active" | "sold_out" | "cancelled";
 export type OrderStatus = "pending" | "confirmed" | "cancelled" | "refunded";
 
+export interface ProductVariantOptionOut {
+  id: string; group_id: string; value: string;
+  image_url: string | null; price_delta: number;
+  sort_order: number; is_active: boolean;
+}
+export interface ProductVariantGroupOut {
+  id: string; product_id: string; name: string; sort_order: number;
+  options: ProductVariantOptionOut[];
+}
 export interface ProductOut {
   id: string; name: string; description: string | null;
+  image_url: string | null;
   price: number; stock_quantity: number; is_unlimited: boolean;
   status: ProductStatus; version: number;
-  org_id: string; created_by: string;
+  series_id: string; org_id: string; created_by: string;
   sale_start: string | null; sale_end: string | null;
   created_at: string; updated_at: string;
+  variant_groups: ProductVariantGroupOut[];
 }
-
-export interface OrderItemOut { id: string; product_id: string; quantity: number; unit_price: number; subtotal: number }
+export interface ProductCategoryOut {
+  id: string; org_id: string; name: string;
+  description: string | null; image_url: string | null;
+  sort_order: number; is_active: boolean;
+  created_by: string; created_at: string; updated_at: string;
+}
+export interface ProductSeriesOut {
+  id: string; category_id: string; name: string;
+  description: string | null; image_url: string | null;
+  sort_order: number; is_active: boolean;
+  created_at: string; updated_at: string;
+}
+export interface CatalogProductOut {
+  id: string; name: string; image_url: string | null;
+  price: number; status: ProductStatus;
+  stock_quantity: number; is_unlimited: boolean;
+  sale_start: string | null; sale_end: string | null;
+  has_variants: boolean;
+}
+export interface CatalogSeriesOut {
+  id: string; name: string; image_url: string | null;
+  sort_order: number; products: CatalogProductOut[];
+}
+export interface CatalogCategoryOut {
+  id: string; name: string; image_url: string | null;
+  sort_order: number; series: CatalogSeriesOut[];
+}
+export interface SelectedOption {
+  group_id: string; group_name: string;
+  option_id: string; value: string; price_delta: number;
+}
+export interface CartItemOut {
+  id: string; product_id: string; product_name: string;
+  product_image_url: string | null;
+  quantity: number; unit_price: number; subtotal: number;
+  selected_options: SelectedOption[];
+  available: boolean; unavailable_reason: string | null;
+}
+export interface CartOut {
+  id: string; items: CartItemOut[]; total_price: number;
+}
+export interface OrderItemOut {
+  id: string; product_id: string; product_name: string | null;
+  quantity: number; unit_price: number; subtotal: number;
+  selected_options: SelectedOption[];
+}
 export interface OrderOut {
   id: string; serial_number: string; user_id: string; org_id: string;
   status: OrderStatus; total_price: number; notes: string | null;
+  class_id: string | null; class_label: string | null;
+  is_paid: boolean; paid_at: string | null;
   created_at: string; updated_at: string; items: OrderItemOut[];
 }
 export interface OrderListItem {
-  id: string; serial_number: string; user_id: string; org_id: string;
-  status: OrderStatus; total_price: number; created_at: string;
+  id: string; serial_number: string; user_id: string;
+  user_name: string | null; org_id: string;
+  status: OrderStatus; total_price: number;
+  class_id: string | null; class_label: string | null;
+  is_paid: boolean; created_at: string;
 }
-export interface OrderCreate {
-  items: { product_id: string; quantity: number }[];
-  notes?: string;
+export interface OrderSummaryRow {
+  key: string; label: string;
+  order_count: number; item_count: number;
+  total_amount: number; paid_amount: number; unpaid_amount: number;
+}
+export interface OrderSummaryOut {
+  group_by: string; rows: OrderSummaryRow[];
+  total_amount: number; paid_amount: number; unpaid_amount: number;
+}
+
+// ── 班級系統型別 ──────────────────────────────────────────────────────────────
+
+export interface ClassStudentRangeOut {
+  id: string; class_id: string;
+  student_id_start: string; student_id_end: string;
+}
+export interface ClassStudentRangeTemplate {
+  student_id_start_template: string;
+  student_id_end_template: string;
+  student_no_start: number;
+  student_no_end: number;
+  class_no_width: number;
+  student_no_width: number;
+}
+export interface ClassStudentRangeOverride {
+  class_no: number;
+  student_no_start: number | null;
+  student_no_end: number | null;
+}
+export interface SchoolClassBulkGradeCreate {
+  grade: number;
+  class_start: number;
+  class_end: number;
+  class_code_template: string;
+  label_template: string | null;
+  range_template: ClassStudentRangeTemplate | null;
+  class_overrides: ClassStudentRangeOverride[];
+}
+export interface SchoolClassBulkCreate {
+  academic_year: number;
+  is_active: boolean;
+  grades: SchoolClassBulkGradeCreate[];
+}
+export interface SchoolClassBulkCreateResult {
+  class_code: string;
+  label: string | null;
+  ok: boolean;
+  class_id: string | null;
+  detail: string | null;
+}
+export interface SchoolClassBulkCreateOut {
+  total: number;
+  succeeded: number;
+  skipped: number;
+  failed: number;
+  results: SchoolClassBulkCreateResult[];
+}
+export interface ClassUserBrief {
+  id: string; display_name: string; student_id: string | null; email: string;
+}
+export interface ClassCadreOut {
+  id: string; class_id: string; user_id: string;
+  user: ClassUserBrief | null;
+}
+export interface ClassManualMemberOut {
+  id: string; class_id: string; user_id: string;
+  user: ClassUserBrief | null;
+}
+export interface ClassMembershipOut {
+  id: string;
+  class_id: string;
+  user_id: string;
+  academic_year: number;
+  source: string;
+  status: string;
+  start_date: string;
+  end_date: string | null;
+  user: ClassUserBrief | null;
+}
+export interface ClassRoleBindingOut {
+  id: string;
+  class_id: string;
+  role_key: string;
+  position_id: string;
+}
+export interface SchoolClassListItem {
+  id: string; academic_year: number; class_code: string;
+  grade: number; label: string | null; is_active: boolean;
+}
+export interface SchoolClassOut extends SchoolClassListItem {
+  created_by: string; org_id: string | null; created_at: string; updated_at: string;
+  ranges: ClassStudentRangeOut[];
+  cadres: ClassCadreOut[];
+  memberships: ClassMembershipOut[];
+  role_bindings: ClassRoleBindingOut[];
+}
+export interface ClassMemberOut {
+  id: string; display_name: string;
+  student_id: string | null; email: string; is_cadre: boolean;
+  source: "range" | "manual";
+  manual_member_id: string | null;
 }
 
 // ── 法規系統型別 ──────────────────────────────────────────────────────────────
@@ -277,6 +443,8 @@ export type ArticleType =
 export interface RegulationArticleOut {
   id: string;
   regulation_id: string;
+  /** 沿革識別碼：同一條文跨版本（修正案）保持穩定 */
+  lineage_id: string;
   sort_index: number;
   order_index: number;
   parent_id?: string | null;
@@ -381,6 +549,314 @@ export interface RegulationListItem {
   created_at: string; updated_at: string;
 }
 
+/** 全文搜尋結果：RegulationListItem 加上命中的條文 */
+export interface RegulationSearchResult extends RegulationListItem {
+  matched_articles: RegulationArticleOut[];
+}
+
+// ── 議事系統型別 ──────────────────────────────────────────────────────────────
+
+export type MeetingStatus = "draft" | "active" | "paused" | "closed";
+/** 會議的法案審議階段（決定議程自動帶入哪一階段的法案） */
+export type MeetingBillStage = "standing_committee" | "council";
+export type AgendaItemType = "manual" | "regulation" | "document";
+export type AttendanceRole = "voter" | "attendee" | "observer";
+export type AttendanceStatus = "expected" | "present" | "absent" | "leave";
+export type VoteStatus = "draft" | "open" | "closed";
+export type VoteVisibility = "named" | "anonymous";
+export type BallotChoice = "approve" | "reject" | "abstain";
+export type MeetingRequestType = "speech" | "point_of_order" | "privilege";
+export type MeetingRequestStatus = "pending" | "acknowledged" | "dismissed";
+export type AttendanceSourceType =
+  | "class_cadres"
+  | "class_members"
+  | "org_members"
+  | "position_members"
+  | "manual";
+export type MeetingArtifactType =
+  | "regulation"
+  | "document"
+  | "survey"
+  | "announcement"
+  | "petition"
+  | "shop"
+  | "meal"
+  | "external"
+  | "custom";
+export type MeetingMotionType = "main" | "amendment" | "procedural";
+export type MeetingMotionStatus =
+  | "pending"
+  | "debating"
+  | "voting"
+  | "adopted"
+  | "rejected"
+  | "withdrawn";
+export type MeetingDecisionStatus = "draft" | "passed" | "failed" | "recorded";
+export type MeetingScreenReadingMode = "agenda" | "article" | "attachment" | "vote" | "free_text";
+
+export interface MeetingUserBrief {
+  id: string;
+  display_name: string;
+  email: string;
+  student_id: string | null;
+}
+
+/** 議程項目關聯法規（修正案）的精簡資訊 */
+export interface MeetingRegulationBrief {
+  id: string;
+  title: string;
+  category: RegulationCategory;
+  version: number;
+  workflow_status: RegulationWorkflowStatus;
+  amendment_type: RegulationAmendmentType;
+  source_regulation_id: string | null;
+}
+
+export interface MeetingAgendaItemOut {
+  id: string;
+  meeting_id: string;
+  title: string;
+  description: string | null;
+  item_type: AgendaItemType;
+  order_index: number;
+  regulation_id: string | null;
+  document_id: string | null;
+  notes: string | null;
+  resolution: string | null;
+  created_at: string;
+  updated_at: string;
+  regulation: MeetingRegulationBrief | null;
+  attachments: MeetingAgendaAttachmentOut[];
+  artifact_links: MeetingArtifactLinkOut[];
+}
+
+export interface MeetingAgendaAttachmentOut {
+  id: string;
+  agenda_item_id: string;
+  filename: string;
+  display_name: string | null;
+  content_type: string | null;
+  file_size: number | null;
+  url: string;
+  link_url: string | null;
+  uploaded_by: string;
+  created_at: string;
+}
+
+export interface MeetingArtifactLinkOut {
+  id: string;
+  agenda_item_id: string;
+  artifact_type: MeetingArtifactType;
+  object_id: string | null;
+  title: string;
+  url: string | null;
+  summary: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MeetingAttendanceOut {
+  id: string;
+  meeting_id: string;
+  user_id: string;
+  role: AttendanceRole;
+  status: AttendanceStatus;
+  checked_in_at: string | null;
+  is_voting_eligible: boolean;
+  proxy_for_user_id: string | null;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+  user: MeetingUserBrief | null;
+  proxy_for_user: MeetingUserBrief | null;
+}
+
+export interface MeetingAttendanceSourceOut {
+  id: string;
+  meeting_id: string;
+  source_type: AttendanceSourceType;
+  source_id: string | null;
+  label: string;
+  role: AttendanceRole;
+  is_voting_eligible: boolean;
+  imported_count: number;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MeetingAttendanceSourcePreviewOut {
+  source_type: AttendanceSourceType;
+  source_id: string | null;
+  label: string;
+  members: MeetingUserBrief[];
+  count: number;
+}
+
+export interface MeetingVoteTallyOut {
+  approve: number;
+  reject: number;
+  abstain: number;
+  total: number;
+  eligible: number;
+  pass_threshold: number;
+  passed: boolean;
+}
+
+export interface MeetingBallotOut {
+  id: string;
+  vote_id: string;
+  voter_id: string;
+  choice: BallotChoice;
+  cast_at: string;
+  voter: MeetingUserBrief | null;
+}
+
+export interface MeetingVoteOut {
+  id: string;
+  meeting_id: string;
+  agenda_item_id: string | null;
+  title: string;
+  description: string | null;
+  visibility: VoteVisibility;
+  status: VoteStatus;
+  pass_threshold: number;
+  opened_at: string | null;
+  closed_at: string | null;
+  result_note: string | null;
+  created_at: string;
+  updated_at: string;
+  tally: MeetingVoteTallyOut | null;
+  ballots: MeetingBallotOut[];
+}
+
+export interface MeetingRequestOut {
+  id: string;
+  meeting_id: string;
+  user_id: string;
+  request_type: MeetingRequestType;
+  status: MeetingRequestStatus;
+  agenda_item_id: string | null;
+  content: string | null;
+  created_at: string;
+  updated_at: string;
+  user: MeetingUserBrief | null;
+}
+
+export interface MeetingMotionOut {
+  id: string;
+  meeting_id: string;
+  agenda_item_id: string | null;
+  proposer_id: string | null;
+  motion_type: MeetingMotionType;
+  title: string;
+  content: string | null;
+  status: MeetingMotionStatus;
+  vote_id: string | null;
+  created_at: string;
+  updated_at: string;
+  proposer: MeetingUserBrief | null;
+}
+
+export interface MeetingDecisionOut {
+  id: string;
+  meeting_id: string;
+  agenda_item_id: string;
+  motion_id: string | null;
+  vote_id: string | null;
+  title: string;
+  content: string;
+  status: MeetingDecisionStatus;
+  regulation_transition_to: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MeetingScreenStateOut {
+  meeting_id: string;
+  agenda_item_id: string | null;
+  reading_mode: MeetingScreenReadingMode;
+  title: string | null;
+  body: string | null;
+  active_attachment_id: string | null;
+  scroll_position: number;
+  auto_scroll: boolean;
+  scroll_speed: number;
+  is_fullscreen: boolean;
+  updated_by: string | null;
+  updated_at: string | null;
+}
+
+export interface MeetingListItem {
+  id: string;
+  org_id: string;
+  title: string;
+  location: string | null;
+  chair_name: string | null;
+  starts_at: string | null;
+  status: MeetingStatus;
+  expected_voters: number;
+  quorum_count: number;
+  default_pass_threshold: number;
+  bill_stage: MeetingBillStage | null;
+  current_agenda_item_id: string | null;
+  screen_focus_title: string | null;
+  screen_focus_body: string | null;
+  confirmed_at: string | null;
+  notice_document_id: string | null;
+  created_at: string;
+}
+
+export interface MeetingOut extends MeetingListItem {
+  description: string | null;
+  ends_at: string | null;
+  reminder_sent_at: string | null;
+  screen_token: string;
+  checkin_token: string;
+  agenda_items: MeetingAgendaItemOut[];
+  attendance_records: MeetingAttendanceOut[];
+  attendance_sources: MeetingAttendanceSourceOut[];
+  votes: MeetingVoteOut[];
+  requests: MeetingRequestOut[];
+  motions: MeetingMotionOut[];
+  decisions: MeetingDecisionOut[];
+  screen_state: MeetingScreenStateOut | null;
+}
+
+export interface MeetingScreenOut {
+  meeting: MeetingOut;
+  current_agenda_item: MeetingAgendaItemOut | null;
+  active_vote: MeetingVoteOut | null;
+  attendance_summary: Record<string, number>;
+  screen_state: MeetingScreenStateOut | null;
+}
+
+export interface MeetingJoinOut {
+  meeting: MeetingOut;
+  current_agenda_item: MeetingAgendaItemOut | null;
+  attendance: MeetingAttendanceOut | null;
+  is_rostered: boolean;
+  can_vote: boolean;
+  active_vote: MeetingVoteOut | null;
+}
+
+export interface MeetingWorkspaceOut {
+  today: MeetingListItem[];
+  drafts: MeetingListItem[];
+  active: MeetingListItem[];
+  closing_pending: MeetingListItem[];
+}
+
+export interface MeetingMinutesOut {
+  meeting: MeetingOut;
+  attendance_summary: Record<string, number>;
+  agenda_items: MeetingAgendaItemOut[];
+  votes: MeetingVoteOut[];
+  markdown: string;
+}
+
 // ── 使用者 ────────────────────────────────────────────────────────────────────
 
 export interface UserRead {
@@ -414,6 +890,7 @@ export interface UserSummary {
   id: string;
   display_name: string;
   email: string;
+  student_id?: string | null;
 }
 
 export interface OrgRead {
@@ -422,6 +899,7 @@ export interface OrgRead {
   description: string | null;
   parent_id: string | null;
   prefix: string | null;
+  bill_stage: MeetingBillStage | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -469,6 +947,7 @@ export interface PositionSummary {
   name: string;
   org_id: string;
   org_name: string;
+  org_is_active: boolean;
   description?: string | null;
   weight: number;
   parent_id?: string | null;
@@ -516,10 +995,70 @@ export interface MealVendorOut {
   contact_phone: string | null;
   contact_email: string | null;
   is_active: boolean;
+  status: string;
+  review_note: string | null;
   org_id: string;
   created_by: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface MealVendorApplicationOut {
+  id: string;
+  name: string;
+  description: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
+  org_id: string;
+  status: string;
+  review_note: string | null;
+  reviewed_by_id: string | null;
+  reviewed_at: string | null;
+  vendor_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MealProductOut {
+  id: string;
+  vendor_id: string;
+  name: string;
+  description: string | null;
+  category: string | null;
+  image_url: string | null;
+  price: number;
+  default_max_quantity: number | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MealPickupSlotOut {
+  id: string;
+  availability_id: string;
+  label: string;
+  sort_order: number;
+  pickup_start: string;
+  pickup_end: string;
+  order_deadline: string;
+  capacity: number | null;
+  is_active: boolean;
+}
+
+export interface MealAvailabilityOut {
+  id: string;
+  product_id: string;
+  vendor_id: string;
+  service_date: string;
+  sale_start: string | null;
+  sale_end: string | null;
+  price: number;
+  max_quantity: number | null;
+  is_available: boolean;
+  note: string | null;
+  product: MealProductOut | null;
+  pickup_slots: MealPickupSlotOut[];
 }
 
 export interface MenuItemSummary {
@@ -570,7 +1109,9 @@ export interface MenuScheduleListItem {
 
 export interface MealOrderItemOut {
   id: string;
-  menu_item_id: string;
+  menu_item_id: string | null;
+  availability_id: string | null;
+  product_name_snapshot: string | null;
   quantity: number;
   unit_price: number;
   subtotal: number;
@@ -581,10 +1122,17 @@ export interface MealOrderOut {
   serial_number: string;
   pickup_code: string;
   user_id: string;
-  schedule_id: string;
+  schedule_id: string | null;
   vendor_id: string;
+  availability_id: string | null;
+  pickup_slot_id: string | null;
+  class_id: string | null;
   status: MealOrderStatus;
   total_price: number;
+  is_paid: boolean;
+  paid_at: string | null;
+  pickup_status: string;
+  pickup_at: string | null;
   notes: string | null;
   reminder_sent_at: string | null;
   is_no_show: boolean;
@@ -598,10 +1146,14 @@ export interface MealOrderListItem {
   serial_number: string;
   pickup_code: string;
   user_id: string;
-  schedule_id: string;
+  schedule_id: string | null;
   vendor_id: string;
+  pickup_slot_id: string | null;
+  class_id: string | null;
   status: MealOrderStatus;
   total_price: number;
+  is_paid: boolean;
+  pickup_status: string;
   is_no_show: boolean;
   created_at: string;
 }
@@ -635,6 +1187,24 @@ export interface VendorManagerOut {
   user_position_id: string;
 }
 
+export interface MealClassPickupCodeOut {
+  code: string;
+  class_id: string;
+  vendor_id: string;
+  pickup_slot_id: string;
+  expires_at: string | null;
+  order_count: number;
+}
+
+export interface MealPickupLookupOut {
+  kind: string;
+  code: string;
+  matched_orders: number;
+  completed_orders: number;
+  total_price: number;
+  message: string;
+}
+
 // ── 問卷系統型別 ──────────────────────────────────────────────────────────────
 
 export type SurveyStatus = "draft" | "open" | "closed" | "archived";
@@ -650,6 +1220,23 @@ export type QuestionType =
   | "image"
   | "video";
 
+/** 文字題型的格式驗證規則 */
+export type ValidationRule = "email" | "number" | "integer" | "url" | "phone";
+
+/** 單一條件判斷規則 */
+export interface ConditionRule {
+  question_id: string;
+  operator: "equals" | "contains";
+  value: string;
+  /** 與前一條規則的連接方式（第一條忽略） */
+  connector: "and" | "or";
+}
+
+/** 題目顯示條件：多條規則由上到下依序左結合評估 */
+export interface QuestionCondition {
+  rules: ConditionRule[];
+}
+
 export interface SurveyQuestionOut {
   id: string;
   survey_id: string;
@@ -661,6 +1248,13 @@ export interface SurveyQuestionOut {
   min_value: number | null;
   max_value: number | null;
   placeholder: string | null;
+  image_url: string | null;
+  min_length: number | null;
+  max_length: number | null;
+  validation_rule: ValidationRule | null;
+  min_label: string | null;
+  max_label: string | null;
+  condition: QuestionCondition | null;
 }
 
 export interface SurveyOut {
@@ -678,6 +1272,10 @@ export interface SurveyOut {
   updated_at: string;
   questions: SurveyQuestionOut[];
   response_count: number;
+  is_public: boolean;
+  allowed_org_ids: string[];
+  allowed_user_ids: string[];
+  allowed_domains: string[];
 }
 
 export interface SurveyListItem {
@@ -693,11 +1291,26 @@ export interface SurveyListItem {
   response_count: number;
 }
 
+export interface SurveyAnswerOut {
+  id: string;
+  question_id: string;
+  answer_text: string | null;
+  answer_options: string[];
+}
+
 export interface SurveyResponseOut {
   id: string;
   survey_id: string;
   submitted_at: string;
-  answers: { id: string; question_id: string; answer_text: string | null; answer_options: string[] }[];
+  answers: SurveyAnswerOut[];
+}
+
+/** 後台檢視用的單筆填答記錄（含填答者 email） */
+export interface SurveyResponseAdminItem {
+  id: string;
+  submitted_at: string;
+  respondent_email: string | null;
+  answers: SurveyAnswerOut[];
 }
 
 export interface QuestionStats {
@@ -720,6 +1333,15 @@ export interface SurveyStats {
 }
 
 // ── 公告系統型別 ──────────────────────────────────────────────────────────────
+
+/** 公告對象：all=全體 / school=全體竹中生 / orgs=特定組織 / members=特定成員 */
+export type AnnouncementAudience = "all" | "school" | "orgs" | "members";
+
+/** 公告對象（組織或成員）的精簡顯示用結構 */
+export interface AnnouncementAudienceRef {
+  id: string;
+  name: string;
+}
 
 export interface AnnouncementMediaOut {
   id: string;
@@ -744,6 +1366,9 @@ export interface AnnouncementOut {
   created_at: string;
   updated_at: string;
   media: AnnouncementMediaOut[];
+  audience_type: AnnouncementAudience;
+  audience_orgs: AnnouncementAudienceRef[];
+  audience_members: AnnouncementAudienceRef[];
 }
 
 export interface AnnouncementListItem {
@@ -756,6 +1381,7 @@ export interface AnnouncementListItem {
   author_id: string;
   author_name: string;
   created_at: string;
+  audience_type: AnnouncementAudience;
 }
 
 export interface AnnouncementCreate {
@@ -764,6 +1390,9 @@ export interface AnnouncementCreate {
   is_urgent?: boolean;
   urgent_until?: string | null;
   org_id?: string | null;
+  audience_type?: AnnouncementAudience;
+  audience_org_ids?: string[];
+  audience_user_ids?: string[];
 }
 
 export interface AnnouncementUpdate {
@@ -772,6 +1401,9 @@ export interface AnnouncementUpdate {
   is_urgent?: boolean;
   urgent_until?: string | null;
   is_published?: boolean;
+  audience_type?: AnnouncementAudience;
+  audience_org_ids?: string[];
+  audience_user_ids?: string[];
 }
 
 // ── 通用型別 ──────────────────────────────────────────────────────────────────
@@ -953,15 +1585,20 @@ export interface PetitionStatsOut {
   by_org: PetitionOrgStatsItem[];
 }
 
-// ── 通知偏好 ─────────────────────────────────────────────────────────────────
+// ── 通知偏好（站內 / Email 多管道）──────────────────────────────────────────
+
+export interface ChannelPref {
+  inapp: boolean;
+  email: boolean;
+}
 
 export interface NotificationPreferences {
-  document_pending: boolean;
-  document_approved: boolean;
-  document_rejected: boolean;
-  document_recalled: boolean;
-  announcement: boolean;
-  system: boolean;
+  document_pending: ChannelPref;
+  document_approved: ChannelPref;
+  document_rejected: ChannelPref;
+  document_recalled: ChannelPref;
+  announcement: ChannelPref;
+  system: ChannelPref;
 }
 
 // ── 公告統計 ─────────────────────────────────────────────────────────────────
@@ -1011,4 +1648,80 @@ export interface SurveyParticipationItem {
   response_count: number;
   status: SurveyStatus;
   created_at: string;
+}
+
+// ── 電子郵件 ─────────────────────────────────────────────────────────────────
+
+export type EmailStatus =
+  | "draft"
+  | "scheduled"
+  | "queued"
+  | "sent"
+  | "failed"
+  | "cancelled";
+
+export interface RecipientSelector {
+  user_ids: string[];
+  position_ids: string[];
+  org_ids: string[];
+  /** 全部使用者（含校外/管理員帳號） */
+  include_all: boolean;
+  /** 全部校內使用者（email 屬校內網域） */
+  include_school: boolean;
+}
+
+export interface EmailCardRow {
+  label: string;
+  value: string;
+}
+
+export interface EmailComposePayload {
+  subject: string;
+  heading: string;
+  body: string;
+  card_rows: EmailCardRow[];
+  cta_label: string;
+  cta_url: string;
+  recipients: RecipientSelector;
+}
+
+export interface EmailMessageCreate extends EmailComposePayload {
+  action: "draft" | "schedule" | "send";
+  scheduled_at?: string | null;
+}
+
+export interface RecipientPreviewOut {
+  recipient_count: number;
+  sample_names: string[];
+  truncated: boolean;
+}
+
+export interface EmailMessageOut {
+  id: string;
+  sender_id: string | null;
+  sender_name: string | null;
+  subject: string;
+  template: string;
+  recipient_count: number;
+  status: EmailStatus;
+  scheduled_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EmailMessageDetailOut extends EmailMessageOut {
+  heading: string;
+  body: string;
+  card_rows: EmailCardRow[];
+  cta_label: string;
+  cta_url: string;
+  recipient_spec: RecipientSelector;
+  resolved_emails: string[];
+  error_detail: string | null;
+}
+
+/** 職位精簡資訊（收件人選擇器用） */
+export interface EmailPosition {
+  id: string;
+  name: string;
 }

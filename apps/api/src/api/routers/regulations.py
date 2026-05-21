@@ -39,6 +39,7 @@ from api.models.regulation import (
     RegulationArticle,
     RegulationCategory,
     RegulationRevision,
+    RegulationWorkflowLog,
     RegulationWorkflowStatus,
 )
 from api.models.user import User
@@ -67,6 +68,7 @@ from api.schemas.regulation import (
 )
 from api.services import audit as audit_svc
 from api.services import document as doc_svc
+from api.services import meeting as meeting_svc
 from api.services import regulation as reg_svc
 from api.services import regulation_import as reg_import_svc
 from api.services.permission import get_user_permission_codes, get_user_permission_codes_for_org
@@ -1231,6 +1233,23 @@ def _workflow_action(
             )
         except ValueError as e:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+        agenda_item_id: str | None = None
+        if to_status == RegulationWorkflowStatus.SCHEDULED and payload.meeting_id is not None:
+            meeting = await meeting_svc.get_meeting(session, payload.meeting_id)
+            if meeting is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="找不到指定的議事會議",
+                )
+            if meeting.org_id != reg.org_id:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="指定會議與法規所屬組織不同",
+                )
+            item = await meeting_svc.create_agenda_item_for_regulation(
+                session, meeting, regulation_id=reg.id, note=payload.note
+            )
+            agenda_item_id = str(item.id)
         await audit_svc.record(
             session,
             entity_type="regulation",
@@ -1238,7 +1257,12 @@ def _workflow_action(
             action=f"regulation.workflow_{to_status.value}",
             actor_id=str(current_user.id),
             actor_email=current_user.email,
-            meta={"to_status": to_status.value, "note": payload.note},
+            meta={
+                "to_status": to_status.value,
+                "note": payload.note,
+                "meeting_id": str(payload.meeting_id) if payload.meeting_id else None,
+                "agenda_item_id": agenda_item_id,
+            },
             summary=f"{summary}「{reg.title}」",
         )
         return result
@@ -1332,7 +1356,6 @@ async def president_publish(
                 detail="需要 regulation:president_publish 權限",
             )
     try:
-        import difflib
         import json
 
         from sqlalchemy import select as _sel
@@ -1358,51 +1381,84 @@ async def president_publish(
                 return f"{prefix}　{body}".strip()
             return (content or title or "").strip()
 
+        def _article_match_key(
+            article_type: object,
+            lineage_id: object,
+            legal_number: object,
+            title: object,
+        ) -> str | None:
+            """跨版本比對鍵：優先用 lineage_id（沿革識別碼，重新排序時保持穩定），
+            舊快照尚無 lineage_id 時才 fallback 到法號/標題。
+
+            不可用條文 id：修正案經 fork_regulation_draft 後條文會取得全新 UUID，
+            以 id 比對會讓所有條文被誤判為「新增 + 刪除」。
+            """
+            if _normalize_article_type(article_type) != ArticleType.ARTICLE:
+                return None
+            if lineage_id:
+                return f"lin:{lineage_id}"
+            key = str(legal_number or "").strip() or str(title or "").strip()
+            return f"num:{key}" if key else None
+
         def _build_amendment_body(
             previous_rows: list[dict], current_rows: list[RegulationArticle]
         ) -> str:
-            previous_map = {
-                str(row.get("id")): row for row in previous_rows if not row.get("is_deleted")
-            }
-            current_active = [a for a in current_rows if not a.is_deleted]
-            current_map = {str(a.id): a for a in current_active}
-            rows: list[tuple[str, str, str]] = []
-
-            for article in current_active:
-                if _normalize_article_type(article.article_type) != ArticleType.ARTICLE:
-                    continue
-                prev = previous_map.get(str(article.id))
-                if prev is None:
-                    status = "新增"
-                elif (
-                    (prev.get("content") or "") != (article.content or "")
-                    or (prev.get("title") or "") != (article.title or "")
-                    or (prev.get("legal_number") or "") != (article.legal_number or "")
-                ):
-                    status = "修正"
-                else:
-                    continue
-                rows.append(
-                    (
-                        status,
-                        f"第 {article.legal_number or article.title or '?'} 條",
-                        (article.content or "").strip() or "（無內容）",
-                    )
-                )
-
+            previous_map: dict[str, dict] = {}
             for row in previous_rows:
                 if row.get("is_deleted"):
                     continue
-                if _normalize_article_type(row.get("article_type")) != ArticleType.ARTICLE:
+                key = _article_match_key(
+                    row.get("article_type"),
+                    row.get("lineage_id"),
+                    row.get("legal_number"),
+                    row.get("title"),
+                )
+                if key is not None:
+                    previous_map[key] = row
+
+            rows: list[tuple[str, str, str]] = []
+            seen_keys: set[str] = set()
+
+            for article in current_rows:
+                if article.is_deleted:
                     continue
-                if str(row.get("id")) not in current_map:
-                    rows.append(
-                        (
-                            "刪除",
-                            f"第 {row.get('legal_number') or row.get('title') or '?'} 條",
-                            ((row.get("content") or "").strip() or "（原內容）"),
-                        )
+                key = _article_match_key(
+                    article.article_type,
+                    article.lineage_id,
+                    article.legal_number,
+                    article.title,
+                )
+                if key is None:
+                    continue
+                seen_keys.add(key)
+                prev = previous_map.get(key)
+                content_text = " ".join((article.content or "").split()) or "（無內容）"
+                article_no = f"第 {article.legal_number or article.title or '?'} 條"
+                if prev is None:
+                    status = "新增"
+                elif (prev.get("content") or "").strip() != (article.content or "").strip() or (
+                    prev.get("title") or ""
+                ).strip() != (article.title or "").strip():
+                    status = "修正"
+                elif (prev.get("legal_number") or "") != (article.legal_number or ""):
+                    # 內容相同但條號變動 → 條次調整，於對照表標示原條號
+                    status = "條次調整"
+                    old_no = prev.get("legal_number") or prev.get("title") or "?"
+                    article_no = f"第 {article.legal_number or '?'} 條（原第 {old_no} 條）"
+                else:
+                    continue
+                rows.append((status, article_no, content_text))
+
+            for key, row in previous_map.items():
+                if key in seen_keys:
+                    continue
+                rows.append(
+                    (
+                        "刪除",
+                        f"第 {row.get('legal_number') or row.get('title') or '?'} 條",
+                        " ".join((row.get("content") or "").split()) or "（原內容）",
                     )
+                )
 
             if not rows:
                 return "（本次未偵測到條文內容異動）"
@@ -1425,7 +1481,6 @@ async def president_publish(
             .limit(1)
         )
         prev_rev = prev_snapshot_result.scalar_one_or_none()
-        prev_content = prev_rev.content_snapshot if prev_rev else ""
 
         # 2. 流程狀態轉換
         await reg_svc.transition_workflow(
@@ -1439,16 +1494,6 @@ async def president_publish(
         # 3. published_at + 修訂快照
         now = datetime.now(UTC)
         reg.published_at = now
-        diff_lines = list(
-            difflib.unified_diff(
-                prev_content.splitlines(keepends=True),
-                reg.content.splitlines(keepends=True),
-                fromfile=f"第 {prev_rev.version} 版" if prev_rev else "（無前版本）",
-                tofile=f"第 {reg.version} 版（公布版）",
-                lineterm="",
-            )
-        )
-        diff_text = "\n".join(diff_lines) if diff_lines else "（本次為全新制定，無前版本對照）"
         previous_article_snapshot = (
             json.loads(prev_rev.article_snapshot or "[]")
             if prev_rev and prev_rev.article_snapshot
@@ -1523,12 +1568,7 @@ async def president_publish(
         else:
             decree_line = f"茲{action_verb}《{reg.title}》，公布之。"
 
-        doc_body = (
-            f"{decree_line}\n\n"
-            f"修正條文整理：\n{amendment_body}\n\n"
-            f"附件：修正條文對照表\n\n"
-            f"{diff_text}"
-        )
+        doc_body = f"{decree_line}\n\n修正條文整理：\n{amendment_body}"
 
         pub_doc_data = DocumentCreate(
             title=f"公布《{reg.title}》",
@@ -1555,6 +1595,29 @@ async def president_publish(
             comment="主席公布法規自動發文",
         )
         reg.published_document_id = pub_doc.id
+
+        # 取代來源法規：修正案（fork）正式公布後，原現行法規自動退場，
+        # 避免法規列表同時出現「修正前」與「修正後」兩個版本。
+        if reg.source_regulation_id is not None:
+            source = await session.get(Regulation, reg.source_regulation_id)
+            if (
+                source is not None
+                and source.id != reg.id
+                and source.is_active
+                and source.published_at is not None
+            ):
+                session.add(
+                    RegulationWorkflowLog(
+                        regulation_id=source.id,
+                        from_status=source.workflow_status,
+                        to_status=RegulationWorkflowStatus.ARCHIVED,
+                        actor_id=current_user.id,
+                        note=f"由修正版本《{reg.title}》v{reg.version} 取代",
+                    )
+                )
+                source.is_active = False
+                source.workflow_status = RegulationWorkflowStatus.ARCHIVED
+                source.repeal_replacement_id = reg.id
 
         await session.flush()
     except ValueError as e:

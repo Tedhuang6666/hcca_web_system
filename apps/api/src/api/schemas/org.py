@@ -7,6 +7,8 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from api.models.meeting import MeetingBillStage
+
 
 # ─────────────────────────────────────────────
 # Org
@@ -17,6 +19,9 @@ class OrgBase(BaseModel):
     parent_id: uuid.UUID | None = None
     prefix: str | None = Field(
         None, max_length=20, description="字號前綴，如「嶺代」「嶺學」，用於組合字號模板"
+    )
+    bill_stage: MeetingBillStage | None = Field(
+        None, description="法案審議階段：常務委員會 / 議會，影響此組織會議的議程自動偵測"
     )
 
 
@@ -31,6 +36,7 @@ class OrgUpdate(BaseModel):
     remark: str | None = None
     parent_id: uuid.UUID | None = None
     prefix: str | None = Field(None, max_length=20, description="字號前綴（留空則不更新）")
+    bill_stage: MeetingBillStage | None = None
     is_active: bool | None = None
 
 

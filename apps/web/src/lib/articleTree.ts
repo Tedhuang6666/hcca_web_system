@@ -168,6 +168,23 @@ export function countArticleDescendants(node: ArticleTreeNode): number {
   return node.children.reduce((sum, child) => sum + 1 + countArticleDescendants(child), 0);
 }
 
+/**
+ * 在樹中尋找節點所在的「容器」（roots 陣列或某 node 的 children 陣列）。
+ * 回傳 container（可直接 splice 操作）、idx、以及 parent（null 代表在 root）。
+ */
+export function findContainerOf(
+  tree: ArticleTreeNode[],
+  id: string,
+  parent: ArticleTreeNode | null = null,
+): { container: ArticleTreeNode[]; idx: number; parent: ArticleTreeNode | null } | null {
+  for (let i = 0; i < tree.length; i++) {
+    if (tree[i].id === id) return { container: tree, idx: i, parent };
+    const found = findContainerOf(tree[i].children, id, tree[i]);
+    if (found) return found;
+  }
+  return null;
+}
+
 /** 將整棵樹回傳為一維陣列（前序），用於大綱導覽 / 顯示計算。 */
 export function flattenTreeForOutline(nodes: ArticleTreeNode[]): ArticleTreeNode[] {
   const acc: ArticleTreeNode[] = [];

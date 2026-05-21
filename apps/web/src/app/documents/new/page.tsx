@@ -77,12 +77,13 @@ function Label({ children, required }: { children: React.ReactNode; required?: b
 
 function RecipientSearch({
   onAdd, inputStyle, selectStyle,
-  isMeetingNotice, orgs,
+  isMeetingNotice, isRecord, orgs,
 }: {
   onAdd: (r: { recipient_type: RecipientType; name: string; email: string }) => void;
   inputStyle: React.CSSProperties;
   selectStyle: React.CSSProperties;
   isMeetingNotice: boolean;
+  isRecord: boolean;
   orgs: OrgRead[];
 }) {
   const [type, setType] = useState<RecipientType>(isMeetingNotice ? "primary" : "main");
@@ -137,6 +138,12 @@ function RecipientSearch({
             <option value="main">受文者</option>
             <option value="primary">正本（出席）</option>
             <option value="copy">副本（列席）</option>
+          </>
+        ) : isRecord ? (
+          <>
+            <option value="main">出席者</option>
+            <option value="primary">出席者</option>
+            <option value="copy">列席者</option>
           </>
         ) : (
           <>
@@ -218,9 +225,82 @@ const CATEGORY_OPTIONS: { value: DocumentCategory; label: string }[] = [
   { value: "decree",         label: "令"       },
   { value: "announcement",   label: "公告"     },
   { value: "report",         label: "報告"     },
+  { value: "record",         label: "紀錄"     },
+  { value: "consultation",   label: "咨"       },
   { value: "meeting_notice", label: "開會通知單" },
   { value: "other",          label: "其他"     },
 ];
+
+const CONTENT_COPY: Record<DocumentCategory, {
+  section: string;
+  subjectLabel?: string;
+  subjectPlaceholder?: string;
+  descriptionLabel: string;
+  descriptionPlaceholder: string;
+  actionLabel?: string;
+  actionPlaceholder?: string;
+}> = {
+  letter: {
+    section: "公文內容",
+    subjectLabel: "主旨",
+    subjectPlaceholder: "一句話概述目的，結尾用「請　鑒核」等語",
+    descriptionLabel: "說明",
+    descriptionPlaceholder: "一、說明事由…\n　　（一）依據：\n　　（二）辦理進度：\n　　　　1. 第一階段…",
+    actionLabel: "辦法",
+    actionPlaceholder: "一、具體請求事項…",
+  },
+  decree: {
+    section: "令文內容",
+    descriptionLabel: "正文",
+    descriptionPlaceholder: "茲修正發布「…」第…條條文，自即日生效。\n\n附修正條文1份。",
+  },
+  announcement: {
+    section: "公告內容",
+    subjectLabel: "主旨",
+    subjectPlaceholder: "公告本會第…案辦理事項，請查照。",
+    descriptionLabel: "公告事項",
+    descriptionPlaceholder: "一、活動時間：\n二、活動地點：\n三、參與方式：",
+  },
+  report: {
+    section: "報告內容",
+    subjectLabel: "主旨",
+    subjectPlaceholder: "檢陳…成果／分析報告，請鑒核。",
+    descriptionLabel: "說明／分析",
+    descriptionPlaceholder: "一、現況\n二、分析\n三、成果",
+    actionLabel: "建議事項",
+    actionPlaceholder: "一、建議後續採行事項…",
+  },
+  record: {
+    section: "討論與決議",
+    descriptionLabel: "討論事項",
+    descriptionPlaceholder: "一、案由：\n　　（一）發言摘要…",
+    actionLabel: "決議",
+    actionPlaceholder: "一、照案通過。\n二、請…續辦。",
+  },
+  consultation: {
+    section: "咨文內容",
+    subjectLabel: "主旨",
+    subjectPlaceholder: "為…事項，請惠復見解。",
+    descriptionLabel: "說明",
+    descriptionPlaceholder: "一、緣由：\n二、需協調／詢問事項：",
+    actionLabel: "辦法或事項",
+    actionPlaceholder: "一、擬請貴機關…\n二、回復期限…",
+  },
+  meeting_notice: {
+    section: "議事日程",
+    descriptionLabel: "議事日程",
+    descriptionPlaceholder: "一、審查「…」案。\n二、討論「…」案。\n三、臨時動議。",
+  },
+  other: {
+    section: "公文內容",
+    subjectLabel: "主旨",
+    subjectPlaceholder: "一句話概述目的。",
+    descriptionLabel: "說明",
+    descriptionPlaceholder: "一、說明事由…",
+    actionLabel: "辦法",
+    actionPlaceholder: "一、具體請求事項…",
+  },
+};
 
 export default function NewDocumentPage() {
   const router = useRouter();
@@ -234,6 +314,8 @@ export default function NewDocumentPage() {
   const [category, setCategory] = useState<DocumentCategory>("letter");
   const isMeetingNotice = category === "meeting_notice";
   const isDecree = category === "decree";
+  const isRecord = category === "record";
+  const copy = CONTENT_COPY[category];
   const docType = CATEGORY_OPTIONS.find(o => o.value === category)?.label ?? "";
 
   // 組織列表
@@ -246,14 +328,6 @@ export default function NewDocumentPage() {
     const parts = [selectedOrg?.name, docType.trim()].filter(Boolean);
     return parts.join(" ");
   }, [selectedOrg, docType]);
-
-  const fieldError = {
-    org:     !selectedOrgId                          ? "請選擇發文組織" : "",
-    subject: !isMeetingNotice && !isDecree && !subject.trim() ? "主旨為必填" : "",
-  };
-  const hasErrors = Object.values(fieldError).some(Boolean);
-  const markTouched = (key: string) => setTouched(p => ({ ...p, [key]: true }));
-  const showErr = (key: string) => touched[key] && fieldError[key as keyof typeof fieldError];
 
   const [docDescription, setDocDescription] = useState("");
   const [actionRequired, setActionRequired] = useState("");
@@ -273,6 +347,20 @@ export default function NewDocumentPage() {
   const [dueDate, setDueDate] = useState("");
   const [visibilityLevel, setVisibilityLevel] = useState<DocumentVisibility>("org_only");
   const [recipients, setRecipients] = useState<Recipient[]>([]);
+
+  const fieldError = {
+    org: !selectedOrgId ? "請選擇發文組織" : "",
+    subject: copy.subjectLabel && !subject.trim() ? `${copy.subjectLabel}為必填` : "",
+    recordTime: isRecord && !meetingTime ? "紀錄需填寫時間" : "",
+    recordLocation: isRecord && !meetingLocation.trim() ? "紀錄需填寫地點" : "",
+    recordChairperson: isRecord && !meetingChairperson.trim() ? "紀錄需填寫主席" : "",
+    recordAttendees: isRecord && recipients.length === 0 ? "紀錄需填寫出席者" : "",
+    recordDiscussion: isRecord && !docDescription.trim() ? "紀錄需填寫討論事項" : "",
+    recordDecision: isRecord && !actionRequired.trim() ? "紀錄需填寫決議" : "",
+  };
+  const hasErrors = Object.values(fieldError).some(Boolean);
+  const markTouched = (key: string) => setTouched(p => ({ ...p, [key]: true }));
+  const showErr = (key: string) => touched[key] && fieldError[key as keyof typeof fieldError];
 
   // 連結附件（草稿建立後逐一新增）
   const [pendingLinks, setPendingLinks] = useState<LinkDraft[]>([]);
@@ -388,9 +476,15 @@ export default function NewDocumentPage() {
 
   // 載入使用者資料與組織
   useEffect(() => {
-    orgsApi.myCreateOrgs().then(setOrgs).catch(() => {});
-    const storedOrgId = typeof window !== "undefined" ? (localStorage.getItem("org_id") ?? "") : "";
-    if (storedOrgId) setSelectedOrgId(storedOrgId);
+    orgsApi.myCreateOrgs().then((items) => {
+      setOrgs(items);
+      const storedOrgId = typeof window !== "undefined" ? (localStorage.getItem("org_id") ?? "") : "";
+      if (storedOrgId && items.some((org) => org.id === storedOrgId)) {
+        setSelectedOrgId(storedOrgId);
+      } else if (items.length === 1) {
+        setSelectedOrgId((prev) => prev || items[0].id);
+      }
+    }).catch(() => {});
 
     // 從個人資料自動填入承辦人
     usersApi.me().then(u => {
@@ -446,20 +540,29 @@ export default function NewDocumentPage() {
 
 
   const save = async () => {
-    setTouched({ org: true, subject: true });
+    setTouched({
+      org: true,
+      subject: true,
+      recordTime: true,
+      recordLocation: true,
+      recordChairperson: true,
+      recordAttendees: true,
+      recordDiscussion: true,
+      recordDecision: true,
+    });
     if (hasErrors) { toast.error("請填寫必填欄位"); return; }
     setSaving(true);
     try {
       const doc = await documentsApi.create({
         title: autoTitle, urgency, classification, category,
         serial_template_id: selectedTemplateId || null,
-        subject: isDecree ? undefined : subject || undefined,
+        subject: copy.subjectLabel ? subject || undefined : undefined,
         doc_description: docDescription || undefined,
-        action_required: isDecree ? undefined : actionRequired || undefined,
+        action_required: copy.actionLabel ? actionRequired || undefined : undefined,
         meeting_purpose: category === "meeting_notice" ? (meetingPurpose || undefined) : undefined,
-        meeting_time: category === "meeting_notice" && meetingTime ? meetingTime : undefined,
-        meeting_location: category === "meeting_notice" ? (meetingLocation || undefined) : undefined,
-        meeting_chairperson: category === "meeting_notice" ? (meetingChairperson || undefined) : undefined,
+        meeting_time: (category === "meeting_notice" || isRecord) && meetingTime ? meetingTime : undefined,
+        meeting_location: (category === "meeting_notice" || isRecord) ? (meetingLocation || undefined) : undefined,
+        meeting_chairperson: (category === "meeting_notice" || isRecord) ? (meetingChairperson || undefined) : undefined,
         handler_name: handlerName || undefined,
         handler_unit: handlerUnit || undefined,
         handler_email: showEmail ? (handlerEmail || undefined) : undefined,
@@ -590,47 +693,64 @@ export default function NewDocumentPage() {
             </div>
           </FormSection>
 
-          {/* 開會通知單專屬 */}
-          {isMeetingNotice && (
-            <FormSection title="開會資訊">
+          {/* 開會通知單 / 紀錄專屬 */}
+          {(isMeetingNotice || isRecord) && (
+            <FormSection title={isRecord ? "紀錄資訊" : "開會資訊"}>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="sm:col-span-2">
-                  <Label>開會事由</Label>
-                  <input value={meetingPurpose} onChange={e => setMeetingPurpose(e.target.value)}
-                    placeholder="例：班級聯合自治會第1屆學生代表團第3次會議" style={inputStyle} />
-                </div>
+                {isMeetingNotice && (
+                  <div className="sm:col-span-2">
+                    <Label>開會事由</Label>
+                    <input value={meetingPurpose} onChange={e => setMeetingPurpose(e.target.value)}
+                      placeholder="例：班級聯合自治會第1屆學生代表團第3次會議" style={inputStyle} />
+                  </div>
+                )}
                 <div>
-                  <Label>開會時間</Label>
+                  <Label required={isRecord}>{isRecord ? "時間" : "開會時間"}</Label>
                   <input type="datetime-local" value={meetingTime}
-                    onChange={e => setMeetingTime(e.target.value)} style={inputStyle} />
+                    onChange={e => setMeetingTime(e.target.value)}
+                    onBlur={() => markTouched("recordTime")}
+                    style={showErr("recordTime") ? { ...inputStyle, border: "1px solid var(--danger)" } : inputStyle} />
+                  {showErr("recordTime") && (
+                    <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>{fieldError.recordTime}</p>
+                  )}
                 </div>
                 <div>
-                  <Label>開會地點</Label>
+                  <Label required={isRecord}>{isRecord ? "地點" : "開會地點"}</Label>
                   <input value={meetingLocation} onChange={e => setMeetingLocation(e.target.value)}
-                    placeholder="例：班聯會辦公室" style={inputStyle} />
+                    onBlur={() => markTouched("recordLocation")}
+                    placeholder="例：班聯會辦公室"
+                    style={showErr("recordLocation") ? { ...inputStyle, border: "1px solid var(--danger)" } : inputStyle} />
+                  {showErr("recordLocation") && (
+                    <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>{fieldError.recordLocation}</p>
+                  )}
                 </div>
                 <div className="sm:col-span-2">
-                  <Label>主持人</Label>
+                  <Label required={isRecord}>{isRecord ? "主席" : "主持人"}</Label>
                   <input value={meetingChairperson} onChange={e => setMeetingChairperson(e.target.value)}
-                    placeholder="例：楊總召千霆" style={inputStyle} />
+                    onBlur={() => markTouched("recordChairperson")}
+                    placeholder="例：楊總召千霆"
+                    style={showErr("recordChairperson") ? { ...inputStyle, border: "1px solid var(--danger)" } : inputStyle} />
+                  {showErr("recordChairperson") && (
+                    <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>{fieldError.recordChairperson}</p>
+                  )}
                 </div>
               </div>
             </FormSection>
           )}
 
           {/* 公文主體 */}
-          <FormSection title={isMeetingNotice ? "議事日程" : isDecree ? "令文內容" : "公文內容"}>
-            {/* 主旨（開會通知單不顯示） */}
-            {!isMeetingNotice && !isDecree && (
+          <FormSection title={copy.section}>
+            {/* 主旨（類別需要時顯示） */}
+            {copy.subjectLabel && (
               <div>
-                <Label required>主旨</Label>
+                <Label required>{copy.subjectLabel}</Label>
                 <textarea
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
                   onBlur={() => markTouched("subject")}
                   rows={2}
                   wrap="soft"
-                  placeholder="一句話概述目的，結尾用「請　鑒核」等語"
+                  placeholder={copy.subjectPlaceholder}
                   style={showErr("subject")
                     ? {
                         ...inputStyle,
@@ -655,7 +775,7 @@ export default function NewDocumentPage() {
             )}
             <div>
               <Label>
-                {isMeetingNotice ? "議事日程" : isDecree ? "正文" : "說明"}
+                {copy.descriptionLabel}
                 <span className="ml-2 font-normal opacity-60 text-[10px]">
                   Tab 降級 ／ Shift+Tab 升級 ／ Enter 續編
                 </span>
@@ -663,24 +783,27 @@ export default function NewDocumentPage() {
               <GongwenEditor
                 value={docDescription}
                 onChange={setDocDescription}
+                onBlur={() => markTouched("recordDiscussion")}
                 minRows={6}
-                placeholder={isMeetingNotice
-                  ? "一、審查「…」案。\n二、討論「…」案。\n三、臨時動議。"
-                  : isDecree
-                    ? "茲修正發布「…」第…條條文，自即日生效。\n\n附修正條文1份。"
-                  : "一、說明事由…\n　　（一）依據：\n　　（二）辦理進度：\n　　　　1. 第一階段…"}
+                placeholder={copy.descriptionPlaceholder}
               />
+              {showErr("recordDiscussion") && (
+                <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>{fieldError.recordDiscussion}</p>
+              )}
             </div>
-            {/* 辦法（開會通知單不顯示） */}
-            {!isMeetingNotice && !isDecree && (
+            {copy.actionLabel && (
               <div>
-                <Label>辦法</Label>
+                <Label required={isRecord}>{copy.actionLabel}</Label>
                 <GongwenEditor
                   value={actionRequired}
                   onChange={setActionRequired}
+                  onBlur={() => markTouched("recordDecision")}
                   minRows={3}
-                  placeholder="一、具體請求事項…"
+                  placeholder={copy.actionPlaceholder}
                 />
+                {showErr("recordDecision") && (
+                  <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>{fieldError.recordDecision}</p>
+                )}
               </div>
             )}
           </FormSection>
@@ -689,6 +812,8 @@ export default function NewDocumentPage() {
           <FormSection title={
             isMeetingNotice
               ? "受文者 / 正本（出席） / 副本（列席）"
+              : isRecord
+                ? "出席者 / 列席者"
               : isDecree
                 ? "受文者（選填）"
                 : "受文者"
@@ -703,7 +828,9 @@ export default function NewDocumentPage() {
                       style={{ color: "var(--primary)", background: "var(--primary-dim)", borderColor: "var(--primary-dim)" }}>
                       {isMeetingNotice
                         ? { main: "受文者", primary: "正本（出席）", copy: "副本（列席）" }[r.recipient_type] ?? r.recipient_type
-                        : { main: "受文者", primary: "正本", copy: "副本" }[r.recipient_type] ?? r.recipient_type}
+                        : isRecord
+                          ? { main: "出席者", primary: "出席者", copy: "列席者" }[r.recipient_type] ?? r.recipient_type
+                          : { main: "受文者", primary: "正本", copy: "副本" }[r.recipient_type] ?? r.recipient_type}
                     </span>
                     <span className="flex-1 truncate" style={{ color: "var(--text-primary)" }}>{r.name}</span>
                     {r.email && (
@@ -726,8 +853,12 @@ export default function NewDocumentPage() {
               inputStyle={inputStyle}
               selectStyle={selectStyle}
               isMeetingNotice={isMeetingNotice}
+              isRecord={isRecord}
               orgs={orgs}
             />
+            {showErr("recordAttendees") && (
+              <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>{fieldError.recordAttendees}</p>
+            )}
           </FormSection>
 
           {/* 連結附件 */}

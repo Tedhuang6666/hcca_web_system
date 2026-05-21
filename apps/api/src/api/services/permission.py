@@ -11,8 +11,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.org import Permission, Position, UserPosition
 
 
-def _active_tenure_filter(check_date: date):
-    """回傳 UserPosition 任期有效的 WHERE 條件（共用）"""
+def active_tenure_filter(check_date: date) -> list:
+    """回傳 UserPosition 任期有效的 WHERE 條件（全系統共用的單一來源）。
+
+    任期有效 = start_date <= check_date AND (end_date IS NULL OR end_date >= check_date)。
+    供 RBAC 權限查詢、收件人解析、公文簽核人查詢、班級成員、連署、會議等模組共用，
+    確保「現任」判定一致。
+    """
     return [
         UserPosition.start_date <= check_date,
         (UserPosition.end_date.is_(None)) | (UserPosition.end_date >= check_date),
@@ -35,6 +40,7 @@ async def get_user_permission_codes(
     # 僅在查詢今天的權限時使用快取（避免過期日期的快取複雜度）
     if on_date is None:
         from api.core.cache import cache_get, cache_set
+
         cache_key = f"perm:{user_id}"
         cached = await cache_get(cache_key)
         if cached is not None:
@@ -46,7 +52,7 @@ async def get_user_permission_codes(
         .join(UserPosition, UserPosition.position_id == Position.id)
         .where(
             UserPosition.user_id == user_id,
-            *_active_tenure_filter(check_date),
+            *active_tenure_filter(check_date),
         )
         .distinct()
     )
@@ -55,6 +61,7 @@ async def get_user_permission_codes(
     # 快取今天的權限結果（180 秒 TTL）
     if on_date is None:
         from api.core.cache import cache_set
+
         await cache_set(cache_key, list(codes), ttl=180)
 
     return codes
@@ -80,7 +87,7 @@ async def get_user_permission_codes_for_org(
         .where(
             UserPosition.user_id == user_id,
             Position.org_id == org_id,
-            *_active_tenure_filter(check_date),
+            *active_tenure_filter(check_date),
         )
         .distinct()
     )
@@ -107,7 +114,27 @@ async def get_user_org_ids_with_permission(
         .where(
             UserPosition.user_id == user_id,
             Permission.code == permission_code,
-            *_active_tenure_filter(check_date),
+            *active_tenure_filter(check_date),
+        )
+        .distinct()
+    )
+    return list(result.scalars().all())
+
+
+async def get_user_org_ids(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    on_date: date | None = None,
+) -> list[uuid.UUID]:
+    """回傳使用者目前透過有效任期所屬的所有組織 ID（不限權限）。"""
+    check_date = on_date or date.today()
+
+    result = await db.execute(
+        select(Position.org_id)
+        .join(UserPosition, UserPosition.position_id == Position.id)
+        .where(
+            UserPosition.user_id == user_id,
+            *active_tenure_filter(check_date),
         )
         .distinct()
     )

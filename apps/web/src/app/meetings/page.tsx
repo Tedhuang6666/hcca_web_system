@@ -1,0 +1,200 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Plus, Radio, ScreenShare, Settings } from "lucide-react";
+import { meetingsApi, orgsApi } from "@/lib/api";
+import type { MeetingListItem, MeetingWorkspaceOut, OrgRead } from "@/lib/types";
+
+const statusLabel: Record<string, string> = {
+  draft: "草稿",
+  active: "進行中",
+  paused: "暫停",
+  closed: "已結束",
+};
+
+export default function MeetingsPage() {
+  const router = useRouter();
+  const [items, setItems] = useState<MeetingListItem[]>([]);
+  const [orgs, setOrgs] = useState<OrgRead[]>([]);
+  const [workspace, setWorkspace] = useState<MeetingWorkspaceOut | null>(null);
+  const [title, setTitle] = useState("");
+  const [orgId, setOrgId] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [permissions, setPermissions] = useState<Set<string>>(new Set());
+  const [isSuperuser, setIsSuperuser] = useState(false);
+
+  useEffect(() => {
+    setIsSuperuser(localStorage.getItem("is_superuser") === "true");
+    try {
+      setPermissions(new Set(JSON.parse(localStorage.getItem("permissions") || "[]")));
+    } catch {
+      setPermissions(new Set());
+    }
+  }, []);
+
+  const canCreateMeeting = useMemo(
+    () => isSuperuser || permissions.has("admin:all") || permissions.has("meeting:create"),
+    [isSuperuser, permissions],
+  );
+
+  async function load() {
+    setLoading(true);
+    setError("");
+    try {
+      const [meetings, orgList] = await Promise.all([
+        meetingsApi.list(),
+        orgsApi.list({ active_only: true }).then(async (activeOrgs) =>
+          activeOrgs.length > 0 ? activeOrgs : orgsApi.list()
+        ),
+      ]);
+      meetingsApi.workspace().then(setWorkspace).catch(() => setWorkspace(null));
+      setItems(meetings);
+      setOrgs(orgList);
+      setOrgId((current) => current || orgList[0]?.id || "");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "載入會議失敗");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  async function createMeeting() {
+    if (!title.trim() || !orgId.trim()) return;
+    setError("");
+    try {
+      const meeting = await meetingsApi.create({
+        title: title.trim(),
+        org_id: orgId.trim(),
+        expected_voters: 0,
+        quorum_count: 0,
+        default_pass_threshold: 0,
+      });
+      setTitle("");
+      setOrgId("");
+      router.push(`/meetings/${meeting.id}/edit`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "建立會議失敗");
+    }
+  }
+
+  return (
+    <main className="mx-auto w-full max-w-6xl px-5 py-6">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-normal">議事系統</h1>
+          <p className="mt-1 text-sm text-[var(--muted)]">管理會議、議程、出列席與現場投票。</p>
+        </div>
+        <Link href="/meetings/screen/demo" className="hidden" aria-hidden="true" />
+      </div>
+
+      {canCreateMeeting ? (
+        <section className="mb-6 grid gap-3 rounded-lg border border-[var(--border)] p-4 sm:grid-cols-[1fr_1fr_auto]">
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="會議名稱"
+            className="rounded-md border border-[var(--border)] bg-transparent px-3 py-2 text-sm"
+          />
+          <select
+            value={orgId}
+            onChange={(e) => setOrgId(e.target.value)}
+            className="rounded-md border border-[var(--border)] bg-transparent px-3 py-2 text-sm">
+            <option value="">選擇組織</option>
+            {orgs.map((org) => (
+              <option key={org.id} value={org.id}>
+                {org.name}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={createMeeting}
+            disabled={!title.trim() || !orgId}
+            className="inline-flex items-center justify-center gap-2 rounded-md bg-[var(--primary)] px-4 py-2 text-sm font-medium text-black disabled:cursor-not-allowed disabled:opacity-50">
+            <Plus size={16} aria-hidden="true" />
+            建立會議
+          </button>
+        </section>
+      ) : (
+        <section className="mb-6 rounded-lg border border-[var(--border)] p-4 text-sm text-[var(--muted)]">
+          目前帳號可以查看會議，但沒有建立會議權限。
+        </section>
+      )}
+
+      {workspace && (
+        <section className="mb-6 grid gap-3 sm:grid-cols-4">
+          {[
+            ["今日會議", workspace.today.length],
+            ["草稿籌備", workspace.drafts.length],
+            ["進行中", workspace.active.length],
+            ["待結案", workspace.closing_pending.length],
+          ].map(([label, count]) => (
+            <div key={label} className="rounded-lg border border-[var(--border)] p-4">
+              <p className="text-xs text-[var(--muted)]">{label}</p>
+              <p className="mt-1 text-2xl font-semibold">{count}</p>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {error && <p className="mb-4 text-sm text-red-500">{error}</p>}
+      {loading ? (
+        <p className="text-sm text-[var(--muted)]">載入中...</p>
+      ) : (
+        <div className="grid gap-3">
+          {items.length === 0 && (
+            <div className="rounded-lg border border-dashed border-[var(--border)] p-8 text-center">
+              <p className="text-base font-medium">目前還沒有會議</p>
+              <p className="mt-2 text-sm text-[var(--muted)]">
+                選擇組織並建立第一場會議後，這裡會顯示控制台、大屏與議員入口。
+              </p>
+            </div>
+          )}
+          {items.map((meeting) => (
+            <article key={meeting.id} className="rounded-lg border border-[var(--border)] p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <Link href={`/meetings/${meeting.id}`} className="text-lg font-semibold hover:underline">
+                    {meeting.title}
+                  </Link>
+                  <p className="mt-1 text-sm text-[var(--muted)]">
+                    {statusLabel[meeting.status]} · {meeting.location || "未填地點"} · 主席{" "}
+                    {meeting.chair_name || "未填"}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {meeting.status === "draft" && (
+                    <Link
+                      href={`/meetings/${meeting.id}/edit`}
+                      className="inline-flex items-center gap-2 rounded-md border border-[var(--border)] px-3 py-2 text-sm">
+                      <Settings size={15} aria-hidden="true" />
+                      設定
+                    </Link>
+                  )}
+                  <Link
+                    href={`/meetings/${meeting.id}/control`}
+                    className="inline-flex items-center gap-2 rounded-md border border-[var(--border)] px-3 py-2 text-sm">
+                    <Radio size={15} aria-hidden="true" />
+                    控制台
+                  </Link>
+                  <Link
+                    href={`/meetings/${meeting.id}`}
+                    className="inline-flex items-center gap-2 rounded-md border border-[var(--border)] px-3 py-2 text-sm">
+                    <ScreenShare size={15} aria-hidden="true" />
+                    大屏連結
+                  </Link>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </main>
+  );
+}

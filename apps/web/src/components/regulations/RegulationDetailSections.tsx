@@ -1,9 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, MouseEvent } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { diffLines } from "diff";
-import { AlertTriangle } from "lucide-react";
 
 import type {
   ArticleType,
@@ -15,7 +13,10 @@ import type {
 import {
   ARTICLE_TYPE_LABEL as STRUCT_LABEL,
   ARTICLE_IS_STRUCTURAL as STRUCT_IS_STRUCTURAL,
+  buildArticleDisplayRows as buildDisplayRowsFn,
 } from "@/lib/regulationStructure";
+
+import { LawArticleRow } from "./LawArticleRow";
 
 export type Tab = "content" | "revisions" | "workflow";
 
@@ -54,25 +55,6 @@ type RevisionSnapshotArticle = {
   content: string | null;
   legal_number?: string | null;
 };
-
-function toChineseOrdinal(value: number): string {
-  const digits = ["", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
-  if (value <= 0) return String(value);
-  if (value < 10) return digits[value];
-  if (value === 10) return "十";
-  if (value < 20) return `十${digits[value - 10]}`;
-  if (value < 100) {
-    const tens = Math.floor(value / 10);
-    const ones = value % 10;
-    return `${digits[tens]}十${ones ? digits[ones] : ""}`;
-  }
-  return String(value);
-}
-
-function listMarkerFromLegalNumber(legalNumber: string | undefined, fallback: number): string {
-  if (!legalNumber) return toChineseOrdinal(fallback);
-  return /^\d+$/.test(legalNumber) ? toChineseOrdinal(Number(legalNumber)) : legalNumber;
-}
 
 function parseProposalSnapshot(raw: string): ParsedProposalSnapshot {
   const snapshot: ParsedProposalSnapshot = {
@@ -122,79 +104,7 @@ export function buildArticleDisplayRows(
   articles: RegulationArticleOut[],
   chapterCollapsedMap: Record<string, boolean>,
 ): ArticleDisplayRow[] {
-  let volumeCount = 0;
-  let chapterCount = 0;
-  let sectionCount = 0;
-  let articleCount = 0;
-  let paragraphCount = 0;
-  let subparagraphCount = 0;
-  let itemCount = 0;
-  let currentChapterId: string | null = null;
-
-  return articles.map((article, index) => {
-    let displayLabel = ARTICLE_TYPE_LABEL[article.article_type] ?? article.article_type;
-    const legalNumber = article.legal_number?.trim();
-
-    switch (article.article_type) {
-      case "volume":
-        volumeCount += 1;
-        chapterCount = 0;
-        sectionCount = 0;
-        displayLabel = `第 ${legalNumber || volumeCount} 編`;
-        currentChapterId = null;
-        break;
-      case "chapter":
-        chapterCount += 1;
-        sectionCount = 0;
-        displayLabel = `第 ${legalNumber || chapterCount} 章`;
-        currentChapterId = article.id;
-        break;
-      case "section":
-        sectionCount += 1;
-        displayLabel = `第 ${legalNumber || sectionCount} 節`;
-        break;
-      case "article":
-      case "clause":
-        articleCount += 1;
-        paragraphCount = 0;
-        subparagraphCount = 0;
-        itemCount = 0;
-        displayLabel = `第 ${legalNumber || articleCount} 條`;
-        break;
-      case "paragraph":
-        paragraphCount += 1;
-        subparagraphCount = 0;
-        itemCount = 0;
-        displayLabel = `第 ${legalNumber || paragraphCount} 項`;
-        break;
-      case "subparagraph":
-      case "subsection":
-        subparagraphCount += 1;
-        itemCount = 0;
-        displayLabel = `${listMarkerFromLegalNumber(legalNumber, subparagraphCount)}、`;
-        break;
-      case "item":
-        itemCount += 1;
-        displayLabel = `（${listMarkerFromLegalNumber(legalNumber, itemCount)}）`;
-        break;
-      case "special_clause":
-        displayLabel = "附則";
-        break;
-      default:
-        break;
-    }
-
-    return {
-      article,
-      index,
-      displayLabel,
-      hiddenByChapter: Boolean(
-        currentChapterId
-        && chapterCollapsedMap[currentChapterId]
-        && article.id !== currentChapterId,
-      ),
-    };
-  });
+  return buildDisplayRowsFn(articles, chapterCollapsedMap) as ArticleDisplayRow[];
 }
 
 function parseRevisionArticleSnapshot(snapshot: string | null | undefined): RevisionSnapshotArticle[] {
@@ -480,13 +390,12 @@ export function WorkflowTimeline({
   );
 }
 
-// ── 條文列（含錨點、凍結高亮、已刪除顯示） ────────────────────────────────────
+// ── 條文列（thin wrapper，沿用 LawArticleRow 視覺）────────────────────────────
 
 export function ArticleRow({
-  article: a,
+  article,
   index,
   displayLabel,
-  collapsed = false,
   hidden = false,
   chapterCollapsed = false,
   onToggleChapter,
@@ -499,6 +408,7 @@ export function ArticleRow({
   article: RegulationArticleOut;
   index: number;
   displayLabel: string;
+  /** 已棄用：原本控制摺疊預覽，新元件直接根據 hidden 隱藏。 */
   collapsed?: boolean;
   hidden?: boolean;
   chapterCollapsed?: boolean;
@@ -509,253 +419,20 @@ export function ArticleRow({
   highlighted?: boolean;
   onClearHighlight?: () => void;
 }) {
-  // Hooks 必須在 early return 之前宣告（React Rules of Hooks）
-  const [copied, setCopied] = useState(false);
-  const copyTimerRef = useRef<number | null>(null);
-  useEffect(() => () => {
-    if (copyTimerRef.current) window.clearTimeout(copyTimerRef.current);
-  }, []);
-
-  if (hidden) return null;
-  const isStructural = ARTICLE_IS_STRUCTURAL[a.article_type] ?? false;
-  const stableAnchorId = `a-${a.id}`;
-  const legacyAnchorId = `art-${index}`; // 向下相容：舊連結仍可定位
-  const isFrozen = Boolean(a.frozen_by);
-  const isDeleted = a.is_deleted;
-
-  const frozenBorder: CSSProperties = isFrozen ? {
-    borderLeft: "3px solid #fb923c",
-    paddingLeft: "10px",
-    background: "rgba(251,146,60,0.05)",
-  } : {};
-
-  const deletedStyle: CSSProperties = isDeleted ? {
-    opacity: 0.45,
-    textDecoration: "line-through",
-  } : {};
-  const dividerStyle: CSSProperties = showTopDivider && index > 0
-    ? { borderTop: "1px solid var(--border)" }
-    : {};
-  const highlightedStyle: CSSProperties = highlighted ? {
-    background: "rgba(14,165,233,0.12)",
-    boxShadow: "inset 0 0 0 1px rgba(14,165,233,0.45)",
-    transition: "background 600ms ease, box-shadow 600ms ease",
-  } : {
-    transition: "background 600ms ease, box-shadow 600ms ease",
-  };
-  const copyButton = shareUrl && onCopyLink ? (
-    <button
-      type="button"
-      onClick={(event) => {
-        event.stopPropagation();
-        onCopyLink(shareUrl);
-        setCopied(true);
-        if (copyTimerRef.current) window.clearTimeout(copyTimerRef.current);
-        copyTimerRef.current = window.setTimeout(() => setCopied(false), 1000);
-      }}
-      className="no-print inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md transition-all"
-      style={{
-        color: copied ? "#10b981" : "var(--text-muted)",
-        border: `1px solid ${copied ? "rgba(16,185,129,0.4)" : "var(--border)"}`,
-        background: copied ? "rgba(16,185,129,0.08)" : "transparent",
-        opacity: copied ? 1 : 0.75,
-        transform: copied ? "scale(1.06)" : "scale(1)",
-      }}
-      title={copied ? "已複製" : "複製此條連結"}
-      aria-label={`複製${displayLabel}連結`}
-    >
-      {copied ? (
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <polyline points="20 6 9 17 4 12" />
-        </svg>
-      ) : (
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-        </svg>
-      )}
-    </button>
-  ) : null;
-  const copyOnContextMenu = shareUrl && onCopyLink
-    ? (event: MouseEvent) => {
-        event.preventDefault();
-        onCopyLink(shareUrl);
-      }
-    : undefined;
-  const labelLink = (label: string, title?: string | null) => {
-    const text = title ? `${label}　${title}` : label;
-    if (!shareUrl) return <span>{text}</span>;
-    return (
-      <a
-        href={shareUrl}
-        className="rounded-sm underline-offset-4 hover:underline"
-        style={{ color: "inherit", textDecorationColor: "var(--primary)" }}
-        title={`${text}連結`}
-      >
-        {text}
-      </a>
-    );
-  };
-  const clearHighlightButton = highlighted && onClearHighlight ? (
-    <button
-      type="button"
-      onClick={(event) => {
-        event.stopPropagation();
-        onClearHighlight();
-      }}
-      className="no-print inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md transition-opacity hover:opacity-80"
-      style={{ color: "var(--primary)", border: "1px solid var(--border-strong)", background: "var(--bg-surface)" }}
-      title="關閉高亮"
-      aria-label="關閉高亮"
-    >
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-        strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
-        <line x1="18" y1="6" x2="6" y2="18" />
-        <line x1="6" y1="6" x2="18" y2="18" />
-      </svg>
-    </button>
-  ) : null;
-
-  // 章節標題
-  if (isStructural) {
-    return (
-      <div
-        id={stableAnchorId}
-        onContextMenu={copyOnContextMenu}
-        className="scroll-mt-20 text-center font-semibold py-4 px-5"
-        style={{
-          color: "var(--text-primary)",
-          fontSize: "1rem",
-          ...dividerStyle,
-          marginTop: index > 0 ? "0.5rem" : "0",
-          ...highlightedStyle,
-          ...frozenBorder,
-          ...deletedStyle,
-        }}>
-        <span id={legacyAnchorId} aria-hidden="true" />
-        <div className="flex flex-col items-center justify-center gap-2 sm:flex-row sm:gap-3">
-          {labelLink(displayLabel, a.title)}
-          {copyButton}
-          {clearHighlightButton}
-          {a.article_type === "chapter" && onToggleChapter && (
-            <button
-              type="button"
-              onClick={onToggleChapter}
-              className="text-xs px-2 py-0.5 rounded-full no-print"
-              style={{ border: "1px solid var(--border)", color: "var(--text-muted)" }}
-            >
-              {chapterCollapsed ? "展開本章" : "收合本章"}
-            </button>
-          )}
-        </div>
-        {isDeleted && (
-          <span className="ml-2 text-xs px-1.5 py-0.5 rounded"
-            style={{ color: "var(--danger)", background: "rgba(220,38,38,0.1)", fontWeight: "normal", textDecoration: "none" }}>
-            已刪除
-          </span>
-        )}
-        {isFrozen && !isDeleted && (
-          <span className="ml-2 text-xs px-1.5 py-0.5 rounded inline-flex items-center gap-1"
-            style={{ color: "#fb923c", background: "rgba(251,146,60,0.12)", fontWeight: "normal", border: "1px solid rgba(251,146,60,0.3)" }}>
-            <AlertTriangle size={12} strokeWidth={2.2} aria-hidden="true" />
-            凍結：{a.frozen_by}
-          </span>
-        )}
-      </div>
-    );
-  }
-
-  // 條文（article / clause）
-  if (a.article_type === "article" || a.article_type === "clause") {
-    return (
-      <div
-        id={stableAnchorId}
-        onContextMenu={copyOnContextMenu}
-        className="scroll-mt-20 px-3 py-3 sm:px-5 sm:py-2"
-        style={{
-          lineHeight: "1.9",
-          fontSize: "0.9375rem",
-          ...dividerStyle,
-          ...highlightedStyle,
-          ...frozenBorder,
-        }}>
-        <span id={legacyAnchorId} aria-hidden="true" />
-        <div className="flex flex-col gap-1 sm:flex-row sm:gap-0" style={{ textIndent: 0, ...deletedStyle }}>
-          <span className="flex items-center gap-1.5 font-bold sm:flex-shrink-0 sm:min-w-[5em]" style={{ color: "var(--text-primary)" }}>
-            {labelLink(displayLabel)}
-            {copyButton}
-            {clearHighlightButton}
-          </span>
-          <span className="flex-1" style={{ color: "var(--text-primary)", whiteSpace: "pre-wrap" }}>
-            {collapsed ? (a.title || a.content?.slice(0, 30) + "…") : (a.content ?? "")}
-          </span>
-        </div>
-        {isDeleted && (
-          <span className="text-xs px-1.5 py-0.5 rounded sm:ml-[5em]"
-            style={{ color: "var(--danger)", background: "rgba(220,38,38,0.1)" }}>
-            已刪除
-          </span>
-        )}
-        {isFrozen && !isDeleted && (
-          <div className="mt-1 flex items-start gap-1 text-xs sm:ml-[5em]"
-            style={{ color: "#fb923c" }}>
-            <AlertTriangle size={12} strokeWidth={2.2} className="mt-0.5 flex-shrink-0" aria-hidden="true" />
-            <span style={{ background: "rgba(251,146,60,0.08)", padding: "2px 6px", borderRadius: "4px", border: "1px solid rgba(251,146,60,0.25)" }}>
-              凍結：{a.frozen_by}
-            </span>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // 項款目：縮排
-  const INDENT_MAP: Partial<Record<ArticleType, number>> = {
-    paragraph: 1, subparagraph: 2, subsection: 2, item: 3, special_clause: 0,
-  };
-  const indentLevel = INDENT_MAP[a.article_type] ?? 0;
-  const indentPx = indentLevel * 32 + 20;
-
   return (
-    <div
-      id={stableAnchorId}
-      onContextMenu={copyOnContextMenu}
-      className="scroll-mt-20 px-3 py-2 sm:px-5 sm:py-1"
-      style={{
-        lineHeight: "1.8",
-        fontSize: "0.9375rem",
-        paddingLeft: `clamp(16px, ${4 + indentLevel * 6}vw, ${indentPx}px)`,
-        ...dividerStyle,
-        ...highlightedStyle,
-        ...frozenBorder,
-      }}>
-      <span id={legacyAnchorId} aria-hidden="true" />
-      <div className="flex flex-col gap-1 sm:flex-row sm:gap-2" style={deletedStyle}>
-        <span className="flex items-center gap-1.5 font-medium sm:flex-shrink-0 sm:min-w-[4.5em]" style={{ color: "var(--text-primary)" }}>
-          {labelLink(displayLabel)}
-          {copyButton}
-          {clearHighlightButton}
-        </span>
-        <span style={{ color: "var(--text-secondary)", whiteSpace: "pre-wrap" }}>
-          {collapsed ? "" : (a.content ?? "")}
-        </span>
-      </div>
-      {isDeleted && (
-        <span className="ml-2 text-xs px-1.5 py-0.5 rounded"
-          style={{ color: "var(--danger)", background: "rgba(220,38,38,0.1)" }}>
-          已刪除
-        </span>
-      )}
-      {isFrozen && !isDeleted && (
-        <span className="ml-2 text-xs px-1.5 py-0.5 rounded inline-flex items-center gap-1"
-          style={{ color: "#fb923c", background: "rgba(251,146,60,0.08)", border: "1px solid rgba(251,146,60,0.25)" }}>
-          <AlertTriangle size={12} strokeWidth={2.2} aria-hidden="true" />
-          {a.frozen_by}
-        </span>
-      )}
-    </div>
+    <LawArticleRow
+      article={article}
+      badge={displayLabel}
+      chapterCollapsed={chapterCollapsed}
+      hiddenByChapter={hidden}
+      onToggleChapter={onToggleChapter ?? undefined}
+      shareUrl={shareUrl}
+      onCopyLink={onCopyLink}
+      showTopDivider={showTopDivider}
+      highlighted={highlighted}
+      onClearHighlight={onClearHighlight}
+      legacyAnchorId={`art-${index}`}
+    />
   );
 }
 

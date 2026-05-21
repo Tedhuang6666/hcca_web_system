@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { ApiError, notificationsApi } from "@/lib/api";
-import type { NotificationPreferences } from "@/lib/types";
+import type { ChannelPref, NotificationPreferences } from "@/lib/types";
 
 const OPTIONS: { key: keyof NotificationPreferences; label: string; desc: string }[] = [
   { key: "document_pending", label: "公文待審", desc: "有公文需要您審核或處理時提醒" },
@@ -15,24 +15,61 @@ const OPTIONS: { key: keyof NotificationPreferences; label: string; desc: string
   { key: "system", label: "系統通知", desc: "平台維運、權限或安全相關提醒" },
 ];
 
+type Channel = keyof ChannelPref;
+
+function Switch({
+  on,
+  disabled,
+  onClick,
+  label,
+}: {
+  on: boolean;
+  disabled: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+      className="relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors disabled:opacity-50"
+      style={{ background: on ? "var(--primary)" : "var(--border-strong)" }}
+    >
+      <span
+        className="inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform"
+        style={{ transform: on ? "translateX(18px)" : "translateX(3px)" }}
+      />
+    </button>
+  );
+}
+
 export default function NotificationSettingsPage() {
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    notificationsApi.getPreferences()
+    notificationsApi
+      .getPreferences()
       .then(setPrefs)
       .catch((e) => toast.error(e instanceof ApiError ? e.message : "載入通知偏好失敗"))
       .finally(() => setLoading(false));
   }, []);
 
-  const enabledCount = useMemo(() => {
-    if (!prefs) return 0;
-    return OPTIONS.filter((item) => prefs[item.key]).length;
+  const counts = useMemo(() => {
+    if (!prefs) return { inapp: 0, email: 0 };
+    return {
+      inapp: OPTIONS.filter((o) => prefs[o.key].inapp).length,
+      email: OPTIONS.filter((o) => prefs[o.key].email).length,
+    };
   }, [prefs]);
 
   const update = async (next: NotificationPreferences) => {
+    const prev = prefs;
     setPrefs(next);
     setSaving(true);
     try {
@@ -41,27 +78,22 @@ export default function NotificationSettingsPage() {
       toast.success("通知偏好已更新");
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "更新失敗");
-      notificationsApi.getPreferences().then(setPrefs).catch(() => {});
+      setPrefs(prev);
     } finally {
       setSaving(false);
     }
   };
 
-  const toggle = (key: keyof NotificationPreferences) => {
+  const toggle = (key: keyof NotificationPreferences, channel: Channel) => {
     if (!prefs || saving) return;
-    update({ ...prefs, [key]: !prefs[key] });
+    update({ ...prefs, [key]: { ...prefs[key], [channel]: !prefs[key][channel] } });
   };
 
   const setAll = (value: boolean) => {
     if (!prefs || saving) return;
-    update({
-      document_pending: value,
-      document_approved: value,
-      document_rejected: value,
-      document_recalled: value,
-      announcement: value,
-      system: value,
-    });
+    const next = { ...prefs };
+    for (const o of OPTIONS) next[o.key] = { inapp: value, email: value };
+    update(next);
   };
 
   return (
@@ -73,7 +105,7 @@ export default function NotificationSettingsPage() {
           </p>
           <h1 className="mt-1 text-xl font-semibold">通知偏好設定</h1>
           <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            選擇哪些事件要出現在通知中心
+            分別設定每種事件要用「站內通知」或「Email」接收
           </p>
         </div>
         <Link href="/notifications" className="btn btn-ghost">
@@ -82,62 +114,103 @@ export default function NotificationSettingsPage() {
       </header>
 
       <section className="card overflow-hidden">
-        <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
-          style={{ borderBottom: "1px solid var(--border)" }}>
+        <div
+          className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
+          style={{ borderBottom: "1px solid var(--border)" }}
+        >
           <div>
             <h2 className="text-sm font-semibold">訂閱項目</h2>
             <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-              {loading ? "載入中" : `${enabledCount} / ${OPTIONS.length} 項已啟用`}
+              {loading
+                ? "載入中"
+                : `站內 ${counts.inapp} 項、Email ${counts.email} 項已啟用`}
               {saving ? "，儲存中" : ""}
             </p>
           </div>
           <div className="flex gap-2">
-            <button className="btn btn-secondary btn-sm" onClick={() => setAll(true)} disabled={!prefs || saving}>
-              全部啟用
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => setAll(true)}
+              disabled={!prefs || saving}
+            >
+              全部開啟
             </button>
-            <button className="btn btn-ghost btn-sm" onClick={() => setAll(false)} disabled={!prefs || saving}>
-              全部停用
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => setAll(false)}
+              disabled={!prefs || saving}
+            >
+              全部關閉
             </button>
           </div>
         </div>
 
         {loading ? (
           <div className="flex items-center justify-center py-16" role="status" aria-live="polite">
-            <div className="h-7 w-7 animate-spin rounded-full border-2 border-t-transparent"
-              style={{ borderColor: "var(--border-strong)", borderTopColor: "var(--primary)" }} />
+            <div
+              className="h-7 w-7 animate-spin rounded-full border-2 border-t-transparent"
+              style={{ borderColor: "var(--border-strong)", borderTopColor: "var(--primary)" }}
+            />
           </div>
         ) : !prefs ? (
           <div className="px-5 py-12 text-center text-sm" style={{ color: "var(--text-muted)" }}>
             無法載入通知偏好。
           </div>
         ) : (
-          <ul>
-            {OPTIONS.map((item) => (
-              <li key={item.key} className="flex items-center justify-between gap-4 px-5 py-4"
-                style={{ borderBottom: "1px solid var(--border)" }}>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-                    {item.label}
-                  </p>
-                  <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                    {item.desc}
-                  </p>
-                </div>
-                <label className="inline-flex cursor-pointer items-center gap-2">
-                  <span className="text-xs" style={{ color: prefs[item.key] ? "var(--primary)" : "var(--text-muted)" }}>
-                    {prefs[item.key] ? "啟用" : "停用"}
-                  </span>
-                  <input
-                    type="checkbox"
-                    checked={prefs[item.key]}
-                    disabled={saving}
-                    onChange={() => toggle(item.key)}
-                    aria-label={`${item.label}${prefs[item.key] ? "停用" : "啟用"}`}
-                  />
-                </label>
-              </li>
-            ))}
-          </ul>
+          <>
+            <div
+              className="flex items-center gap-3 px-5 py-2"
+              style={{ borderBottom: "1px solid var(--border)" }}
+            >
+              <div className="flex-1" />
+              <div
+                className="w-12 text-center text-[11px] font-semibold"
+                style={{ color: "var(--text-muted)" }}
+              >
+                站內
+              </div>
+              <div
+                className="w-12 text-center text-[11px] font-semibold"
+                style={{ color: "var(--text-muted)" }}
+              >
+                Email
+              </div>
+            </div>
+            <ul>
+              {OPTIONS.map((item) => (
+                <li
+                  key={item.key}
+                  className="flex items-center gap-3 px-5 py-4"
+                  style={{ borderBottom: "1px solid var(--border)" }}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+                      {item.label}
+                    </p>
+                    <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                      {item.desc}
+                    </p>
+                  </div>
+                  <div className="flex w-12 justify-center">
+                    <Switch
+                      on={prefs[item.key].inapp}
+                      disabled={saving}
+                      onClick={() => toggle(item.key, "inapp")}
+                      label={`${item.label}站內通知`}
+                    />
+                  </div>
+                  <div className="flex w-12 justify-center">
+                    <Switch
+                      on={prefs[item.key].email}
+                      disabled={saving}
+                      onClick={() => toggle(item.key, "email")}
+                      label={`${item.label} Email 通知`}
+                    />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </section>
     </div>

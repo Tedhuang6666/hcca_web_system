@@ -52,9 +52,28 @@ export function typeRank(t: ArticleStructureType | string): number {
 }
 
 /**
+ * 父子層級規則（與後端 services/regulation.py `_PARENT_RULES` 對齊）。
+ * `_root` 代表 parent_id = null。
+ * 注意：chapter 下可放 section 或 article（章可以不分節，直接列條）。
+ */
+export const PARENT_RULES: Record<ArticleStructureType | "_root", Set<ArticleStructureType>> = {
+  _root: new Set(["volume", "chapter", "section", "article", "special_clause"]),
+  volume: new Set(["chapter"]),
+  chapter: new Set(["section", "article"]),
+  section: new Set(["article"]),
+  article: new Set(["paragraph"]),
+  paragraph: new Set(["subparagraph"]),
+  subparagraph: new Set(["item"]),
+  item: new Set(),
+  special_clause: new Set(),
+  // 舊值向下相容
+  clause: new Set(["paragraph"]),
+  subsection: new Set(["item"]),
+};
+
+/**
  * 是否可將 child 巢入 parent 之下。
- * 規則：child 的 rank 必須等於 parent 的 rank + 1（嚴格相鄰），這與後端 _PARENT_RULES 一致。
- * 例外：根層級（parent=null）允許 volume / chapter / section / article。
+ * parent=null 視為根層級（不能放 paragraph / subparagraph / item — 防止「款」「目」單獨存在）。
  */
 export function canNestInside(
   parentType: ArticleStructureType | string | null,
@@ -62,28 +81,41 @@ export function canNestInside(
 ): boolean {
   const child = normalizeArticleType(childType);
   if (parentType === null) {
-    return child === "volume" || child === "chapter" || child === "section" || child === "article";
+    return PARENT_RULES._root.has(child);
   }
   const parent = normalizeArticleType(parentType);
-  const parentRank = typeRank(parent);
-  const childRank = typeRank(child);
-  return parentRank >= 0 && childRank >= 0 && childRank === parentRank + 1;
+  return PARENT_RULES[parent]?.has(child) ?? false;
 }
 
-/** 取得 parent 之下「下一級」的層級類型（用於降級操作）。 */
+/**
+ * 取得 parent 之下允許的子層級類型清單（已排除舊值）。
+ * 給新增條文時的下拉選單做防呆過濾。
+ */
+export function allowedChildTypes(
+  parentType: ArticleStructureType | string | null,
+): ArticleStructureType[] {
+  const set = parentType === null
+    ? PARENT_RULES._root
+    : PARENT_RULES[normalizeArticleType(parentType)] ?? new Set();
+  return Array.from(set).filter((t) => t !== "clause" && t !== "subsection");
+}
+
+/** 取得 parent 之下「預設的子層級」（清單第一個）。 */
 export function childTypeOf(parentType: ArticleStructureType | string): ArticleStructureType | null {
-  const parent = normalizeArticleType(parentType);
-  const rank = typeRank(parent);
-  if (rank < 0 || rank >= ARTICLE_TYPE_ORDER.length - 1) return null;
-  return ARTICLE_TYPE_ORDER[rank + 1];
+  const types = allowedChildTypes(parentType);
+  return types[0] ?? null;
 }
 
-/** 取得 child 之上「上一級」的層級類型（用於升級操作）。 */
+/** 取得 child 之上「最近的合法父層級」（用於升級操作）。 */
 export function parentTypeOf(childType: ArticleStructureType | string): ArticleStructureType | null {
   const child = normalizeArticleType(childType);
-  const rank = typeRank(child);
-  if (rank <= 0) return null;
-  return ARTICLE_TYPE_ORDER[rank - 1];
+  for (const [parent, allowed] of Object.entries(PARENT_RULES) as Array<[ArticleStructureType | "_root", Set<ArticleStructureType>]>) {
+    if (parent === "_root") continue;
+    if (allowed.has(child)) {
+      return parent as ArticleStructureType;
+    }
+  }
+  return null;
 }
 
 // ── 視覺元資料 ────────────────────────────────────────────────────────────────
@@ -231,6 +263,116 @@ export function computeArticleDisplayLabels<T extends DisplayLabelArticle>(
       : `第 ${num} ${label}${titlePart}`.trim();
   }
   return result;
+}
+
+// ── 章節摺疊的顯示列計算 ────────────────────────────────────────────────────
+
+export interface ArticleDisplayRow<T extends DisplayLabelArticle = DisplayLabelArticle> {
+  article: T;
+  index: number;
+  displayLabel: string;
+  hiddenByChapter: boolean;
+}
+
+function chineseDigit(value: number): string {
+  const digits = ["", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
+  if (value <= 0) return String(value);
+  if (value < 10) return digits[value];
+  if (value === 10) return "十";
+  if (value < 20) return `十${digits[value - 10]}`;
+  if (value < 100) {
+    const tens = Math.floor(value / 10);
+    const ones = value % 10;
+    return `${digits[tens]}十${ones ? digits[ones] : ""}`;
+  }
+  return String(value);
+}
+
+function listMarkerFromLegalNumber(legalNumber: string | undefined, fallback: number): string {
+  if (!legalNumber) return chineseDigit(fallback);
+  return /^\d+$/.test(legalNumber) ? chineseDigit(Number(legalNumber)) : legalNumber;
+}
+
+/**
+ * 為每一條文計算「顯示用標籤」（第 X 章 / 第 X 條 / 一、 / （一）…）並標示是否被章節摺疊隱藏。
+ * 用於 LawTree 與 RegulationDetailSections 的 ArticleRow。
+ */
+export function buildArticleDisplayRows<T extends DisplayLabelArticle & { id: string; article_type: string; legal_number?: string | null }>(
+  articles: T[],
+  chapterCollapsedMap: Record<string, boolean> = {},
+): ArticleDisplayRow<T>[] {
+  let volumeCount = 0;
+  let chapterCount = 0;
+  let sectionCount = 0;
+  let articleCount = 0;
+  let paragraphCount = 0;
+  let subparagraphCount = 0;
+  let itemCount = 0;
+  let currentChapterId: string | null = null;
+
+  return articles.map((article, index) => {
+    const type = normalizeArticleType(article.article_type);
+    let displayLabel = ARTICLE_TYPE_LABEL[type] ?? article.article_type;
+    const legalNumber = article.legal_number?.trim();
+
+    switch (type) {
+      case "volume":
+        volumeCount += 1;
+        chapterCount = 0;
+        sectionCount = 0;
+        displayLabel = `第 ${legalNumber || volumeCount} 編`;
+        currentChapterId = null;
+        break;
+      case "chapter":
+        chapterCount += 1;
+        sectionCount = 0;
+        displayLabel = `第 ${legalNumber || chapterCount} 章`;
+        currentChapterId = article.id;
+        break;
+      case "section":
+        sectionCount += 1;
+        displayLabel = `第 ${legalNumber || sectionCount} 節`;
+        break;
+      case "article":
+        articleCount += 1;
+        paragraphCount = 0;
+        subparagraphCount = 0;
+        itemCount = 0;
+        displayLabel = `第 ${legalNumber || articleCount} 條`;
+        break;
+      case "paragraph":
+        paragraphCount += 1;
+        subparagraphCount = 0;
+        itemCount = 0;
+        displayLabel = `第 ${legalNumber || paragraphCount} 項`;
+        break;
+      case "subparagraph":
+        subparagraphCount += 1;
+        itemCount = 0;
+        displayLabel = `${listMarkerFromLegalNumber(legalNumber, subparagraphCount)}、`;
+        break;
+      case "item":
+        itemCount += 1;
+        displayLabel = `（${listMarkerFromLegalNumber(legalNumber, itemCount)}）`;
+        break;
+      case "special_clause":
+        displayLabel = "附則";
+        break;
+      default:
+        break;
+    }
+
+    return {
+      article,
+      index,
+      displayLabel,
+      hiddenByChapter: Boolean(
+        currentChapterId
+        && chapterCollapsedMap[currentChapterId]
+        && article.id !== currentChapterId,
+      ),
+    };
+  });
 }
 
 // ── 簡潔徽章（純層級名，給 LawArticleRow 使用） ──────────────────────────────

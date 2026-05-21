@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ApiError, orgsApi, petitionsApi } from "@/lib/api";
+import { ApiError, orgsApi, petitionsApi, withFallback } from "@/lib/api";
 import type { PetitionTypeOut } from "@/lib/types";
 
 export default function PetitionTypesAdminPage() {
@@ -14,10 +14,18 @@ export default function PetitionTypesAdminPage() {
   const [sortOrder, setSortOrder] = useState(0);
 
   const load = useCallback(async () => {
-    const [typeItems, orgItems] = await Promise.all([petitionsApi.listAdminTypes(), orgsApi.list()]);
+    const failedSections: string[] = [];
+    const noteFailure = (label: string) => () => failedSections.push(label);
+    const [typeItems, orgItems] = await Promise.all([
+      withFallback(petitionsApi.listAdminTypes(), [], noteFailure("陳情類型")),
+      withFallback(orgsApi.list({ active_only: true }), [], noteFailure("組織")),
+    ]);
     setTypes(typeItems);
     setOrgs(orgItems);
     if (!orgId && orgItems[0]) setOrgId(orgItems[0].id);
+    if (failedSections.length) {
+      toast.warning(`${failedSections.join("、")}暫時無法載入，其餘資料仍可使用`);
+    }
   }, [orgId]);
 
   useEffect(() => { load().catch(() => toast.error("載入失敗")); }, [load]);

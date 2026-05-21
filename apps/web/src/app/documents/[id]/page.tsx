@@ -24,7 +24,7 @@ function toROCDate(dateStr: string) {
 
 const CAT_LABEL: Record<string, string> = {
   letter: "函", decree: "令", announcement: "公告", report: "報告",
-  meeting_notice: "開會通知單", other: "其他",
+  record: "紀錄", consultation: "咨", meeting_notice: "開會通知單", other: "其他",
 };
 const CLASS_LABEL: Record<string, string> = { normal: "普通", confidential: "密", secret: "機密" };
 const URGENCY_LABEL: Record<string, string> = { normal: "普通件", priority: "速件", express: "最速件" };
@@ -664,6 +664,41 @@ export default function DocumentDetailPage() {
                     </div>
                   )}
                 </div>
+              ) : doc.category === "record" ? (
+                <div className="space-y-3 text-sm" style={{ color: "var(--text-primary)" }}>
+                  {doc.meeting_time && (
+                    <div className="grid grid-cols-[5.5em_minmax(0,1fr)] gap-2">
+                      <span>時間：</span><span>{toROCDate(doc.meeting_time)}</span>
+                    </div>
+                  )}
+                  {doc.meeting_location && (
+                    <div className="grid grid-cols-[5.5em_minmax(0,1fr)] gap-2">
+                      <span>地點：</span><span>{doc.meeting_location}</span>
+                    </div>
+                  )}
+                  {doc.meeting_chairperson && (
+                    <div className="grid grid-cols-[5.5em_minmax(0,1fr)] gap-2">
+                      <span>主席：</span><span>{doc.meeting_chairperson}</span>
+                    </div>
+                  )}
+                  {doc.handler_name && (
+                    <div className="grid grid-cols-[5.5em_minmax(0,1fr)] gap-2">
+                      <span>記錄者：</span><span>{doc.handler_name}</span>
+                    </div>
+                  )}
+                  {doc.doc_description && (
+                    <div>
+                      <p className="mb-1">討論事項：</p>
+                      <div className="pl-[2em]"><OfficialText value={doc.doc_description} /></div>
+                    </div>
+                  )}
+                  {doc.action_required && (
+                    <div>
+                      <p className="mb-1">決議：</p>
+                      <div className="pl-[2em]"><OfficialText value={doc.action_required} /></div>
+                    </div>
+                  )}
+                </div>
               ) : isDecree ? (
                 <div className="space-y-5" style={{ color: "var(--text-primary)" }}>
                   {decreeBody && <OfficialText value={decreeBody} className="text-sm" />}
@@ -691,7 +726,9 @@ export default function DocumentDetailPage() {
                   )}
                   {doc.doc_description && (
                     <div>
-                      <p style={{ color: "var(--text-primary)" }}>說明：</p>
+                      <p style={{ color: "var(--text-primary)" }}>
+                        {doc.category === "announcement" ? "公告事項：" : doc.category === "report" ? "說明／分析：" : "說明："}
+                      </p>
                       <div className="pl-[2em]" style={{ color: "var(--text-primary)" }}>
                         <OfficialText value={doc.doc_description} />
                       </div>
@@ -699,7 +736,9 @@ export default function DocumentDetailPage() {
                   )}
                   {doc.action_required && (
                     <div>
-                      <p style={{ color: "var(--text-primary)" }}>辦法：</p>
+                      <p style={{ color: "var(--text-primary)" }}>
+                        {doc.category === "report" ? "建議事項：" : doc.category === "consultation" ? "辦法或事項：" : "辦法："}
+                      </p>
                       <div className="pl-[2em]" style={{ color: "var(--text-primary)" }}>
                         <OfficialText value={doc.action_required} />
                       </div>
