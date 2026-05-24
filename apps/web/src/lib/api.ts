@@ -38,6 +38,10 @@ import type {
   PetitionCaseListItem, PetitionCaseOut, PetitionCreate, PetitionCreatedOut,
   PetitionStatsOut, PetitionStatus, PetitionTypeOut,
   NotificationPreferences,
+  PasskeyCredentialOut,
+  SearchResultOut,
+  WebPushConfigOut,
+  WebPushSubscriptionOut,
   LineBindingOut, LineLinkCodeOut,
   DocumentEfficiencyOut, DeptRankingItem, PendingAlertItem, AnnouncementParticipationItem,
   SurveyParticipationItem,
@@ -205,6 +209,28 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       }
     }
     throw new ApiError(401, "登入已過期，請重新登入");
+  }
+
+  // 503 + maintenance/load_shed → 跳轉維護頁（由 LoadShedMiddleware 回傳）
+  if (res.status === 503) {
+    try {
+      const payload = (await res.clone().json()) as {
+        detail?: string;
+        maintenance?: boolean;
+        load_shed?: boolean;
+      };
+      if (typeof window !== "undefined" && (payload.maintenance || payload.load_shed)) {
+        const retryAfter = res.headers.get("Retry-After") ?? "30";
+        const detail = encodeURIComponent(payload.detail ?? "");
+        const kind = payload.maintenance ? "maintenance" : "busy";
+        const params = new URLSearchParams({ retry: retryAfter, detail, kind });
+        if (!window.location.pathname.startsWith("/maintenance")) {
+          window.location.assign(`/maintenance?${params.toString()}`);
+        }
+      }
+    } catch {
+      // 非 JSON 回應；fall through
+    }
   }
 
   if (!res.ok) {
@@ -831,8 +857,52 @@ export const authApi = {
     avatar_url?: string | null;
     allow_external_login?: boolean;
     is_superuser?: boolean;
+    is_owner?: boolean;
     permissions: string[];
   }>("/auth/me"),
+  googleOneTap: (credential: string, next?: string) =>
+    post<{
+      mfa_required: boolean;
+      challenge?: string;
+      next: string;
+      user?: {
+        id: string;
+        display_name: string;
+        email: string;
+        avatar_url?: string | null;
+        allow_external_login?: boolean;
+        is_superuser?: boolean;
+        is_owner?: boolean;
+        permissions: string[];
+      };
+    }>("/auth/google/one-tap", { credential, next }),
+};
+
+export const passkeysApi = {
+  list: () => get<PasskeyCredentialOut[]>("/auth/passkeys"),
+  registrationOptions: () => post<Record<string, unknown>>(
+    "/auth/passkeys/registration/options",
+    {},
+  ),
+  verifyRegistration: (credential: unknown, name?: string) =>
+    post<PasskeyCredentialOut>("/auth/passkeys/registration/verify", { credential, name }),
+  authenticationOptions: (email: string) =>
+    post<Record<string, unknown>>("/auth/passkeys/authentication/options", { email }),
+  verifyAuthentication: (credential: unknown) =>
+    post<{
+      next: string;
+      user: {
+        id: string;
+        display_name: string;
+        email: string;
+        avatar_url?: string | null;
+        allow_external_login?: boolean;
+        is_superuser?: boolean;
+        is_owner?: boolean;
+        permissions: string[];
+      };
+    }>("/auth/passkeys/authentication/verify", { credential }),
+  delete: (id: string) => del<void>(`/auth/passkeys/${id}`),
 };
 
 export const mfaApi = {
@@ -1105,6 +1175,26 @@ export const notificationsApi = {
       "/notifications/unsubscribe",
       { token },
     ),
+  webPushConfig: () => get<WebPushConfigOut>("/notifications/web-push/config"),
+  saveWebPushSubscription: (body: {
+    endpoint: string;
+    keys: { p256dh: string; auth: string };
+    device_label?: string;
+  }) => post<WebPushSubscriptionOut>("/notifications/web-push/subscriptions", body),
+  listWebPushSubscriptions: () =>
+    get<WebPushSubscriptionOut[]>("/notifications/web-push/subscriptions"),
+  deleteWebPushSubscription: (id: string) =>
+    del<void>(`/notifications/web-push/subscriptions/${id}`),
+  testWebPush: () => post<{ sent: number }>("/notifications/web-push/test", {}),
+};
+
+export const searchApi = {
+  global: (q: string, limit = 10) =>
+    get<SearchResultOut[]>(`/search?${new URLSearchParams({ q, limit: String(limit) })}`),
+  reindex: () => post<{ enabled: boolean; indexed: number; index?: string | null }>(
+    "/search/reindex",
+    {},
+  ),
 };
 
 // ── 常用篩選（Saved Filters）───────────────────────────────────────────────────
@@ -1960,4 +2050,113 @@ export interface TaskInboxResponse {
 
 export const tasksApi = {
   list: () => get<TaskInboxResponse>("/tasks"),
+};
+
+// ── 管理員系統狀態（admin/system） ───────────────────────────────────────────
+
+export interface DbPoolView {
+  size: number;
+  checked_in: number;
+  checked_out: number;
+  overflow: number;
+  utilization: number;
+}
+
+export interface WsLimits {
+  global_max: number;
+  per_ip_max: number;
+  per_room_max: number;
+}
+
+export interface WsRoomCount {
+  room: string;
+  connections: number;
+}
+
+export interface WsView {
+  total: number;
+  rooms: number;
+  unique_ips: number;
+  per_room: WsRoomCount[];
+  limits: WsLimits;
+}
+
+export interface CeleryQueueView {
+  name: string;
+  active: number;
+  reserved: number;
+}
+
+export interface CeleryView {
+  queues: CeleryQueueView[];
+  error: string | null;
+}
+
+export interface RedisView {
+  connected_clients: number;
+  blocked_clients: number;
+  error: string | null;
+}
+
+export interface LoadSignalsView {
+  active_requests: number;
+  recent_5xx_ratio: number;
+  recent_5xx_count: number;
+  window_seconds: number;
+}
+
+export interface MaintenanceView {
+  enabled: boolean;
+  message: string;
+  until: number | null;
+}
+
+export type LoadShedMode = "off" | "auto" | "on" | "bypass";
+
+export interface SystemMetricsSnapshot {
+  timestamp: number;
+  db_pool: DbPoolView;
+  redis: RedisView;
+  ws: WsView;
+  celery: CeleryView;
+  load_signals: LoadSignalsView;
+  maintenance: MaintenanceView;
+  load_shed_mode: LoadShedMode;
+}
+
+export interface SystemFeatureFlag {
+  key: string;
+  description: string;
+  enabled: boolean;
+}
+
+export interface IpBlockedItem {
+  ip: string;
+  reason: string;
+  expires_at: number | null;
+}
+
+export const systemApi = {
+  status: () => get<SystemMetricsSnapshot>("/admin/system/status"),
+  maintenance: () => get<MaintenanceView>("/admin/system/maintenance"),
+  setMaintenance: (body: { enabled: boolean; message?: string; until?: number | null }) =>
+    put<MaintenanceView>("/admin/system/maintenance", body),
+  listFeatureFlags: () => get<SystemFeatureFlag[]>("/admin/system/feature-flags"),
+  setFeatureFlag: (key: string, enabled: boolean) =>
+    patch<SystemFeatureFlag>(`/admin/system/feature-flags/${encodeURIComponent(key)}`, { enabled }),
+  setLoadShedMode: (mode: LoadShedMode) =>
+    put<{ mode: LoadShedMode }>("/admin/system/load-shed", { mode }),
+  listIpBlocks: () => get<IpBlockedItem[]>("/admin/system/ip-blocklist"),
+  addIpBlock: (body: { ip: string; reason?: string; ttl_seconds?: number | null }) =>
+    post<IpBlockedItem>("/admin/system/ip-blocklist", body),
+  removeIpBlock: (ip: string) =>
+    del<{ ip: string; removed: boolean }>(`/admin/system/ip-blocklist/${encodeURIComponent(ip)}`),
+  revokeUserTokens: (user_id: string) =>
+    post<{ user_id: string; revoked_count: number }>("/admin/system/revoke-user-tokens", { user_id }),
+  wsRooms: () =>
+    get<{
+      stats: { total: number; rooms: number; unique_ips: number; limits: WsLimits };
+      rooms: WsRoomCount[];
+      ips: { ip: string; connections: number }[];
+    }>("/admin/system/ws/rooms"),
 };

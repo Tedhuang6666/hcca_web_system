@@ -39,6 +39,15 @@ services:
     image: postgres:16-alpine
     container_name: campus_db
     restart: unless-stopped
+    # 顯式調整連線上限與記憶體；Alpine 預設 shared_buffers=128MB / max_connections=100
+    # 不夠支撐多 worker × 連線池（api×4×30 + celery×4×15 + beat×2 = 180+）。
+    command: >
+      postgres
+      -c max_connections=200
+      -c shared_buffers=256MB
+      -c effective_cache_size=512MB
+      -c work_mem=16MB
+      -c maintenance_work_mem=64MB
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
@@ -68,6 +77,19 @@ services:
       timeout: 5s
       retries: 5
 
+  # ── Meilisearch（全站搜尋；未設定時 API 會自動 fallback DB 搜尋） ───────
+  meilisearch:
+    image: getmeili/meilisearch:v1.13
+    container_name: campus_meilisearch
+    restart: unless-stopped
+    environment:
+      MEILI_ENV: development
+      MEILI_MASTER_KEY: ${MEILISEARCH_API_KEY:-}
+    ports:
+      - "127.0.0.1:7700:7700"
+    volumes:
+      - meilidata:/meili_data
+
   # ── FastAPI（Gunicorn + UvicornWorker） ───────────────────────
   api:
     <<: *api-common
@@ -88,6 +110,30 @@ services:
       DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
       REDIS_URL: redis://redis:6379/0
+      REDIS_MAX_CONNECTIONS: ${REDIS_MAX_CONNECTIONS:-50}
+      REDIS_SOCKET_TIMEOUT: ${REDIS_SOCKET_TIMEOUT:-2.0}
+      REDIS_HEALTH_CHECK_INTERVAL: ${REDIS_HEALTH_CHECK_INTERVAL:-30}
+      TRUST_CLOUDFLARE_PROXY: ${TRUST_CLOUDFLARE_PROXY:-false}
+      CF_TRUSTED_PROXIES: ${CF_TRUSTED_PROXIES:-[]}
+      WS_GLOBAL_MAX_CONNECTIONS: ${WS_GLOBAL_MAX_CONNECTIONS:-2000}
+      WS_PER_IP_MAX_CONNECTIONS: ${WS_PER_IP_MAX_CONNECTIONS:-20}
+      WS_PER_ROOM_MAX_CONNECTIONS: ${WS_PER_ROOM_MAX_CONNECTIONS:-300}
+      WS_HEARTBEAT_INTERVAL_SECONDS: ${WS_HEARTBEAT_INTERVAL_SECONDS:-30}
+      WS_HEARTBEAT_TIMEOUT_SECONDS: ${WS_HEARTBEAT_TIMEOUT_SECONDS:-90}
+      PAYLOAD_MAX_BYTES_JSON: ${PAYLOAD_MAX_BYTES_JSON:-2097152}
+      PAYLOAD_MAX_BYTES_MULTIPART: ${PAYLOAD_MAX_BYTES_MULTIPART:-26214400}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.1}
+      SENTRY_PROFILES_SAMPLE_RATE: ${SENTRY_PROFILES_SAMPLE_RATE:-0.0}
+      MEILISEARCH_URL: http://meilisearch:7700
+      MEILISEARCH_API_KEY: ${MEILISEARCH_API_KEY:-}
+      MEILISEARCH_INDEX_PREFIX: ${MEILISEARCH_INDEX_PREFIX:-hcca}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@example.com}
+      PASSKEY_RP_ID: ${PASSKEY_RP_ID:-localhost}
+      PASSKEY_RP_NAME: ${PASSKEY_RP_NAME:-HCCA 校園自治整合平台}
+      PASSKEY_ORIGIN: ${PASSKEY_ORIGIN:-http://localhost:3000}
       GUNICORN_WORKERS: "4"
       GUNICORN_KEEPALIVE: "5"
       GUNICORN_TIMEOUT: "60"
@@ -104,6 +150,49 @@ services:
       retries: 5
       start_period: 30s
     # 開發模式可 override CMD 為：uvicorn api:app --reload --host 0.0.0.0 --port 8000
+
+  # ── FastAPI Admin 通道（管理員優先 / Load Shed 關閉） ─────────
+  # 與 api 共用 image 與 DB/Redis，但綁不同 port、worker 數較少、永遠不 shed。
+  # Cloudflare 規則：admin.<domain> → 8001；api.<domain> → 8000
+  api-admin:
+    <<: *api-common
+    container_name: campus_api_admin
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: development
+      DEBUG: "true"
+      ENABLE_API_DOCS: "true"
+      ALLOWED_ORIGINS: '["http://localhost:3000","http://127.0.0.1:3000"]'
+      ALLOWED_HOSTS: '["localhost","127.0.0.1","api-admin"]'
+      COOKIE_SECURE: "false"
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
+      DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
+      DB_POOL_SIZE: ${ADMIN_DB_POOL_SIZE:-5}
+      DB_MAX_OVERFLOW: ${ADMIN_DB_MAX_OVERFLOW:-5}
+      REDIS_URL: redis://redis:6379/0
+      REDIS_MAX_CONNECTIONS: ${REDIS_MAX_CONNECTIONS:-50}
+      TRUST_CLOUDFLARE_PROXY: ${TRUST_CLOUDFLARE_PROXY:-false}
+      CF_TRUSTED_PROXIES: ${CF_TRUSTED_PROXIES:-[]}
+      # admin 通道永遠不 shed
+      LOAD_SHED_ENABLED: "false"
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.1}
+      GUNICORN_WORKERS: ${ADMIN_GUNICORN_WORKERS:-2}
+      GUNICORN_KEEPALIVE: "5"
+      GUNICORN_TIMEOUT: "60"
+      PORT: "8001"
+    ports:
+      - "127.0.0.1:8001:8001"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8001/ready', timeout=3).status == 200 else 1)\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # ── Celery Worker ─────────────────────────────────────────────
   celery-worker:
@@ -195,7 +284,25 @@ services:
       retries: 5
       start_period: 30s
 
+  # ── Celery Flower（Celery 任務監控介面，僅內網 / Cloudflare Access） ─
+  # 預設綁 127.0.0.1，prod 應透過 CF 加 SSO 限制存取
+  flower:
+    image: mher/flower:2.0
+    container_name: campus_flower
+    restart: unless-stopped
+    command: >
+      celery --broker=redis://redis:6379/0 flower
+      --port=5555
+      --url-prefix=flower
+      --basic-auth=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-changeme}
+    ports:
+      - "127.0.0.1:5555:5555"
+    depends_on:
+      redis:
+        condition: service_healthy
+
 volumes:
   pgdata:
   redisdata:
+  meilidata:
   celerybeat:

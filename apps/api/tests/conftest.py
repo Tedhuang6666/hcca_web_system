@@ -11,10 +11,17 @@ os.environ.setdefault(
     "ALLOWED_HOSTS",
     '["localhost","127.0.0.1","api","test","testserver"]',
 )
+# Load shedding 會根據 active_requests / 5xx_ratio / db_pool 動態擋 request。
+# 在 pytest 連續執行多 test 時，前面 test 故意觸發的 5xx 會污染同進程的滑動視窗，
+# 導致後面 test 全部 503。測試環境一律關閉。
+os.environ.setdefault("LOAD_SHED_ENABLED", "false")
+# 同理：測試不使用真實 Redis broker，避免事件迴圈跨 test 互鎖。
+os.environ.setdefault("WS_PUBSUB_BACKEND", "memory")
 
 from collections.abc import AsyncGenerator  # noqa: E402
 from typing import Any  # noqa: E402
 
+import pytest  # noqa: E402
 import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient, Response  # noqa: E402
 from sqlalchemy import text  # noqa: E402
@@ -26,6 +33,40 @@ from sqlalchemy.ext.asyncio import (  # noqa: E402
 
 from api import app  # noqa: E402
 from api.core.database import Base, get_db  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _isolate_redis_client_per_test():
+    """每個 test 前替換 redis_client 的 connection_pool。
+
+    `redis_client` 是 module-level singleton，aioredis 的 connection 在首次 await
+    時黏到當前 event loop；pytest-asyncio 每個 test 起新 loop，下個 test 重用同
+    一個 pool 就會撞「Future attached to a different loop」。
+
+    我們保持 redis_client 物件本身不變（其他模組已 import），只替換 pool。
+    """
+    import redis.asyncio as _aioredis
+
+    from api.core import security as _security
+    from api.core.config import settings as _settings
+
+    fresh_pool = _aioredis.ConnectionPool.from_url(
+        str(_settings.REDIS_URL),
+        encoding="utf-8",
+        decode_responses=True,
+        max_connections=_settings.REDIS_MAX_CONNECTIONS,
+    )
+    old_pool = _security.redis_client.connection_pool
+    _security.redis_client.connection_pool = fresh_pool
+    try:
+        yield
+    finally:
+        try:
+            fresh_pool.disconnect(inuse_connections=True)
+        except Exception:
+            pass
+        _security.redis_client.connection_pool = old_pool
+
 
 # 優先使用 PostgreSQL test DB，支援 TSVECTOR 等 PG-specific 特性
 # 若無法連線，退回到 aiosqlite in-memory

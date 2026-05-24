@@ -3,9 +3,13 @@
 import logging
 from urllib.parse import urlencode, urlsplit
 
+from anyio import to_thread
 from authlib.integrations.base_client import OAuthError
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
+from google.auth.exceptions import GoogleAuthError
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token as google_id_token
 from httpx import ConnectTimeout
 from jwt.exceptions import InvalidTokenError
 from sqlalchemy import select
@@ -25,7 +29,7 @@ from api.core.security import (
 )
 from api.dependencies.auth import get_current_active_user
 from api.models.user import User
-from api.schemas.auth import RefreshRequest
+from api.schemas.auth import GoogleOneTapRequest, RefreshRequest
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +121,107 @@ def _email_can_login(email: str, existing_user: User | None = None) -> bool:
     )
 
 
+async def _auth_user_payload(db: AsyncSession, user: User) -> dict:
+    from api.services.permission import get_user_permission_codes
+
+    codes = await get_user_permission_codes(db, user.id)
+    return {
+        "id": str(user.id),
+        "email": user.email,
+        "display_name": user.display_name,
+        "avatar_url": user.avatar_url,
+        "allow_external_login": user.allow_external_login,
+        "is_superuser": user.is_superuser,
+        "is_owner": user.email.lower() in settings.OWNER_EMAILS,
+        "permissions": sorted(codes),
+    }
+
+
+async def _upsert_google_user(
+    db: AsyncSession,
+    *,
+    google_sub: str,
+    email: str,
+    display_name: str,
+    avatar_url: str | None,
+    client_ip: str,
+    user_agent: str | None,
+) -> User:
+    existing_user_by_email_result = await db.execute(select(User).where(User.email == email))
+    existing_user_by_email = existing_user_by_email_result.scalar_one_or_none()
+
+    if not _email_can_login(email, existing_user_by_email):
+        logger.warning(
+            "Rejected Google login from disallowed email domain",
+            extra={"email": email, "client_ip": client_ip},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="僅允許竹中 Google 帳號或已核准的管理員帳號登入",
+        )
+
+    student_id: str | None = None
+    if email.endswith("@hchs.hc.edu.tw") and email.startswith("g0"):
+        student_id = email[2:].split("@")[0]
+
+    result = await db.execute(select(User).where(User.google_sub == google_sub))
+    user = result.scalar_one_or_none() or existing_user_by_email
+
+    is_superuser_candidate = email in settings.SUPERUSER_EMAILS or email in settings.OWNER_EMAILS
+    is_superuser = False
+
+    if is_superuser_candidate:
+        if settings.ADMIN_IP_WHITELIST and client_ip not in settings.ADMIN_IP_WHITELIST:
+            logger.warning(
+                "Unauthorized superuser access attempt from non-whitelisted IP",
+                extra={"email": email, "ip": client_ip, "allowed_ips": settings.ADMIN_IP_WHITELIST},
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="此 IP 不被授權為管理員"
+            )
+
+        if settings.REQUIRE_2FA_FOR_SUPERUSER:
+            logger.info(
+                "Superuser login requires 2FA verification",
+                extra={"email": email, "ip": client_ip},
+            )
+            is_superuser = True
+        else:
+            is_superuser = True
+            logger.info("Superuser login successful", extra={"email": email, "ip": client_ip})
+
+    if user is None:
+        user = User(
+            email=email,
+            display_name=display_name,
+            avatar_url=avatar_url,
+            google_sub=google_sub,
+            is_verified=True,
+            is_superuser=is_superuser,
+            student_id=student_id,
+        )
+        db.add(user)
+    else:
+        user.google_sub = google_sub
+        user.avatar_url = avatar_url
+        if is_superuser_candidate:
+            user.is_superuser = True
+        if student_id and not user.student_id:
+            user.student_id = student_id
+
+    await db.flush()
+
+    is_suspicious, reason = await check_suspicious_login(str(user.id), client_ip)
+    if is_suspicious:
+        logger.warning(
+            "Suspicious login detected",
+            extra={"user_id": str(user.id), "reason": reason, "ip": client_ip},
+        )
+
+    await record_login(str(user.id), client_ip, user_agent)
+    return user
+
+
 def _set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
     response.set_cookie(
         settings.ACCESS_TOKEN_COOKIE_NAME,
@@ -196,105 +301,92 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
     display_name: str = user_info.get("name", email.split("@")[0])
     avatar_url: str | None = user_info.get("picture")
 
-    existing_user_by_email_result = await db.execute(select(User).where(User.email == email))
-    existing_user_by_email = existing_user_by_email_result.scalar_one_or_none()
-
-    if not _email_can_login(email, existing_user_by_email):
-        logger.warning(
-            "Rejected Google login from disallowed email domain",
-            extra={"email": email, "client_ip": client_ip},
-        )
-        error_qs = urlencode({"error": "僅允許竹中 Google 帳號或已核准的管理員帳號登入"})
-        return RedirectResponse(url=f"{frontend_origin}/login?{error_qs}")
-
-    # 從學校信箱自動提取學號（格式：g0{student_id}@hchs.hc.edu.tw）
-    student_id: str | None = None
-    if email.endswith("@hchs.hc.edu.tw") and email.startswith("g0"):
-        student_id = email[2:].split("@")[0]  # 去掉 g0 前綴
-
-    # 查詢或建立使用者
-    result = await db.execute(select(User).where(User.google_sub == google_sub))
-    user = result.scalar_one_or_none()
-
-    if user is None:
-        # 嘗試用 email 找到現有帳號並關聯
-        user = existing_user_by_email
-
-    # 檢查是否為超級管理員候選人
-    is_superuser_candidate = email in settings.SUPERUSER_EMAILS or email in settings.OWNER_EMAILS
-    is_superuser = False
-
-    if is_superuser_candidate:
-        # IP 白名單檢查
-        if settings.ADMIN_IP_WHITELIST and client_ip not in settings.ADMIN_IP_WHITELIST:
-            logger.warning(
-                "Unauthorized superuser access attempt from non-whitelisted IP",
-                extra={"email": email, "ip": client_ip, "allowed_ips": settings.ADMIN_IP_WHITELIST},
-            )
-            error_qs = urlencode({"error": "此 IP 不被授權為管理員"})
-            return RedirectResponse(url=f"{frontend_origin}/login?{error_qs}")
-
-        # 2FA 檢查（若啟用）
-        if settings.REQUIRE_2FA_FOR_SUPERUSER:
-            # 暫時標記為待 2FA（實現見第 14-15 步）
-            logger.info(
-                "Superuser login requires 2FA verification",
-                extra={"email": email, "ip": client_ip},
-            )
-            is_superuser = True
-        else:
-            is_superuser = True
-            logger.info(
-                "Superuser login successful",
-                extra={"email": email, "ip": client_ip},
-            )
-
-    if user is None:
-        user = User(
+    try:
+        user = await _upsert_google_user(
+            db,
+            google_sub=google_sub,
             email=email,
             display_name=display_name,
             avatar_url=avatar_url,
-            google_sub=google_sub,
-            is_verified=True,
-            is_superuser=is_superuser,
-            student_id=student_id,
+            client_ip=client_ip,
+            user_agent=request.headers.get("user-agent"),
         )
-        db.add(user)
-    else:
-        user.google_sub = google_sub
-        user.avatar_url = avatar_url
-        if is_superuser_candidate:
-            user.is_superuser = True  # SUPERUSER_EMAILS 可授予超管，但不覆蓋手動設定的值
-        if student_id and not user.student_id:
-            user.student_id = student_id  # 補填學號（若尚未設定）
-
-    await db.flush()
-
-    # 檢測異常登入
-    is_suspicious, reason = await check_suspicious_login(str(user.id), client_ip)
-    if is_suspicious:
-        logger.warning(
-            "Suspicious login detected",
-            extra={"user_id": str(user.id), "reason": reason, "ip": client_ip},
-        )
-        # 可以選擇要求額外驗證（如 2FA）或發送告警郵件
-        # 暫時允許登入，但記錄事件
-
-    # 記錄成功登入
-    await record_login(str(user.id), client_ip, request.headers.get("user-agent"))
+    except HTTPException as exc:
+        error_qs = urlencode({"error": str(exc.detail)})
+        return RedirectResponse(url=f"{frontend_origin}/login?{error_qs}")
 
     if user.mfa_enabled:
         challenge_token = create_mfa_challenge_token(subject=str(user.id))
         challenge_qs = urlencode({"challenge": challenge_token, "next": login_next})
         return RedirectResponse(url=f"{frontend_origin}/auth/mfa?{challenge_qs}")
 
-    access_token = create_access_token(subject=str(user.id))
+    # 帶入 is_admin claim 讓 load_shed middleware 能優先放行（後端 RBAC 仍是第二道防線）
+    admin_claims = {"is_admin": True} if user.is_superuser else None
+    access_token = create_access_token(subject=str(user.id), extra_claims=admin_claims)
     refresh_token = create_refresh_token(subject=str(user.id))
 
     callback_qs = urlencode({"next": login_next})
     response = RedirectResponse(url=f"{frontend_origin}/auth/callback?{callback_qs}")
     _set_auth_cookies(response, access_token, refresh_token)
     return response
+
+
+@router.post("/google/one-tap", summary="Google One Tap 登入")
+async def google_one_tap(
+    body: GoogleOneTapRequest,
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """驗證 Google Identity Services credential，建立登入 cookie。"""
+    if not settings.GOOGLE_CLIENT_ID:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="尚未設定 Google Client ID"
+        )
+
+    def verify_credential() -> dict:
+        return google_id_token.verify_oauth2_token(
+            body.credential,
+            google_requests.Request(),
+            settings.GOOGLE_CLIENT_ID,
+        )
+
+    try:
+        idinfo = await to_thread.run_sync(verify_credential)
+    except (ValueError, GoogleAuthError) as exc:
+        logger.warning("Invalid Google One Tap credential", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Google 登入憑證無效"
+        ) from exc
+
+    if not idinfo.get("email_verified"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Google 信箱尚未驗證")
+
+    client_ip = request.client.host if request.client else "unknown"
+    user = await _upsert_google_user(
+        db,
+        google_sub=str(idinfo["sub"]),
+        email=str(idinfo["email"]).strip().lower(),
+        display_name=str(idinfo.get("name") or str(idinfo["email"]).split("@")[0]),
+        avatar_url=idinfo.get("picture"),
+        client_ip=client_ip,
+        user_agent=request.headers.get("user-agent"),
+    )
+
+    login_next = _safe_next_path(body.next)
+    if user.mfa_enabled:
+        challenge_token = create_mfa_challenge_token(subject=str(user.id))
+        return {"mfa_required": True, "challenge": challenge_token, "next": login_next}
+
+    admin_claims = {"is_admin": True} if user.is_superuser else None
+    access_token = create_access_token(subject=str(user.id), extra_claims=admin_claims)
+    refresh_token = create_refresh_token(subject=str(user.id))
+    _set_auth_cookies(response, access_token, refresh_token)
+    return {
+        "mfa_required": False,
+        "next": login_next,
+        "user": await _auth_user_payload(db, user),
+    }
 
 
 @router.post("/refresh", summary="使用 Refresh Token 換發 Access Token")
@@ -335,7 +427,8 @@ async def refresh_token(
     # 舊 Refresh Token 加入黑名單（Token Rotation）
     await add_to_blacklist(token)
 
-    access_token = create_access_token(subject=str(user.id))
+    admin_claims = {"is_admin": True} if user.is_superuser else None
+    access_token = create_access_token(subject=str(user.id), extra_claims=admin_claims)
     refresh_token_value = create_refresh_token(subject=str(user.id))
     _set_auth_cookies(response, access_token, refresh_token_value)
 
@@ -348,19 +441,7 @@ async def get_me(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """回傳當前登入使用者的基本資料與 is_superuser 旗標"""
-    from api.services.permission import get_user_permission_codes
-
-    codes = await get_user_permission_codes(db, current_user.id)
-    return {
-        "id": str(current_user.id),
-        "email": current_user.email,
-        "display_name": current_user.display_name,
-        "avatar_url": current_user.avatar_url,
-        "allow_external_login": current_user.allow_external_login,
-        "is_superuser": current_user.is_superuser,
-        "is_owner": current_user.email.lower() in settings.OWNER_EMAILS,
-        "permissions": sorted(codes),
-    }
+    return await _auth_user_payload(db, current_user)
 
 
 @router.post("/logout", summary="登出（使 Token 失效）")

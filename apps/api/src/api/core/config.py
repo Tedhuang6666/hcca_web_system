@@ -45,6 +45,57 @@ class Settings(BaseSettings):
 
     # --- Redis 設定 ---
     REDIS_URL: RedisDsn = Field(default="redis://localhost:6379/0")
+    REDIS_MAX_CONNECTIONS: int = Field(default=50, ge=1)
+    REDIS_SOCKET_TIMEOUT: float = Field(default=2.0, gt=0)
+    REDIS_HEALTH_CHECK_INTERVAL: int = Field(default=30, ge=1)
+
+    # --- Cloudflare / 信任代理 ---
+    # 啟用時，從 CF-Connecting-IP 取真實 client IP（僅信任 socket peer ∈ CF 官方 CIDR）
+    TRUST_CLOUDFLARE_PROXY: bool = Field(default=False)
+    # 額外信任的 proxy CIDR；留空時內建 Cloudflare 官方公開 IP 段
+    CF_TRUSTED_PROXIES: list[str] = Field(default_factory=list)
+
+    # --- WebSocket 連線控制 ---
+    WS_GLOBAL_MAX_CONNECTIONS: int = Field(default=2000, ge=1)
+    WS_PER_IP_MAX_CONNECTIONS: int = Field(default=20, ge=1)
+    WS_PER_ROOM_MAX_CONNECTIONS: int = Field(default=300, ge=1)
+    WS_HEARTBEAT_INTERVAL_SECONDS: int = Field(default=30, ge=5)
+    WS_HEARTBEAT_TIMEOUT_SECONDS: int = Field(default=90, ge=10)
+
+    # --- Payload 大小限制（middleware 層）---
+    PAYLOAD_MAX_BYTES_JSON: int = Field(default=2_097_152, ge=1024)  # 2 MiB
+    PAYLOAD_MAX_BYTES_MULTIPART: int = Field(default=26_214_400, ge=1024)  # 25 MiB
+
+    # --- Sentry 錯誤追蹤 ---
+    SENTRY_DSN: str = Field(default="")
+    SENTRY_TRACES_SAMPLE_RATE: float = Field(default=0.1, ge=0.0, le=1.0)
+    SENTRY_PROFILES_SAMPLE_RATE: float = Field(default=0.0, ge=0.0, le=1.0)
+
+    # --- Search / Meilisearch ---
+    MEILISEARCH_URL: str = Field(default="")
+    MEILISEARCH_API_KEY: str = Field(default="")
+    MEILISEARCH_INDEX_PREFIX: str = Field(default="hcca")
+
+    # --- Web Push ---
+    VAPID_PUBLIC_KEY: str = Field(default="")
+    VAPID_PRIVATE_KEY: str = Field(default="")
+    VAPID_SUBJECT: str = Field(default="mailto:admin@example.com")
+
+    # --- Passkeys / WebAuthn ---
+    PASSKEY_RP_ID: str = Field(default="localhost")
+    PASSKEY_RP_NAME: str = Field(default="HCCA 校園自治整合平台")
+    PASSKEY_ORIGIN: str = Field(default="http://localhost:3000")
+
+    # --- WebSocket pub/sub backend ---
+    # redis：跨 worker / 跨節點廣播（生產建議）；memory：單一進程（測試 / 開發單 worker）
+    WS_PUBSUB_BACKEND: str = Field(default="redis")
+
+    # --- Load Shedding（管理員優先）---
+    LOAD_SHED_ENABLED: bool = Field(default=True)
+    LOAD_SHED_MAX_ACTIVE_REQUESTS: int = Field(default=100, ge=1)
+    LOAD_SHED_5XX_RATIO_THRESHOLD: float = Field(default=0.10, ge=0.0, le=1.0)
+    LOAD_SHED_DB_POOL_THRESHOLD: float = Field(default=0.85, ge=0.0, le=1.0)
+    LOAD_SHED_RETRY_AFTER_BASE_SECONDS: int = Field(default=5, ge=1)
 
     # --- JWT 設定 ---
     SECRET_KEY: str = Field(default=_DEFAULT_SECRET)

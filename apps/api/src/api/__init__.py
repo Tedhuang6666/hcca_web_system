@@ -23,10 +23,16 @@ from api.core.audit import SecurityAuditMiddleware
 from api.core.config import settings
 from api.core.csrf import CSRFMiddleware
 from api.core.database import engine
+from api.core.load_shed import LoadShedMiddleware
+from api.core.load_signals import dec_active, inc_active, record_status
+from api.core.payload_limit import PayloadLimitMiddleware
 from api.core.rate_limit import SimpleRateLimitMiddleware
 from api.core.security_headers import SecurityHeadersMiddleware
+from api.core.sentry import init_sentry
+from api.core.trusted_proxy import TrustedProxyMiddleware
 from api.routers import (
     admin,
+    admin_system,
     analytics,
     announcements,
     audit,
@@ -43,11 +49,13 @@ from api.routers import (
     notifications,
     orgs,
     partner_map,
+    passkeys,
     petitions,
     positions,
     regulations,
     saved_filters,
     school_class,
+    search,
     shop,
     survey,
     tasks,
@@ -89,14 +97,23 @@ async def _check_redis() -> tuple[bool, str | None]:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """應用程式啟動/關閉生命週期管理"""
-    yield
-    from api.core.security import redis_client
+    from api.core.ws_manager import setup_broker, shutdown_broker
 
-    await redis_client.aclose()
+    await setup_broker()
+    try:
+        yield
+    finally:
+        await shutdown_broker()
+        from api.core.security import redis_client
+
+        await redis_client.aclose()
 
 
 def create_app() -> FastAPI:
     """應用程式工廠函式"""
+    # 在 FastAPI app 建立之前 init Sentry，這樣 ASGI / fastapi integration 才能 patch
+    init_sentry()
+
     app = FastAPI(
         title=settings.APP_NAME,
         version=settings.APP_VERSION,
@@ -106,6 +123,9 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Middleware 注意：Starlette 是 LIFO 包裝，最後 add 的最外層先執行。
+    # 所以「越早」需要的（信任代理 / payload 上限）應該「最後」add，
+    # 「越晚」需要的（CORS / Session）應該「最早」add。
     app.add_middleware(
         SecurityHeadersMiddleware,
         enabled=settings.SECURITY_HEADERS_ENABLED,
@@ -135,7 +155,23 @@ def create_app() -> FastAPI:
         same_site=settings.COOKIE_SAMESITE,
         https_only=settings.COOKIE_SECURE,
     )
+    # Payload 大小上限：在 host / proxy 檢查通過後第一個粗篩
+    app.add_middleware(
+        PayloadLimitMiddleware,
+        max_bytes_json=settings.PAYLOAD_MAX_BYTES_JSON,
+        max_bytes_multipart=settings.PAYLOAD_MAX_BYTES_MULTIPART,
+    )
+    # Load shed（admin 優先 + IP 黑名單 + maintenance mode）：在 host 檢查之後、
+    # rate_limit / CSRF 之前。如此被擋下的請求不會浪費 CSRF 驗證資源。
+    app.add_middleware(LoadShedMiddleware)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.ALLOWED_HOSTS)
+    # 信任代理必須在最外層，這樣後續 middleware（rate limit / audit / CSRF）
+    # 看到的 request.client.host 就已經是真實使用者 IP，而非 Cloudflare edge。
+    app.add_middleware(
+        TrustedProxyMiddleware,
+        enabled=settings.TRUST_CLOUDFLARE_PROXY,
+        extra_cidrs=settings.CF_TRUSTED_PROXIES,
+    )
 
     app.include_router(auth.router)
     app.include_router(mfa.router)
@@ -143,7 +179,9 @@ def create_app() -> FastAPI:
     app.include_router(audit.router)
     app.include_router(announcements.router)
     app.include_router(admin.router)
+    app.include_router(admin_system.router)
     app.include_router(orgs.router)
+    app.include_router(passkeys.router)
     app.include_router(partner_map.router)
     app.include_router(petitions.router)
     app.include_router(positions.router)
@@ -155,6 +193,7 @@ def create_app() -> FastAPI:
     app.include_router(serial_router)
     app.include_router(regulations.router)
     app.include_router(saved_filters.router)
+    app.include_router(search.router)
     app.include_router(shop.router)
     app.include_router(school_class.router)
     app.include_router(meal.router)
@@ -178,18 +217,25 @@ def create_app() -> FastAPI:
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
         start = time.perf_counter()
-        response = await call_next(request)
-        duration_ms = (time.perf_counter() - start) * 1000
-        response.headers["X-Process-Time-Ms"] = f"{duration_ms:.1f}"
-        if duration_ms > settings.SLOW_REQUEST_THRESHOLD_MS:
-            logger.warning(
-                "Slow request path=%s method=%s status=%s duration_ms=%.1f",
-                request.url.path,
-                request.method,
-                response.status_code,
-                duration_ms,
-            )
-        return response
+        inc_active()
+        status_code = 500
+        try:
+            response = await call_next(request)
+            status_code = response.status_code
+            duration_ms = (time.perf_counter() - start) * 1000
+            response.headers["X-Process-Time-Ms"] = f"{duration_ms:.1f}"
+            if duration_ms > settings.SLOW_REQUEST_THRESHOLD_MS:
+                logger.warning(
+                    "Slow request path=%s method=%s status=%s duration_ms=%.1f",
+                    request.url.path,
+                    request.method,
+                    response.status_code,
+                    duration_ms,
+                )
+            return response
+        finally:
+            dec_active()
+            record_status(status_code)
 
     @app.exception_handler(StarletteHTTPException)
     async def _http_exception_handler(

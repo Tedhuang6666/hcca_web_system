@@ -101,7 +101,9 @@ async def confirm_mfa(payload: MFAConfirmIn, db: DbDep, user: CurrentUser) -> di
     """輸入 TOTP 驗證碼以正式啟用 2FA"""
     success = await mfa_svc.confirm_mfa(db, user, payload.code)
     if not success:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="驗證碼錯誤，2FA 啟用失敗")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="驗證碼錯誤，2FA 啟用失敗"
+        )
     return {"message": "2FA 已成功啟用"}
 
 
@@ -150,7 +152,8 @@ async def verify_mfa_login(
     if not valid:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="2FA 驗證碼錯誤")
 
-    access_token = create_access_token(subject=str(user.id))
+    admin_claims = {"is_admin": True} if user.is_superuser else None
+    access_token = create_access_token(subject=str(user.id), extra_claims=admin_claims)
     refresh_token = create_refresh_token(subject=str(user.id))
     await add_to_blacklist(payload.challenge_token)
     _set_auth_cookies(response, access_token, refresh_token)
@@ -169,7 +172,9 @@ async def regenerate_backup_codes(
 ) -> MFABackupCodesOut:
     backup_codes = await mfa_svc.regenerate_backup_codes(db, user, payload.code)
     if backup_codes is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="驗證碼錯誤，無法重產備用碼")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="驗證碼錯誤，無法重產備用碼"
+        )
     return MFABackupCodesOut(backup_codes=backup_codes)
 
 

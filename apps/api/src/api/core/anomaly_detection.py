@@ -1,11 +1,18 @@
-"""異常行為偵測 - 檢測異常登入、速率異常等"""
+"""異常行為偵測 - 檢測異常登入、速率異常等。
+
+`check_rate_anomaly_and_block` 超閾值時，會自動將該 IP 加入 [ip_blocklist]
+的暫時黑名單（預設 1 小時），讓 LoadShedMiddleware 在下個 request 直接擋下。
+"""
 
 import logging
 from datetime import datetime, timedelta
 
+from api.core.ip_blocklist import block as ip_block
 from api.core.security import redis_client
 
 logger = logging.getLogger(__name__)
+
+_AUTO_BLOCK_TTL_SECONDS = 3600
 
 
 async def record_login(user_id: str, ip: str, user_agent: str | None = None) -> None:
@@ -15,9 +22,7 @@ async def record_login(user_id: str, ip: str, user_agent: str | None = None) -> 
     await redis_client.set(key, value, ex=30 * 24 * 3600)  # 保留 30 天
 
 
-async def check_suspicious_login(
-    user_id: str, current_ip: str
-) -> tuple[bool, str | None]:
+async def check_suspicious_login(user_id: str, current_ip: str) -> tuple[bool, str | None]:
     """
     檢查是否為可疑登入（不同位置短時間內登入）
 
@@ -73,3 +78,27 @@ async def check_rate_anomaly(
     """
     count = await track_rate_anomaly(user_id, endpoint, window_seconds)
     return count > threshold, count
+
+
+async def check_rate_anomaly_and_block(
+    user_id: str,
+    endpoint: str,
+    client_ip: str,
+    *,
+    threshold: int = 100,
+    window_seconds: int = 60,
+    block_ttl_seconds: int = _AUTO_BLOCK_TTL_SECONDS,
+) -> tuple[bool, int]:
+    """檢查速率異常；超閾值時自動將 client_ip 加入 IP 黑名單。
+
+    回傳 (is_anomalous, current_count)。`client_ip` 可由 LoadShedMiddleware 之前的
+    TrustedProxyMiddleware 換成的真實 IP（CF-Connecting-IP）。
+    """
+    is_anomalous, count = await check_rate_anomaly(
+        user_id, endpoint, threshold=threshold, window_seconds=window_seconds
+    )
+    if is_anomalous and client_ip and client_ip != "unknown":
+        reason = f"anomaly user={user_id} endpoint={endpoint} count={count}/{window_seconds}s"
+        await ip_block(client_ip, reason=reason, ttl_seconds=block_ttl_seconds)
+        logger.warning("Auto-blocked IP=%s: %s", client_ip, reason)
+    return is_anomalous, count

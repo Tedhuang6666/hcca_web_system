@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 from api.core.database import AsyncSessionLocal
 from api.core.security import decode_token, is_blacklisted
-from api.core.ws_manager import manager
+from api.core.ws_manager import WSCapacityError, manager
 from api.dependencies.auth import get_current_active_user
 from api.services.permission import get_user_permission_codes
 
@@ -28,6 +28,11 @@ def _ws_token_from_websocket(websocket: WebSocket) -> str | None:
     if auth.lower().startswith("bearer "):
         return auth[7:]
     return websocket.cookies.get("hcca_access_token")
+
+
+def _client_ip(websocket: WebSocket) -> str:
+    """取真實 client IP（TrustedProxyMiddleware 已替換 scope["client"]）。"""
+    return websocket.client.host if websocket.client else "unknown"
 
 
 async def _authenticate_ws(websocket: WebSocket) -> str | None:
@@ -111,10 +116,12 @@ async def websocket_room(
 
     訊息格式（客戶端送出）：
         { "type": "message", "data": { "text": "Hello" } }
+        { "type": "pong" }                          # 回應伺服器心跳
 
     訊息格式（伺服器廣播）：
         { "type": "message", "room": "general", "sender": "<user_id>",
           "data": { "text": "Hello" }, "timestamp": "..." }
+        { "type": "ping" }                          # 伺服器心跳（前端必須回 pong）
     """
     user_id = await _authenticate_ws(websocket)
     if user_id is None:
@@ -126,7 +133,20 @@ async def websocket_room(
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="無權加入此房間")
         return
 
-    await manager.connect(websocket, room)
+    client_ip = _client_ip(websocket)
+    try:
+        await manager.connect(websocket, room, client_ip)
+    except WSCapacityError as exc:
+        logger.warning(
+            "WS capacity hit scope=%s room=%s ip=%s reason=%s",
+            exc.scope,
+            room,
+            client_ip,
+            exc.reason,
+        )
+        # 1013 = Try Again Later；前端可依此 backoff 重試
+        await websocket.close(code=1013, reason=exc.reason)
+        return
 
     # 通知房間其他人有新成員加入
     await manager.broadcast_to_room(
@@ -140,6 +160,11 @@ async def websocket_room(
 
             msg_type: str = raw.get("type", "message")
             data: dict = raw.get("data", {})
+
+            # 心跳回應：純內部記帳，不廣播
+            if msg_type == "pong":
+                manager.notify_pong(websocket)
+                continue
 
             outbound = manager.build_message(msg_type, data, room=room, sender=user_id)
 
@@ -179,4 +204,5 @@ async def list_ws_rooms() -> dict[str, object]:
     return {
         "rooms": manager.list_rooms(),
         "total_connections": manager.total_connections(),
+        "stats": manager.stats(),
     }

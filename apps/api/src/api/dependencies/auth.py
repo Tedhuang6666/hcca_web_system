@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.config import settings
 from api.core.database import get_db
-from api.core.security import decode_token, is_blacklisted
+from api.core.security import decode_token, is_blacklisted, register_active_token
 from api.models.user import User
 
 if TYPE_CHECKING:
@@ -44,6 +44,10 @@ async def _user_from_access_token(token: str, db: AsyncSession) -> User | None:
     user = result.scalar_one_or_none()
     if user is None or not user.is_active:
         return None
+    # 使用即註冊：把 jti 寫進 user_tokens 集合，讓 admin 能 revoke_user 一次清空所有 session
+    await register_active_token(
+        user_id, payload.get("jti"), settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    )
     return user
 
 
@@ -106,6 +110,11 @@ async def get_current_user(
     user = result.scalar_one_or_none()
     if user is None:
         raise _CREDENTIALS_EXCEPTION
+
+    # 使用即註冊 jti，供 admin 端 revoke_user 強制登出
+    await register_active_token(
+        user_id, payload.get("jti"), settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    )
 
     return user
 
