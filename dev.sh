@@ -43,11 +43,13 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${REPO_ROOT}/.env"
 if [[ -f "$ENV_FILE" ]]; then
     info "載入環境變數：$ENV_FILE"
-    # 過濾空行與注釋，匯出其餘變數
-    set -a
-    # shellcheck disable=SC1090
-    source <(grep -v '^\s*#' "$ENV_FILE" | grep -v '^\s*$')
-    set +a
+    # 保留 JSON list 內的雙引號，避免 Bash source 將 ["..."] 變成 [...]。
+    while IFS= read -r line; do
+        [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+        key="${line%%=*}"
+        value="${line#*=}"
+        export "${key}=${value}"
+    done < "$ENV_FILE"
     success ".env 載入完成"
 else
     warn ".env 不存在，使用應用程式預設值（建議複製 .env.example 並填入實際數值）"

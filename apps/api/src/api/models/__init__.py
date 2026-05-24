@@ -67,6 +67,7 @@ from api.models.meeting import (  # noqa: F401
     MeetingBillStage,
     MeetingDecision,
     MeetingDecisionStatus,
+    MeetingEvent,
     MeetingMotion,
     MeetingMotionStatus,
     MeetingMotionType,
@@ -85,6 +86,17 @@ from api.models.org import Org, Permission, Position, UserPosition  # noqa: F401
 
 # Outbox 事件表（at-least-once 通知保障）
 from api.models.outbox import OutboxEvent  # noqa: F401
+from api.models.partner_map import (  # noqa: F401
+    PartnerBusiness,
+    PartnerBusinessStatus,
+    PartnerLocation,
+    PartnerOffer,
+    PartnerRating,
+    PartnerSubmission,
+    PartnerSubmissionStatus,
+    PartnerTag,
+    partner_business_tags,
+)
 from api.models.petition import (  # noqa: F401
     PetitionAttachment,
     PetitionAttachmentVisibility,

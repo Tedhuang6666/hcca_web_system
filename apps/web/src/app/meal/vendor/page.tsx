@@ -1,970 +1,1630 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  CalendarDays,
+  CheckCircle2,
+  ClipboardList,
+  Edit3,
+  PackagePlus,
+  Plus,
+  QrCode,
+  Search,
+  Settings,
+  Store,
+  Users,
+} from "lucide-react";
 import { toast } from "sonner";
 
-import {
-  EMPTY_SCH,
-  ItemsPanel,
-  PickupTab,
-  fmtDT,
-  orderStatusColor,
-  orderStatusLabel,
-  today,
-  type ScheduleForm,
-  type Tab,
-} from "@/components/meal/VendorPageParts";
 import Modal from "@/components/ui/Modal";
-import { mealApi, orgsApi } from "@/lib/api";
-import type { OrgRead } from "@/lib/api";
+import { mealApi, usersApi, type UserSummary } from "@/lib/api";
 import type {
+  MealAvailabilityOut,
   MealOrderListItem,
-  MealOrderStatus,
+  MealPickupLookupOut,
+  MealProductOut,
   MealVendorOut,
-  MenuScheduleListItem,
-  MenuScheduleOut,
   VendorManagerOut,
 } from "@/lib/types";
 
-// ── 主頁面 ────────────────────────────────────────────────────────────────────
+type VendorTab = "overview" | "products" | "availability" | "orders" | "pickup" | "settings";
+type ProductForm = {
+  name: string;
+  category: string;
+  price: string;
+  default_max_quantity: string;
+  unlimited: boolean;
+  image_url: string;
+  description: string;
+};
+type AvailabilityForm = {
+  mode: "single" | "bulk" | "permanent";
+  product_ids: string[];
+  service_date: string;
+  date_from: string;
+  date_to: string;
+  weekdays: number[];
+  price: string;
+  max_quantity: string;
+  max_unlimited: boolean;
+  note: string;
+  sale_start: string;
+  sale_end: string;
+  selected_slot_labels: string[];
+  slot_label: string;
+  pickup_start_time: string;
+  pickup_end_time: string;
+  order_deadline_time: string;
+  capacity: string;
+  capacity_unlimited: boolean;
+};
 
-export default function VendorPage() {
-  const router = useRouter();
-  const [tab, setTab] = useState<Tab>("overview");
+const tabs: { key: VendorTab; label: string; icon: typeof Store }[] = [
+  { key: "overview", label: "總覽", icon: Store },
+  { key: "products", label: "商品", icon: PackagePlus },
+  { key: "availability", label: "上架", icon: CalendarDays },
+  { key: "orders", label: "訂單", icon: ClipboardList },
+  { key: "pickup", label: "核銷", icon: QrCode },
+  { key: "settings", label: "設定", icon: Settings },
+];
 
-  // ── 資料狀態 ─────────────────────────────────────────────────────────────
+const statusLabel: Record<string, string> = {
+  pending_review: "待審",
+  approved: "已通過",
+  rejected: "已退回",
+  suspended: "已停用",
+};
+
+const orderLabel: Record<string, string> = {
+  pending: "待確認",
+  confirmed: "已確認",
+  cancelled: "已取消",
+  completed: "已完成",
+};
+
+type QuickPickupSlot = {
+  label: string;
+  start: string;
+  end: string;
+  deadline: string;
+};
+
+const quickPickupSlots: QuickPickupSlot[] = [
+  { label: "第1節下課", start: "08:50", end: "09:10", deadline: "08:20" },
+  { label: "第2節下課", start: "10:00", end: "10:10", deadline: "09:30" },
+  { label: "第3節下課", start: "11:00", end: "11:10", deadline: "10:30" },
+  { label: "午餐／午休", start: "12:00", end: "13:05", deadline: "11:30" },
+  { label: "第5節下課", start: "13:55", end: "14:05", deadline: "13:25" },
+  { label: "第6節下課", start: "14:55", end: "15:10", deadline: "14:25" },
+  { label: "第7節下課", start: "16:00", end: "16:10", deadline: "15:30" },
+];
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function addDays(days: number) {
+  const value = new Date();
+  value.setDate(value.getDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
+function toIso(value: string) {
+  return value ? new Date(value).toISOString() : null;
+}
+
+function datetimeLocal(date: string, time: string) {
+  return `${date}T${time}`;
+}
+
+function eachDate(from: string, to: string) {
+  const dates: string[] = [];
+  const cursor = new Date(`${from}T00:00:00`);
+  const end = new Date(`${to}T00:00:00`);
+  while (cursor <= end) {
+    dates.push(cursor.toISOString().slice(0, 10));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return dates;
+}
+
+function weekdayIndex(dateString: string) {
+  const day = new Date(`${dateString}T00:00:00`).getDay();
+  return day === 0 ? 6 : day - 1;
+}
+
+function combineDateTime(dateString: string, timeString: string) {
+  return new Date(datetimeLocal(dateString, timeString)).toISOString();
+}
+
+function money(value: number) {
+  return `NT$ ${value.toLocaleString("zh-TW")}`;
+}
+
+function UserPicker({
+  placeholder,
+  onPick,
+}: {
+  placeholder: string;
+  onPick: (user: UserSummary) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<UserSummary[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (query.trim().length < 2) {
+      setResults([]);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setLoading(true);
+      usersApi
+        .listForSearch(query.trim())
+        .then((items) => setResults(items.slice(0, 8)))
+        .catch(() => setResults([]))
+        .finally(() => setLoading(false));
+    }, 220);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  return (
+    <div className="relative">
+      <div className="flex items-center gap-2 rounded-md px-3 py-2"
+        style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+        <Search size={15} style={{ color: "var(--text-muted)" }} />
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          className="w-full bg-transparent text-sm outline-none"
+          placeholder={placeholder}
+          style={{ color: "var(--text-primary)" }}
+        />
+      </div>
+      {(results.length > 0 || loading) && (
+        <div className="absolute z-30 mt-1 w-full overflow-hidden rounded-md"
+          style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+          {loading && <div className="px-3 py-2 text-xs text-muted">搜尋中...</div>}
+          {results.map((user) => (
+            <button
+              key={user.id}
+              type="button"
+              onClick={() => {
+                onPick(user);
+                setQuery("");
+                setResults([]);
+              }}
+              className="block w-full px-3 py-2 text-left text-sm hover:bg-black/5"
+              style={{ color: "var(--text-primary)" }}
+            >
+              <span className="font-medium">{user.display_name}</span>
+              <span className="ml-2 text-xs" style={{ color: "var(--text-muted)" }}>
+                {user.email}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function VendorAdminPage() {
+  const [tab, setTab] = useState<VendorTab>("overview");
   const [vendors, setVendors] = useState<MealVendorOut[]>([]);
-  const [schedules, setSchedules] = useState<MenuScheduleListItem[]>([]);
-  const [scheduleDetails, setScheduleDetails] = useState<Record<string, MenuScheduleOut>>({});
+  const [selectedVendorId, setSelectedVendorId] = useState("");
+  const [products, setProducts] = useState<MealProductOut[]>([]);
+  const [availabilities, setAvailabilities] = useState<MealAvailabilityOut[]>([]);
   const [orders, setOrders] = useState<MealOrderListItem[]>([]);
-  const [orgs, setOrgs] = useState<OrgRead[]>([]);
+  const [managers, setManagers] = useState<VendorManagerOut[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // ── 篩選狀態 ─────────────────────────────────────────────────────────────
-  const [selectedVendor, setSelectedVendor] = useState<string>("");
-  const [selectedSchedule, setSelectedSchedule] = useState<string>("");
-  const [expandedSchedule, setExpandedSchedule] = useState<string | null>(null);
-
-  // ── 排程新增表單 ─────────────────────────────────────────────────────────
-  const [showSchForm, setShowSchForm] = useState(false);
-  const [schForm, setSchForm] = useState<ScheduleForm>(EMPTY_SCH);
-  const [schSaving, setSchSaving] = useState(false);
-
-  // ── 商家新增表單 ─────────────────────────────────────────────────────────
-  const [showVendorForm, setShowVendorForm] = useState(false);
-  const [vendorForm, setVendorForm] = useState({ name: "", description: "", contact_phone: "", contact_email: "", org_id: "" });
+  const [showVendorModal, setShowVendorModal] = useState(false);
+  const [vendorForm, setVendorForm] = useState({
+    name: "",
+    description: "",
+    contact_phone: "",
+    contact_email: "",
+  });
+  const [initialManager, setInitialManager] = useState<UserSummary | null>(null);
   const [vendorSaving, setVendorSaving] = useState(false);
 
-  // ── 負責人指派 ───────────────────────────────────────────────────────────
-  const [managerEmail, setManagerEmail] = useState("");
+  const [productForm, setProductForm] = useState<ProductForm>({
+    name: "",
+    category: "",
+    price: "",
+    default_max_quantity: "",
+    unlimited: true,
+    image_url: "",
+    description: "",
+  });
+  const [productSaving, setProductSaving] = useState(false);
+
+  const [availabilityForm, setAvailabilityForm] = useState<AvailabilityForm>({
+    mode: "single",
+    product_ids: [],
+    service_date: today(),
+    date_from: today(),
+    date_to: addDays(7),
+    weekdays: [0, 1, 2, 3, 4],
+    price: "",
+    max_quantity: "",
+    max_unlimited: true,
+    note: "",
+    sale_start: datetimeLocal(today(), "07:00"),
+    sale_end: datetimeLocal(today(), "11:50"),
+    selected_slot_labels: ["午餐／午休"],
+    slot_label: "中午",
+    pickup_start_time: "12:00",
+    pickup_end_time: "12:30",
+    order_deadline_time: "11:50",
+    capacity: "",
+    capacity_unlimited: true,
+  });
+  const [availabilitySaving, setAvailabilitySaving] = useState(false);
+
+  const [managerCandidate, setManagerCandidate] = useState<UserSummary | null>(null);
   const [managerSaving, setManagerSaving] = useState(false);
-  const [managerResult, setManagerResult] = useState<VendorManagerOut | null>(null);
+  const [pickupCode, setPickupCode] = useState("");
+  const [pickupResult, setPickupResult] = useState<MealPickupLookupOut | null>(null);
+  const [pickupSaving, setPickupSaving] = useState(false);
 
-  // ── 備餐統計（P1: item-stats per schedule for prep tab）────────────────────
-  const [prepStats, setPrepStats] = useState<Record<string, Record<string, number>>>({});
+  const selectedVendor = useMemo(
+    () => vendors.find((vendor) => vendor.id === selectedVendorId) ?? null,
+    [vendors, selectedVendorId],
+  );
 
-  // ── F1: 權限檢查 — 依賴後端 403 而非 localStorage ──────────────────────
-  useEffect(() => {
-    // 呼叫需要 meal:manage 的端點；若 403 則 redirect
-    mealApi.listVendors({ active_only: false }).catch((e: unknown) => {
-      if (e instanceof Error && e.message && (e as { status?: number }).status === 403) {
-        router.replace("/meal");
-      }
-    });
-  }, [router]);
+  const todayOrders = useMemo(
+    () => orders.filter((order) => order.created_at.slice(0, 10) === today()),
+    [orders],
+  );
 
-  // ── 資料載入 ─────────────────────────────────────────────────────────────
+  const orderStats = useMemo(() => ({
+    total: orders.length,
+    today: todayOrders.length,
+    paid: orders.filter((order) => order.is_paid).length,
+    completed: orders.filter((order) => order.status === "completed").length,
+    revenue: orders.reduce((sum, order) => sum + order.total_price, 0),
+  }), [orders, todayOrders.length]);
+
   const loadVendors = useCallback(async () => {
     const data = await mealApi.listVendors({ active_only: false });
     setVendors(data);
-    if (data.length > 0 && !selectedVendor) {
-      setSelectedVendor(data[0].id);
-    }
-  }, [selectedVendor]);
+    setSelectedVendorId((current) => current || data[0]?.id || "");
+  }, []);
 
-  const loadSchedules = useCallback(async () => {
-    if (!selectedVendor) return;
-    const data = await mealApi.listSchedules({ vendor_id: selectedVendor });
-    setSchedules(data);
-  }, [selectedVendor]);
-
-  const loadOrders = useCallback(async () => {
-    const params: Parameters<typeof mealApi.listOrders>[0] = { my_only: false, limit: 100 };
-    if (selectedVendor) params.vendor_id = selectedVendor;
-    if (selectedSchedule) params.schedule_id = selectedSchedule;
-    const data = await mealApi.listOrders(params);
-    setOrders(data);
-  }, [selectedVendor, selectedSchedule]);
-
-  const loadScheduleDetail = useCallback(async (id: string) => {
-    if (scheduleDetails[id]) return;
-    const detail = await mealApi.getSchedule(id);
-    setScheduleDetails(prev => ({ ...prev, [id]: detail }));
-  }, [scheduleDetails]);
-
-  const refreshScheduleDetail = useCallback(async (id: string) => {
-    const detail = await mealApi.getSchedule(id);
-    setScheduleDetails(prev => ({ ...prev, [id]: detail }));
+  const loadVendorData = useCallback(async (vendorId: string) => {
+    const [productItems, availabilityItems, orderItems, managerItems] = await Promise.all([
+      mealApi.listProducts({ vendor_id: vendorId, active_only: false, limit: 100 }),
+      mealApi.listAvailabilities({
+        vendor_id: vendorId,
+        date_from: addDays(-7),
+        date_to: addDays(14),
+        active_only: false,
+        limit: 100,
+      }),
+      mealApi.listOrders({ vendor_id: vendorId, my_only: false, limit: 100 }),
+      mealApi.listVendorManagers(vendorId).catch(() => []),
+    ]);
+    setProducts(productItems);
+    setAvailabilities(availabilityItems);
+    setOrders(orderItems);
+    setManagers(managerItems);
+    setAvailabilityForm((current) => ({
+      ...current,
+      product_ids: current.product_ids
+        .filter((id) => productItems.some((product) => product.id === id && product.is_active)),
+    }));
   }, []);
 
   useEffect(() => {
     let mounted = true;
-    (async () => {
-      setLoading(true);
-      try {
-        const orgItems = await orgsApi.list({ active_only: true }).catch(() => []);
-        if (mounted) {
-          setOrgs(orgItems);
-          const storedOrgId = localStorage.getItem("org_id") ?? "";
-          const usableStoredOrgId = orgItems.some((org) => org.id === storedOrgId) ? storedOrgId : "";
-          if (usableStoredOrgId || orgItems.length === 1) {
-            setVendorForm(prev => ({
-              ...prev,
-              org_id: prev.org_id || usableStoredOrgId || orgItems[0]?.id || "",
-            }));
-          }
-        }
-        await loadVendors();
-      } finally { if (mounted) setLoading(false); }
-    })();
-    return () => { mounted = false; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (selectedVendor) {
-      // P3: 並行載入排程與訂單，減少 waterfall
-      const tasks: Promise<unknown>[] = [loadSchedules()];
-      if (tab === "orders" || tab === "overview") tasks.push(loadOrders());
-      Promise.all(tasks).catch(() => {});
-    }
-  }, [selectedVendor, loadSchedules, loadOrders, tab]);
-
-  useEffect(() => {
-    if (tab === "orders") loadOrders();
-  }, [tab, loadOrders]);
-
-  // P1: 切換到備餐 tab 時，載入選定排程的 item-stats
-  useEffect(() => {
-    if (tab === "prep" && selectedSchedule && !prepStats[selectedSchedule]) {
-      mealApi.getScheduleItemStats(selectedSchedule).then(stats => {
-        const map: Record<string, number> = {};
-        for (const s of stats) map[s.item_id] = s.total_ordered;
-        setPrepStats(prev => ({ ...prev, [selectedSchedule]: map }));
-      }).catch(() => {});
-    }
-  }, [tab, selectedSchedule, prepStats]);
-
-  // ── 今日排程（用於 overview） ───────────────────────────────────────────
-  const todaySchedules = useMemo(() =>
-    schedules.filter(s => s.date === today()),
-  [schedules]);
-
-  const todayOrders = useMemo(() => {
-    const todayIds = new Set(todaySchedules.map(s => s.id));
-    return orders.filter(o => o.schedule_id !== null && todayIds.has(o.schedule_id));
-  }, [orders, todaySchedules]);
-
-  // ── 新增排程 ─────────────────────────────────────────────────────────────
-  async function handleCreateSchedule() {
-    if (!schForm.vendor_id || !schForm.date || !schForm.order_deadline) {
-      toast.error("請填寫商家、日期與結單時間"); return;
-    }
-    setSchSaving(true);
-    try {
-      await mealApi.createSchedule({
-        vendor_id: schForm.vendor_id,
-        date: schForm.date,
-        order_open_time: schForm.order_open_time || null,
-        order_deadline: schForm.order_deadline,
-        note: schForm.note || undefined,
+    setLoading(true);
+    loadVendors()
+      .catch((error: unknown) => toast.error(error instanceof Error ? error.message : "商家載入失敗"))
+      .finally(() => {
+        if (mounted) setLoading(false);
       });
-      toast.success("排程已建立");
-      setShowSchForm(false);
-      setSchForm(EMPTY_SCH);
-      await loadSchedules();
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "建立失敗");
-    } finally { setSchSaving(false); }
-  }
+    return () => { mounted = false; };
+  }, [loadVendors]);
 
-  // ── 複製菜單 ─────────────────────────────────────────────────────────────
-  async function handleCopyMenu(targetScheduleId: string, sourceScheduleId: string) {
-    const src = scheduleDetails[sourceScheduleId];
-    if (!src) { toast.error("來源排程資料未載入"); return; }
-    const target = scheduleDetails[targetScheduleId];
-    if (!target) { toast.error("目標排程資料未載入"); return; }
-    if (src.items.length === 0) { toast.info("來源排程沒有品項"); return; }
-    try {
-      for (const item of src.items) {
-        await mealApi.addMenuItem(targetScheduleId, {
-          name: item.name,
-          description: item.description ?? undefined,
-          price: item.price,
-          max_quantity: item.max_quantity ?? undefined,
-        });
-      }
-      await refreshScheduleDetail(targetScheduleId);
-      toast.success(`已複製 ${src.items.length} 個品項`);
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "複製失敗");
-    }
-  }
+  useEffect(() => {
+    if (!selectedVendorId) return;
+    loadVendorData(selectedVendorId).catch((error: unknown) => {
+      toast.error(error instanceof Error ? error.message : "商家資料載入失敗");
+    });
+  }, [selectedVendorId, loadVendorData]);
 
-  // ── 手動結單 ─────────────────────────────────────────────────────────────
-  async function handleClose(scheduleId: string) {
-    if (!confirm("確定手動結單？結單後無法繼續訂餐。")) return;
-    try {
-      await mealApi.closeSchedule(scheduleId);
-      await loadSchedules();
-      await refreshScheduleDetail(scheduleId);
-      toast.success("已結單");
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "結單失敗");
-    }
-  }
-
-  // ── 確認訂單 ─────────────────────────────────────────────────────────────
-  async function handleConfirm(orderId: string) {
-    try {
-      await mealApi.confirmOrder(orderId);
-      await loadOrders();
-      toast.success("訂單已確認");
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "確認失敗");
-    }
-  }
-
-  async function handleComplete(orderId: string) {
-    try {
-      await mealApi.completeOrder(orderId);
-      await loadOrders();
-      toast.success("訂單已完成");
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "操作失敗");
-    }
-  }
-
-  async function handleBatchConfirm() {
-    const pending = orders.filter(o => o.status === "pending");
-    if (pending.length === 0) { toast.info("沒有待確認的訂單"); return; }
-    if (!confirm(`確定批次確認 ${pending.length} 筆待確認訂單？`)) return;
-    let ok = 0;
-    for (const o of pending) {
-      try { await mealApi.confirmOrder(o.id); ok++; } catch { /* skip */ }
-    }
-    await loadOrders();
-    toast.success(`已確認 ${ok} 筆訂單`);
-  }
-
-  // ── 新增商家 ─────────────────────────────────────────────────────────────
-  async function handleCreateVendor() {
-    if (!vendorForm.name.trim() || !vendorForm.org_id) {
-      toast.error("請填寫商家名稱與組織 ID"); return;
+  async function createVendor() {
+    if (!vendorForm.name.trim()) {
+      toast.error("請輸入商家名稱");
+      return;
     }
     setVendorSaving(true);
     try {
-      const v = await mealApi.createVendor({
+      const vendor = await mealApi.createVendor({
         name: vendorForm.name.trim(),
-        org_id: vendorForm.org_id,
-        description: vendorForm.description || undefined,
-        contact_phone: vendorForm.contact_phone || undefined,
-        contact_email: vendorForm.contact_email || undefined,
+        description: vendorForm.description.trim() || null,
+        contact_phone: vendorForm.contact_phone.trim() || null,
+        contact_email: vendorForm.contact_email.trim() || null,
+        manager_email: initialManager?.email ?? null,
       });
-      toast.success("商家已新增");
-      setShowVendorForm(false);
-      setVendorForm(f => ({ ...f, name: "", description: "", contact_phone: "", contact_email: "" }));
+      toast.success(initialManager ? "商家與負責人權限已建立" : "商家已建立");
+      setShowVendorModal(false);
+      setVendorForm({ name: "", description: "", contact_phone: "", contact_email: "" });
+      setInitialManager(null);
       await loadVendors();
-      setSelectedVendor(v.id);
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "新增失敗");
-    } finally { setVendorSaving(false); }
+      setSelectedVendorId(vendor.id);
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "新增商家失敗");
+    } finally {
+      setVendorSaving(false);
+    }
   }
 
-  // ── 指派負責人 ───────────────────────────────────────────────────────────
-  async function handleAssignManager() {
-    if (!selectedVendor) { toast.error("請先選擇商家"); return; }
-    if (!managerEmail.trim()) { toast.error("請輸入 Email"); return; }
+  async function createProduct() {
+    if (!selectedVendorId || !productForm.name.trim() || !productForm.price) {
+      toast.error("請輸入商品名稱與價格");
+      return;
+    }
+    setProductSaving(true);
+    try {
+      const product = await mealApi.createProduct({
+        vendor_id: selectedVendorId,
+        name: productForm.name.trim(),
+        category: productForm.category.trim() || null,
+        price: Number(productForm.price),
+        default_max_quantity: productForm.unlimited ? null : productForm.default_max_quantity
+          ? Number(productForm.default_max_quantity)
+          : null,
+        image_url: productForm.image_url.trim() || null,
+        description: productForm.description.trim() || null,
+      });
+      toast.success("商品已新增");
+      setProductForm({
+        name: "",
+        category: "",
+        price: "",
+        default_max_quantity: "",
+        unlimited: true,
+        image_url: "",
+        description: "",
+      });
+      await loadVendorData(selectedVendorId);
+      setAvailabilityForm((current) => ({
+        ...current,
+        product_ids: current.product_ids.length > 0 ? current.product_ids : [product.id],
+      }));
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "新增商品失敗");
+    } finally {
+      setProductSaving(false);
+    }
+  }
+
+  async function createAvailability() {
+    if (availabilityForm.product_ids.length === 0 || !availabilityForm.service_date) {
+      toast.error("請選擇商品與供餐日期");
+      return;
+    }
+    setAvailabilitySaving(true);
+    try {
+      const dates = availabilityForm.mode === "single"
+        ? [availabilityForm.service_date]
+        : eachDate(
+            availabilityForm.date_from,
+            availabilityForm.mode === "permanent" ? addDays(90) : availabilityForm.date_to,
+          )
+            .filter((dateString) => availabilityForm.weekdays.includes(weekdayIndex(dateString)));
+      if (dates.length === 0) {
+        toast.error("批量上架沒有符合的日期");
+        return;
+      }
+      const quickSlotMap = new Map(quickPickupSlots.map((slot) => [slot.label, slot]));
+      const activeProductIds = new Set(products.filter((product) => product.is_active).map((product) => product.id));
+      const productIds = availabilityForm.product_ids.filter((productId) => activeProductIds.has(productId));
+      if (productIds.length === 0) {
+        toast.error("請選擇啟用中的商品再上架");
+        return;
+      }
+      const selectedSlots = availabilityForm.selected_slot_labels
+        .map((label) => quickSlotMap.get(label))
+        .filter((slot): slot is QuickPickupSlot => Boolean(slot));
+      if (selectedSlots.length === 0) {
+        toast.error("請至少選擇一個可取餐時段");
+        return;
+      }
+      for (const productId of productIds) {
+        for (const serviceDate of dates) {
+          await mealApi.createAvailability({
+            product_id: productId,
+            service_date: serviceDate,
+            sale_start: availabilityForm.mode === "bulk"
+              ? combineDateTime(serviceDate, availabilityForm.sale_start.slice(11, 16))
+              : toIso(availabilityForm.sale_start),
+            sale_end: availabilityForm.mode === "bulk"
+              ? combineDateTime(serviceDate, availabilityForm.sale_end.slice(11, 16))
+              : toIso(availabilityForm.sale_end),
+            price: availabilityForm.price ? Number(availabilityForm.price) : null,
+            max_quantity: availabilityForm.max_unlimited ? null : availabilityForm.max_quantity
+              ? Number(availabilityForm.max_quantity)
+              : null,
+            note: availabilityForm.note.trim() || null,
+            pickup_slots: selectedSlots.map((slot, index) => ({
+              label: slot.label,
+              sort_order: index,
+              pickup_start: combineDateTime(serviceDate, slot.start),
+              pickup_end: combineDateTime(serviceDate, slot.end),
+              order_deadline: combineDateTime(serviceDate, slot.deadline),
+              capacity: availabilityForm.capacity_unlimited ? null : availabilityForm.capacity
+                ? Number(availabilityForm.capacity)
+                : null,
+            })),
+          });
+        }
+      }
+      toast.success(`已建立 ${dates.length * productIds.length} 筆上架`);
+      await loadVendorData(selectedVendorId);
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "建立上架失敗");
+    } finally {
+      setAvailabilitySaving(false);
+    }
+  }
+
+  function scheduleProducts(productIds: string[]) {
+    const activeProductIds = productIds.filter((productId) =>
+      products.some((product) => product.id === productId && product.is_active),
+    );
+    if (activeProductIds.length === 0) {
+      toast.error("請先選擇啟用中的商品");
+      return;
+    }
+    setAvailabilityForm((current) => ({
+      ...current,
+      mode: activeProductIds.length > 1 ? "bulk" : current.mode,
+      product_ids: activeProductIds,
+    }));
+    setTab("availability");
+    toast.success(`已帶入 ${activeProductIds.length} 個商品，可直接設定上架時間`);
+  }
+
+  async function assignManager() {
+    if (!selectedVendorId || !managerCandidate) {
+      toast.error("請先搜尋並選擇負責人");
+      return;
+    }
     setManagerSaving(true);
     try {
-      const result = await mealApi.assignVendorManager(selectedVendor, managerEmail.trim());
-      setManagerResult(result);
-      setManagerEmail("");
-      toast.success(`已將 ${result.display_name} 設為學餐管理員`);
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "指派失敗");
-    } finally { setManagerSaving(false); }
+      await mealApi.assignVendorManager(selectedVendorId, managerCandidate.email);
+      toast.success("負責人已指派，並授予商家管理權限");
+      setManagerCandidate(null);
+      await loadVendorData(selectedVendorId);
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "指派失敗");
+    } finally {
+      setManagerSaving(false);
+    }
   }
 
-  // ── F2/P1: 備餐清單 — 使用 item-stats 取得實際訂購量 ──────────────────────
-  const prepList = useMemo(() => {
-    if (!selectedSchedule) return [];
-    const detail = scheduleDetails[selectedSchedule];
-    if (!detail) return [];
-    const stats = prepStats[selectedSchedule] ?? {};
-    return detail.items
-      .map(item => ({
-        id: item.id,
-        name: item.name,
-        price: item.price,
-        total: stats[item.id] ?? 0,
-      }))
-      .filter(item => item.total > 0) // 只顯示有訂購的品項
-      .sort((a, b) => b.total - a.total); // 數量多的排前面
-  }, [selectedSchedule, scheduleDetails, prepStats]);
-
-  // ─────────────────────────────────────────────────────────────────────────
-  if (loading) return (
-    <div className="flex items-center justify-center h-64" style={{ color: "var(--text-muted)" }}>載入中…</div>
-  );
+  async function redeemPickup() {
+    if (!pickupCode.trim()) {
+      toast.error("請輸入個人五碼或班級領取碼");
+      return;
+    }
+    setPickupSaving(true);
+    try {
+      const result = await mealApi.pickupLookup(pickupCode.trim(), true);
+      setPickupResult(result);
+      toast.success(result.message);
+      await loadVendorData(selectedVendorId);
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "核銷失敗");
+    } finally {
+      setPickupSaving(false);
+    }
+  }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8">
-      {/* ── 標題列 ──────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
-        <div>
-          <h1 className="text-xl font-bold" style={{ color: "var(--text-primary)" }}>商家管理</h1>
-          <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-            學餐系統 · 商家後台
-          </p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* 選擇商家 */}
-          <select className="input-sm" value={selectedVendor}
-            onChange={e => setSelectedVendor(e.target.value)}
-            style={{ minWidth: 120 }}>
-            <option value="">全部商家</option>
-            {vendors.map(v => <option key={v.id} value={v.id}>{v.name}{!v.is_active ? "（停用）" : ""}</option>)}
-          </select>
-          <button className="btn-sm btn-primary" onClick={() => setShowVendorForm(true)}>+ 新增商家</button>
-        </div>
-      </div>
-
-      {/* ── Tab 列 ──────────────────────────────────────────────────────── */}
-      <div className="flex gap-1 mb-6 p-1 rounded-xl" style={{ background: "var(--card-bg-2, rgba(255,255,255,0.04))" }}>
-        {([ ["overview","今日總覽"], ["schedules","排程管理"], ["orders","訂單看板"], ["prep","備餐清單"], ["pickup","核銷管理"] ] as [Tab, string][])
-          .map(([t, label]) => (
-            <button key={t} onClick={() => setTab(t)}
-              className="flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors"
-              style={tab === t
-                ? { background: "var(--primary)", color: "var(--primary-fg)" }
-                : { color: "var(--text-muted)" }}>
-              {label}
-            </button>
-          ))}
-      </div>
-
-      {/* ════════════════════════════════════════════════════════════════════
-          Tab 1：今日總覽
-      ════════════════════════════════════════════════════════════════════ */}
-      {tab === "overview" && (
-        <div className="space-y-4">
-          {/* 統計卡片 */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {[
-              { label: "今日排程", value: todaySchedules.length, color: "var(--primary)" },
-              { label: "今日訂單", value: todayOrders.length, color: "#a78bfa" },
-              { label: "待確認", value: todayOrders.filter(o => o.status === "pending").length, color: "#fbbf24" },
-              { label: "已完成", value: todayOrders.filter(o => o.status === "completed").length, color: "#34d399" },
-            ].map(card => (
-              <div key={card.label} className="rounded-xl p-4"
-                style={{ background: "var(--card-bg)", border: "1px solid var(--border)" }}>
-                <p className="text-xs" style={{ color: "var(--text-muted)" }}>{card.label}</p>
-                <p className="text-3xl font-bold mt-1" style={{ color: card.color }}>{card.value}</p>
-              </div>
-            ))}
+    <main className="min-h-screen" style={{ background: "var(--background)" }}>
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 lg:px-6">
+        <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="text-sm" style={{ color: "var(--text-muted)" }}>學餐平台管理</p>
+            <h1 className="text-2xl font-semibold tracking-normal" style={{ color: "var(--text-primary)" }}>
+              商家營運後台
+            </h1>
           </div>
+          <button
+            type="button"
+            onClick={() => setShowVendorModal(true)}
+            className="inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium text-white"
+            style={{ background: "var(--primary)" }}
+          >
+            <Plus size={16} /> 新增商家
+          </button>
+        </header>
 
-          {/* 今日排程列表 */}
-          <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-            <div className="px-4 py-3" style={{ background: "var(--card-bg)", borderBottom: "1px solid var(--border)" }}>
-              <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                今日排程（{today()}）
-              </p>
+        <div className="grid gap-5 lg:grid-cols-[320px_1fr]">
+          <aside className="rounded-lg p-3" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+            <div className="mb-3 flex items-center justify-between">
+              <div className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>商家</div>
+              <div className="text-xs" style={{ color: "var(--text-muted)" }}>{vendors.length} 間</div>
             </div>
-            {todaySchedules.length === 0 ? (
-              <div className="px-4 py-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>
-                今日無排程
+            <div className="flex flex-col gap-2">
+              {loading && <div className="px-3 py-8 text-center text-sm text-muted">載入中...</div>}
+              {!loading && vendors.length === 0 && (
+                <div className="rounded-md p-4 text-sm" style={{ border: "1px dashed var(--border)", color: "var(--text-muted)" }}>
+                  還沒有商家，先建立第一間並指派負責人。
+                </div>
+              )}
+              {vendors.map((vendor) => (
+                <button
+                  key={vendor.id}
+                  type="button"
+                  onClick={() => setSelectedVendorId(vendor.id)}
+                  className="rounded-md p-3 text-left transition hover:bg-black/5"
+                  style={{
+                    border: vendor.id === selectedVendorId
+                      ? "1px solid var(--primary)"
+                      : "1px solid var(--border)",
+                    background: vendor.id === selectedVendorId ? "var(--surface)" : "transparent",
+                  }}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                        {vendor.name}
+                      </div>
+                      <div className="mt-1 truncate text-xs" style={{ color: "var(--text-muted)" }}>
+                        {vendor.contact_phone || vendor.contact_email || "尚未設定聯絡資訊"}
+                      </div>
+                    </div>
+                    <span className="shrink-0 rounded px-2 py-1 text-xs"
+                      style={{ background: "var(--surface)", color: "var(--text-muted)" }}>
+                      {statusLabel[vendor.status] ?? vendor.status}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </aside>
+
+          <section className="min-w-0">
+            {!selectedVendor ? (
+              <div className="rounded-lg p-8 text-center text-sm"
+                style={{ border: "1px solid var(--border)", color: "var(--text-muted)" }}>
+                請選擇或新增商家。
               </div>
             ) : (
-              <div className="divide-y" style={{ borderColor: "var(--border)" }}>
-                {todaySchedules.map(sch => {
-                  const schOrders = todayOrders.filter(o => o.schedule_id === sch.id);
-                  const revenue = schOrders.reduce((s, o) => s + o.total_price, 0);
-                  return (
-                    <div key={sch.id} className="px-4 py-4 flex items-center gap-4 flex-wrap"
-                      style={{ background: "var(--card-bg)" }}>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-                            {vendors.find(v => v.id === sch.vendor_id)?.name ?? "未知商家"}
-                          </span>
-                          <span className="text-xs px-2 py-0.5 rounded-full"
-                            style={sch.is_closed
-                              ? { background: "rgba(239,68,68,0.08)", color: "#f87171" }
-                              : { background: "rgba(52,211,153,0.12)", color: "#34d399" }}>
-                            {sch.is_closed ? "已結單" : "開放中"}
-                          </span>
-                        </div>
-                        <div className="text-xs mt-1 space-x-3" style={{ color: "var(--text-muted)" }}>
-                          {sch.order_open_time && <span>開放：{fmtDT(sch.order_open_time)}</span>}
-                          <span>結單：{fmtDT(sch.order_deadline)}</span>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                          {schOrders.length} 筆訂單
-                        </p>
-                        <p className="text-sm font-semibold" style={{ color: "var(--primary)" }}>NT${revenue}</p>
-                      </div>
-                      {!sch.is_closed && (
-                        <button className="btn-sm"
-                          style={{ background: "rgba(239,68,68,0.1)", color: "#f87171", border: "1px solid rgba(239,68,68,0.3)" }}
-                          onClick={() => handleClose(sch.id)}>
-                          手動結單
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
+              <div className="flex flex-col gap-5">
+                <VendorHero vendor={selectedVendor} managers={managers} stats={orderStats} />
+                <div className="flex flex-wrap gap-2">
+                  {tabs.map((item) => {
+                    const Icon = item.icon;
+                    const active = tab === item.key;
+                    return (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => setTab(item.key)}
+                        className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm"
+                        style={{
+                          border: "1px solid var(--border)",
+                          background: active ? "var(--primary)" : "var(--card-bg)",
+                          color: active ? "white" : "var(--text-primary)",
+                        }}
+                      >
+                        <Icon size={15} /> {item.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {tab === "overview" && (
+                  <OverviewPanel
+                    products={products}
+                    availabilities={availabilities}
+                    todayOrders={todayOrders}
+                    onTab={setTab}
+                  />
+                )}
+                {tab === "products" && (
+                  <ProductsPanel
+                    products={products}
+                    form={productForm}
+                    setForm={setProductForm}
+                    saving={productSaving}
+                    onCreate={createProduct}
+                    onRefresh={() => loadVendorData(selectedVendorId)}
+                    onScheduleSelected={scheduleProducts}
+                  />
+                )}
+                {tab === "availability" && (
+                  <AvailabilityPanel
+                    products={products}
+                    availabilities={availabilities}
+                    form={availabilityForm}
+                    setForm={setAvailabilityForm}
+                    saving={availabilitySaving}
+                    onCreate={createAvailability}
+                  />
+                )}
+                {tab === "orders" && <OrdersPanel orders={orders} />}
+                {tab === "pickup" && (
+                  <PickupPanel
+                    code={pickupCode}
+                    setCode={setPickupCode}
+                    result={pickupResult}
+                    saving={pickupSaving}
+                    onRedeem={redeemPickup}
+                  />
+                )}
+                {tab === "settings" && (
+                  <SettingsPanel
+                    vendor={selectedVendor}
+                    managers={managers}
+                    candidate={managerCandidate}
+                    setCandidate={setManagerCandidate}
+                    saving={managerSaving}
+                    onAssign={assignManager}
+                    onRefresh={() => loadVendorData(selectedVendorId)}
+                  />
+                )}
               </div>
             )}
-          </div>
+          </section>
+        </div>
+      </div>
 
-          {/* 負責人設定 */}
-          <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-            <div className="px-4 py-3" style={{ background: "var(--card-bg)", borderBottom: "1px solid var(--border)" }}>
-              <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>指派學餐管理員</p>
-              <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-                指定後，該使用者將自動取得 meal:manage 權限（限目前選取商家所屬組織）
-              </p>
-            </div>
-            <div className="px-4 py-4 space-y-3" style={{ background: "var(--card-bg-2, rgba(255,255,255,0.02))" }}>
-              <div className="flex gap-2">
+      {showVendorModal && (
+        <Modal onClose={() => setShowVendorModal(false)} title="新增商家">
+          <div className="grid gap-4">
+            <label className="grid gap-1 text-sm">
+              <span style={{ color: "var(--text-muted)" }}>商家名稱</span>
+              <input
+                value={vendorForm.name}
+                onChange={(event) => setVendorForm((current) => ({ ...current, name: event.target.value }))}
+                className="rounded-md px-3 py-2 outline-none"
+                style={{ border: "1px solid var(--border)", background: "var(--background)" }}
+                placeholder="例如：一樓熱食部"
+              />
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span style={{ color: "var(--text-muted)" }}>商家描述</span>
+              <textarea
+                value={vendorForm.description}
+                onChange={(event) => setVendorForm((current) => ({ ...current, description: event.target.value }))}
+                className="min-h-20 rounded-md px-3 py-2 outline-none"
+                style={{ border: "1px solid var(--border)", background: "var(--background)" }}
+              />
+            </label>
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="grid gap-1 text-sm">
+                <span style={{ color: "var(--text-muted)" }}>電話</span>
                 <input
-                  className="flex-1 rounded-xl px-3 py-2 text-sm"
-                  style={{ background: "rgba(255,255,255,0.06)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
-                  type="email"
-                  placeholder="使用者 Email"
-                  value={managerEmail}
-                  onChange={e => setManagerEmail(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && handleAssignManager()}
+                  value={vendorForm.contact_phone}
+                  onChange={(event) => setVendorForm((current) => ({ ...current, contact_phone: event.target.value }))}
+                  className="rounded-md px-3 py-2 outline-none"
+                  style={{ border: "1px solid var(--border)", background: "var(--background)" }}
                 />
-                <button
-                  className="px-4 py-2 rounded-xl text-sm font-semibold"
-                  style={{ background: "var(--primary)", color: "var(--primary-fg)" }}
-                  disabled={managerSaving || !selectedVendor || !managerEmail.trim()}
-                  onClick={handleAssignManager}>
-                  {managerSaving ? "…" : "指派"}
-                </button>
-              </div>
-              {!selectedVendor && (
-                <p className="text-xs" style={{ color: "var(--text-muted)" }}>請先在右上角選擇商家</p>
-              )}
-              {managerResult && (
-                <div className="rounded-lg px-3 py-2 flex items-center gap-2"
-                  style={{ background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.3)" }}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2.5">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  <p className="text-xs" style={{ color: "#34d399" }}>
-                    {managerResult.display_name}（{managerResult.email}）已設為管理員
-                  </p>
-                </div>
-              )}
+              </label>
+              <label className="grid gap-1 text-sm">
+                <span style={{ color: "var(--text-muted)" }}>信箱</span>
+                <input
+                  value={vendorForm.contact_email}
+                  onChange={(event) => setVendorForm((current) => ({ ...current, contact_email: event.target.value }))}
+                  className="rounded-md px-3 py-2 outline-none"
+                  style={{ border: "1px solid var(--border)", background: "var(--background)" }}
+                />
+              </label>
             </div>
-          </div>
-
-          {/* 今日訂單快覽 */}
-          {todayOrders.length > 0 && (
-            <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-              <div className="px-4 py-3 flex items-center justify-between"
-                style={{ background: "var(--card-bg)", borderBottom: "1px solid var(--border)" }}>
-                <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>今日訂單</p>
-                {todayOrders.some(o => o.status === "pending") && (
-                  <button className="btn-sm btn-primary text-xs" onClick={handleBatchConfirm}>全部確認</button>
-                )}
-              </div>
-              {/* U6: 桌面顯示 Table，行動端顯示 Card 堆疊 */}
-              <div className="hidden md:block overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr style={{ background: "var(--card-bg-2, rgba(255,255,255,0.03))", color: "var(--text-muted)" }}>
-                      <th className="px-4 py-2 text-left">單號</th>
-                      <th className="px-4 py-2 text-left">金額</th>
-                      <th className="px-4 py-2 text-left">狀態</th>
-                      <th className="px-4 py-2 text-left">操作</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {todayOrders.slice(0, 20).map(o => {
-                      const sc = orderStatusColor(o.status);
-                      return (
-                        <tr key={o.id} style={{ borderTop: "1px solid var(--border)", background: "var(--card-bg)" }}>
-                          <td className="px-4 py-2 font-mono" style={{ color: "var(--text-primary)" }}>
-                            {o.serial_number}
-                          </td>
-                          <td className="px-4 py-2" style={{ color: "var(--primary)" }}>NT${o.total_price}</td>
-                          <td className="px-4 py-2">
-                            <span className="px-1.5 py-0.5 rounded-full text-[10px]"
-                              style={{ background: sc.bg, color: sc.color }}>
-                              {orderStatusLabel(o.status)}
-                            </span>
-                          </td>
-                          <td className="px-4 py-2 flex gap-1">
-                            {o.status === "pending" && (
-                              <button className="btn-icon text-xs px-2"
-                                style={{ color: "var(--primary)" }} onClick={() => handleConfirm(o.id)}>確認</button>
-                            )}
-                            {o.status === "confirmed" && (
-                              <button className="btn-icon text-xs px-2"
-                                style={{ color: "#34d399" }} onClick={() => handleComplete(o.id)}>完成</button>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              {/* 行動端 Card 堆疊 */}
-              <div className="md:hidden divide-y" style={{ borderColor: "var(--border)" }}>
-                {todayOrders.slice(0, 20).map(o => {
-                  const sc = orderStatusColor(o.status);
-                  return (
-                    <div key={o.id} className="px-4 py-3 flex items-center justify-between gap-3"
-                      style={{ background: "var(--card-bg)" }}>
-                      <div className="min-w-0">
-                        <p className="text-sm font-mono font-semibold" style={{ color: "var(--text-primary)" }}>
-                          {o.serial_number}
-                        </p>
-                        <p className="text-xs mt-0.5" style={{ color: "var(--primary)" }}>NT${o.total_price}</p>
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className="px-2 py-0.5 rounded-full text-xs"
-                          style={{ background: sc.bg, color: sc.color }}>
-                          {orderStatusLabel(o.status)}
-                        </span>
-                        {o.status === "pending" && (
-                          <button className="px-3 py-1.5 rounded-lg text-xs font-semibold"
-                            style={{ background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }}
-                            onClick={() => handleConfirm(o.id)}>確認</button>
-                        )}
-                        {o.status === "confirmed" && (
-                          <button className="px-3 py-1.5 rounded-lg text-xs font-semibold"
-                            style={{ background: "rgba(52,211,153,0.1)", color: "#34d399", border: "1px solid rgba(52,211,153,0.3)" }}
-                            onClick={() => handleComplete(o.id)}>完成</button>
-                        )}
-                      </div>
+            <div className="grid gap-2">
+              <div className="text-sm" style={{ color: "var(--text-muted)" }}>負責人與權限</div>
+              {initialManager ? (
+                <div className="flex items-center justify-between rounded-md px-3 py-2"
+                  style={{ border: "1px solid var(--border)", background: "var(--surface)" }}>
+                  <div>
+                    <div className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+                      {initialManager.display_name}
                     </div>
-                  );
-                })}
-              </div>
+                    <div className="text-xs" style={{ color: "var(--text-muted)" }}>{initialManager.email}</div>
+                  </div>
+                  <button type="button" className="text-sm" onClick={() => setInitialManager(null)}>
+                    取消
+                  </button>
+                </div>
+              ) : (
+                <UserPicker placeholder="搜尋使用者並設定為商家負責人" onPick={setInitialManager} />
+              )}
             </div>
-          )}
-        </div>
-      )}
-
-      {/* ════════════════════════════════════════════════════════════════════
-          Tab 2：排程管理
-      ════════════════════════════════════════════════════════════════════ */}
-      {tab === "schedules" && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-              共 {schedules.length} 筆排程
-            </p>
-            <button className="btn-sm btn-primary" onClick={() => {
-              setSchForm(f => ({ ...f, vendor_id: selectedVendor }));
-              setShowSchForm(true);
-            }}>
-              + 新增排程
-            </button>
-          </div>
-
-          {schedules.length === 0 && (
-            <div className="text-center py-12 rounded-xl" style={{ border: "1px dashed var(--border)" }}>
-              <p className="text-sm" style={{ color: "var(--text-muted)" }}>尚無排程，點擊「新增排程」開始</p>
-            </div>
-          )}
-
-          {schedules.map(sch => {
-            const isExpanded = expandedSchedule === sch.id;
-            const detail = scheduleDetails[sch.id];
-
-            // 找前一個有品項的排程（用於複製）
-            const prevSchedule = schedules
-              .filter(s => s.date < sch.date && scheduleDetails[s.id]?.items.length)
-              .sort((a, b) => b.date.localeCompare(a.date))[0];
-
-            return (
-              <div key={sch.id} className="rounded-xl overflow-hidden"
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setShowVendorModal(false)} className="rounded-md px-4 py-2 text-sm"
                 style={{ border: "1px solid var(--border)" }}>
-                {/* 排程標題列 */}
-                <div className="px-4 py-3 flex items-center gap-3 cursor-pointer"
-                  style={{ background: "var(--card-bg)" }}
-                  onClick={async () => {
-                    if (!isExpanded) {
-                      setExpandedSchedule(sch.id);
-                      await loadScheduleDetail(sch.id);
-                    } else {
-                      setExpandedSchedule(null);
-                    }
-                  }}>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{sch.date}</span>
-                      <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                        {vendors.find(v => v.id === sch.vendor_id)?.name}
-                      </span>
-                      <span className="text-xs px-2 py-0.5 rounded-full"
-                        style={sch.is_closed
-                          ? { background: "rgba(239,68,68,0.08)", color: "#f87171" }
-                          : { background: "rgba(52,211,153,0.12)", color: "#34d399" }}>
-                        {sch.is_closed ? "已結單" : "開放中"}
-                      </span>
-                    </div>
-                    <div className="text-xs mt-0.5 space-x-2" style={{ color: "var(--text-muted)" }}>
-                      {sch.order_open_time && <span>開放：{fmtDT(sch.order_open_time)}</span>}
-                      <span>結單：{fmtDT(sch.order_deadline)}</span>
-                      {sch.note && <span>備註：{sch.note}</span>}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {!sch.is_closed && (
-                      <button className="btn-sm"
-                        style={{ background: "rgba(239,68,68,0.1)", color: "#f87171", border: "1px solid rgba(239,68,68,0.3)" }}
-                        onClick={e => { e.stopPropagation(); handleClose(sch.id); }}>
-                        結單
-                      </button>
-                    )}
-                    {prevSchedule && isExpanded && detail && !sch.is_closed && (
-                      <button className="btn-sm"
-                        style={{ color: "#a78bfa" }}
-                        onClick={e => {
-                          e.stopPropagation();
-                          handleCopyMenu(sch.id, prevSchedule.id);
-                        }}>
-                        複製 {prevSchedule.date} 菜單
-                      </button>
-                    )}
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                      strokeWidth="2" style={{ color: "var(--text-muted)", transform: isExpanded ? "rotate(180deg)" : "none" }}>
-                      <polyline points="6 9 12 15 18 9" />
-                    </svg>
-                  </div>
-                </div>
-
-                {/* 展開：品項管理 */}
-                {isExpanded && (
-                  <div className="px-4 py-3" style={{ borderTop: "1px solid var(--border)", background: "var(--card-bg-2, rgba(255,255,255,0.02))" }}>
-                    {!detail ? (
-                      <p className="text-xs" style={{ color: "var(--text-muted)" }}>載入中…</p>
-                    ) : (
-                      <ItemsPanel
-                        schedule={detail}
-                        onChanged={() => refreshScheduleDetail(sch.id)}
-                      />
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* ════════════════════════════════════════════════════════════════════
-          Tab 3：訂單看板
-      ════════════════════════════════════════════════════════════════════ */}
-      {tab === "orders" && (
-        <div className="space-y-4">
-          <div className="flex items-center gap-3 flex-wrap">
-            <select className="input-sm" value={selectedSchedule}
-              onChange={async e => {
-                setSelectedSchedule(e.target.value);
-              }}
-              style={{ minWidth: 140 }}>
-              <option value="">全部排程</option>
-              {schedules.map(s => (
-                <option key={s.id} value={s.id}>{s.date}</option>
-              ))}
-            </select>
-            <button className="btn-sm" onClick={loadOrders}
-              style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}>
-              重新整理
-            </button>
-            {orders.some(o => o.status === "pending") && (
-              <button className="btn-sm btn-primary" onClick={handleBatchConfirm}>
-                全部確認（{orders.filter(o => o.status === "pending").length}）
+                取消
               </button>
-            )}
-            <button className="btn-sm ml-auto"
-              style={{ color: "var(--primary)", border: "1px solid var(--border-strong)" }}
-              onClick={() => mealApi.downloadReport("xlsx", { vendor_id: selectedVendor || undefined, schedule_id: selectedSchedule || undefined })
-                .then(r => r.blob()).then(b => {
-                  const a = document.createElement("a"); a.href = URL.createObjectURL(b);
-                  a.download = "meal_orders.xlsx"; a.click();
-                }).catch(() => toast.error("匯出失敗"))}>
-              匯出 Excel
+              <button type="button" onClick={createVendor} disabled={vendorSaving}
+                className="rounded-md px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                style={{ background: "var(--primary)" }}>
+                {vendorSaving ? "建立中..." : "建立商家"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </main>
+  );
+}
+
+function VendorHero({
+  vendor,
+  managers,
+  stats,
+}: {
+  vendor: MealVendorOut;
+  managers: VendorManagerOut[];
+  stats: { total: number; today: number; paid: number; completed: number; revenue: number };
+}) {
+  return (
+    <div className="rounded-lg p-5" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>{vendor.name}</h2>
+            <span className="rounded px-2 py-1 text-xs" style={{ background: "var(--surface)", color: "var(--text-muted)" }}>
+              {statusLabel[vendor.status] ?? vendor.status}
+            </span>
+          </div>
+          <p className="mt-2 max-w-2xl text-sm" style={{ color: "var(--text-muted)" }}>
+            {vendor.description || "尚未填寫商家描述。"}
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
+          <Metric label="今日訂單" value={stats.today} />
+          <Metric label="全部訂單" value={stats.total} />
+          <Metric label="已付款" value={stats.paid} />
+          <Metric label="營收" value={money(stats.revenue)} />
+        </div>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
+        <span className="inline-flex items-center gap-1"><Users size={14} /> {managers.length} 位負責人</span>
+        <span>{vendor.contact_phone || "未填電話"}</span>
+        <span>{vendor.contact_email || "未填信箱"}</span>
+      </div>
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-md px-3 py-2" style={{ border: "1px solid var(--border)", background: "var(--surface)" }}>
+      <div className="text-xs" style={{ color: "var(--text-muted)" }}>{label}</div>
+      <div className="mt-1 font-semibold" style={{ color: "var(--text-primary)" }}>{value}</div>
+    </div>
+  );
+}
+
+function OverviewPanel({
+  products,
+  availabilities,
+  todayOrders,
+  onTab,
+}: {
+  products: MealProductOut[];
+  availabilities: MealAvailabilityOut[];
+  todayOrders: MealOrderListItem[];
+  onTab: (tab: VendorTab) => void;
+}) {
+  const actions: { label: string; icon: typeof Plus; tab: VendorTab }[] = [
+    { label: "新增商品", icon: PackagePlus, tab: "products" },
+    { label: "排定上架", icon: CalendarDays, tab: "availability" },
+    { label: "快速核銷", icon: QrCode, tab: "pickup" },
+  ];
+  return (
+    <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
+      <div className="rounded-lg p-4" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+        <h3 className="font-semibold" style={{ color: "var(--text-primary)" }}>今日營運</h3>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <Metric label="商品數" value={products.length} />
+          <Metric label="近期上架" value={availabilities.length} />
+          <Metric label="今日訂單" value={todayOrders.length} />
+        </div>
+        <div className="mt-5 overflow-hidden rounded-md" style={{ border: "1px solid var(--border)" }}>
+          <table className="w-full text-sm">
+            <thead style={{ background: "var(--surface)", color: "var(--text-muted)" }}>
+              <tr>
+                <th className="px-3 py-2 text-left font-medium">訂單</th>
+                <th className="px-3 py-2 text-left font-medium">狀態</th>
+                <th className="px-3 py-2 text-right font-medium">金額</th>
+              </tr>
+            </thead>
+            <tbody>
+              {todayOrders.slice(0, 8).map((order) => (
+                <tr key={order.id} style={{ borderTop: "1px solid var(--border)" }}>
+                  <td className="px-3 py-2">{order.serial_number}</td>
+                  <td className="px-3 py-2">{orderLabel[order.status] ?? order.status}</td>
+                  <td className="px-3 py-2 text-right">{money(order.total_price)}</td>
+                </tr>
+              ))}
+              {todayOrders.length === 0 && (
+                <tr><td colSpan={3} className="px-3 py-8 text-center" style={{ color: "var(--text-muted)" }}>今天尚無訂單</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div className="grid gap-3">
+        {actions.map((action) => {
+          const Icon = action.icon;
+          return (
+            <button key={action.tab} type="button" onClick={() => onTab(action.tab)}
+              className="flex items-center justify-between rounded-lg p-4 text-left"
+              style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+              <span className="inline-flex items-center gap-2 font-medium" style={{ color: "var(--text-primary)" }}>
+                <Icon size={18} /> {action.label}
+              </span>
+              <Plus size={16} style={{ color: "var(--text-muted)" }} />
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ProductsPanel({
+  products,
+  form,
+  setForm,
+  saving,
+  onCreate,
+  onRefresh,
+  onScheduleSelected,
+}: {
+  products: MealProductOut[];
+  form: ProductForm;
+  setForm: Dispatch<SetStateAction<ProductForm>>;
+  saving: boolean;
+  onCreate: () => void;
+  onRefresh: () => void;
+  onScheduleSelected: (productIds: string[]) => void;
+}) {
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [editing, setEditing] = useState<MealProductOut | null>(null);
+  const [editForm, setEditForm] = useState<ProductForm | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
+
+  function toggleSelected(productId: string) {
+    setSelectedIds((current) => current.includes(productId)
+      ? current.filter((id) => id !== productId)
+      : [...current, productId]);
+  }
+
+  function startEdit(product: MealProductOut) {
+    setEditing(product);
+    setEditForm({
+      name: product.name,
+      category: product.category ?? "",
+      price: String(product.price),
+      default_max_quantity: product.default_max_quantity ? String(product.default_max_quantity) : "",
+      unlimited: product.default_max_quantity === null,
+      image_url: product.image_url ?? "",
+      description: product.description ?? "",
+    });
+  }
+
+  async function saveEdit() {
+    if (!editing || !editForm || !editForm.name.trim() || !editForm.price) {
+      toast.error("請填寫商品名稱與價格");
+      return;
+    }
+    setEditSaving(true);
+    try {
+      await mealApi.updateProduct(editing.id, {
+        name: editForm.name.trim(),
+        category: editForm.category.trim() || null,
+        price: Number(editForm.price),
+        default_max_quantity: editForm.unlimited ? null : editForm.default_max_quantity
+          ? Number(editForm.default_max_quantity)
+          : null,
+        image_url: editForm.image_url.trim() || null,
+        description: editForm.description.trim() || null,
+      });
+      toast.success("商品已更新");
+      setEditing(null);
+      setEditForm(null);
+      onRefresh();
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "更新商品失敗");
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
+  return (
+    <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
+      <div className="rounded-lg p-4" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+        <h3 className="font-semibold" style={{ color: "var(--text-primary)" }}>新增商品</h3>
+        <div className="mt-4 grid gap-3">
+          {form.image_url && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={form.image_url} alt="商品圖片預覽" className="h-36 w-full rounded-md object-cover"
+              style={{ border: "1px solid var(--border)" }} />
+          )}
+          <input className="input" placeholder="商品名稱" value={form.name}
+            onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
+          <input className="input" placeholder="分類，例如：便當、飲料" value={form.category}
+            onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))} />
+          <label className="grid gap-1 text-sm">
+            <span style={{ color: "var(--text-muted)" }}>商品圖片</span>
+            <input className="input" type="file" accept="image/*"
+              onChange={async (event) => {
+                const file = event.target.files?.[0];
+                if (!file) return;
+                try {
+                  const uploaded = await mealApi.uploadImage(file);
+                  setForm((current) => ({ ...current, image_url: uploaded.url }));
+                  toast.success("圖片已上傳");
+                } catch (error: unknown) {
+                  toast.error(error instanceof Error ? error.message : "圖片上傳失敗");
+                }
+              }} />
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <input className="input" type="number" min={0} placeholder="價格" value={form.price}
+              onChange={(event) => setForm((current) => ({ ...current, price: event.target.value }))} />
+            <label className="flex items-center gap-2 rounded-md px-3 py-2 text-sm"
+              style={{ border: "1px solid var(--border)", background: "var(--background)" }}>
+              <input type="checkbox" checked={form.unlimited}
+                onChange={(event) => setForm((current) => ({ ...current, unlimited: event.target.checked }))} />
+              無限制
+            </label>
+          </div>
+          {!form.unlimited && (
+            <input className="input" type="number" min={1} placeholder="預設限量"
+              value={form.default_max_quantity}
+              onChange={(event) => setForm((current) => ({ ...current, default_max_quantity: event.target.value }))} />
+          )}
+          <textarea className="input min-h-20" placeholder="描述" value={form.description}
+            onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} />
+          <button type="button" onClick={onCreate} disabled={saving}
+            className="rounded-md px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+            style={{ background: "var(--primary)" }}>
+            {saving ? "新增中..." : "新增商品"}
+          </button>
+        </div>
+      </div>
+      <div className="rounded-lg" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+        <div className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between"
+          style={{ borderBottom: "1px solid var(--border)" }}>
+          <div>
+            <h3 className="font-semibold" style={{ color: "var(--text-primary)" }}>商品目錄</h3>
+            <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+              已選 {selectedIds.length} 個商品
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="rounded-md px-3 py-2 text-sm"
+              style={{ border: "1px solid var(--border)" }}
+              onClick={() => setSelectedIds(products.map((product) => product.id))}>
+              全選
+            </button>
+            <button type="button" className="rounded-md px-3 py-2 text-sm"
+              style={{ border: "1px solid var(--border)" }}
+              onClick={() => setSelectedIds([])}>
+              清除
+            </button>
+            <button type="button" disabled={selectedIds.length === 0}
+              onClick={() => onScheduleSelected(selectedIds)}
+              className="rounded-md px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+              style={{ background: "var(--primary)" }}>
+              批量排定上架
             </button>
           </div>
-
-          {/* Kanban */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {(["pending", "confirmed", "completed"] as MealOrderStatus[]).map(status => {
-              const col = orders.filter(o => o.status === status);
-              const sc = orderStatusColor(status);
-              return (
-                <div key={status} className="rounded-xl overflow-hidden"
-                  style={{ border: `1px solid var(--border)` }}>
-                  <div className="px-3 py-2 flex items-center justify-between"
-                    style={{ background: sc.bg, borderBottom: "1px solid var(--border)" }}>
-                    <span className="text-xs font-semibold" style={{ color: sc.color }}>
-                      {orderStatusLabel(status)}
-                    </span>
-                    <span className="text-xs px-1.5 py-0.5 rounded-full font-bold"
-                      style={{ background: sc.bg, color: sc.color }}>
-                      {col.length}
-                    </span>
-                  </div>
-                  <div className="p-2 space-y-2 min-h-32" style={{ background: "var(--card-bg)" }}>
-                    {col.length === 0 && (
-                      <p className="text-xs text-center py-6" style={{ color: "var(--text-muted)" }}>無</p>
-                    )}
-                    {col.map(o => (
-                      <div key={o.id} className="rounded-lg p-3"
-                        style={{ background: "var(--card-bg-2, rgba(255,255,255,0.03))", border: "1px solid var(--border)" }}>
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <p className="text-xs font-mono font-medium" style={{ color: "var(--text-primary)" }}>
-                              {o.serial_number}
-                            </p>
-                            <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-                              {schedules.find(s => s.id === o.schedule_id)?.date ?? ""}
-                            </p>
-                          </div>
-                          <span className="text-sm font-semibold" style={{ color: "var(--primary)" }}>NT${o.total_price}</span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] text-sm">
+            <thead style={{ background: "var(--surface)", color: "var(--text-muted)" }}>
+              <tr>
+                <th className="w-10 px-3 py-2 text-left">
+                  <input type="checkbox" checked={products.length > 0 && selectedIds.length === products.length}
+                    onChange={(event) => setSelectedIds(event.target.checked
+                      ? products.map((product) => product.id)
+                      : [])} />
+                </th>
+                <th className="px-3 py-2 text-left font-medium">商品</th>
+                <th className="px-3 py-2 text-left font-medium">分類</th>
+                <th className="px-3 py-2 text-right font-medium">價格</th>
+                <th className="px-3 py-2 text-left font-medium">數量</th>
+                <th className="px-3 py-2 text-left font-medium">狀態</th>
+                <th className="px-3 py-2 text-right font-medium">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {products.map((product) => (
+                <tr key={product.id} style={{ borderTop: "1px solid var(--border)" }}>
+                  <td className="px-3 py-2">
+                    <input type="checkbox" checked={selectedIds.includes(product.id)}
+                      onChange={() => toggleSelected(product.id)} />
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-3">
+                      {product.image_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={product.image_url} alt={product.name}
+                          className="h-12 w-12 rounded-md object-cover" />
+                      ) : (
+                        <div className="flex h-12 w-12 items-center justify-center rounded-md text-xs"
+                          style={{ background: "var(--surface)", color: "var(--text-muted)" }}>
+                          無圖
                         </div>
-                        <div className="flex gap-1 mt-2">
-                          {o.status === "pending" && (
-                            <button className="btn-icon text-xs px-2 py-0.5 rounded"
-                              style={{ background: "var(--primary-dim)", color: "var(--primary)" }}
-                              onClick={() => handleConfirm(o.id)}>
-                              確認
-                            </button>
-                          )}
-                          {o.status === "confirmed" && (
-                            <button className="btn-icon text-xs px-2 py-0.5 rounded"
-                              style={{ background: "rgba(52,211,153,0.1)", color: "#34d399" }}
-                              onClick={() => handleComplete(o.id)}>
-                              已取餐
-                            </button>
-                          )}
+                      )}
+                      <div className="min-w-0">
+                        <div className="truncate font-medium" style={{ color: "var(--text-primary)" }}>
+                          {product.name}
+                        </div>
+                        <div className="line-clamp-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                          {product.description || "尚未填寫描述"}
                         </div>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2">{product.category || "未分類"}</td>
+                  <td className="px-3 py-2 text-right">{money(product.price)}</td>
+                  <td className="px-3 py-2">
+                    {product.default_max_quantity ? `限量 ${product.default_max_quantity}` : "無限制"}
+                  </td>
+                  <td className="px-3 py-2">{product.is_active ? "啟用中" : "已停用"}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex justify-end gap-2">
+                      <button type="button" onClick={() => startEdit(product)}
+                        className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs"
+                        style={{ border: "1px solid var(--border)" }}>
+                        <Edit3 size={13} /> 編輯
+                      </button>
+                      <button type="button" onClick={async () => {
+                        const nextActive = !product.is_active;
+                        await mealApi.updateProduct(product.id, { is_active: nextActive });
+                        toast.success(nextActive ? "商品已啟用" : "商品已停用");
+                        onRefresh();
+                      }} className="rounded px-2 py-1 text-xs" style={{ border: "1px solid var(--border)" }}>
+                        {product.is_active ? "停用" : "啟用"}
+                      </button>
+                      <button type="button" onClick={() => onScheduleSelected([product.id])}
+                        className="rounded px-2 py-1 text-xs text-white"
+                        style={{ background: "var(--primary)" }}>
+                        排上架
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {products.length === 0 && (
+                <tr><td colSpan={7} className="px-3 py-8 text-center" style={{ color: "var(--text-muted)" }}>
+                  還沒有商品，先建立菜單目錄。
+                </td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {editing && editForm && (
+        <Modal onClose={() => { setEditing(null); setEditForm(null); }} title="編輯商品">
+          <ProductEditorForm form={editForm} setForm={setEditForm} />
+          <div className="mt-4 flex justify-end gap-2">
+            <button type="button" onClick={() => { setEditing(null); setEditForm(null); }}
+              className="rounded-md px-4 py-2 text-sm" style={{ border: "1px solid var(--border)" }}>
+              取消
+            </button>
+            <button type="button" onClick={saveEdit} disabled={editSaving}
+              className="rounded-md px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+              style={{ background: "var(--primary)" }}>
+              {editSaving ? "儲存中..." : "儲存變更"}
+            </button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function ProductEditorForm({
+  form,
+  setForm,
+}: {
+  form: ProductForm;
+  setForm: Dispatch<SetStateAction<ProductForm | null>>;
+}) {
+  return (
+    <div className="grid gap-3">
+      {form.image_url && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={form.image_url} alt="商品圖片預覽" className="h-40 w-full rounded-md object-cover"
+          style={{ border: "1px solid var(--border)" }} />
+      )}
+      <input className="input" placeholder="商品名稱" value={form.name}
+        onChange={(event) => setForm((current) => current && ({ ...current, name: event.target.value }))} />
+      <input className="input" placeholder="分類" value={form.category}
+        onChange={(event) => setForm((current) => current && ({ ...current, category: event.target.value }))} />
+      <label className="grid gap-1 text-sm">
+        <span style={{ color: "var(--text-muted)" }}>商品圖片</span>
+        <input className="input" type="file" accept="image/*"
+          onChange={async (event) => {
+            const file = event.target.files?.[0];
+            if (!file) return;
+            try {
+              const uploaded = await mealApi.uploadImage(file);
+              setForm((current) => current && ({ ...current, image_url: uploaded.url }));
+              toast.success("圖片已上傳");
+            } catch (error: unknown) {
+              toast.error(error instanceof Error ? error.message : "圖片上傳失敗");
+            }
+          }} />
+      </label>
+      <div className="grid grid-cols-2 gap-3">
+        <input className="input" type="number" min={0} placeholder="價格" value={form.price}
+          onChange={(event) => setForm((current) => current && ({ ...current, price: event.target.value }))} />
+        <label className="flex items-center gap-2 rounded-md px-3 py-2 text-sm"
+          style={{ border: "1px solid var(--border)", background: "var(--background)" }}>
+          <input type="checkbox" checked={form.unlimited}
+            onChange={(event) => setForm((current) => current && ({
+              ...current,
+              unlimited: event.target.checked,
+            }))} />
+          無限制
+        </label>
+      </div>
+      {!form.unlimited && (
+        <input className="input" type="number" min={1} placeholder="預設限量"
+          value={form.default_max_quantity}
+          onChange={(event) => setForm((current) => current && ({
+            ...current,
+            default_max_quantity: event.target.value,
+          }))} />
+      )}
+      <textarea className="input min-h-24" placeholder="描述" value={form.description}
+        onChange={(event) => setForm((current) => current && ({ ...current, description: event.target.value }))} />
+    </div>
+  );
+}
+
+function AvailabilityPanel({
+  products,
+  availabilities,
+  form,
+  setForm,
+  saving,
+  onCreate,
+}: {
+  products: MealProductOut[];
+  availabilities: MealAvailabilityOut[];
+  form: AvailabilityForm;
+  setForm: Dispatch<SetStateAction<AvailabilityForm>>;
+  saving: boolean;
+  onCreate: () => void;
+}) {
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const selectedProducts = products.filter((product) => form.product_ids.includes(product.id));
+  const dateCount = form.mode === "single"
+    ? 1
+    : eachDate(form.date_from, form.mode === "permanent" ? addDays(90) : form.date_to)
+        .filter((dateString) => form.weekdays.includes(weekdayIndex(dateString))).length;
+  const totalCount = dateCount * form.product_ids.length;
+  const slotCount = form.selected_slot_labels.length;
+
+  return (
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+      <div className="grid gap-4">
+        <div className="rounded-lg p-4" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="font-semibold" style={{ color: "var(--text-primary)" }}>1. 商品</h3>
+            <span className="text-sm" style={{ color: "var(--text-muted)" }}>
+              {form.product_ids.length} / {products.length}
+            </span>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" className="rounded-md px-3 py-2 text-sm"
+              style={{ border: "1px solid var(--border)" }}
+              onClick={() => setForm((current) => ({
+                ...current,
+                product_ids: products.filter((product) => product.is_active).map((product) => product.id),
+              }))}>
+              全部啟用商品
+            </button>
+            <button type="button" className="rounded-md px-3 py-2 text-sm"
+              style={{ border: "1px solid var(--border)" }}
+              onClick={() => setForm((current) => ({ ...current, product_ids: [] }))}>
+              清除
+            </button>
+          </div>
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            {products.map((product) => {
+              const checked = form.product_ids.includes(product.id);
+              return (
+                <button key={product.id} type="button"
+                  disabled={!product.is_active}
+                  onClick={() => setForm((current) => ({
+                    ...current,
+                    product_ids: checked
+                      ? current.product_ids.filter((id) => id !== product.id)
+                      : [...current.product_ids, product.id],
+                  }))}
+                  className="flex items-center justify-between gap-3 rounded-md px-3 py-2 text-left text-sm"
+                  style={{
+                    border: checked ? "1px solid var(--primary)" : "1px solid var(--border)",
+                    background: checked ? "var(--surface)" : "transparent",
+                    opacity: product.is_active ? 1 : 0.45,
+                  }}>
+                  <span className="truncate" style={{ color: "var(--text-primary)" }}>
+                    {product.name}{!product.is_active ? "（已停用）" : ""}
+                  </span>
+                  <span className="shrink-0 text-xs" style={{ color: "var(--text-muted)" }}>
+                    {money(product.price)}
+                  </span>
+                </button>
+              );
+            })}
+            {products.length === 0 && <EmptyState text="請先建立商品" />}
+          </div>
+        </div>
+
+        <div className="rounded-lg p-4" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+          <h3 className="font-semibold" style={{ color: "var(--text-primary)" }}>2. 日期</h3>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            {(["single", "bulk", "permanent"] as const).map((mode) => (
+              <button key={mode} type="button"
+                onClick={() => setForm((current) => ({ ...current, mode }))}
+                className="rounded-md px-3 py-2 text-sm"
+                style={{
+                  border: "1px solid var(--border)",
+                  background: form.mode === mode ? "var(--primary)" : "var(--surface)",
+                  color: form.mode === mode ? "white" : "var(--text-primary)",
+                }}>
+                {mode === "single" ? "單日" : mode === "bulk" ? "多日" : "永久"}
+              </button>
+            ))}
+          </div>
+          <div className="mt-3">
+            {form.mode === "single" ? (
+              <input className="input" type="date" value={form.service_date}
+                onChange={(event) => setForm((current) => ({ ...current, service_date: event.target.value }))} />
+            ) : (
+              <div className="grid gap-3">
+                <div className={form.mode === "permanent" ? "grid gap-3" : "grid grid-cols-2 gap-3"}>
+                  <input className="input" type="date" value={form.date_from}
+                    onChange={(event) => setForm((current) => ({ ...current, date_from: event.target.value }))} />
+                  {form.mode === "bulk" && (
+                    <input className="input" type="date" value={form.date_to}
+                      onChange={(event) => setForm((current) => ({ ...current, date_to: event.target.value }))} />
+                  )}
                 </div>
+                {form.mode === "permanent" && (
+                  <div className="rounded-md px-3 py-2 text-sm" style={{ background: "var(--surface)", color: "var(--text-muted)" }}>
+                    永久上架會從開始日往後先建立 90 天，之後可由排程延展。
+                  </div>
+                )}
+                <div className="grid grid-cols-7 gap-1">
+                  {["一", "二", "三", "四", "五", "六", "日"].map((label, index) => (
+                    <button key={label} type="button"
+                      onClick={() => setForm((current) => ({
+                        ...current,
+                        weekdays: current.weekdays.includes(index)
+                          ? current.weekdays.filter((item) => item !== index)
+                          : [...current.weekdays, index].sort(),
+                      }))}
+                      className="rounded-md px-2 py-2 text-xs"
+                      style={{
+                        border: "1px solid var(--border)",
+                        background: form.weekdays.includes(index) ? "var(--primary)" : "var(--surface)",
+                        color: form.weekdays.includes(index) ? "white" : "var(--text-primary)",
+                      }}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-lg p-4" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+          <h3 className="font-semibold" style={{ color: "var(--text-primary)" }}>3. 開放給學生選的取餐時段</h3>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {quickPickupSlots.map((slot) => {
+              const active = form.selected_slot_labels.includes(slot.label);
+              return (
+              <button key={slot.label} type="button" className="rounded-md px-3 py-2 text-sm"
+                style={{
+                  border: "1px solid var(--border)",
+                  background: active ? "var(--primary)" : "var(--surface)",
+                  color: active ? "white" : "var(--text-primary)",
+                }}
+                onClick={() => setForm((current) => ({
+                  ...current,
+                  selected_slot_labels: active
+                    ? current.selected_slot_labels.filter((label) => label !== slot.label)
+                    : [...current.selected_slot_labels, slot.label],
+                }))}>
+                {slot.label} · {slot.start}
+              </button>
               );
             })}
           </div>
-        </div>
-      )}
-
-      {/* ════════════════════════════════════════════════════════════════════
-          Tab 4：備餐清單
-      ════════════════════════════════════════════════════════════════════ */}
-      {tab === "prep" && (
-        <div className="space-y-4">
-          <div className="flex items-center gap-3 flex-wrap">
-            <select className="input-sm" value={selectedSchedule}
-              onChange={async e => {
-                const id = e.target.value;
-                setSelectedSchedule(id);
-                if (id) {
-                  await loadScheduleDetail(id);
-                  // P1: 同時載入 item-stats 取得實際訂購量
-                  if (!prepStats[id]) {
-                    mealApi.getScheduleItemStats(id).then(stats => {
-                      const map: Record<string, number> = {};
-                      for (const s of stats) map[s.item_id] = s.total_ordered;
-                      setPrepStats(prev => ({ ...prev, [id]: map }));
-                    }).catch(() => {});
-                  }
-                }
-              }}
-              style={{ minWidth: 160 }}>
-              <option value="">選擇排程…</option>
-              {schedules.map(s => (
-                <option key={s.id} value={s.id}>
-                  {s.date} — {vendors.find(v => v.id === s.vendor_id)?.name}
-                </option>
-              ))}
-            </select>
-            <button className="btn-sm ml-auto"
-              style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}
-              onClick={() => window.print()}>
-              列印
-            </button>
+          <div className="mt-3 rounded-md px-3 py-2 text-sm" style={{ background: "var(--surface)", color: "var(--text-muted)" }}>
+            學生下單時會從你勾選的 {slotCount} 個時段中選一個。結單時間已預設為取餐前 30 分鐘。
           </div>
-
-          {!selectedSchedule ? (
-            <div className="text-center py-16 rounded-xl" style={{ border: "1px dashed var(--border)" }}>
-              <p className="text-sm" style={{ color: "var(--text-muted)" }}>請先選擇排程</p>
-            </div>
-          ) : !scheduleDetails[selectedSchedule] ? (
-            <div className="text-center py-16" style={{ color: "var(--text-muted)" }}>載入中…</div>
-          ) : (
-            <div className="rounded-xl overflow-hidden print:border-0"
-              style={{ border: "1px solid var(--border)" }}>
-              <div className="px-4 py-3" style={{ background: "var(--card-bg)", borderBottom: "1px solid var(--border)" }}>
-                <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                  備餐清單 — {schedules.find(s => s.id === selectedSchedule)?.date}
-                </p>
-                <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-                  已確認訂單：{orders.filter(o => o.schedule_id === selectedSchedule && (o.status === "confirmed" || o.status === "completed")).length} 筆
-                </p>
+          <button type="button" className="mt-3 text-sm"
+            style={{ color: "var(--primary)" }}
+            onClick={() => setShowAdvanced((value) => !value)}>
+            {showAdvanced ? "收起進階設定" : "進階設定"}
+          </button>
+          {showAdvanced && (
+            <div className="mt-3 grid gap-3">
+              <div className="grid grid-cols-2 gap-3">
+                <input className="input" type="datetime-local" value={form.sale_start}
+                  onChange={(event) => setForm((current) => ({ ...current, sale_start: event.target.value }))} />
+                <input className="input" type="datetime-local" value={form.sale_end}
+                  onChange={(event) => setForm((current) => ({ ...current, sale_end: event.target.value }))} />
               </div>
-              <div className="divide-y" style={{ borderColor: "var(--border)" }}>
-                {prepList.length === 0 ? (
-                  prepStats[selectedSchedule] !== undefined ? (
-                    <p className="px-4 py-6 text-sm" style={{ color: "var(--text-muted)" }}>此排程目前無有效訂單品項</p>
-                  ) : (
-                    <div className="px-4 py-6 text-center space-y-2">
-                      <div className="w-5 h-5 rounded-full border-2 border-t-transparent animate-spin mx-auto"
-                        style={{ borderColor: "var(--border-strong)", borderTopColor: "var(--primary)" }} />
-                      <p className="text-sm" style={{ color: "var(--text-muted)" }}>載入訂購統計中…</p>
-                    </div>
-                  )
-                ) : (
-                  prepList.map((item, idx) => (
-                    <div key={item.id}
-                      className="px-4 py-3 flex items-center justify-between"
-                      style={{ background: idx % 2 === 0 ? "var(--card-bg)" : "var(--card-bg-2, rgba(255,255,255,0.02))" }}>
-                      <div>
-                        <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{item.name}</p>
-                        <p className="text-xs" style={{ color: "var(--text-muted)" }}>NT${item.price} / 份</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-2xl font-black" style={{ color: "var(--primary)" }}>
-                          {item.total}
-                        </p>
-                        <p className="text-xs" style={{ color: "var(--text-muted)" }}>份</p>
-                      </div>
-                    </div>
-                  ))
-                )}
+              <input className="input" type="number" min={0} placeholder="覆寫價格，留空使用商品價格" value={form.price}
+                onChange={(event) => setForm((current) => ({ ...current, price: event.target.value }))} />
+              <div className="grid grid-cols-2 gap-3">
+                <label className="flex items-center gap-2 rounded-md px-3 py-2 text-sm"
+                  style={{ border: "1px solid var(--border)", background: "var(--background)" }}>
+                  <input type="checkbox" checked={form.max_unlimited}
+                    onChange={(event) => setForm((current) => ({ ...current, max_unlimited: event.target.checked }))} />
+                  總量無限制
+                </label>
+                <label className="flex items-center gap-2 rounded-md px-3 py-2 text-sm"
+                  style={{ border: "1px solid var(--border)", background: "var(--background)" }}>
+                  <input type="checkbox" checked={form.capacity_unlimited}
+                    onChange={(event) => setForm((current) => ({ ...current, capacity_unlimited: event.target.checked }))} />
+                  時段無限制
+                </label>
               </div>
+              {!form.max_unlimited && (
+                <input className="input" type="number" min={1} placeholder="總限量" value={form.max_quantity}
+                  onChange={(event) => setForm((current) => ({ ...current, max_quantity: event.target.value }))} />
+              )}
+              {!form.capacity_unlimited && (
+                <input className="input" type="number" min={1} placeholder="時段容量" value={form.capacity}
+                  onChange={(event) => setForm((current) => ({ ...current, capacity: event.target.value }))} />
+              )}
+              <textarea className="input min-h-16" placeholder="備註" value={form.note}
+                onChange={(event) => setForm((current) => ({ ...current, note: event.target.value }))} />
             </div>
           )}
         </div>
-      )}
+      </div>
 
-      {/* ════════════════════════════════════════════════════════════════════
-          Tab 5：核銷管理
-      ════════════════════════════════════════════════════════════════════ */}
-      {tab === "pickup" && (
-        <PickupTab
-          vendors={vendors}
-          schedules={schedules}
-          onCompleteOrder={async (orderId) => {
-            await mealApi.completeOrder(orderId);
-            await loadOrders();
-            toast.success("已標記領餐");
-          }}
-          onConfirmOrder={async (orderId) => {
-            await mealApi.confirmOrder(orderId);
-            await loadOrders();
-            toast.success("訂單已確認");
-          }}
-        />
-      )}
+      <div className="rounded-lg p-4" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+        <h3 className="font-semibold" style={{ color: "var(--text-primary)" }}>確認</h3>
+        <div className="mt-3 grid gap-2 text-sm" style={{ color: "var(--text-muted)" }}>
+          <div className="flex justify-between"><span>商品</span><strong>{form.product_ids.length}</strong></div>
+          <div className="flex justify-between"><span>日期</span><strong>{dateCount}</strong></div>
+          <div className="flex justify-between"><span>建立</span><strong>{totalCount}</strong></div>
+          <div className="flex justify-between"><span>可選時段</span><strong>{slotCount}</strong></div>
+        </div>
+        {selectedProducts.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1">
+            {selectedProducts.slice(0, 8).map((product) => (
+              <span key={product.id} className="rounded px-2 py-1 text-xs"
+                style={{ background: "var(--surface)", color: "var(--text-muted)" }}>
+                {product.name}
+              </span>
+            ))}
+          </div>
+        )}
+        {form.selected_slot_labels.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1">
+            {form.selected_slot_labels.map((label) => (
+              <span key={label} className="rounded px-2 py-1 text-xs"
+                style={{ background: "var(--surface)", color: "var(--text-muted)" }}>
+                {label}
+              </span>
+            ))}
+          </div>
+        )}
+        <button type="button" onClick={onCreate}
+          disabled={saving || products.length === 0 || totalCount === 0 || slotCount === 0}
+          className="mt-4 w-full rounded-md px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+          style={{ background: "var(--primary)" }}>
+          {saving ? "建立中..." : form.mode === "permanent" ? `永久上架（先建立 ${totalCount} 筆）` : `建立 ${totalCount} 筆上架`}
+        </button>
+      </div>
 
-      {/* Modal：新增排程 */}
-      {showSchForm && (
-        <Modal title="新增菜單排程" onClose={() => setShowSchForm(false)} maxWidthClassName="max-w-md">
-          <div className="space-y-3">
-            <div>
-              <label className="label-sm">商家</label>
-              <select className="input-field w-full" value={schForm.vendor_id}
-                onChange={e => setSchForm(f => ({ ...f, vendor_id: e.target.value }))}>
-                <option value="">選擇商家…</option>
-                {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="label-sm">服務日期 *</label>
-              <input className="input-field w-full" type="date" value={schForm.date}
-                onChange={e => setSchForm(f => ({ ...f, date: e.target.value }))} />
-            </div>
-            <div>
-              <label className="label-sm">訂餐開放時間（留空=立即開放）</label>
-              <input className="input-field w-full" type="datetime-local" value={schForm.order_open_time}
-                onChange={e => setSchForm(f => ({ ...f, order_open_time: e.target.value }))} />
-            </div>
-            <div>
-              <label className="label-sm">結單截止時間 *</label>
-              <input className="input-field w-full" type="datetime-local" value={schForm.order_deadline}
-                onChange={e => setSchForm(f => ({ ...f, order_deadline: e.target.value }))} />
-            </div>
-            <div>
-              <label className="label-sm">備註</label>
-              <input className="input-field w-full" placeholder="選填" value={schForm.note}
-                onChange={e => setSchForm(f => ({ ...f, note: e.target.value }))} />
-            </div>
-          </div>
-          <div className="flex gap-2 pt-4">
-            <button className="flex-1 btn btn-primary" disabled={schSaving} onClick={handleCreateSchedule}>
-              {schSaving ? "建立中…" : "建立排程"}
-            </button>
-            <button className="flex-1 btn" onClick={() => setShowSchForm(false)}>取消</button>
-          </div>
-        </Modal>
-      )}
+      <div className="overflow-hidden rounded-lg xl:col-span-2" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+        <table className="w-full text-sm">
+          <thead style={{ background: "var(--surface)", color: "var(--text-muted)" }}>
+            <tr>
+              <th className="px-3 py-2 text-left font-medium">日期</th>
+              <th className="px-3 py-2 text-left font-medium">商品</th>
+              <th className="px-3 py-2 text-left font-medium">取餐</th>
+              <th className="px-3 py-2 text-right font-medium">價格</th>
+            </tr>
+          </thead>
+          <tbody>
+            {availabilities.map((item) => (
+              <tr key={item.id} style={{ borderTop: "1px solid var(--border)" }}>
+                <td className="px-3 py-2">{item.service_date}</td>
+                <td className="px-3 py-2">{item.product?.name ?? "商品"}</td>
+                <td className="px-3 py-2">
+                  {item.pickup_slots.map((slot) => slot.label).join("、") || "未設定"}
+                </td>
+                <td className="px-3 py-2 text-right">{money(item.price)}</td>
+              </tr>
+            ))}
+            {availabilities.length === 0 && (
+              <tr><td colSpan={4} className="px-3 py-8 text-center" style={{ color: "var(--text-muted)" }}>尚未排定上架</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
-      {/* Modal：新增商家 */}
-      {showVendorForm && (
-        <Modal title="新增學餐商家" onClose={() => setShowVendorForm(false)} maxWidthClassName="max-w-md">
-          <div className="space-y-3">
-            <div>
-              <label className="label-sm">商家名稱 *</label>
-              <input className="input-field w-full" placeholder="例：阿明便當" value={vendorForm.name}
-                onChange={e => setVendorForm(f => ({ ...f, name: e.target.value }))} />
-            </div>
-            <div>
-              <label className="label-sm">描述</label>
-              <input className="input-field w-full" placeholder="選填" value={vendorForm.description}
-                onChange={e => setVendorForm(f => ({ ...f, description: e.target.value }))} />
-            </div>
-            <div>
-              <label className="label-sm">聯絡電話</label>
-              <input className="input-field w-full" placeholder="選填" value={vendorForm.contact_phone}
-                onChange={e => setVendorForm(f => ({ ...f, contact_phone: e.target.value }))} />
-            </div>
-            <div>
-              <label className="label-sm">聯絡信箱</label>
-              <input className="input-field w-full" type="email" placeholder="選填" value={vendorForm.contact_email}
-                onChange={e => setVendorForm(f => ({ ...f, contact_email: e.target.value }))} />
-            </div>
-            <div>
-              <label className="label-sm">組織 ID *</label>
-              <select className="input-field w-full" value={vendorForm.org_id}
-                onChange={e => setVendorForm(f => ({ ...f, org_id: e.target.value }))}>
-                <option value="">選擇組織…</option>
-                {orgs.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
-              </select>
-            </div>
+function OrdersPanel({ orders }: { orders: MealOrderListItem[] }) {
+  return (
+    <div className="overflow-hidden rounded-lg" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+      <table className="w-full text-sm">
+        <thead style={{ background: "var(--surface)", color: "var(--text-muted)" }}>
+          <tr>
+            <th className="px-3 py-2 text-left font-medium">訂單</th>
+            <th className="px-3 py-2 text-left font-medium">取餐碼</th>
+            <th className="px-3 py-2 text-left font-medium">狀態</th>
+            <th className="px-3 py-2 text-left font-medium">收款</th>
+            <th className="px-3 py-2 text-right font-medium">金額</th>
+          </tr>
+        </thead>
+        <tbody>
+          {orders.map((order) => (
+            <tr key={order.id} style={{ borderTop: "1px solid var(--border)" }}>
+              <td className="px-3 py-2">{order.serial_number}</td>
+              <td className="px-3 py-2 font-mono">{order.pickup_code}</td>
+              <td className="px-3 py-2">{orderLabel[order.status] ?? order.status}</td>
+              <td className="px-3 py-2">{order.is_paid ? "已收" : "未收"}</td>
+              <td className="px-3 py-2 text-right">{money(order.total_price)}</td>
+            </tr>
+          ))}
+          {orders.length === 0 && (
+            <tr><td colSpan={5} className="px-3 py-8 text-center" style={{ color: "var(--text-muted)" }}>尚無訂單</td></tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function PickupPanel({
+  code,
+  setCode,
+  result,
+  saving,
+  onRedeem,
+}: {
+  code: string;
+  setCode: (value: string) => void;
+  result: MealPickupLookupOut | null;
+  saving: boolean;
+  onRedeem: () => void;
+}) {
+  return (
+    <div className="grid gap-5 xl:grid-cols-[420px_1fr]">
+      <div className="rounded-lg p-4" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+        <h3 className="font-semibold" style={{ color: "var(--text-primary)" }}>快速核銷</h3>
+        <div className="mt-4 flex gap-2">
+          <input className="input font-mono text-lg" value={code}
+            onChange={(event) => setCode(event.target.value.toUpperCase())}
+            placeholder="五碼或班級領取碼" />
+          <button type="button" onClick={onRedeem} disabled={saving}
+            className="rounded-md px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+            style={{ background: "var(--primary)" }}>
+            核銷
+          </button>
+        </div>
+      </div>
+      {result ? (
+        <div className="rounded-lg p-4" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+          <div className="flex items-center gap-2 font-semibold" style={{ color: "var(--text-primary)" }}>
+            <CheckCircle2 size={18} /> {result.message}
           </div>
-          <div className="flex gap-2 pt-4">
-            <button className="flex-1 btn btn-primary" disabled={vendorSaving} onClick={handleCreateVendor}>
-              {vendorSaving ? "建立中…" : "建立商家"}
-            </button>
-            <button className="flex-1 btn" onClick={() => setShowVendorForm(false)}>取消</button>
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <Metric label="符合訂單" value={result.matched_orders} />
+            <Metric label="已核銷" value={result.completed_orders} />
+            <Metric label="金額" value={money(result.total_price)} />
           </div>
-        </Modal>
+        </div>
+      ) : (
+        <EmptyState text="輸入學生五碼可核銷個人訂單，輸入班級碼可整班批次核銷。" />
       )}
+    </div>
+  );
+}
+
+function SettingsPanel({
+  vendor,
+  managers,
+  candidate,
+  setCandidate,
+  saving,
+  onAssign,
+  onRefresh,
+}: {
+  vendor: MealVendorOut;
+  managers: VendorManagerOut[];
+  candidate: UserSummary | null;
+  setCandidate: (user: UserSummary | null) => void;
+  saving: boolean;
+  onAssign: () => void;
+  onRefresh: () => void;
+}) {
+  return (
+    <div className="grid gap-5 xl:grid-cols-[420px_1fr]">
+      <div className="rounded-lg p-4" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+        <h3 className="font-semibold" style={{ color: "var(--text-primary)" }}>快捷設定負責人</h3>
+        <p className="mt-2 text-sm" style={{ color: "var(--text-muted)" }}>
+          指派後會同步建立商家管理人紀錄、商家組織職位與 `meal:manage` 權限。
+        </p>
+        <div className="mt-4 grid gap-3">
+          {candidate ? (
+            <div className="flex items-center justify-between rounded-md px-3 py-2"
+              style={{ border: "1px solid var(--border)", background: "var(--surface)" }}>
+              <div>
+                <div className="text-sm font-medium">{candidate.display_name}</div>
+                <div className="text-xs" style={{ color: "var(--text-muted)" }}>{candidate.email}</div>
+              </div>
+              <button type="button" className="text-sm" onClick={() => setCandidate(null)}>取消</button>
+            </div>
+          ) : (
+            <UserPicker placeholder="搜尋負責人 Email 或姓名" onPick={setCandidate} />
+          )}
+          <button type="button" onClick={onAssign} disabled={saving || !candidate}
+            className="rounded-md px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+            style={{ background: "var(--primary)" }}>
+            {saving ? "指派中..." : "指派並給權限"}
+          </button>
+        </div>
+      </div>
+      <div className="rounded-lg p-4" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
+        <h3 className="font-semibold" style={{ color: "var(--text-primary)" }}>目前負責人</h3>
+        <div className="mt-4 grid gap-2">
+          {managers.map((manager) => (
+            <div key={manager.user_id} className="flex items-center justify-between rounded-md px-3 py-2"
+              style={{ border: "1px solid var(--border)" }}>
+              <div>
+                <div className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+                  {manager.display_name}
+                </div>
+                <div className="text-xs" style={{ color: "var(--text-muted)" }}>{manager.email}</div>
+              </div>
+              <button type="button" className="rounded px-2 py-1 text-xs"
+                style={{ border: "1px solid var(--border)" }}
+                onClick={async () => {
+                  await mealApi.removeVendorManager(vendor.id, manager.user_id);
+                  toast.success("已移除負責人");
+                  onRefresh();
+                }}>
+                移除
+              </button>
+            </div>
+          ))}
+          {managers.length === 0 && <EmptyState text="尚未指派負責人。" />}
+        </div>
+        <div className="mt-4 rounded-md px-3 py-2 text-xs"
+          style={{ background: "var(--surface)", color: "var(--text-muted)" }}>
+          權限細節由系統自動維護，這裡只需要管理實際負責人。
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ text }: { text: string }) {
+  return (
+    <div className="rounded-lg p-6 text-center text-sm"
+      style={{ border: "1px dashed var(--border)", color: "var(--text-muted)" }}>
+      {text}
     </div>
   );
 }

@@ -111,6 +111,9 @@ class PermissionCode(StrEnum):
     MEETING_VIEW_ALL = "meeting:view_all"
     MEETING_EXPORT = "meeting:export"
 
+    PARTNER_MAP_MANAGE = "partner_map:manage"
+    PARTNER_MAP_VIEW_STATS = "partner_map:view_stats"
+
 
 ALL_PERMISSION_CODES: list[dict[str, str]] = [
     {
@@ -646,6 +649,18 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "code": PermissionCode.MEETING_EXPORT,
         "label": "匯出會議紀錄",
         "desc": "查看會後紀錄、匯出或轉成公文草稿",
+    },
+    {
+        "group": "特約地圖",
+        "code": PermissionCode.PARTNER_MAP_MANAGE,
+        "label": "管理特約地圖",
+        "desc": "建立/修改/刪除特約店家、點位、標籤與優惠",
+    },
+    {
+        "group": "特約地圖",
+        "code": PermissionCode.PARTNER_MAP_VIEW_STATS,
+        "label": "查看特約地圖統計",
+        "desc": "查看特約店家點擊、瀏覽與互動統計（預留）",
     },
 ]
 

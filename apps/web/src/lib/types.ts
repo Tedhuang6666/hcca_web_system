@@ -162,6 +162,7 @@ export interface DocumentCreate {
   title: string; org_id: string;
   issuer_full_name?: string | null;
   serial_template_id?: string | null;
+  manual_serial_number?: string | null;
   urgency?: DocumentUrgency; classification?: DocumentClassification; category?: DocumentCategory;
   declassification_condition?: DeclassificationCondition;
   confidentiality_expires_at?: string | null;
@@ -324,6 +325,249 @@ export interface OrderSummaryOut {
   total_amount: number; paid_amount: number; unpaid_amount: number;
 }
 
+// ── 特約地圖型別 ──────────────────────────────────────────────────────────────
+
+export type PartnerBusinessStatus = "draft" | "active" | "hidden" | "archived";
+
+export interface PartnerTagOut {
+  id: string;
+  name: string;
+  color: string | null;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PartnerLocationOut {
+  id: string;
+  business_id: string;
+  name: string | null;
+  address: string;
+  latitude: number;
+  longitude: number;
+  phone: string | null;
+  business_hours: Record<string, unknown>;
+  google_place_id: string | null;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PartnerOfferOut {
+  id: string;
+  business_id: string;
+  title: string;
+  public_summary: string | null;
+  full_description: string | null;
+  instructions: string | null;
+  member_note: string | null;
+  starts_at: string | null;
+  ends_at: string | null;
+  sort_order: number;
+  is_active: boolean;
+  is_current: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PartnerBusinessOut {
+  id: string;
+  name: string;
+  summary: string | null;
+  description: string | null;
+  website_url: string | null;
+  social_url: string | null;
+  logo_url: string | null;
+  cover_image_url: string | null;
+  category: string | null;
+  business_hours_text: string | null;
+  status: PartnerBusinessStatus;
+  sort_order: number;
+  view_count: number;
+  click_count: number;
+  checkin_count: number;
+  rating_avg: number | null;
+  rating_count: number;
+  popularity_score: number;
+  internal_note: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  tags: PartnerTagOut[];
+  locations: PartnerLocationOut[];
+  offers: PartnerOfferOut[];
+  can_view_private_details: boolean;
+}
+
+export interface PartnerBusinessListItem {
+  id: string;
+  name: string;
+  summary: string | null;
+  status: PartnerBusinessStatus;
+  logo_url: string | null;
+  cover_image_url: string | null;
+  category: string | null;
+  business_hours_text: string | null;
+  sort_order: number;
+  view_count: number;
+  click_count: number;
+  checkin_count: number;
+  rating_avg: number | null;
+  rating_count: number;
+  popularity_score: number;
+  tags: PartnerTagOut[];
+  location_count: number;
+  active_offer_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PartnerMapItem {
+  business_id: string;
+  location_id: string;
+  business_name: string;
+  location_name: string | null;
+  summary: string | null;
+  logo_url: string | null;
+  cover_image_url: string | null;
+  category: string | null;
+  business_hours_text: string | null;
+  address: string;
+  latitude: number;
+  longitude: number;
+  phone: string | null;
+  tags: PartnerTagOut[];
+  has_active_offer: boolean;
+  active_offer_titles: string[];
+  rating_avg: number | null;
+  rating_count: number;
+  popularity_score: number;
+  view_count: number;
+  checkin_count: number;
+}
+
+export interface PartnerBusinessCreate {
+  name: string;
+  summary?: string | null;
+  description?: string | null;
+  website_url?: string | null;
+  social_url?: string | null;
+  logo_url?: string | null;
+  cover_image_url?: string | null;
+  category?: string | null;
+  business_hours_text?: string | null;
+  status?: PartnerBusinessStatus;
+  sort_order?: number;
+  internal_note?: string | null;
+  tag_ids?: string[];
+}
+
+export type PartnerBusinessUpdate = Partial<PartnerBusinessCreate>;
+
+export interface PartnerTagCreate {
+  name: string;
+  color?: string | null;
+  sort_order?: number;
+  is_active?: boolean;
+}
+
+export type PartnerTagUpdate = Partial<PartnerTagCreate>;
+
+export interface PartnerLocationCreate {
+  name?: string | null;
+  address: string;
+  latitude: number;
+  longitude: number;
+  phone?: string | null;
+  business_hours?: Record<string, unknown>;
+  google_place_id?: string | null;
+  sort_order?: number;
+  is_active?: boolean;
+}
+
+export type PartnerLocationUpdate = Partial<PartnerLocationCreate>;
+
+export interface PartnerOfferCreate {
+  title: string;
+  public_summary?: string | null;
+  full_description?: string | null;
+  instructions?: string | null;
+  member_note?: string | null;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  sort_order?: number;
+  is_active?: boolean;
+}
+
+export type PartnerOfferUpdate = Partial<PartnerOfferCreate>;
+
+export interface PartnerRatingCreate {
+  rating: number;
+  comment?: string | null;
+  visit_count?: number;
+  is_public?: boolean;
+}
+
+export interface PartnerRatingOut {
+  id: string;
+  business_id: string;
+  user_id: string | null;
+  rating: number;
+  comment: string | null;
+  visit_count: number;
+  is_public: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PartnerSubmissionCreate {
+  name: string;
+  category?: string | null;
+  address?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  reason?: string | null;
+  offer_hint?: string | null;
+  contact_hint?: string | null;
+}
+
+export type PartnerSubmissionStatus = "pending" | "approved" | "rejected";
+
+export interface PartnerSubmissionOut {
+  id: string;
+  name: string;
+  category: string | null;
+  address: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  reason: string | null;
+  offer_hint: string | null;
+  contact_hint: string | null;
+  status: PartnerSubmissionStatus;
+  submitted_by: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
+  business_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PartnerRankingItem {
+  business_id: string;
+  name: string;
+  summary: string | null;
+  category: string | null;
+  logo_url: string | null;
+  rating_avg: number | null;
+  rating_count: number;
+  checkin_count: number;
+  view_count: number;
+  popularity_score: number;
+}
+
 // ── 班級系統型別 ──────────────────────────────────────────────────────────────
 
 export interface ClassStudentRangeOut {
@@ -398,6 +642,20 @@ export interface ClassRoleBindingOut {
   class_id: string;
   role_key: string;
   position_id: string;
+}
+export interface ClassRoleHolderOut {
+  user_position_id: string;
+  user_id: string;
+  display_name: string;
+  email: string;
+  student_id: string | null;
+  start_date: string;
+  end_date: string | null;
+}
+export interface ClassRoleOut extends ClassRoleBindingOut {
+  label: string;
+  permission_codes: string[];
+  holders: ClassRoleHolderOut[];
 }
 export interface SchoolClassListItem {
   id: string; academic_year: number; class_code: string;
@@ -601,6 +859,13 @@ export interface MeetingUserBrief {
   student_id: string | null;
 }
 
+export interface MeetingClassBrief {
+  id: string;
+  class_code: string;
+  label: string | null;
+  grade: number | null;
+}
+
 /** 議程項目關聯法規（修正案）的精簡資訊 */
 export interface MeetingRegulationBrief {
   id: string;
@@ -664,11 +929,13 @@ export interface MeetingAttendanceOut {
   status: AttendanceStatus;
   checked_in_at: string | null;
   is_voting_eligible: boolean;
+  voting_class_id: string | null;
   proxy_for_user_id: string | null;
   note: string | null;
   created_at: string;
   updated_at: string;
   user: MeetingUserBrief | null;
+  voting_class: MeetingClassBrief | null;
   proxy_for_user: MeetingUserBrief | null;
 }
 
@@ -731,6 +998,32 @@ export interface MeetingVoteOut {
   ballots: MeetingBallotOut[];
 }
 
+export type MeetingVoteRosterStatus =
+  | "approve"
+  | "reject"
+  | "abstain"
+  | "not_voted"
+  | "mixed";
+
+export interface MeetingVoteRosterClassOut {
+  class_id: string | null;
+  class_code: string;
+  label: string;
+  grade: number | null;
+  eligible: number;
+  present: number;
+  approve: number;
+  reject: number;
+  abstain: number;
+  not_voted: number;
+  status: MeetingVoteRosterStatus;
+}
+
+export interface MeetingVoteRosterOut {
+  classes: MeetingVoteRosterClassOut[];
+  unassigned: MeetingVoteRosterClassOut | null;
+}
+
 export interface MeetingRequestOut {
   id: string;
   meeting_id: string;
@@ -789,6 +1082,16 @@ export interface MeetingScreenStateOut {
   updated_at: string | null;
 }
 
+export interface MeetingEventOut {
+  id: string;
+  meeting_id: string;
+  agenda_item_id: string | null;
+  event_type: string;
+  actor_id: string | null;
+  payload: Record<string, unknown>;
+  created_at: string;
+}
+
 export interface MeetingListItem {
   id: string;
   org_id: string;
@@ -796,6 +1099,7 @@ export interface MeetingListItem {
   location: string | null;
   chair_name: string | null;
   starts_at: string | null;
+  ends_at: string | null;
   status: MeetingStatus;
   expected_voters: number;
   quorum_count: number;
@@ -811,7 +1115,6 @@ export interface MeetingListItem {
 
 export interface MeetingOut extends MeetingListItem {
   description: string | null;
-  ends_at: string | null;
   reminder_sent_at: string | null;
   screen_token: string;
   checkin_token: string;
@@ -823,6 +1126,7 @@ export interface MeetingOut extends MeetingListItem {
   motions: MeetingMotionOut[];
   decisions: MeetingDecisionOut[];
   screen_state: MeetingScreenStateOut | null;
+  events: MeetingEventOut[];
 }
 
 export interface MeetingScreenOut {
@@ -831,6 +1135,7 @@ export interface MeetingScreenOut {
   active_vote: MeetingVoteOut | null;
   attendance_summary: Record<string, number>;
   screen_state: MeetingScreenStateOut | null;
+  vote_roster: MeetingVoteRosterOut | null;
 }
 
 export interface MeetingJoinOut {
@@ -840,6 +1145,7 @@ export interface MeetingJoinOut {
   is_rostered: boolean;
   can_vote: boolean;
   active_vote: MeetingVoteOut | null;
+  my_ballot: MeetingBallotOut | null;
 }
 
 export interface MeetingWorkspaceOut {
@@ -854,6 +1160,7 @@ export interface MeetingMinutesOut {
   attendance_summary: Record<string, number>;
   agenda_items: MeetingAgendaItemOut[];
   votes: MeetingVoteOut[];
+  events: MeetingEventOut[];
   markdown: string;
 }
 

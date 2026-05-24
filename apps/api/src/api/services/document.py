@@ -912,7 +912,15 @@ async def create_document(
     - 若傳入受文者清單，一併建立 DocumentRecipient
     """
     template: DocumentSerialTemplate | None = None
-    if data.serial_template_id:
+    manual_serial = data.manual_serial_number.strip() if data.manual_serial_number else None
+    if manual_serial:
+        existing = await session.scalar(
+            select(Document.id).where(Document.serial_number == manual_serial)
+        )
+        if existing is not None:
+            raise ValueError("指定的公文字號已存在，請更換字號")
+        serial = manual_serial
+    elif data.serial_template_id:
         template = await get_serial_template(session, data.serial_template_id)
         if template is None or not template.is_active:
             msg = "指定的字號模板不存在或已停用"

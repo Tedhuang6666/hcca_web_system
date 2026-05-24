@@ -1,56 +1,14 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import ThemeToggle from "@/components/ui/ThemeToggle";
-import { notificationsApi } from "@/lib/api";
-import type { NotificationItem } from "@/lib/api";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { notificationsApi, tasksApi } from "@/lib/api";
+import type { NotificationItem, TaskItem } from "@/lib/api";
 import { apiUrl } from "@/lib/config";
-
-const PAGE_TITLES: Record<string, string> = {
-  "/":                  "儀表板",
-  "/documents":         "公文系統",
-  "/documents/new":     "新增公文",
-  "/document-templates": "公文範本",
-  "/documents/delegations": "簽核代理",
-  "/regulations":       "法規查詢",
-  "/regulations/new":   "新增法規",
-  "/serial-templates":  "字號模板",
-  "/shop":              "訂購系統",
-  "/shop/orders":       "我的訂單",
-  "/shop/admin":        "商品管理",
-  "/meal":              "學餐訂購",
-  "/meal/orders":       "我的餐單",
-  "/meal/vendor":       "商家管理",
-  "/surveys":           "問卷填答",
-  "/surveys/new":       "新增問卷",
-  "/petitions":         "陳情系統",
-  "/petitions/new":     "我要陳情",
-  "/petitions/manage":  "陳情管理",
-  "/petitions/admin/types": "陳情類型",
-  "/orgs":              "組織總覽",
-  "/announcements":     "公告檢視",
-  "/announcements/new": "新增公告",
-  "/notifications":     "通知中心",
-  "/settings/notifications": "通知偏好設定",
-  "/settings/security": "安全設定",
-  "/analytics":         "績效統計",
-  "/admin/permissions": "權限管理",
-  "/profile":           "個人資料",
-};
-
-function getPageTitle(pathname: string): string {
-  if (PAGE_TITLES[pathname]) return PAGE_TITLES[pathname];
-  if (/^\/documents\/.+\/edit$/.test(pathname)) return "編輯公文";
-  if (/^\/documents\/.+$/.test(pathname)) return "公文詳情";
-  if (/^\/regulations\/.+\/edit$/.test(pathname)) return "編輯法規";
-  if (/^\/regulations\/.+$/.test(pathname)) return "法規詳情";
-  if (/^\/announcements\/.+\/edit$/.test(pathname)) return "編輯公告";
-  if (/^\/announcements\/.+$/.test(pathname)) return "公告詳情";
-  if (/^\/surveys\/.+$/.test(pathname)) return "問卷詳情";
-  if (/^\/orgs\/.+$/.test(pathname)) return "組織詳情";
-  return "校園自治整合平台";
-}
+import { getBreadcrumbs, getCompactCrumbs, getPageTitle } from "@/lib/breadcrumb";
 
 interface TopbarProps {
   onMenuClick?: () => void;
@@ -68,10 +26,16 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
   const [showBell, setShowBell] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [previewNtfs, setPreviewNtfs] = useState<NotificationItem[]>([]);
+  const [previewTasks, setPreviewTasks] = useState<TaskItem[]>([]);
+  const [taskCount, setTaskCount] = useState(0);
   const menuRef = useRef<HTMLDivElement>(null);
   const bellRef = useRef<HTMLDivElement>(null);
 
-  const pageTitle = getPageTitle(pathname);
+  const crumbs = useMemo(() => getBreadcrumbs(pathname), [pathname]);
+  const compactCrumbs = useMemo(() => getCompactCrumbs(crumbs), [crumbs]);
+  const pageTitle = useMemo(() => getPageTitle(pathname), [pathname]);
+  const parentHref = crumbs.length >= 2 ? crumbs[crumbs.length - 2]?.href : undefined;
+  const showBack = crumbs.length > 2;  // 至少有 首頁 / X / Y 時才顯示
 
   useEffect(() => {
     const userId = localStorage.getItem("user_id");
@@ -95,19 +59,23 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
     return () => document.removeEventListener("mousedown", handle);
   }, [showMenu, showBell]);
 
-  // 通知輪詢
+  // 通知 + 待辦輪詢
   useEffect(() => {
     const userId = typeof window !== "undefined" ? localStorage.getItem("user_id") : null;
     if (!userId) return;
     let mounted = true;
-    const fetchCount = async () => {
+    const fetchCounts = async () => {
       try {
         const { unread } = await notificationsApi.count();
         if (mounted) setUnreadCount(unread);
       } catch { /* ignore */ }
+      try {
+        const inbox = await tasksApi.list();
+        if (mounted) setTaskCount(inbox.total);
+      } catch { /* ignore */ }
     };
-    fetchCount();
-    const timer = setInterval(fetchCount, 60_000);
+    fetchCounts();
+    const timer = setInterval(fetchCounts, 60_000);
     return () => { mounted = false; clearInterval(timer); };
   }, []);
 
@@ -115,8 +83,13 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
     setShowBell(v => !v);
     if (!showBell) {
       try {
-        const items = await notificationsApi.list(false, 5);
+        const [items, inbox] = await Promise.all([
+          notificationsApi.list(false, 5),
+          tasksApi.list().catch(() => ({ items: [] as TaskItem[], total: 0, by_module: {} })),
+        ]);
         setPreviewNtfs(items);
+        setPreviewTasks(inbox.items.slice(0, 5));
+        setTaskCount(inbox.total);
       } catch { /* ignore */ }
     }
   };
@@ -127,6 +100,18 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
       setUnreadCount(0);
       setPreviewNtfs((items) => items.map((item) => ({ ...item, is_read: true })));
     } catch { /* ignore */ }
+  };
+
+  const handleBack = () => {
+    // 優先用 router.back()，使用者可獲得正確 scroll restoration；
+    // 但若 history 不足（直連深層頁），fallback 到上一層 href。
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+    } else if (parentHref) {
+      router.push(parentHref);
+    } else {
+      router.push("/");
+    }
   };
 
   const handleLogout = async () => {
@@ -144,7 +129,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
 
   return (
     <header
-      className="flex items-center justify-between px-4 md:px-5 flex-shrink-0"
+      className="flex items-center justify-between px-4 md:px-5 flex-shrink-0 gap-2"
       style={{
         height: "56px",
         background: "var(--topbar-bg)",
@@ -158,8 +143,8 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
       }}
       role="banner">
 
-      {/* 左側 */}
-      <div className="flex items-center gap-3 min-w-0">
+      {/* 左側：選單 + 返回 + 麵包屑/標題 */}
+      <div className="flex items-center gap-2 min-w-0 flex-1">
         <button
           onClick={onMenuClick}
           className="topbar-icon-btn lg:hidden"
@@ -171,26 +156,44 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
             <line x1="3" y1="18" x2="21" y2="18" />
           </svg>
         </button>
-        <h1
-          className="text-sm truncate"
-          style={{
-            color: "var(--text-primary)",
-            fontWeight: 600,
-            letterSpacing: 0,
-          }}>
-          {pageTitle}
-        </h1>
+
+        {showBack && (
+          <button
+            type="button"
+            onClick={handleBack}
+            className="topbar-icon-btn"
+            aria-label="返回上一頁">
+            <ArrowLeft size={15} aria-hidden={true} />
+          </button>
+        )}
+
+        {/* 桌面：完整麵包屑 */}
+        <div className="hidden md:block min-w-0 flex-1">
+          <Breadcrumb items={crumbs} />
+        </div>
+
+        {/* 行動裝置：縮減麵包屑（首頁 / … / 上層 / 當前）或單一標題 */}
+        <div className="md:hidden min-w-0 flex-1">
+          {crumbs.length > 2 ? (
+            <Breadcrumb items={compactCrumbs} />
+          ) : (
+            <h1
+              className="text-sm truncate"
+              style={{ color: "var(--text-primary)", fontWeight: 600 }}>
+              {pageTitle}
+            </h1>
+          )}
+        </div>
       </div>
 
-      {/* 右側 */}
+      {/* 右側：通知 + 主題 + 使用者 */}
       <div className="flex items-center gap-1.5">
-        {/* 通知鈴鐺 */}
         {isLoggedIn && (
         <div className="relative" ref={bellRef}>
           <button
             onClick={openBell}
             className="topbar-icon-btn relative"
-            aria-label={`通知中心${unreadCount > 0 ? `（${unreadCount} 則未讀）` : ""}`}
+            aria-label={`通知與待辦${(unreadCount + taskCount) > 0 ? `（${unreadCount} 則未讀通知、${taskCount} 件待辦）` : ""}`}
             aria-expanded={showBell}
             aria-haspopup="true">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -198,12 +201,12 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
               <path d="M13.73 21a2 2 0 0 1-3.46 0" />
             </svg>
-            {unreadCount > 0 && (
+            {(unreadCount + taskCount) > 0 && (
               <span
                 className="absolute -top-1 -right-1 min-w-[1rem] h-4 rounded-full flex items-center justify-center text-[10px] font-bold px-1"
                 style={{ background: "var(--danger)", color: "#fff" }}
                 aria-hidden="true">
-                {unreadCount > 99 ? "99+" : unreadCount}
+                {(unreadCount + taskCount) > 99 ? "99+" : (unreadCount + taskCount)}
               </span>
             )}
           </button>
@@ -212,35 +215,101 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
             <div
               role="dialog"
               aria-label="通知預覽"
-              className="absolute right-0 top-full mt-1.5 w-72 rounded-xl z-50 animate-scale-in overflow-hidden"
+              className="absolute right-0 top-full mt-1.5 w-72 max-w-[calc(100vw-1rem)] rounded-xl z-50 animate-scale-in overflow-hidden"
               style={{
                 background: "var(--bg-elevated)",
                 border: "1px solid var(--border-strong)",
                 boxShadow: "var(--shadow-xl)",
               }}>
-              <div className="px-4 py-3 flex items-center justify-between"
-                style={{ borderBottom: "1px solid var(--border)" }}>
-                <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>通知</p>
+              {/* 待辦區 */}
+              <div className="px-4 py-2.5 flex items-center justify-between"
+                style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-hover)" }}>
+                <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
+                  待辦中心
+                </p>
+                {taskCount > 0 && (
+                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+                    style={{ background: "var(--warning)", color: "#fff" }}>
+                    {taskCount > 99 ? "99+" : taskCount}
+                  </span>
+                )}
+              </div>
+              <div className="max-h-44 overflow-y-auto">
+                {previewTasks.length === 0 ? (
+                  <p className="text-[11px] text-center py-4" style={{ color: "var(--text-muted)" }}>
+                    目前沒有待辦
+                  </p>
+                ) : (
+                  previewTasks.map((t, idx) => (
+                    <div key={t.id}
+                      style={idx < previewTasks.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}}>
+                      <Link
+                        href={t.href}
+                        onClick={() => setShowBell(false)}
+                        className="flex items-start gap-2 px-4 py-2.5 transition-colors"
+                        style={{ textDecoration: "none", display: "flex" }}
+                        onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-hover)")}
+                        onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+                        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5"
+                          style={{
+                            background: t.severity === "critical" ? "var(--danger)"
+                              : t.severity === "warning" ? "var(--warning)"
+                              : "var(--primary)",
+                          }}
+                          aria-hidden="true" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium truncate"
+                            style={{ color: "var(--text-primary)" }}>
+                            {t.title}
+                          </p>
+                          {t.subtitle && (
+                            <p className="text-[10px] truncate mt-0.5"
+                              style={{ color: "var(--text-muted)" }}>
+                              {t.subtitle}
+                            </p>
+                          )}
+                        </div>
+                      </Link>
+                    </div>
+                  ))
+                )}
+              </div>
+              <Link href="/tasks" onClick={() => setShowBell(false)}
+                className="block px-4 py-2 text-center text-[11px] font-medium"
+                style={{
+                  color: "var(--primary)",
+                  textDecoration: "none",
+                  borderBottom: "1px solid var(--border)",
+                }}>
+                查看全部待辦 →
+              </Link>
+
+              {/* 通知區 */}
+              <div className="px-4 py-2.5 flex items-center justify-between"
+                style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-hover)" }}>
+                <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
+                  最新通知
+                </p>
                 <div className="flex items-center gap-2">
                   {unreadCount > 0 && (
-                    <span className="text-xs font-medium px-2 py-0.5 rounded-full"
+                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
                       style={{ background: "var(--danger)", color: "#fff" }}>
-                      {unreadCount} 則未讀
+                      {unreadCount > 99 ? "99+" : unreadCount}
                     </span>
                   )}
                   <button
                     type="button"
                     onClick={handleMarkAllRead}
                     disabled={unreadCount === 0}
-                    className="text-xs font-medium disabled:opacity-40"
+                    className="text-[11px] font-medium disabled:opacity-40"
                     style={{ color: "var(--primary)" }}>
                     全數已讀
                   </button>
                 </div>
               </div>
-              <div className="max-h-72 overflow-y-auto">
+              <div className="max-h-44 overflow-y-auto">
                 {previewNtfs.length === 0 ? (
-                  <p className="text-xs text-center py-6" style={{ color: "var(--text-muted)" }}>
+                  <p className="text-[11px] text-center py-4" style={{ color: "var(--text-muted)" }}>
                     目前沒有通知
                   </p>
                 ) : (
@@ -250,24 +319,21 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
                       <Link
                         href={n.link ?? "/"}
                         onClick={() => setShowBell(false)}
-                        className="flex items-start gap-3 px-4 py-3 transition-colors"
+                        className="flex items-start gap-2 px-4 py-2.5 transition-colors"
                         style={{ textDecoration: "none", display: "flex" }}
                         onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-hover)")}
                         onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
                         {!n.is_read && (
-                          <span className="w-2 h-2 rounded-full flex-shrink-0 mt-1.5"
+                          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5"
                             style={{ background: "var(--primary)" }} aria-hidden="true" />
                         )}
-                        <div className={`flex-1 min-w-0 ${n.is_read ? "pl-5" : ""}`}>
-                          <p className="text-xs font-medium truncate" style={{ color: "var(--text-primary)" }}>
+                        <div className={`flex-1 min-w-0 ${n.is_read ? "pl-3" : ""}`}>
+                          <p className="text-xs font-medium truncate"
+                            style={{ color: "var(--text-primary)" }}>
                             {n.title}
                           </p>
-                          {n.body && (
-                            <p className="text-[11px] truncate mt-0.5" style={{ color: "var(--text-muted)" }}>
-                              {n.body}
-                            </p>
-                          )}
-                          <p className="text-[10px] mt-1" style={{ color: "var(--text-disabled)" }}>
+                          <p className="text-[10px] mt-0.5"
+                            style={{ color: "var(--text-disabled)" }}>
                             {new Date(n.created_at).toLocaleDateString("zh-TW")}
                           </p>
                         </div>
@@ -276,16 +342,11 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
                   ))
                 )}
               </div>
-              <div className="px-4 py-2.5" style={{ borderTop: "1px solid var(--border)" }}>
+              <div className="px-4 py-2" style={{ borderTop: "1px solid var(--border)" }}>
                 <Link href="/notifications" onClick={() => setShowBell(false)}
-                  className="block text-center text-xs font-medium"
+                  className="block text-center text-[11px] font-medium"
                   style={{ color: "var(--primary)", textDecoration: "none" }}>
                   查看全部通知 →
-                </Link>
-                <Link href="/settings/notifications" onClick={() => setShowBell(false)}
-                  className="mt-2 block text-center text-xs font-medium"
-                  style={{ color: "var(--text-muted)", textDecoration: "none" }}>
-                  通知偏好設定
                 </Link>
               </div>
             </div>
@@ -293,13 +354,10 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
         </div>
         )}
 
-        {/* 深淺色切換 */}
         <ThemeToggle />
 
-        {/* 分隔 */}
         <div className="w-px h-4 mx-1" style={{ background: "var(--border)" }} aria-hidden="true" />
 
-        {/* 使用者選單 / 登入按鈕 */}
         {isLoggedIn ? (
           <div className="relative" ref={menuRef}>
             <button
@@ -366,7 +424,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
             {showMenu && (
               <div
                 role="menu"
-                className="absolute right-0 top-full mt-1.5 w-52 rounded-xl z-50 animate-scale-in overflow-hidden"
+                className="absolute right-0 top-full mt-1.5 w-52 max-w-[calc(100vw-1rem)] rounded-xl z-50 animate-scale-in overflow-hidden"
                 style={{
                   background: "var(--bg-elevated)",
                   border: "1px solid var(--border-strong)",

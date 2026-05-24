@@ -3,24 +3,33 @@
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncGenerator
-from typing import Any
 
-import pytest
-import pytest_asyncio
-from httpx import ASGITransport, AsyncClient, Response
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+# 測試用 HTTP client 以 base_url="http://test" 發送請求；
+# 確保 TrustedHostMiddleware 不會在使用者本機 .env 限縮 ALLOWED_HOSTS 時
+# 把所有測試 status 變 400 Invalid host header。必須在 `from api import app` 之前設定。
+os.environ.setdefault(
+    "ALLOWED_HOSTS",
+    '["localhost","127.0.0.1","api","test","testserver"]',
+)
 
-from api import app
-from api.core.database import Base, get_db
+from collections.abc import AsyncGenerator  # noqa: E402
+from typing import Any  # noqa: E402
+
+import pytest_asyncio  # noqa: E402
+from httpx import ASGITransport, AsyncClient, Response  # noqa: E402
+from sqlalchemy import text  # noqa: E402
+from sqlalchemy.ext.asyncio import (  # noqa: E402
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
+from api import app  # noqa: E402
+from api.core.database import Base, get_db  # noqa: E402
 
 # 優先使用 PostgreSQL test DB，支援 TSVECTOR 等 PG-specific 特性
 # 若無法連線，退回到 aiosqlite in-memory
-TEST_DATABASE_URL = os.getenv(
-    "TEST_DATABASE_URL",
-    "sqlite+aiosqlite:///:memory:"
-)
+TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 
 class CSRFAwareAsyncClient(AsyncClient):
@@ -106,9 +115,7 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[CSRFAwareAsyncClien
 
     app.dependency_overrides[get_db] = override_get_db
 
-    async with CSRFAwareAsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as ac:
+    async with CSRFAwareAsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         # 為測試生成 CSRF token，手動設定到 cookies
         csrf_token = secrets.token_urlsafe(32)
         ac.cookies.set("csrf_token", csrf_token)

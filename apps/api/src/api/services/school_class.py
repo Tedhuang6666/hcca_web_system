@@ -202,6 +202,60 @@ async def ensure_class_default_roles(
     return bindings
 
 
+async def list_class_roles(session: AsyncSession, sc: SchoolClass) -> list[dict]:
+    await ensure_class_default_roles(session, sc)
+    today = date.today()
+    result = await session.execute(
+        select(ClassRoleBinding)
+        .options(selectinload(ClassRoleBinding.position).selectinload(Position.permissions))
+        .where(ClassRoleBinding.class_id == sc.id)
+    )
+    rows: list[dict] = []
+    for binding in result.scalars().all():
+        holders_result = await session.execute(
+            select(UserPosition)
+            .options(selectinload(UserPosition.user))
+            .where(
+                UserPosition.position_id == binding.position_id,
+                UserPosition.start_date <= today,
+                (UserPosition.end_date.is_(None)) | (UserPosition.end_date >= today),
+            )
+            .order_by(UserPosition.start_date.desc())
+        )
+        holders = [
+            {
+                "user_position_id": up.id,
+                "user_id": up.user_id,
+                "display_name": up.user.display_name if up.user else "",
+                "email": up.user.email if up.user else "",
+                "student_id": up.user.student_id if up.user else None,
+                "start_date": up.start_date,
+                "end_date": up.end_date,
+            }
+            for up in holders_result.scalars().all()
+        ]
+        label = CLASS_ROLE_DEFINITIONS.get(binding.role_key, (binding.role_key, [], 0))[0]
+        rows.append(
+            {
+                "id": binding.id,
+                "class_id": binding.class_id,
+                "role_key": binding.role_key,
+                "label": label,
+                "position_id": binding.position_id,
+                "permission_codes": [
+                    permission.code
+                    for permission in (binding.position.permissions if binding.position else [])
+                ],
+                "holders": holders,
+            }
+        )
+    rows.sort(
+        key=lambda row: CLASS_ROLE_DEFINITIONS.get(row["role_key"], ("", [], 0))[2],
+        reverse=True,
+    )
+    return rows
+
+
 def _render_class_template(
     template: str,
     *,

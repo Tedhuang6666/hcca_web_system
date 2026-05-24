@@ -14,7 +14,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { adminApi, classApi, meetingsApi, orgsApi } from "@/lib/api";
+import { adminApi, classApi, meetingsApi, orgsApi, serialTemplatesApi } from "@/lib/api";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import type {
   AttendanceRole,
@@ -24,6 +24,7 @@ import type {
   MeetingRegulationBrief,
   OrgRead,
   PositionSummary,
+  SerialTemplateOut,
   SchoolClassListItem,
 } from "@/lib/types";
 
@@ -56,6 +57,21 @@ function toLocalInput(iso: string | null): string {
 }
 function fromLocalInput(local: string): string | null {
   return local ? new Date(local).toISOString() : null;
+}
+
+function toUpdatePayload(form: SettingsForm) {
+  return {
+    title: form.title.trim(),
+    description: form.description.trim() || null,
+    location: form.location.trim() || null,
+    chair_name: form.chair_name.trim() || null,
+    starts_at: fromLocalInput(form.starts_at),
+    ends_at: fromLocalInput(form.ends_at),
+    expected_voters: form.expected_voters,
+    quorum_count: form.quorum_count,
+    default_pass_threshold: form.default_pass_threshold,
+    bill_stage: form.bill_stage || null,
+  };
 }
 
 interface SettingsForm {
@@ -109,6 +125,9 @@ export default function MeetingSetupPage({ params }: { params: Promise<{ id: str
   const [sourceRole, setSourceRole] = useState<AttendanceRole>("voter");
   const [sourceVoting, setSourceVoting] = useState(true);
   const [sourcePreview, setSourcePreview] = useState("");
+  const [serialTemplates, setSerialTemplates] = useState<SerialTemplateOut[]>([]);
+  const [noticeSerialTemplateId, setNoticeSerialTemplateId] = useState("");
+  const [noticeSerialNumber, setNoticeSerialNumber] = useState("");
   const [attachmentDrafts, setAttachmentDrafts] = useState<
     Record<string, { url: string; label: string }>
   >({});
@@ -151,6 +170,18 @@ export default function MeetingSetupPage({ params }: { params: Promise<{ id: str
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!meeting?.org_id || meeting.confirmed_at) return;
+    serialTemplatesApi
+      .list({ org_id: meeting.org_id, active_only: true })
+      .then((rows) => {
+        setSerialTemplates(rows);
+        const defaultTemplate = rows.find((item) => item.is_default) ?? rows[0];
+        setNoticeSerialTemplateId((prev) => prev || defaultTemplate?.id || "");
+      })
+      .catch(() => setSerialTemplates([]));
+  }, [meeting?.confirmed_at, meeting?.org_id]);
 
   useEffect(() => {
     async function loadRosterOptions() {
@@ -204,18 +235,7 @@ export default function MeetingSetupPage({ params }: { params: Promise<{ id: str
     setError("");
     setNotice("");
     try {
-      await meetingsApi.update(id, {
-        title: form.title.trim(),
-        description: form.description.trim() || null,
-        location: form.location.trim() || null,
-        chair_name: form.chair_name.trim() || null,
-        starts_at: fromLocalInput(form.starts_at),
-        ends_at: fromLocalInput(form.ends_at),
-        expected_voters: form.expected_voters,
-        quorum_count: form.quorum_count,
-        default_pass_threshold: form.default_pass_threshold,
-        bill_stage: form.bill_stage || null,
-      });
+      await meetingsApi.update(id, toUpdatePayload(form));
       clearDraft();
       setNotice("基本設定已儲存");
       await load();
@@ -353,13 +373,22 @@ export default function MeetingSetupPage({ params }: { params: Promise<{ id: str
   }
 
   async function confirmMeeting() {
-    if (!id) return;
+    if (!id || !form) return;
     setConfirming(true);
     setError("");
     setNotice("");
     try {
-      await meetingsApi.confirm(id);
-      setNotice("議程已確認，已自動產生開會通知單草稿。");
+      // 先持久化目前表單：避免使用者已填開會時間/地點但尚未按「儲存」，
+      // 導致後端讀到舊的 null 值而誤報「請先設定開會時間」。
+      if (!isFormUnchanged(form)) {
+        await meetingsApi.update(id, toUpdatePayload(form));
+        clearDraft();
+      }
+      await meetingsApi.confirm(id, {
+        notice_serial_template_id: noticeSerialNumber.trim() ? null : noticeSerialTemplateId || null,
+        notice_serial_number: noticeSerialNumber.trim() || null,
+      });
+      setNotice("議程已確認，開會通知單草稿已建立。");
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "確認議程失敗");
@@ -412,6 +441,31 @@ export default function MeetingSetupPage({ params }: { params: Promise<{ id: str
     agenda.length > 0 &&
     Boolean(form.starts_at) &&
     Boolean(form.location.trim());
+  const votingRoster = meeting.attendance_records.filter((record) => record.is_voting_eligible);
+  const setupSteps = [
+    {
+      title: "基本資料",
+      done: Boolean(form.title.trim() && form.starts_at && form.location.trim()),
+      detail: form.starts_at && form.location.trim() ? "時間與地點已填" : "請補時間與地點",
+    },
+    {
+      title: "議程 / 資料包",
+      done: agenda.length > 0,
+      detail: agenda.length ? `${agenda.length} 個議程項目` : "請新增至少一個議程",
+    },
+    {
+      title: "名冊 / 表決權",
+      done: votingRoster.length > 0,
+      detail: votingRoster.length
+        ? `${votingRoster.length} 位表決權人；同班只允許一位`
+        : "請匯入或補登表決權人",
+    },
+    {
+      title: "通知單確認",
+      done: isConfirmed,
+      detail: isConfirmed ? "已產生開會通知單" : "確認後會自動產生開會通知單",
+    },
+  ];
 
   return (
     <main className="mx-auto w-full max-w-4xl px-5 py-6">
@@ -431,6 +485,29 @@ export default function MeetingSetupPage({ params }: { params: Promise<{ id: str
 
       {error && <p className="mb-4 text-sm text-red-500">{error}</p>}
       {notice && <p className="mb-4 text-sm text-emerald-500">{notice}</p>}
+
+      <section className="mb-5 rounded-lg border border-[var(--border)] p-4">
+        <div className="grid gap-3 sm:grid-cols-4">
+          {setupSteps.map((step, index) => (
+            <div
+              key={step.title}
+              className={`rounded-md border p-3 ${
+                step.done ? "border-emerald-500/40 bg-emerald-500/10" : "border-[var(--border)]"
+              }`}>
+              <p className="text-xs text-[var(--muted)]">步驟 {index + 1}</p>
+              <div className="mt-2 flex items-center gap-2">
+                <CheckCircle2
+                  size={16}
+                  className={step.done ? "text-emerald-500" : "text-[var(--muted)]"}
+                  aria-hidden="true"
+                />
+                <h2 className="text-sm font-semibold">{step.title}</h2>
+              </div>
+              <p className="mt-2 text-xs text-[var(--muted)]">{step.detail}</p>
+            </div>
+          ))}
+        </div>
+      </section>
 
       {!isDraft && (
         <p className="mb-4 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
@@ -922,6 +999,37 @@ export default function MeetingSetupPage({ params }: { params: Promise<{ id: str
               確認後系統會以基本設定與議程自動建立一份「開會通知單」公文草稿。
               {!canConfirm && " 需先設定開會時間、開會地點，並至少一個議程項目。"}
             </p>
+            <div className="mb-4 grid gap-3 rounded-md border border-[var(--border)] p-3 sm:grid-cols-2">
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-[var(--muted)]">通知單字號模板</span>
+                <select
+                  value={noticeSerialTemplateId}
+                  disabled={Boolean(noticeSerialNumber.trim())}
+                  onChange={(e) => setNoticeSerialTemplateId(e.target.value)}
+                  className="rounded-md border border-[var(--border)] bg-transparent px-3 py-2 disabled:opacity-50">
+                  <option value="">使用系統預設字號</option>
+                  {serialTemplates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.org_prefix}
+                      {template.category_char}字 · {template.preview}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-[var(--muted)]">手動公文字號</span>
+                <input
+                  value={noticeSerialNumber}
+                  onChange={(e) => setNoticeSerialNumber(e.target.value)}
+                  placeholder="例：嶺代生字第1150000001號"
+                  maxLength={30}
+                  className="rounded-md border border-[var(--border)] bg-transparent px-3 py-2"
+                />
+                <span className="text-xs text-[var(--muted)]">
+                  有填手動字號時會優先使用，系統會檢查是否重複。
+                </span>
+              </label>
+            </div>
             <button
               onClick={confirmMeeting}
               disabled={!canConfirm || confirming}

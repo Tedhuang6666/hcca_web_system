@@ -316,6 +316,25 @@ async def assign_case(
         from_status=previous.value,
         to_status=case_obj.status.value,
     )
+    # 通知承辦人
+    try:
+        from api.routers.notifications import create_notification
+
+        await create_notification(
+            session,
+            user_id=data.assigned_to_id,
+            type="petition_assigned",
+            title=f"陳情指派：{case_obj.title}",
+            body=f"案號 {case_obj.case_number}，請於系統內回覆",
+            link=f"/petitions/{case_obj.case_number}",
+            related_id=case_obj.id,
+        )
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "send petition_assigned notification failed", exc_info=True
+        )
     return case_obj
 
 

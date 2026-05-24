@@ -62,8 +62,10 @@ from api.schemas.meeting import (
     DecisionCreate,
     DecisionOut,
     DecisionUpdate,
+    MeetingConfirmCreate,
     MeetingCreate,
     MeetingDocumentDraftOut,
+    MeetingEventOut,
     MeetingJoinOut,
     MeetingListItem,
     MeetingMinutesOut,
@@ -175,9 +177,7 @@ async def _decision_or_404(
     return decision
 
 
-async def _vote_or_404(
-    session: AsyncSession, meeting: Meeting, vote_id: uuid.UUID
-) -> MeetingVote:
+async def _vote_or_404(session: AsyncSession, meeting: Meeting, vote_id: uuid.UUID) -> MeetingVote:
     vote = next((x for x in meeting.votes if x.id == vote_id), None)
     if vote is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此表決")
@@ -206,17 +206,42 @@ async def _broadcast_meeting(session: AsyncSession, meeting_id: uuid.UUID, event
     await manager.broadcast_to_room(f"meeting-screen:{meeting.screen_token}", message)
 
 
+async def _record_event(
+    session: AsyncSession,
+    meeting: Meeting,
+    *,
+    event_type: str,
+    actor: User | None = None,
+    agenda_item_id: uuid.UUID | None = None,
+    payload: dict | None = None,
+) -> None:
+    await meeting_svc.record_event(
+        session,
+        meeting,
+        event_type=event_type,
+        actor_id=actor.id if actor else None,
+        agenda_item_id=agenda_item_id,
+        payload=payload,
+    )
+
+
 @router.get("", response_model=list[MeetingListItem], summary="列出會議")
 async def list_meetings(
     session: DbDep,
-    _: CurrentUser,
+    current_user: CurrentUser,
     org_id: uuid.UUID | None = Query(None),
     status_filter: MeetingStatus | None = Query(None, alias="status"),
+    invited_only: bool = Query(False, description="僅回傳目前使用者受邀（列入名冊）的會議"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> list[Meeting]:
     return await meeting_svc.list_meetings(
-        session, org_id=org_id, status=status_filter, limit=limit, offset=offset
+        session,
+        org_id=org_id,
+        status=status_filter,
+        attendee_id=current_user.id if invited_only else None,
+        limit=limit,
+        offset=offset,
     )
 
 
@@ -243,7 +268,17 @@ async def join_meeting(token: str, session: DbDep, current_user: CurrentUser) ->
 async def create_meeting(
     payload: MeetingCreate, session: DbDep, current_user: CurrentUser
 ) -> Meeting:
-    meeting = await meeting_svc.create_meeting(session, data=payload, created_by=current_user.id)
+    try:
+        meeting = await meeting_svc.create_meeting(session, data=payload, created_by=current_user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    await _record_event(
+        session,
+        meeting,
+        event_type="meeting.created",
+        actor=current_user,
+        payload={"title": meeting.title, "org_id": str(meeting.org_id)},
+    )
     await audit_svc.record(
         session,
         entity_type="meeting",
@@ -275,7 +310,31 @@ async def update_meeting(
     current_user: CurrentUser,
 ) -> Meeting:
     meeting = await _meeting_or_404(session, meeting_id)
+    old_agenda_item_id = meeting.current_agenda_item_id
     meeting = await meeting_svc.update_meeting(session, meeting, data=payload)
+    values = payload.model_dump(exclude_unset=True, mode="json")
+    if "current_agenda_item_id" in values and old_agenda_item_id != meeting.current_agenda_item_id:
+        await _record_event(
+            session,
+            meeting,
+            event_type="agenda.changed",
+            actor=current_user,
+            agenda_item_id=meeting.current_agenda_item_id,
+            payload={
+                "from_agenda_item_id": str(old_agenda_item_id) if old_agenda_item_id else None,
+                "to_agenda_item_id": str(meeting.current_agenda_item_id)
+                if meeting.current_agenda_item_id
+                else None,
+            },
+        )
+    else:
+        await _record_event(
+            session,
+            meeting,
+            event_type="meeting.updated",
+            actor=current_user,
+            payload=values,
+        )
     await audit_svc.record(
         session,
         entity_type="meeting",
@@ -283,7 +342,7 @@ async def update_meeting(
         action="meeting.update",
         actor_id=str(current_user.id),
         actor_email=current_user.email,
-        meta=payload.model_dump(exclude_unset=True, mode="json"),
+        meta=values,
         summary=f"更新會議「{meeting.title}」",
     )
     await _broadcast_meeting(session, meeting.id, "meeting.updated")
@@ -296,9 +355,10 @@ async def update_meeting(
     summary="開始會議（meeting:chair）",
     dependencies=[Depends(require_permission(PermissionCode.MEETING_CHAIR))],
 )
-async def start_meeting(meeting_id: uuid.UUID, session: DbDep, _: CurrentUser) -> Meeting:
+async def start_meeting(meeting_id: uuid.UUID, session: DbDep, current_user: CurrentUser) -> Meeting:
     meeting = await _meeting_or_404(session, meeting_id)
     await meeting_svc.transition_meeting(session, meeting, status=MeetingStatus.ACTIVE)
+    await _record_event(session, meeting, event_type="meeting.started", actor=current_user)
     await _broadcast_meeting(session, meeting.id, "meeting.started")
     return await _meeting_or_404(session, meeting.id)
 
@@ -309,9 +369,10 @@ async def start_meeting(meeting_id: uuid.UUID, session: DbDep, _: CurrentUser) -
     summary="暫停會議（meeting:chair）",
     dependencies=[Depends(require_permission(PermissionCode.MEETING_CHAIR))],
 )
-async def pause_meeting(meeting_id: uuid.UUID, session: DbDep, _: CurrentUser) -> Meeting:
+async def pause_meeting(meeting_id: uuid.UUID, session: DbDep, current_user: CurrentUser) -> Meeting:
     meeting = await _meeting_or_404(session, meeting_id)
     await meeting_svc.transition_meeting(session, meeting, status=MeetingStatus.PAUSED)
+    await _record_event(session, meeting, event_type="meeting.paused", actor=current_user)
     await _broadcast_meeting(session, meeting.id, "meeting.paused")
     return await _meeting_or_404(session, meeting.id)
 
@@ -322,9 +383,10 @@ async def pause_meeting(meeting_id: uuid.UUID, session: DbDep, _: CurrentUser) -
     summary="結束會議（meeting:chair）",
     dependencies=[Depends(require_permission(PermissionCode.MEETING_CHAIR))],
 )
-async def close_meeting(meeting_id: uuid.UUID, session: DbDep, _: CurrentUser) -> Meeting:
+async def close_meeting(meeting_id: uuid.UUID, session: DbDep, current_user: CurrentUser) -> Meeting:
     meeting = await _meeting_or_404(session, meeting_id)
     await meeting_svc.transition_meeting(session, meeting, status=MeetingStatus.CLOSED)
+    await _record_event(session, meeting, event_type="meeting.closed", actor=current_user)
     await _broadcast_meeting(session, meeting.id, "meeting.closed")
     return await _meeting_or_404(session, meeting.id)
 
@@ -336,13 +398,36 @@ async def close_meeting(meeting_id: uuid.UUID, session: DbDep, _: CurrentUser) -
     dependencies=[Depends(require_permission(PermissionCode.MEETING_MANAGE))],
 )
 async def confirm_meeting(
-    meeting_id: uuid.UUID, session: DbDep, current_user: CurrentUser
+    meeting_id: uuid.UUID,
+    session: DbDep,
+    current_user: CurrentUser,
+    payload: MeetingConfirmCreate | None = None,
 ) -> Meeting:
     meeting = await _meeting_or_404(session, meeting_id)
+    payload = payload or MeetingConfirmCreate()
     try:
-        await meeting_svc.confirm_meeting(session, meeting, actor=current_user)
+        await meeting_svc.confirm_meeting(
+            session,
+            meeting,
+            actor=current_user,
+            notice_serial_template_id=payload.notice_serial_template_id,
+            notice_serial_number=payload.notice_serial_number,
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    await _record_event(
+        session,
+        meeting,
+        event_type="meeting.confirmed",
+        actor=current_user,
+        payload={
+            "notice_document_id": str(meeting.notice_document_id),
+            "notice_serial_number": payload.notice_serial_number,
+            "notice_serial_template_id": str(payload.notice_serial_template_id)
+            if payload.notice_serial_template_id
+            else None,
+        },
+    )
     await audit_svc.record(
         session,
         entity_type="meeting",
@@ -392,7 +477,16 @@ async def sync_proposals(
             meta={"added": added},
             summary=f"自動排入 {added} 件待審法案至會議「{meeting.title}」議程",
         )
+        await _record_event(
+            session,
+            meeting,
+            event_type="agenda.synced",
+            actor=current_user,
+            payload={"added": added},
+        )
         await _broadcast_meeting(session, meeting.id, "meeting.agenda_updated")
+    # 新排入的議程項目以 FK 建立，須 expire 已載入集合才能在重查時取得
+    session.expire(meeting, ["agenda_items"])
     return await _meeting_or_404(session, meeting.id)
 
 
@@ -404,15 +498,25 @@ async def sync_proposals(
     dependencies=[Depends(require_permission(PermissionCode.MEETING_MANAGE))],
 )
 async def create_agenda_item(
-    meeting_id: uuid.UUID, payload: AgendaItemCreate, session: DbDep, _: CurrentUser
+    meeting_id: uuid.UUID, payload: AgendaItemCreate, session: DbDep, current_user: CurrentUser
 ) -> MeetingAgendaItem:
     meeting = await _meeting_or_404(session, meeting_id)
     try:
         item = await meeting_svc.create_agenda_item(session, meeting, data=payload)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    await _record_event(
+        session,
+        meeting,
+        event_type="agenda.item_created",
+        actor=current_user,
+        agenda_item_id=item.id,
+        payload={"title": item.title},
+    )
     await _broadcast_meeting(session, meeting.id, "meeting.agenda_updated")
-    # 重新查詢以含有 regulation 關聯（避免序列化時觸發 lazy load）
+    # 新項目以 FK 建立，未進入已載入的 meeting.agenda_items 集合；
+    # 須先 expire 該集合，重查時 selectinload 才會重新載入（含新項目與 regulation 關聯）
+    session.expire(meeting, ["agenda_items"])
     refreshed = await _meeting_or_404(session, meeting.id)
     return await _agenda_or_404(session, refreshed, item.id)
 
@@ -718,6 +822,17 @@ async def check_in(
         record = await meeting_svc.check_in(session, meeting, user_id=current_user.id, token=token)
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    await _record_event(
+        session,
+        meeting,
+        event_type="attendance.checked_in",
+        actor=current_user,
+        payload={
+            "attendance_id": str(record.id),
+            "is_voting_eligible": record.is_voting_eligible,
+            "voting_class_id": str(record.voting_class_id) if record.voting_class_id else None,
+        },
+    )
     await _broadcast_meeting(session, meeting.id, "meeting.attendance_updated")
     return record
 
@@ -768,6 +883,18 @@ async def import_attendance_source(
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    await _record_event(
+        session,
+        meeting,
+        event_type="attendance.imported",
+        actor=current_user,
+        payload={
+            "source_type": source.source_type,
+            "source_id": str(source.source_id) if source.source_id else None,
+            "imported_count": source.imported_count,
+            "is_voting_eligible": source.is_voting_eligible,
+        },
+    )
     await _broadcast_meeting(session, meeting.id, "meeting.attendance_updated")
     return source
 
@@ -779,10 +906,25 @@ async def import_attendance_source(
     dependencies=[Depends(require_permission(PermissionCode.MEETING_MANAGE))],
 )
 async def upsert_attendance(
-    meeting_id: uuid.UUID, payload: AttendanceCreate, session: DbDep, _: CurrentUser
+    meeting_id: uuid.UUID, payload: AttendanceCreate, session: DbDep, current_user: CurrentUser
 ) -> MeetingAttendance:
     meeting = await _meeting_or_404(session, meeting_id)
-    record = await meeting_svc.upsert_attendance(session, meeting, data=payload)
+    try:
+        record = await meeting_svc.upsert_attendance(session, meeting, data=payload)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    await _record_event(
+        session,
+        meeting,
+        event_type="attendance.upserted",
+        actor=current_user,
+        payload={
+            "attendance_id": str(record.id),
+            "user_id": str(record.user_id),
+            "is_voting_eligible": record.is_voting_eligible,
+            "voting_class_id": str(record.voting_class_id) if record.voting_class_id else None,
+        },
+    )
     await _broadcast_meeting(session, meeting.id, "meeting.attendance_updated")
     return record
 
@@ -798,10 +940,25 @@ async def update_attendance(
     attendance_id: uuid.UUID,
     payload: AttendanceUpdate,
     session: DbDep,
-    _: CurrentUser,
+    current_user: CurrentUser,
 ) -> MeetingAttendance:
     record = await _attendance_or_404(session, meeting_id, attendance_id)
-    record = await meeting_svc.update_attendance(session, record, data=payload)
+    try:
+        record = await meeting_svc.update_attendance(session, record, data=payload)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    meeting = await _meeting_or_404(session, meeting_id)
+    await _record_event(
+        session,
+        meeting,
+        event_type="attendance.updated",
+        actor=current_user,
+        payload={
+            "attendance_id": str(record.id),
+            "user_id": str(record.user_id),
+            "values": payload.model_dump(exclude_unset=True, mode="json"),
+        },
+    )
     await _broadcast_meeting(session, meeting_id, "meeting.attendance_updated")
     return record
 
@@ -814,10 +971,18 @@ async def update_attendance(
     dependencies=[Depends(require_permission(PermissionCode.MEETING_CHAIR))],
 )
 async def create_vote(
-    meeting_id: uuid.UUID, payload: VoteCreate, session: DbDep, _: CurrentUser
+    meeting_id: uuid.UUID, payload: VoteCreate, session: DbDep, current_user: CurrentUser
 ) -> dict:
     meeting = await _meeting_or_404(session, meeting_id)
     vote = await meeting_svc.create_vote(session, meeting, data=payload)
+    await _record_event(
+        session,
+        meeting,
+        event_type="vote.created",
+        actor=current_user,
+        agenda_item_id=vote.agenda_item_id,
+        payload={"vote_id": str(vote.id), "title": vote.title},
+    )
     vote = (await _meeting_or_404(session, meeting_id)).votes[-1]
     await _broadcast_meeting(session, meeting.id, "meeting.vote_created")
     return await meeting_svc.decorate_vote(session, vote, include_ballots=True)
@@ -834,11 +999,22 @@ async def update_vote(
     vote_id: uuid.UUID,
     payload: VoteUpdate,
     session: DbDep,
-    _: CurrentUser,
+    current_user: CurrentUser,
 ) -> dict:
     meeting = await _meeting_or_404(session, meeting_id)
     vote = await _vote_or_404(session, meeting, vote_id)
     vote = await meeting_svc.update_vote(session, vote, data=payload)
+    await _record_event(
+        session,
+        meeting,
+        event_type="vote.updated",
+        actor=current_user,
+        agenda_item_id=vote.agenda_item_id,
+        payload={
+            "vote_id": str(vote.id),
+            "values": payload.model_dump(exclude_unset=True, mode="json"),
+        },
+    )
     await _broadcast_meeting(session, meeting.id, "meeting.vote_updated")
     return await meeting_svc.decorate_vote(session, vote, include_ballots=True)
 
@@ -898,6 +1074,19 @@ async def create_decision(
     decision = await meeting_svc.create_decision(
         session, meeting, data=payload, created_by=current_user.id
     )
+    await _record_event(
+        session,
+        meeting,
+        event_type="decision.created",
+        actor=current_user,
+        agenda_item_id=decision.agenda_item_id,
+        payload={
+            "decision_id": str(decision.id),
+            "vote_id": str(decision.vote_id) if decision.vote_id else None,
+            "title": decision.title,
+            "status": decision.status,
+        },
+    )
     await _broadcast_meeting(session, meeting.id, "meeting.decision_created")
     return decision
 
@@ -913,10 +1102,22 @@ async def update_decision(
     decision_id: uuid.UUID,
     payload: DecisionUpdate,
     session: DbDep,
-    _: CurrentUser,
+    current_user: CurrentUser,
 ) -> MeetingDecision:
     decision = await _decision_or_404(session, meeting_id, decision_id)
     await meeting_svc.update_decision(session, decision, data=payload)
+    meeting = await _meeting_or_404(session, meeting_id)
+    await _record_event(
+        session,
+        meeting,
+        event_type="decision.updated",
+        actor=current_user,
+        agenda_item_id=decision.agenda_item_id,
+        payload={
+            "decision_id": str(decision.id),
+            "values": payload.model_dump(exclude_unset=True, mode="json"),
+        },
+    )
     await _broadcast_meeting(session, meeting_id, "meeting.decision_updated")
     return decision
 
@@ -927,13 +1128,23 @@ async def update_decision(
     summary="開啟表決（meeting:chair）",
     dependencies=[Depends(require_permission(PermissionCode.MEETING_CHAIR))],
 )
-async def open_vote(meeting_id: uuid.UUID, vote_id: uuid.UUID, session: DbDep, _: CurrentUser) -> dict:
+async def open_vote(
+    meeting_id: uuid.UUID, vote_id: uuid.UUID, session: DbDep, current_user: CurrentUser
+) -> dict:
     meeting = await _meeting_or_404(session, meeting_id)
     vote = await _vote_or_404(session, meeting, vote_id)
     try:
         vote = await meeting_svc.open_vote(session, vote)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    await _record_event(
+        session,
+        meeting,
+        event_type="vote.opened",
+        actor=current_user,
+        agenda_item_id=vote.agenda_item_id,
+        payload={"vote_id": str(vote.id), "title": vote.title},
+    )
     await _broadcast_meeting(session, meeting.id, "meeting.vote_opened")
     return await meeting_svc.decorate_vote(session, vote, include_ballots=True)
 
@@ -945,7 +1156,7 @@ async def open_vote(meeting_id: uuid.UUID, vote_id: uuid.UUID, session: DbDep, _
     dependencies=[Depends(require_permission(PermissionCode.MEETING_CHAIR))],
 )
 async def close_vote(
-    meeting_id: uuid.UUID, vote_id: uuid.UUID, session: DbDep, _: CurrentUser
+    meeting_id: uuid.UUID, vote_id: uuid.UUID, session: DbDep, current_user: CurrentUser
 ) -> dict:
     meeting = await _meeting_or_404(session, meeting_id)
     vote = await _vote_or_404(session, meeting, vote_id)
@@ -953,8 +1164,22 @@ async def close_vote(
         vote = await meeting_svc.close_vote(session, vote)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    decorated = await meeting_svc.decorate_vote(session, vote, include_ballots=True)
+    await _record_event(
+        session,
+        meeting,
+        event_type="vote.closed",
+        actor=current_user,
+        agenda_item_id=vote.agenda_item_id,
+        payload={
+            "vote_id": str(vote.id),
+            "title": vote.title,
+            "tally": decorated["tally"],
+            "vote_roster": await meeting_svc.vote_roster_payload(session, meeting, vote),
+        },
+    )
     await _broadcast_meeting(session, meeting.id, "meeting.vote_closed")
-    return await meeting_svc.decorate_vote(session, vote, include_ballots=True)
+    return decorated
 
 
 @router.post(
@@ -980,6 +1205,14 @@ async def cast_ballot(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    await _record_event(
+        session,
+        meeting,
+        event_type="vote.ballot_cast",
+        actor=current_user,
+        agenda_item_id=vote.agenda_item_id,
+        payload={"vote_id": str(vote.id), "choice": payload.choice},
+    )
     await _broadcast_meeting(session, meeting.id, "meeting.ballot_cast")
     return ballot
 
@@ -1000,6 +1233,14 @@ async def create_meeting_request(
     record = await meeting_svc.create_request(
         session, meeting, user_id=current_user.id, data=payload
     )
+    await _record_event(
+        session,
+        meeting,
+        event_type="request.created",
+        actor=current_user,
+        agenda_item_id=record.agenda_item_id,
+        payload={"request_id": str(record.id), "request_type": record.request_type},
+    )
     await _broadcast_meeting(session, meeting.id, "meeting.request_created")
     return record
 
@@ -1015,10 +1256,19 @@ async def update_meeting_request(
     request_id: uuid.UUID,
     payload: MeetingRequestUpdate,
     session: DbDep,
-    _: CurrentUser,
+    current_user: CurrentUser,
 ) -> MeetingRequest:
     record = await _request_or_404(session, meeting_id, request_id)
     record = await meeting_svc.update_request_status(session, record, status=payload.status)
+    meeting = await _meeting_or_404(session, meeting_id)
+    await _record_event(
+        session,
+        meeting,
+        event_type="request.updated",
+        actor=current_user,
+        agenda_item_id=record.agenda_item_id,
+        payload={"request_id": str(record.id), "status": record.status},
+    )
     await _broadcast_meeting(session, meeting_id, "meeting.request_updated")
     return record
 
@@ -1050,8 +1300,32 @@ async def update_screen_state(
     state = await meeting_svc.update_screen_state(
         session, meeting, data=payload, updated_by=current_user.id
     )
+    await _record_event(
+        session,
+        meeting,
+        event_type="screen.pushed",
+        actor=current_user,
+        agenda_item_id=state.agenda_item_id,
+        payload=payload.model_dump(exclude_unset=True, mode="json"),
+    )
     await _broadcast_meeting(session, meeting.id, "meeting.screen_state_updated")
     return state
+
+
+@router.get(
+    "/{meeting_id}/events",
+    response_model=list[MeetingEventOut],
+    summary="取得會中事件時間軸（meeting:export）",
+    dependencies=[Depends(require_permission(PermissionCode.MEETING_EXPORT))],
+)
+async def list_meeting_events(
+    meeting_id: uuid.UUID,
+    session: DbDep,
+    _: CurrentUser,
+    limit: int = Query(200, ge=1, le=500),
+) -> list:
+    await _meeting_or_404(session, meeting_id)
+    return await meeting_svc.list_events(session, meeting_id, limit=limit)
 
 
 @router.get(
@@ -1077,7 +1351,9 @@ async def create_minutes_document(
     meeting = await _meeting_or_404(session, meeting_id)
     minutes = await meeting_svc.minutes_payload(session, meeting)
     recipients = [
-        RecipientCreate(recipient_type="main", name=record.user.display_name, email=record.user.email)
+        RecipientCreate(
+            recipient_type="main", name=record.user.display_name, email=record.user.email
+        )
         for record in meeting.attendance_records
         if record.user is not None
     ]

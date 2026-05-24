@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
@@ -23,11 +23,13 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
 from api.models.base import TimestampMixin
+from api.models.types import JSONDict
 
 if TYPE_CHECKING:
     from api.models.document import Document
     from api.models.org import Org
     from api.models.regulation import Regulation
+    from api.models.school_class import SchoolClass
     from api.models.user import User
 
 
@@ -234,6 +236,12 @@ class Meeting(Base, TimestampMixin):
         uselist=False,
         single_parent=True,
     )
+    events: Mapped[list[MeetingEvent]] = relationship(
+        "MeetingEvent",
+        back_populates="meeting",
+        cascade="all, delete-orphan",
+        order_by="MeetingEvent.created_at",
+    )
 
 
 class MeetingAgendaItem(Base, TimestampMixin):
@@ -338,6 +346,9 @@ class MeetingAttendance(Base, TimestampMixin):
     is_voting_eligible: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )
+    voting_class_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("school_classes.id", ondelete="SET NULL"), nullable=True
+    )
     proxy_for_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
@@ -345,6 +356,7 @@ class MeetingAttendance(Base, TimestampMixin):
 
     meeting: Mapped[Meeting] = relationship("Meeting", back_populates="attendance_records")
     user: Mapped[User] = relationship("User", foreign_keys=[user_id])
+    voting_class: Mapped[SchoolClass | None] = relationship("SchoolClass")
     proxy_for_user: Mapped[User | None] = relationship("User", foreign_keys=[proxy_for_user_id])
 
 
@@ -626,3 +638,33 @@ class MeetingScreenState(Base, TimestampMixin):
     agenda_item: Mapped[MeetingAgendaItem | None] = relationship("MeetingAgendaItem")
     active_attachment: Mapped[MeetingAgendaAttachment | None] = relationship("MeetingAgendaAttachment")
     updater: Mapped[User | None] = relationship("User")
+
+
+class MeetingEvent(Base):
+    """會中事件留痕，用於大屏同步、會後時間軸與會議紀錄。"""
+
+    __tablename__ = "meeting_events"
+    __table_args__ = (
+        Index("ix_meeting_events_meeting_created", "meeting_id", "created_at"),
+        Index("ix_meeting_events_meeting_type", "meeting_id", "event_type"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    meeting_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    agenda_item_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("meeting_agenda_items.id", ondelete="SET NULL"), nullable=True
+    )
+    event_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    payload: Mapped[dict] = mapped_column(JSONDict, nullable=False, default=dict, server_default="{}")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+    meeting: Mapped[Meeting] = relationship("Meeting", back_populates="events")
+    agenda_item: Mapped[MeetingAgendaItem | None] = relationship("MeetingAgendaItem")
+    actor: Mapped[User | None] = relationship("User")

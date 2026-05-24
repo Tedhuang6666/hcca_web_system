@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 import secrets
 import uuid
 from datetime import UTC, datetime
 
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -24,6 +26,7 @@ from api.models.meeting import (
     MeetingBallot,
     MeetingBillStage,
     MeetingDecision,
+    MeetingEvent,
     MeetingMotion,
     MeetingRequest,
     MeetingRequestStatus,
@@ -35,7 +38,7 @@ from api.models.meeting import (
 )
 from api.models.org import Org, Permission, Position, UserPosition
 from api.models.regulation import Regulation, RegulationWorkflowStatus
-from api.models.school_class import ClassCadre
+from api.models.school_class import ClassCadre, ClassMembership, ClassMembershipStatus, SchoolClass
 from api.models.user import User
 from api.schemas.meeting import (
     AgendaItemCreate,
@@ -59,6 +62,8 @@ from api.schemas.meeting import (
 )
 from api.services import school_class as class_svc
 from api.services.permission import active_tenure_filter
+
+logger = logging.getLogger(__name__)
 
 
 def _new_token() -> str:
@@ -90,6 +95,7 @@ async def get_meeting(session: AsyncSession, meeting_id: uuid.UUID) -> Meeting |
             selectinload(Meeting.agenda_items).selectinload(MeetingAgendaItem.attachments),
             selectinload(Meeting.agenda_items).selectinload(MeetingAgendaItem.artifact_links),
             selectinload(Meeting.attendance_records).selectinload(MeetingAttendance.user),
+            selectinload(Meeting.attendance_records).selectinload(MeetingAttendance.voting_class),
             selectinload(Meeting.attendance_records).selectinload(MeetingAttendance.proxy_for_user),
             selectinload(Meeting.attendance_sources),
             selectinload(Meeting.votes)
@@ -99,6 +105,7 @@ async def get_meeting(session: AsyncSession, meeting_id: uuid.UUID) -> Meeting |
             selectinload(Meeting.motions).selectinload(MeetingMotion.proposer),
             selectinload(Meeting.decisions),
             selectinload(Meeting.screen_state),
+            selectinload(Meeting.events),
         )
         .where(Meeting.id == meeting_id)
     )
@@ -126,6 +133,7 @@ async def list_meetings(
     *,
     org_id: uuid.UUID | None = None,
     status: MeetingStatus | None = None,
+    attendee_id: uuid.UUID | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> list[Meeting]:
@@ -134,6 +142,12 @@ async def list_meetings(
         stmt = stmt.where(Meeting.org_id == org_id)
     if status:
         stmt = stmt.where(Meeting.status == status)
+    if attendee_id:
+        stmt = stmt.where(
+            Meeting.id.in_(
+                select(MeetingAttendance.meeting_id).where(MeetingAttendance.user_id == attendee_id)
+            )
+        )
     result = await session.execute(stmt.limit(limit).offset(offset))
     return list(result.scalars().all())
 
@@ -189,7 +203,14 @@ async def transition_meeting(
     return meeting
 
 
-async def _create_notice_document(session: AsyncSession, meeting: Meeting, *, actor: User):
+async def _create_notice_document(
+    session: AsyncSession,
+    meeting: Meeting,
+    *,
+    actor: User,
+    serial_template_id: uuid.UUID | None = None,
+    manual_serial_number: str | None = None,
+):
     """以會議基本設定與議程產生一份開會通知單公文草稿。"""
     from api.models.document import DocumentCategory, RecipientType
     from api.schemas.document import DocumentCreate, RecipientCreate
@@ -211,6 +232,8 @@ async def _create_notice_document(session: AsyncSession, meeting: Meeting, *, ac
         data=DocumentCreate(
             title=f"{meeting.title}開會通知單",
             org_id=meeting.org_id,
+            serial_template_id=serial_template_id,
+            manual_serial_number=manual_serial_number,
             category=DocumentCategory.MEETING_NOTICE,
             subject=f"檢送「{meeting.title}」開會通知，請查照並準時出席。",
             meeting_purpose=meeting.description or meeting.title,
@@ -228,7 +251,14 @@ async def _create_notice_document(session: AsyncSession, meeting: Meeting, *, ac
     )
 
 
-async def confirm_meeting(session: AsyncSession, meeting: Meeting, *, actor: User) -> Meeting:
+async def confirm_meeting(
+    session: AsyncSession,
+    meeting: Meeting,
+    *,
+    actor: User,
+    notice_serial_template_id: uuid.UUID | None = None,
+    notice_serial_number: str | None = None,
+) -> Meeting:
     """確認議程草稿：鎖定基本設定、並以基本設定與議程自動產生開會通知單公文草稿。"""
     if meeting.status != MeetingStatus.DRAFT:
         raise ValueError("只有草稿狀態的會議可以確認議程")
@@ -246,10 +276,41 @@ async def confirm_meeting(session: AsyncSession, meeting: Meeting, *, actor: Use
     if invalid_items:
         raise ValueError(f"下列議程缺少對應法規或詳情檔案：{'、'.join(invalid_items[:5])}")
 
-    notice = await _create_notice_document(session, meeting, actor=actor)
+    notice = await _create_notice_document(
+        session,
+        meeting,
+        actor=actor,
+        serial_template_id=notice_serial_template_id,
+        manual_serial_number=notice_serial_number.strip() if notice_serial_number else None,
+    )
     meeting.notice_document_id = notice.id
     meeting.confirmed_at = datetime.now(UTC)
     await session.flush()
+
+    # 通知所有出席者：開會邀請
+    try:
+        from api.routers.notifications import create_notification
+
+        starts_label = (
+            meeting.starts_at.astimezone().strftime("%Y/%m/%d %H:%M")
+            if meeting.starts_at
+            else "(待定)"
+        )
+        body = f"時間：{starts_label}　地點：{meeting.location or '(待定)'}"
+        link = f"/meetings/{meeting.id}"
+        for att in meeting.attendance_records:
+            await create_notification(
+                session,
+                user_id=att.user_id,
+                type="meeting_invited",
+                title=f"開會通知：{meeting.title}",
+                body=body,
+                link=link,
+                related_id=meeting.id,
+            )
+    except Exception:
+        logger.warning("send meeting_invited notifications failed", exc_info=True)
+
     return meeting
 
 
@@ -382,19 +443,138 @@ async def seed_voter_roster(session: AsyncSession, meeting: Meeting) -> int:
         )
         if exists:
             continue
+        values = await _normalize_voting_attendance(
+            session,
+            meeting,
+            values={
+                "user_id": user_id,
+                "role": AttendanceRole.VOTER,
+                "status": AttendanceStatus.EXPECTED,
+                "is_voting_eligible": True,
+            },
+        )
         session.add(
             MeetingAttendance(
                 meeting_id=meeting.id,
-                user_id=user_id,
-                role=AttendanceRole.VOTER,
-                status=AttendanceStatus.EXPECTED,
-                is_voting_eligible=True,
+                **values,
             )
         )
         inserted += 1
     if inserted:
         await session.flush()
     return inserted
+
+
+async def active_voting_class_for_user(
+    session: AsyncSession, user_id: uuid.UUID
+) -> SchoolClass | None:
+    result = await session.execute(
+        select(SchoolClass)
+        .join(ClassMembership, ClassMembership.class_id == SchoolClass.id)
+        .where(ClassMembership.user_id == user_id)
+        .where(ClassMembership.status == ClassMembershipStatus.ACTIVE)
+        .where(SchoolClass.is_active == True)  # noqa: E712
+        .order_by(ClassMembership.academic_year.desc(), SchoolClass.class_code.asc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
+async def _normalize_voting_attendance(
+    session: AsyncSession,
+    meeting: Meeting,
+    *,
+    values: dict,
+    existing: MeetingAttendance | None = None,
+) -> dict:
+    role = values.get("role", existing.role if existing else AttendanceRole.ATTENDEE)
+    is_voting = bool(
+        values.get(
+            "is_voting_eligible",
+            existing.is_voting_eligible if existing else False,
+        )
+    )
+    if role == AttendanceRole.VOTER:
+        is_voting = True
+    if is_voting:
+        values["role"] = AttendanceRole.VOTER
+        values["is_voting_eligible"] = True
+        user_id = values.get("user_id", existing.user_id if existing else None)
+        voting_class = await active_voting_class_for_user(session, user_id)
+        values["voting_class_id"] = voting_class.id if voting_class else None
+        if voting_class is not None:
+            duplicate = await session.scalar(
+                select(MeetingAttendance)
+                .where(MeetingAttendance.meeting_id == meeting.id)
+                .where(MeetingAttendance.voting_class_id == voting_class.id)
+                .where(MeetingAttendance.is_voting_eligible == True)  # noqa: E712
+                .where(
+                    MeetingAttendance.id != existing.id
+                    if existing is not None
+                    else MeetingAttendance.id.is_not(None)
+                )
+            )
+            if duplicate is None:
+                legacy_rows = await session.execute(
+                    select(MeetingAttendance)
+                    .where(MeetingAttendance.meeting_id == meeting.id)
+                    .where(MeetingAttendance.voting_class_id.is_(None))
+                    .where(MeetingAttendance.is_voting_eligible == True)  # noqa: E712
+                    .where(
+                        MeetingAttendance.id != existing.id
+                        if existing is not None
+                        else MeetingAttendance.id.is_not(None)
+                    )
+                )
+                for legacy_record in legacy_rows.scalars().all():
+                    legacy_class = await active_voting_class_for_user(
+                        session, legacy_record.user_id
+                    )
+                    if legacy_class and legacy_class.id == voting_class.id:
+                        duplicate = legacy_record
+                        break
+            if duplicate is not None:
+                label = class_svc.class_display_label(voting_class) or voting_class.class_code
+                raise ValueError(f"{label} 已有表決權人，請先移除原表決權人後再新增")
+    else:
+        values["is_voting_eligible"] = False
+        if role == AttendanceRole.VOTER:
+            values["role"] = AttendanceRole.ATTENDEE
+        values["voting_class_id"] = None
+    return values
+
+
+async def record_event(
+    session: AsyncSession,
+    meeting: Meeting,
+    *,
+    event_type: str,
+    actor_id: uuid.UUID | None = None,
+    agenda_item_id: uuid.UUID | None = None,
+    payload: dict | None = None,
+) -> MeetingEvent:
+    event = MeetingEvent(
+        meeting_id=meeting.id,
+        agenda_item_id=agenda_item_id,
+        event_type=event_type,
+        actor_id=actor_id,
+        payload=jsonable_encoder(payload or {}),
+    )
+    session.add(event)
+    await session.flush()
+    return event
+
+
+async def list_events(
+    session: AsyncSession, meeting_id: uuid.UUID, *, limit: int = 200
+) -> list[MeetingEvent]:
+    result = await session.execute(
+        select(MeetingEvent)
+        .where(MeetingEvent.meeting_id == meeting_id)
+        .order_by(MeetingEvent.created_at.asc())
+        .limit(limit)
+    )
+    return list(result.scalars().all())
 
 
 async def create_agenda_item(
@@ -641,11 +821,15 @@ async def upsert_attendance(
     )
     values = data.model_dump()
     if record is None:
+        values = await _normalize_voting_attendance(session, meeting, values=values)
         record = MeetingAttendance(meeting_id=meeting.id, **values)
         if record.status == AttendanceStatus.PRESENT and record.checked_in_at is None:
             record.checked_in_at = datetime.now(UTC)
         session.add(record)
     else:
+        values = await _normalize_voting_attendance(
+            session, meeting, values=values, existing=record
+        )
         for field, value in values.items():
             setattr(record, field, value)
         if record.status == AttendanceStatus.PRESENT and record.checked_in_at is None:
@@ -657,7 +841,16 @@ async def upsert_attendance(
 async def update_attendance(
     session: AsyncSession, record: MeetingAttendance, *, data: AttendanceUpdate
 ) -> MeetingAttendance:
-    for field, value in data.model_dump(exclude_unset=True).items():
+    meeting = await session.get(Meeting, record.meeting_id)
+    if meeting is None:
+        raise ValueError("找不到此會議")
+    values = await _normalize_voting_attendance(
+        session,
+        meeting,
+        values=data.model_dump(exclude_unset=True),
+        existing=record,
+    )
+    for field, value in values.items():
         setattr(record, field, value)
     if record.status == AttendanceStatus.PRESENT and record.checked_in_at is None:
         record.checked_in_at = datetime.now(UTC)
@@ -886,6 +1079,106 @@ async def decorate_vote(session: AsyncSession, vote: MeetingVote, *, include_bal
     }
 
 
+def _vote_roster_status(record: dict[str, int]) -> str:
+    choices = sum(1 for key in ("approve", "reject", "abstain") if record[key] > 0)
+    if choices > 1:
+        return "mixed"
+    if record["approve"] > 0:
+        return "approve"
+    if record["reject"] > 0:
+        return "reject"
+    if record["abstain"] > 0:
+        return "abstain"
+    return "not_voted"
+
+
+async def vote_roster_payload(
+    session: AsyncSession, meeting: Meeting, vote: MeetingVote | None
+) -> dict | None:
+    if vote is None:
+        return None
+
+    class_rows = await session.execute(
+        select(SchoolClass.id, SchoolClass.class_code, SchoolClass.label, SchoolClass.grade)
+        .where(SchoolClass.is_active == True)  # noqa: E712
+        .order_by(SchoolClass.grade.asc(), SchoolClass.class_code.asc())
+    )
+    records: dict[uuid.UUID | None, dict] = {
+        class_id: {
+            "class_id": class_id,
+            "class_code": class_code,
+            "label": label or class_code,
+            "grade": grade,
+            "eligible": 0,
+            "present": 0,
+            "approve": 0,
+            "reject": 0,
+            "abstain": 0,
+            "not_voted": 0,
+            "status": "not_voted",
+        }
+        for class_id, class_code, label, grade in class_rows.all()
+    }
+    unassigned = {
+        "class_id": None,
+        "class_code": "未分班",
+        "label": "未分班",
+        "grade": None,
+        "eligible": 0,
+        "present": 0,
+        "approve": 0,
+        "reject": 0,
+        "abstain": 0,
+        "not_voted": 0,
+        "status": "not_voted",
+    }
+    eligible_records = [
+        record for record in meeting.attendance_records if record.is_voting_eligible
+    ]
+    user_ids = [record.user_id for record in eligible_records if record.voting_class_id is None]
+    user_class: dict[uuid.UUID, uuid.UUID] = {}
+    if user_ids:
+        membership_rows = await session.execute(
+            select(ClassMembership.user_id, ClassMembership.class_id)
+            .join(SchoolClass, SchoolClass.id == ClassMembership.class_id)
+            .where(
+                ClassMembership.user_id.in_(user_ids),
+                ClassMembership.status == ClassMembershipStatus.ACTIVE,
+                SchoolClass.is_active == True,  # noqa: E712
+            )
+            .order_by(ClassMembership.academic_year.desc())
+        )
+        for user_id, class_id in membership_rows.all():
+            user_class.setdefault(user_id, class_id)
+
+    ballots = {ballot.voter_id: ballot.choice for ballot in vote.ballots}
+    for record in eligible_records:
+        class_id = record.voting_class_id or user_class.get(record.user_id)
+        target = records.get(class_id, unassigned)
+        target["eligible"] += 1
+        if record.status == AttendanceStatus.PRESENT:
+            target["present"] += 1
+
+        choice = ballots.get(record.user_id)
+        if choice == BallotChoice.APPROVE:
+            target["approve"] += 1
+        elif choice == BallotChoice.REJECT:
+            target["reject"] += 1
+        elif choice == BallotChoice.ABSTAIN:
+            target["abstain"] += 1
+        else:
+            target["not_voted"] += 1
+
+    for record in records.values():
+        record["status"] = _vote_roster_status(record)
+    unassigned["status"] = _vote_roster_status(unassigned)
+
+    return {
+        "classes": list(records.values()),
+        "unassigned": unassigned if unassigned["eligible"] > 0 else None,
+    }
+
+
 async def screen_payload(session: AsyncSession, meeting: Meeting) -> dict:
     current = next(
         (item for item in meeting.agenda_items if item.id == meeting.current_agenda_item_id), None
@@ -899,6 +1192,7 @@ async def screen_payload(session: AsyncSession, meeting: Meeting) -> dict:
         else None,
         "attendance_summary": await attendance_summary(session, meeting.id),
         "screen_state": await get_or_create_screen_state(session, meeting),
+        "vote_roster": await vote_roster_payload(session, meeting, active_vote),
     }
 
 
@@ -913,6 +1207,11 @@ async def join_payload(session: AsyncSession, meeting: Meeting, *, user_id: uuid
         (item for item in meeting.agenda_items if item.id == meeting.current_agenda_item_id), None
     )
     active_vote = next((vote for vote in meeting.votes if vote.status == VoteStatus.OPEN), None)
+    my_ballot = (
+        next((ballot for ballot in active_vote.ballots if ballot.voter_id == user_id), None)
+        if active_vote
+        else None
+    )
     return {
         "meeting": meeting,
         "current_agenda_item": current,
@@ -924,6 +1223,7 @@ async def join_payload(session: AsyncSession, meeting: Meeting, *, user_id: uuid
         "active_vote": await decorate_vote(session, active_vote, include_ballots=False)
         if active_vote
         else None,
+        "my_ballot": my_ballot,
     }
 
 
@@ -986,5 +1286,6 @@ async def minutes_payload(session: AsyncSession, meeting: Meeting) -> dict:
         "attendance_summary": summary,
         "agenda_items": sorted(meeting.agenda_items, key=lambda x: x.order_index),
         "votes": votes,
+        "events": await list_events(session, meeting.id),
         "markdown": "\n".join(lines),
     }

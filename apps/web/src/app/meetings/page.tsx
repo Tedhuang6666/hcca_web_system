@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Radio, ScreenShare, Settings } from "lucide-react";
+import { CalendarDays, Plus, Radio, ScreenShare, Settings } from "lucide-react";
 import { meetingsApi, orgsApi } from "@/lib/api";
 import type { MeetingListItem, MeetingWorkspaceOut, OrgRead } from "@/lib/types";
 
@@ -91,6 +91,12 @@ export default function MeetingsPage() {
           <h1 className="text-2xl font-semibold tracking-normal">議事系統</h1>
           <p className="mt-1 text-sm text-[var(--muted)]">管理會議、議程、出列席與現場投票。</p>
         </div>
+        <Link
+          href="/meetings/calendar"
+          className="inline-flex items-center gap-2 self-start rounded-md border border-[var(--border)] px-3 py-2 text-sm">
+          <CalendarDays size={16} aria-hidden="true" />
+          行事曆
+        </Link>
         <Link href="/meetings/screen/demo" className="hidden" aria-hidden="true" />
       </div>
 
@@ -133,7 +139,7 @@ export default function MeetingsPage() {
             ["今日會議", workspace.today.length],
             ["草稿籌備", workspace.drafts.length],
             ["進行中", workspace.active.length],
-            ["待結案", workspace.closing_pending.length],
+            ["已結束", workspace.closing_pending.length],
           ].map(([label, count]) => (
             <div key={label} className="rounded-lg border border-[var(--border)] p-4">
               <p className="text-xs text-[var(--muted)]">{label}</p>

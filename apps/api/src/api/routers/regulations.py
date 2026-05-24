@@ -1111,6 +1111,35 @@ async def get_workflow_logs(reg_id: str, session: DbDep, _: OptionalUser) -> lis
     return await reg_svc.list_workflow_logs(session, reg.id)
 
 
+@router.get(
+    "/{reg_id}/eligible-meetings",
+    summary="列出可推進此法案的會議（該法案已排入議程、同組織）",
+)
+async def list_eligible_meetings(reg_id: str, session: DbDep, _: CurrentUser) -> list[dict]:
+    from sqlalchemy import select as _sel
+
+    from api.models.meeting import Meeting, MeetingAgendaItem
+
+    reg = await _get_reg_or_404(reg_id, session)
+    result = await session.execute(
+        _sel(Meeting)
+        .join(MeetingAgendaItem, MeetingAgendaItem.meeting_id == Meeting.id)
+        .where(MeetingAgendaItem.regulation_id == reg.id)
+        .order_by(Meeting.starts_at.desc().nulls_last())
+        .distinct()
+    )
+    return [
+        {
+            "id": str(m.id),
+            "title": m.title,
+            "status": m.status,
+            "bill_stage": m.bill_stage,
+            "starts_at": m.starts_at.isoformat() if m.starts_at else None,
+        }
+        for m in result.scalars().all()
+    ]
+
+
 # ── 修訂差異比對 ─────────────────────────────────────────────────────────────
 
 
@@ -1223,6 +1252,26 @@ def _workflow_action(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail=f"需要 {required_perm} 權限",
                 )
+        # 排入議程／議會核定一律須透過會議：必須指定一場該法案已在議程上的會議
+        if payload.meeting_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"{summary}須透過會議進行，請指定一場已將此法案排入議程的會議",
+            )
+        meeting = await meeting_svc.get_meeting(session, payload.meeting_id)
+        if meeting is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="找不到指定的議事會議",
+            )
+        # 不檢查 org 相等：議會（母組織）可審議各子組織提交的法案，
+        # 與 meeting 端 list_proposable_regulations / advance_agenda_regulation 的跨組織設計一致。
+        agenda_item = next((ai for ai in meeting.agenda_items if ai.regulation_id == reg.id), None)
+        if agenda_item is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="此法案尚未排入該會議議程，請先於會議端將其帶入議程",
+            )
         try:
             result = await reg_svc.transition_workflow(
                 session,
@@ -1233,23 +1282,6 @@ def _workflow_action(
             )
         except ValueError as e:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
-        agenda_item_id: str | None = None
-        if to_status == RegulationWorkflowStatus.SCHEDULED and payload.meeting_id is not None:
-            meeting = await meeting_svc.get_meeting(session, payload.meeting_id)
-            if meeting is None:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="找不到指定的議事會議",
-                )
-            if meeting.org_id != reg.org_id:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail="指定會議與法規所屬組織不同",
-                )
-            item = await meeting_svc.create_agenda_item_for_regulation(
-                session, meeting, regulation_id=reg.id, note=payload.note
-            )
-            agenda_item_id = str(item.id)
         await audit_svc.record(
             session,
             entity_type="regulation",
@@ -1260,10 +1292,10 @@ def _workflow_action(
             meta={
                 "to_status": to_status.value,
                 "note": payload.note,
-                "meeting_id": str(payload.meeting_id) if payload.meeting_id else None,
-                "agenda_item_id": agenda_item_id,
+                "meeting_id": str(payload.meeting_id),
+                "agenda_item_id": str(agenda_item.id),
             },
-            summary=f"{summary}「{reg.title}」",
+            summary=f"{summary}「{reg.title}」（經會議「{meeting.title}」）",
         )
         return result
 

@@ -3,18 +3,38 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
+type ModalSize = "sm" | "md" | "lg" | "xl" | "full";
+
 interface ModalProps {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  /** 標準尺寸（會自動對應 max-width）。優先於 maxWidthClassName。 */
+  size?: ModalSize;
+  /** 行動裝置（<640px）自動全屏（預設 true）。 */
+  mobileFullscreen?: boolean;
+  /** 底部 sticky 動作列。 */
+  footer?: ReactNode;
+  /** @deprecated 使用 size 取代。為了不破壞既有 callers 而保留。 */
   maxWidthClassName?: string;
 }
+
+const SIZE_CLASS: Record<ModalSize, string> = {
+  sm: "max-w-sm",
+  md: "max-w-md",
+  lg: "max-w-lg",
+  xl: "max-w-2xl",
+  full: "max-w-full",
+};
 
 export default function Modal({
   title,
   onClose,
   children,
-  maxWidthClassName = "max-w-lg",
+  size,
+  mobileFullscreen = true,
+  footer,
+  maxWidthClassName,
 }: ModalProps) {
   const [mounted, setMounted] = useState(false);
 
@@ -27,18 +47,34 @@ export default function Modal({
     };
   }, []);
 
+  // ESC 鍵關閉
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onClose]);
+
   if (!mounted) return null;
+
+  const widthClass = size ? SIZE_CLASS[size] : (maxWidthClassName ?? "max-w-lg");
+
+  // 行動裝置全屏：sm: 之下用 100% / 100vh
+  const mobileClass = mobileFullscreen
+    ? "h-full max-h-full sm:my-auto sm:h-auto sm:max-h-[calc(100vh-2rem)]"
+    : "my-auto max-h-[calc(100vh-2rem)]";
+  const mobileRadius = mobileFullscreen ? "rounded-none sm:rounded-2xl" : "rounded-2xl";
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center"
+      className={`fixed inset-0 z-50 flex justify-center overflow-y-auto sm:items-center ${mobileFullscreen ? "items-stretch p-0 sm:p-4" : "items-start p-4"}`}
       style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}
       role="dialog"
       aria-modal="true"
       aria-label={title}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
-        className={`my-auto flex max-h-[calc(100vh-2rem)] w-full ${maxWidthClassName} flex-col rounded-2xl shadow-2xl`}
+        className={`flex w-full ${widthClass} flex-col shadow-2xl ${mobileClass} ${mobileRadius}`}
         style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
       >
         <div
@@ -70,6 +106,14 @@ export default function Modal({
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-5 pt-4">{children}</div>
+        {footer && (
+          <div
+            className="flex flex-shrink-0 items-center justify-end gap-2 px-5 py-3 flex-wrap"
+            style={{ borderTop: "1px solid var(--border)", background: "var(--bg-elevated)" }}
+          >
+            {footer}
+          </div>
+        )}
       </div>
     </div>,
     document.body,

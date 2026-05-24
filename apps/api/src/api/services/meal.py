@@ -28,6 +28,7 @@ from api.models.meal import (
     MenuItem,
     MenuSchedule,
 )
+from api.models.org import Org
 from api.schemas.meal import (
     MealAvailabilityCreate,
     MealOrderCreate,
@@ -93,6 +94,27 @@ async def generate_class_pickup_code(session: AsyncSession, max_attempts: int = 
 # ── 商家 CRUD ─────────────────────────────────────────────────────────────────
 
 
+async def _get_or_create_vendor_root_org(session: AsyncSession) -> Org:
+    root = await session.scalar(select(Org).where(Org.name == "學餐商家", Org.parent_id.is_(None)))
+    if root is None:
+        root = Org(name="學餐商家", description="學餐平台自動建立的商家組織群")
+        session.add(root)
+        await session.flush()
+    return root
+
+
+async def _create_vendor_org(session: AsyncSession, vendor_name: str) -> uuid.UUID:
+    root = await _get_or_create_vendor_root_org(session)
+    org = Org(
+        name=f"商家：{vendor_name}",
+        description="學餐商家自動建立的 RBAC 組織",
+        parent_id=root.id,
+    )
+    session.add(org)
+    await session.flush()
+    return org.id
+
+
 async def get_vendor(session: AsyncSession, vendor_id: uuid.UUID) -> MealVendor | None:
     result = await session.execute(select(MealVendor).where(MealVendor.id == vendor_id))
     return result.scalar_one_or_none()
@@ -120,17 +142,20 @@ async def list_vendors(
 async def create_vendor(
     session: AsyncSession, *, data: MealVendorCreate, created_by: uuid.UUID
 ) -> MealVendor:
+    org_id = data.org_id or await _create_vendor_org(session, data.name)
     vendor = MealVendor(
         name=data.name,
         description=data.description,
         contact_phone=data.contact_phone,
         contact_email=data.contact_email,
-        org_id=data.org_id,
+        org_id=org_id,
         created_by=created_by,
         status=data.status or MealVendorStatus.APPROVED,
     )
     session.add(vendor)
     await session.flush()
+    if data.manager_email:
+        await assign_vendor_manager(session, vendor, str(data.manager_email))
     logger.info("商家建立 id=%s name=%s", vendor.id, vendor.name)
     return vendor
 
@@ -138,7 +163,9 @@ async def create_vendor(
 async def create_vendor_application(
     session: AsyncSession, *, data: MealVendorApplicationCreate
 ) -> MealVendorApplication:
-    app = MealVendorApplication(**data.model_dump(), status=MealVendorStatus.PENDING_REVIEW)
+    payload = data.model_dump()
+    payload["org_id"] = data.org_id or await _create_vendor_org(session, data.name)
+    app = MealVendorApplication(**payload, status=MealVendorStatus.PENDING_REVIEW)
     session.add(app)
     await session.flush()
     return app
@@ -285,7 +312,7 @@ async def create_availability(
 ) -> MealProductAvailability:
     product = await get_product(session, data.product_id)
     if product is None or not product.is_active:
-        raise ValueError("找不到此商品或商品已停用")
+        raise ValueError("找不到商品或已停用")
     availability = MealProductAvailability(
         product_id=product.id,
         vendor_id=product.vendor_id,
@@ -298,6 +325,7 @@ async def create_availability(
         ),
         note=data.note,
     )
+    availability.product = product
     for slot in data.pickup_slots:
         if slot.order_deadline >= slot.pickup_start:
             raise ValueError("取餐時段的訂購截止時間必須早於取餐開始時間")
@@ -335,6 +363,7 @@ async def bulk_create_weekly_availabilities(
                     price=product.price,
                     max_quantity=product.default_max_quantity,
                 )
+                availability.product = product
                 for slot in data.pickup_slots:
                     availability.pickup_slots.append(MealPickupSlot(**slot.model_dump()))
                 session.add(availability)

@@ -488,6 +488,9 @@ class DocumentCreate(BaseModel):
     serial_template_id: uuid.UUID | None = Field(
         None, description="字號模板 ID（由長官以 doc.issue 權限建立）"
     )
+    manual_serial_number: str | None = Field(
+        None, min_length=1, max_length=30, description="手動指定公文字號；需確保不重複"
+    )
     # 公文格式欄位
     urgency: DocumentUrgency = Field(DocumentUrgency.NORMAL, description="速別")
     classification: DocumentClassification = Field(

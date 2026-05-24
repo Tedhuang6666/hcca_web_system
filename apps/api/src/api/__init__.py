@@ -20,6 +20,7 @@ from api.routers import (
     announcements,
     audit,
     auth,
+    dashboard,
     documents,
     email,
     line_webhook,
@@ -28,6 +29,7 @@ from api.routers import (
     mfa,
     notifications,
     orgs,
+    partner_map,
     petitions,
     positions,
     regulations,
@@ -35,6 +37,7 @@ from api.routers import (
     school_class,
     shop,
     survey,
+    tasks,
     user_positions,
     users,
     ws,
@@ -100,6 +103,7 @@ def create_app() -> FastAPI:
     app.include_router(announcements.router)
     app.include_router(admin.router)
     app.include_router(orgs.router)
+    app.include_router(partner_map.router)
     app.include_router(petitions.router)
     app.include_router(positions.router)
     app.include_router(user_positions.router)
@@ -117,6 +121,8 @@ def create_app() -> FastAPI:
     app.include_router(notifications.router)
     app.include_router(email.router)
     app.include_router(analytics.router)
+    app.include_router(dashboard.router)
+    app.include_router(tasks.router)
     app.include_router(line_webhook.router)
     app.include_router(ws.router)
 

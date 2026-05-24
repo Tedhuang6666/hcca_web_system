@@ -1,14 +1,7 @@
 "use client";
 import { useEffect, useRef, useCallback } from "react";
 import { silentRefresh } from "@/lib/api";
-
-function getWsBase(): string {
-  const configured = process.env.NEXT_PUBLIC_WS_URL;
-  if (configured) return configured.replace(/^http/, "ws").replace(/\/$/, "");
-  if (typeof window === "undefined") return "ws://localhost:8000";
-  const proto = window.location.protocol === "https:" ? "wss" : "ws";
-  return `${proto}://${window.location.host}`;
-}
+import { wsBase } from "@/lib/config";
 
 export interface WsMessage {
   type: string;
@@ -41,7 +34,7 @@ export function useWS(
   const connect = useCallback(() => {
     if (!room || !enabled) return;
     const safeRoom = encodeURIComponent(room);
-    const url = `${getWsBase()}/ws/${safeRoom}`;
+    const url = `${wsBase()}/ws/${safeRoom}`;
     const mySession = sessionId.current;
 
     const socket = new WebSocket(url);
@@ -86,10 +79,12 @@ export function useWS(
   }, [room, enabled]);
 
   useEffect(() => {
+    const activeSession = sessionId.current + 1;
+    sessionId.current = activeSession;
     retries.current = 0;
     connect();
     return () => {
-      sessionId.current++;          // 使所有進行中的 async onclose 失效
+      sessionId.current = activeSession + 1; // 使所有進行中的 async onclose 失效
       ws.current?.close(1000, "component unmounted");
       ws.current = null;
     };

@@ -56,6 +56,15 @@ class RegulationBrief(BaseModel):
     source_regulation_id: uuid.UUID | None = None
 
 
+class SchoolClassBrief(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    class_code: str
+    label: str | None = None
+    grade: int | None = None
+
+
 class MeetingCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     org_id: uuid.UUID
@@ -84,6 +93,11 @@ class MeetingUpdate(BaseModel):
     current_agenda_item_id: uuid.UUID | None = None
     screen_focus_title: str | None = Field(None, max_length=200)
     screen_focus_body: str | None = None
+
+
+class MeetingConfirmCreate(BaseModel):
+    notice_serial_template_id: uuid.UUID | None = None
+    notice_serial_number: str | None = Field(None, min_length=1, max_length=30)
 
 
 class AgendaItemCreate(BaseModel):
@@ -204,11 +218,13 @@ class AttendanceOut(BaseModel):
     status: AttendanceStatus
     checked_in_at: datetime | None
     is_voting_eligible: bool
+    voting_class_id: uuid.UUID | None = None
     proxy_for_user_id: uuid.UUID | None
     note: str | None
     created_at: datetime
     updated_at: datetime
     user: UserBrief | None = None
+    voting_class: SchoolClassBrief | None = None
     proxy_for_user: UserBrief | None = None
 
 
@@ -406,6 +422,25 @@ class VoteOut(BaseModel):
     ballots: list[BallotOut] = []
 
 
+class VoteRosterClassOut(BaseModel):
+    class_id: uuid.UUID | None = None
+    class_code: str
+    label: str
+    grade: int | None = None
+    eligible: int
+    present: int
+    approve: int
+    reject: int
+    abstain: int
+    not_voted: int
+    status: str
+
+
+class VoteRosterOut(BaseModel):
+    classes: list[VoteRosterClassOut] = []
+    unassigned: VoteRosterClassOut | None = None
+
+
 class MeetingListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -415,6 +450,7 @@ class MeetingListItem(BaseModel):
     location: str | None
     chair_name: str | None
     starts_at: datetime | None
+    ends_at: datetime | None = None
     status: MeetingStatus
     expected_voters: int
     quorum_count: int
@@ -471,6 +507,7 @@ class MeetingOut(MeetingListItem):
     motions: list[MotionOut] = []
     decisions: list[DecisionOut] = []
     screen_state: ScreenStateOut | None = None
+    events: list[MeetingEventOut] = []
 
 
 class MeetingScreenOut(BaseModel):
@@ -479,6 +516,7 @@ class MeetingScreenOut(BaseModel):
     active_vote: VoteOut | None
     attendance_summary: dict[str, int]
     screen_state: ScreenStateOut | None = None
+    vote_roster: VoteRosterOut | None = None
 
 
 class MeetingJoinOut(BaseModel):
@@ -488,6 +526,7 @@ class MeetingJoinOut(BaseModel):
     is_rostered: bool
     can_vote: bool
     active_vote: VoteOut | None
+    my_ballot: BallotOut | None = None
 
 
 class MeetingWorkspaceOut(BaseModel):
@@ -502,6 +541,7 @@ class MeetingMinutesOut(BaseModel):
     attendance_summary: dict[str, int]
     agenda_items: list[AgendaItemOut]
     votes: list[VoteOut]
+    events: list[MeetingEventOut] = []
     markdown: str
 
 
@@ -509,3 +549,15 @@ class MeetingDocumentDraftOut(BaseModel):
     document_id: uuid.UUID
     title: str
     status: str
+
+
+class MeetingEventOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    meeting_id: uuid.UUID
+    agenda_item_id: uuid.UUID | None = None
+    event_type: str
+    actor_id: uuid.UUID | None = None
+    payload: dict = {}
+    created_at: datetime

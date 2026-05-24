@@ -800,7 +800,7 @@ function StatsView() {
 
   useEffect(() => {
     Promise.all([
-      orgsApi.list().catch(() => []),
+      orgsApi.list({ active_only: true }).catch(() => []),
       shopApi.listProducts({ limit: "100" }).catch(() => []),
       classApi.list({ limit: "500" }).catch(() => []),
       shopApi.orderSummary({ group_by: "user" }).catch(() => null),
@@ -1128,7 +1128,7 @@ export default function ShopAdminPage() {
     if (!allowed) return;
     loadCategories();
     loadAllProducts();
-    orgsApi.list().then(setOrgs).catch(() => setOrgs([]));
+    orgsApi.list({ active_only: true }).then(setOrgs).catch(() => setOrgs([]));
   }, [allowed, loadAllProducts, loadCategories]);
 
   useEffect(() => { if (cat) loadSeries(cat.id); }, [cat, loadSeries]);

@@ -6,7 +6,7 @@ import uuid
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -49,8 +49,10 @@ from api.schemas.meal import (
     VendorManagerAssignRequest,
     VendorManagerOut,
 )
+from api.schemas.shop import ImageUploadOut
 from api.services import audit as audit_svc
 from api.services import meal as meal_svc
+from api.services.storage import get_storage
 
 router = APIRouter(prefix="/meal", tags=["學餐訂購系統"])
 
@@ -126,6 +128,21 @@ async def _order_or_404(order_id: uuid.UUID, session: DbDep) -> MealOrder:
 # ══════════════════════════════════════════════════════════════════════════════
 # 商家端點（meal:manage 才能新增/修改）
 # ══════════════════════════════════════════════════════════════════════════════
+
+
+@router.post(
+    "/images",
+    response_model=ImageUploadOut,
+    summary="上傳學餐商品圖片（meal:manage）",
+    dependencies=[Depends(require_permission(PermissionCode.MEAL_MANAGE))],
+)
+async def upload_meal_image(_: CurrentUser, file: UploadFile = File(...)) -> ImageUploadOut:
+    storage = get_storage()
+    try:
+        stored = await storage.save(file, prefix="meal")
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    return ImageUploadOut(url=stored.url)
 
 
 @router.get("/vendors", response_model=list[MealVendorOut], summary="列出商家")
@@ -210,7 +227,10 @@ async def get_vendor(vendor_id: uuid.UUID, session: DbDep, _: CurrentUser) -> Me
 async def create_vendor(
     payload: MealVendorCreate, session: DbDep, current_user: CurrentUser
 ) -> MealVendor:
-    vendor = await meal_svc.create_vendor(session, data=payload, created_by=current_user.id)
+    try:
+        vendor = await meal_svc.create_vendor(session, data=payload, created_by=current_user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     await audit_svc.record(
         session,
         entity_type="meal_vendor",
@@ -218,7 +238,11 @@ async def create_vendor(
         action="meal.vendor_create",
         actor_id=str(current_user.id),
         actor_email=current_user.email,
-        meta={"org_id": str(vendor.org_id), "name": vendor.name},
+        meta={
+            "org_id": str(vendor.org_id),
+            "name": vendor.name,
+            "manager_email": str(payload.manager_email) if payload.manager_email else None,
+        },
         summary=f"建立學餐商家「{vendor.name}」",
     )
     return vendor
@@ -269,8 +293,8 @@ async def update_vendor(
     "/vendors/{vendor_id}/managers",
     response_model=VendorManagerOut,
     status_code=status.HTTP_201_CREATED,
-    summary="指派商家管理員（admin:all）",
-    dependencies=[Depends(require_permission(PermissionCode.ADMIN_ALL))],
+    summary="指派商家管理員（meal:manage）",
+    dependencies=[Depends(require_permission(PermissionCode.MEAL_MANAGE))],
 )
 async def assign_vendor_manager(
     vendor_id: uuid.UUID,
@@ -325,8 +349,8 @@ async def list_vendor_managers(
 @router.delete(
     "/vendors/{vendor_id}/managers/{user_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="移除商家管理人（admin:all）",
-    dependencies=[Depends(require_permission(PermissionCode.ADMIN_ALL))],
+    summary="移除商家管理人（meal:manage）",
+    dependencies=[Depends(require_permission(PermissionCode.MEAL_MANAGE))],
 )
 async def remove_vendor_manager(
     vendor_id: uuid.UUID, user_id: uuid.UUID, session: DbDep, _: CurrentUser

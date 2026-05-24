@@ -117,7 +117,7 @@ class Settings(BaseSettings):
     SECURITY_HSTS_MAX_AGE_SECONDS: int = 31_536_000
     SECURITY_CSP: str = (
         "default-src 'self'; "
-        "img-src 'self' data:; "
+        "img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com; "
         "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
         "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
         "frame-ancestors 'none'; "

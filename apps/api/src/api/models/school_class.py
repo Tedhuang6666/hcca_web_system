@@ -15,6 +15,7 @@ from api.core.database import Base
 from api.models.base import TimestampMixin
 
 if TYPE_CHECKING:
+    from api.models.org import Position
     from api.models.user import User
 
 
@@ -135,6 +136,7 @@ class ClassRoleBinding(Base, TimestampMixin):
     )
 
     school_class: Mapped[SchoolClass] = relationship("SchoolClass", back_populates="role_bindings")
+    position: Mapped[Position] = relationship("Position")
 
 
 class ClassStudentRange(Base, TimestampMixin):

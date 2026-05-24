@@ -2,10 +2,37 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronRight, Gavel, Monitor, Pause, Play, Plus, Square, Vote } from "lucide-react";
-import { meetingsApi } from "@/lib/api";
+import {
+  ChevronRight,
+  FileText,
+  Gavel,
+  ListChecks,
+  Monitor,
+  Pause,
+  Play,
+  Plus,
+  Send,
+  Square,
+  Type,
+  Vote,
+} from "lucide-react";
+import { meetingsApi, regulationsApi } from "@/lib/api";
 import { useWS } from "@/hooks/useWS";
-import type { MeetingOut, MeetingScreenOut, MeetingScreenReadingMode } from "@/lib/types";
+import type {
+  MeetingOut,
+  MeetingAgendaItemOut,
+  MeetingScreenOut,
+  MeetingScreenReadingMode,
+  MeetingScreenStateOut,
+  RegulationArticleOut,
+} from "@/lib/types";
+
+const STATUS_LABEL: Record<string, string> = {
+  draft: "草稿",
+  active: "進行中",
+  paused: "暫停",
+  closed: "已結束",
+};
 
 const WORKFLOW_LABEL: Record<string, string> = {
   draft: "草稿",
@@ -26,10 +53,16 @@ export default function MeetingControlPage({ params }: { params: Promise<{ id: s
   const [focusTitle, setFocusTitle] = useState("");
   const [focusBody, setFocusBody] = useState("");
   const [readingMode, setReadingMode] = useState<MeetingScreenReadingMode>("article");
+  // 法條朗讀：從議程上的法規直接選條文（取代手打）
+  const [pickerRegId, setPickerRegId] = useState("");
+  const [pickerArticles, setPickerArticles] = useState<RegulationArticleOut[]>([]);
+  const [pickerArticleId, setPickerArticleId] = useState("");
   const [scrollPosition, setScrollPosition] = useState(0);
   const [scrollSpeed, setScrollSpeed] = useState(1);
   const [autoScroll, setAutoScroll] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     void params.then(({ id: nextId }) => setId(nextId));
@@ -70,18 +103,59 @@ export default function MeetingControlPage({ params }: { params: Promise<{ id: s
       ? Math.max(...meeting.agenda_items.map((item) => item.order_index)) + 1
       : 0;
 
-  async function run(action: () => Promise<unknown>) {
+  // 議程上關聯到的法規（去重），供「法條朗讀」直接挑選條文
+  const agendaRegulations = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const it of meeting?.agenda_items ?? []) {
+      if (it.regulation_id && it.regulation) seen.set(it.regulation_id, it.regulation.title);
+    }
+    return [...seen.entries()].map(([rid, title]) => ({ id: rid, title }));
+  }, [meeting]);
+
+  // 預設選取目前議程項目所關聯的法規
+  useEffect(() => {
+    if (current?.regulation_id) setPickerRegId((prev) => prev || current.regulation_id!);
+  }, [current]);
+
+  // 載入選定法規的條文
+  useEffect(() => {
+    if (!pickerRegId) {
+      setPickerArticles([]);
+      return;
+    }
+    let cancelled = false;
+    regulationsApi
+      .listArticles(pickerRegId)
+      .then((arts) => {
+        if (!cancelled) setPickerArticles(arts.filter((a) => !a.is_deleted));
+      })
+      .catch(() => {
+        if (!cancelled) setPickerArticles([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pickerRegId]);
+
+  async function run<T>(action: () => Promise<T>, success = "操作已完成"): Promise<T | undefined> {
+    setBusy(true);
     try {
-      await action();
+      setNotice("處理中...");
+      const result = await action();
       await load();
+      setNotice(success);
+      return result;
     } catch (err) {
       setError(err instanceof Error ? err.message : "操作失敗");
+      return undefined;
+    } finally {
+      setBusy(false);
     }
   }
 
   async function pushScreenState(overrides: Record<string, unknown> = {}) {
     if (!meeting) return;
-    await run(() =>
+    const state = await run<MeetingScreenStateOut>(() =>
       meetingsApi.updateScreenState(meeting.id, {
         agenda_item_id: meeting.current_agenda_item_id,
         reading_mode: readingMode,
@@ -93,6 +167,37 @@ export default function MeetingControlPage({ params }: { params: Promise<{ id: s
         ...overrides,
       }),
     );
+    if (state) {
+      setMeeting((prev) =>
+        prev
+          ? {
+              ...prev,
+              current_agenda_item_id: state.agenda_item_id ?? prev.current_agenda_item_id,
+              screen_state: state,
+            }
+          : prev,
+      );
+      setError("");
+    }
+  }
+
+  async function selectAgendaAndPush(item: MeetingAgendaItemOut) {
+    if (!meeting) return;
+    setReadingMode("agenda");
+    setFocusTitle(item.title);
+    setFocusBody(item.description || "");
+    setScrollPosition(0);
+    await run(async () => {
+      await meetingsApi.update(meeting.id, { current_agenda_item_id: item.id });
+      return meetingsApi.updateScreenState(meeting.id, {
+        agenda_item_id: item.id,
+        reading_mode: "agenda",
+        title: item.title,
+        body: item.description || null,
+        scroll_position: 0,
+        auto_scroll: false,
+      });
+    });
   }
 
   if (error && !meeting) return <main className="p-6 text-sm text-red-500">{error}</main>;
@@ -107,6 +212,7 @@ export default function MeetingControlPage({ params }: { params: Promise<{ id: s
         : null;
   const advanceLabel =
     meeting.bill_stage === "standing_committee" ? "排入議會議程" : "議會核定";
+  const screenState = meeting.screen_state;
 
   return (
     <main className="mx-auto grid w-full max-w-7xl gap-5 px-5 py-6 xl:grid-cols-[1.1fr_0.9fr]">
@@ -125,33 +231,66 @@ export default function MeetingControlPage({ params }: { params: Promise<{ id: s
           </Link>
         </div>
 
-        {error && <p className="mb-4 text-sm text-red-500">{error}</p>}
+        {error && <p role="alert" className="mb-4 text-sm text-red-500">{error}</p>}
+        {notice && <p role="status" aria-live="polite" className="mb-4 text-sm text-emerald-500">{notice}</p>}
 
-        <div className="mb-5 flex flex-wrap gap-2">
-          <button
-            onClick={() => run(() => meetingsApi.start(meeting.id))}
-            className="inline-flex items-center gap-2 rounded-md bg-green-600 px-3 py-2 text-sm font-medium text-white">
-            <Play size={15} aria-hidden="true" />
-            開始
-          </button>
-          <button
-            onClick={() => run(() => meetingsApi.pause(meeting.id))}
-            className="inline-flex items-center gap-2 rounded-md border border-[var(--border)] px-3 py-2 text-sm">
-            <Pause size={15} aria-hidden="true" />
-            暫停
-          </button>
-          <button
-            onClick={() => run(() => meetingsApi.close(meeting.id))}
-            className="inline-flex items-center gap-2 rounded-md border border-[var(--border)] px-3 py-2 text-sm">
-            <Square size={15} aria-hidden="true" />
-            結束
-          </button>
+        <div className="mb-5 flex flex-wrap items-center gap-2">
+          <span className="rounded-full border border-[var(--border)] px-3 py-1 text-xs text-[var(--muted)]">
+            狀態：{STATUS_LABEL[meeting.status] ?? meeting.status}
+          </span>
+          {(meeting.status === "draft" || meeting.status === "paused") && (
+            <button
+              onClick={() => run(() => meetingsApi.start(meeting.id))}
+              disabled={busy}
+              className="inline-flex items-center gap-2 rounded-md bg-green-600 px-3 py-2 text-sm font-medium text-white">
+              <Play size={15} aria-hidden="true" />
+              {meeting.status === "paused" ? "繼續" : "開始"}
+            </button>
+          )}
+          {meeting.status === "active" && (
+            <button
+              onClick={() => run(() => meetingsApi.pause(meeting.id))}
+              disabled={busy}
+              className="inline-flex items-center gap-2 rounded-md border border-[var(--border)] px-3 py-2 text-sm">
+              <Pause size={15} aria-hidden="true" />
+              暫停
+            </button>
+          )}
+          {(meeting.status === "active" || meeting.status === "paused") && (
+            <button
+              onClick={() => {
+                if (confirm("確定結束會議？結束後將無法重新開啟。")) {
+                  void run(() => meetingsApi.close(meeting.id));
+                }
+              }}
+              disabled={busy}
+              className="inline-flex items-center gap-2 rounded-md border border-red-500 px-3 py-2 text-sm font-medium text-red-500">
+              <Square size={15} aria-hidden="true" />
+              結束
+            </button>
+          )}
+          {meeting.status === "closed" && (
+            <span className="text-sm text-[var(--muted)]">會議已結束</span>
+          )}
         </div>
 
         <section className="mb-5 rounded-lg border border-[var(--border)] p-4">
-          <p className="text-xs font-medium text-[var(--muted)]">大屏目前議案</p>
-          <h2 className="mt-1 text-xl font-semibold">{current?.title || "尚未選定"}</h2>
-          {current?.description && <p className="mt-2 whitespace-pre-wrap text-sm">{current.description}</p>}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-xs font-medium text-[var(--muted)]">大屏目前顯示</p>
+              <h2 className="mt-1 text-xl font-semibold">
+                {screenState?.title || current?.title || "尚未選定"}
+              </h2>
+              {(screenState?.body || current?.description) && (
+                <p className="mt-2 line-clamp-3 whitespace-pre-wrap text-sm">
+                  {screenState?.body || current?.description}
+                </p>
+              )}
+            </div>
+            <span className="shrink-0 rounded-full border border-[var(--border)] px-3 py-1 text-xs text-[var(--muted)]">
+              模式：{screenState?.reading_mode ?? "未設定"}
+            </span>
+          </div>
         </section>
 
         <section className="mb-5 rounded-lg border border-[var(--border)] p-4">
@@ -160,12 +299,14 @@ export default function MeetingControlPage({ params }: { params: Promise<{ id: s
             {[...meeting.agenda_items].sort((a, b) => a.order_index - b.order_index).map((item) => (
               <div key={item.id} className="rounded-md border border-[var(--border)] p-3 text-sm">
                 <button
-                  onClick={() => run(() => meetingsApi.update(meeting.id, { current_agenda_item_id: item.id }))}
-                  className="flex w-full items-center justify-between text-left">
+                  onClick={() => void selectAgendaAndPush(item)}
+                  className="flex w-full items-center justify-between gap-3 text-left">
                   <span>
                     {item.order_index + 1}. {item.title}
                   </span>
-                  <ChevronRight size={15} aria-hidden="true" />
+                  <span className="inline-flex shrink-0 items-center gap-1 text-xs text-[var(--primary)]">
+                    推送 <ChevronRight size={15} aria-hidden="true" />
+                  </span>
                 </button>
                 {item.regulation && (
                   <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-[var(--border)] pt-2 text-xs text-[var(--muted)]">
@@ -228,6 +369,61 @@ export default function MeetingControlPage({ params }: { params: Promise<{ id: s
       <aside className="grid content-start gap-5">
         <section className="rounded-lg border border-[var(--border)] p-4">
           <h2 className="mb-3 text-lg font-semibold">即時朗讀 / 大屏遙控</h2>
+          <div className="mb-3 grid grid-cols-2 gap-2">
+            <button
+              onClick={() =>
+                pushScreenState({
+                  reading_mode: "agenda",
+                  title: current?.title || null,
+                  body: current?.description || null,
+                  scroll_position: 0,
+                  auto_scroll: false,
+                })
+              }
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-[var(--border)] px-3 py-2 text-sm">
+              <ListChecks size={15} aria-hidden="true" />
+              議程摘要
+            </button>
+            <button
+              onClick={() =>
+                pushScreenState({
+                  reading_mode: "vote",
+                  title: openVote?.title || "現場表決",
+                  body: openVote?.description || null,
+                  auto_scroll: false,
+                })
+              }
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-[var(--border)] px-3 py-2 text-sm">
+              <Vote size={15} aria-hidden="true" />
+              表決畫面
+            </button>
+            <button
+              onClick={() =>
+                pushScreenState({
+                  reading_mode: "article",
+                  title: focusTitle || null,
+                  body: focusBody || null,
+                  scroll_position: 0,
+                })
+              }
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-[var(--border)] px-3 py-2 text-sm">
+              <FileText size={15} aria-hidden="true" />
+              法條
+            </button>
+            <button
+              onClick={() =>
+                pushScreenState({
+                  reading_mode: "free_text",
+                  title: focusTitle || "主席提示",
+                  body: focusBody || null,
+                  scroll_position: 0,
+                })
+              }
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-[var(--border)] px-3 py-2 text-sm">
+              <Type size={15} aria-hidden="true" />
+              自由文字
+            </button>
+          </div>
           <select
             value={readingMode}
             onChange={(e) => setReadingMode(e.target.value as MeetingScreenReadingMode)}
@@ -238,10 +434,57 @@ export default function MeetingControlPage({ params }: { params: Promise<{ id: s
             <option value="vote">表決畫面</option>
             <option value="free_text">自由文字</option>
           </select>
+          {readingMode === "article" && (
+            <div className="mb-2 grid gap-2 rounded-md border border-[var(--border)] p-2">
+              <p className="text-xs text-[var(--muted)]">從議程法規直接挑選條文（免手打）</p>
+              <select
+                value={pickerRegId}
+                onChange={(e) => {
+                  setPickerRegId(e.target.value);
+                  setPickerArticleId("");
+                }}
+                className="w-full rounded-md border border-[var(--border)] bg-transparent px-3 py-2 text-sm">
+                <option value="">— 選擇法規 —</option>
+                {agendaRegulations.map((r) => (
+                  <option key={r.id} value={r.id}>{r.title}</option>
+                ))}
+              </select>
+              <select
+                value={pickerArticleId}
+                disabled={!pickerRegId || pickerArticles.length === 0}
+                onChange={(e) => {
+                  const art = pickerArticles.find((a) => a.id === e.target.value);
+                  setPickerArticleId(e.target.value);
+                  if (!art) return;
+                  const title = art.legal_number || art.title || "";
+                  const body = art.content || "";
+                  setReadingMode("article");
+                  setFocusTitle(title);
+                  setFocusBody(body);
+                  // 直接跳轉並推送到大屏
+                  void pushScreenState({ reading_mode: "article", title, body });
+                }}
+                className="w-full rounded-md border border-[var(--border)] bg-transparent px-3 py-2 text-sm disabled:opacity-50">
+                <option value="">
+                  {pickerRegId
+                    ? pickerArticles.length === 0
+                      ? "（此法規尚無條文）"
+                      : "— 選擇條文，選定即推送 —"
+                    : "— 請先選擇法規 —"}
+                </option>
+                {pickerArticles.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {(a.title || a.legal_number || "（未命名）") +
+                      (a.content ? `　${a.content.slice(0, 20)}` : "")}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <input
             value={focusTitle}
             onChange={(e) => setFocusTitle(e.target.value)}
-            placeholder="例如：第五條"
+            placeholder="例如：第五條（或由上方挑選自動帶入）"
             className="mb-2 w-full rounded-md border border-[var(--border)] bg-transparent px-3 py-2 text-sm"
           />
           <textarea
@@ -312,7 +555,8 @@ export default function MeetingControlPage({ params }: { params: Promise<{ id: s
           </label>
           <button
             onClick={() => pushScreenState()}
-            className="w-full rounded-md bg-[var(--primary)] px-3 py-2 text-sm font-medium text-black">
+            className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[var(--primary)] px-3 py-2 text-sm font-medium text-black">
+            <Send size={15} aria-hidden="true" />
             推送到大屏
           </button>
         </section>

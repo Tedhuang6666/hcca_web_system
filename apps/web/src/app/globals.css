@@ -1,4 +1,149 @@
 @import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+
+.partner-map-marker-shell {
+  background: transparent;
+  border: 0;
+}
+
+.partner-map-marker {
+  position: relative;
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 999px 999px 999px 8px;
+  background: var(--marker-color);
+  color: #fff;
+  border: 3px solid #fff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.22), 0 2px 6px rgba(15, 23, 42, 0.18);
+  transform: rotate(-45deg);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.partner-map-marker:hover {
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.28), 0 0 0 5px color-mix(in srgb, var(--marker-color) 18%, transparent);
+  transform: rotate(-45deg) scale(1.08);
+}
+
+.partner-map-marker-icon {
+  display: grid;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  transform: rotate(45deg);
+}
+
+.partner-map-marker-label {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 5px);
+  padding: 0.1rem 0.35rem;
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
+  transform: translateX(-50%) rotate(45deg);
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.partner-map-marker.has-offer::after {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  border-radius: inherit;
+  border: 2px solid rgba(16, 185, 129, 0.56);
+  animation: partner-marker-pulse 1.8s ease-out infinite;
+}
+
+[data-theme="dark"] .partner-map-marker {
+  border-color: #1f2433;
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.48), 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.partner-map-school-marker {
+  position: relative;
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #123b73, #0f172a 58%, #c9a84c);
+  color: #fff8db;
+  border: 3px solid #fff;
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.3), 0 0 0 7px rgba(201, 168, 76, 0.16);
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.partner-map-school-marker::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border-radius: 20px;
+  border: 1px solid rgba(201, 168, 76, 0.55);
+}
+
+.partner-map-user-marker {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #38bdf8;
+  border: 4px solid #fff;
+  box-shadow: 0 0 0 8px rgba(56, 189, 248, 0.22), 0 10px 24px rgba(14, 165, 233, 0.3);
+  animation: partner-user-pulse 1.8s ease-out infinite;
+}
+
+.partner-map-leaflet .leaflet-popup-content-wrapper,
+.partner-map-leaflet .leaflet-popup-tip {
+  background: var(--bg);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+}
+
+.partner-map-leaflet .leaflet-control-zoom a {
+  background: var(--bg) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border) !important;
+}
+
+.partner-map-leaflet .leaflet-control-attribution {
+  background: color-mix(in srgb, var(--bg) 86%, transparent) !important;
+  color: var(--text-muted) !important;
+}
+
+.partner-map-mobile-strip {
+  scrollbar-width: none;
+  scroll-padding-inline: 0.75rem;
+  -webkit-overflow-scrolling: touch;
+}
+
+.partner-map-mobile-strip::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes partner-marker-pulse {
+  0% { opacity: 0.9; transform: scale(0.86); }
+  100% { opacity: 0; transform: scale(1.25); }
+}
+
+@keyframes partner-user-pulse {
+  0% { box-shadow: 0 0 0 5px rgba(56, 189, 248, 0.34), 0 10px 24px rgba(14, 165, 233, 0.3); }
+  100% { box-shadow: 0 0 0 18px rgba(56, 189, 248, 0), 0 10px 24px rgba(14, 165, 233, 0.3); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .partner-map-marker.has-offer::after { animation: none; opacity: 0.65; }
+  .partner-map-user-marker { animation: none; }
+}
 
 /* ══════════════════════════════════════════════════════════════════════════
    HCCA Campus Platform — Design System v3

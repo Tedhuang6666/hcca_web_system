@@ -184,6 +184,14 @@ export default function RegulationDetailPageClient() {
     action: string; label: string; fn: (note: string) => Promise<void>;
     hint?: string; placeholder?: string;
   }>(null);
+  const [meetingPicker, setMeetingPicker] = useState<null | {
+    to: "schedule" | "council"; title: string;
+  }>(null);
+  const [pickerMeetings, setPickerMeetings] = useState<
+    { id: string; title: string; status: string; bill_stage: string | null }[]
+  >([]);
+  const [pickerMeetingId, setPickerMeetingId] = useState("");
+  const [pickerNote, setPickerNote] = useState("");
   const [showRepeal, setShowRepeal] = useState(false);
   const [repealReason, setRepealReason] = useState("");
   const [repealReplacementId, setRepealReplacementId] = useState("");
@@ -272,6 +280,34 @@ export default function RegulationDetailPageClient() {
       finally { setWfActionLoading(false); }
     }
   }, [reload]);
+
+  // 排入議程／議會核定：強制綁定一場該法案已在議程上的會議
+  const openMeetingPicker = useCallback(async (to: "schedule" | "council", title: string) => {
+    setMeetingPicker({ to, title });
+    setPickerMeetingId("");
+    setPickerNote("");
+    setPickerMeetings([]);
+    try {
+      setPickerMeetings(await regulationsApi.eligibleMeetings(id));
+    } catch { setPickerMeetings([]); }
+  }, [id]);
+
+  const confirmMeetingPicker = useCallback(async () => {
+    if (!meetingPicker || !pickerMeetingId) return;
+    setWfActionLoading(true);
+    try {
+      const note = pickerNote || undefined;
+      const updated = meetingPicker.to === "schedule"
+        ? await regulationsApi.scheduleAgenda(id, note, pickerMeetingId)
+        : await regulationsApi.councilApprove(id, note, pickerMeetingId);
+      setReg(updated);
+      toast.success(`${meetingPicker.title} 成功`);
+      setMeetingPicker(null);
+      reload();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "操作失敗");
+    } finally { setWfActionLoading(false); }
+  }, [meetingPicker, pickerMeetingId, pickerNote, id, reload]);
 
   // 分享（navigator.share + clipboard fallback）
   const handleShare = useCallback(async () => {
@@ -1150,12 +1186,12 @@ export default function RegulationDetailPageClient() {
                 )}
                 {/* 排入議程 */}
                 {reg.workflow_status === "under_review" && can("regulation:schedule") && (
-                  <button disabled={wfActionLoading} onClick={() => runWfAction("排入議程", (note) => regulationsApi.scheduleAgenda(id, note || undefined).then(setReg))}
+                  <button disabled={wfActionLoading} onClick={() => openMeetingPicker("schedule", "排入議程")}
                     className="btn btn-primary text-xs px-3 py-1.5">排入議程</button>
                 )}
                 {/* 議會核定 */}
                 {reg.workflow_status === "scheduled" && can("regulation:council_approve") && (
-                  <button disabled={wfActionLoading} onClick={() => runWfAction("議會核定", (note) => regulationsApi.councilApprove(id, note || undefined).then(setReg))}
+                  <button disabled={wfActionLoading} onClick={() => openMeetingPicker("council", "議會核定")}
                     className="btn btn-primary text-xs px-3 py-1.5">議會核定通過</button>
                 )}
                 {/* 主席公布（需填寫修正內容描述，生成主令公文） */}
@@ -1466,6 +1502,57 @@ export default function RegulationDetailPageClient() {
             } finally { setWfActionLoading(false); }
           }}
         />
+      )}
+
+      {/* ── 排入議程／議會核定：選擇會議 Modal ──────────────────────────────── */}
+      {meetingPicker && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setMeetingPicker(null)}>
+          <div className="w-full max-w-md rounded-xl bg-[var(--card,#fff)] p-5 shadow-xl"
+            style={{ background: "var(--card-bg, var(--background))" }}
+            onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-base font-semibold">{meetingPicker.title}</h3>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              此動作須透過會議進行，請選擇一場已將本法案排入議程的會議。
+            </p>
+            {pickerMeetings.length === 0 ? (
+              <p className="mt-4 rounded-lg p-3 text-xs"
+                style={{ color: "var(--danger)", background: "rgba(220,38,38,0.08)" }}>
+                目前沒有可用的會議。請先於會議端（同步待審法案或手動新增議程）將本法案排入議程。
+              </p>
+            ) : (
+              <>
+                <label className="mt-4 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                  選擇會議
+                </label>
+                <select
+                  value={pickerMeetingId}
+                  onChange={(e) => setPickerMeetingId(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-[var(--border)] bg-transparent px-3 py-2 text-sm">
+                  <option value="">— 請選擇 —</option>
+                  {pickerMeetings.map((m) => (
+                    <option key={m.id} value={m.id}>{m.title}</option>
+                  ))}
+                </select>
+                <label className="mt-3 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                  備註（選填）
+                </label>
+                <input
+                  value={pickerNote}
+                  onChange={(e) => setPickerNote(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-[var(--border)] bg-transparent px-3 py-2 text-sm" />
+              </>
+            )}
+            <div className="mt-5 flex justify-end gap-2">
+              <button onClick={() => setMeetingPicker(null)}
+                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs">取消</button>
+              <button
+                disabled={wfActionLoading || !pickerMeetingId}
+                onClick={confirmMeetingPicker}
+                className="btn btn-primary text-xs px-3 py-1.5 disabled:opacity-50">確認</button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );

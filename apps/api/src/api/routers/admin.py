@@ -943,6 +943,7 @@ async def query_permission_codes(
 async def list_orgs_with_positions(db: DbDep, _: AdminUser) -> list[dict]:
     result = await db.execute(
         select(Org)
+        .where(Org.is_active.is_(True))
         .options(selectinload(Org.positions).selectinload(Position.permissions))
         .order_by(Org.name)
     )

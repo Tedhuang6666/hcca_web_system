@@ -8,11 +8,12 @@ import type {
   CatalogCategoryOut,
   SchoolClassOut, SchoolClassListItem, SchoolClassBulkCreate, SchoolClassBulkCreateOut,
   ClassMemberOut, ClassStudentRangeOut, ClassCadreOut, ClassManualMemberOut,
-  ClassMembershipOut, ClassRoleBindingOut,
+  ClassMembershipOut, ClassRoleOut,
   RegulationOut, RegulationListItem, RegulationCategory, RegulationSearchResult,
   RegulationArticleOut, RegulationRevisionOut, RegulationWorkflowLogOut, RegulationTreeNodeOut,
   SerialTemplateOut,
   MeetingListItem, MeetingOut, MeetingScreenOut, MeetingMinutesOut, MeetingWorkspaceOut,
+  MeetingEventOut,
   MeetingJoinOut, MeetingScreenStateOut, MeetingArtifactLinkOut,
   MeetingAttendanceSourcePreviewOut, MeetingAttendanceSourceOut,
   MeetingMotionOut, MeetingDecisionOut,
@@ -39,6 +40,12 @@ import type {
   SurveyParticipationItem,
   EmailComposePayload, EmailMessageCreate, EmailMessageOut, EmailMessageDetailOut,
   RecipientSelector, RecipientPreviewOut, EmailPosition,
+  PartnerBusinessCreate, PartnerBusinessListItem, PartnerBusinessOut, PartnerBusinessUpdate,
+  PartnerLocationCreate, PartnerLocationOut, PartnerLocationUpdate,
+  PartnerMapItem, PartnerOfferCreate, PartnerOfferOut, PartnerOfferUpdate,
+  PartnerRankingItem, PartnerRatingCreate, PartnerRatingOut,
+  PartnerSubmissionCreate, PartnerSubmissionOut,
+  PartnerTagCreate, PartnerTagOut, PartnerTagUpdate,
 } from "./types";
 import { API_BASE, apiUrl } from "./config";
 
@@ -449,6 +456,78 @@ export const shopApi = {
   },
 };
 
+// ── 特約地圖 ──────────────────────────────────────────────────────────────────
+
+export const partnerMapApi = {
+  list: (params?: {
+    tag_ids?: string[];
+    keyword?: string;
+    min_lat?: string;
+    max_lat?: string;
+    min_lng?: string;
+    max_lng?: string;
+    has_active_offer?: boolean;
+    limit?: string;
+    offset?: string;
+  }) => {
+    const p = new URLSearchParams();
+    params?.tag_ids?.forEach((id) => p.append("tag_ids", id));
+    Object.entries(params ?? {}).forEach(([key, value]) => {
+      if (key === "tag_ids" || value === undefined || value === null || value === "") return;
+      p.set(key, String(value));
+    });
+    return get<PartnerMapItem[]>(`/partner-map${p.size ? `?${p.toString()}` : ""}`);
+  },
+  tags: () => get<PartnerTagOut[]>("/partner-map/tags"),
+  rankings: (limit = 10) => get<PartnerRankingItem[]>(`/partner-map/rankings?limit=${limit}`),
+  getBusiness: (id: string) => get<PartnerBusinessOut>(`/partner-map/businesses/${id}`),
+  recordClick: (id: string) => post<PartnerBusinessOut>(`/partner-map/businesses/${id}/click`, {}),
+  checkIn: (id: string) => post<PartnerBusinessOut>(`/partner-map/businesses/${id}/check-in`, {}),
+  listRatings: (id: string) => get<PartnerRatingOut[]>(`/partner-map/businesses/${id}/ratings`),
+  rateBusiness: (id: string, body: PartnerRatingCreate) =>
+    post<PartnerRatingOut>(`/partner-map/businesses/${id}/ratings`, body),
+  submitBusiness: (body: PartnerSubmissionCreate) =>
+    post<PartnerSubmissionOut>("/partner-map/submissions", body),
+
+  adminListBusinesses: (params?: { include_inactive?: boolean; limit?: string; offset?: string }) => {
+    const p = new URLSearchParams();
+    if (params?.include_inactive !== undefined) p.set("include_inactive", String(params.include_inactive));
+    if (params?.limit) p.set("limit", params.limit);
+    if (params?.offset) p.set("offset", params.offset);
+    return get<PartnerBusinessListItem[]>(`/partner-map/admin/businesses${p.size ? `?${p}` : ""}`);
+  },
+  adminGetBusiness: (id: string) => get<PartnerBusinessOut>(`/partner-map/admin/businesses/${id}`),
+  createBusiness: (body: PartnerBusinessCreate) =>
+    post<PartnerBusinessOut>("/partner-map/admin/businesses", body),
+  updateBusiness: (id: string, body: PartnerBusinessUpdate) =>
+    patch<PartnerBusinessOut>(`/partner-map/admin/businesses/${id}`, body),
+  deleteBusiness: (id: string) => del<void>(`/partner-map/admin/businesses/${id}`),
+  adminSubmissions: (params?: { status?: string }) => {
+    const qs = params?.status ? `?${new URLSearchParams({ status: params.status }).toString()}` : "";
+    return get<PartnerSubmissionOut[]>(`/partner-map/admin/submissions${qs}`);
+  },
+  reviewSubmission: (id: string, body: { status: string; review_note?: string | null; business_id?: string | null }) =>
+    patch<PartnerSubmissionOut>(`/partner-map/admin/submissions/${id}`, body),
+
+  adminTags: () => get<PartnerTagOut[]>("/partner-map/admin/tags"),
+  createTag: (body: PartnerTagCreate) => post<PartnerTagOut>("/partner-map/admin/tags", body),
+  updateTag: (id: string, body: PartnerTagUpdate) =>
+    patch<PartnerTagOut>(`/partner-map/admin/tags/${id}`, body),
+  deleteTag: (id: string) => del<void>(`/partner-map/admin/tags/${id}`),
+
+  createLocation: (businessId: string, body: PartnerLocationCreate) =>
+    post<PartnerLocationOut>(`/partner-map/admin/businesses/${businessId}/locations`, body),
+  updateLocation: (id: string, body: PartnerLocationUpdate) =>
+    patch<PartnerLocationOut>(`/partner-map/admin/locations/${id}`, body),
+  deleteLocation: (id: string) => del<void>(`/partner-map/admin/locations/${id}`),
+
+  createOffer: (businessId: string, body: PartnerOfferCreate) =>
+    post<PartnerOfferOut>(`/partner-map/admin/businesses/${businessId}/offers`, body),
+  updateOffer: (id: string, body: PartnerOfferUpdate) =>
+    patch<PartnerOfferOut>(`/partner-map/admin/offers/${id}`, body),
+  deleteOffer: (id: string) => del<void>(`/partner-map/admin/offers/${id}`),
+};
+
 // ── 班級 ──────────────────────────────────────────────────────────────────────
 
 export const classApi = {
@@ -469,7 +548,7 @@ export const classApi = {
     post<ClassMembershipOut>(`/classes/${id}/memberships`, body),
   endMembership: (id: string, userId: string) =>
     del<void>(`/classes/${id}/memberships/${userId}`),
-  roles: (id: string) => get<ClassRoleBindingOut[]>(`/classes/${id}/roles`),
+  roles: (id: string) => get<ClassRoleOut[]>(`/classes/${id}/roles`),
   assignRole: (id: string, roleKey: string, body: { user_id: string; start_date?: string | null; end_date?: string | null }) =>
     post<{ user_position_id: string; position_id: string }>(`/classes/${id}/roles/${roleKey}/assign`, body),
   addMember: (id: string, userId: string) =>
@@ -628,7 +707,12 @@ export const regulationsApi = {
   forkDraft: (id: string) => post<RegulationOut>(`${regulationPath(id)}/fork_draft`, {}),
   scheduleAgenda: (id: string, note?: string, meetingId?: string) =>
     post<RegulationOut>(`${regulationPath(id)}/schedule`, { note, meeting_id: meetingId }),
-  councilApprove: (id: string, note?: string) => post<RegulationOut>(`${regulationPath(id)}/council_approve`, { note }),
+  councilApprove: (id: string, note?: string, meetingId?: string) =>
+    post<RegulationOut>(`${regulationPath(id)}/council_approve`, { note, meeting_id: meetingId }),
+  eligibleMeetings: (id: string) =>
+    get<{ id: string; title: string; status: string; bill_stage: string | null; starts_at: string | null }[]>(
+      `${regulationPath(id)}/eligible-meetings`,
+    ),
   presidentPublish: (id: string, note?: string) => post<RegulationOut>(`${regulationPath(id)}/president_publish`, { note }),
   rejectRegulation: (id: string, note: string) => post<RegulationOut>(`${regulationPath(id)}/reject`, { note }),
   freeze: (id: string, reason: string, freeze_document_id?: string) =>
@@ -1065,7 +1149,11 @@ export const mealApi = {
   deleteMenuItem: (itemId: string) => del<void>(`/meal/items/${itemId}`),
 
   // 商家管理
-  createVendor: (body: { name: string; org_id: string; description?: string; contact_phone?: string; contact_email?: string }) =>
+  createVendor: (body: {
+    name: string; org_id?: string | null; description?: string | null;
+    contact_phone?: string | null; contact_email?: string | null; manager_email?: string | null;
+    status?: string | null;
+  }) =>
     post<MealVendorOut>("/meal/vendors", body),
   updateVendor: (id: string, body: {
     name?: string; description?: string | null;
@@ -1073,7 +1161,7 @@ export const mealApi = {
     status?: string; review_note?: string | null;
   }) => patch<MealVendorOut>(`/meal/vendors/${id}`, body),
   createVendorApplication: (body: {
-    name: string; org_id: string; description?: string | null;
+    name: string; org_id?: string | null; description?: string | null;
     contact_name?: string | null; contact_phone?: string | null; contact_email?: string | null;
   }) => post<MealVendorApplicationOut>("/meal/vendor-applications", body),
   listVendorApplications: (params?: { status?: string; limit?: number; offset?: number }) => {
@@ -1089,6 +1177,21 @@ export const mealApi = {
     get<VendorManagerOut[]>(`/meal/vendors/${vendorId}/managers`),
   removeVendorManager: (vendorId: string, userId: string) =>
     del<void>(`/meal/vendors/${vendorId}/managers/${userId}`),
+  uploadImage: async (file: File): Promise<{ url: string }> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const doFetch = () =>
+      fetch(`${BASE}/meal/images`, {
+        method: "POST",
+        credentials: "include",
+        headers: csrfHeaders("POST"),
+        body: fd,
+      });
+    let res = await doFetch();
+    if (res.status === 401 && (await silentRefresh())) res = await doFetch();
+    if (!res.ok) throw new ApiError(res.status, await errorMessageFromResponse(res));
+    return res.json();
+  },
   listProducts: (params?: { vendor_id?: string; active_only?: boolean; limit?: number; offset?: number }) => {
     const q = new URLSearchParams();
     if (params?.vendor_id) q.set("vendor_id", params.vendor_id);
@@ -1467,10 +1570,11 @@ export const analyticsApi = {
 
 export const meetingsApi = {
   workspace: () => get<MeetingWorkspaceOut>("/meetings/workspace"),
-  list: (params?: { org_id?: string; status?: string; limit?: number; offset?: number }) => {
+  list: (params?: { org_id?: string; status?: string; invited_only?: boolean; limit?: number; offset?: number }) => {
     const q = new URLSearchParams();
     if (params?.org_id) q.set("org_id", params.org_id);
     if (params?.status) q.set("status", params.status);
+    if (params?.invited_only) q.set("invited_only", "true");
     if (params?.limit) q.set("limit", String(params.limit));
     if (params?.offset) q.set("offset", String(params.offset));
     return get<MeetingListItem[]>(`/meetings${q.size ? `?${q}` : ""}`);
@@ -1584,7 +1688,10 @@ export const meetingsApi = {
     del<void>(`/meetings/${id}/agenda-items/${itemId}/artifact-links/${linkId}`),
   deleteAgendaItem: (id: string, itemId: string) =>
     del<void>(`/meetings/${id}/agenda-items/${itemId}`),
-  confirm: (id: string) => post<MeetingOut>(`/meetings/${id}/confirm`),
+  confirm: (
+    id: string,
+    body?: { notice_serial_template_id?: string | null; notice_serial_number?: string | null },
+  ) => post<MeetingOut>(`/meetings/${id}/confirm`, body ?? {}),
   proposableRegulations: (id: string) =>
     get<MeetingRegulationBrief[]>(`/meetings/${id}/proposable-regulations`),
   syncProposals: (id: string) =>
@@ -1700,6 +1807,8 @@ export const meetingsApi = {
   }>) => patch<MeetingScreenStateOut>(`/meetings/${id}/screen-state`, body),
   publicScreen: (token: string) =>
     get<MeetingScreenOut>(`/public/meetings/screen/${encodeURIComponent(token)}`),
+  events: (id: string, limit = 200) =>
+    get<MeetingEventOut[]>(`/meetings/${id}/events?limit=${limit}`),
   minutes: (id: string) => get<MeetingMinutesOut>(`/meetings/${id}/minutes`),
   createMinutesDocument: (id: string) =>
     post<{ document_id: string; title: string; status: string }>(
@@ -1733,4 +1842,69 @@ export const emailApi = {
   },
   getMessage: (id: string) => get<EmailMessageDetailOut>(`/email/messages/${id}`),
   orgPositions: (orgId: string) => get<EmailPosition[]>(`/orgs/${orgId}/positions`),
+};
+
+// ── 儀表板 / 待辦中心 ─────────────────────────────────────────────────────────
+
+export type DashboardSeverity = "info" | "warning" | "critical";
+export type DashboardLayoutHint = "student" | "officer" | "leader";
+
+export interface DashboardWidgetItem {
+  title: string;
+  subtitle: string | null;
+  href: string | null;
+  timestamp: string | null;
+  badge: string | null;
+}
+
+export interface DashboardWidget {
+  key: string;
+  title: string;
+  summary: string | null;
+  count: number | null;
+  href: string | null;
+  severity: DashboardSeverity;
+  wide: boolean;
+  items: DashboardWidgetItem[];
+}
+
+export interface DashboardResponse {
+  widgets: DashboardWidget[];
+  layout_hint: DashboardLayoutHint;
+}
+
+export const dashboardApi = {
+  get: () => get<DashboardResponse>("/dashboard"),
+};
+
+export type TaskModule =
+  | "document" | "meeting" | "regulation" | "petition"
+  | "meal" | "shop" | "survey" | "announcement";
+
+export type TaskAction =
+  | "approve" | "attend" | "review" | "publish"
+  | "reply" | "fill" | "collect" | "pickup" | "sign";
+
+export type TaskSeverity = "info" | "warning" | "critical";
+
+export interface TaskItem {
+  id: string;
+  module: TaskModule;
+  action: TaskAction;
+  title: string;
+  subtitle: string | null;
+  href: string;
+  due_at: string | null;
+  severity: TaskSeverity;
+  created_at: string;
+}
+
+export interface TaskInboxResponse {
+  items: TaskItem[];
+  total: number;
+  by_module: Record<string, number>;
+}
+
+export const tasksApi = {
+  list: () => get<TaskInboxResponse>("/tasks"),
 };

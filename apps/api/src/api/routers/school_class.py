@@ -24,7 +24,7 @@ from api.schemas.school_class import (
     ClassMembershipCreate,
     ClassMembershipOut,
     ClassRoleAssign,
-    ClassRoleBindingOut,
+    ClassRoleOut,
     ClassStudentRangeCreate,
     ClassStudentRangeOut,
     SchoolClassBulkCreate,
@@ -186,14 +186,14 @@ async def end_membership(
 
 @router.get(
     "/{class_id}/roles",
-    response_model=list[ClassRoleBindingOut],
+    response_model=list[ClassRoleOut],
     summary="列出班級 RBAC 職位綁定",
 )
 async def list_class_roles(
     class_id: uuid.UUID, session: DbDep, _: ManagerUser
 ) -> list:
     sc = await _get_class_or_404(class_id, session)
-    return await class_svc.ensure_class_default_roles(session, sc)
+    return await class_svc.list_class_roles(session, sc)
 
 
 @router.post(

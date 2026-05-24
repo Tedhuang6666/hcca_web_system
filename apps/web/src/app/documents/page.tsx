@@ -140,7 +140,7 @@ export default function DocumentListPage() {
 
     const loadInitialData = async () => {
       const [orgsRes, savedFiltersRes] = await Promise.all([
-        withFallback(orgsApi.list(), []),
+        withFallback(orgsApi.list({ active_only: true }), []),
         userId ? withFallback(savedFiltersApi.list("documents"), []) : Promise.resolve([]),
       ]);
       setOrgs(orgsRes);
@@ -551,7 +551,7 @@ export default function DocumentListPage() {
               <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
             <input type="search" value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="搜尋公文標題或字號…" className="input pl-9 w-64" aria-label="搜尋公文" />
+              placeholder="搜尋公文標題或字號…" className="input pl-9 w-full sm:w-64" aria-label="搜尋公文" />
           </div>
 
           {/* Tab 切換 */}
@@ -852,7 +852,7 @@ export default function DocumentListPage() {
                     批量轉代理
                   </button>
                   {delegateSuggestions.length > 0 && !delegateId && (
-                    <div className="absolute right-0 top-full z-30 mt-1 w-64 overflow-hidden rounded-lg shadow-lg"
+                    <div className="absolute right-0 top-full z-30 mt-1 w-64 max-w-[calc(100vw-1rem)] overflow-hidden rounded-lg shadow-lg"
                       style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
                       {delegateSuggestions.map((user) => (
                         <button

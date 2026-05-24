@@ -38,7 +38,8 @@ class MealVendorCreate(BaseModel):
     description: str | None = Field(None, description="商家描述")
     contact_phone: str | None = Field(None, max_length=20, description="聯絡電話")
     contact_email: EmailStr | None = Field(None, description="聯絡信箱")
-    org_id: uuid.UUID = Field(..., description="所屬組織 ID")
+    org_id: uuid.UUID | None = Field(None, description="所屬組織 ID；未提供時系統自動建立")
+    manager_email: EmailStr | None = Field(None, description="建立時同步指派的商家負責人")
     status: str | None = Field(None, description="審核狀態；管理員手動新增預設 approved")
 
 
@@ -58,7 +59,7 @@ class MealVendorApplicationCreate(BaseModel):
     contact_name: str | None = Field(None, max_length=100)
     contact_phone: str | None = Field(None, max_length=20)
     contact_email: EmailStr | None = None
-    org_id: uuid.UUID
+    org_id: uuid.UUID | None = None
 
 
 class MealVendorApplicationReview(BaseModel):
