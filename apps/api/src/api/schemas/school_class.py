@@ -244,6 +244,25 @@ class SchoolClassBulkCreateOut(BaseModel):
     results: list[SchoolClassBulkCreateResult]
 
 
+class SchoolClassBulkAction(BaseModel):
+    class_ids: list[uuid.UUID] = Field(..., min_length=1, max_length=200)
+    action: str = Field(..., pattern="^(activate|deactivate|delete)$")
+
+
+class SchoolClassBulkActionResult(BaseModel):
+    class_id: uuid.UUID
+    label: str | None = None
+    ok: bool
+    detail: str | None = None
+
+
+class SchoolClassBulkActionOut(BaseModel):
+    total: int
+    succeeded: int
+    failed: int
+    results: list[SchoolClassBulkActionResult]
+
+
 class ClassMemberOut(BaseModel):
     """班級成員（由學號區間推導），含是否為幹部"""
 
@@ -275,6 +294,9 @@ __all__ = [
     "ClassStudentRangeOut",
     "ClassStudentRangeTemplate",
     "ClassUserBrief",
+    "SchoolClassBulkAction",
+    "SchoolClassBulkActionOut",
+    "SchoolClassBulkActionResult",
     "SchoolClassBulkCreate",
     "SchoolClassBulkCreateOut",
     "SchoolClassBulkCreateResult",

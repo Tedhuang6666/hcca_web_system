@@ -60,6 +60,23 @@ def _dispatch(event: OutboxEvent) -> None:
         pass  # 未來：通知訂閱者
     elif etype == "order.created":
         pass  # 未來：購票確認信
+    elif etype == "line.push":
+        from api.services.line_bot import push_text_message
+
+        text = str(payload.get("title") or "平台通知")
+        body = payload.get("body")
+        link = payload.get("link")
+        if body:
+            text = f"{text}\n{body}"
+        if link:
+            from api.core.config import settings
+
+            base = settings.FRONTEND_BASE_URL.rstrip("/")
+            href = str(link)
+            if not href.startswith(("http://", "https://")):
+                href = f"{base}{href if href.startswith('/') else '/' + href}"
+            text = f"{text}\n{href}"
+        push_text_message(str(payload.get("line_user_id")), text)
     else:
         logger.warning("Unknown outbox event_type: %s", etype)
 

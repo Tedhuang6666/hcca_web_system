@@ -35,8 +35,10 @@ from api.models.meeting import (
     MeetingDecision,
     MeetingMotion,
     MeetingRequest,
+    MeetingSpeechQueueItem,
     MeetingStatus,
     MeetingVote,
+    SpeechQueueStatus,
 )
 from api.models.regulation import Regulation
 from api.models.user import User
@@ -82,6 +84,11 @@ from api.schemas.meeting import (
     RegulationBrief,
     ScreenStateOut,
     ScreenStateUpdate,
+    SpeechQueueCreate,
+    SpeechQueueExtend,
+    SpeechQueueItemOut,
+    SpeechQueueReorder,
+    SpeechQueueUpdate,
     VoteCreate,
     VoteOut,
     VoteUpdate,
@@ -193,6 +200,15 @@ async def _request_or_404(
     return record
 
 
+async def _speech_or_404(
+    session: AsyncSession, meeting_id: uuid.UUID, speech_id: uuid.UUID
+) -> MeetingSpeechQueueItem:
+    record = await session.get(MeetingSpeechQueueItem, speech_id)
+    if record is None or record.meeting_id != meeting_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此發言項目")
+    return record
+
+
 async def _broadcast_meeting(session: AsyncSession, meeting_id: uuid.UUID, event: str) -> None:
     meeting = await meeting_svc.get_meeting(session, meeting_id)
     if meeting is None:
@@ -269,7 +285,9 @@ async def create_meeting(
     payload: MeetingCreate, session: DbDep, current_user: CurrentUser
 ) -> Meeting:
     try:
-        meeting = await meeting_svc.create_meeting(session, data=payload, created_by=current_user.id)
+        meeting = await meeting_svc.create_meeting(
+            session, data=payload, created_by=current_user.id
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     await _record_event(
@@ -355,11 +373,33 @@ async def update_meeting(
     summary="開始會議（meeting:chair）",
     dependencies=[Depends(require_permission(PermissionCode.MEETING_CHAIR))],
 )
-async def start_meeting(meeting_id: uuid.UUID, session: DbDep, current_user: CurrentUser) -> Meeting:
+async def start_meeting(
+    meeting_id: uuid.UUID, session: DbDep, current_user: CurrentUser
+) -> Meeting:
     meeting = await _meeting_or_404(session, meeting_id)
-    await meeting_svc.transition_meeting(session, meeting, status=MeetingStatus.ACTIVE)
+    try:
+        await meeting_svc.transition_meeting(session, meeting, status=MeetingStatus.ACTIVE)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     await _record_event(session, meeting, event_type="meeting.started", actor=current_user)
     await _broadcast_meeting(session, meeting.id, "meeting.started")
+    return await _meeting_or_404(session, meeting.id)
+
+
+@router.post(
+    "/{meeting_id}/check-in/open",
+    response_model=MeetingOut,
+    summary="開放報到（meeting:chair）",
+    dependencies=[Depends(require_permission(PermissionCode.MEETING_CHAIR))],
+)
+async def open_checkin(meeting_id: uuid.UUID, session: DbDep, current_user: CurrentUser) -> Meeting:
+    meeting = await _meeting_or_404(session, meeting_id)
+    try:
+        await meeting_svc.transition_meeting(session, meeting, status=MeetingStatus.CHECKIN)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    await _record_event(session, meeting, event_type="meeting.checkin_opened", actor=current_user)
+    await _broadcast_meeting(session, meeting.id, "meeting.checkin_opened")
     return await _meeting_or_404(session, meeting.id)
 
 
@@ -369,11 +409,41 @@ async def start_meeting(meeting_id: uuid.UUID, session: DbDep, current_user: Cur
     summary="暫停會議（meeting:chair）",
     dependencies=[Depends(require_permission(PermissionCode.MEETING_CHAIR))],
 )
-async def pause_meeting(meeting_id: uuid.UUID, session: DbDep, current_user: CurrentUser) -> Meeting:
+async def pause_meeting(
+    meeting_id: uuid.UUID, session: DbDep, current_user: CurrentUser
+) -> Meeting:
     meeting = await _meeting_or_404(session, meeting_id)
-    await meeting_svc.transition_meeting(session, meeting, status=MeetingStatus.PAUSED)
+    try:
+        await meeting_svc.transition_meeting(session, meeting, status=MeetingStatus.PAUSED)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     await _record_event(session, meeting, event_type="meeting.paused", actor=current_user)
     await _broadcast_meeting(session, meeting.id, "meeting.paused")
+    return await _meeting_or_404(session, meeting.id)
+
+
+@router.post(
+    "/{meeting_id}/break",
+    response_model=MeetingOut,
+    summary="進入休息（meeting:chair）",
+    dependencies=[Depends(require_permission(PermissionCode.MEETING_CHAIR))],
+)
+async def break_meeting(
+    meeting_id: uuid.UUID, session: DbDep, current_user: CurrentUser
+) -> Meeting:
+    meeting = await _meeting_or_404(session, meeting_id)
+    try:
+        await meeting_svc.transition_meeting(session, meeting, status=MeetingStatus.BREAK)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    await meeting_svc.update_screen_state(
+        session,
+        meeting,
+        data=ScreenStateUpdate(reading_mode="break", title="會議休息中"),
+        updated_by=current_user.id,
+    )
+    await _record_event(session, meeting, event_type="meeting.break_started", actor=current_user)
+    await _broadcast_meeting(session, meeting.id, "meeting.break_started")
     return await _meeting_or_404(session, meeting.id)
 
 
@@ -383,11 +453,35 @@ async def pause_meeting(meeting_id: uuid.UUID, session: DbDep, current_user: Cur
     summary="結束會議（meeting:chair）",
     dependencies=[Depends(require_permission(PermissionCode.MEETING_CHAIR))],
 )
-async def close_meeting(meeting_id: uuid.UUID, session: DbDep, current_user: CurrentUser) -> Meeting:
+async def close_meeting(
+    meeting_id: uuid.UUID, session: DbDep, current_user: CurrentUser
+) -> Meeting:
     meeting = await _meeting_or_404(session, meeting_id)
-    await meeting_svc.transition_meeting(session, meeting, status=MeetingStatus.CLOSED)
+    try:
+        await meeting_svc.transition_meeting(session, meeting, status=MeetingStatus.CLOSED)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     await _record_event(session, meeting, event_type="meeting.closed", actor=current_user)
     await _broadcast_meeting(session, meeting.id, "meeting.closed")
+    return await _meeting_or_404(session, meeting.id)
+
+
+@router.post(
+    "/{meeting_id}/archive",
+    response_model=MeetingOut,
+    summary="封存會議（meeting:export）",
+    dependencies=[Depends(require_permission(PermissionCode.MEETING_EXPORT))],
+)
+async def archive_meeting(
+    meeting_id: uuid.UUID, session: DbDep, current_user: CurrentUser
+) -> Meeting:
+    meeting = await _meeting_or_404(session, meeting_id)
+    try:
+        await meeting_svc.transition_meeting(session, meeting, status=MeetingStatus.ARCHIVED)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    await _record_event(session, meeting, event_type="meeting.archived", actor=current_user)
+    await _broadcast_meeting(session, meeting.id, "meeting.archived")
     return await _meeting_or_404(session, meeting.id)
 
 
@@ -1271,6 +1365,310 @@ async def update_meeting_request(
     )
     await _broadcast_meeting(session, meeting_id, "meeting.request_updated")
     return record
+
+
+@router.post(
+    "/{meeting_id}/requests/{request_id}/enqueue",
+    response_model=SpeechQueueItemOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="將議員請求排入發言 queue（meeting:chair）",
+    dependencies=[Depends(require_permission(PermissionCode.MEETING_CHAIR))],
+)
+async def enqueue_request_speech(
+    meeting_id: uuid.UUID,
+    request_id: uuid.UUID,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> MeetingSpeechQueueItem:
+    meeting = await _meeting_or_404(session, meeting_id)
+    await _request_or_404(session, meeting_id, request_id)
+    try:
+        item = await meeting_svc.create_speech_queue_item(
+            session, meeting, data=SpeechQueueCreate(request_id=request_id)
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    await _record_event(
+        session,
+        meeting,
+        event_type="speech.queued",
+        actor=current_user,
+        agenda_item_id=item.agenda_item_id,
+        payload={"speech_id": str(item.id), "speaker_name": item.speaker_name},
+    )
+    await _broadcast_meeting(session, meeting_id, "meeting.speech_updated")
+    return item
+
+
+@router.post(
+    "/{meeting_id}/speech-queue",
+    response_model=SpeechQueueItemOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="新增發言 queue 項目（meeting:chair）",
+    dependencies=[Depends(require_permission(PermissionCode.MEETING_CHAIR))],
+)
+async def create_speech_queue_item(
+    meeting_id: uuid.UUID,
+    payload: SpeechQueueCreate,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> MeetingSpeechQueueItem:
+    meeting = await _meeting_or_404(session, meeting_id)
+    try:
+        item = await meeting_svc.create_speech_queue_item(session, meeting, data=payload)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    await _record_event(
+        session,
+        meeting,
+        event_type="speech.queued",
+        actor=current_user,
+        agenda_item_id=item.agenda_item_id,
+        payload={"speech_id": str(item.id), "speaker_name": item.speaker_name},
+    )
+    await _broadcast_meeting(session, meeting.id, "meeting.speech_updated")
+    return item
+
+
+@router.patch(
+    "/{meeting_id}/speech-queue/reorder",
+    response_model=list[SpeechQueueItemOut],
+    summary="重排發言 queue（meeting:chair）",
+    dependencies=[Depends(require_permission(PermissionCode.MEETING_CHAIR))],
+)
+async def reorder_speech_queue(
+    meeting_id: uuid.UUID,
+    payload: SpeechQueueReorder,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> list[MeetingSpeechQueueItem]:
+    meeting = await _meeting_or_404(session, meeting_id)
+    try:
+        items = await meeting_svc.reorder_speech_queue(
+            session, meeting, ordered_ids=payload.ordered_ids
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    await _record_event(
+        session,
+        meeting,
+        event_type="speech.reordered",
+        actor=current_user,
+        payload={"ordered_ids": [str(item_id) for item_id in payload.ordered_ids]},
+    )
+    await _broadcast_meeting(session, meeting.id, "meeting.speech_updated")
+    return items
+
+
+@router.patch(
+    "/{meeting_id}/speech-queue/{speech_id}",
+    response_model=SpeechQueueItemOut,
+    summary="更新發言 queue 項目（meeting:chair）",
+    dependencies=[Depends(require_permission(PermissionCode.MEETING_CHAIR))],
+)
+async def update_speech_queue_item(
+    meeting_id: uuid.UUID,
+    speech_id: uuid.UUID,
+    payload: SpeechQueueUpdate,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> MeetingSpeechQueueItem:
+    item = await _speech_or_404(session, meeting_id, speech_id)
+    item = await meeting_svc.update_speech_queue_item(session, item, data=payload)
+    meeting = await _meeting_or_404(session, meeting_id)
+    await _record_event(
+        session,
+        meeting,
+        event_type="speech.updated",
+        actor=current_user,
+        agenda_item_id=item.agenda_item_id,
+        payload={
+            "speech_id": str(item.id),
+            "values": payload.model_dump(exclude_unset=True, mode="json"),
+        },
+    )
+    await _broadcast_meeting(session, meeting_id, "meeting.speech_updated")
+    return item
+
+
+@router.post(
+    "/{meeting_id}/speech-queue/{speech_id}/start",
+    response_model=SpeechQueueItemOut,
+    summary="開始發言計時（meeting:chair）",
+    dependencies=[Depends(require_permission(PermissionCode.MEETING_CHAIR))],
+)
+async def start_speech(
+    meeting_id: uuid.UUID,
+    speech_id: uuid.UUID,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> MeetingSpeechQueueItem:
+    meeting = await _meeting_or_404(session, meeting_id)
+    item = await _speech_or_404(session, meeting_id, speech_id)
+    try:
+        item = await meeting_svc.start_speech(session, meeting, item)
+        await meeting_svc.update_screen_state(
+            session,
+            meeting,
+            data=ScreenStateUpdate(
+                agenda_item_id=item.agenda_item_id,
+                reading_mode="speaker",
+                title=item.speaker_name,
+                body=item.speaker_role,
+            ),
+            updated_by=current_user.id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    await _record_event(
+        session,
+        meeting,
+        event_type="speech.started",
+        actor=current_user,
+        agenda_item_id=item.agenda_item_id,
+        payload={"speech_id": str(item.id), "speaker_name": item.speaker_name},
+    )
+    await _broadcast_meeting(session, meeting_id, "meeting.speech_started")
+    return item
+
+
+@router.post(
+    "/{meeting_id}/speech-queue/{speech_id}/pause",
+    response_model=SpeechQueueItemOut,
+    summary="暫停發言計時（meeting:chair）",
+    dependencies=[Depends(require_permission(PermissionCode.MEETING_CHAIR))],
+)
+async def pause_speech(
+    meeting_id: uuid.UUID,
+    speech_id: uuid.UUID,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> MeetingSpeechQueueItem:
+    meeting = await _meeting_or_404(session, meeting_id)
+    item = await _speech_or_404(session, meeting_id, speech_id)
+    try:
+        item = await meeting_svc.pause_speech(session, meeting, item)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    await _record_event(
+        session,
+        meeting,
+        event_type="speech.paused",
+        actor=current_user,
+        agenda_item_id=item.agenda_item_id,
+        payload={"speech_id": str(item.id), "remaining_seconds": item.remaining_seconds},
+    )
+    await _broadcast_meeting(session, meeting_id, "meeting.speech_updated")
+    return item
+
+
+@router.post(
+    "/{meeting_id}/speech-queue/{speech_id}/resume",
+    response_model=SpeechQueueItemOut,
+    summary="繼續發言計時（meeting:chair）",
+    dependencies=[Depends(require_permission(PermissionCode.MEETING_CHAIR))],
+)
+async def resume_speech(
+    meeting_id: uuid.UUID,
+    speech_id: uuid.UUID,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> MeetingSpeechQueueItem:
+    meeting = await _meeting_or_404(session, meeting_id)
+    item = await _speech_or_404(session, meeting_id, speech_id)
+    item = await meeting_svc.resume_speech(session, meeting, item)
+    await _record_event(
+        session,
+        meeting,
+        event_type="speech.resumed",
+        actor=current_user,
+        agenda_item_id=item.agenda_item_id,
+        payload={"speech_id": str(item.id)},
+    )
+    await _broadcast_meeting(session, meeting_id, "meeting.speech_updated")
+    return item
+
+
+@router.post(
+    "/{meeting_id}/speech-queue/{speech_id}/finish",
+    response_model=SpeechQueueItemOut,
+    summary="結束發言（meeting:chair）",
+    dependencies=[Depends(require_permission(PermissionCode.MEETING_CHAIR))],
+)
+async def finish_speech(
+    meeting_id: uuid.UUID,
+    speech_id: uuid.UUID,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> MeetingSpeechQueueItem:
+    meeting = await _meeting_or_404(session, meeting_id)
+    item = await _speech_or_404(session, meeting_id, speech_id)
+    item = await meeting_svc.finish_speech(session, meeting, item)
+    await _record_event(
+        session,
+        meeting,
+        event_type="speech.finished",
+        actor=current_user,
+        agenda_item_id=item.agenda_item_id,
+        payload={"speech_id": str(item.id), "remaining_seconds": item.remaining_seconds},
+    )
+    await _broadcast_meeting(session, meeting_id, "meeting.speech_finished")
+    return item
+
+
+@router.post(
+    "/{meeting_id}/speech-queue/{speech_id}/skip",
+    response_model=SpeechQueueItemOut,
+    summary="略過發言（meeting:chair）",
+    dependencies=[Depends(require_permission(PermissionCode.MEETING_CHAIR))],
+)
+async def skip_speech(
+    meeting_id: uuid.UUID,
+    speech_id: uuid.UUID,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> MeetingSpeechQueueItem:
+    meeting = await _meeting_or_404(session, meeting_id)
+    item = await _speech_or_404(session, meeting_id, speech_id)
+    item = await meeting_svc.finish_speech(session, meeting, item, status=SpeechQueueStatus.SKIPPED)
+    await _record_event(
+        session,
+        meeting,
+        event_type="speech.skipped",
+        actor=current_user,
+        agenda_item_id=item.agenda_item_id,
+        payload={"speech_id": str(item.id)},
+    )
+    await _broadcast_meeting(session, meeting_id, "meeting.speech_updated")
+    return item
+
+
+@router.post(
+    "/{meeting_id}/speech-queue/{speech_id}/extend",
+    response_model=SpeechQueueItemOut,
+    summary="延長發言時間（meeting:chair）",
+    dependencies=[Depends(require_permission(PermissionCode.MEETING_CHAIR))],
+)
+async def extend_speech(
+    meeting_id: uuid.UUID,
+    speech_id: uuid.UUID,
+    payload: SpeechQueueExtend,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> MeetingSpeechQueueItem:
+    meeting = await _meeting_or_404(session, meeting_id)
+    item = await _speech_or_404(session, meeting_id, speech_id)
+    item = await meeting_svc.extend_speech(session, meeting, item, seconds=payload.seconds)
+    await _record_event(
+        session,
+        meeting,
+        event_type="speech.extended",
+        actor=current_user,
+        agenda_item_id=item.agenda_item_id,
+        payload={"speech_id": str(item.id), "seconds": payload.seconds},
+    )
+    await _broadcast_meeting(session, meeting_id, "meeting.speech_updated")
+    return item
 
 
 @router.get(

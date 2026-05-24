@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ApiError, notificationsApi } from "@/lib/api";
+import { ApiError, lineApi, notificationsApi } from "@/lib/api";
 import type { ChannelPref, NotificationPreferences } from "@/lib/types";
 
 const OPTIONS: { key: keyof NotificationPreferences; label: string; desc: string }[] = [
@@ -49,22 +49,29 @@ function Switch({
 
 export default function NotificationSettingsPage() {
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
+  const [lineLinked, setLineLinked] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    notificationsApi
-      .getPreferences()
-      .then(setPrefs)
+    Promise.all([
+      notificationsApi.getPreferences(),
+      lineApi.me().catch(() => ({ linked: false })),
+    ])
+      .then(([nextPrefs, line]) => {
+        setPrefs(nextPrefs);
+        setLineLinked(Boolean(line.linked));
+      })
       .catch((e) => toast.error(e instanceof ApiError ? e.message : "載入通知偏好失敗"))
       .finally(() => setLoading(false));
   }, []);
 
   const counts = useMemo(() => {
-    if (!prefs) return { inapp: 0, email: 0 };
+    if (!prefs) return { inapp: 0, email: 0, line: 0 };
     return {
       inapp: OPTIONS.filter((o) => prefs[o.key].inapp).length,
       email: OPTIONS.filter((o) => prefs[o.key].email).length,
+      line: OPTIONS.filter((o) => prefs[o.key].line).length,
     };
   }, [prefs]);
 
@@ -86,13 +93,19 @@ export default function NotificationSettingsPage() {
 
   const toggle = (key: keyof NotificationPreferences, channel: Channel) => {
     if (!prefs || saving) return;
+    if (channel === "line" && !lineLinked) {
+      toast.error("請先到個人資料綁定 LINE");
+      return;
+    }
     update({ ...prefs, [key]: { ...prefs[key], [channel]: !prefs[key][channel] } });
   };
 
   const setAll = (value: boolean) => {
     if (!prefs || saving) return;
     const next = { ...prefs };
-    for (const o of OPTIONS) next[o.key] = { inapp: value, email: value };
+    for (const o of OPTIONS) {
+      next[o.key] = { inapp: value, email: value, line: lineLinked ? value : false };
+    }
     update(next);
   };
 
@@ -105,7 +118,7 @@ export default function NotificationSettingsPage() {
           </p>
           <h1 className="mt-1 text-xl font-semibold">通知偏好設定</h1>
           <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            分別設定每種事件要用「站內通知」或「Email」接收
+            分別設定每種事件要用「站內通知」、「Email」或「LINE」接收
           </p>
         </div>
         <Link href="/notifications" className="btn btn-ghost">
@@ -123,9 +136,14 @@ export default function NotificationSettingsPage() {
             <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
               {loading
                 ? "載入中"
-                : `站內 ${counts.inapp} 項、Email ${counts.email} 項已啟用`}
+                : `站內 ${counts.inapp} 項、Email ${counts.email} 項、LINE ${counts.line} 項已啟用`}
               {saving ? "，儲存中" : ""}
             </p>
+            {!lineLinked && (
+              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                LINE 通知需先至個人資料完成綁定。
+              </p>
+            )}
           </div>
           <div className="flex gap-2">
             <button
@@ -175,6 +193,12 @@ export default function NotificationSettingsPage() {
               >
                 Email
               </div>
+              <div
+                className="w-12 text-center text-[11px] font-semibold"
+                style={{ color: "var(--text-muted)" }}
+              >
+                LINE
+              </div>
             </div>
             <ul>
               {OPTIONS.map((item) => (
@@ -205,6 +229,14 @@ export default function NotificationSettingsPage() {
                       disabled={saving}
                       onClick={() => toggle(item.key, "email")}
                       label={`${item.label} Email 通知`}
+                    />
+                  </div>
+                  <div className="flex w-12 justify-center">
+                    <Switch
+                      on={prefs[item.key].line}
+                      disabled={saving || !lineLinked}
+                      onClick={() => toggle(item.key, "line")}
+                      label={`${item.label} LINE 通知`}
                     />
                   </div>
                 </li>

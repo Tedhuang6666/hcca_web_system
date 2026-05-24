@@ -1,8 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { usersApi, classApi, ApiError } from "@/lib/api";
-import type { UserRead, UserPositionRead, SchoolClassListItem } from "@/lib/types";
+import { usersApi, classApi, ApiError, lineApi } from "@/lib/api";
+import type { LineBindingOut, LineLinkCodeOut, UserRead, UserPositionRead, SchoolClassListItem } from "@/lib/types";
 
 /* ─── Inline edit field ─────────────────────────────────────────────────────── */
 function EditableField({
@@ -82,6 +82,9 @@ export default function ProfilePage() {
   const [positions, setPositions] = useState<UserPositionRead[]>([]);
   const [permissions, setPermissions] = useState<string[]>([]);
   const [myClass, setMyClass] = useState<SchoolClassListItem | null>(null);
+  const [lineBinding, setLineBinding] = useState<LineBindingOut | null>(null);
+  const [lineCode, setLineCode] = useState<LineLinkCodeOut | null>(null);
+  const [lineBusy, setLineBusy] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -95,6 +98,7 @@ export default function ProfilePage() {
     }).finally(() => setLoading(false));
 
     classApi.myClass().then(setMyClass).catch(() => setMyClass(null));
+    lineApi.me().then(setLineBinding).catch(() => setLineBinding({ linked: false, line_display_name: null, linked_at: null }));
 
     // 從 localStorage 讀取有效權限
     try {
@@ -133,6 +137,33 @@ export default function ProfilePage() {
       const updated = await usersApi.updateMe({ show_email: !user.show_email });
       setUser(updated);
     } catch { /* ignore */ }
+  }
+
+  async function createLineCode() {
+    setLineBusy(true);
+    try {
+      const code = await lineApi.createLinkCode();
+      setLineCode(code);
+      toast.success("LINE 綁定碼已產生");
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "產生綁定碼失敗");
+    } finally {
+      setLineBusy(false);
+    }
+  }
+
+  async function unlinkLine() {
+    setLineBusy(true);
+    try {
+      await lineApi.unlink();
+      setLineBinding({ linked: false, line_display_name: null, linked_at: null });
+      setLineCode(null);
+      toast.success("已解除 LINE 綁定");
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "解除綁定失敗");
+    } finally {
+      setLineBusy(false);
+    }
   }
 
   const initials = user?.display_name?.charAt(0)?.toUpperCase() ?? "?";
@@ -280,6 +311,51 @@ export default function ProfilePage() {
               )}
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="card p-5 space-y-4" aria-labelledby="line-heading">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 id="line-heading" className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+              LINE Bot
+            </h2>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              綁定後可在 LINE 查詢待辦、公告、學餐並接收通知。
+            </p>
+          </div>
+          {lineBinding?.linked ? (
+            <button className="btn btn-ghost btn-sm" onClick={unlinkLine} disabled={lineBusy}>
+              解除綁定
+            </button>
+          ) : (
+            <button className="btn btn-primary btn-sm" onClick={createLineCode} disabled={lineBusy}>
+              產生綁定碼
+            </button>
+          )}
+        </div>
+        <div className="rounded-lg border px-4 py-3" style={{ borderColor: "var(--border)" }}>
+          <p className="text-sm" style={{ color: "var(--text-primary)" }}>
+            {lineBinding?.linked ? "已綁定 LINE" : "尚未綁定 LINE"}
+          </p>
+          {lineBinding?.linked_at && (
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              綁定時間：{new Date(lineBinding.linked_at).toLocaleString()}
+            </p>
+          )}
+          {lineCode && !lineBinding?.linked && (
+            <div className="mt-3">
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                請在 LINE Bot 輸入
+              </p>
+              <p className="mt-1 font-mono text-lg font-semibold" style={{ color: "var(--primary)" }}>
+                綁定 {lineCode.code}
+              </p>
+              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                有效至 {new Date(lineCode.expires_at).toLocaleTimeString()}
+              </p>
+            </div>
+          )}
         </div>
       </section>
 

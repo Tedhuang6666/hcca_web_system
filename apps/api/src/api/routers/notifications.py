@@ -83,6 +83,7 @@ class ChannelPref(BaseModel):
 
     inapp: bool = True
     email: bool = False
+    line: bool = False
 
 
 class NotificationPreferencesOut(BaseModel):
@@ -209,7 +210,11 @@ async def update_preferences(
 ) -> NotificationPreferencesOut:
     merged = normalize_preferences(current_user.notification_preferences)
     for ntype, channel in body.model_dump(exclude_none=True).items():
-        merged[ntype] = {"inapp": bool(channel["inapp"]), "email": bool(channel["email"])}
+        merged[ntype] = {
+            "inapp": bool(channel["inapp"]),
+            "email": bool(channel["email"]),
+            "line": bool(channel["line"]),
+        }
     current_user.notification_preferences = merged
     await db.flush()
     return NotificationPreferencesOut(**merged)
@@ -336,3 +341,27 @@ async def create_notification(
             _send_notification_email(user, type, title, body, link)
         except Exception:
             logger.warning("通知 Email 排程失敗 user=%s type=%s", user_id, type, exc_info=True)
+    if channel.get("line"):
+        try:
+            from api.models.line_account import LineAccountLink
+            from api.services.outbox import emit
+
+            line_user_id = await db.scalar(
+                select(LineAccountLink.line_user_id).where(
+                    LineAccountLink.user_id == user_id,
+                    LineAccountLink.is_active.is_(True),
+                )
+            )
+            if line_user_id:
+                await emit(
+                    db,
+                    event_type="line.push",
+                    payload={
+                        "line_user_id": line_user_id,
+                        "title": title,
+                        "body": body,
+                        "link": link,
+                    },
+                )
+        except Exception:
+            logger.warning("通知 LINE 排程失敗 user=%s type=%s", user_id, type, exc_info=True)

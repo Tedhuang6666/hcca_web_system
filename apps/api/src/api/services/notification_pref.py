@@ -73,7 +73,7 @@ TYPE_LABELS: dict[str, str] = {
 
 def default_channel(notification_type: str) -> dict[str, bool]:
     """取得某通知類型的預設管道設定。"""
-    return {"inapp": True, "email": notification_type in _EMAIL_DEFAULT_ON}
+    return {"inapp": True, "email": notification_type in _EMAIL_DEFAULT_ON, "line": False}
 
 
 def normalize_preferences(raw: dict | None) -> dict[str, dict[str, bool]]:
@@ -91,9 +91,14 @@ def normalize_preferences(raw: dict | None) -> dict[str, dict[str, bool]]:
             out[ntype] = {
                 "inapp": bool(value.get("inapp", True)),
                 "email": bool(value.get("email", ntype in _EMAIL_DEFAULT_ON)),
+                "line": bool(value.get("line", False)),
             }
         elif isinstance(value, bool):
-            out[ntype] = {"inapp": value, "email": value and (ntype in _EMAIL_DEFAULT_ON)}
+            out[ntype] = {
+                "inapp": value,
+                "email": value and (ntype in _EMAIL_DEFAULT_ON),
+                "line": False,
+            }
         else:
             out[ntype] = default_channel(ntype)
     return out

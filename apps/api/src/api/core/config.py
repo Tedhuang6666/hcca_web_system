@@ -34,6 +34,14 @@ class Settings(BaseSettings):
         default="postgresql+psycopg2://postgres:password@localhost:5432/campus_platform"
     )
     SQL_ECHO: bool = False
+    DB_POOL_SIZE: int = Field(default=10, ge=1)
+    DB_MAX_OVERFLOW: int = Field(default=20, ge=0)
+    DB_POOL_TIMEOUT_SECONDS: int = Field(default=30, ge=1)
+    DB_POOL_RECYCLE_SECONDS: int = Field(default=1800, ge=60)
+
+    # --- 健康檢查 ---
+    HEALTHCHECK_TIMEOUT_SECONDS: float = Field(default=2.0, gt=0)
+    SLOW_REQUEST_THRESHOLD_MS: int = Field(default=1000, ge=1)
 
     # --- Redis 設定 ---
     REDIS_URL: RedisDsn = Field(default="redis://localhost:6379/0")

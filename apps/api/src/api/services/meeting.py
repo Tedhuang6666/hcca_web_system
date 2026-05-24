@@ -31,9 +31,14 @@ from api.models.meeting import (
     MeetingRequest,
     MeetingRequestStatus,
     MeetingScreenState,
+    MeetingSpeechQueueItem,
     MeetingStatus,
+    MeetingTimerState,
     MeetingVote,
+    SpeechQueueStatus,
+    TimerStatus,
     VoteStatus,
+    VoteThresholdType,
     VoteVisibility,
 )
 from api.models.org import Org, Permission, Position, UserPosition
@@ -57,6 +62,8 @@ from api.schemas.meeting import (
     MotionCreate,
     MotionUpdate,
     ScreenStateUpdate,
+    SpeechQueueCreate,
+    SpeechQueueUpdate,
     VoteCreate,
     VoteUpdate,
 )
@@ -70,12 +77,26 @@ def _new_token() -> str:
     return secrets.token_urlsafe(32)
 
 
-def _vote_tally(vote: MeetingVote, eligible_count: int) -> dict[str, int | bool]:
+def _vote_tally(
+    vote: MeetingVote, eligible_count: int, present_voters: int = 0
+) -> dict[str, int | bool | VoteThresholdType]:
     approve = sum(1 for b in vote.ballots if b.choice == BallotChoice.APPROVE)
     reject = sum(1 for b in vote.ballots if b.choice == BallotChoice.REJECT)
     abstain = sum(1 for b in vote.ballots if b.choice == BallotChoice.ABSTAIN)
     total = approve + reject + abstain
-    threshold = vote.pass_threshold or 0
+    threshold_type = VoteThresholdType(vote.threshold_type)
+    if threshold_type == VoteThresholdType.CUSTOM:
+        threshold = vote.pass_threshold or 0
+        passed = approve >= threshold if threshold > 0 else approve > reject
+    elif threshold_type == VoteThresholdType.PRESENT_MAJORITY:
+        threshold = present_voters // 2 + 1
+        passed = approve >= threshold
+    elif threshold_type == VoteThresholdType.ALL_MEMBERS_MAJORITY:
+        threshold = eligible_count // 2 + 1
+        passed = approve >= threshold
+    else:
+        threshold = 0
+        passed = approve > reject
     return {
         "approve": approve,
         "reject": reject,
@@ -83,7 +104,8 @@ def _vote_tally(vote: MeetingVote, eligible_count: int) -> dict[str, int | bool]
         "total": total,
         "eligible": eligible_count,
         "pass_threshold": threshold,
-        "passed": approve >= threshold if threshold > 0 else approve > reject,
+        "threshold_type": threshold_type,
+        "passed": passed,
     }
 
 
@@ -102,6 +124,8 @@ async def get_meeting(session: AsyncSession, meeting_id: uuid.UUID) -> Meeting |
             .selectinload(MeetingVote.ballots)
             .selectinload(MeetingBallot.voter),
             selectinload(Meeting.requests).selectinload(MeetingRequest.user),
+            selectinload(Meeting.speech_queue).selectinload(MeetingSpeechQueueItem.user),
+            selectinload(Meeting.timer_state).selectinload(MeetingTimerState.active_speech),
             selectinload(Meeting.motions).selectinload(MeetingMotion.proposer),
             selectinload(Meeting.decisions),
             selectinload(Meeting.screen_state),
@@ -168,6 +192,8 @@ async def create_meeting(
         expected_voters=data.expected_voters,
         quorum_count=data.quorum_count,
         default_pass_threshold=data.default_pass_threshold,
+        default_speech_seconds=data.default_speech_seconds,
+        allow_observer_requests=data.allow_observer_requests,
         bill_stage=data.bill_stage or (org.bill_stage if org else None),
         screen_token=_new_token(),
         checkin_token=_new_token(),
@@ -176,6 +202,13 @@ async def create_meeting(
     session.add(meeting)
     await session.flush()
     session.add(MeetingScreenState(meeting_id=meeting.id))
+    session.add(
+        MeetingTimerState(
+            meeting_id=meeting.id,
+            duration_seconds=meeting.default_speech_seconds,
+            remaining_when_paused=meeting.default_speech_seconds,
+        )
+    )
     await session.flush()
     await seed_voter_roster(session, meeting)
     return meeting
@@ -194,8 +227,23 @@ async def update_meeting(
 async def transition_meeting(
     session: AsyncSession, meeting: Meeting, *, status: MeetingStatus
 ) -> Meeting:
-    if meeting.status == MeetingStatus.CLOSED and status != MeetingStatus.CLOSED:
+    if meeting.status in {MeetingStatus.CLOSED, MeetingStatus.ARCHIVED} and status not in {
+        MeetingStatus.CLOSED,
+        MeetingStatus.ARCHIVED,
+    }:
         raise ValueError("已結束的會議不可重新開啟")
+    allowed: dict[MeetingStatus, set[MeetingStatus]] = {
+        MeetingStatus.DRAFT: {MeetingStatus.CONFIRMED, MeetingStatus.CHECKIN, MeetingStatus.ACTIVE},
+        MeetingStatus.CONFIRMED: {MeetingStatus.CHECKIN, MeetingStatus.ACTIVE, MeetingStatus.DRAFT},
+        MeetingStatus.CHECKIN: {MeetingStatus.ACTIVE, MeetingStatus.PAUSED, MeetingStatus.CLOSED},
+        MeetingStatus.ACTIVE: {MeetingStatus.BREAK, MeetingStatus.PAUSED, MeetingStatus.CLOSED},
+        MeetingStatus.BREAK: {MeetingStatus.ACTIVE, MeetingStatus.PAUSED, MeetingStatus.CLOSED},
+        MeetingStatus.PAUSED: {MeetingStatus.ACTIVE, MeetingStatus.BREAK, MeetingStatus.CLOSED},
+        MeetingStatus.CLOSED: {MeetingStatus.ARCHIVED},
+        MeetingStatus.ARCHIVED: set(),
+    }
+    if status != meeting.status and status not in allowed.get(MeetingStatus(meeting.status), set()):
+        raise ValueError("不允許的會議狀態轉換")
     meeting.status = status
     if status == MeetingStatus.CLOSED and meeting.ends_at is None:
         meeting.ends_at = datetime.now(UTC)
@@ -285,6 +333,7 @@ async def confirm_meeting(
     )
     meeting.notice_document_id = notice.id
     meeting.confirmed_at = datetime.now(UTC)
+    meeting.status = MeetingStatus.CONFIRMED
     await session.flush()
 
     # 通知所有出席者：開會邀請
@@ -411,8 +460,8 @@ async def delete_agenda_item(
     session: AsyncSession, meeting: Meeting, item: MeetingAgendaItem
 ) -> None:
     """刪除草稿議程項目。"""
-    if meeting.status != MeetingStatus.DRAFT:
-        raise ValueError("僅草稿狀態的會議可以刪除議程項目")
+    if meeting.status not in {MeetingStatus.DRAFT, MeetingStatus.CONFIRMED}:
+        raise ValueError("僅草稿或議程已確認狀態的會議可以刪除議程項目")
     if meeting.current_agenda_item_id == item.id:
         meeting.current_agenda_item_id = None
     await session.delete(item)
@@ -866,6 +915,7 @@ async def create_vote(session: AsyncSession, meeting: Meeting, *, data: VoteCrea
         agenda_item_id=data.agenda_item_id,
         visibility=data.visibility,
         pass_threshold=data.pass_threshold or meeting.default_pass_threshold,
+        threshold_type=data.threshold_type,
     )
     session.add(vote)
     await session.flush()
@@ -924,6 +974,19 @@ async def get_or_create_screen_state(session: AsyncSession, meeting: Meeting) ->
     return state
 
 
+async def get_or_create_timer_state(session: AsyncSession, meeting: Meeting) -> MeetingTimerState:
+    state = meeting.timer_state
+    if state is None:
+        state = MeetingTimerState(
+            meeting_id=meeting.id,
+            duration_seconds=meeting.default_speech_seconds,
+            remaining_when_paused=meeting.default_speech_seconds,
+        )
+        session.add(state)
+        await session.flush()
+    return state
+
+
 async def update_screen_state(
     session: AsyncSession,
     meeting: Meeting,
@@ -947,6 +1010,179 @@ async def update_vote(session: AsyncSession, vote: MeetingVote, *, data: VoteUpd
         setattr(vote, field, value)
     await session.flush()
     return vote
+
+
+def current_timer_remaining(state: MeetingTimerState, now: datetime | None = None) -> int:
+    if state.status == TimerStatus.RUNNING and state.server_started_at is not None:
+        now = now or datetime.now(UTC)
+        elapsed = int((now - state.server_started_at).total_seconds())
+        return state.duration_seconds - elapsed
+    return state.remaining_when_paused
+
+
+async def create_speech_queue_item(
+    session: AsyncSession,
+    meeting: Meeting,
+    *,
+    data: SpeechQueueCreate,
+) -> MeetingSpeechQueueItem:
+    request = None
+    user = None
+    if data.request_id is not None:
+        request = await session.get(MeetingRequest, data.request_id)
+        if request is None or request.meeting_id != meeting.id:
+            raise ValueError("找不到此議事請求")
+    user_id = data.user_id or (request.user_id if request else None)
+    if user_id is not None:
+        user = await session.get(User, user_id)
+    speaker_name = data.speaker_name or (user.display_name if user else None)
+    if not speaker_name:
+        raise ValueError("請提供發言人姓名")
+    max_order = max((item.order_index for item in meeting.speech_queue), default=-1)
+    duration = data.duration_seconds or meeting.default_speech_seconds
+    item = MeetingSpeechQueueItem(
+        meeting_id=meeting.id,
+        agenda_item_id=data.agenda_item_id
+        or (request.agenda_item_id if request else meeting.current_agenda_item_id),
+        user_id=user_id,
+        request_id=data.request_id,
+        speaker_name=speaker_name,
+        speaker_role=data.speaker_role,
+        order_index=max_order + 1,
+        duration_seconds=duration,
+        remaining_seconds=duration,
+    )
+    session.add(item)
+    if request is not None:
+        request.status = MeetingRequestStatus.ACKNOWLEDGED
+    await session.flush()
+    return item
+
+
+async def update_speech_queue_item(
+    session: AsyncSession,
+    item: MeetingSpeechQueueItem,
+    *,
+    data: SpeechQueueUpdate,
+) -> MeetingSpeechQueueItem:
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(item, field, value)
+    if (
+        "duration_seconds" in data.model_fields_set
+        and "remaining_seconds" not in data.model_fields_set
+    ):
+        item.remaining_seconds = item.duration_seconds
+    await session.flush()
+    return item
+
+
+async def reorder_speech_queue(
+    session: AsyncSession, meeting: Meeting, ordered_ids: list[uuid.UUID]
+) -> list[MeetingSpeechQueueItem]:
+    items = {item.id: item for item in meeting.speech_queue}
+    if set(ordered_ids) != set(items):
+        raise ValueError("發言排序清單與目前 queue 不一致")
+    for index, item_id in enumerate(ordered_ids):
+        items[item_id].order_index = index
+    await session.flush()
+    return sorted(items.values(), key=lambda item: item.order_index)
+
+
+async def start_speech(
+    session: AsyncSession, meeting: Meeting, item: MeetingSpeechQueueItem
+) -> MeetingSpeechQueueItem:
+    state = await get_or_create_timer_state(session, meeting)
+    now = datetime.now(UTC)
+    for other in meeting.speech_queue:
+        if (
+            other.status in {SpeechQueueStatus.SPEAKING, SpeechQueueStatus.PAUSED}
+            and other.id != item.id
+        ):
+            other.status = SpeechQueueStatus.FINISHED
+            other.finished_at = now
+    item.status = SpeechQueueStatus.SPEAKING
+    item.started_at = now
+    item.paused_at = None
+    if item.remaining_seconds <= 0:
+        item.remaining_seconds = item.duration_seconds
+    state.active_speech_id = item.id
+    state.status = TimerStatus.RUNNING
+    state.server_started_at = now
+    state.duration_seconds = item.remaining_seconds
+    state.remaining_when_paused = item.remaining_seconds
+    await session.flush()
+    return item
+
+
+async def pause_speech(
+    session: AsyncSession, meeting: Meeting, item: MeetingSpeechQueueItem
+) -> MeetingSpeechQueueItem:
+    state = await get_or_create_timer_state(session, meeting)
+    if state.active_speech_id != item.id or state.status != TimerStatus.RUNNING:
+        raise ValueError("此發言目前沒有進行中的計時")
+    remaining = current_timer_remaining(state)
+    item.remaining_seconds = max(0, remaining)
+    item.status = SpeechQueueStatus.PAUSED
+    item.paused_at = datetime.now(UTC)
+    state.status = TimerStatus.PAUSED if remaining >= 0 else TimerStatus.OVERTIME
+    state.remaining_when_paused = remaining
+    state.server_started_at = None
+    await session.flush()
+    return item
+
+
+async def resume_speech(
+    session: AsyncSession, meeting: Meeting, item: MeetingSpeechQueueItem
+) -> MeetingSpeechQueueItem:
+    state = await get_or_create_timer_state(session, meeting)
+    if state.active_speech_id != item.id:
+        state.active_speech_id = item.id
+    item.status = SpeechQueueStatus.SPEAKING
+    item.paused_at = None
+    state.status = TimerStatus.RUNNING
+    state.server_started_at = datetime.now(UTC)
+    state.duration_seconds = item.remaining_seconds
+    state.remaining_when_paused = item.remaining_seconds
+    await session.flush()
+    return item
+
+
+async def finish_speech(
+    session: AsyncSession,
+    meeting: Meeting,
+    item: MeetingSpeechQueueItem,
+    *,
+    status: SpeechQueueStatus = SpeechQueueStatus.FINISHED,
+) -> MeetingSpeechQueueItem:
+    state = await get_or_create_timer_state(session, meeting)
+    if state.active_speech_id == item.id:
+        item.remaining_seconds = max(0, current_timer_remaining(state))
+        state.active_speech_id = None
+        state.status = TimerStatus.IDLE
+        state.server_started_at = None
+        state.duration_seconds = meeting.default_speech_seconds
+        state.remaining_when_paused = meeting.default_speech_seconds
+    item.status = status
+    item.finished_at = datetime.now(UTC)
+    await session.flush()
+    return item
+
+
+async def extend_speech(
+    session: AsyncSession, meeting: Meeting, item: MeetingSpeechQueueItem, *, seconds: int
+) -> MeetingSpeechQueueItem:
+    state = await get_or_create_timer_state(session, meeting)
+    if state.active_speech_id == item.id and state.status == TimerStatus.RUNNING:
+        remaining = current_timer_remaining(state) + seconds
+        state.server_started_at = datetime.now(UTC)
+        state.duration_seconds = remaining
+        state.remaining_when_paused = remaining
+        item.remaining_seconds = remaining
+    else:
+        item.remaining_seconds += seconds
+    item.duration_seconds += seconds
+    await session.flush()
+    return item
 
 
 async def open_vote(session: AsyncSession, vote: MeetingVote) -> MeetingVote:
@@ -1059,6 +1295,7 @@ async def attendance_summary(session: AsyncSession, meeting_id: uuid.UUID) -> di
 
 async def decorate_vote(session: AsyncSession, vote: MeetingVote, *, include_ballots: bool) -> dict:
     eligible = await eligible_voter_count(session, vote.meeting_id)
+    summary = await attendance_summary(session, vote.meeting_id)
     ballots = vote.ballots if include_ballots or vote.visibility == VoteVisibility.NAMED else []
     return {
         "id": vote.id,
@@ -1069,12 +1306,13 @@ async def decorate_vote(session: AsyncSession, vote: MeetingVote, *, include_bal
         "visibility": vote.visibility,
         "status": vote.status,
         "pass_threshold": vote.pass_threshold,
+        "threshold_type": vote.threshold_type,
         "opened_at": vote.opened_at,
         "closed_at": vote.closed_at,
         "result_note": vote.result_note,
         "created_at": vote.created_at,
         "updated_at": vote.updated_at,
-        "tally": _vote_tally(vote, eligible),
+        "tally": _vote_tally(vote, eligible, summary.get("present_voters", 0)),
         "ballots": ballots,
     }
 
@@ -1184,6 +1422,16 @@ async def screen_payload(session: AsyncSession, meeting: Meeting) -> dict:
         (item for item in meeting.agenda_items if item.id == meeting.current_agenda_item_id), None
     )
     active_vote = next((vote for vote in meeting.votes if vote.status == VoteStatus.OPEN), None)
+    timer_state = await get_or_create_timer_state(session, meeting)
+    active_speech = next(
+        (
+            item
+            for item in meeting.speech_queue
+            if item.id == timer_state.active_speech_id
+            or item.status in {SpeechQueueStatus.SPEAKING, SpeechQueueStatus.PAUSED}
+        ),
+        None,
+    )
     return {
         "meeting": meeting,
         "current_agenda_item": current,
@@ -1193,6 +1441,14 @@ async def screen_payload(session: AsyncSession, meeting: Meeting) -> dict:
         "attendance_summary": await attendance_summary(session, meeting.id),
         "screen_state": await get_or_create_screen_state(session, meeting),
         "vote_roster": await vote_roster_payload(session, meeting, active_vote),
+        "active_speech": active_speech,
+        "speech_queue": [
+            item
+            for item in sorted(meeting.speech_queue, key=lambda item: item.order_index)
+            if item.status
+            in {SpeechQueueStatus.QUEUED, SpeechQueueStatus.SPEAKING, SpeechQueueStatus.PAUSED}
+        ],
+        "timer_state": timer_state,
     }
 
 
@@ -1212,6 +1468,16 @@ async def join_payload(session: AsyncSession, meeting: Meeting, *, user_id: uuid
         if active_vote
         else None
     )
+    timer_state = await get_or_create_timer_state(session, meeting)
+    active_speech = next(
+        (
+            item
+            for item in meeting.speech_queue
+            if item.id == timer_state.active_speech_id
+            or item.status in {SpeechQueueStatus.SPEAKING, SpeechQueueStatus.PAUSED}
+        ),
+        None,
+    )
     return {
         "meeting": meeting,
         "current_agenda_item": current,
@@ -1224,6 +1490,15 @@ async def join_payload(session: AsyncSession, meeting: Meeting, *, user_id: uuid
         if active_vote
         else None,
         "my_ballot": my_ballot,
+        "my_speech_queue_items": [
+            item
+            for item in sorted(meeting.speech_queue, key=lambda item: item.order_index)
+            if item.user_id == user_id
+            and item.status
+            in {SpeechQueueStatus.QUEUED, SpeechQueueStatus.SPEAKING, SpeechQueueStatus.PAUSED}
+        ],
+        "active_speech": active_speech,
+        "timer_state": timer_state,
     }
 
 
@@ -1232,8 +1507,18 @@ async def workspace_payload(session: AsyncSession) -> dict:
     rows = await list_meetings(session, limit=200)
     return {
         "today": [m for m in rows if m.starts_at and m.starts_at.date() == today],
-        "drafts": [m for m in rows if m.status == MeetingStatus.DRAFT],
-        "active": [m for m in rows if m.status in {MeetingStatus.ACTIVE, MeetingStatus.PAUSED}],
+        "drafts": [m for m in rows if m.status in {MeetingStatus.DRAFT, MeetingStatus.CONFIRMED}],
+        "active": [
+            m
+            for m in rows
+            if m.status
+            in {
+                MeetingStatus.CHECKIN,
+                MeetingStatus.ACTIVE,
+                MeetingStatus.BREAK,
+                MeetingStatus.PAUSED,
+            }
+        ],
         "closing_pending": [m for m in rows if m.status == MeetingStatus.CLOSED],
     }
 
@@ -1273,6 +1558,11 @@ async def minutes_payload(session: AsyncSession, meeting: Meeting) -> dict:
         lines.extend(["", "## 正式決議"])
         for decision in meeting.decisions:
             lines.append(f"- {decision.title}：{decision.content}")
+    if meeting.speech_queue:
+        lines.extend(["", "## 發言紀錄"])
+        for item in sorted(meeting.speech_queue, key=lambda x: x.started_at or x.created_at):
+            if item.status in {SpeechQueueStatus.FINISHED, SpeechQueueStatus.SKIPPED}:
+                lines.append(f"- {item.speaker_name}：{item.status}")
     lines.append("")
     lines.append("## 表決")
     for vote in votes:

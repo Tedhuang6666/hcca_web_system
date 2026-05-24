@@ -35,9 +35,13 @@ if TYPE_CHECKING:
 
 class MeetingStatus(StrEnum):
     DRAFT = "draft"
+    CONFIRMED = "confirmed"
+    CHECKIN = "checkin"
     ACTIVE = "active"
+    BREAK = "break"
     PAUSED = "paused"
     CLOSED = "closed"
+    ARCHIVED = "archived"
 
 
 class MeetingBillStage(StrEnum):
@@ -81,6 +85,13 @@ class VoteStatus(StrEnum):
 class VoteVisibility(StrEnum):
     NAMED = "named"
     ANONYMOUS = "anonymous"
+
+
+class VoteThresholdType(StrEnum):
+    SIMPLE_MAJORITY = "simple_majority"
+    PRESENT_MAJORITY = "present_majority"
+    ALL_MEMBERS_MAJORITY = "all_members_majority"
+    CUSTOM = "custom"
 
 
 class BallotChoice(StrEnum):
@@ -145,10 +156,31 @@ class MeetingDecisionStatus(StrEnum):
 
 class ScreenReadingMode(StrEnum):
     AGENDA = "agenda"
+    SPEAKER = "speaker"
+    VOTE = "vote"
+    RESULT = "result"
+    BREAK = "break"
+    ANNOUNCEMENT = "announcement"
+    DOCUMENT = "document"
     ARTICLE = "article"
     ATTACHMENT = "attachment"
-    VOTE = "vote"
     FREE_TEXT = "free_text"
+
+
+class SpeechQueueStatus(StrEnum):
+    QUEUED = "queued"
+    SPEAKING = "speaking"
+    PAUSED = "paused"
+    FINISHED = "finished"
+    SKIPPED = "skipped"
+    CANCELLED = "cancelled"
+
+
+class TimerStatus(StrEnum):
+    IDLE = "idle"
+    RUNNING = "running"
+    PAUSED = "paused"
+    OVERTIME = "overtime"
 
 
 class Meeting(Base, TimestampMixin):
@@ -173,15 +205,27 @@ class Meeting(Base, TimestampMixin):
     status: Mapped[MeetingStatus] = mapped_column(
         String(20), nullable=False, default=MeetingStatus.DRAFT, server_default=MeetingStatus.DRAFT
     )
-    expected_voters: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
-    quorum_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    expected_voters: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    quorum_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     default_pass_threshold: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
+    )
+    default_speech_seconds: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=180, server_default="180"
+    )
+    allow_observer_requests: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
     )
     screen_token: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
     checkin_token: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
     current_agenda_item_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("meeting_agenda_items.id", ondelete="SET NULL"), nullable=True
+        UUID(as_uuid=True),
+        ForeignKey("meeting_agenda_items.id", ondelete="SET NULL"),
+        nullable=True,
     )
     screen_focus_title: Mapped[str | None] = mapped_column(String(200), nullable=True)
     screen_focus_body: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -220,6 +264,21 @@ class Meeting(Base, TimestampMixin):
     requests: Mapped[list[MeetingRequest]] = relationship(
         "MeetingRequest", back_populates="meeting", cascade="all, delete-orphan"
     )
+    speech_queue: Mapped[list[MeetingSpeechQueueItem]] = relationship(
+        "MeetingSpeechQueueItem",
+        back_populates="meeting",
+        cascade="all, delete-orphan",
+        foreign_keys="MeetingSpeechQueueItem.meeting_id",
+        order_by="MeetingSpeechQueueItem.order_index",
+    )
+    timer_state: Mapped[MeetingTimerState | None] = relationship(
+        "MeetingTimerState",
+        back_populates="meeting",
+        cascade="all, delete-orphan",
+        uselist=False,
+        single_parent=True,
+        foreign_keys="MeetingTimerState.meeting_id",
+    )
     attendance_sources: Mapped[list[MeetingAttendanceSource]] = relationship(
         "MeetingAttendanceSource", back_populates="meeting", cascade="all, delete-orphan"
     )
@@ -248,18 +307,22 @@ class MeetingAgendaItem(Base, TimestampMixin):
     """會議議程項目，可關聯法規或公文。"""
 
     __tablename__ = "meeting_agenda_items"
-    __table_args__ = (
-        Index("ix_meeting_agenda_items_meeting_order", "meeting_id", "order_index"),
-    )
+    __table_args__ = (Index("ix_meeting_agenda_items_meeting_order", "meeting_id", "order_index"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     meeting_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("meetings.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     item_type: Mapped[AgendaItemType] = mapped_column(
-        String(20), nullable=False, default=AgendaItemType.MANUAL, server_default=AgendaItemType.MANUAL
+        String(20),
+        nullable=False,
+        default=AgendaItemType.MANUAL,
+        server_default=AgendaItemType.MANUAL,
     )
     order_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     regulation_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -283,7 +346,9 @@ class MeetingAgendaItem(Base, TimestampMixin):
     artifact_links: Mapped[list[MeetingArtifactLink]] = relationship(
         "MeetingArtifactLink", back_populates="agenda_item", cascade="all, delete-orphan"
     )
-    motions: Mapped[list[MeetingMotion]] = relationship("MeetingMotion", back_populates="agenda_item")
+    motions: Mapped[list[MeetingMotion]] = relationship(
+        "MeetingMotion", back_populates="agenda_item"
+    )
     decisions: Mapped[list[MeetingDecision]] = relationship(
         "MeetingDecision", back_populates="agenda_item"
     )
@@ -331,16 +396,25 @@ class MeetingAttendance(Base, TimestampMixin):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     meeting_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("meetings.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     role: Mapped[AttendanceRole] = mapped_column(
-        String(20), nullable=False, default=AttendanceRole.ATTENDEE, server_default=AttendanceRole.ATTENDEE
+        String(20),
+        nullable=False,
+        default=AttendanceRole.ATTENDEE,
+        server_default=AttendanceRole.ATTENDEE,
     )
     status: Mapped[AttendanceStatus] = mapped_column(
-        String(20), nullable=False, default=AttendanceStatus.EXPECTED, server_default=AttendanceStatus.EXPECTED
+        String(20),
+        nullable=False,
+        default=AttendanceStatus.EXPECTED,
+        server_default=AttendanceStatus.EXPECTED,
     )
     checked_in_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_voting_eligible: Mapped[bool] = mapped_column(
@@ -364,24 +438,30 @@ class MeetingAttendanceSource(Base, TimestampMixin):
     """名冊匯入來源，保留班級/組織/職位等來源標籤供稽核。"""
 
     __tablename__ = "meeting_attendance_sources"
-    __table_args__ = (
-        Index("ix_meeting_attendance_sources_meeting", "meeting_id", "source_type"),
-    )
+    __table_args__ = (Index("ix_meeting_attendance_sources_meeting", "meeting_id", "source_type"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     meeting_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("meetings.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     source_type: Mapped[AttendanceSourceType] = mapped_column(String(30), nullable=False)
     source_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     label: Mapped[str] = mapped_column(String(200), nullable=False)
     role: Mapped[AttendanceRole] = mapped_column(
-        String(20), nullable=False, default=AttendanceRole.ATTENDEE, server_default=AttendanceRole.ATTENDEE
+        String(20),
+        nullable=False,
+        default=AttendanceRole.ATTENDEE,
+        server_default=AttendanceRole.ATTENDEE,
     )
     is_voting_eligible: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )
-    imported_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    imported_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     created_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
@@ -431,7 +511,10 @@ class MeetingVote(Base, TimestampMixin):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     meeting_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("meetings.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     agenda_item_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
@@ -441,12 +524,23 @@ class MeetingVote(Base, TimestampMixin):
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     visibility: Mapped[VoteVisibility] = mapped_column(
-        String(20), nullable=False, default=VoteVisibility.NAMED, server_default=VoteVisibility.NAMED
+        String(20),
+        nullable=False,
+        default=VoteVisibility.NAMED,
+        server_default=VoteVisibility.NAMED,
     )
     status: Mapped[VoteStatus] = mapped_column(
         String(20), nullable=False, default=VoteStatus.DRAFT, server_default=VoteStatus.DRAFT
     )
-    pass_threshold: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    pass_threshold: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    threshold_type: Mapped[VoteThresholdType] = mapped_column(
+        String(30),
+        nullable=False,
+        default=VoteThresholdType.SIMPLE_MAJORITY,
+        server_default=VoteThresholdType.SIMPLE_MAJORITY,
+    )
     opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     result_note: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -459,7 +553,9 @@ class MeetingVote(Base, TimestampMixin):
         "MeetingBallot", back_populates="vote", cascade="all, delete-orphan"
     )
     motions: Mapped[list[MeetingMotion]] = relationship("MeetingMotion", back_populates="vote")
-    decisions: Mapped[list[MeetingDecision]] = relationship("MeetingDecision", back_populates="vote")
+    decisions: Mapped[list[MeetingDecision]] = relationship(
+        "MeetingDecision", back_populates="vote"
+    )
 
 
 class MeetingBallot(Base, TimestampMixin):
@@ -473,7 +569,10 @@ class MeetingBallot(Base, TimestampMixin):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     vote_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("meeting_votes.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("meeting_votes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     voter_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
@@ -496,7 +595,10 @@ class MeetingRequest(Base, TimestampMixin):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     meeting_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("meetings.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
@@ -509,13 +611,103 @@ class MeetingRequest(Base, TimestampMixin):
         server_default=MeetingRequestStatus.PENDING,
     )
     agenda_item_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("meeting_agenda_items.id", ondelete="SET NULL"), nullable=True
+        UUID(as_uuid=True),
+        ForeignKey("meeting_agenda_items.id", ondelete="SET NULL"),
+        nullable=True,
     )
     content: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     meeting: Mapped[Meeting] = relationship("Meeting", back_populates="requests")
     user: Mapped[User] = relationship("User")
     agenda_item: Mapped[MeetingAgendaItem | None] = relationship("MeetingAgendaItem")
+
+
+class MeetingSpeechQueueItem(Base, TimestampMixin):
+    """正式發言 queue 項目與單次發言計時狀態。"""
+
+    __tablename__ = "meeting_speech_queue_items"
+    __table_args__ = (
+        Index("ix_meeting_speech_queue_meeting_status", "meeting_id", "status"),
+        Index("ix_meeting_speech_queue_meeting_order", "meeting_id", "order_index"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    meeting_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("meetings.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    agenda_item_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("meeting_agenda_items.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    request_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("meeting_requests.id", ondelete="SET NULL"), nullable=True
+    )
+    speaker_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    speaker_role: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    status: Mapped[SpeechQueueStatus] = mapped_column(
+        String(20),
+        nullable=False,
+        default=SpeechQueueStatus.QUEUED,
+        server_default=SpeechQueueStatus.QUEUED,
+    )
+    order_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    duration_seconds: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=180, server_default="180"
+    )
+    remaining_seconds: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=180, server_default="180"
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    paused_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    meeting: Mapped[Meeting] = relationship(
+        "Meeting", back_populates="speech_queue", foreign_keys=[meeting_id]
+    )
+    agenda_item: Mapped[MeetingAgendaItem | None] = relationship("MeetingAgendaItem")
+    user: Mapped[User | None] = relationship("User")
+    request: Mapped[MeetingRequest | None] = relationship("MeetingRequest")
+
+
+class MeetingTimerState(Base, TimestampMixin):
+    """會議目前發言計時器，讓控制台、大屏與議員端以 server time 同步。"""
+
+    __tablename__ = "meeting_timer_states"
+
+    meeting_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("meetings.id", ondelete="CASCADE"), primary_key=True
+    )
+    active_speech_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("meeting_speech_queue_items.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    status: Mapped[TimerStatus] = mapped_column(
+        String(20), nullable=False, default=TimerStatus.IDLE, server_default=TimerStatus.IDLE
+    )
+    server_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    duration_seconds: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=180, server_default="180"
+    )
+    remaining_when_paused: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=180, server_default="180"
+    )
+
+    meeting: Mapped[Meeting] = relationship(
+        "Meeting", back_populates="timer_state", foreign_keys=[meeting_id]
+    )
+    active_speech: Mapped[MeetingSpeechQueueItem | None] = relationship(
+        "MeetingSpeechQueueItem", foreign_keys=[active_speech_id]
+    )
 
 
 class MeetingMotion(Base, TimestampMixin):
@@ -529,16 +721,24 @@ class MeetingMotion(Base, TimestampMixin):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     meeting_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("meetings.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     agenda_item_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("meeting_agenda_items.id", ondelete="SET NULL"), nullable=True
+        UUID(as_uuid=True),
+        ForeignKey("meeting_agenda_items.id", ondelete="SET NULL"),
+        nullable=True,
     )
     proposer_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     motion_type: Mapped[MeetingMotionType] = mapped_column(
-        String(30), nullable=False, default=MeetingMotionType.MAIN, server_default=MeetingMotionType.MAIN
+        String(30),
+        nullable=False,
+        default=MeetingMotionType.MAIN,
+        server_default=MeetingMotionType.MAIN,
     )
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     content: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -571,7 +771,10 @@ class MeetingDecision(Base, TimestampMixin):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     meeting_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("meetings.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     agenda_item_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -616,27 +819,44 @@ class MeetingScreenState(Base, TimestampMixin):
         UUID(as_uuid=True), ForeignKey("meetings.id", ondelete="CASCADE"), primary_key=True
     )
     agenda_item_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("meeting_agenda_items.id", ondelete="SET NULL"), nullable=True
+        UUID(as_uuid=True),
+        ForeignKey("meeting_agenda_items.id", ondelete="SET NULL"),
+        nullable=True,
     )
     reading_mode: Mapped[ScreenReadingMode] = mapped_column(
-        String(30), nullable=False, default=ScreenReadingMode.AGENDA, server_default=ScreenReadingMode.AGENDA
+        String(30),
+        nullable=False,
+        default=ScreenReadingMode.AGENDA,
+        server_default=ScreenReadingMode.AGENDA,
     )
     title: Mapped[str | None] = mapped_column(String(200), nullable=True)
     body: Mapped[str | None] = mapped_column(Text, nullable=True)
     active_attachment_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("meeting_agenda_attachments.id", ondelete="SET NULL"), nullable=True
+        UUID(as_uuid=True),
+        ForeignKey("meeting_agenda_attachments.id", ondelete="SET NULL"),
+        nullable=True,
     )
-    scroll_position: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
-    auto_scroll: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
-    scroll_speed: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
-    is_fullscreen: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    scroll_position: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    auto_scroll: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    scroll_speed: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    is_fullscreen: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     updated_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
 
     meeting: Mapped[Meeting] = relationship("Meeting", back_populates="screen_state")
     agenda_item: Mapped[MeetingAgendaItem | None] = relationship("MeetingAgendaItem")
-    active_attachment: Mapped[MeetingAgendaAttachment | None] = relationship("MeetingAgendaAttachment")
+    active_attachment: Mapped[MeetingAgendaAttachment | None] = relationship(
+        "MeetingAgendaAttachment"
+    )
     updater: Mapped[User | None] = relationship("User")
 
 
@@ -651,16 +871,23 @@ class MeetingEvent(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     meeting_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("meetings.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     agenda_item_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("meeting_agenda_items.id", ondelete="SET NULL"), nullable=True
+        UUID(as_uuid=True),
+        ForeignKey("meeting_agenda_items.id", ondelete="SET NULL"),
+        nullable=True,
     )
     event_type: Mapped[str] = mapped_column(String(80), nullable=False)
     actor_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    payload: Mapped[dict] = mapped_column(JSONDict, nullable=False, default=dict, server_default="{}")
+    payload: Mapped[dict] = mapped_column(
+        JSONDict, nullable=False, default=dict, server_default="{}"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )

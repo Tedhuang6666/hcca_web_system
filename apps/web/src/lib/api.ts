@@ -6,7 +6,8 @@ import type {
   ProductOut, OrderOut, OrderListItem, CartOut, OrderSummaryOut,
   ProductCategoryOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut,
   CatalogCategoryOut,
-  SchoolClassOut, SchoolClassListItem, SchoolClassBulkCreate, SchoolClassBulkCreateOut,
+  SchoolClassOut, SchoolClassListItem, SchoolClassBulkActionKind, SchoolClassBulkActionOut,
+  SchoolClassBulkCreate, SchoolClassBulkCreateOut,
   ClassMemberOut, ClassStudentRangeOut, ClassCadreOut, ClassManualMemberOut,
   ClassMembershipOut, ClassRoleOut,
   RegulationOut, RegulationListItem, RegulationCategory, RegulationSearchResult,
@@ -19,9 +20,10 @@ import type {
   MeetingMotionOut, MeetingDecisionOut,
   MeetingAgendaAttachmentOut, MeetingAgendaItemOut, MeetingAttendanceOut, MeetingVoteOut, MeetingBallotOut,
   MeetingRequestOut, MeetingBillStage, MeetingRegulationBrief,
-  AgendaItemType, AttendanceRole, AttendanceStatus, VoteVisibility, BallotChoice,
+  AgendaItemType, AttendanceRole, AttendanceStatus, VoteVisibility, VoteThresholdType, BallotChoice,
   MeetingRequestStatus, MeetingRequestType, AttendanceSourceType, MeetingArtifactType,
   MeetingMotionType, MeetingMotionStatus, MeetingDecisionStatus, MeetingScreenReadingMode,
+  MeetingSpeechQueueItemOut, MeetingSpeechQueueStatus,
   MealAvailabilityOut, MealClassPickupCodeOut, MealPickupLookupOut,
   MealProductOut, MealVendorApplicationOut, MealVendorOut,
   MenuScheduleOut, MenuScheduleListItem, MenuItemOut,
@@ -36,6 +38,7 @@ import type {
   PetitionCaseListItem, PetitionCaseOut, PetitionCreate, PetitionCreatedOut,
   PetitionStatsOut, PetitionStatus, PetitionTypeOut,
   NotificationPreferences,
+  LineBindingOut, LineLinkCodeOut,
   DocumentEfficiencyOut, DeptRankingItem, PendingAlertItem, AnnouncementParticipationItem,
   SurveyParticipationItem,
   EmailComposePayload, EmailMessageCreate, EmailMessageOut, EmailMessageDetailOut,
@@ -539,6 +542,8 @@ export const classApi = {
   myClass: () => get<SchoolClassListItem | null>("/classes/me"),
   create: (body: Record<string, unknown>) => post<SchoolClassOut>("/classes", body),
   bulkCreate: (body: SchoolClassBulkCreate) => post<SchoolClassBulkCreateOut>("/classes/bulk", body),
+  bulkAction: (classIds: string[], action: SchoolClassBulkActionKind) =>
+    post<SchoolClassBulkActionOut>("/classes/bulk/action", { class_ids: classIds, action }),
   update: (id: string, body: Record<string, unknown>) =>
     patch<SchoolClassOut>(`/classes/${id}`, body),
   remove: (id: string) => del<void>(`/classes/${id}`),
@@ -868,6 +873,12 @@ export const usersApi = {
     get<import("@/lib/types").UserPositionRead[]>(
       `/user-positions/me?active_only=${activeOnly}`
     ),
+};
+
+export const lineApi = {
+  me: () => get<LineBindingOut>("/line/me"),
+  createLinkCode: () => post<LineLinkCodeOut>("/line/link-code", {}),
+  unlink: () => del<void>("/line/me"),
 };
 
 // ── 組織（公開端點）───────────────────────────────────────────────────────────
@@ -1592,6 +1603,8 @@ export const meetingsApi = {
     expected_voters?: number;
     quorum_count?: number;
     default_pass_threshold?: number;
+    default_speech_seconds?: number;
+    allow_observer_requests?: boolean;
     bill_stage?: MeetingBillStage | null;
   }) => post<MeetingOut>("/meetings", body),
   update: (id: string, body: Partial<{
@@ -1604,14 +1617,19 @@ export const meetingsApi = {
     expected_voters: number;
     quorum_count: number;
     default_pass_threshold: number;
+    default_speech_seconds: number;
+    allow_observer_requests: boolean;
     bill_stage: MeetingBillStage | null;
     current_agenda_item_id: string | null;
     screen_focus_title: string | null;
     screen_focus_body: string | null;
   }>) => patch<MeetingOut>(`/meetings/${id}`, body),
   start: (id: string) => post<MeetingOut>(`/meetings/${id}/start`),
+  openCheckIn: (id: string) => post<MeetingOut>(`/meetings/${id}/check-in/open`),
   pause: (id: string) => post<MeetingOut>(`/meetings/${id}/pause`),
+  break: (id: string) => post<MeetingOut>(`/meetings/${id}/break`),
   close: (id: string) => post<MeetingOut>(`/meetings/${id}/close`),
+  archive: (id: string) => post<MeetingOut>(`/meetings/${id}/archive`),
   addAgendaItem: (id: string, body: {
     title: string;
     description?: string | null;
@@ -1738,12 +1756,14 @@ export const meetingsApi = {
     agenda_item_id?: string | null;
     visibility?: VoteVisibility;
     pass_threshold?: number;
+    threshold_type?: VoteThresholdType;
   }) => post<MeetingVoteOut>(`/meetings/${id}/votes`, body),
   updateVote: (id: string, voteId: string, body: Partial<{
     title: string;
     description: string | null;
     visibility: VoteVisibility;
     pass_threshold: number;
+    threshold_type: VoteThresholdType;
     result_note: string | null;
   }>) => patch<MeetingVoteOut>(`/meetings/${id}/votes/${voteId}`, body),
   createMotion: (id: string, body: {
@@ -1793,6 +1813,39 @@ export const meetingsApi = {
   }) => post<MeetingRequestOut>(`/meetings/${id}/requests`, body),
   updateRequest: (id: string, requestId: string, status: MeetingRequestStatus) =>
     patch<MeetingRequestOut>(`/meetings/${id}/requests/${requestId}`, { status }),
+  enqueueRequest: (id: string, requestId: string) =>
+    post<MeetingSpeechQueueItemOut>(`/meetings/${id}/requests/${requestId}/enqueue`),
+  createSpeechQueueItem: (id: string, body: {
+    agenda_item_id?: string | null;
+    user_id?: string | null;
+    request_id?: string | null;
+    speaker_name?: string | null;
+    speaker_role?: string | null;
+    duration_seconds?: number | null;
+  }) => post<MeetingSpeechQueueItemOut>(`/meetings/${id}/speech-queue`, body),
+  reorderSpeechQueue: (id: string, ordered_ids: string[]) =>
+    patch<MeetingSpeechQueueItemOut[]>(`/meetings/${id}/speech-queue/reorder`, { ordered_ids }),
+  updateSpeechQueueItem: (id: string, speechId: string, body: Partial<{
+    agenda_item_id: string | null;
+    speaker_name: string;
+    speaker_role: string | null;
+    status: MeetingSpeechQueueStatus;
+    order_index: number;
+    duration_seconds: number;
+    remaining_seconds: number;
+  }>) => patch<MeetingSpeechQueueItemOut>(`/meetings/${id}/speech-queue/${speechId}`, body),
+  startSpeech: (id: string, speechId: string) =>
+    post<MeetingSpeechQueueItemOut>(`/meetings/${id}/speech-queue/${speechId}/start`),
+  pauseSpeech: (id: string, speechId: string) =>
+    post<MeetingSpeechQueueItemOut>(`/meetings/${id}/speech-queue/${speechId}/pause`),
+  resumeSpeech: (id: string, speechId: string) =>
+    post<MeetingSpeechQueueItemOut>(`/meetings/${id}/speech-queue/${speechId}/resume`),
+  finishSpeech: (id: string, speechId: string) =>
+    post<MeetingSpeechQueueItemOut>(`/meetings/${id}/speech-queue/${speechId}/finish`),
+  skipSpeech: (id: string, speechId: string) =>
+    post<MeetingSpeechQueueItemOut>(`/meetings/${id}/speech-queue/${speechId}/skip`),
+  extendSpeech: (id: string, speechId: string, seconds: number) =>
+    post<MeetingSpeechQueueItemOut>(`/meetings/${id}/speech-queue/${speechId}/extend`, { seconds }),
   screen: (id: string) => get<MeetingScreenOut>(`/meetings/${id}/screen`),
   updateScreenState: (id: string, body: Partial<{
     agenda_item_id: string | null;

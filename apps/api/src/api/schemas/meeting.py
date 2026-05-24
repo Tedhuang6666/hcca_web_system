@@ -23,7 +23,10 @@ from api.models.meeting import (
     MeetingRequestType,
     MeetingStatus,
     ScreenReadingMode,
+    SpeechQueueStatus,
+    TimerStatus,
     VoteStatus,
+    VoteThresholdType,
     VoteVisibility,
 )
 from api.models.regulation import (
@@ -76,6 +79,8 @@ class MeetingCreate(BaseModel):
     expected_voters: int = Field(0, ge=0)
     quorum_count: int = Field(0, ge=0)
     default_pass_threshold: int = Field(0, ge=0)
+    default_speech_seconds: int = Field(180, ge=10, le=7200)
+    allow_observer_requests: bool = False
     bill_stage: MeetingBillStage | None = None
 
 
@@ -89,6 +94,8 @@ class MeetingUpdate(BaseModel):
     expected_voters: int | None = Field(None, ge=0)
     quorum_count: int | None = Field(None, ge=0)
     default_pass_threshold: int | None = Field(None, ge=0)
+    default_speech_seconds: int | None = Field(None, ge=10, le=7200)
+    allow_observer_requests: bool | None = None
     bill_stage: MeetingBillStage | None = None
     current_agenda_item_id: uuid.UUID | None = None
     screen_focus_title: str | None = Field(None, max_length=200)
@@ -270,6 +277,7 @@ class VoteCreate(BaseModel):
     agenda_item_id: uuid.UUID | None = None
     visibility: VoteVisibility = VoteVisibility.NAMED
     pass_threshold: int = Field(0, ge=0)
+    threshold_type: VoteThresholdType = VoteThresholdType.SIMPLE_MAJORITY
 
 
 class VoteUpdate(BaseModel):
@@ -277,6 +285,7 @@ class VoteUpdate(BaseModel):
     description: str | None = None
     visibility: VoteVisibility | None = None
     pass_threshold: int | None = Field(None, ge=0)
+    threshold_type: VoteThresholdType | None = None
     result_note: str | None = None
 
 
@@ -399,6 +408,7 @@ class VoteTallyOut(BaseModel):
     total: int
     eligible: int
     pass_threshold: int
+    threshold_type: VoteThresholdType = VoteThresholdType.SIMPLE_MAJORITY
     passed: bool
 
 
@@ -413,6 +423,7 @@ class VoteOut(BaseModel):
     visibility: VoteVisibility
     status: VoteStatus
     pass_threshold: int
+    threshold_type: VoteThresholdType
     opened_at: datetime | None
     closed_at: datetime | None
     result_note: str | None
@@ -455,6 +466,8 @@ class MeetingListItem(BaseModel):
     expected_voters: int
     quorum_count: int
     default_pass_threshold: int
+    default_speech_seconds: int
+    allow_observer_requests: bool
     bill_stage: MeetingBillStage | None = None
     current_agenda_item_id: uuid.UUID | None
     screen_focus_title: str | None = None
@@ -493,6 +506,67 @@ class ScreenStateOut(BaseModel):
     updated_at: datetime | None = None
 
 
+class SpeechQueueCreate(BaseModel):
+    agenda_item_id: uuid.UUID | None = None
+    user_id: uuid.UUID | None = None
+    request_id: uuid.UUID | None = None
+    speaker_name: str | None = Field(None, min_length=1, max_length=100)
+    speaker_role: str | None = Field(None, max_length=100)
+    duration_seconds: int | None = Field(None, ge=10, le=7200)
+
+
+class SpeechQueueUpdate(BaseModel):
+    agenda_item_id: uuid.UUID | None = None
+    speaker_name: str | None = Field(None, min_length=1, max_length=100)
+    speaker_role: str | None = Field(None, max_length=100)
+    status: SpeechQueueStatus | None = None
+    order_index: int | None = Field(None, ge=0)
+    duration_seconds: int | None = Field(None, ge=10, le=7200)
+    remaining_seconds: int | None = Field(None, ge=0, le=7200)
+
+
+class SpeechQueueReorder(BaseModel):
+    ordered_ids: list[uuid.UUID]
+
+
+class SpeechQueueExtend(BaseModel):
+    seconds: int = Field(..., ge=1, le=7200)
+
+
+class SpeechQueueItemOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    meeting_id: uuid.UUID
+    agenda_item_id: uuid.UUID | None
+    user_id: uuid.UUID | None
+    request_id: uuid.UUID | None
+    speaker_name: str
+    speaker_role: str | None
+    status: SpeechQueueStatus
+    order_index: int
+    duration_seconds: int
+    remaining_seconds: int
+    started_at: datetime | None
+    paused_at: datetime | None
+    finished_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+    user: UserBrief | None = None
+
+
+class TimerStateOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    meeting_id: uuid.UUID
+    active_speech_id: uuid.UUID | None
+    status: TimerStatus
+    server_started_at: datetime | None
+    duration_seconds: int
+    remaining_when_paused: int
+    updated_at: datetime | None = None
+
+
 class MeetingOut(MeetingListItem):
     description: str | None
     ends_at: datetime | None
@@ -504,6 +578,8 @@ class MeetingOut(MeetingListItem):
     attendance_sources: list[AttendanceSourceOut] = []
     votes: list[VoteOut] = []
     requests: list[MeetingRequestOut] = []
+    speech_queue: list[SpeechQueueItemOut] = []
+    timer_state: TimerStateOut | None = None
     motions: list[MotionOut] = []
     decisions: list[DecisionOut] = []
     screen_state: ScreenStateOut | None = None
@@ -517,6 +593,9 @@ class MeetingScreenOut(BaseModel):
     attendance_summary: dict[str, int]
     screen_state: ScreenStateOut | None = None
     vote_roster: VoteRosterOut | None = None
+    active_speech: SpeechQueueItemOut | None = None
+    speech_queue: list[SpeechQueueItemOut] = []
+    timer_state: TimerStateOut | None = None
 
 
 class MeetingJoinOut(BaseModel):
@@ -527,6 +606,9 @@ class MeetingJoinOut(BaseModel):
     can_vote: bool
     active_vote: VoteOut | None
     my_ballot: BallotOut | None = None
+    my_speech_queue_items: list[SpeechQueueItemOut] = []
+    active_speech: SpeechQueueItemOut | None = None
+    timer_state: TimerStateOut | None = None
 
 
 class MeetingWorkspaceOut(BaseModel):

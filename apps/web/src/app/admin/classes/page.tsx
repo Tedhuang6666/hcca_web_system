@@ -5,11 +5,15 @@ import {
   BadgeCheck,
   BookUser,
   CalendarDays,
+  CheckSquare,
   GraduationCap,
   ListChecks,
   Plus,
+  Power,
   Search,
   ShieldCheck,
+  Square,
+  Trash2,
   UsersRound,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -287,17 +291,45 @@ function CreateClassPanel({ onCreated }: { onCreated: () => void }) {
 function ClassList({
   classes,
   selectedId,
+  selectedIds,
   onSelect,
+  onSelectionChange,
+  onBulkAction,
+  bulkBusy,
 }: {
   classes: SchoolClassListItem[];
   selectedId: string | null;
+  selectedIds: string[];
   onSelect: (id: string) => void;
+  onSelectionChange: (ids: string[]) => void;
+  onBulkAction: (action: "activate" | "deactivate" | "delete") => Promise<void>;
+  bulkBusy: boolean;
 }) {
   const [query, setQuery] = useState("");
   const filtered = classes.filter((item) => {
     const haystack = `${item.academic_year} ${item.class_code} ${item.grade} ${item.label ?? ""}`;
     return haystack.includes(query.trim());
   });
+  const selectedSet = new Set(selectedIds);
+  const filteredIds = filtered.map((item) => item.id);
+  const allVisibleSelected = filteredIds.length > 0 && filteredIds.every((id) => selectedSet.has(id));
+  const hasSelection = selectedIds.length > 0;
+
+  const toggleSelected = (id: string) => {
+    onSelectionChange(
+      selectedSet.has(id)
+        ? selectedIds.filter((selectedId) => selectedId !== id)
+        : [...selectedIds, id],
+    );
+  };
+
+  const toggleAllVisible = () => {
+    if (allVisibleSelected) {
+      onSelectionChange(selectedIds.filter((id) => !filteredIds.includes(id)));
+      return;
+    }
+    onSelectionChange(Array.from(new Set([...selectedIds, ...filteredIds])));
+  };
 
   return (
     <section className="rounded-md" style={{ border: "1px solid var(--border)" }}>
@@ -319,21 +351,73 @@ function ClassList({
             style={{ color: "var(--text-primary)" }}
           />
         </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={toggleAllVisible}
+            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs"
+            style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+            {allVisibleSelected ? <CheckSquare size={14} /> : <Square size={14} />}
+            {allVisibleSelected ? "取消本頁" : "選取本頁"}
+          </button>
+          <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+            已選 {selectedIds.length} 班
+          </span>
+          {hasSelection && (
+            <>
+              <button
+                type="button"
+                disabled={bulkBusy}
+                onClick={() => onBulkAction("deactivate")}
+                className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs disabled:opacity-50"
+                style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+                <Power size={14} /> 批量停用
+              </button>
+              <button
+                type="button"
+                disabled={bulkBusy}
+                onClick={() => onBulkAction("activate")}
+                className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs disabled:opacity-50"
+                style={{ border: "1px solid var(--border)", color: "var(--primary)" }}>
+                <Power size={14} /> 批量啟用
+              </button>
+              <button
+                type="button"
+                disabled={bulkBusy}
+                onClick={() => onBulkAction("delete")}
+                className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs disabled:opacity-50"
+                style={{ border: "1px solid var(--border)", color: "#dc2626" }}>
+                <Trash2 size={14} /> 批量刪除
+              </button>
+            </>
+          )}
+        </div>
       </div>
       <div className="max-h-[520px] overflow-auto">
         {filtered.map((item) => {
           const active = item.id === selectedId;
+          const selected = selectedSet.has(item.id);
           return (
-            <button
+            <div
               key={item.id}
-              type="button"
-              onClick={() => onSelect(item.id)}
-              className="w-full px-4 py-3 text-left transition-colors"
+              className="flex items-stretch"
               style={{
                 borderBottom: "1px solid var(--border)",
                 background: active ? "var(--primary-dim)" : "transparent",
               }}>
-              <div className="flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => toggleSelected(item.id)}
+                className="flex w-10 flex-shrink-0 items-center justify-center"
+                aria-label={selected ? "取消選取班級" : "選取班級"}
+                style={{ color: selected ? "var(--primary)" : "var(--text-muted)" }}>
+                {selected ? <CheckSquare size={16} /> : <Square size={16} />}
+              </button>
+              <button
+                type="button"
+                onClick={() => onSelect(item.id)}
+                className="min-w-0 flex-1 px-2 py-3 text-left transition-colors">
+                <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold"
                     style={{ color: active ? "var(--primary)" : "var(--text-primary)" }}>
@@ -353,7 +437,8 @@ function ClassList({
                   {item.is_active ? "當前" : "停用"}
                 </span>
               </div>
-            </button>
+              </button>
+            </div>
           );
         })}
         {filtered.length === 0 && (
@@ -858,6 +943,8 @@ export default function ClassesAdminPage() {
   const allowed = can("class:manage");
   const [classes, setClasses] = useState<SchoolClassListItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const loadClasses = useCallback(() => {
@@ -866,7 +953,10 @@ export default function ClassesAdminPage() {
       .list()
       .then((items) => {
         setClasses(items);
-        setSelectedId((current) => current ?? items[0]?.id ?? null);
+        setSelectedClassIds((current) => current.filter((id) => items.some((item) => item.id === id)));
+        setSelectedId((current) =>
+          current && items.some((item) => item.id === current) ? current : items[0]?.id ?? null,
+        );
       })
       .catch((error) => toast.error(getErrorMessage(error, "載入班級清單失敗")))
       .finally(() => setLoading(false));
@@ -876,6 +966,27 @@ export default function ClassesAdminPage() {
     if (allowed) loadClasses();
     else setLoading(false);
   }, [allowed, loadClasses]);
+
+  const runBulkAction = async (action: "activate" | "deactivate" | "delete") => {
+    if (selectedClassIds.length === 0) return;
+    const verb = action === "activate" ? "啟用" : action === "deactivate" ? "停用" : "刪除";
+    if (!confirm(`確定要${verb} ${selectedClassIds.length} 個班級？`)) return;
+    setBulkBusy(true);
+    try {
+      const result = await classApi.bulkAction(selectedClassIds, action);
+      toast.success(`批量${verb}完成：${result.succeeded}/${result.total} 成功`);
+      if (result.failed > 0) {
+        const failed = result.results.filter((item) => !item.ok).slice(0, 3);
+        toast.error(failed.map((item) => item.detail ?? item.class_id).join("；"));
+      }
+      setSelectedClassIds([]);
+      loadClasses();
+    } catch (error) {
+      toast.error(getErrorMessage(error, `批量${verb}失敗`));
+    } finally {
+      setBulkBusy(false);
+    }
+  };
 
   if (!allowed) {
     return (
@@ -909,7 +1020,15 @@ export default function ClassesAdminPage() {
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[360px_1fr]">
         <aside className="space-y-4">
           <CreateClassPanel onCreated={loadClasses} />
-          <ClassList classes={classes} selectedId={selectedId} onSelect={setSelectedId} />
+          <ClassList
+            classes={classes}
+            selectedId={selectedId}
+            selectedIds={selectedClassIds}
+            onSelect={setSelectedId}
+            onSelectionChange={setSelectedClassIds}
+            onBulkAction={runBulkAction}
+            bulkBusy={bulkBusy}
+          />
         </aside>
         <main>
           {selectedId ? (

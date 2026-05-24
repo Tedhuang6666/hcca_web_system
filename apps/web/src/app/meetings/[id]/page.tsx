@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import QRCode from "qrcode";
 import {
   CalendarPlus,
   CheckCircle2,
@@ -14,6 +15,7 @@ import {
   Radio,
   Settings,
   Square,
+  UserCheck,
 } from "lucide-react";
 import { meetingsApi } from "@/lib/api";
 import type { MeetingMinutesOut, MeetingOut } from "@/lib/types";
@@ -30,9 +32,13 @@ const WORKFLOW_LABEL: Record<string, string> = {
 const AMENDMENT_LABEL: Record<string, string> = { enact: "制定", amend: "修正", abolish: "廢止" };
 const STATUS_LABEL: Record<string, string> = {
   draft: "草稿",
+  confirmed: "議程已確認",
+  checkin: "開放報到",
   active: "進行中",
+  break: "休息中",
   paused: "暫停",
   closed: "已結束",
+  archived: "已封存",
 };
 
 export default function MeetingDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -43,6 +49,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
   const [statusBusy, setStatusBusy] = useState(false);
   const [draftBusy, setDraftBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const [joinQr, setJoinQr] = useState("");
 
   const runStatus = async (action: () => Promise<MeetingOut>) => {
     setStatusBusy(true);
@@ -76,6 +83,16 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
     () => (meeting ? `/meetings/screen/${meeting.screen_token}` : "#"),
     [meeting],
   );
+  const joinHref = useMemo(
+    () => (meeting ? `/meetings/join/${meeting.checkin_token}` : "#"),
+    [meeting],
+  );
+
+  useEffect(() => {
+    if (!meeting || typeof window === "undefined") return;
+    const absolute = new URL(joinHref, window.location.origin).toString();
+    QRCode.toDataURL(absolute, { margin: 1, width: 180 }).then(setJoinQr).catch(() => setJoinQr(""));
+  }, [joinHref, meeting]);
 
   const googleCalendarHref = useMemo(() => {
     if (!meeting) return "#";
@@ -98,7 +115,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
   if (!meeting) return <main className="p-6 text-sm text-[var(--muted)]">載入中...</main>;
 
   const current = meeting.agenda_items.find((item) => item.id === meeting.current_agenda_item_id);
-  const isDraft = meeting.status === "draft";
+  const isDraft = meeting.status === "draft" || meeting.status === "confirmed";
   const agenda = [...meeting.agenda_items].sort((a, b) => a.order_index - b.order_index);
   const attendanceSummary = minutes?.attendance_summary ?? {};
   const closedVotes = minutes?.votes ?? meeting.votes;
@@ -137,13 +154,22 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
               會議設定
             </Link>
           )}
-          {(meeting.status === "draft" || meeting.status === "paused") && (
+          {(meeting.status === "draft" || meeting.status === "confirmed" || meeting.status === "checkin" || meeting.status === "paused" || meeting.status === "break") && (
             <button
               disabled={statusBusy}
               onClick={() => runStatus(() => meetingsApi.start(meeting.id))}
               className="inline-flex items-center gap-2 rounded-md bg-green-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50">
               <Play size={16} aria-hidden="true" />
-              {meeting.status === "paused" ? "繼續會議" : "開始會議"}
+              {meeting.status === "paused" || meeting.status === "break" ? "繼續會議" : "開始會議"}
+            </button>
+          )}
+          {(meeting.status === "draft" || meeting.status === "confirmed") && (
+            <button
+              disabled={statusBusy}
+              onClick={() => runStatus(() => meetingsApi.openCheckIn(meeting.id))}
+              className="inline-flex items-center gap-2 rounded-md border border-[var(--border)] px-3 py-2 text-sm disabled:opacity-50">
+              <UserCheck size={16} aria-hidden="true" />
+              開放報到
             </button>
           )}
           {meeting.status === "active" && (
@@ -218,6 +244,35 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
           )}
         </section>
       )}
+
+      <section className="mb-5 grid gap-4 rounded-lg border border-[var(--border)] p-4 md:grid-cols-[1fr_220px]">
+        <div>
+          <p className="text-xs font-medium text-[var(--muted)]">現場入口</p>
+          <h2 className="mt-1 text-xl font-semibold">議員入口與公開大屏</h2>
+          <p className="mt-2 text-sm text-[var(--muted)]">
+            會議現場請投影公開大屏，並將右側 QR Code 提供給議員報到、發言與投票。
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link href={joinHref} target="_blank" className="inline-flex items-center gap-2 rounded-md border border-[var(--border)] px-3 py-2 text-sm">
+              <UserCheck size={16} aria-hidden="true" />
+              開啟議員入口
+            </Link>
+            <Link href={screenHref} target="_blank" className="inline-flex items-center gap-2 rounded-md border border-[var(--border)] px-3 py-2 text-sm">
+              <Monitor size={16} aria-hidden="true" />
+              開啟公開大屏
+            </Link>
+          </div>
+        </div>
+        <div className="grid justify-items-center rounded-md border border-[var(--border)] p-3">
+          {joinQr ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={joinQr} alt="議員入口 QR Code" className="h-40 w-40 rounded-md bg-white p-2" />
+          ) : (
+            <div className="grid h-40 w-40 place-items-center rounded-md bg-white/10 text-xs text-[var(--muted)]">QR</div>
+          )}
+          <p className="mt-2 text-center text-xs text-[var(--muted)]">議員現場入口</p>
+        </div>
+      </section>
 
       <section className="mb-5 rounded-lg border border-[var(--border)] p-4">
         <p className="text-xs font-medium text-[var(--muted)]">目前議案</p>

@@ -615,6 +615,19 @@ export interface SchoolClassBulkCreateOut {
   failed: number;
   results: SchoolClassBulkCreateResult[];
 }
+export type SchoolClassBulkActionKind = "activate" | "deactivate" | "delete";
+export interface SchoolClassBulkActionResult {
+  class_id: string;
+  label: string | null;
+  ok: boolean;
+  detail: string | null;
+}
+export interface SchoolClassBulkActionOut {
+  total: number;
+  succeeded: number;
+  failed: number;
+  results: SchoolClassBulkActionResult[];
+}
 export interface ClassUserBrief {
   id: string; display_name: string; student_id: string | null; email: string;
 }
@@ -814,7 +827,15 @@ export interface RegulationSearchResult extends RegulationListItem {
 
 // ── 議事系統型別 ──────────────────────────────────────────────────────────────
 
-export type MeetingStatus = "draft" | "active" | "paused" | "closed";
+export type MeetingStatus =
+  | "draft"
+  | "confirmed"
+  | "checkin"
+  | "active"
+  | "break"
+  | "paused"
+  | "closed"
+  | "archived";
 /** 會議的法案審議階段（決定議程自動帶入哪一階段的法案） */
 export type MeetingBillStage = "standing_committee" | "council";
 export type AgendaItemType = "manual" | "regulation" | "document";
@@ -822,6 +843,11 @@ export type AttendanceRole = "voter" | "attendee" | "observer";
 export type AttendanceStatus = "expected" | "present" | "absent" | "leave";
 export type VoteStatus = "draft" | "open" | "closed";
 export type VoteVisibility = "named" | "anonymous";
+export type VoteThresholdType =
+  | "simple_majority"
+  | "present_majority"
+  | "all_members_majority"
+  | "custom";
 export type BallotChoice = "approve" | "reject" | "abstain";
 export type MeetingRequestType = "speech" | "point_of_order" | "privilege";
 export type MeetingRequestStatus = "pending" | "acknowledged" | "dismissed";
@@ -850,7 +876,25 @@ export type MeetingMotionStatus =
   | "rejected"
   | "withdrawn";
 export type MeetingDecisionStatus = "draft" | "passed" | "failed" | "recorded";
-export type MeetingScreenReadingMode = "agenda" | "article" | "attachment" | "vote" | "free_text";
+export type MeetingScreenReadingMode =
+  | "agenda"
+  | "speaker"
+  | "vote"
+  | "result"
+  | "break"
+  | "announcement"
+  | "document"
+  | "article"
+  | "attachment"
+  | "free_text";
+export type MeetingSpeechQueueStatus =
+  | "queued"
+  | "speaking"
+  | "paused"
+  | "finished"
+  | "skipped"
+  | "cancelled";
+export type MeetingTimerStatus = "idle" | "running" | "paused" | "overtime";
 
 export interface MeetingUserBrief {
   id: string;
@@ -968,6 +1012,7 @@ export interface MeetingVoteTallyOut {
   total: number;
   eligible: number;
   pass_threshold: number;
+  threshold_type: VoteThresholdType;
   passed: boolean;
 }
 
@@ -989,6 +1034,7 @@ export interface MeetingVoteOut {
   visibility: VoteVisibility;
   status: VoteStatus;
   pass_threshold: number;
+  threshold_type: VoteThresholdType;
   opened_at: string | null;
   closed_at: string | null;
   result_note: string | null;
@@ -1035,6 +1081,36 @@ export interface MeetingRequestOut {
   created_at: string;
   updated_at: string;
   user: MeetingUserBrief | null;
+}
+
+export interface MeetingSpeechQueueItemOut {
+  id: string;
+  meeting_id: string;
+  agenda_item_id: string | null;
+  user_id: string | null;
+  request_id: string | null;
+  speaker_name: string;
+  speaker_role: string | null;
+  status: MeetingSpeechQueueStatus;
+  order_index: number;
+  duration_seconds: number;
+  remaining_seconds: number;
+  started_at: string | null;
+  paused_at: string | null;
+  finished_at: string | null;
+  created_at: string;
+  updated_at: string;
+  user: MeetingUserBrief | null;
+}
+
+export interface MeetingTimerStateOut {
+  meeting_id: string;
+  active_speech_id: string | null;
+  status: MeetingTimerStatus;
+  server_started_at: string | null;
+  duration_seconds: number;
+  remaining_when_paused: number;
+  updated_at: string | null;
 }
 
 export interface MeetingMotionOut {
@@ -1104,6 +1180,8 @@ export interface MeetingListItem {
   expected_voters: number;
   quorum_count: number;
   default_pass_threshold: number;
+  default_speech_seconds: number;
+  allow_observer_requests: boolean;
   bill_stage: MeetingBillStage | null;
   current_agenda_item_id: string | null;
   screen_focus_title: string | null;
@@ -1123,6 +1201,8 @@ export interface MeetingOut extends MeetingListItem {
   attendance_sources: MeetingAttendanceSourceOut[];
   votes: MeetingVoteOut[];
   requests: MeetingRequestOut[];
+  speech_queue: MeetingSpeechQueueItemOut[];
+  timer_state: MeetingTimerStateOut | null;
   motions: MeetingMotionOut[];
   decisions: MeetingDecisionOut[];
   screen_state: MeetingScreenStateOut | null;
@@ -1136,6 +1216,9 @@ export interface MeetingScreenOut {
   attendance_summary: Record<string, number>;
   screen_state: MeetingScreenStateOut | null;
   vote_roster: MeetingVoteRosterOut | null;
+  active_speech: MeetingSpeechQueueItemOut | null;
+  speech_queue: MeetingSpeechQueueItemOut[];
+  timer_state: MeetingTimerStateOut | null;
 }
 
 export interface MeetingJoinOut {
@@ -1146,6 +1229,9 @@ export interface MeetingJoinOut {
   can_vote: boolean;
   active_vote: MeetingVoteOut | null;
   my_ballot: MeetingBallotOut | null;
+  my_speech_queue_items: MeetingSpeechQueueItemOut[];
+  active_speech: MeetingSpeechQueueItemOut | null;
+  timer_state: MeetingTimerStateOut | null;
 }
 
 export interface MeetingWorkspaceOut {
@@ -1897,6 +1983,7 @@ export interface PetitionStatsOut {
 export interface ChannelPref {
   inapp: boolean;
   email: boolean;
+  line: boolean;
 }
 
 export interface NotificationPreferences {
@@ -1906,6 +1993,18 @@ export interface NotificationPreferences {
   document_recalled: ChannelPref;
   announcement: ChannelPref;
   system: ChannelPref;
+}
+
+export interface LineBindingOut {
+  linked: boolean;
+  line_display_name: string | null;
+  linked_at: string | null;
+}
+
+export interface LineLinkCodeOut {
+  code: string;
+  expires_at: string;
+  instructions: string;
 }
 
 // ── 公告統計 ─────────────────────────────────────────────────────────────────

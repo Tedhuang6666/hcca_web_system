@@ -34,6 +34,7 @@ from api.models.document import (  # noqa: F401
     YearMode,
 )
 from api.models.email_message import EmailMessage, EmailStatus  # noqa: F401
+from api.models.line_account import LineAccountLink  # noqa: F401
 from api.models.meal import (  # noqa: F401
     MealClassPickupCode,
     MealOrder,

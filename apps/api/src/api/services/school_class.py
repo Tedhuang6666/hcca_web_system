@@ -32,6 +32,8 @@ from api.schemas.school_class import (
     ClassMembershipCreate,
     ClassRoleAssign,
     ClassStudentRangeCreate,
+    SchoolClassBulkActionOut,
+    SchoolClassBulkActionResult,
     SchoolClassBulkCreate,
     SchoolClassBulkCreateOut,
     SchoolClassBulkCreateResult,
@@ -417,6 +419,45 @@ async def update_class(
         setattr(sc, field, value)
     await session.flush()
     return sc
+
+
+async def bulk_action_classes(
+    session: AsyncSession, *, class_ids: list[uuid.UUID], action: str
+) -> SchoolClassBulkActionOut:
+    seen_ids = list(dict.fromkeys(class_ids))
+    found_result = await session.execute(select(SchoolClass).where(SchoolClass.id.in_(seen_ids)))
+    classes_by_id = {sc.id: sc for sc in found_result.scalars().all()}
+    results: list[SchoolClassBulkActionResult] = []
+
+    for class_id in seen_ids:
+        sc = classes_by_id.get(class_id)
+        if sc is None:
+            results.append(
+                SchoolClassBulkActionResult(class_id=class_id, ok=False, detail="找不到此班級")
+            )
+            continue
+
+        label = class_display_label(sc)
+        if action == "activate":
+            sc.is_active = True
+            results.append(SchoolClassBulkActionResult(class_id=sc.id, label=label, ok=True))
+        elif action == "deactivate":
+            sc.is_active = False
+            results.append(SchoolClassBulkActionResult(class_id=sc.id, label=label, ok=True))
+        elif action == "delete":
+            await session.delete(sc)
+            results.append(SchoolClassBulkActionResult(class_id=sc.id, label=label, ok=True))
+        else:
+            raise ValueError("不支援的批量操作")
+
+    await session.flush()
+    succeeded = sum(1 for result in results if result.ok)
+    return SchoolClassBulkActionOut(
+        total=len(results),
+        succeeded=succeeded,
+        failed=len(results) - succeeded,
+        results=results,
+    )
 
 
 # ── 學號區間 ──────────────────────────────────────────────────────────────────

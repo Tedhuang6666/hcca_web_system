@@ -1,8 +1,10 @@
 """校園自治整合平台 API - FastAPI Application"""
 
 import logging
+import time
 import uuid
-from collections.abc import AsyncGenerator
+from asyncio import timeout
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -10,13 +12,17 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from redis.exceptions import RedisError
+from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
+from starlette.responses import Response
 
 from api.core.audit import SecurityAuditMiddleware
 from api.core.config import settings
 from api.core.csrf import CSRFMiddleware
+from api.core.database import engine
 from api.core.rate_limit import SimpleRateLimitMiddleware
 from api.core.security_headers import SecurityHeadersMiddleware
 from api.routers import (
@@ -27,6 +33,8 @@ from api.routers import (
     auth,
     dashboard,
     documents,
+    documents_approve,
+    documents_attachments,
     email,
     line_webhook,
     meal,
@@ -47,9 +55,35 @@ from api.routers import (
     users,
     ws,
 )
-from api.routers.documents import serial_router, template_router
+from api.routers.documents_serial import serial_router, template_router
 
 logger = logging.getLogger(__name__)
+
+
+async def _check_database() -> tuple[bool, str | None]:
+    try:
+        async with timeout(settings.HEALTHCHECK_TIMEOUT_SECONDS):
+            async with engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+    except Exception as exc:
+        logger.warning("Database readiness check failed", exc_info=True)
+        return False, exc.__class__.__name__
+    return True, None
+
+
+async def _check_redis() -> tuple[bool, str | None]:
+    from api.core.security import redis_client
+
+    try:
+        async with timeout(settings.HEALTHCHECK_TIMEOUT_SECONDS):
+            await redis_client.ping()
+    except (RedisError, TimeoutError) as exc:
+        logger.warning("Redis readiness check failed", exc_info=True)
+        return False, exc.__class__.__name__
+    except Exception as exc:
+        logger.warning("Unexpected Redis readiness check failure", exc_info=True)
+        return False, exc.__class__.__name__
+    return True, None
 
 
 @asynccontextmanager
@@ -115,6 +149,8 @@ def create_app() -> FastAPI:
     app.include_router(positions.router)
     app.include_router(user_positions.router)
     app.include_router(documents.router)
+    app.include_router(documents_approve.router)
+    app.include_router(documents_attachments.router)
     app.include_router(template_router)
     app.include_router(serial_router)
     app.include_router(regulations.router)
@@ -136,6 +172,24 @@ def create_app() -> FastAPI:
     # 使用者上傳檔案（公告媒體、問卷圖片等）的靜態存取；
     # 生產環境通常由反向代理直接服務，此處確保開發環境也可正常顯示。
     app.mount("/uploads", StaticFiles(directory="uploads", check_dir=False), name="uploads")
+
+    @app.middleware("http")
+    async def _request_timing_middleware(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        start = time.perf_counter()
+        response = await call_next(request)
+        duration_ms = (time.perf_counter() - start) * 1000
+        response.headers["X-Process-Time-Ms"] = f"{duration_ms:.1f}"
+        if duration_ms > settings.SLOW_REQUEST_THRESHOLD_MS:
+            logger.warning(
+                "Slow request path=%s method=%s status=%s duration_ms=%.1f",
+                request.url.path,
+                request.method,
+                response.status_code,
+                duration_ms,
+            )
+        return response
 
     @app.exception_handler(StarletteHTTPException)
     async def _http_exception_handler(
@@ -189,6 +243,25 @@ def create_app() -> FastAPI:
     @app.get("/health", tags=["系統"], summary="健康檢查")
     async def health_check() -> dict[str, str]:
         return {"status": "ok", "version": settings.APP_VERSION}
+
+    @app.get("/live", tags=["系統"], summary="存活檢查")
+    async def liveness_check() -> dict[str, str]:
+        return {"status": "ok", "version": settings.APP_VERSION}
+
+    @app.get("/ready", tags=["系統"], summary="就緒檢查")
+    async def readiness_check() -> JSONResponse:
+        db_ok, db_error = await _check_database()
+        redis_ok, redis_error = await _check_redis()
+        checks = {
+            "database": {"ok": db_ok, "error": db_error},
+            "redis": {"ok": redis_ok, "error": redis_error},
+        }
+        status_code = 200 if db_ok and redis_ok else 503
+        status = "ok" if status_code == 200 else "degraded"
+        return JSONResponse(
+            {"status": status, "version": settings.APP_VERSION, "checks": checks},
+            status_code=status_code,
+        )
 
     @app.get("/", tags=["系統"], summary="服務資訊")
     async def root_info() -> dict[str, str | bool | None]:

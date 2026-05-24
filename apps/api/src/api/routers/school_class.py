@@ -27,6 +27,8 @@ from api.schemas.school_class import (
     ClassRoleOut,
     ClassStudentRangeCreate,
     ClassStudentRangeOut,
+    SchoolClassBulkAction,
+    SchoolClassBulkActionOut,
     SchoolClassBulkCreate,
     SchoolClassBulkCreateOut,
     SchoolClassCreate,
@@ -96,6 +98,27 @@ async def bulk_create_classes(
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+
+
+@router.post(
+    "/bulk/action",
+    response_model=SchoolClassBulkActionOut,
+    summary="批量啟用、停用或刪除班級",
+)
+async def bulk_action_classes(
+    payload: SchoolClassBulkAction, session: DbDep, _: ManagerUser
+) -> SchoolClassBulkActionOut:
+    try:
+        return await class_svc.bulk_action_classes(
+            session, class_ids=payload.class_ids, action=payload.action
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    except IntegrityError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="部分班級仍被其他資料引用，無法批量刪除",
+        ) from e
 
 
 @router.get("/me", response_model=SchoolClassListItem | None, summary="查詢我目前的班級")

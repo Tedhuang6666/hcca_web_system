@@ -71,7 +71,7 @@ class SimpleRateLimitMiddleware:
             return
 
         request = Request(scope, receive=receive)
-        if request.url.path == "/health":
+        if request.url.path in {"/health", "/live", "/ready"}:
             await self.app(scope, receive, send)
             return
 

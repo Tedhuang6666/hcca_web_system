@@ -19,19 +19,19 @@ threads = 1
 bind = f"0.0.0.0:{os.getenv('PORT', '8000')}"
 
 # Keep-alive：等待 Keep-Alive 連線的秒數
-keepalive = 75
+keepalive = int(os.getenv("GUNICORN_KEEPALIVE", "5"))
 
 # Backlog：最大待處理連線數（超過後系統拒絕新連線）
-backlog = 2048
+backlog = int(os.getenv("GUNICORN_BACKLOG", "2048"))
 
 # ── 逾時設定 ──────────────────────────────────────────────────────────────────
 
 # Worker 在被 master 殺掉前的最大靜默時間（秒）
-# 設高一點以容納 PDF 生成、Excel 匯出等耗時操作
-timeout = 120
+# 耗時的 PDF/Excel/Email 應移到 Celery，避免 HTTP worker 長時間被占住
+timeout = int(os.getenv("GUNICORN_TIMEOUT", "60"))
 
 # Graceful shutdown 的最長等待時間（秒）
-graceful_timeout = 30
+graceful_timeout = int(os.getenv("GUNICORN_GRACEFUL_TIMEOUT", "30"))
 
 # ── 效能調優 ──────────────────────────────────────────────────────────────────
 
@@ -39,8 +39,8 @@ graceful_timeout = 30
 preload_app = True
 
 # 最大請求數後自動重啟 worker（防止記憶體洩漏）
-max_requests = 1000
-max_requests_jitter = 100  # 加入隨機抖動，避免所有 worker 同時重啟
+max_requests = int(os.getenv("GUNICORN_MAX_REQUESTS", "1000"))
+max_requests_jitter = int(os.getenv("GUNICORN_MAX_REQUESTS_JITTER", "100"))
 
 # ── 日誌 ─────────────────────────────────────────────────────────────────────
 

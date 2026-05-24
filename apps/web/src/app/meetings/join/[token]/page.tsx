@@ -111,11 +111,13 @@ export default function MeetingJoinPage({ params }: { params: Promise<{ token: s
   const hasCheckedIn = attendance?.status === "present";
   const votedChoice = payload.my_ballot?.choice ?? null;
   const canCast = Boolean(activeVote && payload.can_vote && !votedChoice);
+  const myQueue = payload.my_speech_queue_items ?? [];
+  const activeSpeech = payload.active_speech;
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col gap-4 px-5 py-5">
       <header>
-        <p className="text-xs font-medium text-[var(--muted)]">現場工作台</p>
+        <p className="text-xs font-medium text-[var(--muted)]">議員現場入口</p>
         <h1 className="mt-1 text-2xl font-semibold tracking-normal">{meeting.title}</h1>
         <div className="mt-3 grid gap-2 text-sm">
           <span className="inline-flex items-center gap-2 rounded-md border border-[var(--border)] px-3 py-2">
@@ -140,6 +142,29 @@ export default function MeetingJoinPage({ params }: { params: Promise<{ token: s
         <CheckCircle2 size={16} aria-hidden="true" />
         {busyAction === "check-in" ? "報到中..." : hasCheckedIn ? "重新同步現場狀態" : "報到並進入會議"}
       </button>
+
+      <section className="rounded-lg border border-[var(--border)] p-4">
+        <p className="text-xs font-medium text-[var(--muted)]">目前發言</p>
+        <h2 className="mt-1 text-xl font-semibold">
+          {activeSpeech?.speaker_name || "尚未開始發言"}
+        </h2>
+        {activeSpeech?.speaker_role && (
+          <p className="mt-1 text-sm text-[var(--muted)]">{activeSpeech.speaker_role}</p>
+        )}
+        <div className="mt-3 rounded-md border border-[var(--border)] px-3 py-2 text-sm">
+          {myQueue.length > 0 ? (
+            <div className="space-y-1">
+              {myQueue.map((item, index) => (
+                <p key={item.id}>
+                  我的發言 #{index + 1}：{item.status === "queued" ? "排隊中" : item.status}
+                </p>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[var(--muted)]">你目前沒有排隊發言。</p>
+          )}
+        </div>
+      </section>
 
       <section className="rounded-lg border border-[var(--border)] p-4">
         <p className="text-xs font-medium text-[var(--muted)]">目前議程</p>
@@ -236,7 +261,7 @@ export default function MeetingJoinPage({ params }: { params: Promise<{ token: s
           <button
             onClick={() => createRequest("speech")}
             disabled={busyAction === "request-speech"}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-[var(--border)] px-4 py-3 text-sm">
+            className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[var(--primary)] px-4 py-3 text-sm font-semibold text-black">
             <MessageSquare size={16} aria-hidden="true" />
             {busyAction === "request-speech" ? "送出中..." : "請求發言"}
           </button>

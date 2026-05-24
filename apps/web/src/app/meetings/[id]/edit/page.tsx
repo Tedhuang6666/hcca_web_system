@@ -70,6 +70,8 @@ function toUpdatePayload(form: SettingsForm) {
     expected_voters: form.expected_voters,
     quorum_count: form.quorum_count,
     default_pass_threshold: form.default_pass_threshold,
+    default_speech_seconds: form.default_speech_seconds,
+    allow_observer_requests: form.allow_observer_requests,
     bill_stage: form.bill_stage || null,
   };
 }
@@ -84,6 +86,8 @@ interface SettingsForm {
   expected_voters: number;
   quorum_count: number;
   default_pass_threshold: number;
+  default_speech_seconds: number;
+  allow_observer_requests: boolean;
   bill_stage: "" | MeetingBillStage;
 }
 
@@ -98,6 +102,8 @@ function toForm(m: MeetingOut): SettingsForm {
     expected_voters: m.expected_voters,
     quorum_count: m.quorum_count,
     default_pass_threshold: m.default_pass_threshold,
+    default_speech_seconds: m.default_speech_seconds,
+    allow_observer_requests: m.allow_observer_requests,
     bill_stage: m.bill_stage ?? "",
   };
 }
@@ -617,6 +623,28 @@ export default function MeetingSetupPage({ params }: { params: Promise<{ id: str
               }
               className="rounded-md border border-[var(--border)] bg-transparent px-3 py-2"
             />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-[var(--muted)]">預設發言時間（秒）</span>
+            <input
+              type="number"
+              min={10}
+              value={form.default_speech_seconds}
+              onChange={(e) =>
+                setForm({ ...form, default_speech_seconds: Number(e.target.value) || 180 })
+              }
+              className="rounded-md border border-[var(--border)] bg-transparent px-3 py-2"
+            />
+          </label>
+          <label className="flex items-center gap-2 rounded-md border border-[var(--border)] px-3 py-2 text-sm">
+            <input
+              type="checkbox"
+              checked={form.allow_observer_requests}
+              onChange={(e) =>
+                setForm({ ...form, allow_observer_requests: e.target.checked })
+              }
+            />
+            <span>允許旁聽者提出現場請求</span>
           </label>
         </div>
         <button
