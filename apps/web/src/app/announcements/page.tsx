@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { announcementsApi, ApiError } from "@/lib/api";
 import type { AnnouncementListItem } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
+import { ListPageSkeleton } from "@/components/ui/Skeleton";
 
 const AUDIENCE_LABEL: Record<string, string> = {
   all: "全體",
@@ -96,9 +97,7 @@ export default function AnnouncementsPage() {
       </div>
 
       {loading ? (
-        <div className="py-20 text-center" style={{ color: "var(--text-muted)" }}>
-          載入中…
-        </div>
+        <ListPageSkeleton rows={5} showHeader={false} showFilters={false} />
       ) : sorted.length === 0 ? (
         <div className="card p-10 text-center" style={{ color: "var(--text-muted)" }}>
           目前沒有公告

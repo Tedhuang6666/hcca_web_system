@@ -12,6 +12,14 @@
 		reverse_proxy api:8000
 	}
 
+	handle /ws/* {
+		reverse_proxy api:8000
+	}
+
+	handle /uploads/* {
+		reverse_proxy api:8000
+	}
+
 	handle /auth/google/* {
 		reverse_proxy api:8000
 	}

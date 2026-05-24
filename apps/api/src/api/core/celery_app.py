@@ -1,6 +1,7 @@
 """Celery 實例設定 - 使用 Redis 作為 Broker 與 Result Backend"""
 
 from celery import Celery
+from celery.schedules import crontab
 
 from api.core.config import settings
 
@@ -41,6 +42,8 @@ celery_app.conf.include = list(celery_app.conf.include or []) + [
     "api.services.email_tasks",
     "api.services.shop_tasks",
     "api.services.meeting_tasks",
+    "api.services.backup_tasks",
+    "api.services.permission_tasks",
 ]
 
 celery_app.conf.beat_schedule = {
@@ -80,5 +83,16 @@ celery_app.conf.beat_schedule = {
     "send-meeting-start-reminders-every-60s": {
         "task": "api.services.meeting_tasks.send_meeting_start_reminders",
         "schedule": 60.0,
+    },
+    # 每日凌晨 3:00 進行資料庫備份（需 DB_BACKUP_ENABLED=true）
+    "backup-database-daily-at-3am": {
+        "task": "api.services.backup_tasks.backup_database",
+        "schedule": crontab(hour="3", minute="0"),
+        "options": {"soft_time_limit": 540, "time_limit": 600},
+    },
+    # 每日凌晨 0:10 清除過期任期使用者的權限快取
+    "invalidate-expired-user-caches-daily": {
+        "task": "api.services.permission_tasks.invalidate_expired_user_caches",
+        "schedule": crontab(hour="0", minute="10"),
     },
 }

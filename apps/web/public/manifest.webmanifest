@@ -1,0 +1,26 @@
+{
+  "name": "校園自治整合平台",
+  "short_name": "HCCA",
+  "description": "服務學生代表大會的數位治理工具，整合公文、法規、購票、學餐與問卷。",
+  "lang": "zh-TW",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#ffffff",
+  "theme_color": "#1a1a2e",
+  "categories": ["education", "productivity", "government"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any"
+    },
+    {
+      "src": "/apple-icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "180x180",
+      "purpose": "any"
+    }
+  ]
+}

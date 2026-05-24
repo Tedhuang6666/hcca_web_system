@@ -54,6 +54,11 @@ services:
       timeout: 5s
       retries: 5
 
+  migrate:
+    <<: *api-common
+    restart: "no"
+    command: python -m alembic -c /app/alembic.ini upgrade head
+
   api:
     <<: *api-common
     restart: unless-stopped
@@ -66,24 +71,33 @@ services:
       DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}
       REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
       GUNICORN_WORKERS: ${GUNICORN_WORKERS:-4}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
   celery-worker:
     <<: *api-common
     restart: unless-stopped
     command: >
-      celery -A api.core.celery_app.celery_app worker
+      python -m celery -A api.core.celery_app.celery_app worker
       --loglevel=info
       --concurrency=${CELERY_WORKER_CONCURRENCY:-4}
       --queues=celery
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
   celery-beat:
     <<: *api-common
     restart: unless-stopped
     command: >
-      celery -A api.core.celery_app.celery_app beat
+      python -m celery -A api.core.celery_app.celery_app beat
       --loglevel=info
       --scheduler celery.beat:PersistentScheduler
       --pidfile=/tmp/celerybeat.pid
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     volumes:
       - uploads:/app/uploads
       - celerybeat:/tmp

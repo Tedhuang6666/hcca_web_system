@@ -16,14 +16,14 @@ const SEGMENT_LABELS: Record<string, string> = {
   "document-templates": "公文範本",
   meetings: "議事系統",
   regulations: "法規查詢",
-  announcements: "公告",
+  announcements: "校內公告",
   shop: "校商訂購",
   meal: "學餐訂購",
   "partner-map": "特約地圖",
-  surveys: "問卷",
-  petitions: "陳情",
+  surveys: "問卷專區",
+  petitions: "陳情中心",
   notifications: "通知中心",
-  tasks: "待辦中心",
+  tasks: "我的待辦",
   orgs: "組織",
   profile: "個人資料",
   admin: "管理",
@@ -35,7 +35,7 @@ const SEGMENT_LABELS: Record<string, string> = {
 };
 
 const PATH_OVERRIDES: Record<string, string> = {
-  "/":                            "儀表板",
+  "/":                            "平台首頁",
   "/documents/new":               "新增公文",
   "/documents/delegations":       "簽核代理",
   "/regulations/new":             "新增法規",

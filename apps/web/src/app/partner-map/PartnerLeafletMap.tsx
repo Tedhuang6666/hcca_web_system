@@ -10,7 +10,9 @@ import {
   Landmark,
   Printer,
   Sandwich,
+  School,
   Soup,
+  TrainFront,
   UtensilsCrossed,
   type LucideIcon,
 } from "lucide-react";
@@ -45,6 +47,16 @@ function BoundsReporter({ onBoundsChange }: { onBoundsChange: (bounds: PartnerMa
     moveend: () => onBoundsChange(toBoundsState(map.getBounds())),
     zoomend: () => onBoundsChange(toBoundsState(map.getBounds())),
   });
+  return null;
+}
+
+function ThemeClassSync({ theme }: { theme: "light" | "dark" }) {
+  const map = useMap();
+  useEffect(() => {
+    const container = map.getContainer();
+    container.classList.toggle("partner-map-theme-dark", theme === "dark");
+    container.classList.toggle("partner-map-theme-light", theme === "light");
+  }, [map, theme]);
   return null;
 }
 
@@ -108,6 +120,28 @@ function storeIcon(item: PartnerMapItem) {
   });
 }
 
+function landmarkIcon(kind: "school" | "station") {
+  if (kind === "station") {
+    const iconMarkup = renderToStaticMarkup(<TrainFront size={19} strokeWidth={2.4} aria-hidden="true" />);
+    return divIcon({
+      className: "partner-map-marker-shell",
+      iconSize: [36, 42],
+      iconAnchor: [18, 36],
+      popupAnchor: [0, -34],
+      html: `<div class="partner-map-station-marker">${iconMarkup}</div>`,
+    });
+  }
+
+  const iconMarkup = renderToStaticMarkup(<School size={22} strokeWidth={2.3} aria-hidden="true" />);
+  return divIcon({
+    className: "partner-map-marker-shell",
+    iconSize: [36, 42],
+    iconAnchor: [18, 36],
+    popupAnchor: [0, -34],
+    html: `<div class="partner-map-school-marker">${iconMarkup}</div>`,
+  });
+}
+
 function useMapTheme() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
 
@@ -143,28 +177,30 @@ export default function PartnerLeafletMap({
     theme === "dark"
       ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
       : "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
+  const hsinchuStation: LatLngExpression = [24.801645, 120.971703];
 
   return (
-    <MapContainer center={center} zoom={16} className="h-full w-full partner-map-leaflet" scrollWheelZoom>
+    <MapContainer
+      center={center}
+      zoom={16}
+      className={`h-full w-full partner-map-leaflet partner-map-theme-${theme}`}
+      scrollWheelZoom>
       <TileLayer
         key={theme}
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
         url={tileUrl}
       />
+      <ThemeClassSync theme={theme} />
       <BoundsReporter onBoundsChange={onBoundsChange} />
       <Marker
         position={center}
-        icon={divIcon({
-          className: "partner-map-marker-shell",
-          iconSize: [48, 48],
-          iconAnchor: [24, 42],
-          html: `
-            <div class="partner-map-school-marker">
-              <span>竹</span>
-            </div>
-          `,
-        })}>
+        icon={landmarkIcon("school")}>
         <Popup>新竹高中周邊</Popup>
+      </Marker>
+      <Marker
+        position={hsinchuStation}
+        icon={landmarkIcon("station")}>
+        <Popup>新竹火車站</Popup>
       </Marker>
       {userLocation && (
         <Marker

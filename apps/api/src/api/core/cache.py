@@ -1,33 +1,37 @@
 """Redis 應用層快取 - 組織、權限、公文列表"""
 
 import json
+import logging
 from typing import Any
 
 from api.core.security import redis_client
 
+logger = logging.getLogger(__name__)
+
 
 async def cache_get(key: str) -> Any | None:
-    """從 Redis 快取取得值"""
+    """從 Redis 快取取得值；Redis 異常時 fallback 為 cache miss 並記錄。"""
     try:
         value = await redis_client.get(key)
         if value is None:
             return None
         return json.loads(value)
     except Exception:
+        logger.warning("cache_get failed (fallback to miss) key=%s", key, exc_info=True)
         return None
 
 
 async def cache_set(key: str, value: Any, ttl: int = 60) -> None:
-    """設定 Redis 快取值，TTL 單位秒"""
+    """設定 Redis 快取值；Redis 異常時記錄但不中斷業務邏輯。"""
     try:
         serialized = json.dumps(value, default=str)
         await redis_client.setex(key, ttl, serialized)
     except Exception:
-        pass  # 忽略快取寫入失敗，不中斷業務邏輯
+        logger.error("cache_set failed key=%s ttl=%d", key, ttl, exc_info=True)
 
 
 async def cache_invalidate(pattern: str) -> None:
-    """清除符合 glob pattern 的所有快取鍵（如 org:tree:*）"""
+    """清除符合 glob pattern 的所有快取鍵；Redis 異常時記錄但不中斷。"""
     try:
         keys = []
         cursor = 0
@@ -39,7 +43,7 @@ async def cache_invalidate(pattern: str) -> None:
         if keys:
             await redis_client.delete(*keys)
     except Exception:
-        pass
+        logger.error("cache_invalidate failed pattern=%s", pattern, exc_info=True)
 
 
 async def cache_invalidate_org(org_id: str) -> None:

@@ -219,11 +219,16 @@ class S3StorageBackend(StorageBackend):
 
 
 def get_storage() -> StorageBackend:
-    """
-    依設定回傳對應的儲存後端（FastAPI 依賴注入用）。
-    TODO: 從 settings.STORAGE_BACKEND 決定使用 local 或 s3。
-    """
-    return LocalStorageBackend(base_dir="uploads")
+    """依 settings.STORAGE_BACKEND 回傳對應的儲存後端（FastAPI 依賴注入用）。"""
+    from api.core.config import settings
+
+    backend = (settings.STORAGE_BACKEND or "local").lower()
+    if backend == "s3":
+        if not settings.S3_BUCKET:
+            msg = "STORAGE_BACKEND=s3 時必須設定 S3_BUCKET"
+            raise RuntimeError(msg)
+        return S3StorageBackend(bucket=settings.S3_BUCKET, region=settings.S3_REGION)
+    return LocalStorageBackend(base_dir=settings.STORAGE_LOCAL_DIR)
 
 
 __all__ = [

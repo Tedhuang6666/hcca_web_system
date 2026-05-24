@@ -10,7 +10,7 @@ from api.core.config import settings  # noqa: E402
 # --- 非同步 Engine ---
 engine = create_async_engine(
     str(settings.DATABASE_URL),
-    echo=settings.DEBUG,
+    echo=settings.SQL_ECHO,
     pool_pre_ping=True,
     pool_size=10,
     max_overflow=20,

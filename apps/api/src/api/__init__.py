@@ -1,11 +1,16 @@
 """校園自治整合平台 API - FastAPI Application"""
 
+import logging
+import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -43,6 +48,8 @@ from api.routers import (
     ws,
 )
 from api.routers.documents import serial_router, template_router
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -129,6 +136,55 @@ def create_app() -> FastAPI:
     # 使用者上傳檔案（公告媒體、問卷圖片等）的靜態存取；
     # 生產環境通常由反向代理直接服務，此處確保開發環境也可正常顯示。
     app.mount("/uploads", StaticFiles(directory="uploads", check_dir=False), name="uploads")
+
+    @app.exception_handler(StarletteHTTPException)
+    async def _http_exception_handler(
+        request: Request, exc: StarletteHTTPException
+    ) -> JSONResponse:
+        # 4xx 維持原樣（含 detail 訊息），5xx 統一遮蔽具體訊息
+        if exc.status_code >= 500:
+            err_id = uuid.uuid4().hex[:12]
+            logger.error(
+                "5xx HTTPException id=%s path=%s detail=%s",
+                err_id,
+                request.url.path,
+                exc.detail,
+                exc_info=True,
+            )
+            return JSONResponse(
+                {"detail": "伺服器內部錯誤", "error_id": err_id},
+                status_code=exc.status_code,
+                headers=getattr(exc, "headers", None) or {},
+            )
+        return JSONResponse(
+            {"detail": exc.detail},
+            status_code=exc.status_code,
+            headers=getattr(exc, "headers", None) or {},
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def _validation_exception_handler(
+        request: Request, exc: RequestValidationError
+    ) -> JSONResponse:
+        return JSONResponse(
+            {"detail": "請求格式驗證失敗", "errors": exc.errors()},
+            status_code=422,
+        )
+
+    @app.exception_handler(Exception)
+    async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        err_id = uuid.uuid4().hex[:12]
+        logger.error(
+            "Unhandled exception id=%s path=%s method=%s",
+            err_id,
+            request.url.path,
+            request.method,
+            exc_info=True,
+        )
+        return JSONResponse(
+            {"detail": "伺服器內部錯誤", "error_id": err_id},
+            status_code=500,
+        )
 
     @app.get("/health", tags=["系統"], summary="健康檢查")
     async def health_check() -> dict[str, str]:

@@ -8,6 +8,7 @@ import type { OrgRead, UserSummary } from "@/lib/api";
 import type { BatchDocumentOperationOut, DocumentListItem, DocumentStatus, SavedFilterOut } from "@/lib/types";
 import { DocumentStatusBadge, UrgencyBadge } from "@/components/ui/StatusBadge";
 import { usePermissions } from "@/hooks/usePermissions";
+import { ListPageSkeleton } from "@/components/ui/Skeleton";
 
 const TABS: { key: DocumentStatus | "all"; label: string }[] = [
   { key: "all",      label: "全部" },
@@ -890,13 +891,8 @@ export default function DocumentListPage() {
       {/* 表格卡片 */}
       <div className="card overflow-hidden">
         {loading ? (
-          <div className="py-20 text-center" style={{ color: "var(--text-muted)" }}>
-            <div
-              className="w-7 h-7 rounded-full border-2 border-t-transparent animate-spin mx-auto mb-3"
-              style={{ borderColor: "var(--border-strong)", borderTopColor: "var(--primary)" }}
-              role="status" aria-label="載入中"
-            />
-            <p className="text-sm">載入中…</p>
+          <div className="p-5">
+            <ListPageSkeleton rows={6} showHeader={false} showFilters={false} />
           </div>
         ) : docs.length === 0 ? (
           <div className="py-20 text-center" style={{ color: "var(--text-muted)" }}>

@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { dashboardApi, type DashboardResponse, type DashboardWidget } from "@/lib/api";
 import { usePermissions } from "@/hooks/usePermissions";
+import OnboardingHint from "@/components/ui/OnboardingHint";
 
 type IconProps = { size: number; "aria-hidden": boolean };
 function FallbackWidgetIcon(p: IconProps) { return <FileText {...p} />; }
@@ -225,6 +226,12 @@ export default function DashboardPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
+
+      {/* 一次性引導：首次進站時提示 */}
+      <OnboardingHint id="hint.dashboard.first-visit">
+        歡迎使用平台首頁！下面的卡片會依您的角色顯示最相關的待辦與最新消息，
+        點任一卡片可以直接開始。
+      </OnboardingHint>
 
       {/* 頁首 */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

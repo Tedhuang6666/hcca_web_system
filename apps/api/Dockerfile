@@ -15,7 +15,7 @@ COPY pyproject.toml ./
 
 # 安裝所有依賴到 /build/.venv（不包含開發工具）
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --project apps/api --no-dev --no-editable
+    uv sync --project apps/api --no-dev --no-editable --no-install-project
 
 # ==============================================================================
 # Stage 2: runtime — 最小化生產映像檔
@@ -48,6 +48,8 @@ COPY --from=builder /build/.venv /app/.venv
 # 複製應用程式原始碼
 COPY apps/api/src /app/src
 COPY libs/shared/src /app/src
+COPY apps/api/alembic /app/alembic
+COPY apps/api/alembic.ini /app/alembic.ini
 COPY apps/api/gunicorn.conf.py /app/gunicorn.conf.py
 
 RUN mkdir -p /app/uploads && chown -R appuser:appgroup /app/uploads
@@ -63,4 +65,4 @@ EXPOSE 8000
 
 # 生產：Gunicorn + UvicornWorker（多 worker 充分利用多核）
 # 開發：CMD 可被 docker-compose override 為 uvicorn --reload
-CMD ["gunicorn", "api:app", "--config", "/app/gunicorn.conf.py"]
+CMD ["python", "-m", "gunicorn.app.wsgiapp", "api:app", "--config", "/app/gunicorn.conf.py"]

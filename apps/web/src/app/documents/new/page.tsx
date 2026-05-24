@@ -420,6 +420,7 @@ export default function NewDocumentPage() {
     urgency,
     visibilityLevel,
   ]);
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const restoreDraft = useCallback((draft: DocumentDraft) => {
     setUrgency(draft.urgency ?? "normal");
     setClassification(draft.classification ?? "normal");
@@ -464,6 +465,7 @@ export default function NewDocumentPage() {
       && !(draft.newLink?.display_text ?? "").trim()
     ), []),
   });
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const restoreFileDraft = useCallback((files: File[]) => {
     setPendingFiles(files);
     toast.info("已復原未上傳的公文附件草稿");

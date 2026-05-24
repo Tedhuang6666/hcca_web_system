@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     DATABASE_URL_SYNC: str = Field(
         default="postgresql+psycopg2://postgres:password@localhost:5432/campus_platform"
     )
+    SQL_ECHO: bool = False
 
     # --- Redis 設定 ---
     REDIS_URL: RedisDsn = Field(default="redis://localhost:6379/0")
@@ -129,11 +130,29 @@ class Settings(BaseSettings):
     LINE_CHANNEL_SECRET: str = Field(default="")
     LINE_CHANNEL_ACCESS_TOKEN: str = Field(default="")
 
+    # --- 附件儲存後端 ---
+    STORAGE_BACKEND: str = Field(
+        default="local",
+        description="附件儲存後端：local（本地）或 s3（AWS S3 / MinIO）",
+    )
+    STORAGE_LOCAL_DIR: str = Field(default="uploads")
+    S3_BUCKET: str = Field(default="")
+    S3_REGION: str = Field(default="ap-northeast-1")
+
+    # --- 資料庫備份 ---
+    DB_BACKUP_ENABLED: bool = Field(default=False)
+    DB_BACKUP_DIR: str = Field(
+        default="backups",
+        description="本地備份輸出目錄；若搭配 STORAGE_BACKEND=s3 則同步上傳",
+    )
+    DB_BACKUP_RETENTION_DAYS: int = Field(default=7)
+
     @field_validator("SECRET_KEY")
     @classmethod
     def secret_key_must_be_set(cls, v: str) -> str:
         if v == _DEFAULT_SECRET:
             import os
+
             if os.getenv("ENVIRONMENT", "development").lower() in {"prod", "production"}:
                 raise ValueError("生產環境必須設定非預設的 SECRET_KEY")
             warnings.warn("SECRET_KEY 使用預設值，僅允許本機開發環境使用。", stacklevel=2)

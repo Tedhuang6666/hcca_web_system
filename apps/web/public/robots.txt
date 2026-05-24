@@ -1,0 +1,26 @@
+User-agent: *
+Allow: /
+Allow: /regulations
+Allow: /announcements
+Allow: /documents
+Allow: /petitions
+Allow: /partner-map
+Allow: /surveys
+Allow: /public/
+
+Disallow: /admin
+Disallow: /api/
+Disallow: /auth/
+Disallow: /profile
+Disallow: /settings
+Disallow: /notifications
+Disallow: /audit-logs
+Disallow: /analytics
+Disallow: /tasks
+Disallow: /email
+Disallow: /unsubscribe
+Disallow: /meetings/screen/
+Disallow: /meetings/join/
+Disallow: /shop/cart
+Disallow: /shop/orders
+Disallow: /meal/orders

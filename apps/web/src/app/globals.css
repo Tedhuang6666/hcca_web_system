@@ -71,24 +71,35 @@
 .partner-map-school-marker {
   position: relative;
   display: grid;
-  width: 46px;
-  height: 46px;
+  width: 34px;
+  height: 34px;
   place-items: center;
-  border-radius: 16px;
-  background: linear-gradient(135deg, #123b73, #0f172a 58%, #c9a84c);
-  color: #fff8db;
-  border: 3px solid #fff;
-  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.3), 0 0 0 7px rgba(201, 168, 76, 0.16);
-  font-size: 18px;
-  font-weight: 800;
+  border-radius: 999px;
+  background: #fffdf7;
+  color: #2563eb;
+  border: 1px solid rgba(37, 99, 235, 0.26);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.16), 0 0 0 4px rgba(255, 253, 247, 0.72);
 }
 
-.partner-map-school-marker::after {
-  content: "";
-  position: absolute;
-  inset: -8px;
-  border-radius: 20px;
-  border: 1px solid rgba(201, 168, 76, 0.55);
+.partner-map-school-marker svg {
+  transform: none;
+}
+
+.partner-map-station-marker {
+  position: relative;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 999px;
+  background: #fffdf7;
+  color: #0f766e;
+  border: 1px solid rgba(15, 118, 110, 0.26);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.16), 0 0 0 4px rgba(255, 253, 247, 0.72);
+}
+
+.partner-map-station-marker svg {
+  transform: none;
 }
 
 .partner-map-user-marker {
@@ -118,6 +129,30 @@
 .partner-map-leaflet .leaflet-control-attribution {
   background: color-mix(in srgb, var(--bg) 86%, transparent) !important;
   color: var(--text-muted) !important;
+}
+
+.partner-map-theme-dark {
+  background: #10151b;
+}
+
+.partner-map-theme-dark .leaflet-tile-pane {
+  filter: brightness(1.05) contrast(0.86) saturate(0.72) sepia(0.08) hue-rotate(8deg);
+}
+
+.partner-map-theme-dark .partner-map-school-marker,
+.partner-map-theme-dark .partner-map-station-marker {
+  background: #151c22;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.34), 0 0 0 4px rgba(21, 28, 34, 0.72);
+}
+
+.partner-map-theme-dark .partner-map-school-marker {
+  color: #93c5fd;
+  border-color: rgba(147, 197, 253, 0.28);
+}
+
+.partner-map-theme-dark .partner-map-station-marker {
+  color: #99f6e4;
+  border-color: rgba(153, 246, 228, 0.28);
 }
 
 .partner-map-mobile-strip {
@@ -1515,6 +1550,16 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 .animate-spin { animation: spin 0.8s linear infinite; }
 
+/* Skeleton shimmer：取代 spinner，預期內容形狀 */
+@keyframes skeleton-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+[data-skeleton="true"] { pointer-events: none; user-select: none; }
+@media (prefers-reduced-motion: reduce) {
+  [data-skeleton="true"] { animation: none !important; opacity: 0.5; }
+}
+
 /* Instagram 風格呼吸跳動（懸浮球） */
 @keyframes bounce-ig {
   0%, 100% { transform: translateY(0); }
@@ -1588,5 +1633,10 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
 @media (max-width: 479px) {
   body { font-size: 0.875rem; }
   .badge { font-size: 0.625rem; padding: 0.15em 0.45em; }
+  :root { --sidebar-w: 200px; }
+}
+
+/* ── 平板（768-1023px）：sidebar 收窄讓主內容更舒展 ──────────────────── */
+@media (min-width: 768px) and (max-width: 1023px) {
   :root { --sidebar-w: 200px; }
 }

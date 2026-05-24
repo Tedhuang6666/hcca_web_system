@@ -5,6 +5,8 @@ import { PermissionProvider } from "@/contexts/PermissionContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
+import BottomTabBar from "./BottomTabBar";
+import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import UrgentAnnouncementPopup from "@/components/announcements/UrgentAnnouncementPopup";
 
 /** 完全裸頁（不渲染 Shell）：login、auth callback、Email 退訂落地頁 */
@@ -44,6 +46,7 @@ function requiresAuth(pathname: string): boolean {
   if (/^\/surveys\/[^/]+$/.test(pathname) && pathname !== "/surveys/new") return false;
   if (pathname === "/petitions") return false;
   if (pathname === "/petitions/new") return false;
+  if (pathname === "/partner-map") return false;
   return true;
 }
 
@@ -92,11 +95,12 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
 
   return (
     <PermissionProvider can={can}>
+      <ConfirmProvider>
       <div className="flex h-screen overflow-hidden" style={{ background: "var(--bg-base)" }}>
         {/* 行動版側邊欄遮罩 */}
         {sidebarOpen && (
           <div
-            className="fixed inset-0 z-20 lg:hidden"
+            className="fixed inset-0 z-20 md:hidden"
             style={{ background: "var(--bg-overlay)" }}
             onClick={() => setSidebarOpen(false)}
             aria-hidden="true"
@@ -107,7 +111,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
         <div
           className={`
             fixed inset-y-0 left-0 z-30 transition-transform duration-300
-            lg:relative lg:translate-x-0 lg:z-auto
+            md:relative md:translate-x-0 md:z-auto
             ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
           `}
           style={{ width: "var(--sidebar-w, 240px)" }}>
@@ -119,13 +123,15 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
           <Topbar onMenuClick={() => setSidebarOpen((p) => !p)} />
           <main
             id="main-content"
-            className="flex-1 overflow-y-auto p-5 md:p-6 animate-slide-in"
+            className="flex-1 overflow-y-auto p-5 md:p-6 pb-20 md:pb-6 animate-slide-in"
             style={{ background: "var(--bg-base)" }}>
             {children}
           </main>
         </div>
+        <BottomTabBar onMoreClick={() => setSidebarOpen((p) => !p)} />
         <UrgentAnnouncementPopup />
       </div>
+      </ConfirmProvider>
     </PermissionProvider>
   );
 }

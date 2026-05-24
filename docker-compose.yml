@@ -89,7 +89,7 @@ services:
     container_name: campus_celery_worker
     restart: unless-stopped
     command: >
-      celery -A api.core.celery_app.celery_app worker
+      python -m celery -A api.core.celery_app.celery_app worker
       --loglevel=info
       --concurrency=4
       --queues=celery
@@ -105,7 +105,7 @@ services:
     container_name: campus_celery_beat
     restart: unless-stopped
     command: >
-      celery -A api.core.celery_app.celery_app beat
+      python -m celery -A api.core.celery_app.celery_app beat
       --loglevel=info
       --scheduler celery.beat:PersistentScheduler
       --pidfile=/tmp/celerybeat.pid

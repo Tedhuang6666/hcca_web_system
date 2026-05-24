@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Toaster } from "sonner";
 import AppShell from "@/components/layout/AppShell";
@@ -16,6 +16,7 @@ export const metadata: Metadata = {
   applicationName: SOCIAL_SITE_NAME,
   title: { default: SOCIAL_SHARE_TITLE, template: SOCIAL_SHARE_TITLE },
   description: DEFAULT_DESCRIPTION,
+  manifest: "/manifest.webmanifest",
   openGraph: {
     type: "website",
     locale: "zh_TW",
@@ -31,6 +32,10 @@ export const metadata: Metadata = {
     description: DEFAULT_DESCRIPTION,
     images: [SOCIAL_IMAGE.url],
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#1a1a2e",
 };
 
 function ThemeScript() {

@@ -25,6 +25,7 @@ import {
   MapPinned,
   ChevronDown,
   Inbox,
+  Truck,
 } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 
@@ -40,7 +41,7 @@ const Icons: Record<string, React.ComponentType<{ size: number; "aria-hidden": b
   shopAdmin:         (p) => <Warehouse {...p} />,
   shopOrders:        (p) => <Store {...p} />,
   meal:              (p) => <Utensils {...p} />,
-  mealVendor:        (p) => <Utensils {...p} />,
+  mealVendor:        (p) => <Truck {...p} />,
   survey:            (p) => <CheckSquare {...p} />,
   announcement:      (p) => <MessageCircle {...p} />,
   petition:          (p) => <MessageSquare {...p} />,
@@ -70,7 +71,7 @@ type NavSection = {
 };
 
 const NAV_DEF: (NavItem | NavSection)[] = [
-  { href: "/", iconKey: "dashboard", label: "儀表板", end: true },
+  { href: "/", iconKey: "dashboard", label: "平台首頁", end: true },
   { href: "/tasks", iconKey: "tasks", label: "我的待辦" },
 
   {
@@ -85,13 +86,13 @@ const NAV_DEF: (NavItem | NavSection)[] = [
   {
     heading: "社群與服務",
     items: [
-      { href: "/announcements",     iconKey: "announcement", label: "公告" },
+      { href: "/announcements",     iconKey: "announcement", label: "校內公告" },
       { href: "/shop",              iconKey: "shop",         label: "校商訂購" },
       { href: "/shop/class-orders", iconKey: "shopOrders",   label: "班級訂單", perm: "class:shop_collect" },
       { href: "/meal",              iconKey: "meal",         label: "學餐訂購" },
       { href: "/partner-map",       iconKey: "partnerMap",   label: "特約地圖" },
-      { href: "/surveys",           iconKey: "survey",       label: "問卷" },
-      { href: "/petitions",         iconKey: "petition",     label: "陳情" },
+      { href: "/surveys",           iconKey: "survey",       label: "問卷專區" },
+      { href: "/petitions",         iconKey: "petition",     label: "陳情中心" },
     ],
   },
 
@@ -109,7 +110,7 @@ const NAV_DEF: (NavItem | NavSection)[] = [
       { href: "/serial-templates",   iconKey: "serial",            label: "字號模板",   perm: "serial:create" },
       { href: "/email",              iconKey: "email",             label: "電子郵件",   perm: "email:*" },
       { href: "/shop/admin",         iconKey: "shopAdmin",         label: "校商後台",   perm: "shop:manage" },
-      { href: "/meal/vendor",        iconKey: "mealVendor",        label: "商家管理",   perm: "meal:manage" },
+      { href: "/meal/vendor",        iconKey: "mealVendor",        label: "餐商管理",   perm: "meal:manage" },
       { href: "/partner-map/admin",  iconKey: "partnerMap",        label: "特約管理",   perm: "partner_map:manage" },
       { href: "/petitions/manage",   iconKey: "petition",          label: "陳情管理",   perm: "petition:*" },
     ],
@@ -122,7 +123,7 @@ const NAV_DEF_LOGGED_OUT: (NavItem | NavSection)[] = [
     items: [
       { href: "/regulations",   iconKey: "regulations",   label: "法規查詢" },
       { href: "/documents",     iconKey: "documents",     label: "公文查詢" },
-      { href: "/announcements", iconKey: "announcement",  label: "公告" },
+      { href: "/announcements", iconKey: "announcement",  label: "校內公告" },
       { href: "/partner-map",   iconKey: "partnerMap",    label: "特約地圖" },
       { href: "/petitions/new", iconKey: "petition",      label: "我要陳情" },
     ],

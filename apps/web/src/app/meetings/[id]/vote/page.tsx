@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { BookOpen, FileText, Home, MessageSquare, Vote } from "lucide-react";
 import { meetingsApi } from "@/lib/api";
@@ -16,14 +16,14 @@ export default function MeetingVotePage({ params }: { params: Promise<{ id: stri
     void params.then(({ id: nextId }) => setId(nextId));
   }, [params]);
 
-  async function load() {
+  const load = useCallback(async () => {
     if (!id) return;
     setMeeting(await meetingsApi.get(id));
-  }
+  }, [id]);
 
   useEffect(() => {
     void load();
-  }, [id]);
+  }, [load]);
 
   useWS(
     id ? `meeting:${id}` : null,

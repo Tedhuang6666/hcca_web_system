@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { CalendarDays, Plus, Radio, ScreenShare, Settings } from "lucide-react";
 import { meetingsApi, orgsApi } from "@/lib/api";
 import type { MeetingListItem, MeetingWorkspaceOut, OrgRead } from "@/lib/types";
+import { ListPageSkeleton } from "@/components/ui/Skeleton";
 
 const statusLabel: Record<string, string> = {
   draft: "草稿",
@@ -151,7 +152,7 @@ export default function MeetingsPage() {
 
       {error && <p className="mb-4 text-sm text-red-500">{error}</p>}
       {loading ? (
-        <p className="text-sm text-[var(--muted)]">載入中...</p>
+        <ListPageSkeleton rows={5} showHeader={false} showFilters={false} />
       ) : (
         <div className="grid gap-3">
           {items.length === 0 && (
