@@ -43,6 +43,9 @@ import type {
   WebPushConfigOut,
   WebPushSubscriptionOut,
   LineBindingOut, LineLinkCodeOut,
+  DiscordBindingOut, DiscordGuildConfigIn, DiscordGuildConfigOut,
+  DiscordChannelOptionOut, DiscordGuildOptionOut, DiscordRoleOptionOut,
+  DiscordRoleMappingIn, DiscordRoleMappingOut,
   DocumentEfficiencyOut, DeptRankingItem, PendingAlertItem, AnnouncementParticipationItem,
   SurveyParticipationItem,
   EmailComposePayload, EmailMessageCreate, EmailMessageOut, EmailMessageDetailOut,
@@ -53,6 +56,8 @@ import type {
   PartnerRankingItem, PartnerRatingCreate, PartnerRatingOut,
   PartnerSubmissionCreate, PartnerSubmissionOut,
   PartnerTagCreate, PartnerTagOut, PartnerTagUpdate,
+  ExamGradeTrack, ExamPaperDownloadOut, ExamPaperListItem, ExamPaperOut, ExamPaperUpdate,
+  ExamTraceInspectOut,
 } from "./types";
 import { API_BASE, apiUrl } from "./config";
 
@@ -158,21 +163,42 @@ function csrfHeaders(method?: string): Record<string, string> {
   return token ? { "X-CSRF-Token": decodeURIComponent(token) } : {};
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+// GET 在網路錯誤時最多重試 N 次，間隔逐步加長
+const GET_NETWORK_RETRIES = 2;
+const RETRY_BACKOFF_MS = [400, 900];
+
+async function request<T>(
+  path: string,
+  init: RequestInit = {},
+  retriedAfterRefresh = false,
+): Promise<T> {
+  const method = (init.method ?? "GET").toUpperCase();
   let res: Response;
-  try {
-    res = await fetch(`${BASE}${path}`, {
-      ...init,
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-        ...csrfHeaders(init.method),
-        ...init.headers,
-      },
-    });
-  } catch {
-    throw new ApiError(0, `無法連線至後端 API：${BASE}`);
+  let lastError: unknown = null;
+  const maxRetries = method === "GET" ? GET_NETWORK_RETRIES : 0;
+  let attempt = 0;
+  while (true) {
+    try {
+      res = await fetch(`${BASE}${path}`, {
+        ...init,
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...csrfHeaders(init.method),
+          ...init.headers,
+        },
+      });
+      break;
+    } catch (err) {
+      lastError = err;
+      if (attempt >= maxRetries) {
+        throw new ApiError(0, `無法連線至後端 API：${BASE}`);
+      }
+      await new Promise((r) => setTimeout(r, RETRY_BACKOFF_MS[attempt] ?? 1500));
+      attempt += 1;
+    }
   }
+  void lastError;
 
   // 401 → 嘗試 silent refresh，成功後重試一次
   if (res.status === 401) {
@@ -211,19 +237,27 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new ApiError(401, "登入已過期，請重新登入");
   }
 
-  // 503 + maintenance/load_shed → 跳轉維護頁（由 LoadShedMiddleware 回傳）
+  // 503 + maintenance/load_shed → 先 refresh 一次，讓舊 token 補上 admin/bypass claims
   if (res.status === 503) {
     try {
       const payload = (await res.clone().json()) as {
         detail?: string;
         maintenance?: boolean;
         load_shed?: boolean;
+        until?: number | null;
       };
       if (typeof window !== "undefined" && (payload.maintenance || payload.load_shed)) {
+        const hasLocalLogin = Boolean(localStorage.getItem("user_id"));
+        if (hasLocalLogin && !retriedAfterRefresh) {
+          const refreshed = await silentRefresh();
+          if (refreshed) return request<T>(path, init, true);
+        }
+
         const retryAfter = res.headers.get("Retry-After") ?? "30";
         const detail = encodeURIComponent(payload.detail ?? "");
         const kind = payload.maintenance ? "maintenance" : "busy";
         const params = new URLSearchParams({ retry: retryAfter, detail, kind });
+        if (payload.until) params.set("until", String(payload.until));
         if (!window.location.pathname.startsWith("/maintenance")) {
           window.location.assign(`/maintenance?${params.toString()}`);
         }
@@ -264,7 +298,7 @@ export const documentsApi = {
   },
   get: (id: string) => get<DocumentOut>(`/documents/${id}`),
   create: (body: DocumentCreate) => post<DocumentOut>("/documents", body),
-  update: (id: string, body: Partial<DocumentCreate> & { change_note?: string }) =>
+  update: (id: string, body: Partial<DocumentCreate> & { change_note?: string; autosave?: boolean }) =>
     patch<DocumentOut>(`/documents/${id}`, body),
   delete: (id: string) => del<void>(`/documents/${id}`),
   submit: (id: string, approver_ids: string[]) =>
@@ -369,6 +403,25 @@ export const documentsApi = {
     `${BASE}/documents/${id}/attachments/${attachmentId}/download`,
   attachmentPreviewUrl: (id: string, attachmentId: string) =>
     `${BASE}/documents/${id}/attachments/${attachmentId}/preview`,
+  /** 後端列印 / 下載 PDF（一般使用者由身份自動判定正/影本；管理員可指定）。
+   *  以 fetch + Bearer token 取得 blob，由呼叫端決定預覽或下載。 */
+  printPdf: async (
+    id: string,
+    opts?: { recipientId?: string; variant?: "primary" | "copy" },
+  ): Promise<Blob> => {
+    const qs = new URLSearchParams();
+    if (opts?.recipientId) qs.set("recipient_id", opts.recipientId);
+    if (opts?.variant) qs.set("variant", opts.variant);
+    const url = `${BASE}/documents/${id}/print${qs.toString() ? `?${qs}` : ""}`;
+    const token =
+      typeof window !== "undefined" ? (localStorage.getItem("access_token") ?? "") : "";
+    const res = await fetch(url, {
+      credentials: "include",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new ApiError(res.status, await errorMessageFromResponse(res));
+    return res.blob();
+  },
 };
 
 // ── 商店 ──────────────────────────────────────────────────────────────────────
@@ -722,6 +775,7 @@ export const regulationsApi = {
     legislative_history: string | null;
     legal_basis: string | null;
     proposal_metadata: string | null;
+    autosave: boolean;
   }>) =>
     patch<RegulationOut>(regulationPath(id), body),
   publish: (id: string, body: { change_brief: string; is_total_amendment?: boolean; resolution_link?: string }) =>
@@ -732,6 +786,8 @@ export const regulationsApi = {
   delete: (id: string) => del<void>(regulationPath(id)),
   // ── 修訂歷程 ──────────────────────────────────────────────────────────────
   listRevisions: (id: string) => get<RegulationRevisionOut[]>(`${regulationPath(id)}/revisions`),
+  structureContent: (id: string, body?: { content?: string | null; replace_existing?: boolean }) =>
+    post<RegulationOut>(`${regulationPath(id)}/structure-content`, body ?? {}),
   // ── 審議流程 ──────────────────────────────────────────────────────────────
   listWorkflowLogs: (id: string) => get<RegulationWorkflowLogOut[]>(`${regulationPath(id)}/workflow_logs`),
   submitReview: (id: string, note?: string) => post<RegulationOut>(`${regulationPath(id)}/submit`, { note }),
@@ -744,7 +800,15 @@ export const regulationsApi = {
     get<{ id: string; title: string; status: string; bill_stage: string | null; starts_at: string | null }[]>(
       `${regulationPath(id)}/eligible-meetings`,
     ),
-  presidentPublish: (id: string, note?: string) => post<RegulationOut>(`${regulationPath(id)}/president_publish`, { note }),
+  presidentPublish: (
+    id: string,
+    note?: string,
+    options?: { serial_template_id?: string | null; manual_serial_number?: string | null },
+  ) => post<RegulationOut>(`${regulationPath(id)}/president_publish`, {
+    note,
+    serial_template_id: options?.serial_template_id ?? null,
+    manual_serial_number: options?.manual_serial_number ?? null,
+  }),
   rejectRegulation: (id: string, note: string) => post<RegulationOut>(`${regulationPath(id)}/reject`, { note }),
   freeze: (id: string, reason: string, freeze_document_id?: string) =>
     post<RegulationOut>(`${regulationPath(id)}/freeze`, { reason, freeze_document_id: freeze_document_id ?? null }),
@@ -951,6 +1015,26 @@ export const lineApi = {
   unlink: () => del<void>("/line/me"),
 };
 
+export const discordApi = {
+  me: () => get<DiscordBindingOut>("/discord/me"),
+  loginUrl: (next = "/profile") => `${BASE}/discord/login?next=${encodeURIComponent(next)}`,
+  unlink: () => del<void>("/discord/me"),
+  availableGuilds: () => get<DiscordGuildOptionOut[]>("/discord/available-guilds"),
+  guildChannels: (guildId: string) =>
+    get<DiscordChannelOptionOut[]>(`/discord/guilds/${encodeURIComponent(guildId)}/channels`),
+  guildRoles: (guildId: string) =>
+    get<DiscordRoleOptionOut[]>(`/discord/guilds/${encodeURIComponent(guildId)}/roles`),
+  listGuildConfigs: () => get<DiscordGuildConfigOut[]>("/discord/guild-configs"),
+  saveGuildConfig: (body: DiscordGuildConfigIn) =>
+    post<DiscordGuildConfigOut>("/discord/guild-configs", body),
+  listRoleMappings: () => get<DiscordRoleMappingOut[]>("/discord/role-mappings"),
+  createRoleMapping: (body: DiscordRoleMappingIn) =>
+    post<DiscordRoleMappingOut>("/discord/role-mappings", body),
+  updateRoleMapping: (id: string, body: DiscordRoleMappingIn) =>
+    patch<DiscordRoleMappingOut>(`/discord/role-mappings/${id}`, body),
+  deleteRoleMapping: (id: string) => del<void>(`/discord/role-mappings/${id}`),
+};
+
 // ── 組織（公開端點）───────────────────────────────────────────────────────────
 
 export type { OrgRead } from "./types";
@@ -985,7 +1069,7 @@ export const orgsApi = {
 // ── 管理員 ────────────────────────────────────────────────────────────────────
 
 import type {
-  AdminUserDetail, OrgWithPositions, PermissionCodeInfo, PositionSummary,
+  AdminUserDetail, OrgWithPositions, PermissionCodeInfo, PositionCategory, PositionSummary,
 } from "./types";
 
 export const adminApi = {
@@ -1030,6 +1114,7 @@ export const adminApi = {
     org_id: string;
     name: string;
     description?: string;
+    category?: PositionCategory;
     weight?: number;
     parent_id?: string | null;
     permission_codes?: string[];
@@ -1037,7 +1122,13 @@ export const adminApi = {
     post<PositionSummary>("/admin/positions", body),
   updatePosition: (
     id: string,
-    body: { name?: string; description?: string | null; weight?: number; parent_id?: string | null },
+    body: {
+      name?: string;
+      description?: string | null;
+      category?: PositionCategory;
+      weight?: number;
+      parent_id?: string | null;
+    },
   ) => patch<PositionSummary>(`/admin/positions/${id}`, body),
   replacePositionPermissions: (id: string, codes: string[]) =>
     request<PositionSummary>(`/admin/positions/${id}/permissions`, {
@@ -1170,6 +1261,13 @@ export const notificationsApi = {
   getPreferences: () => get<NotificationPreferences>("/notifications/preferences"),
   updatePreferences: (body: Partial<NotificationPreferences>) =>
     put<NotificationPreferences>("/notifications/preferences", body),
+  getDigestFrequency: () =>
+    get<{ frequency: "off" | "daily" | "weekly" }>("/notifications/preferences/digest"),
+  setDigestFrequency: (frequency: "off" | "daily" | "weekly") =>
+    put<{ frequency: "off" | "daily" | "weekly" }>(
+      "/notifications/preferences/digest",
+      { frequency },
+    ),
   unsubscribe: (token: string) =>
     post<{ status: string; type: string; message: string }>(
       "/notifications/unsubscribe",
@@ -1409,6 +1507,7 @@ export type SurveyQuestionBody = {
   min_label?: string;
   max_label?: string;
   condition?: { rules: { question_id: string; operator: string; value: string; connector: string }[] } | null;
+  option_config?: { exclusive: string[]; other: string[] } | null;
   order_index?: number;
 };
 
@@ -1440,7 +1539,7 @@ export const surveysApi = {
   updateQuestion: (questionId: string, body: SurveyQuestionBody) =>
     patch<SurveyQuestionOut>(`/surveys/questions/${questionId}`, body),
   deleteQuestion: (questionId: string) => del<void>(`/surveys/questions/${questionId}`),
-  submit: (id: string, body: { answers: { question_id: string; answer_text?: string; answer_options?: string[] }[]; anon_token?: string; email_copy?: boolean }) =>
+  submit: (id: string, body: { answers: { question_id: string; answer_text?: string; answer_options?: string[]; other_text?: string }[]; anon_token?: string; email_copy?: boolean }) =>
     post<SurveyResponseOut>(`/surveys/${pathSegment(id)}/submit`, body),
   stats: (id: string) => get<SurveyStats>(`/surveys/${pathSegment(id)}/stats`),
   responses: (id: string) =>
@@ -1565,10 +1664,10 @@ export const petitionsApi = {
 // ── 公文受文者 ─────────────────────────────────────────────────────────────────
 
 export const documentsRecipientsApi = {
-  update: (id: string, recipients: { recipient_type: string; name: string; email?: string }[]) =>
+  update: (id: string, recipients: import("./types").RecipientCreatePayload[]) =>
     request<void>(`/documents/${id}/recipients`, {
       method: "PUT",
-      body: JSON.stringify({ recipients }),
+      body: JSON.stringify(recipients),
     }),
 };
 
@@ -2052,6 +2151,79 @@ export const tasksApi = {
   list: () => get<TaskInboxResponse>("/tasks"),
 };
 
+// ── 段考題庫 ────────────────────────────────────────────────────────────────
+
+export const examPapersApi = {
+  list: (params?: {
+    include_unpublished?: boolean;
+    subject?: string;
+    academic_year?: number;
+    semester?: number;
+    grade?: number;
+    grade_track?: ExamGradeTrack | null;
+    exam_number?: number;
+  }) => {
+    const q = new URLSearchParams();
+    Object.entries(params ?? {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== "") q.set(key, String(value));
+    });
+    const qs = q.toString();
+    return get<ExamPaperListItem[]>(`/exam-papers${qs ? `?${qs}` : ""}`);
+  },
+  create: async (body: {
+    file: File;
+    title: string;
+    subject: string;
+    academic_year: number;
+    semester: number;
+    grade: number;
+    grade_track?: ExamGradeTrack | null;
+    exam_number: number;
+    is_published: boolean;
+  }): Promise<ExamPaperOut> => {
+    const fd = new FormData();
+    fd.append("file", body.file);
+    fd.append("title", body.title);
+    fd.append("subject", body.subject);
+    fd.append("academic_year", String(body.academic_year));
+    fd.append("semester", String(body.semester));
+    fd.append("grade", String(body.grade));
+    if (body.grade_track) fd.append("grade_track", body.grade_track);
+    fd.append("exam_number", String(body.exam_number));
+    fd.append("is_published", String(body.is_published));
+    const doFetch = () =>
+      fetch(`${BASE}/exam-papers`, {
+        method: "POST",
+        credentials: "include",
+        headers: csrfHeaders("POST"),
+        body: fd,
+      });
+    let res = await doFetch();
+    if (res.status === 401 && await silentRefresh()) res = await doFetch();
+    if (!res.ok) throw new ApiError(res.status, await errorMessageFromResponse(res));
+    return res.json();
+  },
+  update: (id: string, body: ExamPaperUpdate) => patch<ExamPaperOut>(`/exam-papers/${id}`, body),
+  delete: (id: string) => del<void>(`/exam-papers/${id}`),
+  downloadUrl: (id: string) => `${BASE}/exam-papers/${id}/download`,
+  downloads: (id: string) => get<ExamPaperDownloadOut[]>(`/exam-papers/${id}/downloads`),
+  inspectTrace: async (file: File): Promise<ExamTraceInspectOut> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const doFetch = () =>
+      fetch(`${BASE}/exam-papers/trace/inspect`, {
+        method: "POST",
+        credentials: "include",
+        headers: csrfHeaders("POST"),
+        body: fd,
+      });
+    let res = await doFetch();
+    if (res.status === 401 && await silentRefresh()) res = await doFetch();
+    if (!res.ok) throw new ApiError(res.status, await errorMessageFromResponse(res));
+    return res.json();
+  },
+};
+
 // ── 管理員系統狀態（admin/system） ───────────────────────────────────────────
 
 export interface DbPoolView {
@@ -2136,8 +2308,86 @@ export interface IpBlockedItem {
   expires_at: number | null;
 }
 
+export type DefenseRuleType =
+  | "ip_block"
+  | "cidr_block"
+  | "ip_allow"
+  | "rate_limit_override"
+  | "endpoint_lockdown"
+  | "bot_challenge_placeholder";
+
+export interface DefenseRule {
+  id: string;
+  rule_type: DefenseRuleType;
+  target: string;
+  is_active: boolean;
+  reason: string;
+  config: Record<string, unknown>;
+  expires_at: number | null;
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DefenseRuleCreate {
+  rule_type: DefenseRuleType;
+  target: string;
+  reason?: string;
+  config?: Record<string, unknown>;
+  expires_at?: string | null;
+}
+
+export interface DefenseRuleUpdate {
+  rule_type?: DefenseRuleType;
+  target?: string;
+  is_active?: boolean;
+  reason?: string;
+  config?: Record<string, unknown>;
+  expires_at?: string | null;
+}
+
+export interface RateLimitOverride {
+  path_prefix: string;
+  requests: number;
+  window_seconds: number;
+}
+
+export interface RateLimitConfig {
+  enabled: boolean;
+  global_requests: number;
+  global_window_seconds: number;
+  overrides: RateLimitOverride[];
+}
+
+export interface DefenseSummary {
+  active_rule_count: number;
+  total_rule_count: number;
+  active_by_type: Record<string, number>;
+  active_rules: DefenseRule[];
+  rate_limit: RateLimitConfig;
+  recent_status_counts: Record<string, number>;
+}
+
 export const systemApi = {
   status: () => get<SystemMetricsSnapshot>("/admin/system/status"),
+  defenseSummary: () => get<DefenseSummary>("/admin/system/defense/summary"),
+  listDefenseRules: (params?: { active_only?: boolean; limit?: number; offset?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.active_only !== undefined) q.set("active_only", String(params.active_only));
+    if (params?.limit !== undefined) q.set("limit", String(params.limit));
+    if (params?.offset !== undefined) q.set("offset", String(params.offset));
+    const qs = q.toString();
+    return get<DefenseRule[]>(`/admin/system/defense/rules${qs ? `?${qs}` : ""}`);
+  },
+  createDefenseRule: (body: DefenseRuleCreate) =>
+    post<DefenseRule>("/admin/system/defense/rules", body),
+  updateDefenseRule: (id: string, body: DefenseRuleUpdate) =>
+    patch<DefenseRule>(`/admin/system/defense/rules/${encodeURIComponent(id)}`, body),
+  deactivateDefenseRule: (id: string) =>
+    del<DefenseRule>(`/admin/system/defense/rules/${encodeURIComponent(id)}`),
+  rateLimit: () => get<RateLimitConfig>("/admin/system/rate-limit"),
+  setRateLimit: (body: RateLimitConfig) => put<RateLimitConfig>("/admin/system/rate-limit", body),
   maintenance: () => get<MaintenanceView>("/admin/system/maintenance"),
   setMaintenance: (body: { enabled: boolean; message?: string; until?: number | null }) =>
     put<MaintenanceView>("/admin/system/maintenance", body),
@@ -2159,4 +2409,9 @@ export const systemApi = {
       rooms: WsRoomCount[];
       ips: { ip: string; connections: number }[];
     }>("/admin/system/ws/rooms"),
+  slowQueries: (top = 10) =>
+    get<{
+      top: number;
+      items: Array<{ template: string; max_ms: number; occurrences: number; last_seen: number }>;
+    }>(`/admin/system/metrics/slow-queries?top=${top}`),
 };

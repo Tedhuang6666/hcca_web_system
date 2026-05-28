@@ -6,6 +6,8 @@ import Link from "next/link";
 import { shopApi, ApiError } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
 import type { CatalogCategoryOut, CatalogProductOut, ProductOut } from "@/lib/types";
+import { ListPageSkeleton } from "@/components/ui/Skeleton";
+import SmartEmptyState from "@/components/ui/SmartEmptyState";
 
 function Thumb({ url, alt, size = 64 }: { url: string | null; alt: string; size?: number }) {
   if (!url) {
@@ -324,16 +326,9 @@ export default function ShopPage() {
       </div>
 
       {loading ? (
-        <div className="py-20 text-center" style={{ color: "var(--text-muted)" }}>
-          <div className="w-7 h-7 rounded-full border-2 border-t-transparent animate-spin mx-auto mb-3"
-            style={{ borderColor: "var(--border-strong)", borderTopColor: "var(--primary)" }}
-            role="status" aria-label="載入中" />
-          <p className="text-sm">載入中…</p>
-        </div>
+        <ListPageSkeleton rows={4} showHeader={false} showFilters={false} />
       ) : catalog.length === 0 ? (
-        <div className="py-20 text-center" style={{ color: "var(--text-muted)" }}>
-          <p className="text-sm">目前沒有上架商品</p>
-        </div>
+        <SmartEmptyState reason="none" subject="上架商品" message="店家還沒上架任何商品，請稍後再來看看" />
       ) : selectedCategory && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[220px_1fr]">
           <aside className="lg:sticky lg:top-20 lg:self-start">

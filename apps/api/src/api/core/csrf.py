@@ -44,6 +44,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             "/openapi.json",
             "/auth/google/login",
             "/auth/google/callback",
+            "/auth/google/one-tap",
             "/auth/refresh",
             "/line/webhook",
             # 退訂端點以簽章 token 保護，免登入且無 CSRF cookie，故豁免

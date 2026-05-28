@@ -69,6 +69,33 @@ def _parse_condition(raw: object) -> QuestionCondition | None:
         return None
 
 
+class OptionConfig(BaseModel):
+    """選項額外設定：標記哪些選項為互斥／允許自由輸入。
+
+    exclusive：多選題中勾選後會清空其他選項（如「以上皆非」）。
+    other：允許在選項後附加自由輸入文字（提交時存到 answer.other_text）。
+    """
+
+    exclusive: list[str] = Field(default_factory=list)
+    other: list[str] = Field(default_factory=list)
+
+
+def _parse_option_config(raw: object) -> OptionConfig | None:
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    try:
+        cfg = OptionConfig.model_validate(data)
+    except ValueError:
+        return None
+    return cfg if (cfg.exclusive or cfg.other) else None
+
+
 class SurveyQuestionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -89,6 +116,7 @@ class SurveyQuestionOut(BaseModel):
     min_label: str | None = None
     max_label: str | None = None
     condition: QuestionCondition | None = None
+    option_config: OptionConfig | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -120,6 +148,7 @@ class SurveyQuestionOut(BaseModel):
         result: dict[str, Any] = {f: getattr(data, f, None) for f in fields}
         result["options"] = _parse_json_list(getattr(data, "options_json", None))
         result["condition"] = _parse_condition(getattr(data, "condition_json", None))
+        result["option_config"] = _parse_option_config(getattr(data, "option_config_json", None))
         return result
 
 
@@ -128,9 +157,12 @@ class SurveyQuestionCreate(BaseModel):
     question_text: str = Field("", max_length=1000)
     question_type: QuestionType = QuestionType.TEXT
     is_required: bool = True
-    options: list[str] = Field(default_factory=list, description="選項（SINGLE/MULTIPLE 題型）")
-    min_value: int | None = Field(None, ge=1, le=3, description="評分起始值（1–3）")
-    max_value: int | None = Field(None, ge=1, le=100, description="評分最大值（1–100）")
+    options: list[str] = Field(
+        default_factory=list, description="選項（SINGLE/MULTIPLE/RANKING 題型）"
+    )
+    # 評分題：起始/最大分數；排序題：最少/最多必選項數
+    min_value: int | None = Field(None, ge=1, le=100, description="評分起始值或排序最少項數")
+    max_value: int | None = Field(None, ge=1, le=100, description="評分最大值或排序最多項數")
     placeholder: str | None = Field(None, max_length=300)
     image_url: str | None = Field(
         None, max_length=500, description="附加圖片（可與題目合併或單獨顯示）"
@@ -141,6 +173,9 @@ class SurveyQuestionCreate(BaseModel):
     min_label: str | None = Field(None, max_length=50, description="評分最低端標籤")
     max_label: str | None = Field(None, max_length=50, description="評分最高端標籤")
     condition: QuestionCondition | None = Field(None, description="顯示條件（選填）")
+    option_config: OptionConfig | None = Field(
+        None, description="選項額外設定（多選互斥／其他自由輸入）"
+    )
     order_index: int = Field(0, ge=0)
 
     @field_validator("options")
@@ -173,7 +208,13 @@ class SurveyQuestionCreate(BaseModel):
             and self.max_value is not None
             and self.min_value > self.max_value
         ):
-            raise ValueError("評分起始值不可大於最大值")
+            raise ValueError("起始值不可大於最大值")
+        if self.question_type == QuestionType.RANKING:
+            if len(self.options) < 2:
+                raise ValueError("排序題至少需要 2 個選項")
+            ceiling = self.max_value if self.max_value is not None else len(self.options)
+            if ceiling > len(self.options):
+                raise ValueError("排序最多項數不可大於選項總數")
         return self
 
 
@@ -181,7 +222,7 @@ class SurveyQuestionUpdate(BaseModel):
     question_text: str | None = Field(None, max_length=1000)
     is_required: bool | None = None
     options: list[str] | None = None
-    min_value: int | None = Field(None, ge=1, le=3)
+    min_value: int | None = Field(None, ge=1, le=100)
     max_value: int | None = Field(None, ge=1, le=100)
     placeholder: str | None = None
     image_url: str | None = Field(None, max_length=500)
@@ -191,6 +232,7 @@ class SurveyQuestionUpdate(BaseModel):
     min_label: str | None = Field(None, max_length=50)
     max_label: str | None = Field(None, max_length=50)
     condition: QuestionCondition | None = None
+    option_config: OptionConfig | None = None
     order_index: int | None = Field(None, ge=0)
 
 
@@ -307,6 +349,9 @@ class AnswerSubmit(BaseModel):
     question_id: uuid.UUID
     answer_text: str | None = Field(None, max_length=5000)
     answer_options: list[str] = Field(default_factory=list)
+    other_text: str | None = Field(
+        None, max_length=2000, description="多選題勾選「其他」時的補充文字"
+    )
 
 
 class SurveySubmit(BaseModel):
@@ -327,6 +372,7 @@ class SurveyAnswerOut(BaseModel):
     question_id: uuid.UUID
     answer_text: str | None
     answer_options: list[str] = Field(default_factory=list)
+    other_text: str | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -338,6 +384,7 @@ class SurveyAnswerOut(BaseModel):
             "question_id": getattr(data, "question_id", None),
             "answer_text": getattr(data, "answer_text", None),
             "answer_options": _parse_json_list(getattr(data, "answer_json", None)),
+            "other_text": getattr(data, "other_text", None),
         }
 
 

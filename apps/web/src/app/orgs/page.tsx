@@ -4,6 +4,8 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { orgsApi, ApiError } from "@/lib/api";
 import type { OrgRead } from "@/lib/api";
+import { ListPageSkeleton } from "@/components/ui/Skeleton";
+import SmartEmptyState from "@/components/ui/SmartEmptyState";
 
 export default function OrgsPage() {
   const [orgs, setOrgs] = useState<OrgRead[]>([]);
@@ -87,14 +89,9 @@ export default function OrgsPage() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
-            style={{ borderColor: "var(--primary)", borderTopColor: "transparent" }} />
-        </div>
+        <ListPageSkeleton rows={5} showHeader={false} showFilters={false} />
       ) : visibleOrgs.length === 0 ? (
-        <div className="py-16 text-center rounded-2xl" style={{ border: "1px dashed var(--border)" }}>
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>尚未建立任何組織</p>
-        </div>
+        <SmartEmptyState reason="new" subject="組織" message="尚未建立任何組織，請聯絡管理員設定組織架構" />
       ) : (
         <div className="space-y-1.5">
           {roots.map(org => <OrgCard key={org.id} org={org} />)}

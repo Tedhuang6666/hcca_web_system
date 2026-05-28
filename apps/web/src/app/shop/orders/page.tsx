@@ -6,6 +6,8 @@ import { shopApi, ApiError } from "@/lib/api";
 import type { OrderListItem } from "@/lib/types";
 import { OrderStatusBadge } from "@/components/ui/StatusBadge";
 import { usePermissions } from "@/hooks/usePermissions";
+import { ListPageSkeleton } from "@/components/ui/Skeleton";
+import SmartEmptyState from "@/components/ui/SmartEmptyState";
 
 export default function OrdersPage() {
   const { can } = usePermissions();
@@ -139,19 +141,16 @@ export default function OrdersPage() {
       {/* 訂單列表 */}
       <div className="card overflow-hidden">
         {loading ? (
-          <div className="py-16 text-center" style={{ color: "var(--text-muted)" }}>
-            <div
-              className="w-7 h-7 rounded-full border-2 border-t-transparent animate-spin mx-auto mb-3"
-              style={{ borderColor: "var(--border-strong)", borderTopColor: "var(--primary)" }}
-              role="status" aria-label="載入中"
-            />
-            <p className="text-sm">載入中…</p>
+          <div className="p-4">
+            <ListPageSkeleton rows={5} showHeader={false} showFilters={false} />
           </div>
         ) : orders.length === 0 ? (
-          <div className="py-16 text-center" style={{ color: "var(--text-muted)" }}>
-            <p className="mb-3 text-sm">尚無訂單記錄</p>
-            <Link href="/shop" className="text-sm" style={{ color: "var(--primary)" }}>前往選購 →</Link>
-          </div>
+          <SmartEmptyState
+            reason="new"
+            subject="訂單"
+            createHref="/shop"
+            message="還沒下過任何訂單，先去選購喜歡的商品吧"
+          />
         ) : (
           <table className="w-full text-sm" role="table" aria-label="訂單列表">
             <thead>

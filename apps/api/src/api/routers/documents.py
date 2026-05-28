@@ -59,14 +59,14 @@ from api.schemas.document import (
     DocumentOut,
     DocumentUpdate,
     RecipientCreate,
+    RecipientDownloadVariant,
 )
 from api.services import audit as audit_svc
 from api.services import document as doc_svc
 from api.services.permission import get_user_permission_codes, get_user_permission_codes_for_org
 
 router = APIRouter(prefix="/documents", tags=["公文系統"])
-serial_router = APIRouter(prefix="/document-serial-templates", tags=["字號模板（doc.issue）"])
-template_router = APIRouter(prefix="/document-templates", tags=["公文範本庫"])
+# template_router / serial_router 由 documents_serial.py 提供（透過檔案底部 re-export 帶入）
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
@@ -341,7 +341,6 @@ async def delete_document(
 # [documents_approve.py](apps/api/src/api/routers/documents_approve.py)。
 
 
-
 @router.get(
     "/{doc_id}/suggest-approvers",
     summary="建議審核人（依公文組織，擁有 document:approve 權限的現任成員）",
@@ -403,26 +402,105 @@ async def update_recipients(
 # ── 列印視圖 ──────────────────────────────────────────────────────────────────
 
 
+async def _is_document_admin(session: AsyncSession, doc: Document, user: User) -> bool:
+    """是否為公文管理員（superuser、ADMIN_ALL、DOCUMENT_ADMIN、DOCUMENT_VIEW_ALL，
+    或在發文機關下持有 document:admin）。"""
+    if user.is_superuser:
+        return True
+    global_codes = await get_user_permission_codes(session, user.id)
+    if {
+        str(PermissionCode.ADMIN_ALL),
+        str(PermissionCode.DOCUMENT_ADMIN),
+        str(PermissionCode.DOCUMENT_VIEW_ALL),
+    } & set(global_codes):
+        return True
+    org_codes = await get_user_permission_codes_for_org(session, user.id, doc.org_id)
+    return str(PermissionCode.DOCUMENT_ADMIN) in org_codes
+
+
 @router.get(
     "/{doc_id}/print",
     response_class=Response,
-    summary="下載公文 PDF",
+    summary="下載公文 PDF（管理員可指定受文者版本）",
     responses={
         200: {"description": "PDF 公文檔案"},
-        403: {"description": "無查看權限"},
-        404: {"description": "公文不存在"},
+        403: {"description": "無查看權限或非管理員不得指定受文者"},
+        404: {"description": "公文不存在或受文者不存在"},
     },
 )
-async def print_document(doc_id: str, session: DbDep, current_user: CurrentUser) -> Response:
-    """直接產生並下載中華民國公文格式 PDF。"""
+async def print_document(
+    doc_id: str,
+    session: DbDep,
+    current_user: CurrentUser,
+    recipient_id: uuid.UUID | None = Query(
+        None,
+        description="管理員指定列印某筆受文者的版本；一般使用者不可使用",
+    ),
+    variant: RecipientDownloadVariant | None = Query(
+        None,
+        description="管理員強制指定下載正本或影本；一般使用者不可使用",
+    ),
+) -> Response:
+    """直接產生並下載中華民國公文格式 PDF。
+
+    一般使用者：依其身份自動判定下「正本」或「影本」。
+    管理員：可額外指定 recipient_id 或 variant 任意挑一份印。
+    """
     from api.services.official_print import render_document_print_html, render_print_pdf
 
     doc = await _get_doc_or_404(doc_id, session)
     await _assert_access(session, doc, current_user)
-    html_content = await render_document_print_html(session, doc, current_user)
+
+    is_admin = await _is_document_admin(session, doc, current_user)
+    if (recipient_id or variant) and not is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="僅公文管理員可指定受文者或版本",
+        )
+
+    addressed_recipient_name: str | None = None
+    if recipient_id is not None:
+        target = await doc_svc.get_recipient_for_admin(session, doc, recipient_id)
+        if target is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="受文者不存在")
+        addressed_recipient_name = target.name
+        if variant is None:
+            variant = (
+                RecipientDownloadVariant.PRIMARY
+                if doc_svc.is_primary_variant(target)
+                else RecipientDownloadVariant.COPY
+            )
+
+    if variant is not None:
+        copy_mark = "正本" if variant == RecipientDownloadVariant.PRIMARY else "影本"
+    else:
+        # 一般使用者：依身份判定
+        if is_admin:
+            copy_mark = "正本"
+        else:
+            matched = await doc_svc.resolve_recipient_match(session, doc, current_user.id)
+            if matched is not None and doc_svc.is_primary_variant(matched):
+                copy_mark = "正本"
+                addressed_recipient_name = matched.name
+            else:
+                copy_mark = "影本"
+
+    html_content = await render_document_print_html(
+        session,
+        doc,
+        current_user,
+        copy_mark_override=copy_mark,
+        addressed_recipient_name=addressed_recipient_name,
+    )
     pdf_bytes = await run_in_threadpool(render_print_pdf, html_content)
     filename_base = doc.serial_number or doc.title or "document"
-    filename = f"{filename_base.replace('/', '_').replace('\\', '_')}.pdf"
+    suffix = f"_{copy_mark}"
+    if addressed_recipient_name:
+        suffix += f"_{addressed_recipient_name}"
+    filename = (
+        f"{filename_base.replace('/', '_').replace(chr(92), '_')}"
+        f"{suffix.replace('/', '_').replace(chr(92), '_')}.pdf"
+    )
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
@@ -432,3 +510,53 @@ async def print_document(doc_id: str, session: DbDep, current_user: CurrentUser)
 
 # 公文範本庫 (template_router) 與字號模板 (serial_router) 已搬移至
 # [documents_serial.py](apps/api/src/api/routers/documents_serial.py)。
+#
+# 簽核 workflow / 批次 / 代理授權 / 直接發文 已搬移至
+# [documents_approve.py](apps/api/src/api/routers/documents_approve.py)。
+#
+# 附件 / 上傳 / 下載 / 預覽 已搬移至
+# [documents_attachments.py](apps/api/src/api/routers/documents_attachments.py)。
+#
+# 以下 re-export 保留歷史 import 路徑（例如測試直接 `from api.routers.documents
+# import batch_approve_documents`），避免重構破壞既有測試與外部呼叫。
+from api.routers.documents_approve import (  # noqa: E402, F401
+    approve_document,
+    archive_document,
+    batch_approve_documents,
+    batch_archive_documents,
+    batch_delegate_documents,
+    batch_reject_documents,
+    create_document_delegation,
+    delete_document_delegation,
+    issue_document_directly,
+    list_document_delegations,
+    recall_document,
+    reject_document,
+    set_step_delegate,
+    submit_document,
+    update_document_delegation,
+)
+from api.routers.documents_attachments import (  # noqa: E402, F401
+    add_link_attachment,
+    delete_attachment,
+    download_attachment,
+    list_attachments,
+    preview_attachment,
+    rename_attachment,
+    upload_attachment,
+)
+from api.routers.documents_serial import (  # noqa: E402, F401
+    create_document_from_template,
+    create_document_template,
+    create_serial_template,
+    deactivate_document_template,
+    deactivate_serial_template,
+    get_document_template,
+    get_serial_template,
+    list_document_templates,
+    list_serial_templates,
+    serial_router,
+    template_router,
+    update_document_template,
+    update_serial_template,
+)

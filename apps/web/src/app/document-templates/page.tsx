@@ -13,6 +13,8 @@ import type {
   DocumentUrgency,
   DocumentVisibility,
 } from "@/lib/types";
+import { ListPageSkeleton } from "@/components/ui/Skeleton";
+import SmartEmptyState from "@/components/ui/SmartEmptyState";
 
 const CATEGORY_OPTIONS: { value: DocumentCategory; label: string }[] = [
   { value: "letter", label: "函" },
@@ -245,14 +247,9 @@ export default function DocumentTemplatesPage() {
           </div>
 
           {loading ? (
-            <div className="card flex justify-center p-12">
-              <div className="h-7 w-7 animate-spin rounded-full border-2 border-t-transparent"
-                style={{ borderColor: "var(--border-strong)", borderTopColor: "var(--primary)" }} />
-            </div>
+            <ListPageSkeleton rows={4} showHeader={false} showFilters={false} />
           ) : templates.length === 0 ? (
-            <div className="card p-10 text-center text-sm" style={{ color: "var(--text-muted)" }}>
-              尚無符合條件的公文範本
-            </div>
+            <SmartEmptyState reason="filtered" subject="公文範本" message="尚無符合條件的範本，請調整篩選或新增" />
           ) : (
             <div className="grid grid-cols-1 gap-3">
               {templates.map((item) => (

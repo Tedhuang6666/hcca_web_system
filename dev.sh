@@ -30,68 +30,44 @@ else
     C_BLUE='' C_CYAN='' C_MAGENTA='' C_GRAY='' C_RESET=''
 fi
 
-# Unicode 符號（多數現代終端皆支援）
-S_INFO='ℹ' S_OK='✔' S_WARN='⚠' S_ERR='✖' S_FIX='➜' S_DOT='•'
-
-info()    { printf '  %s%s%s  %s\n' "$C_CYAN"    "$S_INFO" "$C_RESET" "$*"; }
-success() { printf '  %s%s%s  %s\n' "$C_GREEN"   "$S_OK"   "$C_RESET" "$*"; }
-warn()    { printf '  %s%s%s  %s\n' "$C_YELLOW"  "$S_WARN" "$C_RESET" "$*"; }
-error()   { printf '  %s%s%s  %s\n' "$C_RED"     "$S_ERR"  "$C_RESET" "$*" >&2; }
-fix()     { printf '  %s%s%s  %s\n' "$C_MAGENTA" "$S_FIX"  "$C_RESET" "$*"; }
+# 著色的類別標籤：只有前綴有顏色，後面內文一律保持終端預設色
+info()    { printf '  %sINFO %s  %s\n' "$C_CYAN"    "$C_RESET" "$*"; }
+success() { printf '  %sOK   %s  %s\n' "$C_GREEN"   "$C_RESET" "$*"; }
+warn()    { printf '  %sWARN %s  %s\n' "$C_YELLOW"  "$C_RESET" "$*"; }
+error()   { printf '  %sERROR%s  %s\n' "$C_RED"     "$C_RESET" "$*" >&2; }
+fix()     { printf '  %sFIX  %s  %s\n' "$C_MAGENTA" "$C_RESET" "$*"; }
 step()    {
-    local label="$*"
-    printf '\n%s┏━ %s%s%s %s%s\n' \
-        "$C_BOLD$C_CYAN" "$C_RESET$C_BOLD" "$label" "$C_RESET" \
-        "$C_BOLD$C_CYAN" "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$C_RESET"
-}
-hr() {
-    printf '%s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n' \
-        "$C_DIM" "$C_RESET"
+    printf '\n%s▶%s %s\n' "$C_CYAN" "$C_RESET" "$*"
 }
 
-_color_for_log_line() {
-    local line="$1"
-    local code=""
-
-    if [[ "$line" =~ (Traceback|Exception|ERROR|Error|error|failed|Failed|FAIL|✖) ]]; then
-        printf '%s' "$C_RED"
-        return
-    fi
-    if [[ "$line" =~ (WARNING|Warning|WARN|Warn|warning|warn|deprecated|Deprecated) ]]; then
-        printf '%s' "$C_YELLOW"
-        return
-    fi
-    if [[ "$line" =~ (HTTP/[0-9.]+\"[[:space:]]+|[[:space:]])([1-5][0-9][0-9])([[:space:]]|$) ]]; then
-        code="${BASH_REMATCH[2]}"
-        case "${code:0:1}" in
-            2) printf '%s' "$C_GREEN" ;;
-            3) printf '%s' "$C_CYAN" ;;
-            4) printf '%s' "$C_YELLOW" ;;
-            5) printf '%s' "$C_RED" ;;
-            *) printf '%s' "$C_GRAY" ;;
-        esac
-        return
-    fi
-    if [[ "$line" =~ (INFO|Info|info|ready|Ready|started|Started|compiled|Compiled|✓|✔) ]]; then
-        printf '%s' "$C_GREEN"
-        return
-    fi
-    printf '%s' "$C_GRAY"
-}
-
+# Log 串流：raw 寫進 $log_file（FD 3），透過 sed 對「token」上色後丟到終端
+# 著色範圍：HTTP method（GET/POST/...）、status code（2xx/3xx/4xx/5xx）、
+# 嚴重等級關鍵字（ERROR/Traceback/WARNING ...）。其餘內文保持白色。
 _stream_log() {
     local name="$1"
     local log_file="$2"
     local prefix_color="$3"
     local line=""
-    local line_color=""
 
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        printf '%s\n' "$line" >> "$log_file"
-        line_color="$(_color_for_log_line "$line")"
-        printf '%s[%s]%s %s%s%s\n' \
-            "$prefix_color" "$name" "$C_RESET" "$line_color" "$line" "$C_RESET"
-    done
+    {
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            printf '%s\n' "$line" >&3     # raw → log 檔
+            printf '%s\n' "$line"          # 給 sed 著色 → 終端
+        done
+    } 3>>"$log_file" | sed -E -u \
+        -e "s/([[:space:]\"])(2[0-9]{2})([[:space:]]|\$)/\1${C_GREEN}\2${C_RESET}\3/g" \
+        -e "s/([[:space:]\"])(3[0-9]{2})([[:space:]]|\$)/\1${C_CYAN}\2${C_RESET}\3/g" \
+        -e "s/([[:space:]\"])(4[0-9]{2})([[:space:]]|\$)/\1${C_YELLOW}\2${C_RESET}\3/g" \
+        -e "s/([[:space:]\"])(5[0-9]{2})([[:space:]]|\$)/\1${C_RED}\2${C_RESET}\3/g" \
+        -e "s/\\b(GET)\\b/${C_CYAN}\\1${C_RESET}/g" \
+        -e "s/\\b(POST)\\b/${C_GREEN}\\1${C_RESET}/g" \
+        -e "s/\\b(PUT|PATCH)\\b/${C_YELLOW}\\1${C_RESET}/g" \
+        -e "s/\\b(DELETE)\\b/${C_RED}\\1${C_RESET}/g" \
+        -e "s/\\b(OPTIONS|HEAD)\\b/${C_GRAY}\\1${C_RESET}/g" \
+        -e "s/(Traceback|Exception)/${C_RED}\\1${C_RESET}/g" \
+        -e "s/\\b(ERROR|FAILED|FAIL)\\b/${C_RED}\\1${C_RESET}/g" \
+        -e "s/\\b(WARNING|WARN|Deprecated|deprecated)\\b/${C_YELLOW}\\1${C_RESET}/g" \
+        -e "s|^|${prefix_color}[${name}]${C_RESET} |"
 }
 
 # ── 全域變數 ──────────────────────────────────────────────────────────────
@@ -535,18 +511,14 @@ fi
 # ──────────────────────────────────────────────────────────────────────────
 ELAPSED=$(( $(date +%s) - START_TIME ))
 printf '\n'
-printf '%s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n' "$C_GREEN" "$C_RESET"
-printf '   %s🚀  開發環境已就緒%s   %s耗時 %ss%s\n' \
-    "$C_BOLD$C_GREEN" "$C_RESET" "$C_DIM" "$ELAPSED" "$C_RESET"
-printf '%s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n' "$C_GREEN" "$C_RESET"
-printf '   %sAPI Docs%s   %s%s%s\n' "$C_DIM" "$C_RESET" "$C_CYAN" "http://localhost:8000/docs" "$C_RESET"
-printf '   %sWeb UI%s     %s%s%s\n' "$C_DIM" "$C_RESET" "$C_CYAN" "http://localhost:3000" "$C_RESET"
-printf '   %sAPI Log%s    %s%s%s\n' "$C_DIM" "$C_RESET" "$C_GRAY" "$API_LOG" "$C_RESET"
-printf '   %sWeb Log%s    %s%s%s\n' "$C_DIM" "$C_RESET" "$C_GRAY" "$WEB_LOG" "$C_RESET"
-printf '%s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n' "$C_GREEN" "$C_RESET"
-printf '   %s按 %sCtrl+C%s%s 停止所有服務%s\n' \
-    "$C_DIM" "$C_BOLD$C_GREEN" "$C_RESET" "$C_DIM" "$C_RESET"
-printf '%s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n\n' "$C_GREEN" "$C_RESET"
+printf '  %sREADY%s  開發環境已就緒（耗時 %ss）\n' "$C_GREEN" "$C_RESET" "$ELAPSED"
+printf '\n'
+printf '  API Docs   http://localhost:8000/docs\n'
+printf '  Web UI     http://localhost:3000\n'
+printf '  API Log    %s\n' "$API_LOG"
+printf '  Web Log    %s\n' "$WEB_LOG"
+printf '\n'
+printf '  按 Ctrl+C 停止所有服務\n\n'
 
 # 等待背景行程（保持腳本存活以接收 Ctrl+C）
 wait "$API_PID" "$WEB_PID"

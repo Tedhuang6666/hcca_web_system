@@ -470,6 +470,18 @@ export default function DocumentListPage() {
     }
   };
 
+  const applyQuickFilter = (
+    nextTab: DocumentStatus | "all",
+    options: { myOnly?: boolean; visibility?: string; sort?: SortKey } = {},
+  ) => {
+    clearFilters();
+    setActiveTab(nextTab);
+    setFilterMyOnly(Boolean(options.myOnly));
+    setFilterVisibility(options.visibility ?? "");
+    if (options.sort) setSortKey(options.sort);
+    setShowFilters(false);
+  };
+
   return (
     <div className="space-y-5 max-w-6xl mx-auto">
 
@@ -509,6 +521,29 @@ export default function DocumentListPage() {
 
       {/* 搜尋 + Tab 篩選 */}
       <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {[
+            { label: "我的待辦", tab: "pending" as const, myOnly: true, sort: "due_asc" as const },
+            { label: "我的草稿", tab: "draft" as const, myOnly: true },
+            { label: "退件處理", tab: "rejected" as const, myOnly: true },
+            { label: "公開查詢", tab: "all" as const, visibility: "publicly_open" },
+          ].map(item => (
+            <button
+              key={item.label}
+              type="button"
+              onClick={() => applyQuickFilter(item.tab, item)}
+              className="rounded-full px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80"
+              style={{
+                background: "var(--bg-surface)",
+                border: "1px solid var(--border)",
+                color: "var(--text-secondary)",
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
         {/* 常用篩選 */}
         {savedFilters.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">

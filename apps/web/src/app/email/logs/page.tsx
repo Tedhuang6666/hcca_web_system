@@ -5,6 +5,8 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { ApiError, emailApi } from "@/lib/api";
 import type { EmailMessageOut, EmailStatus } from "@/lib/types";
+import { ListPageSkeleton } from "@/components/ui/Skeleton";
+import SmartEmptyState from "@/components/ui/SmartEmptyState";
 
 const TABS: { key: string; label: string }[] = [
   { key: "", label: "全部" },
@@ -109,16 +111,16 @@ export default function EmailLogsPage() {
 
       <section className="card overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center py-16" role="status">
-            <div
-              className="h-7 w-7 animate-spin rounded-full border-2 border-t-transparent"
-              style={{ borderColor: "var(--border-strong)", borderTopColor: "var(--primary)" }}
-            />
+          <div className="p-4">
+            <ListPageSkeleton rows={5} showHeader={false} showFilters={false} />
           </div>
         ) : rows.length === 0 ? (
-          <div className="px-5 py-12 text-center text-sm" style={{ color: "var(--text-muted)" }}>
-            尚無寄信紀錄
-          </div>
+          <SmartEmptyState
+            reason={tab ? "filtered" : "none"}
+            subject="寄信紀錄"
+            onClearFilters={() => setTab("")}
+            message={tab ? undefined : "尚未發送任何 Email，前往「Email」頁面開始寄信"}
+          />
         ) : (
           <ul>
             {rows.map((m) => {

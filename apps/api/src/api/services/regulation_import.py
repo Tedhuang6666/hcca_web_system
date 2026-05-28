@@ -21,7 +21,10 @@ _WORD_NS = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
 _NUMERAL_CHARS = "零〇一二三四五六七八九十百千兩"
 _STRUCTURAL_RE = re.compile(rf"^第\s*([{_NUMERAL_CHARS}0-9０-９\-]+)\s*(編|章|節)\s*(.*)$")
 _ARTICLE_RE = re.compile(rf"^第\s*([{_NUMERAL_CHARS}0-9０-９\-]+)\s*條\s*(.*)$")
-_SUBPARAGRAPH_RE = re.compile(rf"(^|[：:。；;\n])([{_NUMERAL_CHARS}]+)、")
+_PARAGRAPH_RE = re.compile(rf"^第\s*([{_NUMERAL_CHARS}0-9０-９\-]+)\s*項\s*(.*)$")
+_SUBPARAGRAPH_LINE_RE = re.compile(rf"^([{_NUMERAL_CHARS}0-9０-９]+)、\s*(.*)$")
+_ITEM_LINE_RE = re.compile(rf"^(?:（([{_NUMERAL_CHARS}0-9０-９]+)）|\((\d+)\))\s*(.*)$")
+_SUBPARAGRAPH_RE = re.compile(rf"(^|[：:。；;\n])([{_NUMERAL_CHARS}0-9０-９]+)、")
 _HISTORY_KEYWORDS = (
     "制定",
     "制訂",
@@ -80,6 +83,16 @@ def parse_regulation_pdf(file_bytes: bytes, filename: str | None = None) -> Impo
     return _parse_regulation_paragraphs(_extract_pdf_paragraphs(file_bytes, filename=filename))
 
 
+def parse_regulation_text(
+    *,
+    title: str,
+    content: str,
+    preface: str | None = None,
+) -> ImportedRegulationDraft:
+    paragraphs = _extract_text_paragraphs(title=title, content=content, preface=preface)
+    return _parse_regulation_paragraphs(paragraphs)
+
+
 def _parse_regulation_paragraphs(paragraphs: list[str]) -> ImportedRegulationDraft:
     if not paragraphs:
         raise ValueError("文件內沒有可匯入的文字內容")
@@ -110,7 +123,10 @@ def _parse_regulation_paragraphs(paragraphs: list[str]) -> ImportedRegulationDra
     stack: dict[ArticleType, str] = {}
     sibling_count: defaultdict[str | None, int] = defaultdict(int)
     sort_index = 0
-    last_article_index: int | None = None
+    last_content_index: int | None = None
+    current_article_key: str | None = None
+    current_paragraph_key: str | None = None
+    current_subparagraph_key: str | None = None
 
     def add_article(
         *,
@@ -153,7 +169,10 @@ def _parse_regulation_paragraphs(paragraphs: list[str]) -> ImportedRegulationDra
             )
             _reset_stack_for_structural(article_type, stack)
             stack[article_type] = key
-            last_article_index = None
+            last_content_index = None
+            current_article_key = None
+            current_paragraph_key = None
+            current_subparagraph_key = None
             continue
 
         article_match = _ARTICLE_RE.match(line)
@@ -167,21 +186,68 @@ def _parse_regulation_paragraphs(paragraphs: list[str]) -> ImportedRegulationDra
                 content=body,
                 parent_key=parent_key,
             )
-            last_article_index = len(articles) - 1
+            current_article_key = key
+            current_paragraph_key = None
+            current_subparagraph_key = None
+            last_content_index = len(articles) - 1
             _split_inline_subparagraphs(articles, key, sibling_count, base_sort_index=sort_index)
             sort_index = len(articles)
             continue
 
-        if last_article_index is not None:
-            current = articles[last_article_index]
+        paragraph_match = _PARAGRAPH_RE.match(line)
+        if paragraph_match and current_article_key is not None:
+            raw_number, body = paragraph_match.groups()
+            key = add_article(
+                article_type=ArticleType.PARAGRAPH,
+                title="",
+                legal_number=_normalize_legal_number(raw_number),
+                content=body,
+                parent_key=current_article_key,
+            )
+            current_paragraph_key = key
+            current_subparagraph_key = None
+            last_content_index = len(articles) - 1
+            continue
+
+        subparagraph_match = _SUBPARAGRAPH_LINE_RE.match(line)
+        if subparagraph_match and current_article_key is not None:
+            raw_number, body = subparagraph_match.groups()
+            key = add_article(
+                article_type=ArticleType.SUBPARAGRAPH,
+                title="",
+                legal_number=_normalize_legal_number(raw_number),
+                content=body,
+                parent_key=current_paragraph_key or current_article_key,
+            )
+            current_subparagraph_key = key
+            last_content_index = len(articles) - 1
+            continue
+
+        item_match = _ITEM_LINE_RE.match(line)
+        if item_match and current_subparagraph_key is not None:
+            raw_number = item_match.group(1) or item_match.group(2) or ""
+            body = item_match.group(3)
+            add_article(
+                article_type=ArticleType.ITEM,
+                title="",
+                legal_number=_normalize_legal_number(raw_number),
+                content=body,
+                parent_key=current_subparagraph_key,
+            )
+            last_content_index = len(articles) - 1
+            continue
+
+        if last_content_index is not None:
+            current = articles[last_content_index]
             merged_content = "\n".join(part for part in (current.content, line) if part)
-            articles[last_article_index] = ImportedRegulationArticle(
+            articles[last_content_index] = ImportedRegulationArticle(
                 **{**current.__dict__, "content": merged_content}
             )
-            _split_inline_subparagraphs(
-                articles, current.key, sibling_count, base_sort_index=sort_index
-            )
-            sort_index = len(articles)
+            if current.article_type == ArticleType.ARTICLE:
+                _split_inline_subparagraphs(
+                    articles, current.key, sibling_count, base_sort_index=sort_index
+                )
+                sort_index = len(articles)
         else:
             preface_parts.append(line)
 
@@ -206,6 +272,18 @@ def _extract_paragraphs(file_bytes: bytes, *, filename: str | None = None) -> li
     if suffix == "pdf":
         return _extract_pdf_paragraphs(file_bytes, filename=filename)
     raise ValueError("請上傳 .docx 或 .pdf 文件")
+
+
+def _extract_text_paragraphs(*, title: str, content: str, preface: str | None = None) -> list[str]:
+    paragraphs = [_normalize_spacing(title)]
+    if preface:
+        paragraphs.extend(_split_text_lines(preface))
+
+    content_lines = _split_text_lines(content)
+    if content_lines and content_lines[0] == paragraphs[0]:
+        content_lines = content_lines[1:]
+    paragraphs.extend(content_lines)
+    return [line for line in paragraphs if line]
 
 
 def _extract_docx_paragraphs(file_bytes: bytes, *, filename: str | None = None) -> list[str]:
@@ -336,10 +414,12 @@ def _split_inline_subparagraphs(
     article = articles[article_index]
     content = article.content or ""
     matches = list(_SUBPARAGRAPH_RE.finditer(content))
-    if len(matches) < 2:
+    if not matches:
+        return
+    lead = content[: matches[0].start(2)].strip()
+    if len(matches) == 1 and lead and not lead.endswith(("：", ":", "。", "；", ";")):
         return
 
-    lead = content[: matches[0].start(2)].strip()
     split_rows: list[ImportedRegulationArticle] = []
     for index, match in enumerate(matches):
         start = match.end()
@@ -355,7 +435,7 @@ def _split_inline_subparagraphs(
                 parent_key=article_key,
                 article_type=ArticleType.SUBPARAGRAPH,
                 title="",
-                legal_number=str(_chinese_to_int(match.group(2))),
+                legal_number=_normalize_legal_number(match.group(2)),
                 content=item_content,
                 sort_index=sort_index,
                 order_index=sibling_count[article_key] - 1,
@@ -452,6 +532,21 @@ def _chinese_to_int(value: str) -> int:
 
 def _normalize_spacing(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
+
+
+def _split_text_lines(value: str) -> list[str]:
+    lines: list[str] = []
+    for raw in value.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        line = raw.strip()
+        if not line:
+            continue
+        line = re.sub(r"^#{1,6}\s*", "", line)
+        line = re.sub(r"^\s*[-*+]\s+", "", line)
+        line = re.sub(r"^\d+\.\s+", "", line)
+        normalized = _normalize_spacing(line)
+        if normalized:
+            lines.append(normalized)
+    return lines
 
 
 def _clean_content(value: str | None) -> str | None:

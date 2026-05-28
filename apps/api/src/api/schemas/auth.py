@@ -26,6 +26,13 @@ class RefreshRequest(BaseModel):
     refresh_token: str | None = None
 
 
+class GoogleOneTapRequest(BaseModel):
+    """Google Identity Services One Tap credential"""
+
+    credential: str
+    next: str | None = None
+
+
 class UserRead(BaseModel):
     """當前使用者資訊回應"""
 

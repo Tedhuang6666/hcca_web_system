@@ -44,6 +44,7 @@ celery_app.conf.include = list(celery_app.conf.include or []) + [
     "api.services.meeting_tasks",
     "api.services.backup_tasks",
     "api.services.permission_tasks",
+    "api.services.digest_tasks",
 ]
 
 celery_app.conf.beat_schedule = {
@@ -94,5 +95,15 @@ celery_app.conf.beat_schedule = {
     "invalidate-expired-user-caches-daily": {
         "task": "api.services.permission_tasks.invalidate_expired_user_caches",
         "schedule": crontab(hour="0", minute="10"),
+    },
+    # 每日 08:00 寄送通知摘要 Email（過去 24 小時未讀通知聚合）
+    "send-daily-digest-at-8am": {
+        "task": "api.services.digest_tasks.send_daily_digest",
+        "schedule": crontab(hour="8", minute="0"),
+    },
+    # 每週一 08:00 寄送週通知摘要 Email（過去 7 天未讀通知聚合）
+    "send-weekly-digest-monday-8am": {
+        "task": "api.services.digest_tasks.send_weekly_digest",
+        "schedule": crontab(hour="8", minute="0", day_of_week="1"),
     },
 }

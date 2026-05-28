@@ -12,7 +12,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 const PENDING_STATUSES: { key: RegulationWorkflowStatus; label: string; color: string; bg: string }[] = [
   { key: "under_review",     label: "送審中",   color: "#0284c7", bg: "rgba(2,132,199,0.1)" },
   { key: "scheduled",        label: "已排入議程", color: "#7c3aed", bg: "rgba(124,58,237,0.1)" },
-  { key: "council_approved", label: "議會核定",  color: "#10b981", bg: "rgba(16,185,129,0.1)" },
+  { key: "council_approved", label: "待主席公布",  color: "#10b981", bg: "rgba(16,185,129,0.1)" },
 ];
 
 export default function PendingRegulationsDashboard() {
@@ -26,6 +26,7 @@ export default function PendingRegulationsDashboard() {
     archived: [],
   });
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban");
   const { can } = usePermissions();
   const canSeeAll = can("regulation:admin") || can("regulation:schedule") || can("regulation:council_approve") || can("regulation:president_publish");
 
@@ -80,15 +81,51 @@ export default function PendingRegulationsDashboard() {
           </p>
         </div>
         <span
-          className="self-start sm:self-auto text-xs px-3 py-1.5 rounded-full font-medium"
-          style={{ background: "var(--primary-dim)", color: "var(--primary)" }}
+          className="self-start sm:self-auto inline-flex items-center gap-2"
         >
-          共 {totalCount} 案
+          <span
+            className="text-xs px-3 py-1.5 rounded-full font-medium"
+            style={{ background: "var(--primary-dim)", color: "var(--primary)" }}
+          >
+            共 {totalCount} 案
+          </span>
+          <button
+            type="button"
+            onClick={() => setViewMode(v => v === "kanban" ? "list" : "kanban")}
+            className="text-xs px-3 py-1.5 rounded-lg"
+            style={{ color: "var(--text-secondary)", border: "1px solid var(--border)" }}
+          >
+            {viewMode === "kanban" ? "列表檢視" : "看板檢視"}
+          </button>
         </span>
       </header>
 
       {loading ? (
         <p className="text-sm" style={{ color: "var(--text-muted)" }}>載入中…</p>
+      ) : viewMode === "list" ? (
+        <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)", background: "var(--bg-surface)" }}>
+          {PENDING_STATUSES.flatMap((s) => (groups[s.key] ?? []).map(row => ({ row, status: s }))).length === 0 ? (
+            <p className="px-4 py-10 text-center text-sm" style={{ color: "var(--text-muted)" }}>目前沒有待審議案件</p>
+          ) : (
+            PENDING_STATUSES.flatMap((s) => (groups[s.key] ?? []).map(row => ({ row, status: s }))).map(({ row, status }) => (
+              <Link
+                key={row.id}
+                href={regulationHref(row)}
+                className="grid gap-2 px-4 py-3 transition-opacity hover:opacity-80 sm:grid-cols-[minmax(0,1fr)_9rem_7rem]"
+                style={{ borderBottom: "1px solid var(--border)" }}
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate" style={{ color: "var(--text-primary)" }}>{row.title}</p>
+                  <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>v{row.version} · 更新 {new Date(row.updated_at).toLocaleDateString("zh-TW")}</p>
+                </div>
+                <span className="self-start rounded-full px-2 py-1 text-xs font-medium" style={{ color: status.color, background: status.bg }}>
+                  {status.label}
+                </span>
+                <RegulationCategoryBadge category={row.category} />
+              </Link>
+            ))
+          )}
+        </div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-3">
           {PENDING_STATUSES.map((s) => {

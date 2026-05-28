@@ -19,6 +19,7 @@ from api.core.anomaly_detection import check_suspicious_login, record_login
 from api.core.config import settings
 from api.core.database import get_db
 from api.core.oauth import google
+from api.core.permission_codes import PermissionCode
 from api.core.security import (
     add_to_blacklist,
     create_access_token,
@@ -133,6 +134,16 @@ async def _auth_user_payload(db: AsyncSession, user: User) -> dict:
         "allow_external_login": user.allow_external_login,
         "is_superuser": user.is_superuser,
         "is_owner": user.email.lower() in settings.OWNER_EMAILS,
+        "permissions": sorted(codes),
+    }
+
+
+async def _access_token_claims(db: AsyncSession, user: User) -> dict:
+    from api.services.permission import get_user_permission_codes
+
+    codes = await get_user_permission_codes(db, user.id)
+    return {
+        "is_admin": user.is_superuser or PermissionCode.ADMIN_ALL in codes,
         "permissions": sorted(codes),
     }
 
@@ -320,9 +331,10 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
         challenge_qs = urlencode({"challenge": challenge_token, "next": login_next})
         return RedirectResponse(url=f"{frontend_origin}/auth/mfa?{challenge_qs}")
 
-    # 帶入 is_admin claim 讓 load_shed middleware 能優先放行（後端 RBAC 仍是第二道防線）
-    admin_claims = {"is_admin": True} if user.is_superuser else None
-    access_token = create_access_token(subject=str(user.id), extra_claims=admin_claims)
+    access_token = create_access_token(
+        subject=str(user.id),
+        extra_claims=await _access_token_claims(db, user),
+    )
     refresh_token = create_refresh_token(subject=str(user.id))
 
     callback_qs = urlencode({"next": login_next})
@@ -378,8 +390,10 @@ async def google_one_tap(
         challenge_token = create_mfa_challenge_token(subject=str(user.id))
         return {"mfa_required": True, "challenge": challenge_token, "next": login_next}
 
-    admin_claims = {"is_admin": True} if user.is_superuser else None
-    access_token = create_access_token(subject=str(user.id), extra_claims=admin_claims)
+    access_token = create_access_token(
+        subject=str(user.id),
+        extra_claims=await _access_token_claims(db, user),
+    )
     refresh_token = create_refresh_token(subject=str(user.id))
     _set_auth_cookies(response, access_token, refresh_token)
     return {
@@ -427,8 +441,10 @@ async def refresh_token(
     # 舊 Refresh Token 加入黑名單（Token Rotation）
     await add_to_blacklist(token)
 
-    admin_claims = {"is_admin": True} if user.is_superuser else None
-    access_token = create_access_token(subject=str(user.id), extra_claims=admin_claims)
+    access_token = create_access_token(
+        subject=str(user.id),
+        extra_claims=await _access_token_claims(db, user),
+    )
     refresh_token_value = create_refresh_token(subject=str(user.id))
     _set_auth_cookies(response, access_token, refresh_token_value)
 

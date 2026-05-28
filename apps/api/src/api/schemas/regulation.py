@@ -96,6 +96,12 @@ class WorkflowActionRequest(BaseModel):
     meeting_id: uuid.UUID | None = Field(
         None, description="排入議程時，同步加入指定議事會議的議程"
     )
+    serial_template_id: uuid.UUID | None = Field(
+        None, description="主席公布產生公文時指定使用的字號模板"
+    )
+    manual_serial_number: str | None = Field(
+        None, max_length=100, description="主席公布產生公文時指定手動字號"
+    )
 
 
 class ArticleReorderItem(BaseModel):
@@ -256,6 +262,7 @@ class RegulationUpdate(BaseModel):
     change_brief: str | None = Field(
         None, max_length=500, description="修改摘要（更新時自動建立歷程）"
     )
+    autosave: bool = Field(False, description="線上自動儲存；不遞增版本、不建立修訂歷程")
 
 
 class RegulationPublishRequest(BaseModel):

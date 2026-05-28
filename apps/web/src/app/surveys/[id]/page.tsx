@@ -4,6 +4,23 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import QRCode from "qrcode";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { surveysApi, ApiError } from "@/lib/api";
 import type { SurveyOut, SurveyQuestionOut, SurveyStats, SurveyResponseAdminItem, ConditionRule } from "@/lib/types";
 import { uploadUrl } from "@/lib/config";
@@ -25,7 +42,8 @@ function validationHint(q: SurveyQuestionOut): string {
   return parts.join(" · ");
 }
 
-type AnswerMap = Record<string, { text: string; options: string[] }>;
+type AnswerValue = { text: string; options: string[]; other_text?: string };
+type AnswerMap = Record<string, AnswerValue>;
 
 /** 評估單一條件規則。 */
 function evalRule(rule: ConditionRule, answers: AnswerMap): boolean {
@@ -69,13 +87,133 @@ function computeHidden(questions: SurveyQuestionOut[], answers: AnswerMap): Set<
   return hidden;
 }
 
+/* ── 排序題：可拖拉的「已選」清單 + 可點擊新增的「未選」清單 ───────────── */
+function RankingInput({
+  selected, unselected, minN, maxN, onMove, onAdd, onRemove,
+}: {
+  selected: string[];
+  unselected: string[];
+  minN: number;
+  maxN: number;
+  onMove: (event: DragEndEvent) => void;
+  onAdd: (opt: string) => void;
+  onRemove: (opt: string) => void;
+}) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const canAdd = selected.length < maxN;
+  return (
+    <div className="space-y-3">
+      <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+        請從下方點選並拖拉排序（最少 {minN} 項{maxN !== minN ? `、最多 ${maxN} 項` : ""}）
+        — 目前已選 <strong style={{ color: "var(--primary)" }}>{selected.length}</strong> 項
+      </p>
+
+      {selected.length > 0 && (
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onMove}>
+          <SortableContext items={selected} strategy={verticalListSortingStrategy}>
+            <div className="space-y-1.5">
+              {selected.map((opt, idx) => (
+                <SortableRankRow key={opt} id={opt} rank={idx + 1} label={opt}
+                  onRemove={() => onRemove(opt)} />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
+      )}
+
+      {unselected.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+            {selected.length === 0 ? "選項" : "其他選項（點擊加入排序）"}
+          </p>
+          {unselected.map(opt => (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => onAdd(opt)}
+              disabled={!canAdd}
+              className="w-full flex items-center gap-2 p-2.5 rounded-xl text-left transition-all"
+              style={{
+                background: "var(--bg-elevated)",
+                border: "1px solid var(--border)",
+                color: "var(--text-secondary)",
+                opacity: canAdd ? 1 : 0.45,
+                cursor: canAdd ? "pointer" : "not-allowed",
+              }}
+              aria-label={`加入「${opt}」到排序`}>
+              <span className="text-xs w-6 text-center" style={{ color: "var(--text-muted)" }}>＋</span>
+              <span className="text-sm flex-1">{opt}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {!canAdd && unselected.length > 0 && (
+        <p className="text-xs" style={{ color: "var(--warning)" }}>
+          已達最多 {maxN} 項上限，如要新增請先移除一項。
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* ── 排序題的單一可拖拉項目 ───────────────────────────────────────────────── */
+function SortableRankRow({ id, rank, label, onRemove }: {
+  id: string; rank: number; label: string; onRemove: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        background: "var(--primary-dim)",
+        border: "1px solid var(--border-strong)",
+        opacity: isDragging ? 0.6 : 1,
+      }}
+      className="flex items-center gap-2 p-2.5 rounded-xl">
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        className="cursor-grab active:cursor-grabbing touch-none p-1 rounded"
+        style={{ color: "var(--text-muted)" }}
+        aria-label="拖拉調整順序">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <circle cx="9" cy="6" r="1.5" /><circle cx="15" cy="6" r="1.5" />
+          <circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" />
+          <circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="18" r="1.5" />
+        </svg>
+      </button>
+      <span className="text-xs font-bold w-6 text-center tabular-nums"
+        style={{ color: "var(--primary)" }}>{rank}</span>
+      <span className="text-sm flex-1" style={{ color: "var(--text-primary)" }}>{label}</span>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="topbar-icon-btn"
+        aria-label="從排序中移除"
+        style={{ color: "var(--danger)" }}>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
 /* ── 各題型的填答元件 ─────────────────────────────────────────────────────── */
 function QuestionInput({
   question, value, onChange,
 }: {
   question: SurveyQuestionOut;
-  value: { text: string; options: string[] };
-  onChange: (val: { text: string; options: string[] }) => void;
+  value: AnswerValue;
+  onChange: (val: AnswerValue) => void;
 }) {
   const { question_type: type, options, min_value, max_value, placeholder } = question;
   const minV = min_value ?? 1;
@@ -188,32 +326,102 @@ function QuestionInput({
     );
   }
   if (type === "multiple") {
+    const exclusive = new Set(question.option_config?.exclusive ?? []);
+    const otherSet = new Set(question.option_config?.other ?? []);
+    const otherChosen = value.options.some(o => otherSet.has(o));
+    const toggle = (opt: string) => {
+      const checked = value.options.includes(opt);
+      let next: string[];
+      if (checked) {
+        next = value.options.filter(o => o !== opt);
+      } else if (exclusive.has(opt)) {
+        // 勾選互斥選項 → 清空其他
+        next = [opt];
+      } else {
+        // 勾選一般選項 → 清掉所有互斥選項
+        next = [...value.options.filter(o => !exclusive.has(o)), opt];
+      }
+      const stillHasOther = next.some(o => otherSet.has(o));
+      onChange({ ...value, options: next, other_text: stillHasOther ? value.other_text : undefined });
+    };
     return (
       <div className="space-y-2">
         {options.map(opt => {
           const checked = value.options.includes(opt);
+          const isExcl = exclusive.has(opt);
+          const isOther = otherSet.has(opt);
           return (
-            <label key={opt} className="flex items-center gap-3 cursor-pointer p-2.5 rounded-xl transition-all"
-              style={{
-                background: checked ? "var(--primary-dim)" : "var(--bg-elevated)",
-                border: `1px solid ${checked ? "var(--border-strong)" : "var(--border)"}`,
-              }}>
-              <input
-                type="checkbox"
-                checked={checked}
-                onChange={() => {
-                  const next = checked
-                    ? value.options.filter(o => o !== opt)
-                    : [...value.options, opt];
-                  onChange({ ...value, options: next });
-                }}
-                className="accent-sky-400"
-              />
-              <span className="text-sm" style={{ color: "var(--text-primary)" }}>{opt}</span>
-            </label>
+            <div key={opt}>
+              <label className="flex items-center gap-3 cursor-pointer p-2.5 rounded-xl transition-all"
+                style={{
+                  background: checked ? "var(--primary-dim)" : "var(--bg-elevated)",
+                  border: `1px solid ${checked ? "var(--border-strong)" : "var(--border)"}`,
+                }}>
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => toggle(opt)}
+                  className="accent-sky-400"
+                />
+                <span className="text-sm flex-1" style={{ color: "var(--text-primary)" }}>{opt}</span>
+                {isExcl && (
+                  <span className="text-xs px-1.5 py-0.5 rounded"
+                    style={{ background: "var(--bg-surface)", color: "var(--text-muted)" }}>互斥</span>
+                )}
+              </label>
+              {isOther && checked && (
+                <input
+                  value={value.other_text ?? ""}
+                  onChange={e => onChange({ ...value, other_text: e.target.value })}
+                  placeholder="請輸入..."
+                  maxLength={2000}
+                  className="input mt-1.5 ml-7"
+                  style={{ width: "calc(100% - 1.75rem)" }}
+                />
+              )}
+            </div>
           );
         })}
+        {!otherChosen && value.other_text && (
+          /* 沒勾「其他」就清掉，避免送出多餘文字 */
+          <></>
+        )}
       </div>
+    );
+  }
+  if (type === "ranking") {
+    const minN = question.min_value ?? 1;
+    const maxN = question.max_value ?? options.length;
+    const selected = value.options.filter(o => options.includes(o));
+    const unselected = options.filter(o => !selected.includes(o));
+    const canAddMore = selected.length < maxN;
+
+    const move = (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+      const oldIdx = selected.indexOf(String(active.id));
+      const newIdx = selected.indexOf(String(over.id));
+      if (oldIdx < 0 || newIdx < 0) return;
+      onChange({ ...value, options: arrayMove(selected, oldIdx, newIdx) });
+    };
+    const addOpt = (opt: string) => {
+      if (!canAddMore) return;
+      onChange({ ...value, options: [...selected, opt] });
+    };
+    const removeOpt = (opt: string) => {
+      onChange({ ...value, options: selected.filter(o => o !== opt) });
+    };
+
+    return (
+      <RankingInput
+        selected={selected}
+        unselected={unselected}
+        minN={minN}
+        maxN={maxN}
+        onMove={move}
+        onAdd={addOpt}
+        onRemove={removeOpt}
+      />
     );
   }
   if (type === "rating") {
@@ -579,7 +787,7 @@ export default function SurveyDetailPage() {
 
   const [survey, setSurvey] = useState<SurveyOut | null>(null);
   const [loading, setLoading] = useState(true);
-  const [answers, setAnswers] = useState<Record<string, { text: string; options: string[] }>>({});
+  const [answers, setAnswers] = useState<AnswerMap>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [viewStats, setViewStats] = useState(false);
@@ -604,7 +812,7 @@ export default function SurveyDetailPage() {
     }
     return m;
   }, [survey, hiddenIds]);
-  const restoreAnswerDraft = useCallback((draft: typeof answers) => {
+  const restoreAnswerDraft = useCallback((draft: AnswerMap) => {
     setAnswers(prev => ({ ...prev, ...draft }));
     toast.info("已復原未送出的問卷填答草稿");
   }, []);
@@ -613,8 +821,12 @@ export default function SurveyDetailPage() {
     value: answerDraft,
     onRestore: restoreAnswerDraft,
     enabled: Boolean(survey && survey.status === "open" && !submitted && !viewStats),
-    isEmpty: useCallback((draft: typeof answers) => (
-      Object.values(draft).every(ans => !(ans.text ?? "").trim() && (ans.options ?? []).length === 0)
+    isEmpty: useCallback((draft: AnswerMap) => (
+      Object.values(draft).every(ans =>
+        !(ans.text ?? "").trim()
+        && (ans.options ?? []).length === 0
+        && !(ans.other_text ?? "").trim()
+      )
     ), []),
   });
 
@@ -627,7 +839,7 @@ export default function SurveyDetailPage() {
       .then(s => {
         setSurvey(s);
         // 初始化答案狀態
-        const init: Record<string, { text: string; options: string[] }> = {};
+        const init: AnswerMap = {};
         s.questions.forEach(q => {
           if (!DISPLAY_TYPES.has(q.question_type)) init[q.id] = { text: "", options: [] };
         });
@@ -655,6 +867,26 @@ export default function SurveyDetailPage() {
       }
     }
 
+    // 排序題額外驗證項數
+    for (const q of survey.questions) {
+      if (q.question_type !== "ranking" || hiddenIds.has(q.id)) continue;
+      const chosen = answers[q.id]?.options ?? [];
+      const minN = q.min_value ?? (q.is_required ? 1 : 0);
+      const maxN = q.max_value ?? q.options.length;
+      if (q.is_required && chosen.length < Math.max(minN, 1)) {
+        toast.error(`「${q.question_text.slice(0, 20)}」至少需排序 ${Math.max(minN, 1)} 項`);
+        return;
+      }
+      if (chosen.length > 0 && chosen.length < minN) {
+        toast.error(`「${q.question_text.slice(0, 20)}」至少需排序 ${minN} 項`);
+        return;
+      }
+      if (chosen.length > maxN) {
+        toast.error(`「${q.question_text.slice(0, 20)}」最多只能排序 ${maxN} 項`);
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
       const anon_token = survey.is_anonymous ? crypto.randomUUID() : undefined;
@@ -665,6 +897,7 @@ export default function SurveyDetailPage() {
             question_id: q.id,
             answer_text: answers[q.id]?.text || undefined,
             answer_options: answers[q.id]?.options,
+            other_text: answers[q.id]?.other_text || undefined,
           })),
         anon_token,
         email_copy: emailCopy,

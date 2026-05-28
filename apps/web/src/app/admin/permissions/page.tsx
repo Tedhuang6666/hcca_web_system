@@ -11,9 +11,11 @@ import type {
   AdminUserDetail,
   MeetingBillStage,
   PermissionCodeInfo,
+  PositionCategory,
   PositionSummary,
   SchoolClassListItem,
 } from "@/lib/types";
+import { ListPageSkeleton } from "@/components/ui/Skeleton";
 
 type Mode = "orgs" | "members" | "audit";
 
@@ -26,6 +28,18 @@ const BILL_STAGE_OPTIONS: { value: "" | MeetingBillStage; label: string }[] = [
 type Detail = { type: "org"; id: string } | { type: "position"; id: string } | { type: "user"; id: string };
 type ConfirmState = { title: string; body: string; action: () => Promise<unknown> } | null;
 
+const POSITION_CATEGORY_LABEL: Record<PositionCategory, string> = {
+  council: "自治職位",
+  class: "班級職位",
+  system: "系統職位",
+};
+
+const POSITION_CATEGORY_OPTIONS: { value: PositionCategory; label: string }[] = [
+  { value: "council", label: "自治職位（班聯會 / 組織幹部）" },
+  { value: "class", label: "班級職位（班級幹部）" },
+  { value: "system", label: "系統職位（外部協作 / 特殊權限）" },
+];
+
 const today = () => new Date().toISOString().split("T")[0];
 const highRisk = (code: string) =>
   code === "admin:all" ||
@@ -37,7 +51,7 @@ const highRisk = (code: string) =>
 
 function uniquePositionsById(positions: PositionSummary[]) {
   return Array.from(new Map(positions.map((position) => [position.id, position])).values())
-    .sort((a, b) => `${a.org_name} ${a.name}`.localeCompare(`${b.org_name} ${b.name}`, "zh-Hant"));
+    .sort((a, b) => `${a.category} ${a.org_name} ${a.name}`.localeCompare(`${b.category} ${b.org_name} ${b.name}`, "zh-Hant"));
 }
 
 function displayError(e: unknown, fallback: string) {
@@ -220,8 +234,8 @@ export default function PermissionsAdminPage() {
       </header>
 
       {loading ? (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--primary)", borderTopColor: "transparent" }} />
+        <div className="flex-1 p-6">
+          <ListPageSkeleton rows={6} showHeader={false} showFilters={false} />
         </div>
       ) : (
         <main className="flex-1 min-h-0 flex overflow-hidden relative">
@@ -392,7 +406,12 @@ function OrgWorkbenchSidebar({
                 style={selectedPositionId === position.id ? { background: "var(--primary-dim)", color: "var(--primary)" } : { color: "var(--text-muted)" }}
               >
                 <span className="w-1.5 h-1.5 rounded-full" style={{ background: selectedPositionId === position.id ? "var(--primary)" : "var(--border-strong)" }} />
-                <span className="flex-1 truncate text-xs">{position.name}</span>
+                <span className="flex-1 truncate text-xs">
+                  {position.name}
+                  <span className="ml-1 text-[10px]" style={{ color: "var(--text-disabled)" }}>
+                    {POSITION_CATEGORY_LABEL[position.category]}
+                  </span>
+                </span>
                 <span className="text-[10px]">{countMembers(position.id)}</span>
               </button>
             ))}
@@ -448,7 +467,7 @@ function WorkbenchList({
               </div>
               <p className="text-xs truncate" style={{ color: "var(--text-muted)" }}>{u.email}</p>
               <div className="flex flex-wrap gap-1 mt-1">
-                {u.positions.slice(0, 3).map((p) => <span key={p.user_position_id ?? p.id} className="text-[10px] px-1.5 py-0.5 rounded" style={{ border: "1px solid var(--border)", color: "var(--text-muted)" }}>{p.org_name} · {p.name}</span>)}
+                {u.positions.slice(0, 3).map((p) => <span key={p.user_position_id ?? p.id} className="text-[10px] px-1.5 py-0.5 rounded" style={{ border: "1px solid var(--border)", color: "var(--text-muted)" }}>{POSITION_CATEGORY_LABEL[p.category]} · {p.org_name} · {p.name}</span>)}
               </div>
             </div>
           </button>
@@ -480,7 +499,7 @@ function WorkbenchList({
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>{perm.desc}</p>
               <div className="flex flex-wrap gap-1">
                 {holderPositions.slice(0, 5).map((p) => (
-                  <button key={p.id} onClick={() => onSelect({ type: "position", id: p.id })} className="text-[10px] px-2 py-0.5 rounded-full cursor-pointer" style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>{p.org_name} · {p.name}</button>
+                  <button key={p.id} onClick={() => onSelect({ type: "position", id: p.id })} className="text-[10px] px-2 py-0.5 rounded-full cursor-pointer" style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>{POSITION_CATEGORY_LABEL[p.category]} · {p.org_name} · {p.name}</button>
                 ))}
               </div>
             </div>
@@ -644,6 +663,7 @@ function OrgPanel({
   const [billStage, setBillStage] = useState<"" | MeetingBillStage>(org.bill_stage ?? "");
   const [parentId, setParentId] = useState(org.parent_id ?? "");
   const [newPositionName, setNewPositionName] = useState("");
+  const [newPositionCategory, setNewPositionCategory] = useState<PositionCategory>("council");
   const [newWeight, setNewWeight] = useState(0);
   const [newCodes, setNewCodes] = useState<string[]>([]);
   const orgPositions = positions.filter((p) => p.org_id === org.id);
@@ -695,11 +715,13 @@ function OrgPanel({
       const created = await adminApi.createPosition({
         org_id: org.id,
         name: newPositionName.trim(),
+        category: newPositionCategory,
         weight: newWeight,
         permission_codes: newCodes,
       });
       toast.success("職位已建立");
       setNewPositionName("");
+      setNewPositionCategory("council");
       setNewWeight(0);
       setNewCodes([]);
       await onRefresh();
@@ -802,8 +824,9 @@ function OrgPanel({
             <p className="text-xs mt-1" style={{ color: "#f59e0b" }}>停用組織不可新增職位或指派新任期。</p>
           )}
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_120px_auto] gap-2 items-end">
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr_170px_120px_auto] gap-2 items-end">
           <label className="text-xs" style={{ color: "var(--text-muted)" }}>職位名稱<TextInput value={newPositionName} onChange={(e) => setNewPositionName(e.target.value)} disabled={!org.is_active} className="mt-1" /></label>
+          <label className="text-xs" style={{ color: "var(--text-muted)" }}>分類<SelectInput value={newPositionCategory} onChange={(e) => setNewPositionCategory(e.target.value as PositionCategory)} disabled={!org.is_active} className="mt-1">{POSITION_CATEGORY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</SelectInput></label>
           <label className="text-xs" style={{ color: "var(--text-muted)" }}>權重<TextInput type="number" min={0} value={newWeight} onChange={(e) => setNewWeight(Number(e.target.value))} disabled={!org.is_active} className="mt-1" /></label>
           <SmallButton onClick={createPosition} tone="primary" disabled={!org.is_active}><Icon name="plus" />建立</SmallButton>
         </div>
@@ -826,6 +849,7 @@ function PositionPanel({
 }) {
   const [name, setName] = useState(position.name);
   const [description, setDescription] = useState(position.description ?? "");
+  const [category, setCategory] = useState<PositionCategory>(position.category);
   const [weight, setWeight] = useState(position.weight);
   const [parentId, setParentId] = useState(position.parent_id ?? "");
   const [codes, setCodes] = useState(position.permission_codes);
@@ -839,6 +863,7 @@ function PositionPanel({
   useEffect(() => {
     setName(position.name);
     setDescription(position.description ?? "");
+    setCategory(position.category);
     setWeight(position.weight);
     setParentId(position.parent_id ?? "");
     setCodes(position.permission_codes);
@@ -846,7 +871,7 @@ function PositionPanel({
 
   const save = async () => {
     try {
-      await adminApi.updatePosition(position.id, { name: name.trim(), description: description.trim() || null, weight, parent_id: parentId || null });
+      await adminApi.updatePosition(position.id, { name: name.trim(), description: description.trim() || null, category, weight, parent_id: parentId || null });
       await adminApi.replacePositionPermissions(position.id, codes);
       toast.success("職位已更新");
       await onRefresh();
@@ -879,7 +904,7 @@ function PositionPanel({
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>職位 / 幹部</p>
           <h2 className="text-xl font-semibold mt-1" style={{ color: "var(--text-primary)" }}>{position.name}</h2>
-          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>{position.org_name} · {members.length} 位成員 · {position.permission_codes.length} 個權限</p>
+          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>{POSITION_CATEGORY_LABEL[position.category]} · {position.org_name} · {members.length} 位成員 · {position.permission_codes.length} 個權限</p>
           {!position.org_is_active && (
             <p className="text-xs mt-1" style={{ color: "#f59e0b" }}>所屬組織已停用：只保留既有任期，不可新增指派。</p>
           )}
@@ -902,6 +927,7 @@ function PositionPanel({
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="text-xs" style={{ color: "var(--text-muted)" }}>名稱<TextInput value={name} onChange={(e) => setName(e.target.value)} className="mt-1" /></label>
+          <label className="text-xs" style={{ color: "var(--text-muted)" }}>分類<SelectInput value={category} onChange={(e) => setCategory(e.target.value as PositionCategory)} className="mt-1">{POSITION_CATEGORY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</SelectInput></label>
           <label className="text-xs" style={{ color: "var(--text-muted)" }}>權限係數<TextInput type="number" min={0} value={weight} onChange={(e) => setWeight(Number(e.target.value))} className="mt-1" /></label>
           <label className="text-xs sm:col-span-2" style={{ color: "var(--text-muted)" }}>描述<TextInput value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1" /></label>
           <label className="text-xs sm:col-span-2" style={{ color: "var(--text-muted)" }}>上級職位<SelectInput value={parentId} onChange={(e) => setParentId(e.target.value)} className="mt-1"><option value="">無上級</option>{orgPositions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</SelectInput></label>
@@ -1071,7 +1097,7 @@ function UserPanel({
       <section className="rounded-xl p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
         <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>指派新職位</h3>
         <div className="grid grid-cols-1 sm:grid-cols-[1fr_130px_130px_auto] gap-2 items-end">
-          <SelectInput value={positionId} onChange={(e) => setPositionId(e.target.value)}><option value="">選擇職位（套用職位權限）</option>{available.map((p) => <option key={p.id} value={p.id}>{p.org_name} · {p.name}</option>)}</SelectInput>
+          <SelectInput value={positionId} onChange={(e) => setPositionId(e.target.value)}><option value="">選擇職位（套用職位權限）</option>{available.map((p) => <option key={p.id} value={p.id}>{POSITION_CATEGORY_LABEL[p.category]} · {p.org_name} · {p.name}</option>)}</SelectInput>
           <TextInput type="date" value={start} onChange={(e) => setStart(e.target.value)} style={{ colorScheme: "dark" }} />
           <TextInput type="date" value={end} onChange={(e) => setEnd(e.target.value)} style={{ colorScheme: "dark" }} />
           <SmallButton onClick={add} tone="primary">指派</SmallButton>
@@ -1152,7 +1178,7 @@ function UserAssignmentEditor({
   return (
     <div className="grid grid-cols-1 sm:grid-cols-[1fr_130px_130px_auto_auto] gap-2 items-center px-4 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
       <div className="min-w-0">
-        <p className="text-sm font-medium truncate" style={{ color: "var(--text-primary)" }}>{position.org_name} · {position.name}</p>
+        <p className="text-sm font-medium truncate" style={{ color: "var(--text-primary)" }}>{POSITION_CATEGORY_LABEL[position.category]} · {position.org_name} · {position.name}</p>
         <p className="text-xs" style={{ color: "var(--text-muted)" }}>{position.permission_codes.length} 個權限</p>
       </div>
       <TextInput type="date" value={start} onChange={(e) => setStart(e.target.value)} style={{ colorScheme: "dark" }} />
@@ -1301,7 +1327,7 @@ function OnboardingWizard({
             </div>
           )}
           <div className="grid grid-cols-1 sm:grid-cols-[1fr_150px_150px] gap-3">
-            <SelectInput value={positionId} onChange={(e) => setPositionId(e.target.value)}><option value="">選擇職位（套用職位權限）</option>{uniquePositions.map((p) => <option key={p.id} value={p.id}>{p.org_name} · {p.name}</option>)}</SelectInput>
+            <SelectInput value={positionId} onChange={(e) => setPositionId(e.target.value)}><option value="">選擇職位（套用職位權限）</option>{uniquePositions.map((p) => <option key={p.id} value={p.id}>{POSITION_CATEGORY_LABEL[p.category]} · {p.org_name} · {p.name}</option>)}</SelectInput>
             <TextInput type="date" value={start} onChange={(e) => setStart(e.target.value)} style={{ colorScheme: "dark" }} />
             <TextInput type="date" value={end} onChange={(e) => setEnd(e.target.value)} style={{ colorScheme: "dark" }} />
           </div>

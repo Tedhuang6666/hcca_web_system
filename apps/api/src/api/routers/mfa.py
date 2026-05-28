@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.config import settings
 from api.core.database import get_db
+from api.core.login_lockout import is_locked, record_failure, record_success
 from api.core.security import (
     add_to_blacklist,
     create_access_token,
@@ -20,6 +21,7 @@ from api.core.security import (
 )
 from api.dependencies.auth import get_current_active_user
 from api.models.user import User
+from api.routers.auth import _access_token_claims
 from api.services import mfa as mfa_svc
 
 router = APIRouter(prefix="/auth/mfa", tags=["多因素認證"])
@@ -109,10 +111,19 @@ async def confirm_mfa(payload: MFAConfirmIn, db: DbDep, user: CurrentUser) -> di
 
 @router.post("/verify", summary="驗證 2FA 碼")
 async def verify_mfa(payload: MFAVerifyIn, db: DbDep, user: CurrentUser) -> dict[str, bool]:
-    """驗證 TOTP 碼（用於需要二次確認的敏感操作）"""
+    """驗證 TOTP 碼（用於需要二次確認的敏感操作）。連續失敗會暫時鎖定。"""
+    lockout_key = f"mfa:{user.id}"
+    locked_seconds = await is_locked(lockout_key)
+    if locked_seconds:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"嘗試次數過多，請於 {locked_seconds // 60 + 1} 分鐘後再試",
+        )
     valid = await mfa_svc.verify_mfa(db, user, payload.code)
     if not valid:
+        await record_failure(lockout_key)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="2FA 驗證碼錯誤")
+    await record_success(lockout_key)
     return {"verified": True}
 
 
@@ -148,12 +159,24 @@ async def verify_mfa_login(
     if user is None or not user.is_active:
         raise credentials_exception
 
+    lockout_key = f"mfa_login:{user.id}"
+    locked_seconds = await is_locked(lockout_key)
+    if locked_seconds:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"嘗試次數過多，請於 {locked_seconds // 60 + 1} 分鐘後再試",
+        )
+
     valid = await mfa_svc.verify_mfa(db, user, payload.code)
     if not valid:
+        await record_failure(lockout_key)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="2FA 驗證碼錯誤")
 
-    admin_claims = {"is_admin": True} if user.is_superuser else None
-    access_token = create_access_token(subject=str(user.id), extra_claims=admin_claims)
+    await record_success(lockout_key)
+    access_token = create_access_token(
+        subject=str(user.id),
+        extra_claims=await _access_token_claims(db, user),
+    )
     refresh_token = create_refresh_token(subject=str(user.id))
     await add_to_blacklist(payload.challenge_token)
     _set_auth_cookies(response, access_token, refresh_token)

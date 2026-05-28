@@ -128,6 +128,17 @@ class RegulationImportItemOut(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class StructureContentRequest(BaseModel):
+    content: str | None = Field(
+        None,
+        description="要解析的法規全文；未提供時使用目前儲存在法規上的 content",
+    )
+    replace_existing: bool = Field(
+        False,
+        description="已有結構化條文時是否以解析結果覆蓋（舊條文會軟刪除）",
+    )
+
+
 async def _assert_regulation_create_permission(
     session: AsyncSession,
     user: User,
@@ -798,6 +809,55 @@ async def get_article_tree(
     if _ is None and (reg.published_at is None or not reg.is_active):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此法規")
     return await reg_svc.get_article_tree(session, reg)
+
+
+@router.post(
+    "/{reg_id}/structure-content",
+    response_model=RegulationOut,
+    summary="將法規全文解析為結構化條文",
+    responses={
+        200: {"description": "解析並建立結構化條文成功"},
+        403: {"description": "非建立者"},
+        409: {"description": "狀態衝突或已有條文"},
+        422: {"description": "全文格式無法解析"},
+    },
+)
+async def structure_regulation_content(
+    reg_id: str,
+    payload: StructureContentRequest,
+    session: DbDep,
+    current_user: Annotated[User, Depends(require_permission(PermissionCode.REGULATION_EDIT))],
+) -> Regulation:
+    reg = await _get_reg_or_404(reg_id, session)
+    _assert_regulation_editable(reg)
+    if reg.created_by != current_user.id and not current_user.is_superuser:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有建立者可以結構化條文")
+    try:
+        structured = await reg_svc.structure_regulation_content(
+            session,
+            reg,
+            content=payload.content,
+            replace_existing=payload.replace_existing,
+        )
+    except ValueError as e:
+        detail = str(e)
+        code = (
+            status.HTTP_409_CONFLICT
+            if "已有結構化條文" in detail
+            else status.HTTP_422_UNPROCESSABLE_ENTITY
+        )
+        raise HTTPException(status_code=code, detail=detail) from e
+    await audit_svc.record(
+        session,
+        entity_type="regulation",
+        entity_id=str(reg.id),
+        action="regulation.structure_content",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={"replace_existing": payload.replace_existing},
+        summary=f"將法規「{reg.title}」全文轉為結構化條文",
+    )
+    return structured
 
 
 @router.post(
@@ -1545,7 +1605,7 @@ async def president_publish(
         )
         session.add(rev)
 
-        # 4. 查詢主席公布專用字號模板
+        # 4. 查詢主席公布專用字號模板；若前端指定模板，優先使用指定模板。
         tmpl_result = await session.execute(
             _sel(DocumentSerialTemplate)
             .where(DocumentSerialTemplate.is_active.is_(True))
@@ -1584,9 +1644,17 @@ async def president_publish(
                 None,
             )
 
-        tmpl = _pick_president_publish_template(templates)
+        tmpl: DocumentSerialTemplate | None = None
+        if payload.serial_template_id is not None:
+            tmpl = next((t for t in templates if t.id == payload.serial_template_id), None)
+            if tmpl is None:
+                raise ValueError("指定的主席公布字號模板不存在或已停用")
+            if tmpl.org_id != reg.org_id:
+                raise ValueError("指定的主席公布字號模板不屬於此法規組織")
+        elif not (payload.manual_serial_number or "").strip():
+            tmpl = _pick_president_publish_template(templates)
 
-        if tmpl is None:
+        if tmpl is None and not (payload.manual_serial_number or "").strip():
             raise ValueError(
                 "找不到可用的主席公布字號模板，請先到字號模板管理設定「主席公布預設模板」"
             )
@@ -1604,7 +1672,7 @@ async def president_publish(
 
         pub_doc_data = DocumentCreate(
             title=f"公布《{reg.title}》",
-            org_id=tmpl.org_id,
+            org_id=tmpl.org_id if tmpl else reg.org_id,
             category=DocumentCategory.DECREE,
             urgency=DocumentUrgency.NORMAL,
             classification=DocumentClassification.NORMAL,
@@ -1614,6 +1682,7 @@ async def president_publish(
             handler_name=current_user.display_name,
             handler_unit="主席",
             serial_template_id=tmpl.id if tmpl else None,
+            manual_serial_number=payload.manual_serial_number,
         )
         pub_doc = await doc_svc.create_document(
             session, data=pub_doc_data, created_by=current_user.id

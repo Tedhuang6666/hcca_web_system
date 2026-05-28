@@ -24,6 +24,7 @@ from api.models.document import (
     DocumentStatus,
     DocumentTemplate,
     DocumentVisibility,
+    RecipientType,
     YearMode,
 )
 from api.models.org import Org
@@ -486,7 +487,8 @@ def _doc_query_with_relations():
         selectinload(Document.approvals).selectinload(DocumentApproval.approver),
         selectinload(Document.approvals).selectinload(DocumentApproval.delegate),
         selectinload(Document.attachments),
-        selectinload(Document.recipients),
+        selectinload(Document.recipients).selectinload(DocumentRecipient.target_user),
+        selectinload(Document.recipients).selectinload(DocumentRecipient.target_org),
         selectinload(Document.creator),
     )
 
@@ -982,6 +984,9 @@ async def create_document(
                 recipient_type=r.recipient_type,
                 name=r.name,
                 email=r.email,
+                target_user_id=r.target_user_id,
+                target_org_id=r.target_org_id,
+                delivery_method=r.delivery_method,
             )
         )
 
@@ -1016,7 +1021,7 @@ async def update_document(
 
     # 逐欄位更新（exclude_unset 確保只更新使用者實際傳入的欄位）
     changed = False
-    update_fields = data.model_dump(exclude_unset=True, exclude={"change_note"})
+    update_fields = data.model_dump(exclude_unset=True, exclude={"change_note", "autosave"})
     for field, value in update_fields.items():
         if getattr(doc, field, None) != value:
             setattr(doc, field, value)
@@ -1025,7 +1030,7 @@ async def update_document(
     if "visibility_level" in update_fields:
         doc.is_public = doc.visibility_level == DocumentVisibility.PUBLICLY_OPEN
 
-    if changed:
+    if changed and not data.autosave:
         result = await session.execute(
             select(func.max(DocumentRevision.revision_number)).where(
                 DocumentRevision.document_id == doc.id
@@ -1353,6 +1358,9 @@ async def upsert_recipients(
             recipient_type=r.recipient_type,
             name=r.name,
             email=r.email,
+            target_user_id=r.target_user_id,
+            target_org_id=r.target_org_id,
+            delivery_method=r.delivery_method,
         )
         session.add(rec)
         new_recipients.append(rec)
@@ -1699,3 +1707,63 @@ async def _get_current_approval(
         return None, False
     is_acting = approval.approver_id != approver_id
     return approval, is_acting
+
+
+# ── 受文者下載權限判定 ───────────────────────────────────────────────────────
+
+
+PRIMARY_RECIPIENT_TYPES = frozenset({RecipientType.MAIN, RecipientType.PRIMARY})
+
+
+async def resolve_recipient_match(
+    session: AsyncSession,
+    doc: Document,
+    viewer_id: uuid.UUID,
+) -> DocumentRecipient | None:
+    """找出第一筆使用者身份命中的受文者紀錄（用於決定其應下載正本或影本）。
+
+    命中規則（依序）：
+    1. target_user_id 等於 viewer_id
+    2. target_org_id 對應的機關內，viewer 目前任期有效成員
+    3. 純文字受文者：以 email 字串模糊比對（向下相容舊資料）
+    """
+    if not doc.recipients:
+        return None
+
+    viewer = await session.scalar(select(User).where(User.id == viewer_id))
+    viewer_email = (viewer.email or "").strip().lower() if viewer else ""
+
+    matched_text: DocumentRecipient | None = None
+    for r in doc.recipients:
+        if r.target_user_id == viewer_id:
+            return r
+        if r.target_org_id is not None:
+            if await _has_active_org_membership(session, viewer_id, r.target_org_id):
+                return r
+        elif (
+            matched_text is None
+            and r.target_user_id is None
+            and viewer_email
+            and (r.email or "").strip().lower() == viewer_email
+        ):
+            matched_text = r
+    return matched_text
+
+
+def is_primary_variant(recipient: DocumentRecipient) -> bool:
+    """受文者類型對應到「正本」（main/primary）才能下正本，copy 一律影本。"""
+    return recipient.recipient_type in PRIMARY_RECIPIENT_TYPES
+
+
+async def get_recipient_for_admin(
+    session: AsyncSession,
+    doc: Document,
+    recipient_id: uuid.UUID,
+) -> DocumentRecipient | None:
+    result = await session.execute(
+        select(DocumentRecipient).where(
+            DocumentRecipient.id == recipient_id,
+            DocumentRecipient.document_id == doc.id,
+        )
+    )
+    return result.scalar_one_or_none()

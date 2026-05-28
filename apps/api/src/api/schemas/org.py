@@ -8,6 +8,7 @@ from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.models.meeting import MeetingBillStage
+from api.models.org import PositionCategory
 
 
 # ─────────────────────────────────────────────
@@ -79,6 +80,10 @@ class PermissionRead(BaseModel):
 class PositionBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     description: str | None = None
+    category: PositionCategory = Field(
+        PositionCategory.COUNCIL,
+        description="職位分類：council=班聯會/自治組織，class=班級幹部，system=系統/外部協作",
+    )
     weight: int = Field(0, ge=0, description="權限係數，同組織內數字越大代表權限越高")
     parent_id: uuid.UUID | None = None
 
@@ -92,6 +97,7 @@ class PositionUpdate(BaseModel):
     description: str | None = None
     note: str | None = None
     remark: str | None = None
+    category: PositionCategory | None = None
     weight: int | None = Field(None, ge=0)
     parent_id: uuid.UUID | None = None
 
@@ -132,6 +138,7 @@ class UserPositionRead(BaseModel):
     updated_at: datetime
     # 職位名稱（eagerly loaded from position relationship）
     position_name: str = ""
+    position_category: PositionCategory = PositionCategory.COUNCIL
     position_org_id: uuid.UUID | None = None
     position_org_name: str = ""
 
@@ -141,6 +148,7 @@ class UserPositionRead(BaseModel):
         pos = getattr(up, "position", None)
         if pos:
             obj.position_name = getattr(pos, "name", "")
+            obj.position_category = getattr(pos, "category", PositionCategory.COUNCIL)
             org = getattr(pos, "org", None)
             if org:
                 obj.position_org_id = getattr(org, "id", None)

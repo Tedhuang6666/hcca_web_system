@@ -18,7 +18,11 @@ from api.schemas.regulation import RegulationArticleCreate, RegulationPublishReq
 from api.services import regulation as reg_svc
 from api.services.official_print import render_regulation_print_html
 from api.services.regulation_consistency import audit_regulation_document_consistency
-from api.services.regulation_import import parse_regulation_document, parse_regulation_docx
+from api.services.regulation_import import (
+    parse_regulation_document,
+    parse_regulation_docx,
+    parse_regulation_text,
+)
 
 
 def _build_docx(lines: list[str]) -> bytes:
@@ -119,6 +123,38 @@ def test_parse_regulation_pdf_maps_text_pdf_to_articles(monkeypatch: pytest.Monk
     assert draft.articles[2].content == "學生代表之職權如下："
     assert draft.articles[3].article_type == ArticleType.SUBPARAGRAPH
     assert draft.articles[3].content == "出席會議。"
+
+
+def test_parse_regulation_text_maps_nested_standalone_lines_precisely() -> None:
+    draft = parse_regulation_text(
+        title="學生自治組織辦法",
+        content="\n".join(
+            [
+                "# 學生自治組織辦法",
+                "第一章 總則",
+                "第一條 本辦法規範學生自治組織。",
+                "第二條 學生代表之職權如下：",
+                "第一項 共同職權如下：",
+                "一、出席會議。",
+                "（一）完成簽到。",
+                "二、提出建議。",
+            ]
+        ),
+    )
+
+    assert [row.article_type for row in draft.articles] == [
+        ArticleType.CHAPTER,
+        ArticleType.ARTICLE,
+        ArticleType.ARTICLE,
+        ArticleType.PARAGRAPH,
+        ArticleType.SUBPARAGRAPH,
+        ArticleType.ITEM,
+        ArticleType.SUBPARAGRAPH,
+    ]
+    assert draft.articles[3].parent_key == draft.articles[2].key
+    assert draft.articles[4].parent_key == draft.articles[3].key
+    assert draft.articles[5].parent_key == draft.articles[4].key
+    assert draft.articles[6].legal_number == "2"
 
 
 def test_parse_regulation_docx_collects_history_heading_block() -> None:

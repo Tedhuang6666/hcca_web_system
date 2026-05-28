@@ -1,11 +1,17 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  LayoutGrid, Inbox, Landmark, ShoppingCart, MoreHorizontal,
-} from "lucide-react";
+import { LogIn, MoreHorizontal } from "lucide-react";
 import { notificationsApi, tasksApi } from "@/lib/api";
+import {
+  filterNavItems,
+  NAV_PREF_EVENT,
+  orderedItems,
+  readNavPreferences,
+  type NavItem,
+} from "@/lib/navigation";
+import NavIcon from "./NavIcon";
 
 interface BottomTabBarProps {
   onMoreClick: () => void;
@@ -16,31 +22,71 @@ type IconProps = { size: number; "aria-hidden": boolean };
 interface Tab {
   href?: string;
   label: string;
-  icon: (p: IconProps) => React.ReactNode;
+  iconKey?: string;
+  icon?: (p: IconProps) => React.ReactNode;
   match?: (pathname: string) => boolean;
   badgeKey?: "tasks" | "notifs";
   onClick?: () => void;
 }
 
-const HOME_PATH = "/";
-const TASKS_PATH = "/tasks";
-const MEETINGS_PATH = "/meetings";
-const SHOP_PATH = "/shop";
+type Role = "guest" | "student" | "cadre";
+
+const CADRE_PREFIXES = ["document:", "regulation:", "audit:"] as const;
 
 /**
  * 手機底部 tab bar（< md 顯示）。
- * 提供 5 個常用入口，減少反覆開合 hamburger 的次數。
- * 鍵盤彈起時透過 visualViewport 自動隱藏避免擋輸入欄。
+ * 依使用者身分顯示三套不同 tab：
+ *  - guest：法規/公告/特約/陳情/登入（皆公開可讀）
+ *  - student：首頁/學餐/校商/問卷/更多
+ *  - cadre：首頁/待辦/公文/法規/更多（有公文、法規或審計權限者）
  */
 export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
   const pathname = usePathname();
+  const [role, setRole] = useState<Role>("guest");
+  const [roleResolved, setRoleResolved] = useState(false);
   const [taskCount, setTaskCount] = useState(0);
   const [notifCount, setNotifCount] = useState(0);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [navPrefs, setNavPrefs] = useState(() => readNavPreferences());
+
+  // 解析身分（依登入狀態與權限分桶）
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const userId = localStorage.getItem("user_id");
+    if (!userId) {
+      setRole("guest");
+      setRoleResolved(true);
+      return;
+    }
+    const superuser = localStorage.getItem("is_superuser") === "true";
+    const owner = localStorage.getItem("is_owner") === "true";
+    let perms: string[] = [];
+    try {
+      const raw = localStorage.getItem("permissions");
+      perms = raw ? JSON.parse(raw) : [];
+    } catch { /* ignore */ }
+    const isCadre =
+      superuser
+      || owner
+      || perms.includes("admin:all")
+      || perms.some((p) => CADRE_PREFIXES.some((pre) => p.startsWith(pre)));
+    setRole(isCadre ? "cadre" : "student");
+    setRoleResolved(true);
+  }, []);
 
   useEffect(() => {
-    const userId = typeof window !== "undefined" ? localStorage.getItem("user_id") : null;
-    if (!userId) return;
+    if (typeof window === "undefined") return;
+    const syncPrefs = () => setNavPrefs(readNavPreferences());
+    window.addEventListener(NAV_PREF_EVENT, syncPrefs);
+    window.addEventListener("storage", syncPrefs);
+    return () => {
+      window.removeEventListener(NAV_PREF_EVENT, syncPrefs);
+      window.removeEventListener("storage", syncPrefs);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (role === "guest") return;
     let mounted = true;
     const fetchCounts = async () => {
       try {
@@ -55,7 +101,7 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
     fetchCounts();
     const timer = setInterval(fetchCounts, 60_000);
     return () => { mounted = false; clearInterval(timer); };
-  }, []);
+  }, [role]);
 
   // 鍵盤彈起偵測：visualViewport 高度顯著縮小時隱藏
   useEffect(() => {
@@ -69,15 +115,33 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
     return () => vv.removeEventListener("resize", handler);
   }, []);
 
-  const tabs: Tab[] = [
-    { href: HOME_PATH,     label: "首頁", icon: (p) => <LayoutGrid {...p} />, match: (p) => p === HOME_PATH },
-    { href: TASKS_PATH,    label: "待辦", icon: (p) => <Inbox {...p} />, match: (p) => p.startsWith(TASKS_PATH), badgeKey: "tasks" },
-    { href: MEETINGS_PATH, label: "議事", icon: (p) => <Landmark {...p} />, match: (p) => p.startsWith(MEETINGS_PATH) },
-    { href: SHOP_PATH,     label: "服務", icon: (p) => <ShoppingCart {...p} />, match: (p) => p.startsWith(SHOP_PATH) || p.startsWith("/meal") || p.startsWith("/announcements") || p.startsWith("/surveys") || p.startsWith("/partner-map") },
-    { label: "更多", icon: (p) => <MoreHorizontal {...p} />, onClick: onMoreClick },
-  ];
+  const tabs: Tab[] = useMemo(() => {
+    if (role === "guest") {
+      return [
+        { href: "/regulations",   label: "法規", iconKey: "regulations",   match: (p) => p.startsWith("/regulations") },
+        { href: "/announcements", label: "公告", iconKey: "announcement",  match: (p) => p.startsWith("/announcements") },
+        { href: "/partner-map",   label: "特約", iconKey: "partnerMap",    match: (p) => p.startsWith("/partner-map") },
+        { href: "/petitions/new", label: "陳情", iconKey: "petition",      match: (p) => p.startsWith("/petitions") },
+        { href: "/login",         label: "登入", icon: (p) => <LogIn {...p} />,         match: (p) => p === "/login" },
+      ];
+    }
+    const superuser = typeof window !== "undefined" && (
+      localStorage.getItem("is_superuser") === "true" || localStorage.getItem("is_owner") === "true"
+    );
+    let perms = new Set<string>();
+    try {
+      perms = new Set(JSON.parse(localStorage.getItem("permissions") || "[]"));
+    } catch { /* ignore */ }
+    const can = (code: string) => superuser || perms.has("admin:all") || perms.has(code);
+    const hasPrefix = (prefix: string) =>
+      superuser || perms.has("admin:all") || Array.from(perms).some((perm) => perm.startsWith(prefix));
+    const available = filterNavItems(orderedItems(navPrefs.mobileOrder, navPrefs.mobileHidden), can, hasPrefix);
+    const topTabs = available.slice(0, 4).map(navItemToTab);
+    return [...topTabs, { label: "更多", icon: (p) => <MoreHorizontal {...p} />, onClick: onMoreClick }];
+  }, [navPrefs, role, onMoreClick]);
 
   if (keyboardOpen) return null;
+  if (!roleResolved) return null;
 
   return (
     <nav
@@ -104,7 +168,7 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
               transition: "color 150ms",
             }}>
             <span className="relative">
-              <Icon size={20} aria-hidden={true} />
+              {t.iconKey ? <NavIcon iconKey={t.iconKey} size={20} /> : Icon?.({ size: 20, "aria-hidden": true })}
               {badge > 0 && (
                 <span
                   className="absolute -top-1 -right-2 min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center text-[9px] font-bold"
@@ -147,4 +211,16 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
       })}
     </nav>
   );
+}
+
+function navItemToTab(item: NavItem): Tab {
+  return {
+    href: item.href,
+    label: item.label.replace("系統", "").replace("專區", "").replace("訂購", ""),
+    iconKey: item.iconKey,
+    match: (pathname) => item.end
+      ? pathname === item.href
+      : pathname === item.href || pathname.startsWith(item.href + "/"),
+    badgeKey: item.id === "tasks" ? "tasks" : undefined,
+  };
 }

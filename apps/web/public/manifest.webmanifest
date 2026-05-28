@@ -1,26 +1,47 @@
 {
-  "name": "校園自治整合平台",
+  "name": "HCCA 校園自治整合平台",
   "short_name": "HCCA",
   "description": "服務學生代表大會的數位治理工具，整合公文、法規、購票、學餐與問卷。",
   "lang": "zh-TW",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "orientation": "any",
-  "background_color": "#ffffff",
-  "theme_color": "#1a1a2e",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#111827",
   "categories": ["education", "productivity", "government"],
   "icons": [
     {
       "src": "/icon.svg",
       "type": "image/svg+xml",
       "sizes": "any",
-      "purpose": "any"
+      "purpose": "any maskable"
     },
     {
       "src": "/apple-icon.svg",
       "type": "image/svg+xml",
       "sizes": "180x180",
       "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "公文",
+      "short_name": "公文",
+      "url": "/documents",
+      "description": "開啟公文管理"
+    },
+    {
+      "name": "法規",
+      "short_name": "法規",
+      "url": "/regulations",
+      "description": "開啟法規系統"
+    },
+    {
+      "name": "通知",
+      "short_name": "通知",
+      "url": "/notifications",
+      "description": "查看通知"
     }
   ]
 }

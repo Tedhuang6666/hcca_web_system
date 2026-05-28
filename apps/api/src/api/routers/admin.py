@@ -26,9 +26,10 @@ from api.core.permission_codes import (
     validate_permission_codes,
 )
 from api.dependencies.permissions import require_permission
-from api.models.org import Org, Permission, Position, UserPosition
+from api.models.org import Org, Permission, Position, PositionCategory, UserPosition
 from api.models.user import User
 from api.services import audit as audit_svc
+from api.services.discord_bot import enqueue_role_sync
 from api.services.permission import get_user_permission_codes
 
 router = APIRouter(prefix="/admin", tags=["管理員"])
@@ -49,6 +50,7 @@ class PositionSummary(BaseModel):
     org_name: str = ""
     org_is_active: bool = True
     description: str | None = None
+    category: PositionCategory = PositionCategory.COUNCIL
     weight: int = 0
     parent_id: uuid.UUID | None = None
     permission_codes: list[str] = []
@@ -124,6 +126,10 @@ class PositionCreate(BaseModel):
     org_id: uuid.UUID
     name: str = Field(..., min_length=1, max_length=100)
     description: str | None = Field(None, max_length=500)
+    category: PositionCategory = Field(
+        PositionCategory.COUNCIL,
+        description="職位分類：council=班聯會/自治組織，class=班級幹部，system=系統/外部協作",
+    )
     weight: int = Field(0, ge=0)
     parent_id: uuid.UUID | None = None
     permission_codes: list[str] = Field(default_factory=list, description="同時設定的權限碼")
@@ -132,6 +138,7 @@ class PositionCreate(BaseModel):
 class PositionUpdate(BaseModel):
     name: str | None = Field(None, max_length=100)
     description: str | None = None
+    category: PositionCategory | None = None
     weight: int | None = Field(None, ge=0)
     parent_id: uuid.UUID | None = None
 
@@ -171,6 +178,7 @@ async def _enrich_user(db: AsyncSession, user: User) -> UserDetail:
                 org_name=pos.org.name if pos.org else "",
                 org_is_active=pos.org.is_active if pos.org else True,
                 description=pos.description,
+                category=pos.category,
                 weight=pos.weight,
                 parent_id=pos.parent_id,
                 permission_codes=[p.code for p in pos.permissions],
@@ -331,6 +339,7 @@ async def pre_register_user(
             org_id=org.id,
             name=f"外部協作-{body.display_name}",
             description=f"系統自動建立：{user.email} 的自訂權限職位",
+            category=PositionCategory.SYSTEM,
         )
         db.add(custom_pos)
         await db.flush()
@@ -494,6 +503,7 @@ async def add_user_position(
         },
         summary=f"指派「{position.name}」給「{user.display_name}」",
     )
+    await enqueue_role_sync(db, user_id)
     return await _enrich_user(db, user)
 
 
@@ -537,6 +547,8 @@ async def remove_user_position(
         summary="移除使用者職位任期",
     )
     await db.delete(up)
+    await db.flush()
+    await enqueue_role_sync(db, user_id)
 
 
 @router.patch(
@@ -601,6 +613,7 @@ async def update_user_position(
         },
         summary="更新使用者職位任期",
     )
+    await enqueue_role_sync(db, up.user_id)
     if up.user is None:
         user_result = await db.execute(select(User).where(User.id == user_id))
         user = user_result.scalar_one()
@@ -637,6 +650,7 @@ async def list_all_positions(
             org_name=p.org.name if p.org else "",
             org_is_active=p.org.is_active if p.org else True,
             description=p.description,
+            category=p.category,
             weight=p.weight,
             parent_id=p.parent_id,
             permission_codes=[perm.code for perm in p.permissions],
@@ -682,6 +696,7 @@ async def create_position_with_perms(
         org_id=body.org_id,
         name=body.name,
         description=body.description,
+        category=body.category,
         weight=body.weight,
         parent_id=body.parent_id,
     )
@@ -702,6 +717,7 @@ async def create_position_with_perms(
             "org_id": str(position.org_id),
             "org_name": org.name,
             "permission_codes": sorted(set(body.permission_codes)),
+            "category": body.category,
         },
         summary=f"建立職位「{position.name}」並設定權限",
     )
@@ -713,6 +729,7 @@ async def create_position_with_perms(
         org_name=org.name,
         org_is_active=org.is_active,
         description=position.description,
+        category=position.category,
         weight=position.weight,
         parent_id=position.parent_id,
         permission_codes=list(body.permission_codes),
@@ -753,6 +770,7 @@ async def update_position(
     before = {
         "name": position.name,
         "description": position.description,
+        "category": position.category,
         "weight": position.weight,
         "parent_id": str(position.parent_id) if position.parent_id else None,
     }
@@ -772,6 +790,7 @@ async def update_position(
             "after": {
                 "name": position.name,
                 "description": position.description,
+                "category": position.category,
                 "weight": position.weight,
                 "parent_id": str(position.parent_id) if position.parent_id else None,
             },
@@ -786,6 +805,7 @@ async def update_position(
         org_name=position.org.name if position.org else "",
         org_is_active=position.org.is_active if position.org else True,
         description=position.description,
+        category=position.category,
         weight=position.weight,
         parent_id=position.parent_id,
         permission_codes=[perm.code for perm in position.permissions],
@@ -852,6 +872,7 @@ async def replace_position_permissions(
         org_name=position.org.name if position.org else "",
         org_is_active=position.org.is_active if position.org else True,
         description=position.description,
+        category=position.category,
         weight=position.weight,
         parent_id=position.parent_id,
         permission_codes=after_codes,
@@ -957,6 +978,7 @@ async def list_orgs_with_positions(db: DbDep, _: AdminUser) -> list[dict]:
                     "id": str(p.id),
                     "name": p.name,
                     "description": p.description,
+                    "category": p.category,
                     "weight": p.weight,
                     "parent_id": str(p.parent_id) if p.parent_id else None,
                     "permission_codes": [perm.code for perm in p.permissions],

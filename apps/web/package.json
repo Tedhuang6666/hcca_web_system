@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "next dev --webpack",
     "build": "next build --webpack",
+    "analyze": "ANALYZE=true next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "generate:types": "openapi-typescript http://localhost:8000/openapi.json -o ./src/lib/api-types.ts"
@@ -17,15 +18,20 @@
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@sentry/nextjs": "^10.53.1",
+    "@simplewebauthn/browser": "^13.3.0",
     "@tiptap/extension-placeholder": "^3.22.5",
     "@tiptap/extension-underline": "^3.22.5",
     "@tiptap/react": "^3.22.5",
     "@tiptap/starter-kit": "^3.22.5",
     "@types/qrcode": "^1.5.6",
+    "cmdk": "^1.1.1",
     "diff": "^9.0.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.14.0",
     "next": "^16.2.6",
+    "pdfjs-dist": "^5.7.284",
+    "posthog-js": "^1.376.0",
     "qrcode": "^1.5.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",
@@ -36,6 +42,7 @@
     "tiptap-markdown": "^0.9.0"
   },
   "devDependencies": {
+    "@next/bundle-analyzer": "^16.2.6",
     "@tailwindcss/postcss": "^4",
     "@types/diff": "^7.0.2",
     "@types/leaflet": "^1.9.21",

@@ -1,138 +1,24 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
-import {
-  LayoutGrid,
-  FileText,
-  Files,
-  BookOpen,
-  Barcode,
-  ShoppingCart,
-  Warehouse,
-  CheckSquare,
-  MessageCircle,
-  MessageSquare,
-  Mail,
-  Lock,
-  ClipboardList,
-  Network,
-  Landmark,
-  Utensils,
-  Store,
-  Users,
-  BarChart3,
-  MapPinned,
-  ChevronDown,
-  Inbox,
-  Truck,
-} from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
-
-/* ── Lucide Icons ─────────────────────────────────────────────────────────── */
-const Icons: Record<string, React.ComponentType<{ size: number; "aria-hidden": boolean }>> = {
-  dashboard:         (p) => <LayoutGrid {...p} />,
-  documents:         (p) => <FileText {...p} />,
-  documentTemplates: (p) => <Files {...p} />,
-  regulations:       (p) => <BookOpen {...p} />,
-  meetings:          (p) => <Landmark {...p} />,
-  serial:            (p) => <Barcode {...p} />,
-  shop:              (p) => <ShoppingCart {...p} />,
-  shopAdmin:         (p) => <Warehouse {...p} />,
-  shopOrders:        (p) => <Store {...p} />,
-  meal:              (p) => <Utensils {...p} />,
-  mealVendor:        (p) => <Truck {...p} />,
-  survey:            (p) => <CheckSquare {...p} />,
-  announcement:      (p) => <MessageCircle {...p} />,
-  petition:          (p) => <MessageSquare {...p} />,
-  email:             (p) => <Mail {...p} />,
-  permissions:       (p) => <Lock {...p} />,
-  audit:             (p) => <ClipboardList {...p} />,
-  org:               (p) => <Network {...p} />,
-  classes:           (p) => <Users {...p} />,
-  analytics:         (p) => <BarChart3 {...p} />,
-  partnerMap:        (p) => <MapPinned {...p} />,
-  tasks:             (p) => <Inbox {...p} />,
-};
-
-/* ── 導覽資料結構 ────────────────────────────────────────────────────────── */
-type NavItem = {
-  href: string;
-  iconKey: string;
-  label: string;
-  end?: boolean;
-  perm?: string;   // 單一權限代碼或前綴匹配（"foo:*"）
-};
-type NavSection = {
-  heading: string;
-  items: NavItem[];
-  collapsible?: boolean;
-  defaultCollapsed?: boolean;
-};
-
-const NAV_DEF: (NavItem | NavSection)[] = [
-  { href: "/", iconKey: "dashboard", label: "平台首頁", end: true },
-  { href: "/tasks", iconKey: "tasks", label: "我的待辦" },
-
-  {
-    heading: "議事",
-    items: [
-      { href: "/documents",   iconKey: "documents",   label: "公文系統" },
-      { href: "/meetings",    iconKey: "meetings",    label: "議事系統" },
-      { href: "/regulations", iconKey: "regulations", label: "法規查詢" },
-    ],
-  },
-
-  {
-    heading: "社群與服務",
-    items: [
-      { href: "/announcements",     iconKey: "announcement", label: "校內公告" },
-      { href: "/shop",              iconKey: "shop",         label: "校商訂購" },
-      { href: "/shop/class-orders", iconKey: "shopOrders",   label: "班級訂單", perm: "class:shop_collect" },
-      { href: "/meal",              iconKey: "meal",         label: "學餐訂購" },
-      { href: "/partner-map",       iconKey: "partnerMap",   label: "特約地圖" },
-      { href: "/surveys",           iconKey: "survey",       label: "問卷專區" },
-      { href: "/petitions",         iconKey: "petition",     label: "陳情中心" },
-    ],
-  },
-
-  {
-    heading: "管理",
-    collapsible: true,
-    defaultCollapsed: true,
-    items: [
-      { href: "/analytics",          iconKey: "analytics",         label: "績效統計",   perm: "analytics:view" },
-      { href: "/orgs",               iconKey: "org",               label: "組織管理",   perm: "org:*" },
-      { href: "/admin/permissions",  iconKey: "permissions",       label: "權限管理",   perm: "admin:all" },
-      { href: "/admin/classes",      iconKey: "classes",           label: "班級管理",   perm: "class:manage" },
-      { href: "/audit-logs",         iconKey: "audit",             label: "稽核日誌",   perm: "audit:view_org" },
-      { href: "/document-templates", iconKey: "documentTemplates", label: "公文範本",   perm: "document:create" },
-      { href: "/serial-templates",   iconKey: "serial",            label: "字號模板",   perm: "serial:create" },
-      { href: "/email",              iconKey: "email",             label: "電子郵件",   perm: "email:*" },
-      { href: "/shop/admin",         iconKey: "shopAdmin",         label: "校商後台",   perm: "shop:manage" },
-      { href: "/meal/vendor",        iconKey: "mealVendor",        label: "餐商管理",   perm: "meal:manage" },
-      { href: "/partner-map/admin",  iconKey: "partnerMap",        label: "特約管理",   perm: "partner_map:manage" },
-      { href: "/petitions/manage",   iconKey: "petition",          label: "陳情管理",   perm: "petition:*" },
-    ],
-  },
-];
-
-const NAV_DEF_LOGGED_OUT: (NavItem | NavSection)[] = [
-  {
-    heading: "公開",
-    items: [
-      { href: "/regulations",   iconKey: "regulations",   label: "法規查詢" },
-      { href: "/documents",     iconKey: "documents",     label: "公文查詢" },
-      { href: "/announcements", iconKey: "announcement",  label: "校內公告" },
-      { href: "/partner-map",   iconKey: "partnerMap",    label: "特約地圖" },
-      { href: "/petitions/new", iconKey: "petition",      label: "我要陳情" },
-    ],
-  },
-];
-
-function isSection(x: NavItem | NavSection): x is NavSection {
-  return "heading" in x;
-}
+import NavIcon from "./NavIcon";
+import {
+  filterNavItems,
+  hasSavedNavPreferences,
+  isSection,
+  NAV_DEF,
+  NAV_DEF_LOGGED_OUT,
+  NAV_PREF_EVENT,
+  orderedItems,
+  readNavPreferences,
+  type NavEntry,
+  type NavItem,
+  type NavSection,
+} from "@/lib/navigation";
 
 /* ── 折疊狀態：localStorage 持久化 ─────────────────────────────────────── */
 const COLLAPSED_KEY = "sidebar.collapsed-sections";
@@ -163,14 +49,13 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
   const active = item.end
     ? pathname === item.href
     : pathname === item.href || pathname.startsWith(item.href + "/");
-  const Icon = Icons[item.iconKey];
 
   return (
     <Link
       href={item.href}
       className="sidebar-nav-item"
       aria-current={active ? "page" : undefined}>
-      {Icon && <span className="flex-shrink-0"><Icon size={15} aria-hidden={true} /></span>}
+      <span className="flex-shrink-0"><NavIcon iconKey={item.iconKey} size={15} /></span>
       <span className="flex-1 truncate">{item.label}</span>
     </Link>
   );
@@ -185,6 +70,8 @@ export default function Sidebar() {
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  const [desktopPrefs, setDesktopPrefs] = useState(() => readNavPreferences());
+  const [hasCustomNav, setHasCustomNav] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -193,6 +80,7 @@ export default function Sidebar() {
     setUserName(localStorage.getItem("user_name") ?? "使用者");
     setUserEmail(localStorage.getItem("user_email") ?? "");
     setUserAvatar(localStorage.getItem("user_avatar"));
+    setHasCustomNav(hasSavedNavPreferences());
 
     const persisted = readCollapsed();
     if (persisted.size === 0) {
@@ -207,6 +95,17 @@ export default function Sidebar() {
       setCollapsed(persisted);
     }
     setHydrated(true);
+
+    const syncPrefs = () => {
+      setDesktopPrefs(readNavPreferences());
+      setHasCustomNav(hasSavedNavPreferences());
+    };
+    window.addEventListener(NAV_PREF_EVENT, syncPrefs);
+    window.addEventListener("storage", syncPrefs);
+    return () => {
+      window.removeEventListener(NAV_PREF_EVENT, syncPrefs);
+      window.removeEventListener("storage", syncPrefs);
+    };
   }, []);
 
   const toggleSection = (heading: string) => {
@@ -231,20 +130,35 @@ export default function Sidebar() {
   }, [isAdmin, permissions]);
 
   const itemVisible = (item: NavItem): boolean => {
-    if (!item.perm) return true;
-    if (item.perm.endsWith(":*")) return hasPrefix(item.perm.slice(0, -1));
-    return can(item.perm);
+    if (item.id === "systemDefense" && !isAdmin) return false;
+    return filterNavItems([item], can, hasPrefix).length > 0;
   };
 
   const navSections = useMemo(
-    () =>
-      (isLoggedIn ? NAV_DEF : NAV_DEF_LOGGED_OUT).map((entry) => {
+    () => {
+      if (isLoggedIn && hydrated && hasCustomNav) {
+        const visibleItems = new Set(
+          orderedItems(desktopPrefs.desktopOrder, desktopPrefs.desktopHidden)
+            .filter(itemVisible)
+            .map((item) => item.id),
+        );
+        const orderIndex = new Map(desktopPrefs.desktopOrder.map((id, index) => [id, index]));
+        return NAV_DEF.map((entry) => {
+          if (!isSection(entry)) return visibleItems.has(entry.id) ? entry : null;
+          const items = entry.items
+            .filter((item) => visibleItems.has(item.id))
+            .sort((a, b) => (orderIndex.get(a.id) ?? 9999) - (orderIndex.get(b.id) ?? 9999));
+          return items.length > 0 ? { ...entry, items } : null;
+        }).filter(Boolean) as NavEntry[];
+      }
+      return (isLoggedIn ? NAV_DEF : NAV_DEF_LOGGED_OUT).map((entry) => {
         if (!isSection(entry)) return entry;
         const items = entry.items.filter(itemVisible);
         return items.length > 0 ? { ...entry, items } : null;
-      }).filter(Boolean) as (NavItem | NavSection)[],
+      }).filter(Boolean) as NavEntry[];
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isLoggedIn, isAdmin, permissions],
+    [desktopPrefs, hasCustomNav, hydrated, isLoggedIn, isAdmin, permissions],
   );
 
   const initials = userName.charAt(0).toUpperCase();
@@ -351,10 +265,12 @@ export default function Sidebar() {
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--sidebar-hover)")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
             {userAvatar ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <Image
                 src={userAvatar}
                 alt={userName}
+                width={28}
+                height={28}
+                unoptimized
                 className="w-7 h-7 rounded-full object-cover flex-shrink-0"
                 style={{ border: "1.5px solid var(--primary)", opacity: 0.92 }}
               />

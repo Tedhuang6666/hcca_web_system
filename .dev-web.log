@@ -1,0 +1,718 @@
+
+> web@0.1.0 dev
+> next dev --webpack
+
+▲ Next.js 16.2.6 (webpack)
+- Local:         http://localhost:3000
+- Network:       http://10.255.255.254:3000
+- Environments: .env.local
+✓ Ready in 211ms
+- Experiments (use with caution):
+  · clientTraceMetadata
+
+○ Compiling / ...
+
+[2m[84.53ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.06ms][22m  [2m ↳ [22mQuick bail check
+[2m[26.69ms][22m  [2m ↳ [22mSetup compiler
+[2m[ 1.01ms][22m    [2m ↳ [22mPostCSS AST -> Tailwind CSS AST
+[2m[25.65ms][22m    [2m ↳ [22mCreate compiler
+[2m[ 0.08ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 0.92ms][22m  [2m ↳ [22mSetup scanner
+[2m[14.83ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 3.38ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[31.10ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 4.70ms][22m  [2m ↳ [22mTransform Tailwind CSS AST into PostCSS AST
+[2m[ 2.41ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+ GET / 200 in 7.1s (next.js: 6.4s, proxy.ts: 143ms, application-code: 512ms)
+ GET /login 200 in 7.2s (next.js: 6.4s, proxy.ts: 127ms, application-code: 646ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 7.2s (next.js: 6.4s, proxy.ts: 127ms, application-code: 648ms)
+ GET /login?next=%2Fmaintenance 200 in 7.2s (next.js: 6.4s, proxy.ts: 127ms, application-code: 649ms)
+ GET /login?next=%2Fmaintenance 200 in 136ms (next.js: 5ms, proxy.ts: 18ms, application-code: 114ms)
+
+[2m[26.60ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.06ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.08ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[15.50ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 2.04ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 5.07ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 3.61ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 324ms (next.js: 73ms, proxy.ts: 6ms, application-code: 245ms)
+ GET /login 200 in 321ms (next.js: 4ms, proxy.ts: 247ms, application-code: 70ms)
+ GET /login?next=%2Fmaintenance 200 in 322ms (next.js: 22ms, proxy.ts: 246ms, application-code: 53ms)
+ GET /login?next=%2Fmaintenance 200 in 40ms (next.js: 4ms, proxy.ts: 5ms, application-code: 31ms)
+
+[2m[16.40ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.05ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 7.67ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 1.60ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 5.17ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 1.79ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+ GET /login?next=%2Fmaintenance 200 in 110ms (next.js: 4ms, proxy.ts: 5ms, application-code: 102ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 112ms (next.js: 4ms, proxy.ts: 24ms, application-code: 83ms)
+ GET /login 200 in 112ms (next.js: 22ms, proxy.ts: 25ms, application-code: 66ms)
+ GET /login?next=%2Fmaintenance 200 in 75ms (next.js: 4ms, proxy.ts: 29ms, application-code: 42ms)
+
+[2m[10.30ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.04ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 6.14ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 1.34ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 0.42ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 2.25ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+
+[2m[14.45ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.07ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 7.55ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 1.90ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 1.04ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 3.74ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+ GET /login?next=%2Fmaintenance 200 in 239ms (next.js: 5ms, proxy.ts: 7ms, application-code: 228ms)
+ GET /login 200 in 239ms (next.js: 5ms, proxy.ts: 29ms, application-code: 205ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 245ms (next.js: 22ms, proxy.ts: 29ms, application-code: 193ms)
+ GET /login?next=%2Fmaintenance 200 in 207ms (next.js: 8ms, proxy.ts: 27ms, application-code: 171ms)
+ GET /login?next=%2Fmaintenance 200 in 96ms (next.js: 22ms, proxy.ts: 7ms, application-code: 67ms)
+ GET /login 200 in 98ms (next.js: 5ms, proxy.ts: 7ms, application-code: 85ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 100ms (next.js: 37ms, proxy.ts: 7ms, application-code: 56ms)
+ GET /login?next=%2Fmaintenance 200 in 54ms (next.js: 3ms, proxy.ts: 8ms, application-code: 43ms)
+
+[2m[12.87ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.03ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.05ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 7.04ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 3.26ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 0.49ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 1.82ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+
+[2m[9.37ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[0.09ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[5.33ms][22m  [2m ↳ [22mScan for candidates
+[2m[1.65ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[0.41ms][22m  [2m ↳ [22mBuild utilities
+[2m[1.80ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+ GET /login?next=%2Fmaintenance 200 in 310ms (next.js: 61ms, proxy.ts: 4ms, application-code: 245ms)
+ GET /login 200 in 311ms (next.js: 226ms, proxy.ts: 4ms, application-code: 80ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 315ms (next.js: 245ms, proxy.ts: 4ms, application-code: 65ms)
+ GET /login?next=%2Fmaintenance 200 in 43ms (next.js: 3ms, proxy.ts: 7ms, application-code: 32ms)
+
+[2m[13.18ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.04ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 8.68ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 2.04ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 0.55ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 1.75ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+ GET /login?next=%2Fmaintenance 200 in 336ms (next.js: 103ms, proxy.ts: 5ms, application-code: 227ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 339ms (next.js: 260ms, proxy.ts: 5ms, application-code: 74ms)
+ GET /login 200 in 339ms (next.js: 5ms, proxy.ts: 279ms, application-code: 55ms)
+ GET /login?next=%2Fmaintenance 200 in 60ms (next.js: 2ms, proxy.ts: 23ms, application-code: 34ms)
+
+[2m[10.38ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.04ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 7.19ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 1.18ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 0.41ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 1.47ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+ GET /login 200 in 217ms (next.js: 52ms, proxy.ts: 4ms, application-code: 161ms)
+ GET /login?next=%2Fmaintenance 200 in 217ms (next.js: 4ms, proxy.ts: 139ms, application-code: 74ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 220ms (next.js: 21ms, proxy.ts: 139ms, application-code: 60ms)
+ GET /login?next=%2Fmaintenance 200 in 42ms (next.js: 3ms, proxy.ts: 6ms, application-code: 32ms)
+
+[2m[12.66ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.05ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 8.49ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 0.97ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 0.47ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 2.57ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+
+[2m[10.54ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.04ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 5.99ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 2.04ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 0.42ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 1.96ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+ GET /login?next=%2Fmaintenance 200 in 170ms (next.js: 33ms, proxy.ts: 5ms, application-code: 133ms)
+ GET /login 200 in 173ms (next.js: 101ms, proxy.ts: 5ms, application-code: 67ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 176ms (next.js: 116ms, proxy.ts: 5ms, application-code: 55ms)
+ GET /login?next=%2Fmaintenance 200 in 38ms (next.js: 3ms, proxy.ts: 5ms, application-code: 30ms)
+
+[2m[11.35ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.04ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 6.71ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 2.00ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 0.50ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 1.98ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+
+[2m[10.05ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.04ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 5.98ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 1.25ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 0.37ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 2.32ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+ GET /login?next=%2Fmaintenance 200 in 173ms (next.js: 4ms, proxy.ts: 6ms, application-code: 163ms)
+ GET /login 200 in 173ms (next.js: 9ms, proxy.ts: 23ms, application-code: 141ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 181ms (next.js: 21ms, proxy.ts: 27ms, application-code: 133ms)
+ GET /login?next=%2Fmaintenance 200 in 143ms (next.js: 7ms, proxy.ts: 24ms, application-code: 113ms)
+ GET /login 200 in 143ms (next.js: 27ms, proxy.ts: 10ms, application-code: 106ms)
+ GET /login?next=%2Fmaintenance 200 in 146ms (next.js: 6ms, proxy.ts: 10ms, application-code: 130ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 149ms (next.js: 50ms, proxy.ts: 10ms, application-code: 89ms)
+ GET /login?next=%2Fmaintenance 200 in 50ms (next.js: 3ms, proxy.ts: 9ms, application-code: 39ms)
+
+[2m[10.93ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.01ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.04ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 6.99ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 1.05ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 0.41ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 2.35ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+
+[2m[11.34ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.04ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 6.44ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 1.79ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 0.39ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 2.58ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+ GET /login 200 in 188ms (next.js: 8ms, proxy.ts: 6ms, application-code: 173ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 193ms (next.js: 5ms, proxy.ts: 28ms, application-code: 160ms)
+ GET /login?next=%2Fmaintenance 200 in 168ms (next.js: 3ms, proxy.ts: 23ms, application-code: 142ms)
+ GET /login?next=%2Fmaintenance 200 in 134ms (next.js: 6ms, proxy.ts: 15ms, application-code: 113ms)
+ GET /login?next=%2Fmaintenance 200 in 142ms (next.js: 5ms, proxy.ts: 10ms, application-code: 127ms)
+ GET /login 200 in 143ms (next.js: 24ms, proxy.ts: 10ms, application-code: 108ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 145ms (next.js: 43ms, proxy.ts: 10ms, application-code: 92ms)
+ GET /login?next=%2Fmaintenance 200 in 81ms (next.js: 35ms, proxy.ts: 7ms, application-code: 40ms)
+⚠ Found a change in next.config.ts. Restarting the server to apply the changes...
+▲ Next.js 16.2.6 (webpack)
+- Local:         http://localhost:3000
+- Network:       http://10.255.255.254:3000
+- Environments: .env.local
+✓ Ready in 196ms
+- Experiments (use with caution):
+  · clientTraceMetadata
+
+○ Compiling /login ...
+
+[2m[162.12ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[  0.07ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 94.47ms][22m  [2m ↳ [22mSetup compiler
+[2m[  0.89ms][22m    [2m ↳ [22mPostCSS AST -> Tailwind CSS AST
+[2m[ 93.56ms][22m    [2m ↳ [22mCreate compiler
+[2m[  0.08ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[  0.92ms][22m  [2m ↳ [22mSetup scanner
+[2m[ 14.81ms][22m  [2m ↳ [22mScan for candidates
+[2m[  3.98ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 32.85ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 12.24ms][22m  [2m ↳ [22mTransform Tailwind CSS AST into PostCSS AST
+[2m[  2.27ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+ GET /login 200 in 9.3s (next.js: 8.6s, proxy.ts: 121ms, application-code: 561ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 9.3s (next.js: 8.6s, proxy.ts: 121ms, application-code: 563ms)
+ GET /login?next=%2Fmaintenance 200 in 9.3s (next.js: 8.6s, proxy.ts: 121ms, application-code: 565ms)
+ GET /login?next=%2Fmaintenance 200 in 86ms (next.js: 3ms, proxy.ts: 8ms, application-code: 76ms)
+
+[2m[48.19ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.04ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.11ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[33.91ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 1.75ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 8.09ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 4.02ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+ GET /login?next=%2Fmaintenance 200 in 121ms (next.js: 6ms, proxy.ts: 6ms, application-code: 109ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 124ms (next.js: 5ms, proxy.ts: 40ms, application-code: 78ms)
+ GET /login 200 in 121ms (next.js: 25ms, proxy.ts: 40ms, application-code: 57ms)
+ GET /login?next=%2Fmaintenance 200 in 66ms (next.js: 3ms, proxy.ts: 27ms, application-code: 35ms)
+
+[2m[13.14ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.01ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.05ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 6.68ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 2.03ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 2.67ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 1.57ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+ GET /login 200 in 134ms (next.js: 4ms, proxy.ts: 6ms, application-code: 123ms)
+ GET /login?next=%2Fmaintenance 200 in 135ms (next.js: 31ms, proxy.ts: 6ms, application-code: 98ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 139ms (next.js: 78ms, proxy.ts: 6ms, application-code: 55ms)
+ GET /login?next=%2Fmaintenance 200 in 42ms (next.js: 3ms, proxy.ts: 7ms, application-code: 32ms)
+
+[2m[12.41ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.01ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.05ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 6.62ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 1.34ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 2.13ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 2.10ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+
+[2m[10.43ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.05ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 6.48ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 1.80ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 0.46ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 1.53ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+ GET /login 200 in 192ms (next.js: 4ms, proxy.ts: 7ms, application-code: 181ms)
+ GET /login?next=%2Fmaintenance 200 in 192ms (next.js: 5ms, proxy.ts: 26ms, application-code: 162ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 178ms (next.js: 3ms, proxy.ts: 29ms, application-code: 146ms)
+ GET /login?next=%2Fmaintenance 200 in 135ms (next.js: 8ms, proxy.ts: 12ms, application-code: 114ms)
+ GET /login?next=%2Fmaintenance 200 in 106ms (next.js: 6ms, proxy.ts: 8ms, application-code: 92ms)
+ GET /login 200 in 107ms (next.js: 43ms, proxy.ts: 8ms, application-code: 55ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 111ms (next.js: 25ms, proxy.ts: 8ms, application-code: 78ms)
+ GET /login?next=%2Fmaintenance 200 in 49ms (next.js: 1819µs, proxy.ts: 8ms, application-code: 40ms)
+
+[2m[15.24ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.05ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 9.06ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 1.75ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 0.71ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 3.55ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+
+[2m[13.24ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.01ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.07ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 7.64ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 2.66ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 0.52ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 2.20ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+ GET /login?next=%2Fmaintenance 200 in 304ms (next.js: 223ms, proxy.ts: 5ms, application-code: 76ms)
+ GET /login 200 in 305ms (next.js: 254ms, proxy.ts: 5ms, application-code: 46ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 308ms (next.js: 59ms, proxy.ts: 4ms, application-code: 244ms)
+ GET /login?next=%2Fmaintenance 200 in 44ms (next.js: 3ms, proxy.ts: 5ms, application-code: 36ms)
+
+[2m[10.95ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.05ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 7.30ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 1.46ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 0.46ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 1.55ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+ GET /login 200 in 261ms (next.js: 54ms, proxy.ts: 4ms, application-code: 203ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 284ms (next.js: 3ms, proxy.ts: 195ms, application-code: 87ms)
+ GET /login?next=%2Fmaintenance 200 in 93ms (next.js: 4ms, proxy.ts: 33ms, application-code: 56ms)
+ GET /login?next=%2Fmaintenance 200 in 41ms (next.js: 4ms, proxy.ts: 5ms, application-code: 32ms)
+
+[2m[10.17ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.01ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.05ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 6.01ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 1.37ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 0.52ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 2.10ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+
+[2m[9.77ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[0.01ms][22m  [2m ↳ [22mQuick bail check
+[2m[0.05ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[5.54ms][22m  [2m ↳ [22mScan for candidates
+[2m[1.72ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[0.55ms][22m  [2m ↳ [22mBuild utilities
+[2m[1.79ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+ GET /login?next=%2Fmaintenance 200 in 209ms (next.js: 6ms, proxy.ts: 8ms, application-code: 195ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 218ms (next.js: 24ms, proxy.ts: 10ms, application-code: 183ms)
+ GET /login 200 in 211ms (next.js: 5ms, proxy.ts: 47ms, application-code: 159ms)
+ GET /login?next=%2Fmaintenance 200 in 180ms (next.js: 8ms, proxy.ts: 31ms, application-code: 141ms)
+ GET /login 200 in 104ms (next.js: 5ms, proxy.ts: 10ms, application-code: 89ms)
+ GET /login?next=%2Fmaintenance 200 in 105ms (next.js: 41ms, proxy.ts: 10ms, application-code: 54ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 108ms (next.js: 25ms, proxy.ts: 10ms, application-code: 73ms)
+ GET /login?next=%2Fmaintenance 200 in 45ms (next.js: 4ms, proxy.ts: 7ms, application-code: 34ms)
+
+[2m[15.99ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.01ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.05ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 8.45ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 1.28ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 3.57ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 2.49ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+ GET /login?next=%2Fmaintenance 200 in 91ms (next.js: 3ms, proxy.ts: 4ms, application-code: 84ms)
+ GET /login 200 in 92ms (next.js: 4ms, proxy.ts: 23ms, application-code: 65ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 76ms (next.js: 5ms, proxy.ts: 25ms, application-code: 47ms)
+ GET /login?next=%2Fmaintenance 200 in 55ms (next.js: 3ms, proxy.ts: 23ms, application-code: 29ms)
+
+[2m[13.64ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.05ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 8.19ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 1.52ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 1.72ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 2.04ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+
+[2m[10.76ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.01ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.06ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 6.91ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 0.94ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 0.45ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 2.27ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+ GET /login 200 in 273ms (next.js: 7ms, proxy.ts: 8ms, application-code: 258ms)
+ GET /login?next=%2Fmaintenance 200 in 273ms (next.js: 5ms, proxy.ts: 30ms, application-code: 238ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 265ms (next.js: 25ms, proxy.ts: 8ms, application-code: 232ms)
+ GET /login?next=%2Fmaintenance 200 in 203ms (next.js: 11ms, proxy.ts: 15ms, application-code: 177ms)
+ GET /login 200 in 99ms (next.js: 5ms, proxy.ts: 8ms, application-code: 86ms)
+ GET /login?next=%2Fmaintenance 200 in 100ms (next.js: 23ms, proxy.ts: 8ms, application-code: 69ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 106ms (next.js: 39ms, proxy.ts: 8ms, application-code: 59ms)
+ GET /login?next=%2Fmaintenance 200 in 52ms (next.js: 2ms, proxy.ts: 7ms, application-code: 43ms)
+
+[2m[10.67ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.04ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 5.79ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 1.44ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 2.00ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 1.26ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+
+[2m[10.12ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.01ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.06ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 6.61ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 1.53ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 0.39ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 1.41ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+ GET /login 200 in 172ms (next.js: 4ms, proxy.ts: 5ms, application-code: 164ms)
+ GET /login?next=%2Fmaintenance 200 in 180ms (next.js: 24ms, proxy.ts: 5ms, application-code: 150ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 185ms (next.js: 9ms, proxy.ts: 58ms, application-code: 119ms)
+ GET /login?next=%2Fmaintenance 200 in 131ms (next.js: 5ms, proxy.ts: 33ms, application-code: 92ms)
+ GET /login?next=%2Fmaintenance 200 in 158ms (next.js: 10ms, proxy.ts: 10ms, application-code: 139ms)
+ GET /login 200 in 159ms (next.js: 38ms, proxy.ts: 10ms, application-code: 112ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 161ms (next.js: 58ms, proxy.ts: 10ms, application-code: 93ms)
+ GET /login?next=%2Fmaintenance 200 in 56ms (next.js: 3ms, proxy.ts: 8ms, application-code: 45ms)
+
+[2m[10.84ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.12ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 7.24ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 1.71ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 0.38ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 1.24ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+
+[2m[12.22ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.06ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 6.97ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 0.99ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 0.59ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 3.48ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+ GET /login?next=%2Fmaintenance 200 in 282ms (next.js: 20ms, proxy.ts: 6ms, application-code: 255ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 289ms (next.js: 4ms, proxy.ts: 6ms, application-code: 279ms)
+ GET /login 200 in 287ms (next.js: 3ms, proxy.ts: 39ms, application-code: 244ms)
+ GET /login?next=%2Fmaintenance 200 in 246ms (next.js: 59ms, proxy.ts: 9ms, application-code: 177ms)
+ GET /login 200 in 157ms (next.js: 6ms, proxy.ts: 11ms, application-code: 140ms)
+ GET /login?next=%2Fmaintenance 200 in 158ms (next.js: 27ms, proxy.ts: 11ms, application-code: 120ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 162ms (next.js: 49ms, proxy.ts: 11ms, application-code: 102ms)
+ GET /login?next=%2Fmaintenance 200 in 92ms (next.js: 3ms, proxy.ts: 32ms, application-code: 57ms)
+
+[2m[10.90ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.04ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 6.56ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 1.78ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 0.42ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 1.87ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+
+[2m[9.04ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[0.05ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[6.04ms][22m  [2m ↳ [22mScan for candidates
+[2m[1.01ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[0.39ms][22m  [2m ↳ [22mBuild utilities
+[2m[1.46ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+ GET /login 200 in 204ms (next.js: 4ms, proxy.ts: 8ms, application-code: 192ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 209ms (next.js: 5ms, proxy.ts: 25ms, application-code: 179ms)
+ GET /login?next=%2Fmaintenance 200 in 208ms (next.js: 20ms, proxy.ts: 26ms, application-code: 162ms)
+ GET /login?next=%2Fmaintenance 200 in 157ms (next.js: 10ms, proxy.ts: 13ms, application-code: 133ms)
+ GET /login 200 in 96ms (next.js: 20ms, proxy.ts: 5ms, application-code: 72ms)
+ GET /login?next=%2Fmaintenance 200 in 97ms (next.js: 2ms, proxy.ts: 5ms, application-code: 90ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 100ms (next.js: 38ms, proxy.ts: 5ms, application-code: 57ms)
+ GET /login?next=%2Fmaintenance 200 in 42ms (next.js: 4ms, proxy.ts: 6ms, application-code: 32ms)
+
+[2m[10.97ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.05ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 7.89ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 1.05ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 0.44ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 1.45ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+ GET /login?next=%2Fmaintenance 200 in 109ms (next.js: 4ms, proxy.ts: 6ms, application-code: 99ms)
+ GET /login 200 in 110ms (next.js: 23ms, proxy.ts: 7ms, application-code: 80ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 113ms (next.js: 23ms, proxy.ts: 26ms, application-code: 65ms)
+ GET /login?next=%2Fmaintenance 200 in 51ms (next.js: 2ms, proxy.ts: 14ms, application-code: 34ms)
+
+[2m[12.95ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.04ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 8.81ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 1.87ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 0.45ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 1.65ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+
+[2m[9.07ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[0.07ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[4.65ms][22m  [2m ↳ [22mScan for candidates
+[2m[1.47ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[0.43ms][22m  [2m ↳ [22mBuild utilities
+[2m[2.36ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 250ms (next.js: 5ms, proxy.ts: 7ms, application-code: 238ms)
+ GET /login?next=%2Fmaintenance 200 in 245ms (next.js: 7ms, proxy.ts: 60ms, application-code: 179ms)
+ GET /login 200 in 250ms (next.js: 31ms, proxy.ts: 61ms, application-code: 157ms)
+ GET /login?next=%2Fmaintenance 200 in 144ms (next.js: 6ms, proxy.ts: 16ms, application-code: 123ms)
+ GET /login?next=%2Fmaintenance 200 in 97ms (next.js: 36ms, proxy.ts: 7ms, application-code: 55ms)
+ GET /login 200 in 99ms (next.js: 4ms, proxy.ts: 7ms, application-code: 88ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 102ms (next.js: 20ms, proxy.ts: 7ms, application-code: 74ms)
+ GET /login?next=%2Fmaintenance 200 in 45ms (next.js: 4ms, proxy.ts: 5ms, application-code: 35ms)
+
+[2m[11.29ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.01ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.04ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 7.79ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 1.40ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 0.39ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 1.55ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+
+[2m[8.31ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[0.04ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[5.16ms][22m  [2m ↳ [22mScan for candidates
+[2m[1.31ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[0.40ms][22m  [2m ↳ [22mBuild utilities
+[2m[1.30ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+ GET /login?next=%2Fmaintenance 200 in 180ms (next.js: 4ms, proxy.ts: 7ms, application-code: 169ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 185ms (next.js: 5ms, proxy.ts: 23ms, application-code: 158ms)
+ GET /login 200 in 183ms (next.js: 20ms, proxy.ts: 23ms, application-code: 140ms)
+ GET /login?next=%2Fmaintenance 200 in 163ms (next.js: 8ms, proxy.ts: 25ms, application-code: 131ms)
+ GET /login?next=%2Fmaintenance 200 in 97ms (next.js: 3ms, proxy.ts: 8ms, application-code: 86ms)
+ GET /login 200 in 98ms (next.js: 21ms, proxy.ts: 8ms, application-code: 70ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 102ms (next.js: 37ms, proxy.ts: 8ms, application-code: 58ms)
+ GET /login?next=%2Fmaintenance 200 in 42ms (next.js: 3ms, proxy.ts: 6ms, application-code: 32ms)
+
+[2m[33.02ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.04ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 6.68ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 2.44ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[13.99ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 5.79ms][22m  [2m ↳ [22mTransform Tailwind CSS AST into PostCSS AST
+[2m[ 3.94ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+
+[2m[10.89ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.04ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 6.29ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 1.43ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 0.46ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 2.58ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+ GET /login?next=%2Fmaintenance 200 in 183ms (next.js: 25ms, proxy.ts: 7ms, application-code: 150ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 190ms (next.js: 5ms, proxy.ts: 7ms, application-code: 178ms)
+ GET /login 200 in 187ms (next.js: 4ms, proxy.ts: 49ms, application-code: 134ms)
+ GET /login?next=%2Fmaintenance 200 in 155ms (next.js: 6ms, proxy.ts: 24ms, application-code: 124ms)
+ GET /login?next=%2Fmaintenance 200 in 90ms (next.js: 3ms, proxy.ts: 5ms, application-code: 81ms)
+ GET /login 200 in 91ms (next.js: 37ms, proxy.ts: 5ms, application-code: 48ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 95ms (next.js: 22ms, proxy.ts: 5ms, application-code: 67ms)
+ GET /login?next=%2Fmaintenance 200 in 40ms (next.js: 3ms, proxy.ts: 6ms, application-code: 32ms)
+
+[2m[26.05ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.01ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.04ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 7.65ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 1.80ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[10.05ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 4.71ms][22m  [2m ↳ [22mTransform Tailwind CSS AST into PostCSS AST
+[2m[ 1.67ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+
+[2m[9.99ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[0.01ms][22m  [2m ↳ [22mQuick bail check
+[2m[0.06ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[6.01ms][22m  [2m ↳ [22mScan for candidates
+[2m[1.48ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[0.39ms][22m  [2m ↳ [22mBuild utilities
+[2m[1.95ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 178ms (next.js: 4ms, proxy.ts: 6ms, application-code: 168ms)
+ GET /login 200 in 174ms (next.js: 4ms, proxy.ts: 21ms, application-code: 149ms)
+ GET /login?next=%2Fmaintenance 200 in 178ms (next.js: 18ms, proxy.ts: 22ms, application-code: 138ms)
+ GET /login?next=%2Fmaintenance 200 in 133ms (next.js: 9ms, proxy.ts: 11ms, application-code: 113ms)
+ GET /login 200 in 144ms (next.js: 47ms, proxy.ts: 9ms, application-code: 88ms)
+ GET /login?next=%2Fmaintenance 200 in 145ms (next.js: 8ms, proxy.ts: 9ms, application-code: 129ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 148ms (next.js: 26ms, proxy.ts: 9ms, application-code: 112ms)
+ GET /login?next=%2Fmaintenance 200 in 66ms (next.js: 2ms, proxy.ts: 7ms, application-code: 57ms)
+
+[2m[13.45ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.05ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 7.75ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 1.45ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 2.04ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 2.05ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+
+[2m[10.02ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.04ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 5.63ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 1.56ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 0.48ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 2.22ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+ GET /login 200 in 160ms (next.js: 3ms, proxy.ts: 6ms, application-code: 151ms)
+ GET /login?next=%2Fmaintenance 200 in 161ms (next.js: 4ms, proxy.ts: 22ms, application-code: 136ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 150ms (next.js: 3ms, proxy.ts: 24ms, application-code: 123ms)
+ GET /login?next=%2Fmaintenance 200 in 116ms (next.js: 8ms, proxy.ts: 9ms, application-code: 99ms)
+ GET /login 200 in 100ms (next.js: 3ms, proxy.ts: 7ms, application-code: 89ms)
+ GET /login?next=%2Fmaintenance 200 in 101ms (next.js: 36ms, proxy.ts: 7ms, application-code: 57ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 104ms (next.js: 20ms, proxy.ts: 7ms, application-code: 77ms)
+ GET /login?next=%2Fmaintenance 200 in 47ms (next.js: 3ms, proxy.ts: 6ms, application-code: 38ms)
+
+[2m[11.77ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.04ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 7.04ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 1.86ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 0.40ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 2.33ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+
+[2m[10.18ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.04ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 6.04ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 1.46ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 0.42ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 2.07ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+ GET /login?next=%2Fmaintenance 200 in 214ms (next.js: 5ms, proxy.ts: 9ms, application-code: 199ms)
+ GET /login 200 in 209ms (next.js: 27ms, proxy.ts: 29ms, application-code: 154ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 213ms (next.js: 5ms, proxy.ts: 28ms, application-code: 180ms)
+ GET /login?next=%2Fmaintenance 200 in 170ms (next.js: 9ms, proxy.ts: 63ms, application-code: 98ms)
+ GET /login 200 in 106ms (next.js: 19ms, proxy.ts: 7ms, application-code: 80ms)
+ GET /login?next=%2Fmaintenance 200 in 107ms (next.js: 4ms, proxy.ts: 7ms, application-code: 96ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 110ms (next.js: 35ms, proxy.ts: 7ms, application-code: 68ms)
+ GET /login?next=%2Fmaintenance 200 in 46ms (next.js: 3ms, proxy.ts: 6ms, application-code: 37ms)
+
+[2m[10.35ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.04ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 6.72ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 1.17ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 0.40ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 1.91ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+
+[2m[9.77ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[0.05ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[5.11ms][22m  [2m ↳ [22mScan for candidates
+[2m[1.21ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[0.40ms][22m  [2m ↳ [22mBuild utilities
+[2m[2.90ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+ GET /login 200 in 184ms (next.js: 5ms, proxy.ts: 6ms, application-code: 173ms)
+ GET /login?next=%2Fmaintenance 200 in 185ms (next.js: 20ms, proxy.ts: 7ms, application-code: 158ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 195ms (next.js: 8ms, proxy.ts: 39ms, application-code: 148ms)
+ GET /login?next=%2Fmaintenance 200 in 159ms (next.js: 8ms, proxy.ts: 29ms, application-code: 123ms)
+ GET /login 200 in 98ms (next.js: 5ms, proxy.ts: 8ms, application-code: 86ms)
+ GET /login?next=%2Fmaintenance 200 in 99ms (next.js: 25ms, proxy.ts: 8ms, application-code: 67ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 103ms (next.js: 41ms, proxy.ts: 8ms, application-code: 54ms)
+ GET /login?next=%2Fmaintenance 200 in 46ms (next.js: 2ms, proxy.ts: 7ms, application-code: 37ms)
+
+[2m[14.16ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.04ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 8.17ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 1.73ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 2.15ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 1.96ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+
+[2m[10.75ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.05ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 6.30ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 1.62ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 0.41ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 2.26ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+ GET /login 200 in 177ms (next.js: 4ms, proxy.ts: 8ms, application-code: 165ms)
+ GET /login?next=%2Fmaintenance 200 in 174ms (next.js: 4ms, proxy.ts: 21ms, application-code: 149ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 169ms (next.js: 20ms, proxy.ts: 6ms, application-code: 143ms)
+ GET /login?next=%2Fmaintenance 200 in 132ms (next.js: 9ms, proxy.ts: 10ms, application-code: 112ms)
+ GET /login?next=%2Fmaintenance 200 in 95ms (next.js: 5ms, proxy.ts: 7ms, application-code: 83ms)
+ GET /login 200 in 97ms (next.js: 25ms, proxy.ts: 7ms, application-code: 64ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 99ms (next.js: 41ms, proxy.ts: 7ms, application-code: 51ms)
+ GET /login?next=%2Fmaintenance 200 in 45ms (next.js: 3ms, proxy.ts: 6ms, application-code: 36ms)
+
+[2m[13.27ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.01ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.04ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 7.31ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 2.08ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 0.65ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 3.01ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+
+[2m[11.48ms][22m [@tailwindcss/postcss] src/app/globals.css
+[2m[ 0.00ms][22m  [2m ↳ [22mQuick bail check
+[2m[ 0.04ms][22m  [2m ↳ [22mRegister full rebuild paths
+[2m[ 6.25ms][22m  [2m ↳ [22mScan for candidates
+[2m[ 2.01ms][22m  [2m ↳ [22mRegister dependency messages
+[2m[ 0.39ms][22m  [2m ↳ [22mBuild utilities
+[2m[ 2.70ms][22m  [2m ↳ [22mUpdate PostCSS AST
+
+ GET /login 200 in 182ms (next.js: 5ms, proxy.ts: 7ms, application-code: 170ms)
+ GET /login?next=%2Fmaintenance 200 in 184ms (next.js: 26ms, proxy.ts: 8ms, application-code: 150ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 186ms (next.js: 22ms, proxy.ts: 29ms, application-code: 135ms)
+ GET /login?next=%2Fmaintenance 200 in 123ms (next.js: 7ms, proxy.ts: 9ms, application-code: 108ms)
+ GET /login?next=%2Fmaintenance 200 in 95ms (next.js: 5ms, proxy.ts: 8ms, application-code: 82ms)
+ GET /login 200 in 96ms (next.js: 41ms, proxy.ts: 8ms, application-code: 48ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 99ms (next.js: 24ms, proxy.ts: 8ms, application-code: 68ms)
+ GET /login?next=%2Fmaintenance 200 in 43ms (next.js: 3ms, proxy.ts: 6ms, application-code: 34ms)
+ GET /login 200 in 2.3s (next.js: 27ms, proxy.ts: 391ms, application-code: 1894ms)
+ GET /login?next=%2Fmaintenance 200 in 1950ms (next.js: 1453ms, proxy.ts: 271ms, application-code: 226ms)
+ GET /login?next=%2Fmeetings%2Fe73c4e22-76fa-4561-8569-64d7ec89b3dd 200 in 1920ms (next.js: 80ms, proxy.ts: 1689ms, application-code: 152ms)
+ GET / 200 in 2.7s (next.js: 1999ms, proxy.ts: 91ms, application-code: 582ms)
+ GET / 200 in 83ms (next.js: 3ms, proxy.ts: 24ms, application-code: 55ms)

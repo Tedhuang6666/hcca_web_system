@@ -5,9 +5,9 @@ import uuid
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from itsdangerous import BadData
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,8 +20,16 @@ from api.email.renderer import make_unsubscribe_token, parse_unsubscribe_token
 from api.email.sender import send_branded_email
 from api.models.notification import Notification
 from api.models.user import User
+from api.models.web_push import WebPushSubscription
 from api.services.mail import enqueue_email
-from api.services.notification_pref import TYPE_LABELS, normalize_preferences
+from api.services.notification_pref import (
+    DIGEST_FREQUENCIES,
+    TYPE_LABELS,
+    get_digest_frequency,
+    normalize_preferences,
+    set_digest_frequency,
+)
+from api.services.web_push import send_to_user, web_push_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +92,7 @@ class ChannelPref(BaseModel):
     inapp: bool = True
     email: bool = False
     line: bool = False
+    discord: bool = False
 
 
 class NotificationPreferencesOut(BaseModel):
@@ -106,6 +115,33 @@ class NotificationPreferencesIn(BaseModel):
 
 class UnsubscribeRequest(BaseModel):
     token: str
+
+
+class WebPushKeys(BaseModel):
+    p256dh: str
+    auth: str
+
+
+class WebPushSubscriptionIn(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    endpoint: str
+    push_keys: WebPushKeys = Field(alias="keys")
+    device_label: str | None = None
+
+
+class WebPushSubscriptionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    endpoint: str
+    device_label: str | None
+    is_active: bool
+
+
+class WebPushConfigOut(BaseModel):
+    enabled: bool
+    public_key: str
 
 
 # ── 站內通知收件匣 ────────────────────────────────────────────────────────────
@@ -214,10 +250,132 @@ async def update_preferences(
             "inapp": bool(channel["inapp"]),
             "email": bool(channel["email"]),
             "line": bool(channel["line"]),
+            "discord": bool(channel["discord"]),
         }
     current_user.notification_preferences = merged
     await db.flush()
     return NotificationPreferencesOut(**merged)
+
+
+class DigestPreferenceOut(BaseModel):
+    frequency: str = Field(..., description="off / daily / weekly")
+
+
+class DigestPreferenceIn(BaseModel):
+    frequency: str = Field(..., description="off / daily / weekly")
+
+
+@router.get(
+    "/preferences/digest",
+    response_model=DigestPreferenceOut,
+    summary="取得我的 Email 摘要頻率",
+)
+async def get_digest_preference(current_user: CurrentUser) -> DigestPreferenceOut:
+    return DigestPreferenceOut(
+        frequency=get_digest_frequency(current_user.notification_preferences)
+    )
+
+
+@router.put(
+    "/preferences/digest",
+    response_model=DigestPreferenceOut,
+    summary="更新我的 Email 摘要頻率",
+)
+async def update_digest_preference(
+    body: DigestPreferenceIn,
+    db: DbDep,
+    current_user: CurrentUser,
+) -> DigestPreferenceOut:
+    if body.frequency not in DIGEST_FREQUENCIES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"frequency 須為 {', '.join(DIGEST_FREQUENCIES)}",
+        )
+    current_user.notification_preferences = set_digest_frequency(
+        current_user.notification_preferences, body.frequency
+    )
+    await db.flush()
+    return DigestPreferenceOut(frequency=body.frequency)
+
+
+@router.get("/web-push/config", response_model=WebPushConfigOut, summary="取得 Web Push 設定")
+async def web_push_config() -> WebPushConfigOut:
+    return WebPushConfigOut(enabled=web_push_enabled(), public_key=settings.VAPID_PUBLIC_KEY)
+
+
+@router.post(
+    "/web-push/subscriptions",
+    response_model=WebPushSubscriptionOut,
+    summary="登錄瀏覽器 Web Push subscription",
+)
+async def save_web_push_subscription(
+    body: WebPushSubscriptionIn,
+    request: Request,
+    db: DbDep,
+    current_user: CurrentUser,
+) -> WebPushSubscriptionOut:
+    existing = (
+        await db.execute(
+            select(WebPushSubscription)
+            .where(WebPushSubscription.user_id == current_user.id)
+            .where(WebPushSubscription.endpoint == body.endpoint)
+        )
+    ).scalar_one_or_none()
+    if existing is None:
+        existing = WebPushSubscription(user_id=current_user.id, endpoint=body.endpoint)
+        db.add(existing)
+    existing.p256dh = body.push_keys.p256dh
+    existing.auth = body.push_keys.auth
+    existing.device_label = body.device_label
+    existing.user_agent = request.headers.get("user-agent")
+    existing.is_active = True
+    await db.flush()
+    return WebPushSubscriptionOut.model_validate(existing)
+
+
+@router.get(
+    "/web-push/subscriptions",
+    response_model=list[WebPushSubscriptionOut],
+    summary="列出我的 Web Push subscriptions",
+)
+async def list_web_push_subscriptions(
+    db: DbDep, current_user: CurrentUser
+) -> list[WebPushSubscriptionOut]:
+    rows = (
+        await db.execute(
+            select(WebPushSubscription)
+            .where(WebPushSubscription.user_id == current_user.id)
+            .order_by(WebPushSubscription.created_at.desc())
+        )
+    ).scalars()
+    return [WebPushSubscriptionOut.model_validate(row) for row in rows]
+
+
+@router.delete("/web-push/subscriptions/{subscription_id}", summary="停用 Web Push subscription")
+async def delete_web_push_subscription(
+    subscription_id: uuid.UUID, db: DbDep, current_user: CurrentUser
+) -> None:
+    sub = (
+        await db.execute(
+            select(WebPushSubscription)
+            .where(WebPushSubscription.id == subscription_id)
+            .where(WebPushSubscription.user_id == current_user.id)
+        )
+    ).scalar_one_or_none()
+    if sub is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="subscription 不存在")
+    sub.is_active = False
+    await db.flush()
+
+
+@router.post("/web-push/test", summary="測試推播至目前使用者")
+async def test_web_push(db: DbDep, current_user: CurrentUser) -> dict[str, int]:
+    sent = await send_to_user(
+        db,
+        current_user.id,
+        {"title": "HCCA 推播測試", "body": "你的瀏覽器通知已成功啟用。", "url": "/notifications"},
+    )
+    return {"sent": sent}
 
 
 @router.post("/unsubscribe", summary="透過 Email 退訂連結關閉某類 Email 通知（免登入）")
@@ -365,3 +523,27 @@ async def create_notification(
                 )
         except Exception:
             logger.warning("通知 LINE 排程失敗 user=%s type=%s", user_id, type, exc_info=True)
+    if channel.get("discord"):
+        try:
+            from api.models.discord_account import DiscordAccountLink
+            from api.services.outbox import emit
+
+            discord_user_id = await db.scalar(
+                select(DiscordAccountLink.discord_user_id).where(
+                    DiscordAccountLink.user_id == user_id,
+                    DiscordAccountLink.is_active.is_(True),
+                )
+            )
+            if discord_user_id:
+                await emit(
+                    db,
+                    event_type="discord.push",
+                    payload={
+                        "discord_user_id": discord_user_id,
+                        "title": title,
+                        "body": body,
+                        "link": link,
+                    },
+                )
+        except Exception:
+            logger.warning("通知 Discord 排程失敗 user=%s type=%s", user_id, type, exc_info=True)

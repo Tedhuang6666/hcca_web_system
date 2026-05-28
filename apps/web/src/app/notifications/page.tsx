@@ -5,6 +5,8 @@ import { toast } from "sonner";
 import { notificationsApi, ApiError } from "@/lib/api";
 import type { NotificationItem } from "@/lib/api";
 import { useWS } from "@/hooks/useWS";
+import { ListPageSkeleton } from "@/components/ui/Skeleton";
+import SmartEmptyState from "@/components/ui/SmartEmptyState";
 
 // ── 通知類型設定 ──────────────────────────────────────────────────────────────
 
@@ -300,13 +302,7 @@ export default function NotificationsPage() {
 
       {/* 通知列表 */}
       {loading ? (
-        <div className="flex flex-col items-center py-20 gap-3" style={{ color: "var(--text-muted)" }}
-          role="status" aria-live="polite" aria-label="載入中">
-          <div className="w-7 h-7 rounded-full border-2 border-t-transparent animate-spin"
-            style={{ borderColor: "var(--border-strong)", borderTopColor: "var(--primary)" }}
-            aria-hidden="true" />
-          <p className="text-sm">載入中…</p>
-        </div>
+        <ListPageSkeleton rows={5} showHeader={false} showFilters={false} />
       ) : loadError ? (
         <div className="flex flex-col items-center py-20 gap-4" style={{ color: "var(--text-muted)" }}
           role="alert" aria-live="assertive">
@@ -325,17 +321,15 @@ export default function NotificationsPage() {
           </button>
         </div>
       ) : displayed.length === 0 ? (
-        <div className="flex flex-col items-center py-20 gap-3" style={{ color: "var(--text-muted)" }}
-          aria-live="polite">
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            strokeWidth="1.5" className="opacity-30" aria-hidden="true">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-          </svg>
-          <p className="text-sm">
-            {unreadOnly ? "目前沒有未讀通知" : "還沒有任何通知"}
-          </p>
-        </div>
+        <SmartEmptyState
+          reason={unreadOnly || dateFrom || dateTo ? "filtered" : "none"}
+          subject="通知"
+          message={unreadOnly ? "所有通知已讀完畢，做得好！" : undefined}
+          onClearFilters={() => {
+            setDateFrom("");
+            setDateTo("");
+          }}
+        />
       ) : (
         <ol className="space-y-2 list-none" aria-label="通知列表" aria-live="polite">
           {displayed.map(n => (

@@ -8,6 +8,7 @@ from enum import StrEnum
 class PermissionCode(StrEnum):
     ADMIN_ALL = "admin:all"
     ADMIN_USERS = "admin:users"
+    SYSTEM_MAINTENANCE_BYPASS = "system:maintenance_bypass"
     AUDIT_VIEW_ORG = "audit:view_org"
     AUDIT_VIEW_ALL = "audit:view_all"
     AUDIT_VIEW = "audit:view"
@@ -104,6 +105,9 @@ class PermissionCode(StrEnum):
     EMAIL_SEND_BULK = "email:send_bulk"
     EMAIL_VIEW_LOGS = "email:view_logs"
 
+    EXAM_MANAGE = "exam:manage"
+    EXAM_DOWNLOAD = "exam:download"
+
     MEETING_CREATE = "meeting:create"
     MEETING_MANAGE = "meeting:manage"
     MEETING_CHAIR = "meeting:chair"
@@ -127,6 +131,12 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "code": PermissionCode.ADMIN_USERS,
         "label": "使用者管理",
         "desc": "建立/修改使用者帳號、指派職位",
+    },
+    {
+        "group": "系統管理",
+        "code": PermissionCode.SYSTEM_MAINTENANCE_BYPASS,
+        "label": "忽略維護模式",
+        "desc": "維護模式啟用時仍可進入網站與使用非公開功能",
     },
     {
         "group": "系統管理",
@@ -613,6 +623,18 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "code": PermissionCode.EMAIL_VIEW_LOGS,
         "label": "查看寄信紀錄",
         "desc": "查看所有寄信稽核紀錄與實際收件清單",
+    },
+    {
+        "group": "段考題庫",
+        "code": PermissionCode.EXAM_MANAGE,
+        "label": "管理段考題庫",
+        "desc": "上傳、編輯、上下架段考題 PDF，並查看下載追蹤紀錄",
+    },
+    {
+        "group": "段考題庫",
+        "code": PermissionCode.EXAM_DOWNLOAD,
+        "label": "下載段考題",
+        "desc": "下載段考題 PDF；校內成員亦可下載已上架題目",
     },
     {
         "group": "議事系統",

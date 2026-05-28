@@ -15,6 +15,7 @@ from typing import Any
 
 from redis.exceptions import RedisError
 
+from api.core.defense import is_ip_allowed, is_ip_blocked
 from api.core.security import redis_client
 
 logger = logging.getLogger(__name__)
@@ -28,14 +29,18 @@ _cache_lock = asyncio.Lock()
 
 async def is_blocked(ip: str) -> bool:
     """檢查 IP 是否在黑名單；用本地快取攤平 Redis 壓力。"""
+    if await is_ip_allowed(ip):
+        _cache[ip] = (time.monotonic() + _LOCAL_CACHE_TTL, False)
+        return False
+
     now = time.monotonic()
     cached = _cache.get(ip)
     if cached and cached[0] > now:
         return cached[1]
 
     try:
-        raw = await redis_client.hget(BLOCKLIST_KEY, ip)
-    except RedisError:
+        raw = await asyncio.wait_for(redis_client.hget(BLOCKLIST_KEY, ip), timeout=0.8)
+    except (RedisError, TimeoutError):
         return False  # Redis 異常時不擋（避免誤殺）
 
     blocked = False
@@ -47,10 +52,13 @@ async def is_blocked(ip: str) -> bool:
                 blocked = True
             else:
                 # 過期但仍在 hash 裡 — 順手清掉
-                with contextlib.suppress(RedisError):
-                    await redis_client.hdel(BLOCKLIST_KEY, ip)
+                with contextlib.suppress(RedisError, TimeoutError):
+                    await asyncio.wait_for(redis_client.hdel(BLOCKLIST_KEY, ip), timeout=0.8)
         except (json.JSONDecodeError, TypeError):
             blocked = True  # corrupt 條目視為封鎖，等 admin 清理
+
+    if not blocked:
+        blocked = await is_ip_blocked(ip)
 
     _cache[ip] = (now + _LOCAL_CACHE_TTL, blocked)
     return blocked

@@ -5,6 +5,8 @@ import { toast } from "sonner";
 import { surveysApi, ApiError } from "@/lib/api";
 import type { SurveyListItem, SurveyStatus } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
+import { ListPageSkeleton } from "@/components/ui/Skeleton";
+import SmartEmptyState from "@/components/ui/SmartEmptyState";
 
 const STATUS_CFG: Record<SurveyStatus, { label: string; color: string; bg: string }> = {
   draft:    { label: "草稿",    color: "var(--text-muted)", bg: "var(--bg-elevated)" },
@@ -109,23 +111,16 @@ export default function SurveysPage() {
 
       {/* 問卷列表 */}
       {loading ? (
-        <div className="py-20 text-center" style={{ color: "var(--text-muted)" }}>
-          <div className="w-7 h-7 rounded-full border-2 border-t-transparent animate-spin mx-auto mb-3"
-            style={{ borderColor: "var(--border-strong)", borderTopColor: "var(--primary)" }}
-            role="status" aria-label="載入中" />
-          <p className="text-sm">載入中…</p>
-        </div>
+        <ListPageSkeleton rows={5} showHeader={false} showFilters={false} />
       ) : displayed.length === 0 ? (
-        <div className="py-20 text-center" style={{ color: "var(--text-muted)" }}>
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            strokeWidth="1.5" className="mx-auto mb-3 opacity-40" aria-hidden="true">
-            <path d="M9 11l3 3L22 4" />
-            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-          </svg>
-          <p className="text-sm">
-            {search ? `找不到「${search}」相關問卷` : tab === "open" ? "目前沒有開放填答的問卷" : "尚無問卷"}
-          </p>
-        </div>
+        <SmartEmptyState
+          reason={search ? "filtered" : (can("survey:manage") ? "new" : "none")}
+          subject="問卷"
+          createHref="/surveys/new"
+          createPerm="survey:manage"
+          onClearFilters={() => setSearch("")}
+          message={!search && tab === "open" ? "目前沒有開放填答的問卷" : undefined}
+        />
       ) : (
         <div className="space-y-3">
           {displayed.map(survey => {

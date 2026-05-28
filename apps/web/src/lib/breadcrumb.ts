@@ -54,6 +54,7 @@ const PATH_OVERRIDES: Record<string, string> = {
   "/petitions/admin/types":       "陳情類型",
   "/admin/permissions":           "權限管理",
   "/admin/classes":               "班級管理",
+  "/settings/navigation":         "介面導覽設定",
   "/settings/notifications":      "通知偏好",
   "/settings/security":           "安全設定",
 };

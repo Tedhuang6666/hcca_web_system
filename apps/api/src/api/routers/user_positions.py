@@ -17,6 +17,7 @@ from api.models.user import User
 from api.schemas.org import UserPositionCreate, UserPositionRead, UserPositionUpdate
 from api.services import audit as audit_svc
 from api.services import org as org_svc
+from api.services.discord_bot import enqueue_role_sync
 from api.services.permission import get_user_permission_codes
 
 router = APIRouter(prefix="/user-positions", tags=["任期管理"])
@@ -89,6 +90,7 @@ async def create_user_position(
         summary="新增使用者任期記錄",
     )
     await cache_invalidate(f"perm:{up.user_id}")
+    await enqueue_role_sync(db, up.user_id)
     ups = await org_svc.get_active_positions_by_date(db, up.user_id)
     matched = next((x for x in ups if x.id == up.id), None)
     return UserPositionRead.from_orm_with_details(matched or up)
@@ -137,6 +139,7 @@ async def update_user_position(
         summary="更新使用者任期",
     )
     await cache_invalidate(f"perm:{up.user_id}")
+    await enqueue_role_sync(db, up.user_id)
     return up
 
 
@@ -171,4 +174,5 @@ async def delete_user_position(
         summary="刪除使用者任期記錄",
     )
     await cache_invalidate(f"perm:{up.user_id}")
+    await enqueue_role_sync(db, up.user_id)
     await db.delete(up)

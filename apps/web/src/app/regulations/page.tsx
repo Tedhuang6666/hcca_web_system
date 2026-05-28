@@ -12,6 +12,8 @@ import type {
 } from "@/lib/types";
 import { RegulationCategoryBadge } from "@/components/ui/StatusBadge";
 import Toggle from "@/components/ui/Toggle";
+import { ListPageSkeleton } from "@/components/ui/Skeleton";
+import SmartEmptyState from "@/components/ui/SmartEmptyState";
 import { usePermissions } from "@/hooks/usePermissions";
 
 const CATEGORIES: { key: RegulationCategory | "all"; label: string }[] = [
@@ -19,6 +21,15 @@ const CATEGORIES: { key: RegulationCategory | "all"; label: string }[] = [
   { key: "constitution",       label: "憲章" },
   { key: "ordinance",          label: "條例" },
   { key: "procedure",          label: "辦法" },
+];
+
+const WORKFLOW_FILTERS: { key: RegulationWorkflowStatus | "all"; label: string }[] = [
+  { key: "all", label: "全部狀態" },
+  { key: "under_review", label: "送審中" },
+  { key: "scheduled", label: "排入議程" },
+  { key: "council_approved", label: "待公布" },
+  { key: "draft", label: "草稿" },
+  { key: "published", label: "現行" },
 ];
 
 const WORKFLOW_LABEL: Record<RegulationWorkflowStatus, { label: string; color: string; bg: string }> = {
@@ -97,6 +108,7 @@ export default function RegulationsPage() {
   const [allRegs, setAllRegs] = useState<Array<RegulationListItem | RegulationSearchResult>>([]);
   const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState<RegulationCategory | "all">("all");
+  const [workflow, setWorkflow] = useState<RegulationWorkflowStatus | "all">("all");
   const [search, setSearch] = useState("");
   const [showAll, setShowAll] = useState(false);
   const { can } = usePermissions();
@@ -107,6 +119,7 @@ export default function RegulationsPage() {
     setLoading(true);
     const params: Record<string, string> = {};
     if (category !== "all") params.category = category;
+    if (canManage && workflow !== "all") params.workflow_status = workflow;
     if (!showAll || !canManage) params.active_only = "true";
     const req = search.trim()
       ? regulationsApi.search(search.trim(), params)
@@ -115,7 +128,7 @@ export default function RegulationsPage() {
       .then(setAllRegs)
       .catch((e) => toast.error(e instanceof ApiError ? e.message : "載入失敗"))
       .finally(() => setLoading(false));
-  }, [category, search, showAll, canManage]);
+  }, [category, search, showAll, canManage, workflow]);
 
   const sorted = useMemo(
     () => [...allRegs].sort((a, b) => (b.published_at ?? "").localeCompare(a.published_at ?? "")),
@@ -152,6 +165,15 @@ export default function RegulationsPage() {
               待審案件
             </Link>
           )}
+          <Link href="/regulations/archived" className="btn btn-ghost" title="查看歷史已廢止法規">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+              <rect x="2" y="3" width="20" height="5" rx="1" />
+              <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
+              <line x1="10" y1="12" x2="14" y2="12" />
+            </svg>
+            廢止法規
+          </Link>
           {can("regulation:create") && (
             <Link href="/regulations/new" className="btn btn-primary">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -191,6 +213,26 @@ export default function RegulationsPage() {
             );
           })}
         </div>
+        {canManage && (
+          <div className="flex w-full flex-wrap gap-1.5" role="group" aria-label="法規流程狀態篩選">
+            {WORKFLOW_FILTERS.map(({ key, label }) => {
+              const active = workflow === key;
+              return (
+                <button
+                  key={key}
+                  aria-pressed={active}
+                  onClick={() => setWorkflow(key)}
+                  className="px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap cursor-pointer hover:opacity-80"
+                  style={active
+                    ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
+                    : { color: "var(--text-muted)", border: "1px solid var(--border)", background: "var(--bg-surface)" }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* 統計列 */}
@@ -202,21 +244,19 @@ export default function RegulationsPage() {
 
       {/* 結果 */}
       {loading ? (
-        <div className="py-20 text-center" style={{ color: "var(--text-muted)" }}>
-          <div className="w-7 h-7 rounded-full border-2 border-t-transparent animate-spin mx-auto mb-3"
-            style={{ borderColor: "var(--border-strong)", borderTopColor: "var(--primary)" }}
-            role="status" aria-label="載入中" />
-          <p className="text-sm">載入中…</p>
-        </div>
+        <ListPageSkeleton rows={6} showHeader={false} showFilters={false} />
       ) : sorted.length === 0 ? (
-        <div className="py-20 text-center" style={{ color: "var(--text-muted)" }}>
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            strokeWidth="1.5" className="mx-auto mb-3 opacity-40" aria-hidden="true">
-            <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
-            <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
-          </svg>
-          <p className="text-sm">找不到符合條件的法規</p>
-        </div>
+        <SmartEmptyState
+          reason={search.trim() || category !== "all" || workflow !== "all" ? "filtered" : "new"}
+          subject="法規"
+          createHref="/regulations/new"
+          createPerm="regulation:create"
+          onClearFilters={() => {
+            setSearch("");
+            setCategory("all");
+            setWorkflow("all");
+          }}
+        />
       ) : (
         <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))" }}>
           {sorted.map((reg) => (

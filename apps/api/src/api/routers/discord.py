@@ -1,0 +1,443 @@
+"""Discord 整合路由：OAuth 綁定、短效入口與角色映射管理。"""
+
+from __future__ import annotations
+
+import logging
+import uuid
+from datetime import datetime
+from typing import Annotated
+
+from authlib.integrations.base_client import OAuthError
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import RedirectResponse
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from api.core.config import settings
+from api.core.database import get_db
+from api.core.oauth import discord
+from api.core.permission_codes import PermissionCode
+from api.core.security import create_access_token, create_refresh_token
+from api.dependencies.auth import get_current_active_user
+from api.dependencies.permissions import require_permission
+from api.models.discord_account import (
+    DiscordAccountLink,
+    DiscordGuildConfig,
+    DiscordRoleMapping,
+    DiscordRoleMappingKind,
+)
+from api.models.user import User
+from api.services import audit as audit_svc
+from api.services.discord_bot import (
+    consume_open_token,
+    enqueue_role_sync,
+    fetch_bot_guilds,
+    fetch_guild_channels,
+    fetch_guild_roles,
+    get_user_link,
+    is_configured,
+    unlink_user,
+    upsert_user_link,
+)
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/discord", tags=["Discord Bot"])
+
+DbDep = Annotated[AsyncSession, Depends(get_db)]
+CurrentUser = Annotated[User, Depends(get_current_active_user)]
+
+
+class DiscordBindingOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    linked: bool
+    discord_user_id: str | None = None
+    username: str | None = None
+    global_name: str | None = None
+    linked_at: datetime | None = None
+
+
+class DiscordGuildConfigIn(BaseModel):
+    guild_id: str = Field(..., min_length=1, max_length=32)
+    name: str | None = Field(None, max_length=120)
+    office_channel_id: str | None = Field(None, max_length=32)
+    security_alert_channel_id: str | None = Field(None, max_length=32)
+    petition_entry_channel_id: str | None = Field(None, max_length=32)
+    announcement_channel_id: str | None = Field(None, max_length=32)
+    admin_role_id: str | None = Field(None, max_length=32)
+    is_active: bool = True
+
+
+class DiscordGuildConfigOut(DiscordGuildConfigIn):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
+
+
+class DiscordRoleMappingIn(BaseModel):
+    guild_id: str = Field(..., min_length=1, max_length=32)
+    role_id: str = Field(..., min_length=1, max_length=32)
+    mapping_kind: DiscordRoleMappingKind
+    org_id: uuid.UUID | None = None
+    position_id: uuid.UUID | None = None
+    is_active: bool = True
+
+    @model_validator(mode="after")
+    def target_must_match_kind(self) -> DiscordRoleMappingIn:
+        if self.mapping_kind == DiscordRoleMappingKind.ORG and self.org_id is None:
+            raise ValueError("組織身分組映射必須提供 org_id")
+        if self.mapping_kind == DiscordRoleMappingKind.POSITION and self.position_id is None:
+            raise ValueError("職位身分組映射必須提供 position_id")
+        return self
+
+
+class DiscordRoleMappingOut(DiscordRoleMappingIn):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
+
+
+class DiscordGuildOptionOut(BaseModel):
+    id: str
+    name: str
+    icon: str | None = None
+
+
+class DiscordChannelOptionOut(BaseModel):
+    id: str
+    name: str
+    type: int
+    parent_id: str | None = None
+
+
+class DiscordRoleOptionOut(BaseModel):
+    id: str
+    name: str
+    color: int = 0
+    position: int = 0
+    managed: bool = False
+
+
+def _safe_next_path(value: str | None) -> str:
+    if not value or not value.startswith("/") or value.startswith("//"):
+        return "/profile"
+    return value
+
+
+@router.get("/login", summary="發起 Discord OAuth 綁定")
+async def discord_login(request: Request, current_user: CurrentUser) -> RedirectResponse:
+    if not is_configured():
+        raise HTTPException(status_code=503, detail="Discord OAuth 尚未設定")
+    request.session["discord_link_user_id"] = str(current_user.id)
+    request.session["discord_link_next"] = _safe_next_path(request.query_params.get("next"))
+    redirect_uri = settings.DISCORD_REDIRECT_URI
+    return await discord.authorize_redirect(request, redirect_uri)
+
+
+@router.get("/callback", summary="Discord OAuth Callback")
+async def discord_callback(request: Request, db: DbDep) -> RedirectResponse:
+    frontend = settings.FRONTEND_BASE_URL.rstrip("/")
+    user_id_raw = request.session.get("discord_link_user_id")
+    next_path = _safe_next_path(request.session.get("discord_link_next"))
+    if not user_id_raw:
+        return RedirectResponse(url=f"{frontend}/profile?discord=missing-session")
+    try:
+        token = await discord.authorize_access_token(request)
+        user_info = (await discord.get("users/@me", token=token)).json()
+    except OAuthError:
+        logger.warning("Discord OAuth failed", exc_info=True)
+        return RedirectResponse(url=f"{frontend}/profile?discord=oauth-failed")
+    user = await db.get(User, uuid.UUID(str(user_id_raw)))
+    if user is None or not user.is_active:
+        return RedirectResponse(url=f"{frontend}/profile?discord=user-not-found")
+    link = await upsert_user_link(
+        db,
+        user_id=user.id,
+        discord_user_id=str(user_info["id"]),
+        username=user_info.get("username"),
+        global_name=user_info.get("global_name"),
+        avatar_hash=user_info.get("avatar"),
+    )
+    await enqueue_role_sync(db, user.id)
+    await audit_svc.record(
+        db,
+        entity_type="discord_account_link",
+        entity_id=str(link.id),
+        action="discord.link",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        meta={"discord_user_id": link.discord_user_id, "username": link.username},
+        summary="綁定 Discord 帳號",
+    )
+    return RedirectResponse(url=f"{frontend}{next_path}?discord=linked")
+
+
+@router.get("/me", response_model=DiscordBindingOut, summary="取得我的 Discord 綁定狀態")
+async def get_my_discord_binding(db: DbDep, current_user: CurrentUser) -> DiscordBindingOut:
+    link = await get_user_link(db, current_user.id)
+    if link is None:
+        return DiscordBindingOut(linked=False)
+    return DiscordBindingOut(
+        linked=True,
+        discord_user_id=link.discord_user_id,
+        username=link.username,
+        global_name=link.global_name,
+        linked_at=link.linked_at,
+    )
+
+
+@router.delete("/me", status_code=204, summary="解除我的 Discord 綁定")
+async def delete_my_discord_binding(db: DbDep, current_user: CurrentUser) -> None:
+    await unlink_user(db, current_user.id)
+
+
+@router.get("/open", summary="Discord 短效登入並導向指定頁面")
+async def open_from_discord(token: str = Query(...)) -> RedirectResponse:
+    consumed = await consume_open_token(token)
+    if consumed is None:
+        return RedirectResponse(url=f"{settings.FRONTEND_BASE_URL.rstrip('/')}/login")
+    user_id, path = consumed
+    response = RedirectResponse(url=f"{settings.FRONTEND_BASE_URL.rstrip('/')}{path}")
+    response.set_cookie(
+        settings.ACCESS_TOKEN_COOKIE_NAME,
+        create_access_token(subject=str(user_id), extra_claims={"source": "discord"}),
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+        path="/",
+    )
+    response.set_cookie(
+        settings.REFRESH_TOKEN_COOKIE_NAME,
+        create_refresh_token(subject=str(user_id)),
+        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+        path="/",
+    )
+    return response
+
+
+@router.get(
+    "/guild-configs",
+    response_model=list[DiscordGuildConfigOut],
+    dependencies=[Depends(require_permission(PermissionCode.ADMIN_ALL))],
+)
+async def list_guild_configs(db: DbDep) -> list[DiscordGuildConfig]:
+    return list((await db.execute(select(DiscordGuildConfig))).scalars().all())
+
+
+@router.get(
+    "/available-guilds",
+    response_model=list[DiscordGuildOptionOut],
+    dependencies=[Depends(require_permission(PermissionCode.ADMIN_ALL))],
+    summary="列出 Bot 已加入的 Discord 伺服器",
+)
+async def available_guilds() -> list[DiscordGuildOptionOut]:
+    try:
+        guilds = await fetch_bot_guilds()
+    except Exception as exc:
+        logger.warning("Discord guild fetch failed", exc_info=True)
+        raise HTTPException(status_code=502, detail="無法從 Discord 取得伺服器清單") from exc
+    return [
+        DiscordGuildOptionOut(
+            id=str(item["id"]), name=str(item.get("name") or item["id"]), icon=item.get("icon")
+        )
+        for item in guilds
+    ]
+
+
+@router.get(
+    "/guilds/{guild_id}/channels",
+    response_model=list[DiscordChannelOptionOut],
+    dependencies=[Depends(require_permission(PermissionCode.ADMIN_ALL))],
+    summary="列出 Discord 伺服器頻道",
+)
+async def guild_channels(guild_id: str) -> list[DiscordChannelOptionOut]:
+    try:
+        channels = await fetch_guild_channels(guild_id)
+    except Exception as exc:
+        logger.warning("Discord channel fetch failed guild=%s", guild_id, exc_info=True)
+        raise HTTPException(status_code=502, detail="無法從 Discord 取得頻道清單") from exc
+    allowed_types = {0, 5, 10, 11, 12, 15, 16}
+    rows = [
+        DiscordChannelOptionOut(
+            id=str(item["id"]),
+            name=str(item.get("name") or item["id"]),
+            type=int(item.get("type") or 0),
+            parent_id=str(item["parent_id"]) if item.get("parent_id") else None,
+        )
+        for item in channels
+        if int(item.get("type") or 0) in allowed_types
+    ]
+    return sorted(rows, key=lambda item: (item.type, item.name.lower()))
+
+
+@router.get(
+    "/guilds/{guild_id}/roles",
+    response_model=list[DiscordRoleOptionOut],
+    dependencies=[Depends(require_permission(PermissionCode.ADMIN_ALL))],
+    summary="列出 Discord 伺服器身分組",
+)
+async def guild_roles(guild_id: str) -> list[DiscordRoleOptionOut]:
+    try:
+        roles = await fetch_guild_roles(guild_id)
+    except Exception as exc:
+        logger.warning("Discord role fetch failed guild=%s", guild_id, exc_info=True)
+        raise HTTPException(status_code=502, detail="無法從 Discord 取得身分組清單") from exc
+    rows = [
+        DiscordRoleOptionOut(
+            id=str(item["id"]),
+            name=str(item.get("name") or item["id"]),
+            color=int(item.get("color") or 0),
+            position=int(item.get("position") or 0),
+            managed=bool(item.get("managed")),
+        )
+        for item in roles
+        if str(item.get("name") or "") != "@everyone"
+    ]
+    return sorted(rows, key=lambda item: item.position, reverse=True)
+
+
+@router.post(
+    "/guild-configs",
+    response_model=DiscordGuildConfigOut,
+    status_code=201,
+    dependencies=[Depends(require_permission(PermissionCode.ADMIN_ALL))],
+)
+async def upsert_guild_config(
+    body: DiscordGuildConfigIn, db: DbDep, current_user: CurrentUser
+) -> DiscordGuildConfig:
+    config = await db.scalar(
+        select(DiscordGuildConfig).where(DiscordGuildConfig.guild_id == body.guild_id)
+    )
+    if config is None:
+        config = DiscordGuildConfig(guild_id=body.guild_id)
+        db.add(config)
+    for key, value in body.model_dump().items():
+        setattr(config, key, value)
+    await db.flush()
+    await audit_svc.record(
+        db,
+        entity_type="discord_guild_config",
+        entity_id=str(config.id),
+        action="discord.guild_config.upsert",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta=body.model_dump(),
+        summary="更新 Discord 伺服器設定",
+    )
+    return config
+
+
+@router.get(
+    "/role-mappings",
+    response_model=list[DiscordRoleMappingOut],
+    dependencies=[Depends(require_permission(PermissionCode.ADMIN_ALL))],
+)
+async def list_role_mappings(db: DbDep) -> list[DiscordRoleMapping]:
+    return list((await db.execute(select(DiscordRoleMapping))).scalars().all())
+
+
+@router.post(
+    "/role-mappings",
+    response_model=DiscordRoleMappingOut,
+    status_code=201,
+    dependencies=[Depends(require_permission(PermissionCode.ADMIN_ALL))],
+)
+async def create_role_mapping(
+    body: DiscordRoleMappingIn, db: DbDep, current_user: CurrentUser
+) -> DiscordRoleMapping:
+    mapping = DiscordRoleMapping(**body.model_dump())
+    db.add(mapping)
+    await db.flush()
+    await audit_svc.record(
+        db,
+        entity_type="discord_role_mapping",
+        entity_id=str(mapping.id),
+        action="discord.role_mapping.create",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta=body.model_dump(mode="json"),
+        summary="建立 Discord 身分組映射",
+    )
+    linked_user_ids = (
+        await db.execute(
+            select(DiscordAccountLink.user_id).where(DiscordAccountLink.is_active.is_(True))
+        )
+    ).scalars()
+    for user_id in linked_user_ids:
+        await enqueue_role_sync(db, user_id)
+    return mapping
+
+
+@router.patch(
+    "/role-mappings/{mapping_id}",
+    response_model=DiscordRoleMappingOut,
+    dependencies=[Depends(require_permission(PermissionCode.ADMIN_ALL))],
+)
+async def update_role_mapping(
+    mapping_id: uuid.UUID,
+    body: DiscordRoleMappingIn,
+    db: DbDep,
+    current_user: CurrentUser,
+) -> DiscordRoleMapping:
+    mapping = await db.get(DiscordRoleMapping, mapping_id)
+    if mapping is None:
+        raise HTTPException(status_code=404, detail="Discord 身分組映射不存在")
+    for key, value in body.model_dump().items():
+        setattr(mapping, key, value)
+    await db.flush()
+    await audit_svc.record(
+        db,
+        entity_type="discord_role_mapping",
+        entity_id=str(mapping.id),
+        action="discord.role_mapping.update",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta=body.model_dump(mode="json"),
+        summary="更新 Discord 身分組映射",
+    )
+    linked_user_ids = (
+        await db.execute(
+            select(DiscordAccountLink.user_id).where(DiscordAccountLink.is_active.is_(True))
+        )
+    ).scalars()
+    for user_id in linked_user_ids:
+        await enqueue_role_sync(db, user_id)
+    return mapping
+
+
+@router.delete(
+    "/role-mappings/{mapping_id}",
+    status_code=204,
+    dependencies=[Depends(require_permission(PermissionCode.ADMIN_ALL))],
+)
+async def delete_role_mapping(mapping_id: uuid.UUID, db: DbDep, current_user: CurrentUser) -> None:
+    mapping = await db.get(DiscordRoleMapping, mapping_id)
+    if mapping is None:
+        raise HTTPException(status_code=404, detail="Discord 身分組映射不存在")
+    mapping.is_active = False
+    await audit_svc.record(
+        db,
+        entity_type="discord_role_mapping",
+        entity_id=str(mapping.id),
+        action="discord.role_mapping.disable",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        summary="停用 Discord 身分組映射",
+    )
+    linked_user_ids = (
+        await db.execute(
+            select(DiscordAccountLink.user_id).where(DiscordAccountLink.is_active.is_(True))
+        )
+    ).scalars()
+    for user_id in linked_user_ids:
+        await enqueue_role_sync(db, user_id)

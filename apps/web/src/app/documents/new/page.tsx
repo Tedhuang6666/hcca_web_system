@@ -10,6 +10,7 @@ import type {
 } from "@/lib/types";
 import type { OrgRead } from "@/lib/api";
 import GongwenEditor from "@/components/ui/GongwenEditor";
+import SmartTextarea from "@/components/ui/SmartTextarea";
 import Toggle from "@/components/ui/Toggle";
 import { useDraftAutosave, useFileDraftAutosave } from "@/hooks/useDraftAutosave";
 import { RecipientSearch } from "@/components/documents/RecipientSearch";
@@ -602,9 +603,9 @@ export default function NewDocumentPage() {
             {copy.subjectLabel && (
               <div>
                 <Label required>{copy.subjectLabel}</Label>
-                <textarea
+                <SmartTextarea
                   value={subject}
-                  onChange={(e) => setSubject(e.target.value)}
+                  onChange={setSubject}
                   onBlur={() => markTouched("subject")}
                   rows={2}
                   wrap="soft"

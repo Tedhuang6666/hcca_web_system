@@ -22,11 +22,18 @@ async function pagedFetch<T>(url: URL, limit = 200): Promise<T[]> {
     url.searchParams.set("limit", String(limit));
     url.searchParams.set("offset", String(offset));
     let res: Response;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4000);
     try {
-      res = await fetch(url.toString(), { next: { revalidate: 300 } });
+      res = await fetch(url.toString(), {
+        next: { revalidate: 300 },
+        signal: controller.signal,
+      });
     } catch {
       // Build-time fallback: API 未啟動時回傳空集合，避免 sitemap prerender 失敗
       return [];
+    } finally {
+      clearTimeout(timer);
     }
     if (!res.ok) break;
     const items: T[] = await res.json();

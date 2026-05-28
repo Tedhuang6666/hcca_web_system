@@ -104,6 +104,16 @@ class RecipientType(enum.StrEnum):
     COPY = "copy"  # 副本
 
 
+class DeliveryMethod(enum.StrEnum):
+    """遞送方式（系統僅儲存與顯示，不直接觸發寄送行為）"""
+
+    NONE = "none"  # 未指定 / 不適用（舊資料預設）
+    SYSTEM = "system"  # 線上系統下載
+    EMAIL = "email"  # Email
+    PAPER = "paper"  # 紙本親送
+    POSTAL = "postal"  # 郵寄
+
+
 class DocumentVisibility(enum.StrEnum):
     """公文可見度"""
 
@@ -607,9 +617,17 @@ class DocumentApprovalDelegation(Base, TimestampMixin):
 
 
 class DocumentRecipient(Base, TimestampMixin):
-    """受文者清單（正本 / 副本 / 主旨對象）"""
+    """受文者清單（正本 / 副本 / 主旨對象）。
+
+    可指向特定使用者（target_user_id）或機關（target_org_id），
+    若兩者皆 None 則 name 為純文字外部單位（如：教育部）。
+    """
 
     __tablename__ = "document_recipients"
+    __table_args__ = (
+        Index("ix_document_recipients_target_user", "target_user_id"),
+        Index("ix_document_recipients_target_org", "target_org_id"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     document_id: Mapped[uuid.UUID] = mapped_column(
@@ -627,7 +645,31 @@ class DocumentRecipient(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(200), nullable=False)  # 單位或個人名稱
     email: Mapped[str | None] = mapped_column(String(200), nullable=True)  # 發文後寄送聯絡信箱
 
+    # 結構化目標：擇一指定（兩者皆 None 即為純文字外部單位）
+    target_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    target_org_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("orgs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    delivery_method: Mapped[DeliveryMethod] = mapped_column(
+        Enum(
+            DeliveryMethod,
+            name="deliverymethod",
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
+        nullable=False,
+        default=DeliveryMethod.NONE,
+        server_default=DeliveryMethod.NONE.value,
+    )
+
     document: Mapped[Document] = relationship("Document", back_populates="recipients")
+    target_user: Mapped[User | None] = relationship("User", foreign_keys=[target_user_id])
+    target_org: Mapped[Org | None] = relationship("Org", foreign_keys=[target_org_id])
 
 
 # ── 附件 ──────────────────────────────────────────────────────────────────────
@@ -665,6 +707,7 @@ class DocumentAttachment(Base, TimestampMixin):
 
 __all__ = [
     "ApprovalStepStatus",
+    "DeliveryMethod",
     "Document",
     "DocumentApproval",
     "DocumentAttachment",

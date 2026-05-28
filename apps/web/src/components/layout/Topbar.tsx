@@ -2,16 +2,70 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import Image from "next/image";
+import { ArrowLeft, Search } from "lucide-react";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { notificationsApi, tasksApi } from "@/lib/api";
 import type { NotificationItem, TaskItem } from "@/lib/api";
 import { apiUrl } from "@/lib/config";
 import { getBreadcrumbs, getCompactCrumbs, getPageTitle } from "@/lib/breadcrumb";
+import type { Crumb } from "@/lib/breadcrumb";
 
 interface TopbarProps {
   onMenuClick?: () => void;
+}
+
+function MobileBreadcrumb({ items, fallbackTitle }: { items: Crumb[]; fallbackTitle: string }) {
+  const current = items[items.length - 1]?.label ?? fallbackTitle;
+  const ancestors = items.slice(0, -1);
+
+  return (
+    <div className="min-w-0 flex flex-col justify-center gap-0.5 overflow-hidden">
+      {ancestors.length > 0 && (
+        <nav
+          aria-label="上層路徑"
+          className="flex items-center gap-1 overflow-hidden text-[10px] leading-none">
+          {ancestors.map((item, i) => (
+            <span key={`${item.label}-${i}`} className="flex min-w-0 items-center gap-1">
+              {i > 0 && (
+                <svg
+                  width="9"
+                  height="9"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  className="flex-shrink-0"
+                  style={{ color: "var(--text-disabled)" }}
+                  aria-hidden="true">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              )}
+              {item.href ? (
+                <Link
+                  href={item.href}
+                  className="block max-w-16 truncate transition-colors hover:opacity-80"
+                  style={{ color: "var(--text-disabled)", textDecoration: "none" }}>
+                  {item.label}
+                </Link>
+              ) : (
+                <span className="block max-w-16 truncate" style={{ color: "var(--text-disabled)" }}>
+                  {item.label}
+                </span>
+              )}
+            </span>
+          ))}
+        </nav>
+      )}
+      <h1
+        className="truncate text-sm leading-tight"
+        style={{ color: "var(--text-primary)", fontWeight: 650 }}>
+        {current}
+      </h1>
+    </div>
+  );
 }
 
 export default function Topbar({ onMenuClick }: TopbarProps) {
@@ -172,22 +226,24 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
           <Breadcrumb items={crumbs} />
         </div>
 
-        {/* 行動裝置：縮減麵包屑（首頁 / … / 上層 / 當前）或單一標題 */}
+        {/* 行動裝置：上層小字、當前頁突出顯示 */}
         <div className="md:hidden min-w-0 flex-1">
-          {crumbs.length > 2 ? (
-            <Breadcrumb items={compactCrumbs} />
-          ) : (
-            <h1
-              className="text-sm truncate"
-              style={{ color: "var(--text-primary)", fontWeight: 600 }}>
-              {pageTitle}
-            </h1>
-          )}
+          <MobileBreadcrumb items={compactCrumbs} fallbackTitle={pageTitle} />
         </div>
       </div>
 
-      {/* 右側：通知 + 主題 + 使用者 */}
+      {/* 右側：搜尋 + 通知 + 主題 + 使用者 */}
       <div className="flex items-center gap-1.5">
+        {isLoggedIn && (
+          <Link
+            href="/search"
+            className="topbar-icon-btn"
+            aria-label="全域搜尋"
+            title="全域搜尋"
+          >
+            <Search size={15} aria-hidden={true} />
+          </Link>
+        )}
         {isLoggedIn && (
         <div className="relative" ref={bellRef}>
           <button
@@ -372,10 +428,12 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
               aria-haspopup="menu">
 
               {userAvatar ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
+                <Image
                   src={userAvatar}
                   alt={userName}
+                  width={24}
+                  height={24}
+                  unoptimized
                   className="w-6 h-6 rounded-full object-cover"
                   style={{ border: "1.5px solid var(--primary)", opacity: 0.92 }}
                 />

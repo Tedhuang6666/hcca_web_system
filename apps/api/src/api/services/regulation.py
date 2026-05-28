@@ -37,7 +37,7 @@ from api.schemas.regulation import (
     RegulationTreeNodeOut,
     RegulationUpdate,
 )
-from api.services.regulation_import import ImportedRegulationDraft
+from api.services.regulation_import import ImportedRegulationDraft, parse_regulation_text
 
 logger = logging.getLogger(__name__)
 _PUBLICATION_DOCUMENT_STATUSES = (DocumentStatus.APPROVED, DocumentStatus.ARCHIVED)
@@ -152,6 +152,53 @@ def _article_snapshot_json(articles: list[RegulationArticle]) -> str:
         if not a.is_deleted
     ]
     return json.dumps(payload, ensure_ascii=False)
+
+
+async def _add_imported_articles(
+    session: AsyncSession,
+    *,
+    reg_id: uuid.UUID,
+    data: ImportedRegulationDraft,
+) -> list[RegulationArticle]:
+    id_map: dict[str, uuid.UUID] = {}
+    articles: list[RegulationArticle] = []
+    for row in data.articles:
+        article_id = uuid.uuid4()
+        id_map[row.key] = article_id
+        article = RegulationArticle(
+            id=article_id,
+            regulation_id=reg_id,
+            sort_index=row.sort_index,
+            order_index=row.order_index,
+            parent_id=id_map.get(row.parent_key) if row.parent_key else None,
+            article_type=row.article_type,
+            title=row.title,
+            subtitle="",
+            legal_number=row.legal_number,
+            content=row.content,
+            is_deleted=False,
+        )
+        session.add(article)
+        articles.append(article)
+    return articles
+
+
+async def _structure_text_content_if_possible(
+    session: AsyncSession,
+    reg: Regulation,
+    *,
+    content: str,
+) -> bool:
+    if not content.strip():
+        return False
+    if any(not a.is_deleted for a in reg.articles):
+        return False
+    try:
+        parsed = parse_regulation_text(title=reg.title, content=content, preface=reg.preface)
+    except ValueError:
+        return False
+    reg.articles.extend(await _add_imported_articles(session, reg_id=reg.id, data=parsed))
+    return True
 
 
 # ── 查詢 ─────────────────────────────────────────────────────────────────────
@@ -342,6 +389,7 @@ async def create_regulation(
     )
     session.add(reg)
     await session.flush()
+    await _structure_text_content_if_possible(session, reg, content=data.content)
     logger.info("法規建立 id=%s title=%s", reg.id, reg.title)
     # 重新查詢以載入所有關聯（避免 async 環境下的 MissingGreenlet）
     loaded = await get_regulation(session, reg.id)
@@ -372,25 +420,7 @@ async def create_regulation_from_import(
     session.add(reg)
     await session.flush()
 
-    id_map: dict[str, uuid.UUID] = {}
-    for row in data.articles:
-        article_id = uuid.uuid4()
-        id_map[row.key] = article_id
-        session.add(
-            RegulationArticle(
-                id=article_id,
-                regulation_id=reg.id,
-                sort_index=row.sort_index,
-                order_index=row.order_index,
-                parent_id=id_map.get(row.parent_key) if row.parent_key else None,
-                article_type=row.article_type,
-                title=row.title,
-                subtitle="",
-                legal_number=row.legal_number,
-                content=row.content,
-                is_deleted=False,
-            )
-        )
+    await _add_imported_articles(session, reg_id=reg.id, data=data)
 
     await session.flush()
     logger.info(
@@ -561,7 +591,13 @@ async def update_regulation(
             setattr(reg, field, val)
             changed = True
 
+    if changed and data.autosave:
+        await session.flush()
+        return reg
+
     if changed:
+        if "content" in data.model_fields_set and data.content is not None:
+            await _structure_text_content_if_possible(session, reg, content=data.content)
         reg.version += 1
         # 若有提供 change_brief，建立修訂快照記錄
         if data.change_brief:
@@ -580,6 +616,39 @@ async def update_regulation(
 
     await session.flush()
     return reg
+
+
+async def structure_regulation_content(
+    session: AsyncSession,
+    reg: Regulation,
+    *,
+    content: str | None = None,
+    replace_existing: bool = False,
+) -> Regulation:
+    """將法規全文文字解析成結構化條文，供歷史資料補結構使用。"""
+    source_content = reg.content if content is None else content
+    if not source_content.strip():
+        raise ValueError("法規全文為空，無法建立結構化條文")
+
+    existing_articles = [a for a in reg.articles if not a.is_deleted]
+    if existing_articles and not replace_existing:
+        raise ValueError("此法規已有結構化條文；若要覆蓋請設定 replace_existing=true")
+
+    parsed = parse_regulation_text(
+        title=reg.title,
+        content=source_content,
+        preface=reg.preface,
+    )
+    if replace_existing:
+        for article in existing_articles:
+            article.is_deleted = True
+    if content is not None:
+        reg.content = content
+
+    await _add_imported_articles(session, reg_id=reg.id, data=parsed)
+    await session.flush()
+    loaded = await get_regulation(session, reg.id)
+    return loaded or reg
 
 
 # ── 發布 ─────────────────────────────────────────────────────────────────────

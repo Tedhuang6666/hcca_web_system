@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import LawTreeEditor, { inferParentIdByPrevious } from "@/components/regulations/LawTreeEditor";
+import SmartTextarea from "@/components/ui/SmartTextarea";
 import { ApiError, orgsApi, regulationsApi, regulationHref, type OrgRead } from "@/lib/api";
 import type { ArticleType, RegulationArticleOut, RegulationCategory } from "@/lib/types";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
@@ -238,9 +239,9 @@ export default function NewRegulationPage() {
             </div>
             <div className="md:col-span-2">
               <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>前言 / 立法宗旨</label>
-              <textarea
+              <SmartTextarea
                 value={preface}
-                onChange={e => setPreface(e.target.value)}
+                onChange={setPreface}
                 rows={2}
                 className="w-full text-sm px-2 py-1.5 rounded"
                 style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)", color: "var(--text-primary)" }}
@@ -377,9 +378,9 @@ export default function NewRegulationPage() {
               className="text-sm px-2 py-1.5 rounded"
               style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)", color: "var(--text-primary)" }}
             />
-            <textarea
+            <SmartTextarea
               value={modal.content}
-              onChange={e => setModal(p => p ? { ...p, content: e.target.value } : p)}
+              onChange={value => setModal(p => p ? { ...p, content: value } : p)}
               rows={5}
               placeholder="內文"
               className="w-full text-sm px-2 py-1.5 rounded"

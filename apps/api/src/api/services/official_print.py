@@ -428,8 +428,17 @@ async def render_document_print_html(
     session: AsyncSession,
     doc: Document,
     viewer: User | None = None,
+    *,
+    copy_mark_override: str | None = None,
+    addressed_recipient_name: str | None = None,
 ) -> str:
-    """Render a ROC-style official document or meeting notice print page."""
+    """Render a ROC-style official document or meeting notice print page.
+
+    - ``copy_mark_override``：呼叫端決定後傳入「正本」或「影本」，留空時
+      退回原本的 viewer 字串模糊比對（向下相容）。
+    - ``addressed_recipient_name``：管理員指定列印某筆受文者版本時，
+      在「受文者」欄位顯示該名稱（覆蓋預設彙整文字）。
+    """
     cat = _enum_value(doc.category)
     is_meeting = cat == "meeting_notice"
     is_decree = cat == "decree"
@@ -459,7 +468,7 @@ async def render_document_print_html(
     main_recipients = _recipient_names(doc, "main")
     primary_recipients = _recipient_names(doc, "primary")
     copy_recipients = _recipient_names(doc, "copy")
-    recipient_text = _join_names(main_recipients or primary_recipients)
+    recipient_text = addressed_recipient_name or _join_names(main_recipients or primary_recipients)
     addressed_to = recipient_text or "（未填）"
     attachment_summary = _attachment_summary(doc)
     issue_date = _roc_date(doc.issued_at or doc.completed_at or doc.created_at)
@@ -467,7 +476,10 @@ async def render_document_print_html(
     file_number = _esc(getattr(doc, "file_number", "") or "")
     retention_period = _esc(getattr(doc, "retention_period", "") or "")
     declassification = _declassification_text(doc)
-    copy_mark = "正本" if _viewer_is_recipient(doc, viewer) else "影本"
+    if copy_mark_override is not None:
+        copy_mark = copy_mark_override
+    else:
+        copy_mark = "正本" if _viewer_is_recipient(doc, viewer) else "影本"
 
     handler_block = ""
     if doc.handler_name:

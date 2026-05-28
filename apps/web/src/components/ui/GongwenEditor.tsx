@@ -17,7 +17,8 @@
  *   Ctrl+Y / Ctrl+Shift+Z → 取消復原
  */
 
-import { useRef, useCallback, useEffect } from "react";
+import { useRef, useCallback, useEffect, useMemo, useState } from "react";
+import { insertAtCursor, writingSuggestions } from "@/lib/writingAssist";
 
 // ── 中文數字對照 ────────────────────────────────────────────────────────────────
 
@@ -105,6 +106,9 @@ interface Props {
 
 export default function GongwenEditor({ value, onChange, placeholder, minRows = 5, className, onBlur }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
+  const [focused, setFocused] = useState(false);
+  const [cursor, setCursor] = useState(0);
+  const suggestions = useMemo(() => writingSuggestions(value, cursor), [cursor, value]);
 
   // ── 歷史紀錄（Undo/Redo）─────────────────────────────────────────────────────
   const historyRef = useRef<string[]>([value]);
@@ -258,9 +262,22 @@ export default function GongwenEditor({ value, onChange, placeholder, minRows = 
   }, [onChange, updateValue]);
 
   const minH = `${minRows * 1.8 * 14}px`;
+  const applySuggestion = (text: string) => {
+    const ta = ref.current;
+    const start = ta?.selectionStart ?? value.length;
+    const end = ta?.selectionEnd ?? start;
+    const next = insertAtCursor(value, text, start, end);
+    updateValue(next);
+    setTimeout(() => {
+      ref.current?.focus();
+      const nextPos = start + text.length;
+      if (ref.current) ref.current.selectionStart = ref.current.selectionEnd = nextPos;
+      setCursor(nextPos);
+    }, 0);
+  };
 
   return (
-    <div>
+    <div className="relative">
       {/* 工具列 */}
       <div
         className="flex items-center gap-1 px-2 py-1.5 rounded-t-xl flex-wrap"
@@ -333,9 +350,19 @@ export default function GongwenEditor({ value, onChange, placeholder, minRows = 
           pushHistory(e.target.value);
           skipHistoryPushRef.current = true;
           onChange(e.target.value);
+          setCursor(e.target.selectionStart);
         }}
         onKeyDown={handleKeyDown}
-        onBlur={onBlur}
+        onKeyUp={() => setCursor(ref.current?.selectionStart ?? value.length)}
+        onClick={() => setCursor(ref.current?.selectionStart ?? value.length)}
+        onFocus={(e) => {
+          setFocused(true);
+          setCursor(e.currentTarget.selectionStart);
+        }}
+        onBlur={() => {
+          window.setTimeout(() => setFocused(false), 120);
+          onBlur?.();
+        }}
         placeholder={placeholder}
         rows={minRows}
         wrap="soft"
@@ -357,6 +384,33 @@ export default function GongwenEditor({ value, onChange, placeholder, minRows = 
           tabSize: 2,
         }}
       />
+      {focused && suggestions.length > 0 && (
+        <div
+          className="absolute z-20 mt-1 w-full overflow-hidden rounded-lg shadow-lg"
+          style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
+        >
+          <div className="flex max-h-48 flex-col overflow-y-auto p-1">
+            {suggestions.map((item, index) => (
+              <button
+                key={`${item.group}-${item.label}-${index}`}
+                type="button"
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  applySuggestion(item.value);
+                }}
+                className="flex items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-xs hover:opacity-80"
+              >
+                <span className="min-w-0 truncate" style={{ color: "var(--text-primary)" }}>
+                  {item.value}
+                </span>
+                <span className="flex-shrink-0" style={{ color: "var(--text-muted)" }}>
+                  {item.group}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 

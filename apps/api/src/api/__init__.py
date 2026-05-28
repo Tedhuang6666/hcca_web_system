@@ -23,9 +23,18 @@ from api.core.audit import SecurityAuditMiddleware
 from api.core.config import settings
 from api.core.csrf import CSRFMiddleware
 from api.core.database import engine
+from api.core.defense import record_status as record_defense_status
 from api.core.load_shed import LoadShedMiddleware
 from api.core.load_signals import dec_active, inc_active, record_status
 from api.core.payload_limit import PayloadLimitMiddleware
+from api.core.query_audit import (
+    N_PLUS_ONE_THRESHOLD,
+    get_request_counters,
+    reset_request_counters,
+)
+from api.core.query_audit import (
+    install_listeners as install_query_audit,
+)
 from api.core.rate_limit import SimpleRateLimitMiddleware
 from api.core.security_headers import SecurityHeadersMiddleware
 from api.core.sentry import init_sentry
@@ -38,10 +47,12 @@ from api.routers import (
     audit,
     auth,
     dashboard,
+    discord,
     documents,
     documents_approve,
     documents_attachments,
     email,
+    exam_papers,
     line_webhook,
     meal,
     meetings,
@@ -97,9 +108,13 @@ async def _check_redis() -> tuple[bool, str | None]:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """應用程式啟動/關閉生命週期管理"""
+    from api.core.database import AsyncSessionLocal
     from api.core.ws_manager import setup_broker, shutdown_broker
+    from api.services.defense import sync_active_rules
 
     await setup_broker()
+    async with AsyncSessionLocal() as session:
+        await sync_active_rules(session)
     try:
         yield
     finally:
@@ -113,6 +128,7 @@ def create_app() -> FastAPI:
     """應用程式工廠函式"""
     # 在 FastAPI app 建立之前 init Sentry，這樣 ASGI / fastapi integration 才能 patch
     init_sentry()
+    install_query_audit()
 
     app = FastAPI(
         title=settings.APP_NAME,
@@ -179,6 +195,7 @@ def create_app() -> FastAPI:
     app.include_router(audit.router)
     app.include_router(announcements.router)
     app.include_router(admin.router)
+    app.include_router(admin_system.public_router)
     app.include_router(admin_system.router)
     app.include_router(orgs.router)
     app.include_router(passkeys.router)
@@ -189,6 +206,7 @@ def create_app() -> FastAPI:
     app.include_router(documents.router)
     app.include_router(documents_approve.router)
     app.include_router(documents_attachments.router)
+    app.include_router(discord.router)
     app.include_router(template_router)
     app.include_router(serial_router)
     app.include_router(regulations.router)
@@ -202,6 +220,7 @@ def create_app() -> FastAPI:
     app.include_router(survey.router)
     app.include_router(notifications.router)
     app.include_router(email.router)
+    app.include_router(exam_papers.router)
     app.include_router(analytics.router)
     app.include_router(dashboard.router)
     app.include_router(tasks.router)
@@ -218,24 +237,41 @@ def create_app() -> FastAPI:
     ) -> Response:
         start = time.perf_counter()
         inc_active()
+        reset_request_counters()
         status_code = 500
         try:
             response = await call_next(request)
             status_code = response.status_code
             duration_ms = (time.perf_counter() - start) * 1000
             response.headers["X-Process-Time-Ms"] = f"{duration_ms:.1f}"
+            query_count, slow_count, query_ms = get_request_counters()
+            response.headers["X-DB-Queries"] = str(query_count)
+            response.headers["X-DB-Time-Ms"] = f"{query_ms:.1f}"
             if duration_ms > settings.SLOW_REQUEST_THRESHOLD_MS:
                 logger.warning(
-                    "Slow request path=%s method=%s status=%s duration_ms=%.1f",
+                    "Slow request path=%s method=%s status=%s duration_ms=%.1f "
+                    "queries=%d slow_queries=%d query_ms=%.1f",
                     request.url.path,
                     request.method,
                     response.status_code,
                     duration_ms,
+                    query_count,
+                    slow_count,
+                    query_ms,
+                )
+            elif query_count >= N_PLUS_ONE_THRESHOLD:
+                logger.warning(
+                    "Potential N+1 detected path=%s method=%s queries=%d query_ms=%.1f",
+                    request.url.path,
+                    request.method,
+                    query_count,
+                    query_ms,
                 )
             return response
         finally:
             dec_active()
             record_status(status_code)
+            await record_defense_status(status_code)
 
     @app.exception_handler(StarletteHTTPException)
     async def _http_exception_handler(

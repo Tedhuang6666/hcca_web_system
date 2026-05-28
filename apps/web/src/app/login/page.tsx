@@ -1,9 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 
 import { apiUrl } from "@/lib/config";
+import { loginWithPasskey } from "@/lib/passkeys";
 
 const FEATURES = [
   {
@@ -57,10 +59,13 @@ const FEATURES = [
 ];
 
 export default function LoginPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const error = searchParams.get("error");
   const [mounted, setMounted] = useState(false);
   const [loginHref, setLoginHref] = useState(apiUrl("/auth/google/login"));
+  const [email, setEmail] = useState("");
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -74,6 +79,28 @@ export default function LoginPage() {
   }, [searchParams]);
 
   if (!mounted) return null;
+
+  const handlePasskeyLogin = async () => {
+    if (!email.trim()) {
+      toast.error("請先輸入 Email");
+      return;
+    }
+    setPasskeyBusy(true);
+    try {
+      const result = await loginWithPasskey(email.trim());
+      localStorage.setItem("user_id", result.user.id);
+      localStorage.setItem("user_name", result.user.display_name);
+      localStorage.setItem("user_email", result.user.email);
+      if (result.user.avatar_url) localStorage.setItem("user_avatar", result.user.avatar_url);
+      localStorage.setItem("permissions", JSON.stringify(result.user.permissions ?? []));
+      localStorage.setItem("is_superuser", String(Boolean(result.user.is_superuser)));
+      router.replace(searchParams.get("next") || result.next || "/");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Passkey 登入失敗");
+    } finally {
+      setPasskeyBusy(false);
+    }
+  };
 
   return (
     <div className="min-h-screen flex" style={{ background: "var(--bg-base)" }}>
@@ -234,6 +261,33 @@ export default function LoginPage() {
               校內成員享完整功能；校外帳號可檢視公開資料與送出陳情<br />
               登入即表示同意相關使用規範
             </p>
+
+            <div className="my-5 flex items-center gap-3">
+              <div className="h-px flex-1" style={{ background: "var(--border)" }} />
+              <span className="text-xs" style={{ color: "var(--text-muted)" }}>或</span>
+              <div className="h-px flex-1" style={{ background: "var(--border)" }} />
+            </div>
+
+            <label className="block space-y-2">
+              <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                Passkey Email
+              </span>
+              <input
+                className="input"
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="you@example.com"
+              />
+            </label>
+            <button
+              type="button"
+              className="btn btn-secondary mt-3 w-full"
+              disabled={passkeyBusy}
+              onClick={handlePasskeyLogin}
+            >
+              使用 Passkey 登入
+            </button>
           </div>
         </main>
       </div>

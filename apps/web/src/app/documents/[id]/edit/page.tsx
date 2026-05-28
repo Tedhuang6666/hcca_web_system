@@ -11,7 +11,9 @@ import type {
   DocumentCategory, RecipientType, SerialTemplateOut,
 } from "@/lib/types";
 import GongwenEditor from "@/components/ui/GongwenEditor";
+import SmartTextarea from "@/components/ui/SmartTextarea";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
+import { useOnlineAutosave } from "@/hooks/useOnlineAutosave";
 
 interface Recipient { id: string; recipient_type: RecipientType; name: string; email: string }
 
@@ -45,6 +47,10 @@ type DocumentEditDraft = {
   subject: string;
   docDescription: string;
   actionRequired: string;
+  meetingPurpose: string;
+  meetingTime: string;
+  meetingLocation: string;
+  meetingChairperson: string;
   handlerName: string;
   handlerUnit: string;
   handlerEmail: string;
@@ -93,6 +99,10 @@ export default function EditDocumentPage() {
     subject,
     docDescription,
     actionRequired,
+    meetingPurpose,
+    meetingTime,
+    meetingLocation,
+    meetingChairperson,
     handlerName,
     handlerUnit,
     handlerEmail,
@@ -111,6 +121,10 @@ export default function EditDocumentPage() {
     handlerEmail,
     handlerName,
     handlerUnit,
+    meetingChairperson,
+    meetingLocation,
+    meetingPurpose,
+    meetingTime,
     newRecipient,
     recipients,
     selectedTemplateId,
@@ -123,12 +137,16 @@ export default function EditDocumentPage() {
     urgency: doc.urgency,
     classification: doc.classification,
     category: doc.category,
-    subject: doc.subject ?? "",
-    docDescription: doc.doc_description ?? "",
-    actionRequired: doc.action_required ?? "",
-    handlerName: doc.handler_name ?? "",
-    handlerUnit: doc.handler_unit ?? "",
-    handlerEmail: doc.handler_email ?? "",
+      subject: doc.subject ?? "",
+      docDescription: doc.doc_description ?? "",
+      actionRequired: doc.action_required ?? "",
+      meetingPurpose: doc.meeting_purpose ?? "",
+      meetingTime: doc.meeting_time ? doc.meeting_time.slice(0, 16) : "",
+      meetingLocation: doc.meeting_location ?? "",
+      meetingChairperson: doc.meeting_chairperson ?? "",
+      handlerName: doc.handler_name ?? "",
+      handlerUnit: doc.handler_unit ?? "",
+      handlerEmail: doc.handler_email ?? "",
     dueDate: doc.due_date ? doc.due_date.split("T")[0] : "",
     changeNote: "",
     recipients: doc.recipients.map(r => ({
@@ -148,6 +166,10 @@ export default function EditDocumentPage() {
     setSubject(draft.subject ?? "");
     setDocDescription(draft.docDescription ?? "");
     setActionRequired(draft.actionRequired ?? "");
+    setMeetingPurpose(draft.meetingPurpose ?? "");
+    setMeetingTime(draft.meetingTime ?? "");
+    setMeetingLocation(draft.meetingLocation ?? "");
+    setMeetingChairperson(draft.meetingChairperson ?? "");
     setHandlerName(draft.handlerName ?? "");
     setHandlerUnit(draft.handlerUnit ?? "");
     setHandlerEmail(draft.handlerEmail ?? "");
@@ -158,7 +180,7 @@ export default function EditDocumentPage() {
     setSelectedTemplateId(draft.selectedTemplateId ?? "");
     toast.info("已復原未儲存的公文編輯草稿");
   }, []);
-  const { clearDraft, flushDraft } = useDraftAutosave({
+  const { clearDraft, flushDraft, lastSavedAt } = useDraftAutosave({
     key: `documents:${id}:edit`,
     value: draftValue,
     onRestore: restoreDraft,
@@ -168,6 +190,59 @@ export default function EditDocumentPage() {
       if (!draft.newRecipient) return true;
       return JSON.stringify(draft) === JSON.stringify(originalDraft);
     }, [originalDraft]),
+  });
+
+  const buildUpdatePayload = useCallback((autosave = false) => ({
+    title, urgency, classification, category,
+    serial_template_id: selectedTemplateId || null,
+    subject: category === "decree" ? null : subject || undefined,
+    doc_description: docDescription || undefined,
+    action_required: category === "decree" ? null : actionRequired || undefined,
+    meeting_purpose: category === "meeting_notice" ? meetingPurpose || undefined : undefined,
+    meeting_time: (category === "meeting_notice" || category === "record") && meetingTime ? meetingTime : undefined,
+    meeting_location: (category === "meeting_notice" || category === "record") ? meetingLocation || undefined : undefined,
+    meeting_chairperson: (category === "meeting_notice" || category === "record") ? meetingChairperson || undefined : undefined,
+    handler_name: handlerName || undefined,
+    handler_unit: handlerUnit || undefined,
+    handler_email: handlerEmail || undefined,
+    due_date: dueDate || undefined,
+    change_note: autosave ? undefined : changeNote || undefined,
+    autosave,
+  }), [
+    actionRequired,
+    category,
+    changeNote,
+    classification,
+    docDescription,
+    dueDate,
+    handlerEmail,
+    handlerName,
+    handlerUnit,
+    meetingChairperson,
+    meetingLocation,
+    meetingPurpose,
+    meetingTime,
+    selectedTemplateId,
+    subject,
+    title,
+    urgency,
+  ]);
+
+  const onlineAutosave = useOnlineAutosave({
+    value: draftValue,
+    enabled: Boolean(doc),
+    isEmpty: useCallback((draft: DocumentEditDraft) => {
+      if (!originalDraft) return true;
+      return JSON.stringify(draft) === JSON.stringify(originalDraft);
+    }, [originalDraft]),
+    save: useCallback(async () => {
+      await documentsApi.update(id, buildUpdatePayload(true));
+      await documentsRecipientsApi.update(id, recipients.map(r => ({
+        recipient_type: r.recipient_type,
+        name: r.name,
+        email: r.email || undefined,
+      })));
+    }, [buildUpdatePayload, id, recipients]),
   });
 
   const fetchDoc = useCallback(async () => {
@@ -232,20 +307,7 @@ export default function EditDocumentPage() {
     if (!title.trim()) { toast.error("請輸入公文標題"); return; }
     setSaving(true);
     try {
-      await documentsApi.update(id, {
-        title, urgency, classification, category,
-        serial_template_id: selectedTemplateId || null,
-        subject: category === "decree" ? null : subject || undefined,
-        doc_description: docDescription || undefined,
-        action_required: category === "decree" ? null : actionRequired || undefined,
-        meeting_purpose: category === "meeting_notice" ? meetingPurpose || undefined : undefined,
-        meeting_time: (category === "meeting_notice" || category === "record") && meetingTime ? meetingTime : undefined,
-        meeting_location: (category === "meeting_notice" || category === "record") ? meetingLocation || undefined : undefined,
-        meeting_chairperson: (category === "meeting_notice" || category === "record") ? meetingChairperson || undefined : undefined,
-        handler_name: handlerName || undefined, handler_unit: handlerUnit || undefined,
-        handler_email: handlerEmail || undefined,
-        due_date: dueDate || undefined, change_note: changeNote || undefined,
-      });
+      await documentsApi.update(id, buildUpdatePayload(false));
       // 更新受文者（整批覆寫）
       await documentsRecipientsApi.update(id, recipients.map(r => ({
         recipient_type: r.recipient_type, name: r.name, email: r.email || undefined,
@@ -301,6 +363,20 @@ export default function EditDocumentPage() {
           <h1 className="text-xl font-semibold ">編輯公文</h1>
           <p className="text-sm font-mono" style={{ color: "var(--primary)" }}>
             {doc.serial_number || "（草稿，尚未發文）"}
+          </p>
+          {lastSavedAt && (
+            <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+              本機草稿已自動保存：{new Date(lastSavedAt).toLocaleTimeString("zh-TW")}
+            </p>
+          )}
+          <p className="text-xs mt-1" style={{ color: onlineAutosave.status === "error" ? "var(--danger)" : "var(--text-muted)" }}>
+            {onlineAutosave.status === "saving"
+              ? "正在線上儲存..."
+              : onlineAutosave.lastSavedAt
+                ? `線上已儲存：${new Date(onlineAutosave.lastSavedAt).toLocaleTimeString("zh-TW")}`
+                : onlineAutosave.status === "error"
+                  ? onlineAutosave.error
+                  : "編輯時會自動線上儲存草稿"}
           </p>
         </div>
       </div>
@@ -367,10 +443,9 @@ export default function EditDocumentPage() {
             {contentLabels.subject && (
               <div>
                 <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>{contentLabels.subject}</label>
-                <textarea value={subject} onChange={e => setSubject(e.target.value)} rows={2}
+                <SmartTextarea value={subject} onChange={setSubject} rows={2}
                   placeholder="一句話概述目的，結尾用「請 鑒核」等語。"
                   wrap="soft"
-                  className="w-full bg-transparent  text-sm p-2 rounded outline-none resize-y"
                   style={{
                     ...inputStyle,
                     overflowWrap: "anywhere",

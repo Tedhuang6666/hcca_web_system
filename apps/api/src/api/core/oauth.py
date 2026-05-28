@@ -17,5 +17,16 @@ oauth.register(
     },
 )
 
+oauth.register(
+    name="discord",
+    client_id=settings.DISCORD_CLIENT_ID,
+    client_secret=settings.DISCORD_CLIENT_SECRET,
+    access_token_url="https://discord.com/api/oauth2/token",
+    authorize_url="https://discord.com/api/oauth2/authorize",
+    api_base_url="https://discord.com/api/",
+    client_kwargs={"scope": "identify"},
+)
+
 # 型別提示輔助
 google: StarletteOAuth2App = oauth.google  # type: ignore[assignment]
+discord: StarletteOAuth2App = oauth.discord  # type: ignore[assignment]

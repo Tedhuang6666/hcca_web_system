@@ -43,6 +43,7 @@ class QuestionType(enum.StrEnum):
     TEXTAREA = "textarea"  # 長答（多行文字）
     SINGLE = "single"  # 單選
     MULTIPLE = "multiple"  # 多選
+    RANKING = "ranking"  # 拖拉排序（從選項中挑選並排序）
     RATING = "rating"  # 評分（1–5 / 1–10）
     DATE = "date"  # 日期輸入
     SECTION_TEXT = "section_text"  # 純文字描述區塊
@@ -150,8 +151,12 @@ class SurveyQuestion(Base, TimestampMixin):
         default=QuestionType.TEXT,
     )
     is_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    # 選項 JSON（SINGLE/MULTIPLE 題型）
+    # 選項 JSON（SINGLE/MULTIPLE/RANKING 題型）
     options_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 選項額外設定 JSON：{"exclusive": ["以上皆非"], "other": ["其他"]}
+    # exclusive：多選題的互斥選項（勾選後清空其他）
+    # other：可附加自由輸入文字的選項
+    option_config_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 評分範圍
     min_value: Mapped[int | None] = mapped_column(Integer, nullable=True)
     max_value: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -244,8 +249,10 @@ class SurveyAnswer(Base, TimestampMixin):
     )
     # TEXT / TEXTAREA / DATE / RATING(單值) → answer_text
     answer_text: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # MULTIPLE → answer_json（JSON 陣列 ["opt1","opt2"]）
+    # MULTIPLE / RANKING → answer_json（JSON 陣列 ["opt1","opt2"]；RANKING 為已排序順序）
     answer_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 多選題勾選「其他」選項時，填答者輸入的補充文字
+    other_text: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     response: Mapped[SurveyResponse] = relationship("SurveyResponse", back_populates="answers")
     question: Mapped[SurveyQuestion] = relationship("SurveyQuestion", back_populates="answers")

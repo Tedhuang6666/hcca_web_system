@@ -73,7 +73,12 @@ TYPE_LABELS: dict[str, str] = {
 
 def default_channel(notification_type: str) -> dict[str, bool]:
     """取得某通知類型的預設管道設定。"""
-    return {"inapp": True, "email": notification_type in _EMAIL_DEFAULT_ON, "line": False}
+    return {
+        "inapp": True,
+        "email": notification_type in _EMAIL_DEFAULT_ON,
+        "line": False,
+        "discord": False,
+    }
 
 
 def normalize_preferences(raw: dict | None) -> dict[str, dict[str, bool]]:
@@ -92,13 +97,41 @@ def normalize_preferences(raw: dict | None) -> dict[str, dict[str, bool]]:
                 "inapp": bool(value.get("inapp", True)),
                 "email": bool(value.get("email", ntype in _EMAIL_DEFAULT_ON)),
                 "line": bool(value.get("line", False)),
+                "discord": bool(value.get("discord", False)),
             }
         elif isinstance(value, bool):
             out[ntype] = {
                 "inapp": value,
                 "email": value and (ntype in _EMAIL_DEFAULT_ON),
                 "line": False,
+                "discord": False,
             }
         else:
             out[ntype] = default_channel(ntype)
     return out
+
+
+# ── Email 摘要頻率（每日/每週聚合通知） ──────────────────────────────────────
+
+DIGEST_FREQUENCIES = ("off", "daily", "weekly")
+
+# 將摘要頻率存於 notification_preferences JSON 的特殊保留鍵；
+# 雙底線開頭以避免與 NOTIFICATION_TYPES 衝突，免做 DB schema 變更。
+_DIGEST_KEY = "__digest_frequency"
+
+
+def get_digest_frequency(prefs: dict | None) -> str:
+    """從原始 JSON 取出摘要頻率；未設定回 "off"。"""
+    raw = (prefs or {}).get(_DIGEST_KEY)
+    if isinstance(raw, str) and raw in DIGEST_FREQUENCIES:
+        return raw
+    return "off"
+
+
+def set_digest_frequency(prefs: dict | None, frequency: str) -> dict:
+    """回傳寫入新摘要頻率後的完整 prefs dict（保留其他欄位）。"""
+    if frequency not in DIGEST_FREQUENCIES:
+        raise ValueError(f"unsupported digest frequency: {frequency}")
+    next_prefs = dict(prefs or {})
+    next_prefs[_DIGEST_KEY] = frequency
+    return next_prefs

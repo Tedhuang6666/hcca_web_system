@@ -1,8 +1,22 @@
 "use client";
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { toast } from "sonner";
-import { usersApi, classApi, ApiError, lineApi } from "@/lib/api";
-import type { LineBindingOut, LineLinkCodeOut, UserRead, UserPositionRead, SchoolClassListItem } from "@/lib/types";
+import { usersApi, classApi, ApiError, lineApi, discordApi } from "@/lib/api";
+import type {
+  DiscordBindingOut,
+  LineBindingOut,
+  LineLinkCodeOut,
+  UserRead,
+  UserPositionRead,
+  SchoolClassListItem,
+} from "@/lib/types";
+
+const POSITION_CATEGORY_LABEL = {
+  council: "自治職位",
+  class: "班級職位",
+  system: "系統職位",
+} as const;
 
 /* ─── Inline edit field ─────────────────────────────────────────────────────── */
 function EditableField({
@@ -83,8 +97,10 @@ export default function ProfilePage() {
   const [permissions, setPermissions] = useState<string[]>([]);
   const [myClass, setMyClass] = useState<SchoolClassListItem | null>(null);
   const [lineBinding, setLineBinding] = useState<LineBindingOut | null>(null);
+  const [discordBinding, setDiscordBinding] = useState<DiscordBindingOut | null>(null);
   const [lineCode, setLineCode] = useState<LineLinkCodeOut | null>(null);
   const [lineBusy, setLineBusy] = useState(false);
+  const [discordBusy, setDiscordBusy] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -99,6 +115,13 @@ export default function ProfilePage() {
 
     classApi.myClass().then(setMyClass).catch(() => setMyClass(null));
     lineApi.me().then(setLineBinding).catch(() => setLineBinding({ linked: false, line_display_name: null, linked_at: null }));
+    discordApi.me().then(setDiscordBinding).catch(() => setDiscordBinding({
+      linked: false,
+      discord_user_id: null,
+      username: null,
+      global_name: null,
+      linked_at: null,
+    }));
 
     // 從 localStorage 讀取有效權限
     try {
@@ -166,12 +189,38 @@ export default function ProfilePage() {
     }
   }
 
+  function linkDiscord() {
+    window.location.href = discordApi.loginUrl("/profile");
+  }
+
+  async function unlinkDiscord() {
+    setDiscordBusy(true);
+    try {
+      await discordApi.unlink();
+      setDiscordBinding({
+        linked: false,
+        discord_user_id: null,
+        username: null,
+        global_name: null,
+        linked_at: null,
+      });
+      toast.success("已解除 Discord 綁定");
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "解除綁定失敗");
+    } finally {
+      setDiscordBusy(false);
+    }
+  }
+
   const initials = user?.display_name?.charAt(0)?.toUpperCase() ?? "?";
 
   const today = new Date().toISOString().slice(0, 10);
   const activePositions = positions.filter(
     p => p.start_date <= today && (!p.end_date || p.end_date >= today)
   );
+  const activeCouncilPositions = activePositions.filter((p) => p.position_category === "council");
+  const activeClassPositions = activePositions.filter((p) => p.position_category === "class");
+  const activeSystemPositions = activePositions.filter((p) => p.position_category === "system");
   const pastPositions = positions.filter(
     p => p.end_date && p.end_date < today
   );
@@ -200,8 +249,8 @@ export default function ProfilePage() {
         <div className="flex items-center gap-4">
           {/* 頭像 */}
           {user?.avatar_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={user.avatar_url} alt={user.display_name}
+            <Image src={user.avatar_url} alt={user.display_name}
+              width={56} height={56} unoptimized
               className="w-14 h-14 rounded-full object-cover flex-shrink-0" />
           ) : (
             <div
@@ -359,6 +408,40 @@ export default function ProfilePage() {
         </div>
       </section>
 
+      <section className="card p-5 space-y-4" aria-labelledby="discord-heading">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 id="discord-heading" className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+              Discord Bot
+            </h2>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              綁定後可在 Discord 使用待辦、陳情、公文審核與辦公通知。
+            </p>
+          </div>
+          {discordBinding?.linked ? (
+            <button className="btn btn-ghost btn-sm" onClick={unlinkDiscord} disabled={discordBusy}>
+              解除綁定
+            </button>
+          ) : (
+            <button className="btn btn-primary btn-sm" onClick={linkDiscord} disabled={discordBusy}>
+              連結 Discord
+            </button>
+          )}
+        </div>
+        <div className="rounded-lg border px-4 py-3" style={{ borderColor: "var(--border)" }}>
+          <p className="text-sm" style={{ color: "var(--text-primary)" }}>
+            {discordBinding?.linked
+              ? `已綁定 ${discordBinding.global_name || discordBinding.username || "Discord 帳號"}`
+              : "尚未綁定 Discord"}
+          </p>
+          {discordBinding?.linked_at && (
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              綁定時間：{new Date(discordBinding.linked_at).toLocaleString()}
+            </p>
+          )}
+        </div>
+      </section>
+
       {/* 現職職位 */}
       <section className="card overflow-hidden" aria-labelledby="positions-heading">
         <div className="px-5 py-4" style={{ borderBottom: "1px solid var(--border)" }}>
@@ -378,30 +461,43 @@ export default function ProfilePage() {
             目前無在任職位
           </p>
         ) : (
-          <ul aria-label="在任職位列表">
-            {activePositions.map((p, idx) => (
-              <li key={p.id}
-                className="px-5 py-3.5 flex items-center justify-between gap-3"
-                style={idx < activePositions.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}}>
-                <div>
-                  <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-                    {p.position_name || p.position_id.slice(0, 8) + "…"}
-                  </p>
-                  {p.position_org_name && (
-                    <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                      {p.position_org_name}
-                    </p>
-                  )}
-                  <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-                    自 {p.start_date}{p.end_date ? ` 至 ${p.end_date}` : " 起（無限期）"}
-                  </p>
-                </div>
-                <span className="badge" style={{ color: "var(--success)", background: "var(--success-dim)", borderColor: "var(--success)" }}>
-                  在任中
-                </span>
-              </li>
+          <div>
+            {[
+              ["自治職位", activeCouncilPositions],
+              ["班級職位", activeClassPositions],
+              ["系統職位", activeSystemPositions],
+            ].filter(([, list]) => (list as UserPositionRead[]).length > 0).map(([label, list]) => (
+              <div key={label as string}>
+                <p className="px-5 pt-4 pb-2 text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
+                  {label as string}
+                </p>
+                <ul aria-label={`${label as string}列表`}>
+                  {(list as UserPositionRead[]).map((p, idx) => (
+                    <li key={p.id}
+                      className="px-5 py-3.5 flex items-center justify-between gap-3"
+                      style={idx < (list as UserPositionRead[]).length - 1 ? { borderBottom: "1px solid var(--border)" } : {}}>
+                      <div>
+                        <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+                          {p.position_name || p.position_id.slice(0, 8) + "…"}
+                        </p>
+                        {p.position_org_name && (
+                          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                            {p.position_org_name}
+                          </p>
+                        )}
+                        <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+                          自 {p.start_date}{p.end_date ? ` 至 ${p.end_date}` : " 起（無限期）"}
+                        </p>
+                      </div>
+                      <span className="badge" style={{ color: "var(--success)", background: "var(--success-dim)", borderColor: "var(--success)" }}>
+                        在任中
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
       </section>
 
@@ -445,7 +541,7 @@ export default function ProfilePage() {
                     <p className="text-xs" style={{ color: "var(--text-muted)" }}>{p.position_org_name}</p>
                   )}
                   <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-                    {p.start_date} 至 {p.end_date}
+                    {POSITION_CATEGORY_LABEL[p.position_category]} · {p.start_date} 至 {p.end_date}
                   </p>
                 </div>
                 <span className="badge" style={{ color: "var(--text-muted)", background: "var(--bg-elevated)", borderColor: "var(--border)" }}>

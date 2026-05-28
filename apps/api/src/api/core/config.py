@@ -189,6 +189,14 @@ class Settings(BaseSettings):
     LINE_CHANNEL_SECRET: str = Field(default="")
     LINE_CHANNEL_ACCESS_TOKEN: str = Field(default="")
 
+    # --- Discord Bot / OAuth 設定 ---
+    DISCORD_CLIENT_ID: str = Field(default="")
+    DISCORD_CLIENT_SECRET: str = Field(default="")
+    DISCORD_BOT_TOKEN: str = Field(default="")
+    DISCORD_REDIRECT_URI: str = Field(default="http://localhost:8000/discord/callback")
+    DISCORD_GUILD_ID: str = Field(default="")
+    DISCORD_COMMAND_SYNC_GUILD_ID: str = Field(default="")
+
     # --- 附件儲存後端 ---
     STORAGE_BACKEND: str = Field(
         default="local",

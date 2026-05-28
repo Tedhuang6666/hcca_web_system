@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from api.models.org import Org, Permission, Position, UserPosition
+from api.models.org import Org, Permission, Position, PositionCategory, UserPosition
 from api.models.school_class import (
     ClassCadre,
     ClassManualMember,
@@ -192,7 +192,12 @@ async def ensure_class_default_roles(
         if role_key in existing:
             bindings.append(existing[role_key])
             continue
-        position = Position(org_id=sc.org_id, name=title, weight=weight)
+        position = Position(
+            org_id=sc.org_id,
+            name=title,
+            category=PositionCategory.CLASS,
+            weight=weight,
+        )
         session.add(position)
         await session.flush()
         for code in codes:
@@ -618,7 +623,12 @@ async def get_or_create_council_representative_position(
         )
     )
     if position is None:
-        position = Position(org_id=org.id, name=COUNCIL_REPRESENTATIVE_POSITION_NAME, weight=70)
+        position = Position(
+            org_id=org.id,
+            name=COUNCIL_REPRESENTATIVE_POSITION_NAME,
+            category=PositionCategory.COUNCIL,
+            weight=70,
+        )
         session.add(position)
         await session.flush()
     existing_codes = await session.execute(

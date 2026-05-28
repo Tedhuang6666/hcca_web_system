@@ -10,6 +10,7 @@ import {
   ARTICLE_IS_STRUCTURAL,
   normalizeArticleType,
 } from "@/lib/regulationStructure";
+import { SmartLinkedText } from "@/components/ui/OfficialText";
 
 export interface LawArticleRowProps {
   article: RegulationArticleOut;
@@ -268,7 +269,7 @@ export function LawArticleRow({
               className={`${meta.textSize} ${meta.fontWeight}`}
               style={{ color: "var(--text-primary)" }}
             >
-              {article.title || "（未命名章節）"}
+              <SmartLinkedText text={article.title || "（未命名章節）"} />
             </span>
             {statusChips}
             {isFrozen && !isDeleted && article.frozen_by && (
@@ -346,7 +347,7 @@ export function LawArticleRow({
                 className={`${meta.textSize} ${meta.fontWeight}`}
                 style={{ color: "var(--text-primary)", whiteSpace: "pre-wrap" }}
               >
-                {article.title && !article.content ? article.title : (article.content ?? "")}
+                <SmartLinkedText text={article.title && !article.content ? article.title : (article.content ?? "")} />
               </span>
               {isFrozen && !isDeleted && article.frozen_by && (
                 <div className="mt-1 flex items-start gap-1 text-xs" style={{ color: "#fb923c" }}>
@@ -408,7 +409,7 @@ export function LawArticleRow({
             className={`flex-1 min-w-0 ${meta.textSize} ${meta.fontWeight}`}
             style={{ color: "var(--text-secondary)", whiteSpace: "pre-wrap" }}
           >
-            {chapterCollapsed ? "" : (article.content ?? article.title ?? "")}
+            {chapterCollapsed ? "" : <SmartLinkedText text={article.content ?? article.title ?? ""} />}
           </span>
         </div>
         {actions && <div className="law-row-actions">{actions}</div>}

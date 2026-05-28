@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import enum
 import uuid
 from datetime import date
 from typing import TYPE_CHECKING
@@ -15,6 +16,14 @@ from api.models.base import TimestampMixin
 
 if TYPE_CHECKING:
     from api.models.user import User
+
+
+class PositionCategory(enum.StrEnum):
+    """職位所屬功能區，用於區分自治組織、班級與系統用途。"""
+
+    COUNCIL = "council"
+    CLASS = "class"
+    SYSTEM = "system"
 
 
 class Org(Base, TimestampMixin):
@@ -58,6 +67,13 @@ class Position(Base, TimestampMixin):
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    category: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default=PositionCategory.COUNCIL,
+        server_default=PositionCategory.COUNCIL,
+        index=True,
+    )
     # 權限係數：同組織內的相對權限大小，數字越大權限越高（用於自動派發審核）
     weight: Mapped[int] = mapped_column(Integer, nullable=False, default=0, index=True)
     # 職位階層：上級職位（同組織內，選填）

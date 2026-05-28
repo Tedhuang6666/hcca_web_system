@@ -254,6 +254,37 @@ services:
       retries: 3
       start_period: 30s
 
+  # ── Discord Bot Worker ───────────────────────────────────────
+  discord-bot:
+    <<: *api-common
+    container_name: campus_discord_bot
+    restart: unless-stopped
+    command: >
+      sh -c 'if [ -z "$$DISCORD_BOT_TOKEN" ]; then
+      echo "DISCORD_BOT_TOKEN not set; discord-bot idle";
+      tail -f /dev/null;
+      else python -m api.discord_worker;
+      fi'
+    environment:
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
+      DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
+      DB_POOL_SIZE: ${DISCORD_DB_POOL_SIZE:-3}
+      DB_MAX_OVERFLOW: ${DISCORD_DB_MAX_OVERFLOW:-5}
+      REDIS_URL: redis://redis:6379/0
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:3000}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:-}
+      DISCORD_REDIRECT_URI: ${DISCORD_REDIRECT_URI:-http://localhost:8000/discord/callback}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:-}
+      DISCORD_COMMAND_SYNC_GUILD_ID: ${DISCORD_COMMAND_SYNC_GUILD_ID:-}
+    depends_on:
+      api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   # ── Next.js（standalone 生產模式） ───────────────────────────
   web:
     build:

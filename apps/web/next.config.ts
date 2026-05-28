@@ -26,6 +26,10 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "**.trycloudflare.com" },
       { protocol: "https", hostname: "**.devtunnels.ms" },
       { protocol: "https", hostname: "lh3.googleusercontent.com" },
+      // 本機後端（dev / docker compose）
+      { protocol: "http", hostname: "localhost" },
+      { protocol: "http", hostname: "127.0.0.1" },
+      { protocol: "http", hostname: "0.0.0.0" },
       // S3 / MinIO 後端附件（依實際 bucket domain 自行調整）
       { protocol: "https", hostname: "*.s3.amazonaws.com" },
     ],
@@ -52,7 +56,19 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withSentryConfig(nextConfig, {
+// Bundle analyzer wrapper：跑 `npm run analyze` 時自動開啟視覺化報告
+// 條件 require 避免 prod build 載入 dev-only 套件
+let configWithAnalyzer: NextConfig = nextConfig;
+if (process.env.ANALYZE === "true") {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const withBundleAnalyzer = require("@next/bundle-analyzer")({
+    enabled: true,
+    openAnalyzer: false,
+  });
+  configWithAnalyzer = withBundleAnalyzer(nextConfig);
+}
+
+export default withSentryConfig(configWithAnalyzer, {
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,
   silent: true,

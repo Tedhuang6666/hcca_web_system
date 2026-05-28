@@ -20,6 +20,7 @@ from api.models.document import (
     ApprovalStepStatus,
     DeclassificationCondition,
     DelegateSource,
+    DeliveryMethod,
     DocumentCategory,
     DocumentClassification,
     DocumentStatus,
@@ -128,6 +129,9 @@ class RecipientOut(BaseModel):
     recipient_type: RecipientType
     name: str
     email: str | None
+    target_user_id: uuid.UUID | None = None
+    target_org_id: uuid.UUID | None = None
+    delivery_method: DeliveryMethod = DeliveryMethod.NONE
 
 
 class RecipientCreate(BaseModel):
@@ -136,6 +140,28 @@ class RecipientCreate(BaseModel):
     )
     name: str = Field(..., min_length=1, max_length=200, description="單位或個人名稱")
     email: EmailStr | None = Field(None, description="聯絡信箱（發文後自動寄送）")
+    target_user_id: uuid.UUID | None = Field(
+        None, description="指定特定使用者（與 target_org_id 互斥）"
+    )
+    target_org_id: uuid.UUID | None = Field(
+        None, description="指定特定機關（與 target_user_id 互斥）"
+    )
+    delivery_method: DeliveryMethod = Field(
+        DeliveryMethod.NONE, description="遞送方式（系統僅儲存與顯示）"
+    )
+
+    @model_validator(mode="after")
+    def validate_target_exclusivity(self) -> RecipientCreate:
+        if self.target_user_id is not None and self.target_org_id is not None:
+            raise ValueError("target_user_id 與 target_org_id 不可同時指定")
+        return self
+
+
+class RecipientDownloadVariant(StrEnum):
+    """管理員下載時可指定的版本（一般使用者由系統依身份決定）"""
+
+    PRIMARY = "primary"  # 正本
+    COPY = "copy"  # 影本
 
 
 # ── 公文內容範本 ───────────────────────────────────────────────────────────────
@@ -601,6 +627,7 @@ class DocumentUpdate(BaseModel):
     is_public: bool | None = None
     page_info: str | None = Field(None, max_length=50)
     change_note: str | None = Field(None, max_length=500, description="修改備註（將記入版本歷程）")
+    autosave: bool = Field(False, description="線上自動儲存；不建立版本快照")
 
 
 class SubmitRequest(BaseModel):

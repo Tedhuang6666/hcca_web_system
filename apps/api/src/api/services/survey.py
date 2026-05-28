@@ -236,6 +236,31 @@ async def archive_survey(session: AsyncSession, survey: Survey) -> Survey:
 # ── 題目 CRUD ─────────────────────────────────────────────────────────────────
 
 
+def _serialize_option_config(cfg, options: list[str] | None) -> str | None:
+    """將 OptionConfig 序列化；保留只引用實際存在於 options 的標記。"""
+    if cfg is None:
+        return None
+    valid = set(options or [])
+    exclusive = [o for o in cfg.exclusive if o in valid]
+    other = [o for o in cfg.other if o in valid]
+    if not exclusive and not other:
+        return None
+    return json.dumps({"exclusive": exclusive, "other": other}, ensure_ascii=False)
+
+
+def _load_option_config(raw: str | None) -> dict[str, list[str]]:
+    if not raw:
+        return {"exclusive": [], "other": []}
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return {"exclusive": [], "other": []}
+    return {
+        "exclusive": [str(o) for o in data.get("exclusive", []) if isinstance(o, str)],
+        "other": [str(o) for o in data.get("other", []) if isinstance(o, str)],
+    }
+
+
 async def add_question(
     session: AsyncSession, survey: Survey, *, data: SurveyQuestionCreate
 ) -> SurveyQuestion:
@@ -247,6 +272,7 @@ async def add_question(
         question_type=data.question_type,
         is_required=False if data.question_type in DISPLAY_QUESTION_TYPES else data.is_required,
         options_json=json.dumps(data.options, ensure_ascii=False) if data.options else None,
+        option_config_json=_serialize_option_config(data.option_config, data.options),
         min_value=data.min_value,
         max_value=data.max_value,
         placeholder=data.placeholder,
@@ -275,6 +301,21 @@ async def update_question(
     if "options" in fields:
         opts = fields.pop("options")
         question.options_json = json.dumps(opts, ensure_ascii=False) if opts else None
+    if "option_config" in fields:
+        raw_cfg = fields.pop("option_config")
+        # 此處取用 dict（model_dump 已將 OptionConfig 攤平）
+        current_opts = json.loads(question.options_json) if question.options_json else []
+        if raw_cfg is None:
+            question.option_config_json = None
+        else:
+            valid = set(current_opts)
+            exclusive = [o for o in raw_cfg.get("exclusive", []) if o in valid]
+            other = [o for o in raw_cfg.get("other", []) if o in valid]
+            question.option_config_json = (
+                json.dumps({"exclusive": exclusive, "other": other}, ensure_ascii=False)
+                if (exclusive or other)
+                else None
+            )
     if "condition" in fields:
         cond = fields.pop("condition")
         question.condition_json = (
@@ -455,6 +496,36 @@ async def submit_response(
             if ans and ans.answer_text:
                 _validate_text_answer(q, ans.answer_text)
 
+    # 驗證多選題的「互斥選項」與排序題的項數範圍
+    for q in questions.values():
+        ans = answers_by_q.get(q.id)
+        if ans is None:
+            continue
+        if q.question_type == QuestionType.MULTIPLE:
+            cfg = _load_option_config(q.option_config_json)
+            chosen = list(ans.answer_options or [])
+            excl_chosen = [o for o in chosen if o in cfg["exclusive"]]
+            if excl_chosen and len(chosen) > len(excl_chosen):
+                raise ValueError(
+                    f"題目「{q.question_text[:30]}」勾選了互斥選項，不可同時選擇其他項目"
+                )
+            if cfg["other"] and ans.other_text and not any(o in cfg["other"] for o in chosen):
+                ans.other_text = None
+        elif q.question_type == QuestionType.RANKING:
+            options_list = _load_str_list(q.options_json)
+            chosen = [o for o in (ans.answer_options or []) if o in options_list]
+            seen: set[str] = set()
+            unique = [o for o in chosen if not (o in seen or seen.add(o))]
+            ans.answer_options = unique
+            min_n = q.min_value or 0
+            max_n = q.max_value if q.max_value is not None else len(options_list)
+            if q.is_required and len(unique) < max(min_n, 1):
+                raise ValueError(f"題目「{q.question_text[:30]}」至少需排序 {max(min_n, 1)} 個項目")
+            if unique and len(unique) < min_n:
+                raise ValueError(f"題目「{q.question_text[:30]}」至少需排序 {min_n} 個項目")
+            if len(unique) > max_n:
+                raise ValueError(f"題目「{q.question_text[:30]}」最多只能排序 {max_n} 個項目")
+
     # 建立回應（匿名問卷不記錄 email，保障匿名性）
     response = SurveyResponse(
         survey_id=survey.id,
@@ -477,7 +548,12 @@ async def submit_response(
             response_id=response.id,
             question_id=ans.question_id,
         )
-        if q.question_type in (QuestionType.MULTIPLE,):
+        if q.question_type == QuestionType.MULTIPLE:
+            answer.answer_json = json.dumps(ans.answer_options, ensure_ascii=False)
+            cfg = _load_option_config(q.option_config_json)
+            if cfg["other"] and any(o in cfg["other"] for o in ans.answer_options):
+                answer.other_text = (ans.other_text or "").strip() or None
+        elif q.question_type == QuestionType.RANKING:
             answer.answer_json = json.dumps(ans.answer_options, ensure_ascii=False)
         elif q.question_type == QuestionType.SINGLE:
             answer.answer_text = ans.answer_options[0] if ans.answer_options else ans.answer_text
@@ -544,6 +620,34 @@ async def get_survey_stats(session: AsyncSession, survey: Survey) -> SurveyStats
             qs.option_counts = counts
             qs.suggested_chart = "pie" if len(counts) <= 5 else "bar"
             qs.available_charts = ["bar", "pie"]
+            # 多選題若有「其他」自由輸入，彙整為文字回答清單供管理員瀏覽
+            other_texts = [a.other_text for a in answers if a.other_text]
+            if other_texts:
+                qs.text_answers = other_texts
+
+        elif q.question_type == QuestionType.RANKING:
+            # 計算各選項平均排名：第 1 名 = 1 分，越小越優先
+            rank_sums: dict[str, float] = {}
+            rank_counts: dict[str, int] = {}
+            for a in answers:
+                if not a.answer_json:
+                    continue
+                try:
+                    ordered = json.loads(a.answer_json)
+                except json.JSONDecodeError:
+                    continue
+                for idx, opt in enumerate(ordered):
+                    rank_sums[opt] = rank_sums.get(opt, 0.0) + idx + 1
+                    rank_counts[opt] = rank_counts.get(opt, 0) + 1
+            # 以平均排名（越低越好）反向轉成「分數」用於長條圖
+            # 沿用 option_counts 結構：值為被選次數，方便管理員看「最常被排入名單」
+            qs.option_counts = dict(rank_counts)
+            qs.text_answers = [
+                f"{opt}：平均第 {rank_sums[opt] / rank_counts[opt]:.2f} 名（{rank_counts[opt]} 票）"
+                for opt in sorted(rank_sums, key=lambda o: rank_sums[o] / rank_counts[o])
+            ]
+            qs.suggested_chart = "bar"
+            qs.available_charts = ["bar", "list"]
 
         elif q.question_type == QuestionType.RATING:
             values = []
@@ -592,7 +696,10 @@ def _answer_display(answer: SurveyAnswer | None) -> str:
         try:
             opts = json.loads(answer.answer_json)
             if isinstance(opts, list):
-                return "、".join(str(o) for o in opts)
+                text = "、".join(str(o) for o in opts)
+                if answer.other_text:
+                    text += f"（其他：{answer.other_text}）"
+                return text
         except json.JSONDecodeError:
             pass
     return answer.answer_text or ""

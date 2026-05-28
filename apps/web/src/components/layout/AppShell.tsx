@@ -8,9 +8,10 @@ import Topbar from "./Topbar";
 import BottomTabBar from "./BottomTabBar";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import UrgentAnnouncementPopup from "@/components/announcements/UrgentAnnouncementPopup";
+import CommandMenu from "./CommandMenu";
 
 /** 完全裸頁（不渲染 Shell）：login、auth callback、Email 退訂落地頁 */
-const BARE_PATHS = ["/login", "/auth", "/profile/complete", "/public", "/unsubscribe"];
+const BARE_PATHS = ["/login", "/auth", "/maintenance", "/profile/complete", "/public", "/unsubscribe"];
 
 function isBare(pathname: string) {
   return BARE_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
@@ -100,7 +101,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
         {/* 行動版側邊欄遮罩 */}
         {sidebarOpen && (
           <div
-            className="fixed inset-0 z-20 md:hidden"
+            className="fixed inset-0 z-40 md:hidden"
             style={{ background: "var(--bg-overlay)" }}
             onClick={() => setSidebarOpen(false)}
             aria-hidden="true"
@@ -110,7 +111,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
         {/* 側邊欄 */}
         <div
           className={`
-            fixed inset-y-0 left-0 z-30 transition-transform duration-300
+            fixed inset-y-0 left-0 z-50 transition-transform duration-300
             md:relative md:translate-x-0 md:z-auto
             ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
           `}
@@ -128,8 +129,9 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
             {children}
           </main>
         </div>
-        <BottomTabBar onMoreClick={() => setSidebarOpen((p) => !p)} />
+        {!sidebarOpen && <BottomTabBar onMoreClick={() => setSidebarOpen((p) => !p)} />}
         <UrgentAnnouncementPopup />
+        <CommandMenu />
       </div>
       </ConfirmProvider>
     </PermissionProvider>

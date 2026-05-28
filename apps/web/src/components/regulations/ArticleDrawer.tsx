@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import Drawer from "@/components/ui/Drawer";
+import SmartTextarea from "@/components/ui/SmartTextarea";
 import type { ArticleType, RegulationArticleOut } from "@/lib/types";
 import { ARTICLE_TYPE_LABEL, ARTICLE_TYPE_META } from "@/lib/regulationStructure";
 
@@ -182,9 +183,9 @@ export function ArticleDrawer({
           <label className="mb-1.5 block text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
             內容
           </label>
-          <textarea
+          <SmartTextarea
             value={content}
-            onChange={(event) => setContent(event.target.value)}
+            onChange={setContent}
             rows={12}
             placeholder="條文正文…"
             disabled={readOnly}

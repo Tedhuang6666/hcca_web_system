@@ -19,9 +19,11 @@ import {
 } from "@/components/regulations/RegulationEditParts";
 import LawTreeEditor, { inferParentIdByPrevious } from "@/components/regulations/LawTreeEditor";
 import { ArticleDrawer } from "@/components/regulations/ArticleDrawer";
+import SmartTextarea from "@/components/ui/SmartTextarea";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
-import { ApiError, regulationsApi, regulationHref } from "@/lib/api";
+import { useOnlineAutosave } from "@/hooks/useOnlineAutosave";
+import { ApiError, regulationsApi, regulationHref, serialTemplatesApi } from "@/lib/api";
 import { ARTICLE_TYPE_LABEL, canNestInside } from "@/lib/regulationStructure";
 import type {
   ArticleType,
@@ -29,6 +31,7 @@ import type {
   RegulationArticleOut,
   RegulationCategory,
   RegulationOut,
+  SerialTemplateOut,
 } from "@/lib/types";
 
 // ── 主頁面 ────────────────────────────────────────────────────────────────────
@@ -37,6 +40,7 @@ type RegulationEditDraft = {
   title: string;
   category: RegulationCategory;
   preface: string;
+  content: string;
   amendmentType: RegulationAmendmentType;
   amendedArticlesInput: string;
   effectiveDate: string;
@@ -45,6 +49,8 @@ type RegulationEditDraft = {
   proposalMetadata: string;
   publishSummary: string;
   publishAmendDesc: string;
+  publishSerialTemplateId: string;
+  publishManualSerialNumber: string;
   articles: RegulationArticleOut[];
   addingEnd: boolean;
   endForm: NewArtForm;
@@ -57,6 +63,7 @@ export default function EditRegulationPage() {
   const [reg, setReg] = useState<RegulationOut | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingInfo, setSavingInfo] = useState(false);
+  const [structuringContent, setStructuringContent] = useState(false);
 
   // 基本資訊
   const [title, setTitle] = useState("");
@@ -71,6 +78,9 @@ export default function EditRegulationPage() {
   const [proposalMetadata, setProposalMetadata] = useState("");
   const [publishSummary, setPublishSummary] = useState("");
   const [publishAmendDesc, setPublishAmendDesc] = useState("");
+  const [publishSerialTemplates, setPublishSerialTemplates] = useState<SerialTemplateOut[]>([]);
+  const [publishSerialTemplateId, setPublishSerialTemplateId] = useState("");
+  const [publishManualSerialNumber, setPublishManualSerialNumber] = useState("");
 
   // 條文狀態
   const [articles, setArticles] = useState<RegulationArticleOut[]>([]);
@@ -90,6 +100,7 @@ export default function EditRegulationPage() {
     title,
     category,
     preface,
+    content,
     amendmentType,
     amendedArticlesInput,
     effectiveDate,
@@ -98,6 +109,8 @@ export default function EditRegulationPage() {
     proposalMetadata,
     publishSummary,
     publishAmendDesc,
+    publishSerialTemplateId,
+    publishManualSerialNumber,
     articles,
     addingEnd,
     endForm,
@@ -107,6 +120,7 @@ export default function EditRegulationPage() {
     amendmentType,
     articles,
     category,
+    content,
     effectiveDate,
     endForm,
     legalBasis,
@@ -114,6 +128,8 @@ export default function EditRegulationPage() {
     preface,
     proposalMetadata,
     publishAmendDesc,
+    publishManualSerialNumber,
+    publishSerialTemplateId,
     publishSummary,
     title,
   ]);
@@ -123,6 +139,7 @@ export default function EditRegulationPage() {
       title: reg.title,
       category: reg.category,
       preface: reg.preface ?? "",
+      content: reg.content ?? "",
       amendmentType: reg.amendment_type,
       amendedArticlesInput: (reg.amended_articles ?? "")
         .split(",")
@@ -135,6 +152,8 @@ export default function EditRegulationPage() {
       proposalMetadata: reg.proposal_metadata ?? "",
       publishSummary: "",
       publishAmendDesc: "",
+      publishSerialTemplateId: "",
+      publishManualSerialNumber: "",
       articles: [...reg.articles]
         .filter(a => !a.is_deleted)
         .sort((a, b) => a.sort_index - b.sort_index),
@@ -146,6 +165,7 @@ export default function EditRegulationPage() {
     setTitle(draft.title ?? "");
     setCategory(draft.category ?? "ordinance");
     setPreface(draft.preface ?? "");
+    setContent(draft.content ?? "");
     setAmendmentType(draft.amendmentType ?? "enact");
     setAmendedArticlesInput(draft.amendedArticlesInput ?? "");
     setEffectiveDate(draft.effectiveDate ?? "");
@@ -154,12 +174,14 @@ export default function EditRegulationPage() {
     setProposalMetadata(draft.proposalMetadata ?? "");
     setPublishSummary(draft.publishSummary ?? "");
     setPublishAmendDesc(draft.publishAmendDesc ?? "");
+    setPublishSerialTemplateId(draft.publishSerialTemplateId ?? "");
+    setPublishManualSerialNumber(draft.publishManualSerialNumber ?? "");
     setArticles(draft.articles ?? []);
     setAddingEnd(Boolean(draft.addingEnd));
     setEndForm(draft.endForm ?? EMPTY_FORM);
     toast.info("已復原未儲存的法規編輯草稿");
   }, []);
-  const { flushDraft } = useDraftAutosave({
+  const { clearDraft, flushDraft, lastSavedAt } = useDraftAutosave({
     key: `regulations:${id}:edit`,
     value: draftValue,
     onRestore: restoreDraft,
@@ -168,6 +190,47 @@ export default function EditRegulationPage() {
       if (!originalDraft) return true;
       return JSON.stringify(draft) === JSON.stringify(originalDraft);
     }, [originalDraft]),
+  });
+
+  const buildUpdatePayload = useCallback((autosave = false) => ({
+    title,
+    category,
+    content: content || undefined,
+    preface: preface || undefined,
+    amendment_type: amendmentType,
+    amended_articles: amendedArticlesInput
+      .split("\n")
+      .map(x => x.trim())
+      .filter(Boolean)
+      .join(", ") || null,
+    effective_date: effectiveDate ? `${effectiveDate}T00:00:00+08:00` : null,
+    legislative_history: legislativeHistory || null,
+    legal_basis: legalBasis || null,
+    proposal_metadata: proposalMetadata || null,
+    autosave,
+  }), [
+    amendedArticlesInput,
+    amendmentType,
+    category,
+    content,
+    effectiveDate,
+    legalBasis,
+    legislativeHistory,
+    preface,
+    proposalMetadata,
+    title,
+  ]);
+
+  const onlineAutosave = useOnlineAutosave({
+    value: draftValue,
+    enabled: Boolean(reg && ["draft", "rejected"].includes(reg.workflow_status)),
+    isEmpty: useCallback((draft: RegulationEditDraft) => {
+      if (!originalDraft) return true;
+      return JSON.stringify(draft) === JSON.stringify(originalDraft);
+    }, [originalDraft]),
+    save: useCallback(async () => {
+      await regulationsApi.update(id, buildUpdatePayload(true));
+    }, [buildUpdatePayload, id]),
   });
 
   // ── 資料載入 ────────────────────────────────────────────────────────────────
@@ -198,6 +261,22 @@ export default function EditRegulationPage() {
   }, [id]);
 
   useEffect(() => { fetchReg(); }, [fetchReg]);
+  useEffect(() => {
+    if (!reg?.org_id) return;
+    serialTemplatesApi
+      .list({ org_id: reg.org_id, active_only: true })
+      .then((rows) => {
+        setPublishSerialTemplates(rows);
+        setPublishSerialTemplateId((prev) => {
+          if (prev && rows.some((row) => row.id === prev)) return prev;
+          return rows.find((row) => row.is_default_president_publish)?.id
+            ?? rows.find((row) => row.is_default)?.id
+            ?? rows[0]?.id
+            ?? "";
+        });
+      })
+      .catch(() => setPublishSerialTemplates([]));
+  }, [reg?.org_id]);
   const lawTree = useMemo(() => buildLawTree(articles, collapsedMap), [articles, collapsedMap]);
 
   // ── 基本資訊存檔 ────────────────────────────────────────────────────────────
@@ -210,21 +289,7 @@ export default function EditRegulationPage() {
     }
     setSavingInfo(true);
     try {
-      const updated = await regulationsApi.update(id, {
-        title,
-        category,
-        preface: preface || undefined,
-        amendment_type: amendmentType,
-        amended_articles: amendedArticlesInput
-          .split("\n")
-          .map(x => x.trim())
-          .filter(Boolean)
-          .join(", ") || null,
-        effective_date: effectiveDate ? `${effectiveDate}T00:00:00+08:00` : null,
-        legislative_history: legislativeHistory || null,
-        legal_basis: legalBasis || null,
-        proposal_metadata: proposalMetadata || null,
-      });
+      const updated = await regulationsApi.update(id, buildUpdatePayload(false));
       setReg(updated);
       setTitle(updated.title);
       setCategory(updated.category);
@@ -243,6 +308,7 @@ export default function EditRegulationPage() {
           .filter(a => !a.is_deleted)
           .sort((a, b) => a.sort_index - b.sort_index)
       );
+      clearDraft();
       toast.success("基本資訊已儲存");
       router.replace(`${regulationHref(updated)}/edit`);
     } catch (e) {
@@ -360,6 +426,25 @@ export default function EditRegulationPage() {
       toast.success("條文已移除");
       fetchReg();
     } catch (e) { toast.error(e instanceof ApiError ? e.message : "刪除失敗"); }
+  };
+
+  const handleStructureContent = async () => {
+    setStructuringContent(true);
+    try {
+      const updated = await regulationsApi.structureContent(id);
+      setReg(updated);
+      setContent(updated.content ?? "");
+      setArticles(
+        [...updated.articles]
+          .filter(a => !a.is_deleted)
+          .sort((a, b) => a.sort_index - b.sort_index)
+      );
+      toast.success("已從全文解析出結構化條文");
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "解析失敗");
+    } finally {
+      setStructuringContent(false);
+    }
   };
 
   const persistTree = async (nextTree: LawNode[]) => {
@@ -599,6 +684,20 @@ export default function EditRegulationPage() {
                 <span className="text-xs" style={{ color: "var(--text-muted)" }}>v{reg.version}</span>
                 <span className="text-[11px] font-medium" style={{ color: wfColor }}>· {wfLabel}</span>
               </div>
+              {lastSavedAt && (
+                <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+                  本機草稿已自動保存：{new Date(lastSavedAt).toLocaleTimeString("zh-TW")}
+                </p>
+              )}
+              <p className="text-xs mt-1" style={{ color: onlineAutosave.status === "error" ? "var(--danger)" : "var(--text-muted)" }}>
+                {onlineAutosave.status === "saving"
+                  ? "正在線上儲存..."
+                  : onlineAutosave.lastSavedAt
+                    ? `線上已儲存：${new Date(onlineAutosave.lastSavedAt).toLocaleTimeString("zh-TW")}`
+                    : onlineAutosave.status === "error"
+                      ? onlineAutosave.error
+                      : "草稿狀態會自動線上儲存，送審後停止自動更新"}
+              </p>
             </div>
           </div>
 
@@ -621,7 +720,12 @@ export default function EditRegulationPage() {
                     return;
                   }
                   try {
-                    await regulationsApi.presidentPublish(id, `${s}；${a}`);
+                    await regulationsApi.presidentPublish(id, `${s}；${a}`, {
+                      serial_template_id: publishManualSerialNumber.trim()
+                        ? null
+                        : publishSerialTemplateId || null,
+                      manual_serial_number: publishManualSerialNumber.trim() || null,
+                    });
                     toast.success("已完成主席公布");
                     fetchReg();
                   } catch (e) {
@@ -706,8 +810,22 @@ export default function EditRegulationPage() {
               </div>
               <div>
                 <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>前言 / 立法宗旨</label>
-                <textarea value={preface} onChange={e => setPreface(e.target.value)} rows={2}
-                  className="w-full bg-transparent text-sm p-2 rounded outline-none resize-y" style={inputStyle} />
+                <SmartTextarea value={preface} onChange={setPreface} rows={2} style={inputStyle} />
+              </div>
+              <div>
+                <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>
+                  全文草稿
+                </label>
+                <SmartTextarea
+                  value={content}
+                  onChange={setContent}
+                  rows={5}
+                  placeholder="可先貼上完整法規文字，稍後用「從全文解析條文」轉成結構化條文。"
+                  style={inputStyle}
+                />
+                <p className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}>
+                  支援本機自動保存；內容中出現公文字號或「法規名稱」會在閱讀頁自動轉成查詢連結。
+                </p>
               </div>
               <div>
                 <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>制定/修正/廢止</label>
@@ -721,9 +839,9 @@ export default function EditRegulationPage() {
               </div>
               <div>
                 <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>修正條號（每行一筆）</label>
-                <textarea value={amendedArticlesInput} onChange={e => setAmendedArticlesInput(e.target.value)} rows={3}
+                <SmartTextarea value={amendedArticlesInput} onChange={setAmendedArticlesInput} rows={3}
                   placeholder="第3條&#10;第7條第2項"
-                  className="w-full bg-transparent text-sm p-2 rounded outline-none resize-y" style={inputStyle} />
+                  style={inputStyle} />
               </div>
               <div>
                 <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>生效日期</label>
@@ -732,18 +850,15 @@ export default function EditRegulationPage() {
               </div>
               <div>
                 <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>沿革文字</label>
-                <textarea value={legislativeHistory} onChange={e => setLegislativeHistory(e.target.value)} rows={2}
-                  className="w-full bg-transparent text-sm p-2 rounded outline-none resize-y" style={inputStyle} />
+                <SmartTextarea value={legislativeHistory} onChange={setLegislativeHistory} rows={2} style={inputStyle} />
               </div>
               <div>
                 <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>法源依據</label>
-                <textarea value={legalBasis} onChange={e => setLegalBasis(e.target.value)} rows={2}
-                  className="w-full bg-transparent text-sm p-2 rounded outline-none resize-y" style={inputStyle} />
+                <SmartTextarea value={legalBasis} onChange={setLegalBasis} rows={2} style={inputStyle} />
               </div>
               <div>
                 <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>提案/決議資訊</label>
-                <textarea value={proposalMetadata} onChange={e => setProposalMetadata(e.target.value)} rows={2}
-                  className="w-full bg-transparent text-sm p-2 rounded outline-none resize-y" style={inputStyle} />
+                <SmartTextarea value={proposalMetadata} onChange={setProposalMetadata} rows={2} style={inputStyle} />
               </div>
               <button onClick={saveInfo} disabled={savingInfo}
                 className="w-full px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 cursor-pointer sm:w-auto"
@@ -765,6 +880,41 @@ export default function EditRegulationPage() {
                 <input value={publishAmendDesc} onChange={e => setPublishAmendDesc(e.target.value)}
                   placeholder="例：第3條、第7條第2項"
                   className="w-full bg-transparent text-sm p-2 rounded outline-none" style={inputStyle} />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>
+                    公布令字號模板
+                  </label>
+                  <select
+                    value={publishSerialTemplateId}
+                    disabled={Boolean(publishManualSerialNumber.trim())}
+                    onChange={e => setPublishSerialTemplateId(e.target.value)}
+                    className="w-full text-sm outline-none rounded px-2 py-2 disabled:opacity-50"
+                    style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
+                  >
+                    <option value="">使用系統預設字號</option>
+                    {publishSerialTemplates.map(template => (
+                      <option key={template.id} value={template.id}>
+                        {template.org_prefix}{template.category_char}字
+                        {template.is_default_president_publish ? "（主席公布預設）" : ""}
+                        {template.preview ? ` - ${template.preview}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>
+                    手動公文字號
+                  </label>
+                  <input
+                    value={publishManualSerialNumber}
+                    onChange={e => setPublishManualSerialNumber(e.target.value)}
+                    placeholder="例：嶺班主公字第1150000001號"
+                    className="w-full bg-transparent text-sm p-2 rounded outline-none"
+                    style={inputStyle}
+                  />
+                </div>
               </div>
               <div className="text-xs p-2 rounded" style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)", color: "var(--text-secondary)" }}>
                 茲公布《{title || "法規名稱"}》{publishSummary || "（請填公布語句摘要）"}，{publishAmendDesc || "（請填修正條號描述）"}。
@@ -796,8 +946,18 @@ export default function EditRegulationPage() {
               </div>
 
               {articles.length === 0 && !addingEnd ? (
-                <div className="py-12 text-center">
+                <div className="py-12 text-center space-y-3">
                   <p className="text-xs" style={{ color: "var(--text-muted)" }}>尚無條文，點擊「新增至尾部」開始建立</p>
+                  {content.trim() && (
+                    <button
+                      onClick={handleStructureContent}
+                      disabled={structuringContent}
+                      className="text-xs px-3 py-1.5 rounded disabled:opacity-50"
+                      style={{ background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }}
+                    >
+                      {structuringContent ? "解析中..." : "從全文解析條文"}
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="px-2 py-3 sm:px-3">

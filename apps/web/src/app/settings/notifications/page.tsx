@@ -3,8 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ApiError, lineApi, notificationsApi } from "@/lib/api";
+import { ApiError, discordApi, lineApi, notificationsApi } from "@/lib/api";
 import type { ChannelPref, NotificationPreferences } from "@/lib/types";
+import { enableWebPush } from "@/lib/web-push";
+import { SectionSkeleton } from "@/components/ui/Skeleton";
 
 const OPTIONS: { key: keyof NotificationPreferences; label: string; desc: string }[] = [
   { key: "document_pending", label: "公文待審", desc: "有公文需要您審核或處理時提醒" },
@@ -50,28 +52,58 @@ function Switch({
 export default function NotificationSettingsPage() {
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
   const [lineLinked, setLineLinked] = useState(false);
+  const [discordLinked, setDiscordLinked] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [digest, setDigest] = useState<"off" | "daily" | "weekly">("off");
+  const [digestSaving, setDigestSaving] = useState(false);
 
   useEffect(() => {
     Promise.all([
       notificationsApi.getPreferences(),
       lineApi.me().catch(() => ({ linked: false })),
+      discordApi.me().catch(() => ({ linked: false })),
+      notificationsApi.getDigestFrequency().catch(() => ({ frequency: "off" as const })),
     ])
-      .then(([nextPrefs, line]) => {
+      .then(([nextPrefs, line, discord, digestPref]) => {
         setPrefs(nextPrefs);
         setLineLinked(Boolean(line.linked));
+        setDiscordLinked(Boolean(discord.linked));
+        setDigest(digestPref.frequency);
       })
       .catch((e) => toast.error(e instanceof ApiError ? e.message : "載入通知偏好失敗"))
       .finally(() => setLoading(false));
   }, []);
 
+  const updateDigest = async (next: "off" | "daily" | "weekly") => {
+    const prev = digest;
+    setDigest(next);
+    setDigestSaving(true);
+    try {
+      await notificationsApi.setDigestFrequency(next);
+      toast.success(
+        next === "off"
+          ? "已關閉 Email 摘要"
+          : next === "daily"
+            ? "已啟用每日摘要（08:00 寄送）"
+            : "已啟用每週摘要（週一 08:00 寄送）",
+      );
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "更新摘要設定失敗");
+      setDigest(prev);
+    } finally {
+      setDigestSaving(false);
+    }
+  };
+
   const counts = useMemo(() => {
-    if (!prefs) return { inapp: 0, email: 0, line: 0 };
+    if (!prefs) return { inapp: 0, email: 0, line: 0, discord: 0 };
     return {
       inapp: OPTIONS.filter((o) => prefs[o.key].inapp).length,
       email: OPTIONS.filter((o) => prefs[o.key].email).length,
       line: OPTIONS.filter((o) => prefs[o.key].line).length,
+      discord: OPTIONS.filter((o) => prefs[o.key].discord).length,
     };
   }, [prefs]);
 
@@ -97,6 +129,10 @@ export default function NotificationSettingsPage() {
       toast.error("請先到個人資料綁定 LINE");
       return;
     }
+    if (channel === "discord" && !discordLinked) {
+      toast.error("請先到個人資料綁定 Discord");
+      return;
+    }
     update({ ...prefs, [key]: { ...prefs[key], [channel]: !prefs[key][channel] } });
   };
 
@@ -104,9 +140,38 @@ export default function NotificationSettingsPage() {
     if (!prefs || saving) return;
     const next = { ...prefs };
     for (const o of OPTIONS) {
-      next[o.key] = { inapp: value, email: value, line: lineLinked ? value : false };
+      next[o.key] = {
+        inapp: value,
+        email: value,
+        line: lineLinked ? value : false,
+        discord: discordLinked ? value : false,
+      };
     }
     update(next);
+  };
+
+  const enablePush = async () => {
+    setPushBusy(true);
+    try {
+      await enableWebPush();
+      toast.success("瀏覽器推播已啟用");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "啟用推播失敗");
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
+  const testPush = async () => {
+    setPushBusy(true);
+    try {
+      const result = await notificationsApi.testWebPush();
+      toast.success(result.sent > 0 ? "已送出測試推播" : "沒有可用的推播訂閱");
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "測試推播失敗");
+    } finally {
+      setPushBusy(false);
+    }
   };
 
   return (
@@ -118,13 +183,55 @@ export default function NotificationSettingsPage() {
           </p>
           <h1 className="mt-1 text-xl font-semibold">通知偏好設定</h1>
           <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            分別設定每種事件要用「站內通知」、「Email」或「LINE」接收
+            分別設定每種事件要用「站內通知」、「Email」、「LINE」或「Discord」接收
           </p>
         </div>
         <Link href="/notifications" className="btn btn-ghost">
           回通知中心
         </Link>
       </header>
+
+      <section className="card overflow-hidden">
+        <div className="px-5 py-4" style={{ borderBottom: "1px solid var(--border)" }}>
+          <h2 className="text-sm font-semibold">Email 摘要</h2>
+          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            把未讀通知聚合成單封 Email，避免每則通知都收到一封信。即時通知仍會照常推播。
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2 px-5 py-4">
+          {([
+            { key: "off", label: "關閉" },
+            { key: "daily", label: "每日 08:00" },
+            { key: "weekly", label: "每週一 08:00" },
+          ] as const).map(({ key, label }) => {
+            const active = digest === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => updateDigest(key)}
+                disabled={digestSaving || loading}
+                className="px-3 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer hover:opacity-80 disabled:opacity-50"
+                style={
+                  active
+                    ? {
+                        background: "var(--primary-dim)",
+                        color: "var(--primary)",
+                        border: "1px solid var(--border-strong)",
+                      }
+                    : {
+                        color: "var(--text-muted)",
+                        border: "1px solid var(--border)",
+                        background: "var(--bg-surface)",
+                      }
+                }
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </section>
 
       <section className="card overflow-hidden">
         <div
@@ -136,12 +243,17 @@ export default function NotificationSettingsPage() {
             <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
               {loading
                 ? "載入中"
-                : `站內 ${counts.inapp} 項、Email ${counts.email} 項、LINE ${counts.line} 項已啟用`}
+                : `站內 ${counts.inapp} 項、Email ${counts.email} 項、LINE ${counts.line} 項、Discord ${counts.discord} 項已啟用`}
               {saving ? "，儲存中" : ""}
             </p>
             {!lineLinked && (
               <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
                 LINE 通知需先至個人資料完成綁定。
+              </p>
+            )}
+            {!discordLinked && (
+              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                Discord 通知需先至個人資料完成綁定。
               </p>
             )}
           </div>
@@ -164,12 +276,7 @@ export default function NotificationSettingsPage() {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-16" role="status" aria-live="polite">
-            <div
-              className="h-7 w-7 animate-spin rounded-full border-2 border-t-transparent"
-              style={{ borderColor: "var(--border-strong)", borderTopColor: "var(--primary)" }}
-            />
-          </div>
+          <div className="p-5"><SectionSkeleton lines={5} /></div>
         ) : !prefs ? (
           <div className="px-5 py-12 text-center text-sm" style={{ color: "var(--text-muted)" }}>
             無法載入通知偏好。
@@ -198,6 +305,12 @@ export default function NotificationSettingsPage() {
                 style={{ color: "var(--text-muted)" }}
               >
                 LINE
+              </div>
+              <div
+                className="w-16 text-center text-[11px] font-semibold"
+                style={{ color: "var(--text-muted)" }}
+              >
+                Discord
               </div>
             </div>
             <ul>
@@ -239,11 +352,38 @@ export default function NotificationSettingsPage() {
                       label={`${item.label} LINE 通知`}
                     />
                   </div>
+                  <div className="flex w-16 justify-center">
+                    <Switch
+                      on={prefs[item.key].discord}
+                      disabled={saving || !discordLinked}
+                      onClick={() => toggle(item.key, "discord")}
+                      label={`${item.label} Discord 通知`}
+                    />
+                  </div>
                 </li>
               ))}
             </ul>
           </>
         )}
+      </section>
+
+      <section className="card p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold">瀏覽器推播</h2>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              用於待審、公文狀態、公告與會議提醒。
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button className="btn btn-primary btn-sm" disabled={pushBusy} onClick={enablePush}>
+              啟用推播
+            </button>
+            <button className="btn btn-secondary btn-sm" disabled={pushBusy} onClick={testPush}>
+              測試推播
+            </button>
+          </div>
+        </div>
       </section>
     </div>
   );

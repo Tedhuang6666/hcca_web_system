@@ -7,9 +7,9 @@
        - "off"    永遠不 shed
        - "bypass" 永遠不 shed（緊急回滾用）
        - "on"     強制非 admin 503
-       - "auto"   依負載指標決策（active_requests / 5xx ratio / DB pool 使用率）
+       - "auto"   依負載指標決策（active_requests / DB pool；5xx 只作輔助訊號）
 
-「是否 admin」純看 JWT extra_claims["is_admin"]，不查 DB（middleware 必須無 I/O）。
+「是否 admin / bypass」純看 JWT extra_claims，不查 DB（middleware 必須無 I/O）。
 JWT claim 被偽造也只能擠進 origin → RBAC 第二道防線會在 router 層擋掉。
 """
 
@@ -25,6 +25,7 @@ from starlette.types import Receive, Scope, Send
 
 from api.core.config import settings
 from api.core.database import engine
+from api.core.defense import endpoint_lockdown_reason
 from api.core.ip_blocklist import is_blocked
 from api.core.load_signals import get_5xx_ratio, get_active_requests
 from api.core.maintenance import get_load_shed_force_mode, get_maintenance_state
@@ -44,6 +45,7 @@ ALWAYS_ALLOWED_PATHS = frozenset(
         "/auth/refresh",
         "/auth/me",
         "/auth/logout",
+        "/system/maintenance",
     }
 )
 ALWAYS_ALLOWED_PREFIXES = (
@@ -54,10 +56,10 @@ ALWAYS_ALLOWED_PREFIXES = (
 )
 
 
-def _is_admin_claim(scope: Scope) -> bool:
-    """從 cookie / Authorization header 取 access_token，看 JWT is_admin claim。
+def _access_claims(scope: Scope) -> dict:
+    """從 cookie / Authorization header 取 access_token，回傳可信 JWT claims。
 
-    不查 DB；不阻塞。若 token 缺失/失效/無 claim → False。
+    不查 DB；不阻塞。若 token 缺失/失效則回傳空 dict。
     """
     headers = scope.get("headers") or []
     token: str | None = None
@@ -85,12 +87,21 @@ def _is_admin_claim(scope: Scope) -> bool:
                 break
 
     if not token:
-        return False
+        return {}
     try:
-        payload = decode_token(token)
+        return decode_token(token)
     except jwt.PyJWTError:
-        return False
-    return bool(payload.get("is_admin"))
+        return {}
+
+
+def _can_bypass_protection(scope: Scope) -> bool:
+    payload = _access_claims(scope)
+    permissions = payload.get("permissions") or []
+    return bool(
+        payload.get("is_admin")
+        or "admin:all" in permissions
+        or "system:maintenance_bypass" in permissions
+    )
 
 
 def _client_ip(scope: Scope) -> str:
@@ -111,8 +122,9 @@ async def _should_shed_by_signals() -> tuple[bool, str]:
         return True, f"active_requests={active}"
 
     ratio = get_5xx_ratio()
-    if ratio > settings.LOAD_SHED_5XX_RATIO_THRESHOLD:
-        return True, f"5xx_ratio={ratio:.2%}"
+    active_pressure = active > max(5, settings.LOAD_SHED_MAX_ACTIVE_REQUESTS // 2)
+    if active_pressure and ratio > settings.LOAD_SHED_5XX_RATIO_THRESHOLD:
+        return True, f"active_requests={active};5xx_ratio={ratio:.2%}"
 
     try:
         db_stats = get_db_pool_stats(engine)
@@ -141,20 +153,24 @@ class LoadShedMiddleware:
         path = scope.get("path", "")
         ip = _client_ip(scope)
 
-        # 1. IP 黑名單：所有路徑（含 /health）都擋
-        if await is_blocked(ip):
-            await self._respond_blocked(scope, send)
-            return
-
         if _is_path_exempt(path):
             await self.app(scope, receive, send)
             return
 
-        is_admin = _is_admin_claim(scope)
+        # 1. IP 黑名單
+        if await is_blocked(ip):
+            await self._respond_blocked(scope, send)
+            return
+
+        can_bypass = _can_bypass_protection(scope)
+        lockdown_reason = await endpoint_lockdown_reason(path)
+        if lockdown_reason and not can_bypass:
+            await self._respond_lockdown(scope, send, lockdown_reason)
+            return
 
         # 2. Maintenance mode
         maintenance = await get_maintenance_state()
-        if maintenance.get("enabled") and not is_admin:
+        if maintenance.get("enabled") and not can_bypass:
             await self._respond_maintenance(scope, send, maintenance)
             return
 
@@ -166,10 +182,10 @@ class LoadShedMiddleware:
             if mode == "bypass" or mode == "off":
                 should_shed = False
             elif mode == "on":
-                should_shed = not is_admin
+                should_shed = not can_bypass
                 reason = "force_on"
             else:  # auto
-                if not is_admin:
+                if not can_bypass:
                     auto_shed, reason = await _should_shed_by_signals()
                     should_shed = auto_shed
 
@@ -189,7 +205,7 @@ class LoadShedMiddleware:
     async def _respond_maintenance(self, scope: Scope, send: Send, state: dict) -> None:
         message = state.get("message") or "系統維護中，請稍後再試"
         resp = JSONResponse(
-            {"detail": message, "maintenance": True},
+            {"detail": message, "maintenance": True, "until": state.get("until")},
             status_code=503,
             headers={"Retry-After": "60"},
         )
@@ -210,6 +226,14 @@ class LoadShedMiddleware:
             {"detail": "伺服器壅塞，請稍後再試", "load_shed": True},
             status_code=503,
             headers={"Retry-After": str(retry_after)},
+        )
+        await self._send_response(resp, scope, send)
+
+    async def _respond_lockdown(self, scope: Scope, send: Send, reason: str) -> None:
+        resp = JSONResponse(
+            {"detail": "此功能因全站防護策略暫時停用", "load_shed": True, "reason": reason},
+            status_code=503,
+            headers={"Retry-After": "60"},
         )
         await self._send_response(resp, scope, send)
 

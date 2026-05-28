@@ -21,12 +21,26 @@ export type RecipientType = "main" | "primary" | "copy";
 export type ApprovalStepStatus = "pending" | "approved" | "rejected" | "waiting" | "skipped";
 export type DelegateSource = "manual" | "assignment";
 export type RejectMode = "to_creator" | "to_previous";
+/** 遞送方式（後端僅儲存與顯示） */
+export type DeliveryMethod = "none" | "system" | "email" | "paper" | "postal";
 
 export interface RecipientOut {
   id: string;
   recipient_type: RecipientType;
   name: string;
   email: string | null;
+  target_user_id: string | null;
+  target_org_id: string | null;
+  delivery_method: DeliveryMethod;
+}
+
+export interface RecipientCreatePayload {
+  recipient_type: RecipientType;
+  name: string;
+  email?: string | null;
+  target_user_id?: string | null;
+  target_org_id?: string | null;
+  delivery_method?: DeliveryMethod;
 }
 
 export interface AttachmentOut {
@@ -120,6 +134,7 @@ export interface DocumentOut {
   org_id: string;
   created_by: string;
   serial_template_id: string | null;
+  regulation_id: string | null;
   revisions: RevisionOut[];
   approvals: ApprovalStepOut[];
   attachments: AttachmentOut[];
@@ -175,7 +190,7 @@ export interface DocumentCreate {
   due_date?: string;
   page_info?: string;
   visibility_level?: DocumentVisibility;
-  recipients?: { recipient_type: RecipientType; name: string; email?: string }[];
+  recipients?: RecipientCreatePayload[];
 }
 
 export interface BatchDocumentResult {
@@ -217,7 +232,7 @@ export interface DocumentTemplateOut {
   file_number: string | null;
   retention_period: string | null;
   visibility_level: DocumentVisibility;
-  recipients: { recipient_type: RecipientType; name: string; email?: string | null }[];
+  recipients: RecipientCreatePayload[];
   created_by: string;
   updated_by: string | null;
   created_at: string;
@@ -1307,6 +1322,7 @@ export interface UserPositionRead {
   created_at: string;
   updated_at: string;
   position_name: string;
+  position_category: PositionCategory;
   position_org_id: string | null;
   position_org_name: string;
 }
@@ -1335,6 +1351,8 @@ export interface PermissionCodeInfo {
   desc: string;
 }
 
+export type PositionCategory = "council" | "class" | "system";
+
 export interface PositionSummary {
   id: string;
   name: string;
@@ -1342,6 +1360,7 @@ export interface PositionSummary {
   org_name: string;
   org_is_active: boolean;
   description?: string | null;
+  category: PositionCategory;
   weight: number;
   parent_id?: string | null;
   permission_codes: string[];
@@ -1371,6 +1390,7 @@ export interface OrgWithPositions {
     id: string;
     name: string;
     description?: string | null;
+    category: PositionCategory;
     weight: number;
     parent_id?: string | null;
     permission_codes: string[];
@@ -1606,12 +1626,19 @@ export type QuestionType =
   | "textarea"
   | "single"
   | "multiple"
+  | "ranking"
   | "rating"
   | "date"
   | "section_text"
   | "page_break"
   | "image"
   | "video";
+
+/** 選項額外設定：多選互斥／自由輸入 */
+export interface OptionConfig {
+  exclusive: string[];
+  other: string[];
+}
 
 /** 文字題型的格式驗證規則 */
 export type ValidationRule = "email" | "number" | "integer" | "url" | "phone";
@@ -1648,6 +1675,7 @@ export interface SurveyQuestionOut {
   min_label: string | null;
   max_label: string | null;
   condition: QuestionCondition | null;
+  option_config: OptionConfig | null;
 }
 
 export interface SurveyOut {
@@ -1689,6 +1717,7 @@ export interface SurveyAnswerOut {
   question_id: string;
   answer_text: string | null;
   answer_options: string[];
+  other_text: string | null;
 }
 
 export interface SurveyResponseOut {
@@ -1984,6 +2013,7 @@ export interface ChannelPref {
   inapp: boolean;
   email: boolean;
   line: boolean;
+  discord: boolean;
 }
 
 export interface NotificationPreferences {
@@ -1993,6 +2023,79 @@ export interface NotificationPreferences {
   document_recalled: ChannelPref;
   announcement: ChannelPref;
   system: ChannelPref;
+}
+
+export interface SearchResultOut {
+  id: string;
+  kind: "document" | "regulation" | "meeting" | "announcement" | string;
+  title: string;
+  summary: string;
+  href: string;
+}
+
+export interface WebPushConfigOut {
+  enabled: boolean;
+  public_key: string;
+}
+
+export interface WebPushSubscriptionOut {
+  id: string;
+  endpoint: string;
+  device_label: string | null;
+  is_active: boolean;
+}
+
+// ── 系統防護 ───────────────────────────────────────────────────────────────
+
+export type DefenseRuleType =
+  | "ip_block"
+  | "cidr_block"
+  | "ip_allow"
+  | "rate_limit_override"
+  | "endpoint_lockdown"
+  | "bot_challenge_placeholder";
+
+export interface DefenseRule {
+  id: string;
+  rule_type: DefenseRuleType;
+  target: string;
+  is_active: boolean;
+  reason: string;
+  config: Record<string, unknown>;
+  expires_at: number | null;
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RateLimitOverride {
+  path_prefix: string;
+  requests: number;
+  window_seconds: number;
+}
+
+export interface RateLimitConfig {
+  enabled: boolean;
+  global_requests: number;
+  global_window_seconds: number;
+  overrides: RateLimitOverride[];
+}
+
+export interface DefenseSummary {
+  active_rule_count: number;
+  total_rule_count: number;
+  active_by_type: Record<string, number>;
+  active_rules: DefenseRule[];
+  rate_limit: RateLimitConfig;
+  recent_status_counts: Record<string, number>;
+}
+
+export interface PasskeyCredentialOut {
+  id: string;
+  name: string;
+  last_used_at: string | null;
+  created_at: string;
 }
 
 export interface LineBindingOut {
@@ -2005,6 +2108,67 @@ export interface LineLinkCodeOut {
   code: string;
   expires_at: string;
   instructions: string;
+}
+
+export interface DiscordBindingOut {
+  linked: boolean;
+  discord_user_id: string | null;
+  username: string | null;
+  global_name: string | null;
+  linked_at: string | null;
+}
+
+export type DiscordRoleMappingKind = "org" | "position";
+
+export interface DiscordGuildConfigOut {
+  id: string;
+  guild_id: string;
+  name: string | null;
+  office_channel_id: string | null;
+  security_alert_channel_id: string | null;
+  petition_entry_channel_id: string | null;
+  announcement_channel_id: string | null;
+  admin_role_id: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type DiscordGuildConfigIn = Omit<DiscordGuildConfigOut, "id" | "created_at" | "updated_at">;
+
+export interface DiscordRoleMappingOut {
+  id: string;
+  guild_id: string;
+  role_id: string;
+  mapping_kind: DiscordRoleMappingKind;
+  org_id: string | null;
+  position_id: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type DiscordRoleMappingIn = Omit<DiscordRoleMappingOut, "id" | "created_at" | "updated_at">;
+
+export interface DiscordGuildOptionOut {
+  id: string;
+  name: string;
+  icon: string | null;
+}
+
+export interface DiscordChannelOptionOut {
+  id: string;
+  name: string;
+  type: number;
+  parent_id: string | null;
+}
+
+export interface DiscordRoleOptionOut {
+  id: string;
+  name: string;
+  color: number;
+  position: number;
+  managed: boolean;
 }
 
 // ── 公告統計 ─────────────────────────────────────────────────────────────────
@@ -2130,4 +2294,74 @@ export interface EmailMessageDetailOut extends EmailMessageOut {
 export interface EmailPosition {
   id: string;
   name: string;
+}
+
+// ── 段考題庫 ────────────────────────────────────────────────────────────────
+
+export type ExamGradeTrack = "first" | "second" | "third";
+
+export interface ExamPaperListItem {
+  id: string;
+  title: string;
+  subject: string;
+  academic_year: number;
+  semester: number;
+  grade: number;
+  grade_track: ExamGradeTrack | null;
+  exam_number: number;
+  filename: string;
+  file_size: number;
+  is_published: boolean;
+  uploaded_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ExamPaperOut extends ExamPaperListItem {
+  content_type: string;
+  is_active: boolean;
+}
+
+export interface ExamPaperUpdate {
+  title?: string;
+  subject?: string;
+  academic_year?: number;
+  semester?: number;
+  grade?: number;
+  grade_track?: ExamGradeTrack | null;
+  exam_number?: number;
+  is_published?: boolean;
+}
+
+export interface ExamPaperDownloadOut {
+  id: string;
+  paper_id: string;
+  user_id: string;
+  trace_code: string;
+  file_sha256: string | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  downloaded_at: string;
+  user_display_name: string;
+  user_email: string;
+  user_student_id: string | null;
+}
+
+export interface ExamTraceInspectMatch {
+  trace_code: string;
+  download_id: string;
+  paper_id: string;
+  paper_title: string;
+  user_id: string;
+  user_display_name: string;
+  user_email: string;
+  user_student_id: string | null;
+  downloaded_at: string;
+  confidence: string;
+}
+
+export interface ExamTraceInspectOut {
+  detected_trace_codes: string[];
+  matches: ExamTraceInspectMatch[];
+  unsupported_reason: string | null;
 }

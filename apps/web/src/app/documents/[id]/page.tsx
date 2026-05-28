@@ -866,6 +866,28 @@ export default function DocumentDetailPage() {
             </button>
           </div>
 
+          {doc.regulation_id && (
+            <div
+              className="card p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+              style={{ borderColor: "var(--border-strong)" }}
+            >
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+                  關聯法規
+                </p>
+                <p className="text-sm mt-1" style={{ color: "var(--text-primary)" }}>
+                  此公文是法規公布或處理流程的一部分
+                </p>
+              </div>
+              <Link
+                href={`/regulations/${encodeURIComponent(doc.regulation_id)}`}
+                className="btn btn-ghost btn-sm justify-center"
+              >
+                查看法規
+              </Link>
+            </div>
+          )}
+
           {showDocumentInfo && (
             <div className="card p-4">
               <dl className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-3">

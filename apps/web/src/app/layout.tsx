@@ -1,8 +1,12 @@
 import type { Metadata, Viewport } from "next";
+import { Suspense } from "react";
 import "./globals.css";
 import { Toaster } from "sonner";
 import AppShell from "@/components/layout/AppShell";
+import GoogleOneTap from "@/components/auth/GoogleOneTap";
+import PwaInstallPrompt from "@/components/pwa/PwaInstallPrompt";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import TelemetryProvider from "@/components/providers/TelemetryProvider";
 import ScrollProgressBar from "@/components/ui/ScrollProgressBar";
 import { SOCIAL_IMAGE, SOCIAL_SHARE_TITLE, SOCIAL_SITE_NAME } from "@/lib/social-metadata";
 
@@ -69,7 +73,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="antialiased">
         <ThemeProvider>
           <ScrollProgressBar />
+          <Suspense fallback={null}>
+            <TelemetryProvider />
+          </Suspense>
           <AppShell>{children}</AppShell>
+          <Suspense fallback={null}>
+            <GoogleOneTap />
+          </Suspense>
+          <PwaInstallPrompt />
           <Toaster
             position="top-right"
             richColors

@@ -11,6 +11,7 @@ from redis.exceptions import RedisError
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from api.core.defense import get_rate_limit_config
 from api.core.security import redis_client
 
 logger = logging.getLogger(__name__)
@@ -42,17 +43,38 @@ class SimpleRateLimitMiddleware:
         self.window_seconds = window_seconds
 
         self._overrides: list[tuple[str, int, int]] = [
-            ("/auth/refresh", 30, 60),
-            ("/auth/google/login", 30, 60),
-            ("/auth/google/callback", 30, 60),
+            ("/auth/refresh", 20, 60),
+            ("/auth/google/login", 20, 60),
+            ("/auth/google/callback", 20, 60),
+            ("/admin/", 90, 60),
             ("/notifications/email", 10, 60),
+            ("/email", 20, 60),
+            ("/documents/attachments", 15, 60),
+            ("/surveys", 40, 60),
+            ("/petitions", 30, 60),
         ]
 
-    def _policy_for_path(self, path: str) -> tuple[int, int]:
+    async def _policy_for_path(self, path: str) -> tuple[bool, int, int]:
+        config = await get_rate_limit_config()
+        enabled = bool(config.get("enabled", self.enabled))
+        req_limit = int(config.get("global_requests") or self.requests)
+        win = int(config.get("global_window_seconds") or self.window_seconds)
+        overrides = config.get("overrides")
+        if isinstance(overrides, list):
+            for item in overrides:
+                if not isinstance(item, dict):
+                    continue
+                prefix = str(item.get("path_prefix") or "")
+                if prefix and path.startswith(prefix):
+                    return (
+                        enabled,
+                        int(item.get("requests") or req_limit),
+                        int(item.get("window_seconds") or win),
+                    )
         for prefix, req, win in self._overrides:
             if path.startswith(prefix):
-                return req, win
-        return self.requests, self.window_seconds
+                return enabled, req, win
+        return enabled, req_limit, win
 
     def _check_memory_rate_limit(self, key: str, req_limit: int, win: int) -> bool:
         """簡單的內存降級 rate limit（固定視窗）"""
@@ -66,7 +88,7 @@ class SimpleRateLimitMiddleware:
         return len(_memory_buckets[key]) > req_limit
 
     async def __call__(self, scope, receive, send) -> None:
-        if scope["type"] != "http" or not self.enabled:
+        if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
 
@@ -76,7 +98,10 @@ class SimpleRateLimitMiddleware:
             return
 
         client_host = request.client.host if request.client else "unknown"
-        req_limit, win = self._policy_for_path(request.url.path)
+        enabled, req_limit, win = await self._policy_for_path(request.url.path)
+        if not enabled:
+            await self.app(scope, receive, send)
+            return
         now = int(time.time())
         bucket = now - (now % win)
         key = f"rate_limit:{client_host}:{request.method}:{request.url.path}:{bucket}"

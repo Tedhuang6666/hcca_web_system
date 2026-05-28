@@ -1,5 +1,7 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 type OfficialLine = {
   prefix: string;
   body: string;
@@ -17,6 +19,8 @@ type OfficialBlock =
   | { type: "amendment_table"; rows: AmendmentRow[]; index: number };
 
 const LINE_RE = /^(　*)([一二三四五六七八九十百零〇]+、|（[一二三四五六七八九十百零〇]+）|\d+\.|\(\d+\))\s*(.*)$/;
+const SMART_LINK_RE =
+  /(https?:\/\/[^\s，。；、）)]+|[\u4e00-\u9fffA-Za-z]{1,16}字第\s*[0-9０-９A-Za-z-]+\s*號|「[^」]{2,60}(?:憲章|條例|辦法|規則|章程|細則|要點|準則)」)/g;
 
 function parseLine(line: string): OfficialLine {
   const match = line.match(LINE_RE);
@@ -97,6 +101,44 @@ function amendmentStatusStyle(status: string) {
   };
 }
 
+function smartLinkHref(token: string) {
+  if (/^https?:\/\//.test(token)) return token;
+  if (token.includes("字第") && token.includes("號")) {
+    return `/documents?keyword=${encodeURIComponent(token.replace(/\s+/g, ""))}`;
+  }
+  const title = token.replace(/^「|」$/g, "");
+  return `/regulations?keyword=${encodeURIComponent(title)}`;
+}
+
+export function SmartLinkedText({ text }: { text: string }) {
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+  let key = 0;
+
+  for (const match of text.matchAll(SMART_LINK_RE)) {
+    const token = match[0];
+    const index = match.index ?? 0;
+    if (index > cursor) parts.push(text.slice(cursor, index));
+    const href = smartLinkHref(token);
+    parts.push(
+      <a
+        key={`${token}-${key++}`}
+        href={href}
+        className="official-smart-link"
+        target={href.startsWith("http") ? "_blank" : undefined}
+        rel={href.startsWith("http") ? "noreferrer" : undefined}
+        onClick={(event) => event.stopPropagation()}
+      >
+        {token}
+      </a>,
+    );
+    cursor = index + token.length;
+  }
+
+  if (cursor < text.length) parts.push(text.slice(cursor));
+  return <>{parts}</>;
+}
+
 export function OfficialText({
   value,
   className = "",
@@ -139,6 +181,15 @@ export function OfficialText({
           white-space: pre-wrap;
           overflow-wrap: anywhere;
           word-break: break-word;
+        }
+        .official-smart-link {
+          color: var(--primary);
+          text-decoration: underline;
+          text-decoration-thickness: 1px;
+          text-underline-offset: 0.18em;
+        }
+        .official-smart-link:hover {
+          opacity: 0.82;
         }
         .official-text-line.level-1 { margin-left: 0; }
         .official-text-line.level-2 { margin-left: 2em; }
@@ -217,7 +268,9 @@ export function OfficialText({
                           </span>
                         </td>
                         <td>{row.articleNo}</td>
-                        <td className="whitespace-pre-wrap">{row.content}</td>
+                        <td className="whitespace-pre-wrap">
+                          <SmartLinkedText text={row.content} />
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -235,7 +288,9 @@ export function OfficialText({
                       </span>
                       <span className="text-sm font-medium">{row.articleNo}</span>
                     </div>
-                    <p className="whitespace-pre-wrap text-sm">{row.content}</p>
+                    <p className="whitespace-pre-wrap text-sm">
+                      <SmartLinkedText text={row.content} />
+                    </p>
                   </article>
                 ))}
               </div>
@@ -251,14 +306,16 @@ export function OfficialText({
         if (!parsed.prefix) {
           return (
             <div key={index} className="official-text-line plain">
-              {parsed.body}
+              <SmartLinkedText text={parsed.body} />
             </div>
           );
         }
         return (
           <div key={index} className={`official-text-line level-${parsed.level}`}>
             <span className="official-text-prefix">{parsed.prefix}</span>
-            <span className="official-text-body">{parsed.body}</span>
+            <span className="official-text-body">
+              <SmartLinkedText text={parsed.body} />
+            </span>
           </div>
         );
       })}

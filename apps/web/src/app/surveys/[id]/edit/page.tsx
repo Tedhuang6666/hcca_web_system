@@ -15,6 +15,7 @@ const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: "textarea", label: "長答（多行）" },
   { value: "single", label: "單選" },
   { value: "multiple", label: "多選" },
+  { value: "ranking", label: "拖拉排序" },
   { value: "rating", label: "評分" },
   { value: "date", label: "日期" },
   { value: "section_text", label: "文字描述區塊" },
@@ -70,6 +71,8 @@ function QuestionRow({
   const [rule, setRule] = useState<string>(q.validation_rule ?? "");
   const [placeholder, setPlaceholder] = useState(q.placeholder ?? "");
   const [imageUrl, setImageUrl] = useState(q.image_url ?? "");
+  const [exclusiveOpts, setExclusiveOpts] = useState<string[]>(q.option_config?.exclusive ?? []);
+  const [otherOpts, setOtherOpts] = useState<string[]>(q.option_config?.other ?? []);
   const [rules, setRules] = useState<CondRule[]>(
     (q.condition?.rules ?? []).map(r => ({
       question_id: r.question_id, operator: r.operator, value: r.value, connector: r.connector,
@@ -92,11 +95,20 @@ function QuestionRow({
     });
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const isChoice = q.question_type === "single" || q.question_type === "multiple";
+  const isMultiple = q.question_type === "multiple";
+  const isRanking = q.question_type === "ranking";
+  const isChoice = q.question_type === "single" || isMultiple || isRanking;
   const isRating = q.question_type === "rating";
   const isText = q.question_type === "text" || q.question_type === "textarea";
   const isImage = q.question_type === "image";
   const isVideo = q.question_type === "video";
+
+  // 從 optionsText 拆出實際選項清單，供「互斥／其他」標記面板使用
+  const parsedOptions = optionsText.split("\n").map(s => s.trim()).filter(Boolean);
+  const toggleExclusive = (opt: string) =>
+    setExclusiveOpts(prev => prev.includes(opt) ? prev.filter(o => o !== opt) : [...prev, opt]);
+  const toggleOther = (opt: string) =>
+    setOtherOpts(prev => prev.includes(opt) ? prev.filter(o => o !== opt) : [...prev, opt]);
 
   const uploadImage = async (file: File) => {
     if (!file.type.startsWith("image/")) { toast.error("請選擇圖片檔案"); return; }
@@ -110,13 +122,26 @@ function QuestionRow({
   };
 
   const save = async () => {
-    if (isChoice) {
-      const opts = optionsText.split("\n").map(s => s.trim()).filter(Boolean);
-      if (opts.length < 2) { toast.error("選擇題至少需 2 個選項"); return; }
+    const opts = isChoice ? parsedOptions : [];
+    if (isChoice && opts.length < 2) { toast.error("選擇題至少需 2 個選項"); return; }
+    if (isRanking && maxValue > opts.length) {
+      toast.error("排序最多項數不可大於選項總數"); return;
+    }
+    if (isRanking && minValue > maxValue) {
+      toast.error("最少項數不可大於最多項數"); return;
     }
     setSaving(true);
     const body: SurveyQuestionBody = { question_text: text, is_required: required };
-    if (isChoice) body.options = optionsText.split("\n").map(s => s.trim()).filter(Boolean);
+    if (isChoice) body.options = opts;
+    if (isMultiple) {
+      const exclusive = exclusiveOpts.filter(o => opts.includes(o));
+      const other = otherOpts.filter(o => opts.includes(o));
+      body.option_config = (exclusive.length || other.length) ? { exclusive, other } : null;
+    }
+    if (isRanking) {
+      body.min_value = Math.max(1, minValue);
+      body.max_value = Math.min(opts.length, maxValue);
+    }
     if (isRating) {
       body.min_value = minValue;
       body.max_value = maxValue;
@@ -186,6 +211,57 @@ function QuestionRow({
           <Label>選項（每行一個，至少 2 個）</Label>
           <textarea value={optionsText} onChange={e => setOptionsText(e.target.value)} rows={3}
             className="input resize-y" placeholder={"選項一\n選項二"} />
+        </div>
+      )}
+
+      {isMultiple && parsedOptions.length > 0 && (
+        <div className="rounded-xl p-3 space-y-2" style={{ background: "var(--bg-elevated)" }}>
+          <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+            選項額外設定（選填）
+          </p>
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+            <strong>互斥</strong>：勾選此項時自動清空其他項目（如「以上皆非」）。
+            <br />
+            <strong>其他</strong>：勾選此項時顯示文字輸入框，可由填答者自由輸入。
+          </p>
+          <div className="space-y-1">
+            {parsedOptions.map(opt => (
+              <div key={opt} className="flex items-center gap-2 px-2 py-1.5 rounded-lg"
+                style={{ background: "var(--bg-surface)" }}>
+                <span className="text-sm flex-1 truncate" style={{ color: "var(--text-primary)" }}>{opt}</span>
+                <label className="flex items-center gap-1 text-xs cursor-pointer"
+                  style={{ color: "var(--text-muted)" }}>
+                  <input type="checkbox" checked={exclusiveOpts.includes(opt)}
+                    onChange={() => toggleExclusive(opt)} className="accent-sky-400" />
+                  互斥
+                </label>
+                <label className="flex items-center gap-1 text-xs cursor-pointer"
+                  style={{ color: "var(--text-muted)" }}>
+                  <input type="checkbox" checked={otherOpts.includes(opt)}
+                    onChange={() => toggleOther(opt)} className="accent-sky-400" />
+                  其他
+                </label>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {isRanking && (
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <Label>最少排序項數</Label>
+            <input type="number" min={1} max={Math.max(1, parsedOptions.length)} value={minValue}
+              onChange={e => setMinValue(parseInt(e.target.value) || 1)} className="input" />
+          </div>
+          <div>
+            <Label>最多排序項數</Label>
+            <input type="number" min={1} max={Math.max(1, parsedOptions.length)} value={maxValue}
+              onChange={e => setMaxValue(parseInt(e.target.value) || 1)} className="input" />
+          </div>
+          <p className="col-span-2 text-xs" style={{ color: "var(--text-muted)" }}>
+            填答者需從上述選項中挑選並排序（最少 {Math.max(1, minValue)}、最多 {Math.min(parsedOptions.length || maxValue, maxValue)} 項）。
+          </p>
         </div>
       )}
 
@@ -470,19 +546,24 @@ export default function EditSurveyPage() {
   const addQuestion = async () => {
     if (!survey) return;
     const isImg = newType === "image";
-    const isChoice = newType === "single" || newType === "multiple";
+    const isChoice = newType === "single" || newType === "multiple" || newType === "ranking";
     if (!isImg && !newText.trim()) { toast.error("請輸入題目或區塊文字"); return; }
     const opts = newOptions.split("\n").map(s => s.trim()).filter(Boolean);
     if (isChoice && opts.length < 2) { toast.error("選擇題至少需 2 個選項"); return; }
     if (isImg) { toast.error("圖片題請先新增其他題型，再於題目卡上傳圖片"); return; }
     setBusy(true);
     try {
-      await surveysApi.addQuestion(survey.id, {
+      const body: SurveyQuestionBody & { question_text: string; question_type: string } = {
         question_text: newText.trim() || "（未命名）",
         question_type: newType,
         options: isChoice ? opts : [],
         order_index: survey.questions.length,
-      });
+      };
+      if (newType === "ranking") {
+        body.min_value = 1;
+        body.max_value = opts.length;
+      }
+      await surveysApi.addQuestion(survey.id, body);
       setNewText("");
       setNewOptions("");
       toast.success("題目已新增");
@@ -518,7 +599,7 @@ export default function EditSurveyPage() {
     );
   }
 
-  const needsOptions = newType === "single" || newType === "multiple";
+  const needsOptions = newType === "single" || newType === "multiple" || newType === "ranking";
 
   return (
     <div className="max-w-2xl mx-auto space-y-5">

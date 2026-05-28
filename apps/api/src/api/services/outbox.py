@@ -77,6 +77,25 @@ def _dispatch(event: OutboxEvent) -> None:
                 href = f"{base}{href if href.startswith('/') else '/' + href}"
             text = f"{text}\n{href}"
         push_text_message(str(payload.get("line_user_id")), text)
+    elif etype == "discord.push":
+        from api.services.discord_bot import format_discord_payload, send_dm
+
+        title, body = format_discord_payload(payload)
+        send_dm(str(payload.get("discord_user_id")), title=title, body=body)
+    elif etype == "discord.channel_alert":
+        from api.services.discord_bot import format_discord_payload, send_channel_message
+
+        title, body = format_discord_payload(payload)
+        send_channel_message(str(payload.get("channel_id")), title=title, body=body)
+    elif etype == "discord.role_sync":
+        from api.services.discord_bot import sync_member_roles
+
+        sync_member_roles(
+            str(payload.get("guild_id")),
+            str(payload.get("discord_user_id")),
+            list(payload.get("role_ids") or []),
+            list(payload.get("managed_role_ids") or []),
+        )
     else:
         logger.warning("Unknown outbox event_type: %s", etype)
 

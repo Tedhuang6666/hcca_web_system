@@ -14,6 +14,13 @@ from api.models.announcement import (  # noqa: F401
 
 # 稽核日誌（不可變）
 from api.models.audit_log import AuditLog  # noqa: F401
+from api.models.defense import DefenseRule, DefenseRuleType  # noqa: F401
+from api.models.discord_account import (  # noqa: F401
+    DiscordAccountLink,
+    DiscordGuildConfig,
+    DiscordRoleMapping,
+    DiscordRoleMappingKind,
+)
 from api.models.document import (  # noqa: F401
     ApprovalStepStatus,
     DelegateSource,
@@ -34,6 +41,7 @@ from api.models.document import (  # noqa: F401
     YearMode,
 )
 from api.models.email_message import EmailMessage, EmailStatus  # noqa: F401
+from api.models.exam_paper import ExamGradeTrack, ExamPaper, ExamPaperDownload  # noqa: F401
 from api.models.line_account import LineAccountLink  # noqa: F401
 from api.models.meal import (  # noqa: F401
     MealClassPickupCode,
@@ -98,6 +106,7 @@ from api.models.partner_map import (  # noqa: F401
     PartnerTag,
     partner_business_tags,
 )
+from api.models.passkey import PasskeyCredential, WebAuthnChallenge  # noqa: F401
 from api.models.petition import (  # noqa: F401
     PetitionAttachment,
     PetitionAttachmentVisibility,
@@ -150,3 +159,4 @@ from api.models.shop import (  # noqa: F401
     ProductVariantOption,
 )
 from api.models.user import User  # noqa: F401
+from api.models.web_push import WebPushSubscription  # noqa: F401
