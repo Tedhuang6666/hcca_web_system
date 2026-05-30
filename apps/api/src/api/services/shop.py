@@ -72,11 +72,17 @@ async def get_category(session: AsyncSession, category_id: uuid.UUID) -> Product
 
 
 async def list_categories(
-    session: AsyncSession, *, org_id: uuid.UUID | None = None, include_inactive: bool = True
+    session: AsyncSession,
+    *,
+    org_id: uuid.UUID | None = None,
+    activity_id: uuid.UUID | None = None,
+    include_inactive: bool = True,
 ) -> list[ProductCategory]:
     q = select(ProductCategory)
     if org_id:
         q = q.where(ProductCategory.org_id == org_id)
+    if activity_id:
+        q = q.where(ProductCategory.activity_id == activity_id)
     if not include_inactive:
         q = q.where(ProductCategory.is_active.is_(True))
     q = q.order_by(ProductCategory.sort_order, ProductCategory.created_at)
@@ -89,6 +95,7 @@ async def create_category(
 ) -> ProductCategory:
     category = ProductCategory(
         org_id=data.org_id,
+        activity_id=data.activity_id,
         name=data.name,
         description=data.description,
         image_url=data.image_url,
@@ -184,7 +191,10 @@ async def delete_series(session: AsyncSession, series: ProductSeries) -> None:
 async def get_product(session: AsyncSession, product_id: uuid.UUID) -> Product | None:
     result = await session.execute(
         select(Product)
-        .options(selectinload(Product.variant_groups).selectinload(ProductVariantGroup.options))
+        .options(
+            selectinload(Product.variant_groups).selectinload(ProductVariantGroup.options),
+            selectinload(Product.series).selectinload(ProductSeries.category),
+        )
         .where(Product.id == product_id)
     )
     return result.scalar_one_or_none()
@@ -194,6 +204,7 @@ async def list_products(
     session: AsyncSession,
     *,
     org_id: uuid.UUID | None = None,
+    activity_id: uuid.UUID | None = None,
     series_id: uuid.UUID | None = None,
     status: ProductStatus | None = None,
     limit: int = 20,
@@ -204,6 +215,11 @@ async def list_products(
     )
     if org_id:
         q = q.where(Product.org_id == org_id)
+    if activity_id:
+        q = q.join(ProductSeries, Product.series_id == ProductSeries.id).join(
+            ProductCategory, ProductSeries.category_id == ProductCategory.id
+        )
+        q = q.where(ProductCategory.activity_id == activity_id)
     if series_id:
         q = q.where(Product.series_id == series_id)
     if status:
@@ -394,7 +410,10 @@ async def delete_variant_option(session: AsyncSession, option: ProductVariantOpt
 
 
 async def build_catalog_tree(
-    session: AsyncSession, *, org_id: uuid.UUID | None = None
+    session: AsyncSession,
+    *,
+    org_id: uuid.UUID | None = None,
+    activity_id: uuid.UUID | None = None,
 ) -> list[CatalogCategoryOut]:
     """組合 主題 → 系列 → 商品 的瀏覽樹（僅含上架中 / 售罄商品）。"""
     q = (
@@ -409,6 +428,8 @@ async def build_catalog_tree(
     )
     if org_id:
         q = q.where(ProductCategory.org_id == org_id)
+    if activity_id:
+        q = q.where(ProductCategory.activity_id == activity_id)
     categories = (await session.execute(q)).scalars().unique().all()
 
     visible = {ProductStatus.ACTIVE, ProductStatus.SOLD_OUT}
@@ -447,6 +468,7 @@ async def build_catalog_tree(
             CatalogCategoryOut(
                 id=category.id,
                 name=category.name,
+                activity_id=category.activity_id,
                 image_url=category.image_url,
                 sort_order=category.sort_order,
                 series=series_out,
@@ -604,6 +626,16 @@ def serialize_cart(cart: Cart) -> CartOut:
     return CartOut(id=cart.id, items=items_out, total_price=total)
 
 
+def _order_activity_id(order: Order) -> uuid.UUID | None:
+    for item in getattr(order, "items", []) or []:
+        product = getattr(item, "product", None)
+        series = getattr(product, "series", None) if product else None
+        category = getattr(series, "category", None) if series else None
+        if category and category.activity_id:
+            return category.activity_id
+    return None
+
+
 # ── 結單（購物車 → 訂單）──────────────────────────────────────────────────────
 
 
@@ -716,7 +748,10 @@ async def get_order(session: AsyncSession, order_id: uuid.UUID) -> Order | None:
     result = await session.execute(
         select(Order)
         .options(
-            selectinload(Order.items).selectinload(OrderItem.product),
+            selectinload(Order.items)
+            .selectinload(OrderItem.product)
+            .selectinload(Product.series)
+            .selectinload(ProductSeries.category),
             selectinload(Order.school_class),
             selectinload(Order.user),
         )
@@ -730,6 +765,7 @@ async def list_orders(
     *,
     user_id: uuid.UUID | None = None,
     org_id: uuid.UUID | None = None,
+    activity_id: uuid.UUID | None = None,
     class_ids: list[uuid.UUID] | None = None,
     status: OrderStatus | None = None,
     is_paid: bool | None = None,
@@ -738,13 +774,30 @@ async def list_orders(
 ) -> list[Order]:
     q = (
         select(Order)
-        .options(selectinload(Order.school_class), selectinload(Order.user))
+        .options(
+            selectinload(Order.school_class),
+            selectinload(Order.user),
+            selectinload(Order.items)
+            .selectinload(OrderItem.product)
+            .selectinload(Product.series)
+            .selectinload(ProductSeries.category),
+        )
         .order_by(Order.created_at.desc())
     )
     if user_id:
         q = q.where(Order.user_id == user_id)
     if org_id:
         q = q.where(Order.org_id == org_id)
+    if activity_id:
+        q = q.where(
+            Order.items.any(
+                OrderItem.product.has(
+                    Product.series.has(
+                        ProductSeries.category.has(ProductCategory.activity_id == activity_id)
+                    )
+                )
+            )
+        )
     if class_ids is not None:
         if not class_ids:
             return []
@@ -776,6 +829,7 @@ def serialize_order(order: Order) -> OrderOut:
         serial_number=order.serial_number,
         user_id=order.user_id,
         org_id=order.org_id,
+        activity_id=_order_activity_id(order),
         status=order.status,
         total_price=order.total_price,
         notes=order.notes,
@@ -796,6 +850,7 @@ def serialize_order_list_item(order: Order) -> OrderListItem:
         user_id=order.user_id,
         user_name=order.user.display_name if order.user else None,
         org_id=order.org_id,
+        activity_id=_order_activity_id(order),
         status=order.status,
         total_price=order.total_price,
         class_id=order.class_id,
@@ -870,13 +925,10 @@ async def order_summary(
     if group_by not in ("class", "grade", "user"):
         raise ValueError("group_by 必須為 class / grade / user")
 
-    q = (
-        select(Order)
-        .options(
-            selectinload(Order.items),
-            selectinload(Order.school_class),
-            selectinload(Order.user),
-        )
+    q = select(Order).options(
+        selectinload(Order.items),
+        selectinload(Order.school_class),
+        selectinload(Order.user),
     )
     if status is not None:
         q = q.where(Order.status == status)
@@ -961,6 +1013,7 @@ async def order_summary(
 async def _fetch_order_report_rows(
     session: AsyncSession,
     org_id: uuid.UUID | None = None,
+    activity_id: uuid.UUID | None = None,
 ) -> list[dict]:
     """聚合訂單明細資料，供 Pandas 處理"""
     q = (
@@ -980,6 +1033,12 @@ async def _fetch_order_report_rows(
     )
     if org_id:
         q = q.where(Order.org_id == org_id)
+    if activity_id:
+        q = q.where(
+            Product.series.has(
+                ProductSeries.category.has(ProductCategory.activity_id == activity_id)
+            )
+        )
 
     result = await session.execute(q)
     rows = result.mappings().all()
@@ -1002,11 +1061,12 @@ async def _fetch_order_report_rows(
 async def export_orders_excel(
     session: AsyncSession,
     org_id: uuid.UUID | None = None,
+    activity_id: uuid.UUID | None = None,
 ) -> bytes:
     """匯出訂單報表為 Excel（.xlsx）。"""
     import pandas as pd
 
-    rows = await _fetch_order_report_rows(session, org_id=org_id)
+    rows = await _fetch_order_report_rows(session, org_id=org_id, activity_id=activity_id)
     columns = [
         "訂單字號",
         "訂單狀態",
@@ -1034,10 +1094,11 @@ async def export_orders_excel(
 async def export_orders_csv(
     session: AsyncSession,
     org_id: uuid.UUID | None = None,
+    activity_id: uuid.UUID | None = None,
 ) -> str:
     """匯出訂單報表為 CSV（UTF-8 with BOM，Excel 可直接開啟）"""
     import pandas as pd
 
-    rows = await _fetch_order_report_rows(session, org_id=org_id)
+    rows = await _fetch_order_report_rows(session, org_id=org_id, activity_id=activity_id)
     df = pd.DataFrame(rows) if rows else pd.DataFrame()
     return df.to_csv(index=False, encoding="utf-8-sig")

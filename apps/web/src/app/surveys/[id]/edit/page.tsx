@@ -3,12 +3,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { surveysApi, orgsApi, usersApi, ApiError } from "@/lib/api";
+import { activitiesApi, surveysApi, orgsApi, usersApi, ApiError } from "@/lib/api";
 import type { SurveyQuestionBody, OrgRead } from "@/lib/api";
-import type { SurveyOut, SurveyQuestionOut, QuestionType, UserSummary } from "@/lib/types";
+import type { Activity, SurveyOut, SurveyQuestionOut, QuestionType, UserSummary } from "@/lib/types";
 import { uploadUrl } from "@/lib/config";
 import { usePermissions } from "@/hooks/usePermissions";
 import UserPicker from "@/components/surveys/UserPicker";
+import ActivitySelect from "@/components/activities/ActivitySelect";
 
 const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: "text", label: "簡答（單行）" },
@@ -440,6 +441,8 @@ export default function EditSurveyPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [closesAt, setClosesAt] = useState("");
+  const [activityId, setActivityId] = useState("");
+  const [activities, setActivities] = useState<Activity[]>([]);
   const [newType, setNewType] = useState<QuestionType>("text");
   const [newText, setNewText] = useState("");
   const [newOptions, setNewOptions] = useState("");
@@ -452,6 +455,7 @@ export default function EditSurveyPage() {
 
   useEffect(() => {
     orgsApi.list({ active_only: true }).then(setOrgs).catch(() => setOrgs([]));
+    activitiesApi.mine(true).then(setActivities).catch(() => setActivities([]));
   }, []);
 
   const load = useCallback(() => {
@@ -461,6 +465,7 @@ export default function EditSurveyPage() {
         setTitle(s.title);
         setDescription(s.description ?? "");
         setClosesAt(s.closes_at ? s.closes_at.slice(0, 16) : "");
+        setActivityId(s.activity_id ?? "");
         setIsPublic(s.is_public);
         setAllowedDomains(s.allowed_domains.join("\n"));
         setAllowedOrgIds(s.allowed_org_ids);
@@ -487,6 +492,7 @@ export default function EditSurveyPage() {
         title: title.trim(),
         description: description.trim(),
         closes_at: closesAt || undefined,
+        activity_id: activityId || null,
         is_public: isPublic,
         allowed_org_ids: isPublic ? [] : allowedOrgIds,
         allowed_user_ids: isPublic ? [] : allowedUsers.map(u => u.id),
@@ -585,7 +591,10 @@ export default function EditSurveyPage() {
   if (!survey) {
     return <div className="py-20 text-center text-sm" style={{ color: "var(--text-muted)" }}>問卷不存在</div>;
   }
-  if (!can("survey:manage")) {
+  const managesActivity = Boolean(
+    survey.activity_id && activities.some((activity) => activity.id === survey.activity_id),
+  );
+  if (!can("survey:manage") && !managesActivity) {
     return <div className="py-20 text-center text-sm" style={{ color: "var(--text-muted)" }}>您沒有編輯問卷的權限</div>;
   }
   if (survey.status === "closed" || survey.status === "archived") {
@@ -635,6 +644,7 @@ export default function EditSurveyPage() {
           <input type="datetime-local" value={closesAt} onChange={e => setClosesAt(e.target.value)}
             className="input" style={{ colorScheme: "dark" }} />
         </div>
+        <ActivitySelect value={activityId} onChange={setActivityId} onActivitiesLoaded={setActivities} />
 
         {/* 開放對象 */}
         <div className="rounded-xl p-3 space-y-2.5" style={{ background: "var(--bg-elevated)" }}>

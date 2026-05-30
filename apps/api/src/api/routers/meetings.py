@@ -329,7 +329,9 @@ async def update_meeting(
 ) -> Meeting:
     meeting = await _meeting_or_404(session, meeting_id)
     old_agenda_item_id = meeting.current_agenda_item_id
-    meeting = await meeting_svc.update_meeting(session, meeting, data=payload)
+    meeting = await meeting_svc.update_meeting(
+        session, meeting, data=payload, actor_id=current_user.id
+    )
     values = payload.model_dump(exclude_unset=True, mode="json")
     if "current_agenda_item_id" in values and old_agenda_item_id != meeting.current_agenda_item_id:
         await _record_event(
@@ -378,7 +380,9 @@ async def start_meeting(
 ) -> Meeting:
     meeting = await _meeting_or_404(session, meeting_id)
     try:
-        await meeting_svc.transition_meeting(session, meeting, status=MeetingStatus.ACTIVE)
+        await meeting_svc.transition_meeting(
+            session, meeting, status=MeetingStatus.ACTIVE, actor_id=current_user.id
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     await _record_event(session, meeting, event_type="meeting.started", actor=current_user)
@@ -395,7 +399,9 @@ async def start_meeting(
 async def open_checkin(meeting_id: uuid.UUID, session: DbDep, current_user: CurrentUser) -> Meeting:
     meeting = await _meeting_or_404(session, meeting_id)
     try:
-        await meeting_svc.transition_meeting(session, meeting, status=MeetingStatus.CHECKIN)
+        await meeting_svc.transition_meeting(
+            session, meeting, status=MeetingStatus.CHECKIN, actor_id=current_user.id
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     await _record_event(session, meeting, event_type="meeting.checkin_opened", actor=current_user)
@@ -414,7 +420,9 @@ async def pause_meeting(
 ) -> Meeting:
     meeting = await _meeting_or_404(session, meeting_id)
     try:
-        await meeting_svc.transition_meeting(session, meeting, status=MeetingStatus.PAUSED)
+        await meeting_svc.transition_meeting(
+            session, meeting, status=MeetingStatus.PAUSED, actor_id=current_user.id
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     await _record_event(session, meeting, event_type="meeting.paused", actor=current_user)
@@ -433,7 +441,9 @@ async def break_meeting(
 ) -> Meeting:
     meeting = await _meeting_or_404(session, meeting_id)
     try:
-        await meeting_svc.transition_meeting(session, meeting, status=MeetingStatus.BREAK)
+        await meeting_svc.transition_meeting(
+            session, meeting, status=MeetingStatus.BREAK, actor_id=current_user.id
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     await meeting_svc.update_screen_state(
@@ -458,7 +468,9 @@ async def close_meeting(
 ) -> Meeting:
     meeting = await _meeting_or_404(session, meeting_id)
     try:
-        await meeting_svc.transition_meeting(session, meeting, status=MeetingStatus.CLOSED)
+        await meeting_svc.transition_meeting(
+            session, meeting, status=MeetingStatus.CLOSED, actor_id=current_user.id
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     await _record_event(session, meeting, event_type="meeting.closed", actor=current_user)
@@ -477,7 +489,9 @@ async def archive_meeting(
 ) -> Meeting:
     meeting = await _meeting_or_404(session, meeting_id)
     try:
-        await meeting_svc.transition_meeting(session, meeting, status=MeetingStatus.ARCHIVED)
+        await meeting_svc.transition_meeting(
+            session, meeting, status=MeetingStatus.ARCHIVED, actor_id=current_user.id
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     await _record_event(session, meeting, event_type="meeting.archived", actor=current_user)

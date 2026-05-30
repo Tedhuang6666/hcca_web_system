@@ -2,12 +2,13 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { shopApi, ApiError } from "@/lib/api";
-import type { OrderListItem } from "@/lib/types";
+import { activitiesApi, shopApi, ApiError } from "@/lib/api";
+import type { Activity, OrderListItem } from "@/lib/types";
 import { OrderStatusBadge } from "@/components/ui/StatusBadge";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import SmartEmptyState from "@/components/ui/SmartEmptyState";
+import ActivitySelect from "@/components/activities/ActivitySelect";
 
 export default function OrdersPage() {
   const { can } = usePermissions();
@@ -15,14 +16,18 @@ export default function OrdersPage() {
 
   const [tab, setTab] = useState<"mine" | "all">("mine");
   const [orders, setOrders] = useState<OrderListItem[]>([]);
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [activityId, setActivityId] = useState("");
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const canManageOrders = isAdmin || activities.length > 0;
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const params: Record<string, string> = {};
       if (tab === "all") params.my_only = "false";
+      if (activityId) params.activity_id = activityId;
       const data = await shopApi.listOrders(params);
       setOrders(data);
     } catch (e) {
@@ -30,14 +35,17 @@ export default function OrdersPage() {
     } finally {
       setLoading(false);
     }
-  }, [tab]);
+  }, [activityId, tab]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    activitiesApi.mine(true).then(setActivities).catch(() => setActivities([]));
+  }, []);
 
   const downloadReport = async (format: "xlsx" | "csv") => {
     setDownloading(true);
     try {
-      const res = await shopApi.downloadReport(format);
+      const res = await shopApi.downloadReport(format, activityId ? { activity_id: activityId } : undefined);
       if (!res.ok) { toast.error("匯出失敗"); return; }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -78,7 +86,7 @@ export default function OrdersPage() {
           </div>
         </div>
 
-        {isAdmin && (
+        {canManageOrders && (
           <div className="flex gap-2">
             <button onClick={() => downloadReport("xlsx")} disabled={downloading}
               className="px-3 py-2 rounded-lg text-xs font-medium disabled:opacity-50 transition-colors"
@@ -95,7 +103,7 @@ export default function OrdersPage() {
       </div>
 
       {/* 管理員 Tab */}
-      {isAdmin && (
+      {canManageOrders && (
         <div
           className="flex gap-0.5 p-1 rounded-xl w-fit"
           style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
@@ -108,8 +116,15 @@ export default function OrdersPage() {
                 key={key}
                 role="tab"
                 aria-selected={active}
-                onClick={() => setTab(key)}
-                className="px-4 py-1.5 rounded-lg text-xs font-medium transition-all"
+                disabled={key === "all" && !isAdmin && !activityId}
+                onClick={() => {
+                  if (key === "all" && !isAdmin && !activityId) {
+                    toast.error("請先選擇你可管理的活動");
+                    return;
+                  }
+                  setTab(key);
+                }}
+                className="px-4 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-45"
                 style={
                   active
                     ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--primary-dim)" }
@@ -121,6 +136,20 @@ export default function OrdersPage() {
           })}
         </div>
       )}
+
+      <div className="card p-4">
+        <ActivitySelect
+          value={activityId}
+          onChange={(next) => {
+            setActivityId(next);
+            if (!isAdmin && !next) setTab("mine");
+          }}
+          label="活動篩選"
+          noneLabel="全部訂單"
+          scope="all"
+          onActivitiesLoaded={setActivities}
+        />
+      </div>
 
       {/* 統計卡片 */}
       {orders.length > 0 && (

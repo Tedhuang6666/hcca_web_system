@@ -1,250 +1,733 @@
 INFO:     Will watch for changes in these directories: ['/home/ted98/projects/main/apps/api/src']
 INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
-INFO:     Started reloader process [76023] using WatchFiles
-INFO:     Started server process [76025]
+INFO:     Started reloader process [73548] using WatchFiles
+INFO:     Started server process [73550]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
-INFO:     127.0.0.1:54674 - "GET /health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54686 - "GET /system/maintenance HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57514 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57520 - "GET /system/maintenance HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /notifications/inbox/count HTTP/1.1" 401 Unauthorized
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /dashboard HTTP/1.1" 401 Unauthorized
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /tasks HTTP/1.1" 401 Unauthorized
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /system/module-status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /announcements/active-urgent HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47320 - "GET /system/maintenance HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /system/module-status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /announcements/active-urgent HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /notifications/inbox/count HTTP/1.1" 401 Unauthorized
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /tasks HTTP/1.1" 401 Unauthorized
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /dashboard HTTP/1.1" 401 Unauthorized
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /system/module-status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "POST /auth/refresh HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /notifications/inbox/count HTTP/1.1" 401 Unauthorized
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /tasks HTTP/1.1" 401 Unauthorized
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /system/module-status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /notifications/inbox/count HTTP/1.1" 401 Unauthorized
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "POST /auth/refresh HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /dashboard HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /notifications/inbox/count HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /tasks HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /notifications/inbox/count HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47320 - "GET /system/maintenance HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /tasks HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /dashboard HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /notifications/inbox/count HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /system/module-status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /notifications/inbox/count HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /announcements/active-urgent HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /tasks HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /dashboard HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /notifications/inbox/count HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /announcements/active-urgent HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "POST /auth/refresh HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /tasks HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /dashboard HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /notifications/inbox/count HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /tasks HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48278 - "GET /system/maintenance HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48278 - "GET /system/maintenance HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48278 - "GET /system/maintenance HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /system/module-status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /notifications/inbox/count HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /announcements/active-urgent HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /dashboard HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "POST /auth/refresh HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /tasks HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /announcements/active-urgent HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /dashboard HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /notifications/inbox/count HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /notifications/inbox/count HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /tasks HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /tasks HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /tasks HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /notifications/inbox/count HTTP/1.1" 200 OK
+Slow request path=/admin/system/status method=GET status=200 duration_ms=2072.9 queries=0 slow_queries=0 query_ms=0.0
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 200 OK
+Slow request path=/admin/system/status method=GET status=200 duration_ms=2072.8 queries=0 slow_queries=0 query_ms=0.0
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/ip-blocklist HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/feature-flags HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/rules?limit=100 HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/summary HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/summary HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/ip-blocklist HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/feature-flags HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/rules?limit=100 HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/metrics/slow-queries?top=10 HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/errors?top=50 HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/errors?top=50 HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/metrics/slow-queries?top=10 HTTP/1.1" 200 OK
+Slow request path=/admin/system/status method=GET status=200 duration_ms=2013.4 queries=0 slow_queries=0 query_ms=0.0
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/summary HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/feature-flags HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/ip-blocklist HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/rules?limit=100 HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 200 OK
+Slow request path=/admin/system/status method=GET status=200 duration_ms=2014.1 queries=0 slow_queries=0 query_ms=0.0
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/summary HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/ip-blocklist HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/feature-flags HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/rules?limit=100 HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 200 OK
+Slow request path=/admin/system/status method=GET status=200 duration_ms=2012.3 queries=0 slow_queries=0 query_ms=0.0
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/feature-flags HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/ip-blocklist HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/summary HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/rules?limit=100 HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /system/module-status HTTP/1.1" 200 OK
+Slow request path=/admin/system/status method=GET status=200 duration_ms=2013.3 queries=0 slow_queries=0 query_ms=0.0
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/ip-blocklist HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/rules?limit=100 HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/feature-flags HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/summary HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 200 OK
+Slow request path=/admin/system/status method=GET status=200 duration_ms=2014.4 queries=0 slow_queries=0 query_ms=0.0
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/summary HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/ip-blocklist HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/feature-flags HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/rules?limit=100 HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 200 OK
+Slow request path=/admin/system/status method=GET status=200 duration_ms=2012.4 queries=0 slow_queries=0 query_ms=0.0
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/rules?limit=100 HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/summary HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/feature-flags HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/ip-blocklist HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 200 OK
+Slow request path=/admin/system/status method=GET status=200 duration_ms=2013.1 queries=0 slow_queries=0 query_ms=0.0
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/ip-blocklist HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/feature-flags HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/rules?limit=100 HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/summary HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 200 OK
+Slow request path=/admin/system/status method=GET status=200 duration_ms=2013.5 queries=0 slow_queries=0 query_ms=0.0
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /system/module-status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /notifications/inbox/count HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /announcements/active-urgent HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /tasks HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "POST /auth/refresh HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /announcements/active-urgent HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /notifications/inbox/count HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /tasks HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /notifications/inbox/count HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /tasks HTTP/1.1" 200 OK
+Slow request path=/admin/system/status method=GET status=200 duration_ms=2017.7 queries=0 slow_queries=0 query_ms=0.0
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/feature-flags HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/ip-blocklist HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/rules?limit=100 HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/summary HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/errors?top=50 HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/metrics/slow-queries?top=10 HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/errors?top=50 HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/metrics/slow-queries?top=10 HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 200 OK
+Slow request path=/admin/system/status method=GET status=200 duration_ms=2013.8 queries=0 slow_queries=0 query_ms=0.0
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/summary HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/feature-flags HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/ip-blocklist HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/rules?limit=100 HTTP/1.1" 200 OK
+Slow request path=/admin/system/status method=GET status=200 duration_ms=2012.0 queries=0 slow_queries=0 query_ms=0.0
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/ip-blocklist HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/summary HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/feature-flags HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/rules?limit=100 HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 200 OK
+Slow request path=/admin/system/status method=GET status=200 duration_ms=2012.9 queries=0 slow_queries=0 query_ms=0.0
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /system/module-status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /notifications/inbox/count HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /tasks HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /system/module-status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /notifications/inbox/count HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /tasks HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /system/module-status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /notifications/inbox/count HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /tasks HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /notifications/inbox/count HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /tasks HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 200 OK
+Slow request path=/admin/system/status method=GET status=200 duration_ms=2029.6 queries=0 slow_queries=0 query_ms=0.0
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/feature-flags HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/summary HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/ip-blocklist HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/rules?limit=100 HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/errors?top=50 HTTP/1.1" 200 OK
+Slow request path=/admin/system/status method=GET status=200 duration_ms=2015.4 queries=0 slow_queries=0 query_ms=0.0
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/rules?limit=100 HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/feature-flags HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/summary HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/ip-blocklist HTTP/1.1" 200 OK
+Slow request path=/admin/system/status method=GET status=200 duration_ms=2025.7 queries=0 slow_queries=0 query_ms=0.0
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/ip-blocklist HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/feature-flags HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/summary HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/rules?limit=100 HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 200 OK
+Slow request path=/admin/system/status method=GET status=200 duration_ms=2021.0 queries=0 slow_queries=0 query_ms=0.0
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/rules?limit=100 HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/ip-blocklist HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/feature-flags HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/summary HTTP/1.1" 200 OK
+Slow request path=/admin/system/status method=GET status=200 duration_ms=2013.8 queries=0 slow_queries=0 query_ms=0.0
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/summary HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/ip-blocklist HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/feature-flags HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/rules?limit=100 HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 200 OK
+Slow request path=/admin/system/status method=GET status=200 duration_ms=2025.9 queries=0 slow_queries=0 query_ms=0.0
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/feature-flags HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/rules?limit=100 HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/ip-blocklist HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/summary HTTP/1.1" 200 OK
+Slow request path=/admin/system/status method=GET status=200 duration_ms=2016.4 queries=0 slow_queries=0 query_ms=0.0
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/summary HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/ip-blocklist HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/feature-flags HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/rules?limit=100 HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /system/module-status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /notifications/inbox/count HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /tasks HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /notifications/inbox/count HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /tasks HTTP/1.1" 200 OK
+Slow request path=/admin/system/status method=GET status=200 duration_ms=2012.9 queries=0 slow_queries=0 query_ms=0.0
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/feature-flags HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/summary HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/ip-blocklist HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/rules?limit=100 HTTP/1.1" 200 OK
+Slow request path=/admin/system/status method=GET status=200 duration_ms=2021.5 queries=0 slow_queries=0 query_ms=0.0
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "POST /admin/system/modules/documents/restart HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/feature-flags HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/ip-blocklist HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/rules?limit=100 HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/summary HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 200 OK
+Slow request path=/admin/system/status method=GET status=200 duration_ms=2010.9 queries=0 slow_queries=0 query_ms=0.0
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/summary HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/rules?limit=100 HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/ip-blocklist HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/feature-flags HTTP/1.1" 200 OK
+Slow request path=/admin/system/status method=GET status=200 duration_ms=2017.0 queries=0 slow_queries=0 query_ms=0.0
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 200 OK
+Slow request path=/admin/system/status method=GET status=200 duration_ms=2025.6 queries=0 slow_queries=0 query_ms=0.0
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 200 OK
+Slow request path=/admin/system/status method=GET status=200 duration_ms=2023.8 queries=0 slow_queries=0 query_ms=0.0
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/feature-flags HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/ip-blocklist HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/rules?limit=100 HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/summary HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/feature-flags HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/ip-blocklist HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/rules?limit=100 HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/summary HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/feature-flags HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/summary HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/ip-blocklist HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/rules?limit=100 HTTP/1.1" 200 OK
+Slow request path=/admin/system/status method=GET status=200 duration_ms=2017.4 queries=0 slow_queries=0 query_ms=0.0
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/feature-flags HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/ip-blocklist HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/summary HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/rules?limit=100 HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 200 OK
+Slow request path=/admin/system/status method=GET status=200 duration_ms=2018.5 queries=0 slow_queries=0 query_ms=0.0
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/summary HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/feature-flags HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/rules?limit=100 HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/ip-blocklist HTTP/1.1" 200 OK
+Slow request path=/admin/system/status method=GET status=200 duration_ms=2013.2 queries=0 slow_queries=0 query_ms=0.0
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/feature-flags HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/ip-blocklist HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/summary HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/rules?limit=100 HTTP/1.1" 200 OK
+Slow request path=/admin/system/status method=GET status=200 duration_ms=2018.4 queries=0 slow_queries=0 query_ms=0.0
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/summary HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/feature-flags HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/ip-blocklist HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/defense/rules?limit=100 HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 200 OK
+Slow request path=/admin/system/status method=GET status=200 duration_ms=2013.8 queries=0 slow_queries=0 query_ms=0.0
+WARNING:  WatchFiles detected changes in 'src/api/core/permission_codes.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [73550]
+INFO:     Started server process [80793]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api/core/permission_codes.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [80793]
+INFO:     Started server process [80880]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api/services/data_lifecycle.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [80880]
+INFO:     Started server process [80956]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api/services/trash.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [80956]
+INFO:     Started server process [81041]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api/services/privacy.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [81041]
+INFO:     Started server process [82707]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api/routers/data_lifecycle.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [82707]
+INFO:     Started server process [82806]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api/routers/trash.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [82806]
+WARNING:  WatchFiles detected changes in 'src/api/routers/trash.py'. Reloading...
+INFO:     Started server process [82890]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [82890]
+INFO:     Started server process [82905]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api/routers/privacy.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [82905]
+WARNING:  WatchFiles detected changes in 'src/api/routers/privacy.py'. Reloading...
+INFO:     Started server process [82956]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [82956]
+INFO:     Started server process [82970]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api/__init__.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [82970]
+INFO:     Started server process [83042]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api/__init__.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [83042]
+INFO:     Started server process [83080]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api/core/celery_app.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [83080]
+INFO:     Started server process [83159]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api/core/celery_app.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [83159]
+INFO:     Started server process [83246]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api/services/data_lifecycle_tasks.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [83246]
+INFO:     Started server process [83285]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api/services/data_lifecycle.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [83285]
+INFO:     Started server process [86911]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api/services/data_lifecycle_tasks.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [86911]
+INFO:     Started server process [86998]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 401 Unauthorized
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 401 Unauthorized
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /notifications/inbox/count HTTP/1.1" 401 Unauthorized
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /tasks HTTP/1.1" 401 Unauthorized
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /system/module-status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 401 Unauthorized
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 401 Unauthorized
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "POST /auth/refresh HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 401 Unauthorized
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /system/module-status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 401 Unauthorized
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /notifications/inbox/count HTTP/1.1" 401 Unauthorized
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /tasks HTTP/1.1" 401 Unauthorized
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 401 Unauthorized
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "POST /auth/refresh HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 401 Unauthorized
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /system/module-status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 401 Unauthorized
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 401 Unauthorized
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /notifications/inbox/count HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 401 Unauthorized
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "POST /auth/refresh HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /tasks HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 401 Unauthorized
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /notifications/inbox/count HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 401 Unauthorized
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 401 Unauthorized
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "POST /auth/refresh HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 401 Unauthorized
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /notifications/inbox/count HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 401 Unauthorized
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "POST /auth/refresh HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 401 Unauthorized
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /tasks HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/status HTTP/1.1" 401 Unauthorized
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /admin/system/modules HTTP/1.1" 401 Unauthorized
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "POST /auth/refresh HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /notifications/inbox/count HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /system/module-status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /system/module-status HTTP/1.1" 200 OK
+INFO:     2001:b011:7008:d3a5:e438:f2b5:dade:3ca6:0 - "GET /system/module-status HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'src/api/models/calendar.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [86998]
+INFO:     Started server process [91928]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api/models/calendar.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [91928]
+INFO:     Started server process [93320]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api/schemas/calendar.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [93320]
+INFO:     Started server process [95928]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api/services/calendar.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [95928]
+INFO:     Started server process [95965]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api/services/coordination.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [95965]
+INFO:     Started server process [96219]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api/services/coordination.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [96219]
+INFO:     Started server process [96260]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api/services/coordination.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [96260]
+INFO:     Started server process [96318]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api/services/coordination.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [96318]
+WARNING:  WatchFiles detected changes in 'src/api/core/permission_codes.py'. Reloading...
+INFO:     Started server process [96356]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [96356]
+INFO:     Started server process [96446]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api/core/permission_codes.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [96446]
+INFO:     Started server process [96528]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api/routers/calendar.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [96528]
+INFO:     Started server process [96639]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api/services/coordination.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [96639]
+WARNING:  WatchFiles detected changes in 'src/api/services/term_rollover.py'. Reloading...
+INFO:     Started server process [4799]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [4799]
+WARNING:  WatchFiles detected changes in 'src/api/services/term_rollover.py'. Reloading...
+INFO:     Started server process [7512]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [7512]
+INFO:     Started server process [7522]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api/services/coordination.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [7522]
+INFO:     Started server process [7547]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api/services/user_lifecycle.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [7547]
+WARNING:  WatchFiles detected changes in 'src/api/services/user_lifecycle.py'. Reloading...
+INFO:     Started server process [7614]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [7614]
+INFO:     Started server process [7679]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api/schemas/task.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [7679]
+INFO:     Started server process [13802]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api/services/reports.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [13802]
+WARNING:  WatchFiles detected changes in 'src/api/services/reports.py'. Reloading...
+INFO:     Started server process [13870]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [13870]
+INFO:     Started server process [13887]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api/services/task_inbox.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [13887]
+INFO:     Started server process [13911]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api/services/task_inbox.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [13911]
+INFO:     Started server process [13959]
+INFO:     Waiting for application startup.
+WARNING:  WatchFiles detected changes in 'src/api/routers/term_rollover.py'. Reloading...
+INFO:     Application startup complete.
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [13959]
+INFO:     Started server process [14046]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api/routers/user_lifecycle.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [14046]
+WARNING:  WatchFiles detected changes in 'src/api/routers/user_lifecycle.py'. Reloading...
+INFO:     Started server process [14249]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [14249]
+INFO:     Started server process [14294]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
 WARNING:  WatchFiles detected changes in 'src/api/services/notification_pref.py'. Reloading...
 INFO:     Shutting down
 INFO:     Waiting for application shutdown.
 INFO:     Application shutdown complete.
-INFO:     Finished server process [76025]
-INFO:     Started server process [79463]
+INFO:     Finished server process [14294]
+INFO:     Started server process [14312]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api/routers/reports.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [14312]
+WARNING:  WatchFiles detected changes in 'src/api/routers/reports.py'. Reloading...
+INFO:     Started server process [14389]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [14389]
 WARNING:  WatchFiles detected changes in 'src/api/routers/notifications.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [79463]
-INFO:     Started server process [79650]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-WARNING:  WatchFiles detected changes in 'src/api/routers/notifications.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [79650]
-WARNING:  WatchFiles detected changes in 'src/api/routers/notifications.py'. Reloading...
-INFO:     Started server process [79829]
+INFO:     Started server process [16023]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 INFO:     Shutting down
 INFO:     Waiting for application shutdown.
 INFO:     Application shutdown complete.
-INFO:     Finished server process [79829]
-INFO:     Started server process [79864]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-WARNING:  WatchFiles detected changes in 'src/api/routers/notifications.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [79864]
-WARNING:  WatchFiles detected changes in 'src/api/routers/notifications.py'. Reloading...
-INFO:     Started server process [79934]
+INFO:     Finished server process [16023]
+WARNING:  WatchFiles detected changes in 'src/api/__init__.py'. Reloading...
+INFO:     Started server process [16161]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 INFO:     Shutting down
 INFO:     Waiting for application shutdown.
 INFO:     Application shutdown complete.
-INFO:     Finished server process [79934]
-INFO:     Started server process [79948]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-WARNING:  WatchFiles detected changes in 'src/api/services/digest_tasks.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [79948]
-INFO:     Started server process [80069]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-WARNING:  WatchFiles detected changes in 'src/api/core/celery_app.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [80069]
-INFO:     Started server process [80146]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-WARNING:  WatchFiles detected changes in 'src/api/core/celery_app.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [80146]
-INFO:     Started server process [80221]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-WARNING:  WatchFiles detected changes in 'src/api/routers/notifications.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [80221]
-INFO:     Started server process [83756]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-WARNING:  WatchFiles detected changes in 'src/api/models/survey.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [83756]
-INFO:     Started server process [83874]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-WARNING:  WatchFiles detected changes in 'src/api/models/survey.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [83874]
-INFO:     Started server process [83964]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-WARNING:  WatchFiles detected changes in 'src/api/models/survey.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [83964]
-INFO:     Started server process [84009]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-WARNING:  WatchFiles detected changes in 'src/api/schemas/survey.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [84009]
-INFO:     Started server process [86210]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-WARNING:  WatchFiles detected changes in 'src/api/schemas/survey.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [86210]
-WARNING:  WatchFiles detected changes in 'src/api/schemas/survey.py'. Reloading...
-INFO:     Started server process [86324]
+INFO:     Finished server process [16161]
+WARNING:  WatchFiles detected changes in 'src/api/__init__.py'. Reloading...
+INFO:     Started server process [16210]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 INFO:     Shutting down
 INFO:     Waiting for application shutdown.
 INFO:     Application shutdown complete.
-INFO:     Finished server process [86324]
-INFO:     Started server process [86440]
+INFO:     Finished server process [16210]
+INFO:     Started server process [16318]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
-WARNING:  WatchFiles detected changes in 'src/api/schemas/survey.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [86440]
-INFO:     Started server process [86544]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-WARNING:  WatchFiles detected changes in 'src/api/schemas/survey.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [86544]
-INFO:     Started server process [86653]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-WARNING:  WatchFiles detected changes in 'src/api/schemas/survey.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [86653]
-INFO:     Started server process [87455]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-WARNING:  WatchFiles detected changes in 'src/api/schemas/survey.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [87455]
-INFO:     Started server process [88203]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-WARNING:  WatchFiles detected changes in 'src/api/schemas/survey.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [88203]
-INFO:     Started server process [88326]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-WARNING:  WatchFiles detected changes in 'src/api/services/survey.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [88326]
-INFO:     Started server process [88491]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-WARNING:  WatchFiles detected changes in 'src/api/services/survey.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [88491]
-INFO:     Started server process [88550]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-WARNING:  WatchFiles detected changes in 'src/api/services/survey.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [88550]
-WARNING:  WatchFiles detected changes in 'src/api/services/survey.py'. Reloading...
-INFO:     Started server process [88734]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [88734]
-INFO:     Started server process [88770]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-WARNING:  WatchFiles detected changes in 'src/api/services/survey.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [88770]
-INFO:     Started server process [88976]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-WARNING:  WatchFiles detected changes in 'src/api/services/survey.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [88976]
-INFO:     Started server process [90783]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-WARNING:  WatchFiles detected changes in 'src/api/services/survey.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [90783]
-INFO:     Started server process [90867]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-WARNING:  WatchFiles detected changes in 'src/api/services/survey.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [90867]
-WARNING:  WatchFiles detected changes in 'src/api/services/survey.py'. Reloading...
-INFO:     Started server process [90996]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [90996]
-INFO:     Started server process [91046]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-INFO:     127.0.0.1:36284 - "GET /system/maintenance HTTP/1.1" 200 OK
-INFO:     127.0.0.1:45740 - "GET /system/maintenance HTTP/1.1" 200 OK

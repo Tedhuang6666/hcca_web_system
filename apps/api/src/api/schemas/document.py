@@ -452,6 +452,7 @@ class DocumentOut(BaseModel):
     is_public: bool = False
     # 關聯
     org_id: uuid.UUID
+    activity_id: uuid.UUID | None = None
     created_by: uuid.UUID
     serial_template_id: uuid.UUID | None = None
     regulation_id: uuid.UUID | None = None  # 此令所公布的法規（僅令類公文）
@@ -475,6 +476,7 @@ class DocumentListItem(BaseModel):
     subject: str | None
     status: DocumentStatus
     org_id: uuid.UUID
+    activity_id: uuid.UUID | None = None
     created_by: uuid.UUID
     due_date: datetime | None
     submitted_at: datetime | None
@@ -510,6 +512,7 @@ class DocumentCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=200, description="公文標題（系統顯示用）")
     issuer_full_name: str | None = Field(None, max_length=200, description="發文機關全銜")
     org_id: uuid.UUID = Field(..., description="所屬組織 ID")
+    activity_id: uuid.UUID | None = Field(None, description="所屬活動 ID")
     # 字號模板（None 則使用通用格式 DOC-YYYY-NNNNNN）
     serial_template_id: uuid.UUID | None = Field(
         None, description="字號模板 ID（由長官以 doc.issue 權限建立）"
@@ -625,6 +628,7 @@ class DocumentUpdate(BaseModel):
     due_date: datetime | None = None
     visibility_level: DocumentVisibility | None = None
     is_public: bool | None = None
+    activity_id: uuid.UUID | None = None
     page_info: str | None = Field(None, max_length=50)
     change_note: str | None = Field(None, max_length=500, description="修改備註（將記入版本歷程）")
     autosave: bool = Field(False, description="線上自動儲存；不建立版本快照")

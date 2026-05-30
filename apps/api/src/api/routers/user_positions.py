@@ -174,5 +174,7 @@ async def delete_user_position(
         summary="刪除使用者任期記錄",
     )
     await cache_invalidate(f"perm:{up.user_id}")
-    await enqueue_role_sync(db, up.user_id)
+    user_id = up.user_id
     await db.delete(up)
+    await db.flush()
+    await enqueue_role_sync(db, user_id)

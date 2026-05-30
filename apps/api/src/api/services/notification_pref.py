@@ -33,6 +33,11 @@ NOTIFICATION_TYPES: tuple[str, ...] = (
     # 問卷 / 公告
     "survey_invitation",
     "announcement",
+    # 行事曆 / 工作
+    "calendar_event_invited",
+    "calendar_event_updated",
+    "work_item_assigned",
+    "work_item_due",
     # 系統
     "system",
 )
@@ -67,6 +72,10 @@ TYPE_LABELS: dict[str, str] = {
     "shop_order_paid": "校商訂單付款",
     "survey_invitation": "問卷邀請",
     "announcement": "公告通知",
+    "calendar_event_invited": "行事曆邀請",
+    "calendar_event_updated": "行事曆異動",
+    "work_item_assigned": "工作指派",
+    "work_item_due": "工作期限",
     "system": "系統通知",
 }
 

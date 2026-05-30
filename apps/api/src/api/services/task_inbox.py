@@ -17,6 +17,8 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import and_, desc, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.models.announcement import Announcement
+from api.models.calendar import CalendarEvent, CalendarEventChecklistItem, CalendarEventParticipant
 from api.models.document import (
     ApprovalStepStatus,
     DelegateSource,
@@ -30,10 +32,13 @@ from api.models.meeting import (
     MeetingAttendance,
     MeetingStatus,
 )
+from api.models.meal import MenuSchedule
 from api.models.petition import PetitionCase, PetitionStatus
 from api.models.regulation import Regulation, RegulationWorkflowStatus
+from api.models.shop import Product, ProductStatus
 from api.models.survey import Survey, SurveyStatus
 from api.models.user import User
+from api.models.work_item import WorkItem, WorkItemStatus
 from api.schemas.task import TaskInboxResponse, TaskItem
 from api.services.permission import get_user_permission_codes
 
@@ -292,6 +297,212 @@ async def _surveys_to_fill(db: AsyncSession, user: User) -> list[TaskItem]:
     ]
 
 
+async def _calendar_checklist_assigned(db: AsyncSession, user: User) -> list[TaskItem]:
+    rows = (
+        (
+            await db.execute(
+                select(CalendarEventChecklistItem, CalendarEvent)
+                .join(CalendarEvent, CalendarEvent.id == CalendarEventChecklistItem.event_id)
+                .where(CalendarEventChecklistItem.assignee_id == user.id)
+                .where(CalendarEventChecklistItem.is_done.is_(False))
+                .where(CalendarEvent.is_active.is_(True))
+                .order_by(
+                    CalendarEventChecklistItem.due_at.asc().nulls_last(),
+                    desc(CalendarEventChecklistItem.created_at),
+                )
+                .limit(30)
+            )
+        )
+        .all()
+    )
+    return [
+        TaskItem(
+            id=f"calendar:{item.id}:prepare",
+            module="calendar",
+            action="prepare",
+            title=f"準備：{item.title}",
+            subtitle=event.title,
+            href=f"/calendar?event={event.id}",
+            due_at=item.due_at,
+            severity=_severity_by_due(item.due_at),
+            created_at=item.created_at,
+        )
+        for item, event in rows
+    ]
+
+
+async def _calendar_events_to_attend(db: AsyncSession, user: User) -> list[TaskItem]:
+    now = datetime.now(UTC)
+    cutoff = now + timedelta(hours=72)
+    rows = (
+        (
+            await db.execute(
+                select(CalendarEvent)
+                .join(CalendarEventParticipant, CalendarEventParticipant.event_id == CalendarEvent.id)
+                .where(CalendarEventParticipant.user_id == user.id)
+                .where(CalendarEvent.starts_at >= now, CalendarEvent.starts_at <= cutoff)
+                .where(CalendarEvent.is_active.is_(True))
+                .order_by(CalendarEvent.starts_at.asc())
+                .limit(30)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [
+        TaskItem(
+            id=f"calendar:{event.id}:attend",
+            module="calendar",
+            action="attend",
+            title=f"行程：{event.title}",
+            subtitle=event.location,
+            href=event.href or f"/calendar?event={event.id}",
+            due_at=event.starts_at,
+            severity=_severity_by_due(event.starts_at),
+            created_at=event.created_at,
+        )
+        for event in rows
+    ]
+
+
+async def _announcements_to_publish(
+    db: AsyncSession, user: User, perms: frozenset[str], is_admin: bool
+) -> list[TaskItem]:
+    if not (is_admin or _has(perms, is_admin, "announcement:publish")):
+        return []
+    rows = (
+        (
+            await db.execute(
+                select(Announcement)
+                .where(Announcement.is_published.is_(False))
+                .order_by(desc(Announcement.updated_at))
+                .limit(20)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [
+        TaskItem(
+            id=f"announcement:{ann.id}:publish",
+            module="announcement",
+            action="publish",
+            title=f"發布公告：{ann.title}",
+            href=f"/announcements/{ann.id}/edit",
+            severity="info",
+            created_at=ann.updated_at,
+        )
+        for ann in rows
+    ]
+
+
+async def _shop_sales_to_manage(
+    db: AsyncSession, user: User, perms: frozenset[str], is_admin: bool
+) -> list[TaskItem]:
+    if not (is_admin or _has(perms, is_admin, "shop:manage")):
+        return []
+    now = datetime.now(UTC)
+    cutoff = now + timedelta(hours=48)
+    rows = (
+        (
+            await db.execute(
+                select(Product)
+                .where(Product.status == ProductStatus.ACTIVE)
+                .where(Product.sale_end.is_not(None))
+                .where(Product.sale_end >= now, Product.sale_end <= cutoff)
+                .order_by(Product.sale_end.asc())
+                .limit(20)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [
+        TaskItem(
+            id=f"shop:{product.id}:manage",
+            module="shop",
+            action="manage",
+            title=f"商品即將停售：{product.name}",
+            href="/shop/admin",
+            due_at=product.sale_end,
+            severity=_severity_by_due(product.sale_end),
+            created_at=product.updated_at,
+        )
+        for product in rows
+    ]
+
+
+async def _meal_deadlines_to_manage(
+    db: AsyncSession, user: User, perms: frozenset[str], is_admin: bool
+) -> list[TaskItem]:
+    if not (
+        is_admin
+        or _has(perms, is_admin, "meal:manage")
+        or _has(perms, is_admin, "meal:manage_schedule")
+    ):
+        return []
+    now = datetime.now(UTC)
+    cutoff = now + timedelta(hours=48)
+    rows = (
+        (
+            await db.execute(
+                select(MenuSchedule)
+                .where(MenuSchedule.is_closed.is_(False))
+                .where(MenuSchedule.order_deadline >= now, MenuSchedule.order_deadline <= cutoff)
+                .order_by(MenuSchedule.order_deadline.asc())
+                .limit(20)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [
+        TaskItem(
+            id=f"meal:{schedule.id}:manage",
+            module="meal",
+            action="manage",
+            title="學餐即將結單",
+            subtitle=schedule.note,
+            href="/meal/vendor",
+            due_at=schedule.order_deadline,
+            severity=_severity_by_due(schedule.order_deadline),
+            created_at=schedule.created_at,
+        )
+        for schedule in rows
+    ]
+
+
+async def _work_items_assigned(db: AsyncSession, user: User) -> list[TaskItem]:
+    rows = (
+        (
+            await db.execute(
+                select(WorkItem)
+                .where(WorkItem.assigned_to_id == user.id)
+                .where(WorkItem.status == WorkItemStatus.OPEN)
+                .where(WorkItem.is_active.is_(True))
+                .order_by(WorkItem.due_at.asc().nulls_last(), desc(WorkItem.created_at))
+                .limit(50)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [
+        TaskItem(
+            id=f"work_item:{item.id}:complete",
+            module="work_item",
+            action="complete",
+            title=f"工作：{item.title}",
+            subtitle=item.description[:80] if item.description else None,
+            href="/tasks",
+            due_at=item.due_at,
+            severity=_severity_by_due(item.due_at),
+            created_at=item.created_at,
+        )
+        for item in rows
+    ]
+
+
 # ── 聚合 ─────────────────────────────────────────────────────────────────────
 
 
@@ -314,6 +525,12 @@ async def build_task_inbox(db: AsyncSession, user: User) -> TaskInboxResponse:
         _safe("regulations_review", lambda: _regulations_to_review(db, user, perms, is_admin)),
         _safe("petitions_assigned", lambda: _petitions_assigned(db, user, perms, is_admin)),
         _safe("surveys_fill", lambda: _surveys_to_fill(db, user)),
+        _safe("calendar_prepare", lambda: _calendar_checklist_assigned(db, user)),
+        _safe("calendar_attend", lambda: _calendar_events_to_attend(db, user)),
+        _safe("announcements_publish", lambda: _announcements_to_publish(db, user, perms, is_admin)),
+        _safe("shop_sales", lambda: _shop_sales_to_manage(db, user, perms, is_admin)),
+        _safe("meal_deadlines", lambda: _meal_deadlines_to_manage(db, user, perms, is_admin)),
+        _safe("work_items_assigned", lambda: _work_items_assigned(db, user)),
     )
     items: list[TaskItem] = [it for g in groups for it in g]
 

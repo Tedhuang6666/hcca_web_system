@@ -12,6 +12,8 @@ import AnnouncementAudiencePicker, {
 import { contentFromMarkdown } from "@/components/announcements/AnnouncementMarkdown";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
+import ActivitySelect from "@/components/activities/ActivitySelect";
+import type { Activity } from "@/lib/types";
 
 const DEFAULT_AUDIENCE: AudienceValue = {
   audience_type: "all",
@@ -24,6 +26,7 @@ type AnnouncementDraft = {
   markdown: string;
   isUrgent: boolean;
   urgentUntil: string;
+  activityId: string;
 };
 
 export default function NewAnnouncementPage() {
@@ -34,20 +37,25 @@ export default function NewAnnouncementPage() {
   const [isUrgent, setIsUrgent] = useState(false);
   const [urgentUntil, setUrgentUntil] = useState("");
   const [audience, setAudience] = useState<AudienceValue>(DEFAULT_AUDIENCE);
+  const [activityId, setActivityId] = useState("");
+  const [activities, setActivities] = useState<Activity[]>([]);
   const [saving, setSaving] = useState(false);
-  const canPublish = can("announcement:publish");
+  const canCreateGlobal = can("announcement:create");
+  const canPublish = can("announcement:publish") || Boolean(activityId);
   const canUrgent = can("announcement:set_urgent");
   const draftValue = useMemo<AnnouncementDraft>(() => ({
     title,
     markdown,
     isUrgent,
     urgentUntil,
-  }), [isUrgent, markdown, title, urgentUntil]);
+    activityId,
+  }), [activityId, isUrgent, markdown, title, urgentUntil]);
   const restoreDraft = useCallback((draft: AnnouncementDraft) => {
     setTitle(draft.title ?? "");
     setMarkdown(draft.markdown ?? "");
     setIsUrgent(Boolean(draft.isUrgent));
     setUrgentUntil(draft.urgentUntil ?? "");
+    setActivityId(draft.activityId ?? "");
     toast.info("已復原未送出的公告草稿");
   }, []);
   const { clearDraft, flushDraft } = useDraftAutosave({
@@ -59,10 +67,16 @@ export default function NewAnnouncementPage() {
       && !(draft.markdown ?? "").trim()
       && !draft.isUrgent
       && !draft.urgentUntil
+      && !draft.activityId
     ), []),
   });
+  const canCreate = canCreateGlobal || activities.length > 0;
 
   const save = async (publish: boolean) => {
+    if (!canCreateGlobal && !activityId) {
+      toast.error("請先選擇你可管理的活動");
+      return;
+    }
     if (!title.trim()) {
       toast.error("請輸入公告標題");
       return;
@@ -87,6 +101,7 @@ export default function NewAnnouncementPage() {
         audience_type: audience.audience_type,
         audience_org_ids: audience.audience_org_ids,
         audience_user_ids: audience.audience_user_ids,
+        activity_id: activityId || null,
       });
       if (publish && canPublish) {
         await announcementsApi.publish(created.id);
@@ -130,6 +145,15 @@ export default function NewAnnouncementPage() {
       />
 
       <AnnouncementAudiencePicker onChange={setAudience} />
+
+      <section className="card p-4">
+        <ActivitySelect
+          value={activityId}
+          onChange={setActivityId}
+          disabled={!canCreate}
+          onActivitiesLoaded={setActivities}
+        />
+      </section>
 
       {canUrgent && (
         <section className="card p-4">

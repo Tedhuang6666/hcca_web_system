@@ -54,6 +54,7 @@ from api.schemas.shop import (
     ProductVariantOptionOut,
     ProductVariantOptionUpdate,
 )
+from api.services import activity as activity_svc
 from api.services import audit as audit_svc
 from api.services import school_class as class_svc
 from api.services import shop as shop_svc
@@ -123,6 +124,32 @@ async def _get_order_or_404(order_id: uuid.UUID, session: AsyncSession) -> Order
     return o
 
 
+async def _has_shop_manage(session: AsyncSession, user: User) -> bool:
+    if user.is_superuser:
+        return True
+    codes = await get_user_permission_codes(session, user.id)
+    return str(PermissionCode.SHOP_MANAGE) in codes or str(PermissionCode.ADMIN_ALL) in codes
+
+
+async def _require_shop_manager(
+    session: AsyncSession, user: User, activity_id: uuid.UUID | None
+) -> None:
+    if await _has_shop_manage(session, user):
+        return
+    if await activity_svc.can_manage_activity_resource(session, user, activity_id):
+        return
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="需要權限：shop:manage")
+
+
+def _category_activity(category: ProductCategory | None) -> uuid.UUID | None:
+    return category.activity_id if category else None
+
+
+def _product_activity(product: Product) -> uuid.UUID | None:
+    series = getattr(product, "series", None)
+    return _category_activity(getattr(series, "category", None) if series else None)
+
+
 # ── 圖片上傳 ──────────────────────────────────────────────────────────────────
 
 
@@ -149,9 +176,12 @@ async def list_categories(
     session: DbDep,
     _: CurrentUser,
     org_id: uuid.UUID | None = Query(None),
+    activity_id: uuid.UUID | None = Query(None),
     include_inactive: bool = Query(True),
 ) -> list[ProductCategory]:
-    return await shop_svc.list_categories(session, org_id=org_id, include_inactive=include_inactive)
+    return await shop_svc.list_categories(
+        session, org_id=org_id, activity_id=activity_id, include_inactive=include_inactive
+    )
 
 
 @router.post(
@@ -161,8 +191,9 @@ async def list_categories(
     summary="新增主題",
 )
 async def create_category(
-    payload: ProductCategoryCreate, session: DbDep, current_user: ManagerUser
+    payload: ProductCategoryCreate, session: DbDep, current_user: CurrentUser
 ) -> ProductCategory:
+    await _require_shop_manager(session, current_user, payload.activity_id)
     return await shop_svc.create_category(session, data=payload, created_by=current_user.id)
 
 
@@ -171,9 +202,10 @@ async def update_category(
     category_id: uuid.UUID,
     payload: ProductCategoryUpdate,
     session: DbDep,
-    _: ManagerUser,
+    current_user: CurrentUser,
 ) -> ProductCategory:
     category = await _get_category_or_404(category_id, session)
+    await _require_shop_manager(session, current_user, category.activity_id)
     return await shop_svc.update_category(session, category, data=payload)
 
 
@@ -182,8 +214,11 @@ async def update_category(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="刪除主題",
 )
-async def delete_category(category_id: uuid.UUID, session: DbDep, _: ManagerUser) -> None:
+async def delete_category(
+    category_id: uuid.UUID, session: DbDep, current_user: CurrentUser
+) -> None:
     category = await _get_category_or_404(category_id, session)
+    await _require_shop_manager(session, current_user, category.activity_id)
     try:
         await shop_svc.delete_category(session, category)
     except ValueError as e:
@@ -212,8 +247,10 @@ async def list_series(
     summary="新增系列",
 )
 async def create_series(
-    payload: ProductSeriesCreate, session: DbDep, _: ManagerUser
+    payload: ProductSeriesCreate, session: DbDep, current_user: CurrentUser
 ) -> ProductSeries:
+    category = await _get_category_or_404(payload.category_id, session)
+    await _require_shop_manager(session, current_user, category.activity_id)
     try:
         return await shop_svc.create_series(session, data=payload)
     except ValueError as e:
@@ -225,9 +262,11 @@ async def update_series(
     series_id: uuid.UUID,
     payload: ProductSeriesUpdate,
     session: DbDep,
-    _: ManagerUser,
+    current_user: CurrentUser,
 ) -> ProductSeries:
     series = await _get_series_or_404(series_id, session)
+    category = await _get_category_or_404(series.category_id, session)
+    await _require_shop_manager(session, current_user, category.activity_id)
     return await shop_svc.update_series(session, series, data=payload)
 
 
@@ -236,8 +275,10 @@ async def update_series(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="刪除系列",
 )
-async def delete_series(series_id: uuid.UUID, session: DbDep, _: ManagerUser) -> None:
+async def delete_series(series_id: uuid.UUID, session: DbDep, current_user: CurrentUser) -> None:
     series = await _get_series_or_404(series_id, session)
+    category = await _get_category_or_404(series.category_id, session)
+    await _require_shop_manager(session, current_user, category.activity_id)
     try:
         await shop_svc.delete_series(session, series)
     except ValueError as e:
@@ -249,9 +290,12 @@ async def delete_series(series_id: uuid.UUID, session: DbDep, _: ManagerUser) ->
 
 @router.get("/catalog", response_model=list[CatalogCategoryOut], summary="購買頁瀏覽樹")
 async def get_catalog(
-    session: DbDep, _: CurrentUser, org_id: uuid.UUID | None = Query(None)
+    session: DbDep,
+    _: CurrentUser,
+    org_id: uuid.UUID | None = Query(None),
+    activity_id: uuid.UUID | None = Query(None),
 ) -> list[CatalogCategoryOut]:
-    return await shop_svc.build_catalog_tree(session, org_id=org_id)
+    return await shop_svc.build_catalog_tree(session, org_id=org_id, activity_id=activity_id)
 
 
 # ── 商品 ──────────────────────────────────────────────────────────────────────
@@ -262,6 +306,7 @@ async def list_products(
     session: DbDep,
     _: CurrentUser,
     org_id: uuid.UUID | None = Query(None),
+    activity_id: uuid.UUID | None = Query(None),
     series_id: uuid.UUID | None = Query(None),
     status_filter: ProductStatus | None = Query(None, alias="status"),
     limit: int = Query(20, ge=1, le=100),
@@ -270,6 +315,7 @@ async def list_products(
     return await shop_svc.list_products(
         session,
         org_id=org_id,
+        activity_id=activity_id,
         series_id=series_id,
         status=status_filter,
         limit=limit,
@@ -289,8 +335,11 @@ async def get_product(product_id: uuid.UUID, session: DbDep, _: CurrentUser) -> 
     summary="新增商品（可附變體）",
 )
 async def create_product(
-    payload: ProductCreate, session: DbDep, current_user: ManagerUser
+    payload: ProductCreate, session: DbDep, current_user: CurrentUser
 ) -> Product:
+    series = await _get_series_or_404(payload.series_id, session)
+    category = await _get_category_or_404(series.category_id, session)
+    await _require_shop_manager(session, current_user, category.activity_id)
     try:
         product = await shop_svc.create_product(session, data=payload, created_by=current_user.id)
     except ValueError as e:
@@ -313,9 +362,10 @@ async def update_product(
     product_id: uuid.UUID,
     payload: ProductUpdate,
     session: DbDep,
-    current_user: ManagerUser,
+    current_user: CurrentUser,
 ) -> Product:
     product = await _get_product_or_404(product_id, session)
+    await _require_shop_manager(session, current_user, _product_activity(product))
     try:
         product = await shop_svc.update_product(session, product, data=payload)
     except ValueError as e:
@@ -335,9 +385,10 @@ async def update_product(
 
 @router.post("/products/{product_id}/activate", response_model=ProductOut, summary="上架商品")
 async def activate_product(
-    product_id: uuid.UUID, session: DbDep, current_user: ManagerUser
+    product_id: uuid.UUID, session: DbDep, current_user: CurrentUser
 ) -> Product:
     product = await _get_product_or_404(product_id, session)
+    await _require_shop_manager(session, current_user, _product_activity(product))
     try:
         product = await shop_svc.activate_product(session, product)
     except ValueError as e:
@@ -356,9 +407,10 @@ async def activate_product(
 
 @router.post("/products/{product_id}/deactivate", response_model=ProductOut, summary="下架商品")
 async def deactivate_product(
-    product_id: uuid.UUID, session: DbDep, current_user: ManagerUser
+    product_id: uuid.UUID, session: DbDep, current_user: CurrentUser
 ) -> Product:
     product = await _get_product_or_404(product_id, session)
+    await _require_shop_manager(session, current_user, _product_activity(product))
     try:
         product = await shop_svc.deactivate_product(session, product)
     except ValueError as e:
@@ -388,9 +440,10 @@ async def add_variant_group(
     product_id: uuid.UUID,
     payload: ProductVariantGroupCreate,
     session: DbDep,
-    _: ManagerUser,
+    current_user: CurrentUser,
 ) -> ProductVariantGroup:
     product = await _get_product_or_404(product_id, session)
+    await _require_shop_manager(session, current_user, _product_activity(product))
     return await shop_svc.add_variant_group(session, product, data=payload)
 
 
@@ -403,9 +456,11 @@ async def update_variant_group(
     group_id: uuid.UUID,
     payload: ProductVariantGroupUpdate,
     session: DbDep,
-    _: ManagerUser,
+    current_user: CurrentUser,
 ) -> ProductVariantGroup:
     group = await _get_variant_group_or_404(group_id, session)
+    product = await _get_product_or_404(group.product_id, session)
+    await _require_shop_manager(session, current_user, _product_activity(product))
     return await shop_svc.update_variant_group(session, group, data=payload)
 
 
@@ -414,8 +469,12 @@ async def update_variant_group(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="刪除變體群組",
 )
-async def delete_variant_group(group_id: uuid.UUID, session: DbDep, _: ManagerUser) -> None:
+async def delete_variant_group(
+    group_id: uuid.UUID, session: DbDep, current_user: CurrentUser
+) -> None:
     group = await _get_variant_group_or_404(group_id, session)
+    product = await _get_product_or_404(group.product_id, session)
+    await _require_shop_manager(session, current_user, _product_activity(product))
     await shop_svc.delete_variant_group(session, group)
 
 
@@ -429,9 +488,11 @@ async def add_variant_option(
     group_id: uuid.UUID,
     payload: ProductVariantOptionCreate,
     session: DbDep,
-    _: ManagerUser,
+    current_user: CurrentUser,
 ) -> ProductVariantOption:
     group = await _get_variant_group_or_404(group_id, session)
+    product = await _get_product_or_404(group.product_id, session)
+    await _require_shop_manager(session, current_user, _product_activity(product))
     return await shop_svc.add_variant_option(session, group, data=payload)
 
 
@@ -444,9 +505,12 @@ async def update_variant_option(
     option_id: uuid.UUID,
     payload: ProductVariantOptionUpdate,
     session: DbDep,
-    _: ManagerUser,
+    current_user: CurrentUser,
 ) -> ProductVariantOption:
     option = await _get_variant_option_or_404(option_id, session)
+    group = await _get_variant_group_or_404(option.group_id, session)
+    product = await _get_product_or_404(group.product_id, session)
+    await _require_shop_manager(session, current_user, _product_activity(product))
     return await shop_svc.update_variant_option(session, option, data=payload)
 
 
@@ -455,8 +519,13 @@ async def update_variant_option(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="刪除變體選項",
 )
-async def delete_variant_option(option_id: uuid.UUID, session: DbDep, _: ManagerUser) -> None:
+async def delete_variant_option(
+    option_id: uuid.UUID, session: DbDep, current_user: CurrentUser
+) -> None:
     option = await _get_variant_option_or_404(option_id, session)
+    group = await _get_variant_group_or_404(option.group_id, session)
+    product = await _get_product_or_404(group.product_id, session)
+    await _require_shop_manager(session, current_user, _product_activity(product))
     await shop_svc.delete_variant_option(session, option)
 
 
@@ -564,12 +633,17 @@ async def list_orders(
     session: DbDep,
     current_user: CurrentUser,
     org_id: uuid.UUID | None = Query(None),
+    activity_id: uuid.UUID | None = Query(None),
     status_filter: OrderStatus | None = Query(None, alias="status"),
     my_only: bool = Query(True, description="僅顯示我的訂單"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ) -> list[OrderListItem]:
-    if current_user.is_superuser:
+    if (
+        current_user.is_superuser
+        or activity_id
+        and await activity_svc.can_manage_activity_resource(session, current_user, activity_id)
+    ):
         my_only = False
     elif not my_only:
         codes = await get_user_permission_codes(session, str(current_user.id))
@@ -579,6 +653,7 @@ async def list_orders(
         session,
         user_id=current_user.id if my_only else None,
         org_id=org_id,
+        activity_id=activity_id,
         status=status_filter,
         limit=limit,
         offset=offset,
@@ -657,7 +732,10 @@ async def get_order(order_id: uuid.UUID, session: DbDep, current_user: CurrentUs
         codes = await get_user_permission_codes(session, str(current_user.id))
         cadre_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
         is_cadre = order.class_id is not None and order.class_id in cadre_ids
-        if not (_ADMIN_VIEW_CODES & set(codes)) and not is_cadre:
+        is_activity_manager = await activity_svc.can_manage_activity_resource(
+            session, current_user, shop_svc._order_activity_id(order)
+        )
+        if not (_ADMIN_VIEW_CODES & set(codes)) and not is_cadre and not is_activity_manager:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此訂單")
     return shop_svc.serialize_order(order)
 
@@ -704,7 +782,10 @@ async def update_order_payment(
         codes = await get_user_permission_codes(session, str(current_user.id))
         cadre_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
         is_cadre = order.class_id is not None and order.class_id in cadre_ids
-        if not (_ADMIN_VIEW_CODES & set(codes)) and not is_cadre:
+        is_activity_manager = await activity_svc.can_manage_activity_resource(
+            session, current_user, shop_svc._order_activity_id(order)
+        )
+        if not (_ADMIN_VIEW_CODES & set(codes)) and not is_cadre and not is_activity_manager:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="僅該班幹部或管理員可標示繳費"
             )
@@ -732,14 +813,22 @@ async def update_order_payment(
     "/reports/orders.xlsx",
     response_class=Response,
     summary="匯出訂單報表（Excel）",
-    dependencies=[Depends(require_any(PermissionCode.FINANCE_VIEW, PermissionCode.ADMIN_ALL))],
 )
 async def export_orders_excel(
     session: DbDep,
-    _: CurrentUser,
+    current_user: CurrentUser,
     org_id: uuid.UUID | None = Query(None, description="過濾組織（留空匯出全部）"),
+    activity_id: uuid.UUID | None = Query(None, description="過濾活動"),
 ) -> Response:
-    xlsx_bytes = await shop_svc.export_orders_excel(session, org_id=org_id)
+    if activity_id:
+        await _require_shop_manager(session, current_user, activity_id)
+    elif not current_user.is_superuser:
+        codes = await get_user_permission_codes(session, current_user.id)
+        if not {str(PermissionCode.FINANCE_VIEW), str(PermissionCode.ADMIN_ALL)} & set(codes):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="需要權限：finance:view"
+            )
+    xlsx_bytes = await shop_svc.export_orders_excel(session, org_id=org_id, activity_id=activity_id)
     filename = f"orders_{__import__('datetime').date.today()}.xlsx"
     return Response(
         content=xlsx_bytes,
@@ -752,14 +841,22 @@ async def export_orders_excel(
     "/reports/orders.csv",
     response_class=Response,
     summary="匯出訂單報表（CSV）",
-    dependencies=[Depends(require_any(PermissionCode.FINANCE_VIEW, PermissionCode.ADMIN_ALL))],
 )
 async def export_orders_csv(
     session: DbDep,
-    _: CurrentUser,
+    current_user: CurrentUser,
     org_id: uuid.UUID | None = Query(None, description="過濾組織"),
+    activity_id: uuid.UUID | None = Query(None, description="過濾活動"),
 ) -> Response:
-    csv_str = await shop_svc.export_orders_csv(session, org_id=org_id)
+    if activity_id:
+        await _require_shop_manager(session, current_user, activity_id)
+    elif not current_user.is_superuser:
+        codes = await get_user_permission_codes(session, current_user.id)
+        if not {str(PermissionCode.FINANCE_VIEW), str(PermissionCode.ADMIN_ALL)} & set(codes):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="需要權限：finance:view"
+            )
+    csv_str = await shop_svc.export_orders_csv(session, org_id=org_id, activity_id=activity_id)
     filename = f"orders_{__import__('datetime').date.today()}.csv"
     return Response(
         content=csv_str.encode("utf-8-sig"),

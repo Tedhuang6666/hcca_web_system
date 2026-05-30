@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import discord
 from discord import app_commands
@@ -20,11 +21,22 @@ from api.models.user import User
 from api.routers.notifications import create_notification
 from api.schemas.document import RejectMode
 from api.schemas.petition import PetitionCreate, PetitionInternalNoteCreate, PetitionStatusUpdate
+from api.schemas.work_item import WorkItemCreate
 from api.services import audit as audit_svc
 from api.services import defense as defense_svc
 from api.services import document as doc_svc
 from api.services import petition as petition_svc
-from api.services.discord_bot import create_open_url, get_user_by_discord_id
+from api.services import work_item as work_item_svc
+from api.services.discord_bot import (
+    create_open_url,
+    emit_moderation_log,
+    emit_public_document_notice,
+    emit_welcome_message,
+    enqueue_all_role_sync,
+    enqueue_petition_private_channel,
+    enqueue_role_sync,
+    get_user_by_discord_id,
+)
 from api.services.permission import get_user_permission_codes
 from api.services.task_inbox import build_task_inbox
 
@@ -48,6 +60,46 @@ async def _require_bound_user(interaction: discord.Interaction) -> User | None:
         )
         return None
     return user
+
+
+async def _require_platform_admin(interaction: discord.Interaction) -> User | None:
+    user = await _require_bound_user(interaction)
+    if user is None:
+        return None
+    async with AsyncSessionLocal() as db:
+        codes = await get_user_permission_codes(db, user.id)
+    if not _has(user, codes, "admin:all"):
+        await interaction.response.send_message("你沒有 Discord 社群管理權限。", ephemeral=True)
+        return None
+    return user
+
+
+async def _audit_discord_action(
+    actor: User,
+    interaction: discord.Interaction,
+    *,
+    action: str,
+    summary: str,
+    meta: dict,
+) -> None:
+    async with AsyncSessionLocal() as db:
+        await audit_svc.record(
+            db,
+            entity_type="discord_guild",
+            entity_id=str(interaction.guild_id or "dm"),
+            action=action,
+            actor_id=str(actor.id),
+            actor_email=actor.email,
+            meta={**meta, "discord_interaction_id": str(interaction.id)},
+            summary=summary,
+        )
+        await emit_moderation_log(
+            db,
+            guild_id=str(interaction.guild_id) if interaction.guild_id else None,
+            title=summary,
+            body="\n".join(f"{key}: {value}" for key, value in meta.items()),
+        )
+        await db.commit()
 
 
 class PetitionModal(discord.ui.Modal, title="建立陳情"):
@@ -104,6 +156,7 @@ class PetitionModal(discord.ui.Modal, title="建立陳情"):
                 },
                 summary=f"Discord 建立陳情案件 {case_obj.case_number}",
             )
+            await enqueue_petition_private_channel(db, case_obj)
             await db.commit()
         await interaction.response.send_message(
             f"已建立陳情案件 {case_obj.case_number}。查詢驗證碼：{code}", ephemeral=True
@@ -206,6 +259,7 @@ class DocumentActionView(discord.ui.View):
                     link=f"/documents/{updated.id}",
                     related_id=updated.id,
                 )
+                await emit_public_document_notice(db, updated)
             await db.commit()
         await interaction.response.send_message(f"已核准：{updated.title}", ephemeral=True)
 
@@ -281,6 +335,8 @@ class PetitionManageView(discord.ui.View):
 class HccaDiscordClient(discord.Client):
     def __init__(self) -> None:
         intents = discord.Intents.default()
+        intents.members = True
+        intents.moderation = True
         super().__init__(intents=intents)
         self.tree = app_commands.CommandTree(self)
 
@@ -293,8 +349,48 @@ class HccaDiscordClient(discord.Client):
         else:
             await self.tree.sync()
 
+    async def on_member_join(self, member: discord.Member) -> None:
+        async with AsyncSessionLocal() as db:
+            user = await get_user_by_discord_id(db, str(member.id))
+            if user is not None:
+                await enqueue_role_sync(db, user.id)
+                await emit_moderation_log(
+                    db,
+                    guild_id=str(member.guild.id),
+                    title="Discord 成員加入並已綁定平台",
+                    body=f"{member} / {user.display_name}",
+                )
+            await emit_welcome_message(
+                db,
+                guild_id=str(member.guild.id),
+                discord_user_id=str(member.id),
+                display_name=member.display_name,
+            )
+            await db.commit()
+
 
 client = HccaDiscordClient()
+
+
+@client.tree.command(name="ping", description="確認 HCCA Bot 狀態")
+async def ping(interaction: discord.Interaction) -> None:
+    await interaction.response.send_message(
+        f"HCCA Bot online. latency={client.latency * 1000:.0f}ms",
+        ephemeral=True,
+    )
+
+
+@client.tree.command(name="hcca_help", description="查看 HCCA Bot 功能摘要")
+async def hcca_help(interaction: discord.Interaction) -> None:
+    text = (
+        "HCCA Bot\n"
+        "個人：/me /tasks /sync_me\n"
+        "工作：/assign_task /complete_task\n"
+        "公文陳情：/documents_pending /petition /petitions_pending /petition_note /petition_channel\n"
+        "系統：/system_status /defense_summary\n"
+        "社群管理：admin:all 可用 /purge /timeout /untimeout /kick /ban /unban /slowmode /lock /unlock"
+    )
+    await interaction.response.send_message(text, ephemeral=True)
 
 
 @client.tree.command(name="me", description="查看平台綁定與待辦摘要")
@@ -325,6 +421,86 @@ async def tasks(interaction: discord.Interaction) -> None:
         for item in inbox.items[:8]:
             lines.append(f"- {item.title}：{await create_open_url(user.id, item.href)}")
     await interaction.response.send_message("\n".join(lines), ephemeral=True)
+
+
+@client.tree.command(name="assign_task", description="指派工作與期限提醒")
+async def assign_task(
+    interaction: discord.Interaction,
+    member: discord.Member,
+    title: str,
+    due_at: str | None = None,
+    description: str | None = None,
+) -> None:
+    user = await _require_bound_user(interaction)
+    if user is None:
+        return
+    async with AsyncSessionLocal() as db:
+        assignee = await get_user_by_discord_id(db, str(member.id))
+        if assignee is None:
+            await interaction.response.send_message("對方尚未綁定平台帳號。", ephemeral=True)
+            return
+        due = None
+        if due_at:
+            try:
+                due = datetime.fromisoformat(due_at.replace("Z", "+00:00"))
+                if due.tzinfo is None:
+                    due = due.replace(tzinfo=UTC)
+            except ValueError:
+                await interaction.response.send_message(
+                    "期限格式請用 ISO，例如 2026-05-30T18:00:00+08:00。", ephemeral=True
+                )
+                return
+        item = await work_item_svc.create_work_item(
+            db,
+            data=WorkItemCreate(
+                title=title,
+                description=description,
+                assigned_to_id=assignee.id,
+                due_at=due,
+                source_type="discord",
+            ),
+            created_by_id=user.id,
+        )
+        await audit_svc.record(
+            db,
+            entity_type="work_item",
+            entity_id=str(item.id),
+            action="discord.work_item.create",
+            actor_id=str(user.id),
+            actor_email=user.email,
+            meta={"discord_interaction_id": str(interaction.id), "assignee": str(member.id)},
+            summary=f"Discord 指派工作：{item.title}",
+        )
+        await db.commit()
+    await interaction.response.send_message(f"已指派給 {member.mention}：{item.title}", ephemeral=True)
+
+
+@client.tree.command(name="complete_task", description="完成一筆工作分配")
+async def complete_task(interaction: discord.Interaction, task_id: str) -> None:
+    user = await _require_bound_user(interaction)
+    if user is None:
+        return
+    async with AsyncSessionLocal() as db:
+        try:
+            item = await work_item_svc.get_work_item(db, uuid.UUID(task_id))
+        except ValueError:
+            item = None
+        if item is None or item.assigned_to_id != user.id:
+            await interaction.response.send_message("找不到可由你完成的工作。", ephemeral=True)
+            return
+        await work_item_svc.complete_work_item(db, item=item)
+        await audit_svc.record(
+            db,
+            entity_type="work_item",
+            entity_id=str(item.id),
+            action="discord.work_item.complete",
+            actor_id=str(user.id),
+            actor_email=user.email,
+            meta={"discord_interaction_id": str(interaction.id)},
+            summary=f"Discord 完成工作：{item.title}",
+        )
+        await db.commit()
+    await interaction.response.send_message(f"已完成：{item.title}", ephemeral=True)
 
 
 @client.tree.command(name="petition", description="用私密表單建立陳情")
@@ -412,6 +588,41 @@ async def petition_note(interaction: discord.Interaction, case_id: str, content:
     await interaction.response.send_message("已新增內部備註。", ephemeral=True)
 
 
+@client.tree.command(name="petition_channel", description="為陳情案件建立私密討論頻道")
+async def petition_channel(interaction: discord.Interaction, case_id: str) -> None:
+    user = await _require_bound_user(interaction)
+    if user is None:
+        return
+    async with AsyncSessionLocal() as db:
+        codes = await get_user_permission_codes(db, user.id)
+        if not _has(user, codes, "petition:handle"):
+            await interaction.response.send_message("你沒有處理陳情權限。", ephemeral=True)
+            return
+        try:
+            case_obj = await petition_svc.get_case(db, uuid.UUID(case_id))
+        except ValueError:
+            case_obj = None
+        if case_obj is None:
+            await interaction.response.send_message("找不到此陳情案件。", ephemeral=True)
+            return
+        queued = await enqueue_petition_private_channel(db, case_obj, force=True)
+        if not queued:
+            await interaction.response.send_message("此案件已有頻道，或後台尚未完成頻道設定。", ephemeral=True)
+            return
+        await audit_svc.record(
+            db,
+            entity_type="petition_case",
+            entity_id=str(case_obj.id),
+            action="discord.petition.channel",
+            actor_id=str(user.id),
+            actor_email=user.email,
+            meta={"discord_interaction_id": str(interaction.id)},
+            summary=f"Discord 建立陳情私密頻道 {case_obj.case_number}",
+        )
+        await db.commit()
+    await interaction.response.send_message("已排程建立私密討論頻道。", ephemeral=True)
+
+
 @client.tree.command(name="system_status", description="查看系統狀態")
 async def system_status(interaction: discord.Interaction) -> None:
     user = await _require_bound_user(interaction)
@@ -454,6 +665,281 @@ async def defense_summary(interaction: discord.Interaction) -> None:
         f"status_counts={data['recent_status_counts']}",
         ephemeral=True,
     )
+
+
+@client.tree.command(name="sync_me", description="同步自己的平台身分組與社群暱稱前綴")
+async def sync_me(interaction: discord.Interaction) -> None:
+    user = await _require_bound_user(interaction)
+    if user is None:
+        return
+    async with AsyncSessionLocal() as db:
+        await enqueue_role_sync(db, user.id)
+        await db.commit()
+    await interaction.response.send_message("已排程同步你的身分組與暱稱前綴。", ephemeral=True)
+
+
+@client.tree.command(name="sync_all", description="排程同步所有已綁定成員")
+async def sync_all(interaction: discord.Interaction) -> None:
+    user = await _require_platform_admin(interaction)
+    if user is None:
+        return
+    async with AsyncSessionLocal() as db:
+        queued = await enqueue_all_role_sync(db)
+        await audit_svc.record(
+            db,
+            entity_type="discord_account_link",
+            entity_id="all",
+            action="discord.sync_all",
+            actor_id=str(user.id),
+            actor_email=user.email,
+            meta={"discord_interaction_id": str(interaction.id), "queued": queued},
+            summary="Discord 排程同步所有已綁定成員",
+        )
+        await emit_moderation_log(
+            db,
+            guild_id=str(interaction.guild_id) if interaction.guild_id else None,
+            title="Discord 排程同步所有已綁定成員",
+            body=f"queued: {queued}",
+        )
+        await db.commit()
+    await interaction.response.send_message(f"已排程同步 {queued} 位已綁定成員。", ephemeral=True)
+
+
+@client.tree.command(name="server_info", description="查看伺服器摘要")
+async def server_info(interaction: discord.Interaction) -> None:
+    if interaction.guild is None:
+        await interaction.response.send_message("此指令只能在伺服器內使用。", ephemeral=True)
+        return
+    guild = interaction.guild
+    text = (
+        f"{guild.name}\n"
+        f"members={guild.member_count} roles={len(guild.roles)} channels={len(guild.channels)}\n"
+        f"owner_id={guild.owner_id} created_at={guild.created_at.date().isoformat()}"
+    )
+    await interaction.response.send_message(text, ephemeral=True)
+
+
+@client.tree.command(name="user_info", description="查看成員摘要")
+async def user_info(interaction: discord.Interaction, member: discord.Member | None = None) -> None:
+    target = member or interaction.user
+    if not isinstance(target, discord.Member):
+        await interaction.response.send_message("請在伺服器內使用。", ephemeral=True)
+        return
+    async with AsyncSessionLocal() as db:
+        user = await get_user_by_discord_id(db, str(target.id))
+    platform = f"平台：{user.display_name} / {user.email}" if user else "平台：未綁定"
+    roles = ", ".join(role.name for role in target.roles[-5:] if role.name != "@everyone") or "無"
+    text = (
+        f"{target} ({target.id})\n"
+        f"{platform}\n"
+        f"joined_at={target.joined_at.date().isoformat() if target.joined_at else 'unknown'}\n"
+        f"roles={roles}"
+    )
+    await interaction.response.send_message(text, ephemeral=True)
+
+
+@client.tree.command(name="purge", description="清除本頻道最近訊息")
+async def purge(interaction: discord.Interaction, amount: app_commands.Range[int, 1, 100]) -> None:
+    user = await _require_platform_admin(interaction)
+    if user is None:
+        return
+    if not isinstance(interaction.channel, discord.TextChannel | discord.Thread):
+        await interaction.response.send_message("此指令只能在文字頻道使用。", ephemeral=True)
+        return
+    await interaction.response.defer(ephemeral=True)
+    deleted = await interaction.channel.purge(limit=int(amount))
+    await _audit_discord_action(
+        user,
+        interaction,
+        action="discord.community.purge",
+        summary=f"Discord 清除 {len(deleted)} 則訊息",
+        meta={"channel_id": str(interaction.channel_id), "amount": amount},
+    )
+    await interaction.followup.send(f"已清除 {len(deleted)} 則訊息。", ephemeral=True)
+
+
+@client.tree.command(name="timeout", description="將成員暫時禁言")
+async def timeout_member(
+    interaction: discord.Interaction,
+    member: discord.Member,
+    minutes: app_commands.Range[int, 1, 10080],
+    reason: str = "Discord 管理指令",
+) -> None:
+    user = await _require_platform_admin(interaction)
+    if user is None:
+        return
+    await member.timeout(discord.utils.utcnow() + timedelta(minutes=int(minutes)), reason=reason)
+    await _audit_discord_action(
+        user,
+        interaction,
+        action="discord.community.timeout",
+        summary=f"Discord 禁言 {member}",
+        meta={"target_id": str(member.id), "minutes": minutes, "reason": reason},
+    )
+    await interaction.response.send_message(
+        f"已禁言 {member.mention} {minutes} 分鐘。", ephemeral=True
+    )
+
+
+@client.tree.command(name="untimeout", description="解除成員禁言")
+async def untimeout_member(
+    interaction: discord.Interaction, member: discord.Member, reason: str = "Discord 管理指令"
+) -> None:
+    user = await _require_platform_admin(interaction)
+    if user is None:
+        return
+    await member.timeout(None, reason=reason)
+    await _audit_discord_action(
+        user,
+        interaction,
+        action="discord.community.untimeout",
+        summary=f"Discord 解除禁言 {member}",
+        meta={"target_id": str(member.id), "reason": reason},
+    )
+    await interaction.response.send_message(f"已解除 {member.mention} 的禁言。", ephemeral=True)
+
+
+@client.tree.command(name="kick", description="踢出成員")
+async def kick_member(
+    interaction: discord.Interaction, member: discord.Member, reason: str = "Discord 管理指令"
+) -> None:
+    user = await _require_platform_admin(interaction)
+    if user is None:
+        return
+    await member.kick(reason=reason)
+    await _audit_discord_action(
+        user,
+        interaction,
+        action="discord.community.kick",
+        summary=f"Discord 踢出 {member}",
+        meta={"target_id": str(member.id), "reason": reason},
+    )
+    await interaction.response.send_message(f"已踢出 {member}。", ephemeral=True)
+
+
+@client.tree.command(name="ban", description="封鎖成員")
+async def ban_member(
+    interaction: discord.Interaction,
+    member: discord.Member,
+    delete_message_days: app_commands.Range[int, 0, 7] = 0,
+    reason: str = "Discord 管理指令",
+) -> None:
+    user = await _require_platform_admin(interaction)
+    if user is None:
+        return
+    await member.ban(delete_message_days=int(delete_message_days), reason=reason)
+    await _audit_discord_action(
+        user,
+        interaction,
+        action="discord.community.ban",
+        summary=f"Discord 封鎖 {member}",
+        meta={
+            "target_id": str(member.id),
+            "delete_message_days": delete_message_days,
+            "reason": reason,
+        },
+    )
+    await interaction.response.send_message(f"已封鎖 {member}。", ephemeral=True)
+
+
+@client.tree.command(name="unban", description="用 Discord User ID 解除封鎖")
+async def unban_member(
+    interaction: discord.Interaction, user_id: str, reason: str = "Discord 管理指令"
+) -> None:
+    actor = await _require_platform_admin(interaction)
+    if actor is None:
+        return
+    if interaction.guild is None:
+        await interaction.response.send_message("此指令只能在伺服器內使用。", ephemeral=True)
+        return
+    target = discord.Object(id=int(user_id))
+    await interaction.guild.unban(target, reason=reason)
+    await _audit_discord_action(
+        actor,
+        interaction,
+        action="discord.community.unban",
+        summary=f"Discord 解除封鎖 {user_id}",
+        meta={"target_id": user_id, "reason": reason},
+    )
+    await interaction.response.send_message(f"已解除封鎖 {user_id}。", ephemeral=True)
+
+
+@client.tree.command(name="slowmode", description="設定本頻道慢速模式秒數")
+async def slowmode(
+    interaction: discord.Interaction,
+    seconds: app_commands.Range[int, 0, 21600],
+    channel: discord.TextChannel | None = None,
+) -> None:
+    user = await _require_platform_admin(interaction)
+    if user is None:
+        return
+    target = channel or interaction.channel
+    if not isinstance(target, discord.TextChannel):
+        await interaction.response.send_message("請指定文字頻道。", ephemeral=True)
+        return
+    await target.edit(slowmode_delay=int(seconds), reason="HCCA Discord 管理指令")
+    await _audit_discord_action(
+        user,
+        interaction,
+        action="discord.community.slowmode",
+        summary=f"Discord 設定慢速模式 {seconds}s",
+        meta={"channel_id": str(target.id), "seconds": seconds},
+    )
+    await interaction.response.send_message(
+        f"已設定 {target.mention} 慢速模式 {seconds} 秒。", ephemeral=True
+    )
+
+
+@client.tree.command(name="lock", description="鎖定本頻道，禁止 @everyone 發言")
+async def lock_channel(
+    interaction: discord.Interaction, channel: discord.TextChannel | None = None
+) -> None:
+    user = await _require_platform_admin(interaction)
+    if user is None:
+        return
+    target = channel or interaction.channel
+    if not isinstance(target, discord.TextChannel) or interaction.guild is None:
+        await interaction.response.send_message("請指定文字頻道。", ephemeral=True)
+        return
+    await target.set_permissions(
+        interaction.guild.default_role,
+        send_messages=False,
+        reason="HCCA Discord 管理指令",
+    )
+    await _audit_discord_action(
+        user,
+        interaction,
+        action="discord.community.lock",
+        summary=f"Discord 鎖定頻道 {target}",
+        meta={"channel_id": str(target.id)},
+    )
+    await interaction.response.send_message(f"已鎖定 {target.mention}。", ephemeral=True)
+
+
+@client.tree.command(name="unlock", description="解除本頻道 @everyone 發言覆寫")
+async def unlock_channel(
+    interaction: discord.Interaction, channel: discord.TextChannel | None = None
+) -> None:
+    user = await _require_platform_admin(interaction)
+    if user is None:
+        return
+    target = channel or interaction.channel
+    if not isinstance(target, discord.TextChannel) or interaction.guild is None:
+        await interaction.response.send_message("請指定文字頻道。", ephemeral=True)
+        return
+    await target.set_permissions(
+        interaction.guild.default_role,
+        send_messages=None,
+        reason="HCCA Discord 管理指令",
+    )
+    await _audit_discord_action(
+        user,
+        interaction,
+        action="discord.community.unlock",
+        summary=f"Discord 解鎖頻道 {target}",
+        meta={"channel_id": str(target.id)},
+    )
+    await interaction.response.send_message(f"已解除 {target.mention} 的發言鎖定。", ephemeral=True)
 
 
 async def main() -> None:

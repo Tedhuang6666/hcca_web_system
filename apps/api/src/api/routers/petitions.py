@@ -48,6 +48,7 @@ from api.schemas.petition import (
 )
 from api.services import audit as audit_svc
 from api.services import petition as petition_svc
+from api.services.discord_bot import enqueue_petition_private_channel
 from api.services.permission import get_user_org_ids_with_permission, get_user_permission_codes
 from api.services.storage import get_storage
 
@@ -154,6 +155,9 @@ def _decorate_list_item(case_obj: PetitionCase) -> PetitionCaseListItem:
         type_name=case_obj.type.name if case_obj.type else "",
         current_org_name=case_obj.current_org.name if case_obj.current_org else "",
         assigned_to_name=case_obj.assigned_to.display_name if case_obj.assigned_to else None,
+        discord_guild_id=case_obj.discord_guild_id,
+        discord_channel_id=case_obj.discord_channel_id,
+        discord_channel_created_at=case_obj.discord_channel_created_at,
     )
 
 
@@ -243,6 +247,7 @@ async def create_petition(
         meta={"case_number": case_obj.case_number, "type_id": str(case_obj.type_id)},
         summary=f"建立陳情案件 {case_obj.case_number}",
     )
+    await enqueue_petition_private_channel(session, case_obj)
     return PetitionCreatedOut(
         id=case_obj.id,
         case_number=case_obj.case_number,
@@ -472,6 +477,32 @@ async def list_assignable_users(case_id: uuid.UUID, session: DbDep, user: Curren
         {"id": str(u.id), "display_name": u.display_name, "email": u.email}
         for u in result.scalars().all()
     ]
+
+
+@router.post("/{case_id}/discord-channel", response_model=PetitionCaseOut, summary="建立陳情私密 Discord 頻道")
+async def create_petition_discord_channel(
+    case_id: uuid.UUID, session: DbDep, current_user: CurrentUser
+) -> PetitionCaseOut:
+    case_obj = await _case_or_404(session, case_id)
+    include_internal, can_view_submitter = await _assert_case_access(session, case_obj, current_user)
+    if not include_internal:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權建立陳情私密頻道")
+    queued = await enqueue_petition_private_channel(session, case_obj, force=True)
+    if not queued:
+        raise HTTPException(status_code=409, detail="此案件已建立頻道，或 Discord 陳情頻道設定尚未完成")
+    await audit_svc.record(
+        session,
+        entity_type="petition_case",
+        entity_id=str(case_obj.id),
+        action="petition.discord_channel.create",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={"case_number": case_obj.case_number},
+        summary=f"建立陳情 Discord 私密頻道 {case_obj.case_number}",
+    )
+    return await _decorate_case(
+        case_obj, include_internal=include_internal, can_view_submitter=can_view_submitter
+    )
 
 
 @router.post("/{case_id}/supplement", response_model=PetitionCaseOut, summary="補充資料")

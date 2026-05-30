@@ -16,6 +16,8 @@ TaskModule = Literal[
     "shop",
     "survey",
     "announcement",
+    "calendar",
+    "work_item",
 ]
 
 TaskAction = Literal[
@@ -28,6 +30,9 @@ TaskAction = Literal[
     "collect",
     "pickup",
     "sign",
+    "complete",
+    "prepare",
+    "manage",
 ]
 
 TaskSeverity = Literal["info", "warning", "critical"]

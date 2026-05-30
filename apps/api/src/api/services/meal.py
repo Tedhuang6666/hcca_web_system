@@ -219,7 +219,9 @@ async def get_vendor_application(
     return await session.get(MealVendorApplication, application_id)
 
 
-async def is_vendor_manager(session: AsyncSession, vendor_id: uuid.UUID, user_id: uuid.UUID) -> bool:
+async def is_vendor_manager(
+    session: AsyncSession, vendor_id: uuid.UUID, user_id: uuid.UUID
+) -> bool:
     exists = await session.scalar(
         select(MealVendorManager.id).where(
             MealVendorManager.vendor_id == vendor_id,
@@ -343,8 +345,10 @@ async def bulk_create_weekly_availabilities(
     if data.date_to < data.date_from:
         raise ValueError("結束日期不可早於開始日期")
     products = (
-        await session.execute(select(MealProduct).where(MealProduct.id.in_(data.product_ids)))
-    ).scalars().all()
+        (await session.execute(select(MealProduct).where(MealProduct.id.in_(data.product_ids))))
+        .scalars()
+        .all()
+    )
     product_by_id = {product.id: product for product in products}
     if len(product_by_id) != len(set(data.product_ids)):
         raise ValueError("包含不存在的商品")
@@ -408,9 +412,7 @@ async def get_pickup_slot(session: AsyncSession, slot_id: uuid.UUID) -> MealPick
     result = await session.execute(
         select(MealPickupSlot)
         .options(
-            selectinload(MealPickupSlot.availability).selectinload(
-                MealProductAvailability.product
-            )
+            selectinload(MealPickupSlot.availability).selectinload(MealProductAvailability.product)
         )
         .where(MealPickupSlot.id == slot_id)
     )
@@ -1150,7 +1152,7 @@ async def check_and_handle_no_shows(session: AsyncSession) -> dict:
     """
     from sqlalchemy.orm import selectinload as _sil
 
-    from api.services.mail import enqueue_email
+    from api.services import outbox
 
     now = datetime.now(UTC)
     reminder_threshold = now - __import__("datetime").timedelta(hours=1)
@@ -1191,24 +1193,30 @@ async def check_and_handle_no_shows(session: AsyncSession) -> dict:
 
             if settings.MAIL_FROM:
                 try:
-                    enqueue_email(
-                        to=settings.MAIL_FROM,
-                        subject=f"[未取餐通知] {vendor_name} {schedule_date} 有訂單未取",
-                        body=(
-                            f"<p>以下訂單已超過 4 小時未取餐，已自動標記：</p>"
-                            f"<ul>"
-                            f"<li>代碼：<strong>{order.pickup_code}</strong></li>"
-                            f"<li>字號：{order.serial_number}</li>"
-                            f"<li>金額：NT${order.total_price}</li>"
-                            f"<li>商家：{vendor_name}</li>"
-                            f"<li>日期：{schedule_date}</li>"
-                            f"</ul>"
-                            f"<p>請至後台查閱並做後續處理。</p>"
-                        ),
+                    await outbox.emit(
+                        session,
+                        event_type="email.send",
+                        payload={
+                            "to": settings.MAIL_FROM,
+                            "subject": (f"[未取餐通知] {vendor_name} {schedule_date} 有訂單未取"),
+                            "body": (
+                                f"<p>以下訂單已超過 4 小時未取餐，已自動標記：</p>"
+                                f"<ul>"
+                                f"<li>代碼：<strong>{order.pickup_code}</strong></li>"
+                                f"<li>字號：{order.serial_number}</li>"
+                                f"<li>金額：NT${order.total_price}</li>"
+                                f"<li>商家：{vendor_name}</li>"
+                                f"<li>日期：{schedule_date}</li>"
+                                f"</ul>"
+                                f"<p>請至後台查閱並做後續處理。</p>"
+                            ),
+                        },
                     )
                 except Exception as mail_err:
                     logger.warning(
-                        "管理員通知 email 失敗 serial=%s err=%s", order.serial_number, mail_err
+                        "管理員通知 email outbox 失敗 serial=%s err=%s",
+                        order.serial_number,
+                        mail_err,
                     )
 
         # Phase 1：尚未發提醒 → 發提醒給使用者
@@ -1217,19 +1225,26 @@ async def check_and_handle_no_shows(session: AsyncSession) -> dict:
             reminded += 1
             logger.info("發送未取餐提醒 serial=%s email=%s", order.serial_number, user_email)
             try:
-                enqueue_email(
-                    to=user_email,
-                    subject=f"[學餐提醒] 您在 {vendor_name} 的餐點尚未取",
-                    body=(
-                        f"<p>您好，</p>"
-                        f"<p>您於 <strong>{schedule_date}</strong> 在 <strong>{vendor_name}</strong> "
-                        f"的訂餐（代碼：<strong>{order.pickup_code}</strong>）尚未取餐。</p>"
-                        f"<p>請盡快前往取餐，若超時未取將自動標記為未取餐並通知管理員。</p>"
-                        f"<p>感謝您使用學餐系統。</p>"
-                    ),
+                await outbox.emit(
+                    session,
+                    event_type="email.send",
+                    payload={
+                        "to": user_email,
+                        "subject": f"[學餐提醒] 您在 {vendor_name} 的餐點尚未取",
+                        "body": (
+                            f"<p>您好，</p>"
+                            f"<p>您於 <strong>{schedule_date}</strong> 在 "
+                            f"<strong>{vendor_name}</strong> 的訂餐"
+                            f"（代碼：<strong>{order.pickup_code}</strong>）尚未取餐。</p>"
+                            f"<p>請盡快前往取餐，若超時未取將自動標記為未取餐並通知管理員。</p>"
+                            f"<p>感謝您使用學餐系統。</p>"
+                        ),
+                    },
                 )
             except Exception as mail_err:
-                logger.warning("提醒 email 失敗 serial=%s err=%s", order.serial_number, mail_err)
+                logger.warning(
+                    "提醒 email outbox 失敗 serial=%s err=%s", order.serial_number, mail_err
+                )
 
     if reminded or marked_no_show:
         await session.flush()

@@ -9,6 +9,7 @@ import type { QuestionType, ValidationRule, UserSummary } from "@/lib/types";
 import { uploadUrl } from "@/lib/config";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import UserPicker from "@/components/surveys/UserPicker";
+import ActivitySelect from "@/components/activities/ActivitySelect";
 
 const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: "section_text", label: "文字描述區塊" },
@@ -63,6 +64,7 @@ type SurveyDraft = {
   allowMultiple: boolean;
   closesAt: string;
   orgId: string;
+  activityId: string;
   questions: DraftQuestion[];
   newQ: Partial<DraftQuestion>;
   optionInput: string;
@@ -234,6 +236,7 @@ export default function NewSurveyPage() {
   const [allowMultiple, setAllowMultiple] = useState(false);
   const [closesAt, setClosesAt] = useState("");
   const [orgId, setOrgId] = useState("");
+  const [activityId, setActivityId] = useState("");
   const [orgs, setOrgs] = useState<OrgRead[]>([]);
 
   // 填答對象
@@ -270,10 +273,12 @@ export default function NewSurveyPage() {
     allowMultiple,
     closesAt,
     orgId,
+    activityId,
     questions,
     newQ,
     optionInput,
   }), [
+    activityId,
     allowMultiple,
     closesAt,
     description,
@@ -291,6 +296,7 @@ export default function NewSurveyPage() {
     setAllowMultiple(Boolean(draft.allowMultiple));
     setClosesAt(draft.closesAt ?? "");
     setOrgId(draft.orgId ?? localStorage.getItem("org_id") ?? "");
+    setActivityId(draft.activityId ?? "");
     setQuestions((draft.questions ?? []).map(q => ({ ...q, rules: q.rules ?? [] })));
     setNewQ(draft.newQ ?? {
       question_text: "",
@@ -417,6 +423,7 @@ export default function NewSurveyPage() {
         allow_multiple: allowMultiple,
         closes_at: closesAt || undefined,
         org_id: orgId,
+        activity_id: activityId || null,
         is_public: isPublic,
         allowed_org_ids: isPublic ? [] : allowedOrgIds,
         allowed_user_ids: isPublic ? [] : allowedUsers.map(u => u.id),
@@ -529,6 +536,7 @@ export default function NewSurveyPage() {
                 {orgs.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
               </select>
             </div>
+            <ActivitySelect value={activityId} onChange={setActivityId} />
           </div>
 
           {/* 填答對象 */}

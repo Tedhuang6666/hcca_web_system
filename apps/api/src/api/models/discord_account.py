@@ -63,7 +63,14 @@ class DiscordGuildConfig(Base, TimestampMixin):
     office_channel_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     security_alert_channel_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     petition_entry_channel_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    petition_private_category_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    petition_staff_role_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    petition_private_channel_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
     announcement_channel_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    moderation_log_channel_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    welcome_channel_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     admin_role_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
 
@@ -96,9 +103,60 @@ class DiscordRoleMapping(Base, TimestampMixin):
     position: Mapped[Position | None] = relationship("Position")
 
 
+class DiscordOrgChannelMapping(Base, TimestampMixin):
+    """平台機關對應 Discord 公告頻道。"""
+
+    __tablename__ = "discord_org_channel_mappings"
+    __table_args__ = (
+        UniqueConstraint("guild_id", "org_id", name="uq_discord_org_channel_mapping_org"),
+        Index("ix_discord_org_channel_mapping_active", "guild_id", "is_active"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    guild_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    org_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("orgs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    channel_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+
+    org: Mapped[Org] = relationship("Org")
+
+
+class DiscordNicknamePrefixRule(Base, TimestampMixin):
+    """平台組織/職位對應 Discord 社群暱稱前綴。"""
+
+    __tablename__ = "discord_nickname_prefix_rules"
+    __table_args__ = (
+        Index("ix_discord_nickname_prefix_rule_target", "mapping_kind", "org_id", "position_id"),
+        Index("ix_discord_nickname_prefix_rule_active", "guild_id", "is_active"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    guild_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    prefix: Mapped[str] = mapped_column(String(20), nullable=False)
+    priority: Mapped[int] = mapped_column(nullable=False, default=100, index=True)
+    mapping_kind: Mapped[DiscordRoleMappingKind] = mapped_column(String(20), nullable=False)
+    org_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("orgs.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    position_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("positions.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+
+    org: Mapped[Org | None] = relationship("Org")
+    position: Mapped[Position | None] = relationship("Position")
+
+
 __all__ = [
     "DiscordAccountLink",
     "DiscordGuildConfig",
+    "DiscordNicknamePrefixRule",
+    "DiscordOrgChannelMapping",
     "DiscordRoleMapping",
     "DiscordRoleMappingKind",
 ]

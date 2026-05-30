@@ -480,6 +480,9 @@ fi
 : > "$WEB_LOG"
 (
     cd "${WEB_DIR}"
+    # DEBUG 是後端 FastAPI 旗標；若繼承到此處會讓 @tailwindcss/postcss
+    # 在每次 CSS rebuild 噴出 [Xms] 計時 log，故前端行程不繼承它
+    unset DEBUG
     exec npm run dev > >(_stream_log "web" "$WEB_LOG" "$C_MAGENTA") 2>&1
 ) &
 WEB_PID=$!

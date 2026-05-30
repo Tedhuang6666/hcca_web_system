@@ -16,22 +16,30 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict, Field
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core import app_settings as app_settings_svc
+from api.core import recovery
+from api.core.config import settings
 from api.core.database import engine, get_db
+from api.core.error_audit import clear_errors, get_recent_errors
 from api.core.ip_blocklist import block as ip_block
 from api.core.ip_blocklist import list_blocked as ip_list_blocked
 from api.core.ip_blocklist import unblock as ip_unblock
 from api.core.load_signals import snapshot as load_snapshot
 from api.core.maintenance import (
+    clear_module_maintenance,
     get_load_shed_force_mode,
     get_maintenance_state,
     list_feature_flags,
+    list_module_maintenance,
     set_feature_flag,
     set_load_shed_force_mode,
     set_maintenance_mode,
+    set_module_maintenance,
+    set_module_reset,
 )
 from api.core.metrics import (
     DbPoolSnapshot,
@@ -39,6 +47,13 @@ from api.core.metrics import (
     get_db_pool_stats,
     get_redis_stats,
 )
+from api.core.module_health import (
+    get_trip_meta,
+    module_5xx_count,
+    module_severity_breakdown,
+)
+from api.core.module_recovery import attempt_recovery, probe_module
+from api.core.modules import MODULES
 from api.core.query_audit import get_slow_queries
 from api.core.security import revoke_user
 from api.core.ws_manager import manager as ws_manager
@@ -46,6 +61,7 @@ from api.dependencies.auth import get_current_active_user
 from api.models.user import User
 from api.services import audit as audit_svc
 from api.services import defense as defense_svc
+from api.services import mfa as mfa_svc
 from api.services.discord_bot import emit_security_alert
 
 router = APIRouter(prefix="/admin/system", tags=["管理員 / 系統"])
@@ -156,6 +172,77 @@ class MaintenanceBody(BaseModel):
 
 class LoadShedBody(BaseModel):
     mode: Literal["off", "auto", "on", "bypass"]
+
+
+class ModuleStatusOut(BaseModel):
+    id: str
+    label: str
+    on: bool
+    source: str | None = None
+    reason: str = ""
+    since: float | None = None
+    until: float | None = None
+    recent_5xx_count: int = 0
+    severity_breakdown: dict[str, int] = Field(default_factory=dict)
+    trip_count: int = 0
+    max_severity: str = "NORMAL"
+
+
+class ModuleRecoverResult(BaseModel):
+    module_id: str
+    recovered: bool
+    probe_ok: bool
+    probe_reason: str = ""
+
+
+class ModuleTripHistoryItem(BaseModel):
+    timestamp: float
+    severity: str
+    trip_count: int
+    cooldown_s: int
+    escalated: bool
+
+
+class ModuleTripHistory(BaseModel):
+    module_id: str
+    trip_count: int
+    max_severity: str
+    recent_5xx_count: int
+    severity_breakdown: dict[str, int]
+    recent_events: list[ModuleTripHistoryItem]
+
+
+class ModuleStatusPublic(BaseModel):
+    id: str
+    label: str
+    on: bool
+    reason: str = ""
+    until: float | None = None
+
+
+class ModuleMaintenanceBody(BaseModel):
+    on: bool
+    reason: str = Field("", max_length=500)
+
+
+@public_router.get(
+    "/module-status", response_model=list[ModuleStatusPublic], summary="公開模組維護狀態"
+)
+async def public_module_status() -> list[ModuleStatusPublic]:
+    states = await list_module_maintenance()
+    out: list[ModuleStatusPublic] = []
+    for mid, spec in MODULES.items():
+        st = states.get(mid)
+        out.append(
+            ModuleStatusPublic(
+                id=mid,
+                label=spec.label,
+                on=bool(st and st.get("on")),
+                reason=(st or {}).get("reason", "") if st else "",
+                until=(st or {}).get("until") if st else None,
+            )
+        )
+    return out
 
 
 class IpBlockBody(BaseModel):
@@ -365,6 +452,301 @@ async def update_load_shed_mode(body: LoadShedBody, session: DbDep, _admin: Admi
     return {"mode": mode}
 
 
+# ── 模組維護（per-module maintenance） ───────────────────────────────────────
+
+
+def _validate_module(module_id: str) -> None:
+    if module_id not in MODULES:
+        raise HTTPException(status_code=404, detail="未知的模組")
+
+
+@router.get("/modules", response_model=list[ModuleStatusOut])
+async def list_modules(_admin: AdminUser) -> list[ModuleStatusOut]:
+    states = await list_module_maintenance()
+    out: list[ModuleStatusOut] = []
+    for mid, spec in MODULES.items():
+        st = states.get(mid) or {}
+        meta = await get_trip_meta(mid)
+        out.append(
+            ModuleStatusOut(
+                id=mid,
+                label=spec.label,
+                on=bool(st.get("on")),
+                source=st.get("source"),
+                reason=st.get("reason", ""),
+                since=st.get("since"),
+                until=st.get("until"),
+                recent_5xx_count=module_5xx_count(mid),
+                severity_breakdown=module_severity_breakdown(mid),
+                trip_count=int(meta["trip_count"]),
+                max_severity=str(meta["max_severity"]),
+            )
+        )
+    return out
+
+
+@router.put("/modules/{module_id}/maintenance", response_model=ModuleStatusOut)
+async def update_module_maintenance(
+    module_id: str, body: ModuleMaintenanceBody, session: DbDep, _admin: AdminUser
+) -> ModuleStatusOut:
+    _validate_module(module_id)
+    state = await set_module_maintenance(module_id, on=body.on, source="manual", reason=body.reason)
+    await audit_svc.record(
+        session,
+        entity_type="defense_rule",
+        entity_id=f"module:{module_id}",
+        action="set_module_maintenance",
+        actor_id=str(_admin.id),
+        actor_email=_admin.email,
+        meta={"module": module_id, "on": body.on, "reason": body.reason},
+        summary=f"{'開啟' if body.on else '關閉'}模組維護：{MODULES[module_id].label}",
+    )
+    await emit_security_alert(
+        session,
+        title="模組維護狀態已更新",
+        body=f"module={module_id} on={body.on} actor={_admin.email}",
+    )
+    await ws_manager.broadcast_all(
+        {"type": "module_maintenance", "module": module_id, "on": body.on}
+    )
+    return ModuleStatusOut(
+        id=module_id,
+        label=MODULES[module_id].label,
+        on=bool(state.get("on")),
+        source=state.get("source"),
+        reason=state.get("reason", ""),
+        since=state.get("since"),
+        until=state.get("until"),
+        recent_5xx_count=module_5xx_count(module_id),
+    )
+
+
+@router.post("/modules/{module_id}/restart", response_model=dict)
+async def restart_module(module_id: str, session: DbDep, _admin: AdminUser) -> dict:
+    """重啟模組：清除維護旗標（手動 + 自動）並重置健康計數窗，立即恢復服務。"""
+    _validate_module(module_id)
+    await clear_module_maintenance(module_id)
+    await set_module_reset(module_id, window_seconds=settings.MODULE_CIRCUIT_WINDOW_SECONDS)
+    await audit_svc.record(
+        session,
+        entity_type="defense_rule",
+        entity_id=f"module:{module_id}",
+        action="restart_module",
+        actor_id=str(_admin.id),
+        actor_email=_admin.email,
+        meta={"module": module_id},
+        summary=f"重啟模組：{MODULES[module_id].label}",
+    )
+    await emit_security_alert(
+        session,
+        title="模組已重啟",
+        body=f"module={module_id} actor={_admin.email}",
+    )
+    await ws_manager.broadcast_all({"type": "module_maintenance", "module": module_id, "on": False})
+    return {"ok": True, "module": module_id}
+
+
+@router.post(
+    "/modules/{module_id}/recover",
+    response_model=ModuleRecoverResult,
+    summary="清除升級計數器並強制嘗試恢復",
+)
+async def recover_module(module_id: str, session: DbDep, _admin: AdminUser) -> ModuleRecoverResult:
+    """admin 點「強制恢復」按鈕。
+
+    流程：
+      1. 清升級計數器（trip_count / max_severity）
+      2. 打模組 /__module_health__ 探測一次
+      3. 通過 → 解除維護 + 重置 5xx 計數窗
+      4. 不通過 → 維持目前維護狀態（但計數器已歸零，下次跳閘從頭算）
+    """
+    _validate_module(module_id)
+    from api.core.module_health import clear_trip_count
+
+    await clear_trip_count(module_id)
+    ok, reason = await probe_module(module_id)
+    recovered = False
+    if ok:
+        recovered = await attempt_recovery(module_id, force=True)
+
+    await audit_svc.record(
+        session,
+        entity_type="defense_rule",
+        entity_id=f"module:{module_id}",
+        action="recover_module",
+        actor_id=str(_admin.id),
+        actor_email=_admin.email,
+        meta={"module": module_id, "probe_ok": ok, "recovered": recovered, "reason": reason},
+        summary=f"嘗試恢復模組：{MODULES[module_id].label}（{'成功' if recovered else '失敗'}）",
+    )
+    await emit_security_alert(
+        session,
+        title="嘗試恢復模組",
+        body=f"module={module_id} probe_ok={ok} recovered={recovered} actor={_admin.email}",
+    )
+    if recovered:
+        await ws_manager.broadcast_all(
+            {"type": "module_maintenance", "module": module_id, "on": False}
+        )
+    return ModuleRecoverResult(
+        module_id=module_id, recovered=recovered, probe_ok=ok, probe_reason=reason
+    )
+
+
+@router.get(
+    "/modules/{module_id}/trip-history",
+    response_model=ModuleTripHistory,
+    summary="模組跳閘歷史與當前計數",
+)
+async def module_trip_history(module_id: str, _admin: AdminUser) -> ModuleTripHistory:
+    _validate_module(module_id)
+    meta = await get_trip_meta(module_id)
+    breakdown = module_severity_breakdown(module_id)
+    return ModuleTripHistory(
+        module_id=module_id,
+        trip_count=int(meta["trip_count"]),
+        max_severity=str(meta["max_severity"]),
+        recent_5xx_count=module_5xx_count(module_id),
+        severity_breakdown=breakdown,
+        recent_events=[],  # 未來：可從 audit_log 撈 module-trip 事件
+    )
+
+
+# ── 系統設定 / .env 編輯（高危：flag-gated + MFA） ───────────────────────────
+
+
+class AppSettingFieldOut(BaseModel):
+    key: str
+    category: str
+    type: str
+    is_secret: bool
+    in_file: bool
+    value: str
+    description: str = ""
+
+
+class AppSettingsListResponse(BaseModel):
+    enabled: bool
+    mfa_enabled: bool
+    env_path: str
+    fields: list[AppSettingFieldOut]
+
+
+class RevealBody(BaseModel):
+    mfa_code: str = Field(..., min_length=4, max_length=16)
+    keys: list[str] = Field(default_factory=list)
+
+
+class RevealResponse(BaseModel):
+    values: dict[str, str]
+
+
+class SaveSettingsBody(BaseModel):
+    mfa_code: str = Field(..., min_length=4, max_length=16)
+    changes: dict[str, str] = Field(default_factory=dict)
+
+
+class SaveSettingsResponse(BaseModel):
+    updated: list[str]
+    restart_required: bool = True
+
+
+def _require_env_editor_enabled() -> None:
+    """flag 關閉時連 404，連端點存在都不透露。"""
+    if not settings.ENABLE_ENV_EDITOR:
+        raise HTTPException(status_code=404, detail="Not Found")
+
+
+async def _require_mfa(db: AsyncSession, user: User, code: str) -> None:
+    """強制 MFA 再驗證；未啟用 MFA 直接拒絕（避免 verify_mfa 的 pass-through）。"""
+    if not user.mfa_enabled:
+        raise HTTPException(status_code=403, detail="請先啟用 MFA 才能執行此操作")
+    if not code or not await mfa_svc.verify_mfa(db, user, code):
+        raise HTTPException(status_code=403, detail="MFA 驗證失敗")
+
+
+@router.get("/settings", response_model=AppSettingsListResponse)
+async def list_app_settings(_admin: AdminUser) -> AppSettingsListResponse:
+    _require_env_editor_enabled()
+    return AppSettingsListResponse(
+        enabled=True,
+        mfa_enabled=bool(_admin.mfa_enabled),
+        env_path=str(app_settings_svc.resolve_env_path()),
+        fields=[AppSettingFieldOut(**f) for f in app_settings_svc.list_fields()],
+    )
+
+
+@router.post("/settings/reveal", response_model=RevealResponse)
+async def reveal_app_settings(
+    body: RevealBody, session: DbDep, _admin: AdminUser
+) -> RevealResponse:
+    _require_env_editor_enabled()
+    await _require_mfa(session, _admin, body.mfa_code)
+
+    env = app_settings_svc.read_env_file()
+    requested = [k for k in body.keys if k in app_settings_svc.editable_keys()]
+    secret_only = [k for k in requested if app_settings_svc.is_secret_key(k)]
+    # 只回密鑰真值（非密鑰不需要 reveal）
+    values = {k: env.get(k, "") for k in secret_only}
+
+    await audit_svc.record(
+        session,
+        entity_type="defense_rule",
+        entity_id="app_settings",
+        action="reveal_secrets",
+        actor_id=str(_admin.id),
+        actor_email=_admin.email,
+        meta={"keys": secret_only},  # 僅鍵名，永不記值
+        summary=f"檢視 {len(secret_only)} 項密鑰",
+    )
+    await emit_security_alert(
+        session,
+        title="系統設定密鑰已被檢視",
+        body=f"actor={_admin.email} keys={','.join(secret_only)}",
+    )
+    return RevealResponse(values=values)
+
+
+@router.put("/settings", response_model=SaveSettingsResponse)
+async def save_app_settings(
+    body: SaveSettingsBody, session: DbDep, _admin: AdminUser
+) -> SaveSettingsResponse:
+    _require_env_editor_enabled()
+    await _require_mfa(session, _admin, body.mfa_code)
+
+    if not body.changes:
+        return SaveSettingsResponse(updated=[], restart_required=False)
+
+    try:
+        app_settings_svc.validate_changes(body.changes)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=f"設定值無效：{exc.errors()}") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    try:
+        updated = app_settings_svc.write_env_changes(body.changes)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"寫入 .env 失敗：{exc}") from exc
+
+    await audit_svc.record(
+        session,
+        entity_type="defense_rule",
+        entity_id="app_settings",
+        action="save_settings",
+        actor_id=str(_admin.id),
+        actor_email=_admin.email,
+        meta={"keys": updated},  # 僅鍵名，永不記值
+        summary=f"更新 {len(updated)} 項系統設定（待重啟生效）",
+    )
+    await emit_security_alert(
+        session,
+        title="系統設定已更新（待重啟）",
+        body=f"actor={_admin.email} keys={','.join(updated)}",
+    )
+    return SaveSettingsResponse(updated=updated, restart_required=True)
+
+
 # ── Defense Rules / Rate Limit ──────────────────────────────────────────────
 
 
@@ -556,3 +938,114 @@ async def metrics_slow_queries(
     template 已去除字面值，只看 SQL 結構；不會洩漏實際資料內容。
     """
     return {"top": top, "items": get_slow_queries(top=top)}
+
+
+# ── 近期錯誤（error_audit ring buffer） ──────────────────────────────────────
+
+
+class RecentErrorItem(BaseModel):
+    error_id: str
+    category: str
+    exc_type: str
+    message: str
+    method: str
+    path: str
+    status_code: int
+    traceback_head: str
+    first_seen: float
+    last_seen: float
+    occurrences: int
+
+
+class RecentErrorsResponse(BaseModel):
+    count: int
+    items: list[RecentErrorItem]
+
+
+@router.get("/errors", response_model=RecentErrorsResponse, summary="近期伺服器錯誤")
+async def recent_errors(_admin: AdminUser, top: int = 50) -> RecentErrorsResponse:
+    """記憶體 ring buffer 中最近的 5xx／未處理例外，依 last_seen 由新到舊。重啟後清空。"""
+    items = get_recent_errors(top=top)
+    return RecentErrorsResponse(count=len(items), items=[RecentErrorItem(**i) for i in items])
+
+
+@router.post("/errors/clear", response_model=dict, summary="清空錯誤緩衝")
+async def clear_recent_errors(_admin: AdminUser) -> dict:
+    return {"cleared": clear_errors()}
+
+
+# ── 復原工具（清快取 / 升級資料庫 / 重啟） ──────────────────────────────────
+
+
+@router.post("/recovery/clear-cache", response_model=dict, summary="清除應用層快取")
+async def recovery_clear_cache(session: DbDep, _admin: AdminUser) -> dict:
+    result = await recovery.clear_app_cache()
+    await audit_svc.record(
+        session,
+        entity_type="defense_rule",
+        entity_id="cache",
+        action="recovery_clear_cache",
+        actor_id=str(_admin.id),
+        actor_email=_admin.email,
+        meta=result,
+        summary="清除應用層快取",
+    )
+    await emit_security_alert(
+        session,
+        title="清除應用層快取",
+        body=f"cleared={result['cleared']} actor={_admin.email}",
+    )
+    return {"ok": True, **result}
+
+
+@router.post("/recovery/db-upgrade", response_model=dict, summary="升級資料庫到最新版本")
+async def recovery_db_upgrade(session: DbDep, _admin: AdminUser) -> dict:
+    """執行 alembic upgrade head。失敗時以 ok=False + error 回傳完整訊息供超管除錯。"""
+    try:
+        result = await recovery.run_db_upgrade()
+    except Exception as exc:  # noqa: BLE001 — 超管需要看到完整遷移錯誤
+        await emit_security_alert(
+            session,
+            title="資料庫升級失敗",
+            body=f"error={exc} actor={_admin.email}",
+        )
+        return {"ok": False, "error": str(exc)}
+    await audit_svc.record(
+        session,
+        entity_type="defense_rule",
+        entity_id="db",
+        action="recovery_db_upgrade",
+        actor_id=str(_admin.id),
+        actor_email=_admin.email,
+        meta=result,
+        summary="升級資料庫到最新版本",
+    )
+    await emit_security_alert(
+        session,
+        title="資料庫升級完成",
+        body=f"before={result['before_revision']} head={result['head_revision']} "
+        f"changed={result['changed']} actor={_admin.email}",
+    )
+    return {"ok": True, **result}
+
+
+@router.post("/recovery/restart", response_model=dict, summary="重啟服務")
+async def recovery_restart(background: BackgroundTasks, session: DbDep, _admin: AdminUser) -> dict:
+    """依環境觸發重啟（dev 熱重載 / prod SIGHUP gunicorn master）。回應送出後才執行。"""
+    await audit_svc.record(
+        session,
+        entity_type="defense_rule",
+        entity_id="service",
+        action="recovery_restart",
+        actor_id=str(_admin.id),
+        actor_email=_admin.email,
+        meta={"environment": settings.ENVIRONMENT},
+        summary="觸發服務重啟",
+    )
+    await emit_security_alert(
+        session,
+        title="服務重啟已觸發",
+        body=f"environment={settings.ENVIRONMENT} actor={_admin.email}",
+    )
+    background.add_task(recovery.perform_restart)
+    return {"scheduled": True, "environment": settings.ENVIRONMENT}

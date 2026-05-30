@@ -117,6 +117,11 @@ class PetitionCase(Base, TimestampMixin):
     assigned_to_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    discord_guild_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    discord_channel_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    discord_channel_created_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     assigned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -131,6 +131,9 @@ class PetitionCaseListItem(BaseModel):
     type_name: str = ""
     current_org_name: str = ""
     assigned_to_name: str | None = None
+    discord_guild_id: str | None = None
+    discord_channel_id: str | None = None
+    discord_channel_created_at: datetime | None = None
 
 
 class PetitionCaseOut(PetitionCaseListItem):

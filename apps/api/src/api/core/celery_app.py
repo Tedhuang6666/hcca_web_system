@@ -2,6 +2,7 @@
 
 from celery import Celery
 from celery.schedules import crontab
+from kombu import Queue
 
 from api.core.config import settings
 
@@ -33,6 +34,24 @@ celery_app.conf.update(
     worker_prefetch_multiplier=1,  # 避免搶佔過多任務
     # --- Result 保留時間 ---
     result_expires=3600,  # 結果保留 1 小時
+    # --- 多 queue 隔離：單一模組任務阻塞不會拖累其他模組 ---
+    task_default_queue="default",
+    task_queues=(
+        Queue("default"),
+        Queue("email"),
+        Queue("meal"),
+        Queue("backup"),
+        Queue("documents"),
+        Queue("recovery"),
+    ),
+    task_routes={
+        "api.services.mail.*": {"queue": "email"},
+        "api.services.email_tasks.*": {"queue": "email"},
+        "api.services.digest_tasks.*": {"queue": "email"},
+        "api.services.meal_tasks.*": {"queue": "meal"},
+        "api.services.backup_tasks.*": {"queue": "backup"},
+        "api.services.recovery_tasks.*": {"queue": "recovery"},
+    },
 )
 
 # ── Celery Beat 定時任務排程 ──────────────────────────────────────────────────
@@ -45,6 +64,9 @@ celery_app.conf.include = list(celery_app.conf.include or []) + [
     "api.services.backup_tasks",
     "api.services.permission_tasks",
     "api.services.digest_tasks",
+    "api.services.work_item_tasks",
+    "api.services.recovery_tasks",
+    "api.services.data_lifecycle_tasks",
 ]
 
 celery_app.conf.beat_schedule = {
@@ -106,4 +128,23 @@ celery_app.conf.beat_schedule = {
         "task": "api.services.digest_tasks.send_weekly_digest",
         "schedule": crontab(hour="8", minute="0", day_of_week="1"),
     },
+    # 每 10 分鐘提醒 24 小時內到期或已逾期的工作分配
+    "remind-due-work-items-every-10min": {
+        "task": "api.services.work_item_tasks.remind_due_work_items",
+        "schedule": 600.0,
+    },
+    # half-open 模組探測：掃 module_probe_queue ZSET 並嘗試恢復維護中的模組
+    "process-half-open-probes": {
+        "task": "api.services.recovery_tasks.process_half_open_probes",
+        "schedule": float(settings.MODULE_PROBE_INTERVAL_SECONDS),
+    },
+    # 每週一凌晨 4:00 清理已讀通知與已處理 outbox 事件（safe 規則自動執行）
+    # archive_then_purge / dangerous 規則一律保留為手動觸發
+    "data-lifecycle-auto-purge-weekly": {
+        "task": "api.services.data_lifecycle_tasks.run_safe_purges",
+        "schedule": crontab(hour="4", minute="0", day_of_week="1"),
+    },
 }
+
+# Lifecycle 任務路由到 backup queue（同樣是低頻、可長跑、不阻塞線上請求）
+celery_app.conf.task_routes["api.services.data_lifecycle_tasks.*"] = {"queue": "backup"}

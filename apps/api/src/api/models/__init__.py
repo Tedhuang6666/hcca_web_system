@@ -3,6 +3,8 @@
 # 基礎
 # 公文系統（含字號模板、受文者、審核步驟等）[M-17, M-18]
 # 公告系統 [P8+]
+# 稽核日誌（不可變）
+from api.models.activity import Activity, ActivityConvener, ActivityStatus  # noqa: F401
 from api.models.announcement import (  # noqa: F401
     Announcement,
     AnnouncementAudience,
@@ -11,13 +13,25 @@ from api.models.announcement import (  # noqa: F401
     announcement_audience_orgs,
     announcement_audience_users,
 )
-
-# 稽核日誌（不可變）
 from api.models.audit_log import AuditLog  # noqa: F401
+from api.models.calendar import (  # noqa: F401
+    CalendarEvent,
+    CalendarEventChecklistItem,
+    CalendarEventLink,
+    CalendarEventParticipant,
+    CalendarEventStatus,
+    CalendarEventType,
+    CalendarLinkType,
+    CalendarParticipantResponse,
+    CalendarParticipantRole,
+    CalendarVisibility,
+)
 from api.models.defense import DefenseRule, DefenseRuleType  # noqa: F401
 from api.models.discord_account import (  # noqa: F401
     DiscordAccountLink,
     DiscordGuildConfig,
+    DiscordNicknamePrefixRule,
+    DiscordOrgChannelMapping,
     DiscordRoleMapping,
     DiscordRoleMappingKind,
 )
@@ -160,3 +174,4 @@ from api.models.shop import (  # noqa: F401
 )
 from api.models.user import User  # noqa: F401
 from api.models.web_push import WebPushSubscription  # noqa: F401
+from api.models.work_item import WorkItem, WorkItemStatus  # noqa: F401

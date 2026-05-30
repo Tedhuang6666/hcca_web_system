@@ -24,6 +24,7 @@ from api.core.database import Base
 from api.models.base import TimestampMixin
 
 if TYPE_CHECKING:
+    from api.models.activity import Activity
     from api.models.org import Org
     from api.models.user import User
 
@@ -104,6 +105,12 @@ class Survey(Base, TimestampMixin):
         nullable=False,
         index=True,
     )
+    activity_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("activities.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     created_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="RESTRICT"),
@@ -112,6 +119,7 @@ class Survey(Base, TimestampMixin):
     )
 
     org: Mapped[Org] = relationship("Org")
+    activity: Mapped[Activity | None] = relationship("Activity")
     creator: Mapped[User] = relationship("User")
     questions: Mapped[list[SurveyQuestion]] = relationship(
         "SurveyQuestion",

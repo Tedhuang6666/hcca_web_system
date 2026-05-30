@@ -103,6 +103,7 @@ async def list_surveys(
     session: AsyncSession,
     *,
     org_id: uuid.UUID | None = None,
+    activity_id: uuid.UUID | None = None,
     status: SurveyStatus | None = None,
     public_only: bool = False,
     limit: int = 20,
@@ -118,6 +119,8 @@ async def list_surveys(
     )
     if org_id:
         q = q.where(Survey.org_id == org_id)
+    if activity_id:
+        q = q.where(Survey.activity_id == activity_id)
     if public_only:
         # 公開列表：僅顯示標記為公開且已開放/已截止的問卷（不含草稿、封存）
         q = q.where(
@@ -152,6 +155,7 @@ async def create_survey(
         opens_at=data.opens_at,
         closes_at=data.closes_at,
         org_id=data.org_id,
+        activity_id=data.activity_id,
         created_by=created_by,
         is_public=data.is_public,
         allowed_org_ids_json=_dump_str_list(data.allowed_org_ids),

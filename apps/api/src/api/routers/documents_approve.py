@@ -55,8 +55,11 @@ from api.schemas.document import (
     RejectRequest,
     SubmitRequest,
 )
+from api.services import activity as activity_svc
 from api.services import audit as audit_svc
 from api.services import document as doc_svc
+from api.services.discord_bot import emit_public_document_notice
+from api.services.permission import get_user_permission_codes_for_org
 
 router = APIRouter(prefix="/documents", tags=["公文系統"])
 
@@ -109,6 +112,8 @@ async def batch_approve_documents(
                 },
                 summary=f"批量核准公文「{updated.title}」",
             )
+            if updated.status == DocumentStatus.APPROVED:
+                await emit_public_document_notice(session, updated)
             bg.add_task(ws_broadcast_bg, updated)
             results.append(batch_result(doc_id, ok=True, doc=updated))
         except (PermissionError, ValueError) as exc:
@@ -268,13 +273,24 @@ async def submit_document(
     doc_id: str,
     payload: SubmitRequest,
     session: DbDep,
-    current_user: Annotated[User, Depends(require_permission(PermissionCode.DOCUMENT_SUBMIT))],
+    current_user: CurrentUser,
     bg: BackgroundTasks,
 ) -> Document:
     """送審後自動以 BackgroundTasks 通知第一位審核人（Email + WebSocket）"""
     doc = await get_doc_or_404(doc_id, session)
-    if doc.created_by != current_user.id and not current_user.is_superuser:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有建立者可以送審")
+    if not current_user.is_superuser:
+        codes = await get_user_permission_codes_for_org(session, current_user.id, doc.org_id)
+        is_activity_manager = await activity_svc.can_manage_activity_resource(
+            session, current_user, doc.activity_id
+        )
+        if not (
+            (doc.created_by == current_user.id and "document:submit" in codes)
+            or is_activity_manager
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="只有建立者、document:submit 或活動總召可以送審",
+            )
     try:
         updated = await doc_svc.submit_document(session, doc, approver_ids=payload.approver_ids)
     except ValueError as e:
@@ -343,6 +359,7 @@ async def approve_document(
             link=f"/documents/{updated.id}",
             related_id=updated.id,
         )
+        await emit_public_document_notice(session, updated)
     else:
         next_step = next(
             (a for a in updated.approvals if a.step_order == updated.current_step), None
@@ -693,5 +710,6 @@ async def issue_document_directly(
         link=f"/documents/{loaded.id}",
         related_id=loaded.id,
     )
+    await emit_public_document_notice(session, loaded)
     bg.add_task(ws_broadcast_bg, loaded)
     return loaded

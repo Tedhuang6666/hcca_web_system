@@ -5,6 +5,8 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useModuleStatus } from "@/contexts/ModuleStatusContext";
+import { NAV_ID_TO_MODULE } from "@/lib/modules";
 import NavIcon from "./NavIcon";
 import {
   filterNavItems,
@@ -45,7 +47,7 @@ function writeCollapsed(set: Set<string>) {
 }
 
 /* ── NavLink ──────────────────────────────────────────────────────────────── */
-function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
+function NavLink({ item, pathname, down }: { item: NavItem; pathname: string; down?: boolean }) {
   const active = item.end
     ? pathname === item.href
     : pathname === item.href || pathname.startsWith(item.href + "/");
@@ -57,6 +59,18 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
       aria-current={active ? "page" : undefined}>
       <span className="flex-shrink-0"><NavIcon iconKey={item.iconKey} size={15} /></span>
       <span className="flex-1 truncate">{item.label}</span>
+      {down && (
+        <span
+          className="ml-1 flex-shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium"
+          style={{
+            background: "var(--warning-dim)",
+            color: "var(--warning)",
+            border: "1px solid var(--warning-border)",
+          }}
+          title="此模組維護中">
+          維護中
+        </span>
+      )}
     </Link>
   );
 }
@@ -65,6 +79,7 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
 export default function Sidebar() {
   const pathname = usePathname();
   const { can, isAdmin, permissions } = usePermissions();
+  const { isModuleDown } = useModuleStatus();
   const [userName, setUserName] = useState("使用者");
   const [userEmail, setUserEmail] = useState("");
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
@@ -212,7 +227,14 @@ export default function Sidebar() {
         <div className="space-y-0.5">
           {navSections.map((entry, i) => {
             if (!isSection(entry)) {
-              return <NavLink key={entry.href} item={entry} pathname={pathname} />;
+              return (
+                <NavLink
+                  key={entry.href}
+                  item={entry}
+                  pathname={pathname}
+                  down={isModuleDown(NAV_ID_TO_MODULE[entry.id] ?? null)}
+                />
+              );
             }
             const isCollapsed = hydrated && collapsed.has(entry.heading);
             const sectionId = `nav-section-${i}`;
@@ -243,7 +265,12 @@ export default function Sidebar() {
                 {!isCollapsed && (
                   <div id={sectionId} className="space-y-0.5">
                     {entry.items.map((item) => (
-                      <NavLink key={item.href} item={item} pathname={pathname} />
+                      <NavLink
+                        key={item.href}
+                        item={item}
+                        pathname={pathname}
+                        down={isModuleDown(NAV_ID_TO_MODULE[item.id] ?? null)}
+                      />
                     ))}
                   </div>
                 )}

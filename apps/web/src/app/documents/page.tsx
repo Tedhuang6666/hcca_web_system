@@ -5,10 +5,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { documentsApi, orgsApi, savedFiltersApi, usersApi, ApiError, withFallback } from "@/lib/api";
 import type { OrgRead, UserSummary } from "@/lib/api";
-import type { BatchDocumentOperationOut, DocumentListItem, DocumentStatus, SavedFilterOut } from "@/lib/types";
+import type { Activity, BatchDocumentOperationOut, DocumentListItem, DocumentStatus, SavedFilterOut } from "@/lib/types";
 import { DocumentStatusBadge, UrgencyBadge } from "@/components/ui/StatusBadge";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
+import ActivitySelect from "@/components/activities/ActivitySelect";
 
 const TABS: { key: DocumentStatus | "all"; label: string }[] = [
   { key: "all",      label: "全部" },
@@ -112,7 +113,9 @@ export default function DocumentListPage() {
   const [filterRecipientKeyword, setFilterRecipientKeyword] = useState(searchParams.get("recipient_keyword") ?? "");
   const [filterMyOnly, setFilterMyOnly] = useState(searchParams.get("my_only") === "true");
   const [filterOrgId, setFilterOrgId] = useState(searchParams.get("org_id") ?? "");
+  const [filterActivityId, setFilterActivityId] = useState(searchParams.get("activity_id") ?? "");
   const [orgs, setOrgs] = useState<OrgRead[]>([]);
+  const [activities, setActivities] = useState<Activity[]>([]);
   const [savedFilters, setSavedFilters] = useState<SavedFilterOut[]>([]);
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(false);
@@ -131,7 +134,7 @@ export default function DocumentListPage() {
     filterDateFrom || filterDateTo ||
     filterIssuedFrom || filterIssuedTo ||
     filterRocYear || filterSerialPrefix || filterHandlerKeyword || filterRecipientKeyword ||
-    filterMyOnly || filterOrgId
+    filterMyOnly || filterOrgId || filterActivityId
   );
 
   useEffect(() => {
@@ -168,6 +171,7 @@ export default function DocumentListPage() {
     if (filterRecipientKeyword) q.set("recipient_keyword", filterRecipientKeyword);
     if (filterMyOnly) q.set("my_only", "true");
     if (filterOrgId) q.set("org_id", filterOrgId);
+    if (filterActivityId) q.set("activity_id", filterActivityId);
     const next = q.toString() ? `/documents?${q}` : "/documents";
     router.replace(next, { scroll: false });
   }, [
@@ -175,7 +179,7 @@ export default function DocumentListPage() {
     filterDateFrom, filterDateTo,
     filterIssuedFrom, filterIssuedTo, filterRocYear,
     filterSerialPrefix, filterHandlerKeyword, filterRecipientKeyword,
-    filterMyOnly, filterOrgId, router,
+    filterMyOnly, filterOrgId, filterActivityId, router,
   ]);
 
   useEffect(() => {
@@ -195,6 +199,7 @@ export default function DocumentListPage() {
     if (filterRecipientKeyword) params.recipient_keyword = filterRecipientKeyword;
     if (filterMyOnly) params.my_only = "true";
     if (filterOrgId) params.org_id = filterOrgId;
+    if (filterActivityId) params.activity_id = filterActivityId;
 
     setLoading(true);
     setOffset(0);
@@ -212,7 +217,7 @@ export default function DocumentListPage() {
     filterDateFrom, filterDateTo,
     filterIssuedFrom, filterIssuedTo, filterRocYear,
     filterSerialPrefix, filterHandlerKeyword, filterRecipientKeyword,
-    filterMyOnly, filterOrgId,
+    filterMyOnly, filterOrgId, filterActivityId,
   ]);
 
   const clearFilters = () => {
@@ -229,6 +234,7 @@ export default function DocumentListPage() {
     setFilterRecipientKeyword("");
     setFilterMyOnly(false);
     setFilterOrgId("");
+    setFilterActivityId("");
   };
 
   const applySavedFilter = (sf: SavedFilterOut) => {
@@ -249,6 +255,7 @@ export default function DocumentListPage() {
     setFilterRecipientKeyword(s("recipient_keyword"));
     setFilterMyOnly(s("my_only") === "true");
     setFilterOrgId(s("org_id"));
+    setFilterActivityId(s("activity_id"));
     setShowFilters(true);
   };
 
@@ -271,6 +278,7 @@ export default function DocumentListPage() {
     if (filterRecipientKeyword) params.recipient_keyword = filterRecipientKeyword;
     if (filterMyOnly) params.my_only = "true";
     if (filterOrgId) params.org_id = filterOrgId;
+    if (filterActivityId) params.activity_id = filterActivityId;
     const share_path = (() => {
       const q = new URLSearchParams(params as Record<string, string>);
       return q.toString() ? `/documents?${q.toString()}` : "/documents";
@@ -315,6 +323,7 @@ export default function DocumentListPage() {
       if (filterRecipientKeyword) params.recipient_keyword = filterRecipientKeyword;
       if (filterMyOnly) params.my_only = "true";
       if (filterOrgId) params.org_id = filterOrgId;
+      if (filterActivityId) params.activity_id = filterActivityId;
       const more = await documentsApi.list(params);
       setDocs(prev => [...prev, ...more]);
       setOffset(nextOffset);
@@ -327,6 +336,7 @@ export default function DocumentListPage() {
   };
 
   const filteredDocs = docs;
+  const activityNameById = new Map(activities.map((activity) => [activity.id, activity.name]));
 
   const sorted = [...filteredDocs].sort((a, b) => {
     switch (sortKey) {
@@ -388,6 +398,7 @@ export default function DocumentListPage() {
     if (filterRecipientKeyword) params.recipient_keyword = filterRecipientKeyword;
     if (filterMyOnly) params.my_only = "true";
     if (filterOrgId) params.org_id = filterOrgId;
+    if (filterActivityId) params.activity_id = filterActivityId;
     const data = await documentsApi.list(params);
     setDocs(data);
     setOffset(0);
@@ -810,6 +821,17 @@ export default function DocumentListPage() {
                 </div>
               )}
 
+              <div className="w-56 space-y-1.5">
+                <ActivitySelect
+                  value={filterActivityId}
+                  onChange={setFilterActivityId}
+                  label="活動"
+                  noneLabel="全部活動"
+                  scope="all"
+                  onActivitiesLoaded={setActivities}
+                />
+              </div>
+
               {/* 僅顯示我的 */}
               <div className="space-y-1.5">
                 <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>其他</p>
@@ -1007,6 +1029,12 @@ export default function DocumentListPage() {
                             {doc.subject}
                           </p>
                         )}
+                        {doc.activity_id && (
+                          <span className="mt-1 inline-flex rounded px-1.5 py-0.5 text-[10px]"
+                            style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
+                            {activityNameById.get(doc.activity_id) ?? "活動公文"}
+                          </span>
+                        )}
                       </td>
                       <td className="px-5 py-4">
                         <UrgencyBadge urgency={doc.urgency} />
@@ -1137,6 +1165,12 @@ export default function DocumentListPage() {
                             限辦 {new Date(doc.due_date).toLocaleDateString("zh-TW")}
                             {isOverdue && " · 已逾期"}
                           </p>
+                        )}
+                        {doc.activity_id && (
+                          <span className="mt-1 inline-flex rounded px-1.5 py-0.5 text-[10px]"
+                            style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
+                            {activityNameById.get(doc.activity_id) ?? "活動公文"}
+                          </span>
                         )}
                       </div>
                       <div className="flex flex-col items-end gap-1.5 flex-shrink-0">

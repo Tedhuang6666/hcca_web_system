@@ -7,6 +7,8 @@ import { announcementsApi, ApiError } from "@/lib/api";
 import type { AnnouncementListItem } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
+import ActivitySelect from "@/components/activities/ActivitySelect";
+import type { Activity } from "@/lib/types";
 
 const AUDIENCE_LABEL: Record<string, string> = {
   all: "全體",
@@ -41,8 +43,10 @@ export default function AnnouncementsPage() {
   const [items, setItems] = useState<AnnouncementListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDrafts, setShowDrafts] = useState(false);
+  const [activityId, setActivityId] = useState("");
+  const [activities, setActivities] = useState<Activity[]>([]);
   const { can, canAny } = usePermissions();
-  const canCreate = can("announcement:create");
+  const canCreate = can("announcement:create") || activities.length > 0;
   const canListDrafts = can("announcement:create");
   const canManage = canAny(
     "announcement:create",
@@ -54,14 +58,20 @@ export default function AnnouncementsPage() {
 
   useEffect(() => {
     setLoading(true);
+    const params = { limit: 100, activity_id: activityId || undefined };
     const req = showDrafts && canListDrafts
-      ? announcementsApi.listAll({ limit: 100 })
-      : announcementsApi.list({ limit: 100 });
+      ? announcementsApi.listAll(params)
+      : announcementsApi.list(params);
     req
       .then(setItems)
       .catch((e) => toast.error(e instanceof ApiError ? e.message : "載入公告失敗"))
       .finally(() => setLoading(false));
-  }, [showDrafts, canListDrafts]);
+  }, [activityId, showDrafts, canListDrafts]);
+
+  const activityNameById = useMemo(
+    () => new Map(activities.map((activity) => [activity.id, activity.name])),
+    [activities],
+  );
 
   const sorted = useMemo(
     () => [...items].sort((a, b) => (
@@ -96,6 +106,17 @@ export default function AnnouncementsPage() {
         </div>
       </div>
 
+      <section className="card p-4">
+        <ActivitySelect
+          value={activityId}
+          onChange={setActivityId}
+          label="依活動篩選"
+          noneLabel="全部公告"
+          scope="all"
+          onActivitiesLoaded={setActivities}
+        />
+      </section>
+
       {loading ? (
         <ListPageSkeleton rows={5} showHeader={false} showFilters={false} />
       ) : sorted.length === 0 ? (
@@ -117,6 +138,11 @@ export default function AnnouncementsPage() {
                     {item.audience_type !== "all" && (
                       <span className="badge" style={{ color: "var(--primary)", background: "var(--primary-dim)", borderColor: "var(--border-strong)" }}>
                         {AUDIENCE_LABEL[item.audience_type] ?? item.audience_type}
+                      </span>
+                    )}
+                    {item.activity_id && (
+                      <span className="badge" style={{ color: "var(--info)", background: "var(--info-dim)", borderColor: "var(--border-strong)" }}>
+                        {activityNameById.get(item.activity_id) ?? "活動公告"}
                       </span>
                     )}
                     <span className="text-xs" style={{ color: "var(--text-muted)" }}>

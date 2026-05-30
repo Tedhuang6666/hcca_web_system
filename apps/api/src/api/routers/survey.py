@@ -33,6 +33,7 @@ from api.schemas.survey import (
     SurveySubmit,
     SurveyUpdate,
 )
+from api.services import activity as activity_svc
 from api.services import audit as audit_svc
 from api.services import survey as survey_svc
 from api.services.storage import get_storage
@@ -62,6 +63,25 @@ async def _question_or_404(question_id: uuid.UUID, session: DbDep) -> SurveyQues
     if q is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此題目")
     return q
+
+
+async def _has_survey_manage(session: AsyncSession, user: User) -> bool:
+    if user.is_superuser:
+        return True
+    from api.services.permission import get_user_permission_codes
+
+    codes = await get_user_permission_codes(session, user.id)
+    return str(PermissionCode.SURVEY_MANAGE) in codes or str(PermissionCode.ADMIN_ALL) in codes
+
+
+async def _require_survey_manager(
+    session: AsyncSession, user: User, activity_id: uuid.UUID | None
+) -> None:
+    if await _has_survey_manage(session, user):
+        return
+    if await activity_svc.can_manage_activity_resource(session, user, activity_id):
+        return
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="需要權限：survey:manage")
 
 
 # ── 圖片上傳 ──────────────────────────────────────────────────────────────────
@@ -95,12 +115,18 @@ async def list_surveys(
     session: DbDep,
     _: CurrentUser,
     org_id: uuid.UUID | None = Query(None),
+    activity_id: uuid.UUID | None = Query(None),
     status_filter: SurveyStatus | None = Query(None, alias="status"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ) -> list[Survey]:
     return await survey_svc.list_surveys(
-        session, org_id=org_id, status=status_filter, limit=limit, offset=offset
+        session,
+        org_id=org_id,
+        activity_id=activity_id,
+        status=status_filter,
+        limit=limit,
+        offset=offset,
     )
 
 
@@ -141,9 +167,9 @@ async def get_public_survey(survey_id: str, session: DbDep) -> Survey:
     response_model=SurveyOut,
     status_code=status.HTTP_201_CREATED,
     summary="新增問卷",
-    dependencies=[Depends(require_permission(PermissionCode.SURVEY_MANAGE))],
 )
 async def create_survey(payload: SurveyCreate, session: DbDep, user: CurrentUser) -> Survey:
+    await _require_survey_manager(session, user, payload.activity_id)
     survey = await survey_svc.create_survey(session, data=payload, created_by=user.id)
     await audit_svc.record(
         session,
@@ -155,6 +181,7 @@ async def create_survey(payload: SurveyCreate, session: DbDep, user: CurrentUser
         meta={
             "title": survey.title,
             "org_id": str(survey.org_id),
+            "activity_id": str(survey.activity_id) if survey.activity_id else None,
             "is_anonymous": survey.is_anonymous,
             "allow_multiple": survey.allow_multiple,
             "opens_at": survey.opens_at.isoformat() if survey.opens_at else None,
@@ -169,12 +196,12 @@ async def create_survey(payload: SurveyCreate, session: DbDep, user: CurrentUser
     "/{survey_id}",
     response_model=SurveyOut,
     summary="更新問卷基本資料（草稿或開放中）",
-    dependencies=[Depends(require_permission(PermissionCode.SURVEY_MANAGE))],
 )
 async def update_survey(
     survey_id: str, payload: SurveyUpdate, session: DbDep, user: CurrentUser
 ) -> Survey:
     survey = await _survey_or_404(survey_id, session)
+    await _require_survey_manager(session, user, survey.activity_id)
     before = {
         "title": survey.title,
         "description": survey.description,
@@ -214,10 +241,10 @@ async def update_survey(
     "/{survey_id}/open",
     response_model=SurveyOut,
     summary="開放問卷填答",
-    dependencies=[Depends(require_permission(PermissionCode.SURVEY_MANAGE))],
 )
 async def open_survey(survey_id: str, session: DbDep, user: CurrentUser) -> Survey:
     survey = await _survey_or_404(survey_id, session)
+    await _require_survey_manager(session, user, survey.activity_id)
     try:
         survey = await survey_svc.open_survey(session, survey)
     except ValueError as e:
@@ -239,10 +266,10 @@ async def open_survey(survey_id: str, session: DbDep, user: CurrentUser) -> Surv
     "/{survey_id}/close",
     response_model=SurveyOut,
     summary="關閉問卷",
-    dependencies=[Depends(require_permission(PermissionCode.SURVEY_MANAGE))],
 )
 async def close_survey(survey_id: str, session: DbDep, user: CurrentUser) -> Survey:
     survey = await _survey_or_404(survey_id, session)
+    await _require_survey_manager(session, user, survey.activity_id)
     try:
         survey = await survey_svc.close_survey(session, survey)
     except ValueError as e:
@@ -268,12 +295,12 @@ async def close_survey(survey_id: str, session: DbDep, user: CurrentUser) -> Sur
     response_model=SurveyQuestionOut,
     status_code=status.HTTP_201_CREATED,
     summary="新增題目（草稿或開放中）",
-    dependencies=[Depends(require_permission(PermissionCode.SURVEY_MANAGE))],
 )
 async def add_question(
     survey_id: str, payload: SurveyQuestionCreate, session: DbDep, user: CurrentUser
 ) -> SurveyQuestion:
     survey = await _survey_or_404(survey_id, session)
+    await _require_survey_manager(session, user, survey.activity_id)
     try:
         question = await survey_svc.add_question(session, survey, data=payload)
     except ValueError as e:
@@ -301,12 +328,13 @@ async def add_question(
     "/questions/{question_id}",
     response_model=SurveyQuestionOut,
     summary="更新題目（草稿或開放中）",
-    dependencies=[Depends(require_permission(PermissionCode.SURVEY_MANAGE))],
 )
 async def update_question(
     question_id: uuid.UUID, payload: SurveyQuestionUpdate, session: DbDep, user: CurrentUser
 ) -> SurveyQuestion:
     question = await _question_or_404(question_id, session)
+    survey = await _survey_or_404(question.survey_id, session)
+    await _require_survey_manager(session, user, survey.activity_id)
     before = {
         "question_text": question.question_text,
         "question_type": question.question_type.value,
@@ -349,10 +377,11 @@ async def update_question(
     "/questions/{question_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="刪除題目（草稿或開放中）",
-    dependencies=[Depends(require_permission(PermissionCode.SURVEY_MANAGE))],
 )
 async def delete_question(question_id: uuid.UUID, session: DbDep, user: CurrentUser) -> None:
     question = await _question_or_404(question_id, session)
+    survey = await _survey_or_404(question.survey_id, session)
+    await _require_survey_manager(session, user, survey.activity_id)
     meta = {
         "survey_id": str(question.survey_id),
         "question_text": question.question_text,
@@ -455,10 +484,10 @@ async def submit_response(
     "/{survey_id}/stats",
     response_model=SurveyStats,
     summary="取得問卷統計（survey:manage）",
-    dependencies=[Depends(require_permission(PermissionCode.SURVEY_MANAGE))],
 )
-async def get_survey_stats(survey_id: str, session: DbDep, _: CurrentUser) -> SurveyStats:
+async def get_survey_stats(survey_id: str, session: DbDep, user: CurrentUser) -> SurveyStats:
     survey = await _survey_or_404(survey_id, session)
+    await _require_survey_manager(session, user, survey.activity_id)
     return await survey_svc.get_survey_stats(session, survey)
 
 
@@ -466,16 +495,16 @@ async def get_survey_stats(survey_id: str, session: DbDep, _: CurrentUser) -> Su
     "/{survey_id}/responses",
     response_model=list[SurveyResponseAdminItem],
     summary="列出問卷所有填答記錄（survey:manage）",
-    dependencies=[Depends(require_permission(PermissionCode.SURVEY_MANAGE))],
 )
 async def list_survey_responses(
     survey_id: str,
     session: DbDep,
-    _: CurrentUser,
+    user: CurrentUser,
     limit: int = Query(200, ge=1, le=1000),
     offset: int = Query(0, ge=0),
 ) -> list[SurveyResponse]:
     survey = await _survey_or_404(survey_id, session)
+    await _require_survey_manager(session, user, survey.activity_id)
     return await survey_svc.list_responses(session, survey, limit=limit, offset=offset)
 
 
@@ -486,11 +515,11 @@ async def list_survey_responses(
     responses={
         200: {"content": {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {}}}
     },
-    dependencies=[Depends(require_permission(PermissionCode.SURVEY_MANAGE))],
 )
-async def export_survey(survey_id: str, session: DbDep, _: CurrentUser) -> Response:
+async def export_survey(survey_id: str, session: DbDep, user: CurrentUser) -> Response:
     """下載問卷回應與統計試算表（含「回應明細」與「統計摘要」工作表）。"""
     survey = await _survey_or_404(survey_id, session)
+    await _require_survey_manager(session, user, survey.activity_id)
     xlsx_bytes = await survey_svc.build_survey_export(session, survey)
     ascii_name = f"survey_{survey.id}.xlsx"
     utf8_name = quote(f"{survey.title}.xlsx")

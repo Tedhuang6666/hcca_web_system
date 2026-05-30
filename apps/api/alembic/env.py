@@ -7,6 +7,7 @@ from sqlalchemy import create_engine, pool
 
 # --- 載入應用程式設定與所有 ORM 模型（Autogenerate 必需）---
 import api.models.announcement  # noqa: F401
+import api.models.calendar  # noqa: F401
 import api.models.defense  # noqa: F401
 import api.models.document  # noqa: F401
 import api.models.exam_paper  # noqa: F401

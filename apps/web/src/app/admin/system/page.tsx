@@ -5,11 +5,16 @@ import {
   Activity,
   AlertTriangle,
   Ban,
+  Boxes,
+  Bug,
+  Database,
+  Eraser,
   Gauge,
   Lock,
   Plus,
   Power,
   RefreshCcw,
+  RotateCcw,
   Save,
   Shield,
   ShieldCheck,
@@ -17,6 +22,7 @@ import {
   Trash2,
   UserX,
   Wifi,
+  Wrench,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -27,9 +33,12 @@ import {
   type DefenseRule,
   type DefenseRuleType,
   type DefenseSummary,
+  type ErrorCategory,
   type IpBlockedItem,
   type LoadShedMode,
+  type ModuleStatus,
   type RateLimitConfig,
+  type RecentErrorItem,
   type SystemFeatureFlag,
   type SystemMetricsSnapshot,
 } from "@/lib/api";
@@ -855,7 +864,210 @@ export default function SystemDefensePage() {
 
         <SlowQueriesPanel />
       </section>
+
+      <section className="mt-4">
+        <ModulesPanel />
+      </section>
+
+      <section className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[0.8fr_1.2fr]">
+        <RecoveryToolsPanel onChanged={refresh} />
+        <RecentErrorsPanel />
+      </section>
     </main>
+  );
+}
+
+function ModulesPanel() {
+  const [modules, setModules] = useState<ModuleStatus[]>([]);
+  const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setModules(await systemApi.listModules());
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "載入模組狀態失敗");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+    const timer = setInterval(load, POLL_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [load]);
+
+  const setMaintenance = async (mod: ModuleStatus, on: boolean) => {
+    setBusy(mod.id);
+    try {
+      await systemApi.setModuleMaintenance(mod.id, { on, reason: reasons[mod.id] ?? "" });
+      toast.success(`${mod.label}：${on ? "已開啟維護" : "已關閉維護"}`);
+      load();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "切換模組維護失敗");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const restart = async (mod: ModuleStatus) => {
+    if (!window.confirm(`重啟「${mod.label}」？將清除維護狀態並重置錯誤計數，立即恢復服務。`)) return;
+    setBusy(mod.id);
+    try {
+      await systemApi.restartModule(mod.id);
+      toast.success(`${mod.label} 已重啟`);
+      load();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "重啟模組失敗");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const recover = async (mod: ModuleStatus) => {
+    if (
+      !window.confirm(
+        `嘗試恢復「${mod.label}」？將清除升級計數器並執行 half-open 探測，通過後自動解除維護。`,
+      )
+    )
+      return;
+    setBusy(mod.id);
+    try {
+      const result = await systemApi.recoverModule(mod.id);
+      if (result.recovered) {
+        toast.success(`${mod.label} 已成功恢復`);
+      } else if (result.probe_ok) {
+        toast.warning(`${mod.label} 探測通過但需手動解除維護`);
+      } else {
+        toast.error(`${mod.label} 探測失敗：${result.probe_reason}`);
+      }
+      load();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "嘗試恢復失敗");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const sourceLabel = (mod: ModuleStatus) =>
+    !mod.on ? "正常" : mod.source === "auto" ? "維護中（自動）" : "維護中（手動）";
+
+  const severityLabel = (sev: string) =>
+    sev === "CRITICAL" ? "🔴 嚴重" : sev === "HIGH" ? "🟠 高" : "🟡 一般";
+
+  return (
+    <Panel
+      title="模組維護"
+      icon={<Boxes size={18} aria-hidden />}
+      action={
+        <button type="button" onClick={load} disabled={loading} className="btn btn-ghost text-xs">
+          <RefreshCcw size={12} aria-hidden /> 重新整理
+        </button>
+      }
+    >
+      <p className="mb-3 text-xs text-[var(--text-muted)]">
+        針對單一功能模組開啟維護：只有該模組的 API 與頁面停用，平台其他功能不受影響。模組大量錯誤時會
+        自動進入維護（自動，冷卻時間指數退避），冷卻後 half-open 探測通過自動恢復；
+        1h 內累計跳閘 3-7 次（依嚴重度）會升級為手動維護，需「嘗試恢復」或「重啟」介入。
+      </p>
+      {modules.length === 0 ? (
+        <EmptyRow text={loading ? "載入中…" : "沒有可管理的模組。"} />
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] text-sm">
+            <thead className="text-xs text-[var(--text-muted)]">
+              <tr className="border-b border-[var(--border)]">
+                <th className="py-2 text-left font-medium">模組</th>
+                <th className="text-left font-medium">狀態</th>
+                <th className="text-right font-medium">近 60s 5xx</th>
+                <th className="text-right font-medium">1h 跳閘</th>
+                <th className="text-left font-medium">最高嚴重度</th>
+                <th className="text-left font-medium">維護原因（選填）</th>
+                <th className="text-right font-medium">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {modules.map((mod) => (
+                <tr key={mod.id} className="border-b border-[var(--border)] last:border-0 align-middle">
+                  <td className="py-2 text-[var(--text-primary)]">{mod.label}</td>
+                  <td>
+                    <StatusPill active={!mod.on}>{sourceLabel(mod)}</StatusPill>
+                  </td>
+                  <td className="text-right tabular-nums text-[var(--text-secondary)]">
+                    {mod.recent_5xx_count}
+                  </td>
+                  <td className="text-right tabular-nums text-[var(--text-secondary)]">
+                    {mod.trip_count}
+                  </td>
+                  <td className="text-xs text-[var(--text-muted)]">
+                    {mod.trip_count > 0 ? severityLabel(mod.max_severity) : "—"}
+                  </td>
+                  <td className="pr-3">
+                    <input
+                      type="text"
+                      value={reasons[mod.id] ?? mod.reason ?? ""}
+                      onChange={(e) =>
+                        setReasons((prev) => ({ ...prev, [mod.id]: e.target.value }))
+                      }
+                      placeholder="例如：資料異常修復中"
+                      className="input w-full"
+                    />
+                  </td>
+                  <td className="text-right">
+                    <div className="inline-flex gap-2">
+                      {mod.on ? (
+                        <button
+                          type="button"
+                          onClick={() => setMaintenance(mod, false)}
+                          disabled={busy === mod.id}
+                          className="btn-sm btn-secondary"
+                        >
+                          關閉維護
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setMaintenance(mod, true)}
+                          disabled={busy === mod.id}
+                          className="btn-sm btn-danger-ghost"
+                        >
+                          <Power size={14} aria-hidden />
+                          開啟維護
+                        </button>
+                      )}
+                      {mod.on && (
+                        <button
+                          type="button"
+                          onClick={() => recover(mod)}
+                          disabled={busy === mod.id}
+                          className="btn-sm btn-primary"
+                          title="清計數器並嘗試探測恢復"
+                        >
+                          <RotateCcw size={14} aria-hidden />
+                          嘗試恢復
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => restart(mod)}
+                        disabled={busy === mod.id}
+                        className="btn-sm btn-ghost"
+                      >
+                        <RotateCcw size={14} aria-hidden />
+                        重啟
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Panel>
   );
 }
 
@@ -923,6 +1135,291 @@ function SlowQueriesPanel() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+type ErrorTone = "danger" | "warning" | "neutral";
+
+const ERROR_CATEGORY: Record<
+  ErrorCategory,
+  { label: string; tone: ErrorTone; hint: string }
+> = {
+  db: { label: "資料庫", tone: "danger", hint: "可試「升級資料庫」或「重啟服務」" },
+  unhandled: { label: "未處理例外", tone: "danger", hint: "展開追蹤後修正程式碼" },
+  redis: { label: "Redis / 快取", tone: "warning", hint: "可試「清除快取」或「重啟服務」" },
+  timeout: { label: "逾時", tone: "warning", hint: "負載可能過高，檢視慢查詢或重啟" },
+  http: { label: "5xx 例外", tone: "neutral", hint: "由程式主動拋出的 5xx" },
+};
+
+const ERROR_BAR: Record<ErrorTone, string> = {
+  danger: "bg-[var(--danger)]",
+  warning: "bg-[var(--warning)]",
+  neutral: "bg-[var(--border-strong)]",
+};
+
+const ERROR_CHIP: Record<ErrorTone, string> = {
+  danger: "border-[var(--danger-border)] bg-[var(--danger-dim)] text-[var(--danger)]",
+  warning: "border-[var(--warning-border)] bg-[var(--warning-dim)] text-[var(--warning)]",
+  neutral: "border-[var(--border)] bg-[var(--bg-hover)] text-[var(--text-muted)]",
+};
+
+function ErrorRow({ item }: { item: RecentErrorItem }) {
+  const meta = ERROR_CATEGORY[item.category] ?? ERROR_CATEGORY.unhandled;
+  return (
+    <div className="overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--bg-surface)]">
+      <div className="flex">
+        <div className={`w-1 shrink-0 ${ERROR_BAR[meta.tone]}`} />
+        <div className="min-w-0 flex-1 p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className={`inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium ${ERROR_CHIP[meta.tone]}`}
+            >
+              {meta.label}
+            </span>
+            <span className="font-mono text-sm font-semibold text-[var(--text-primary)]">
+              {item.exc_type}
+            </span>
+            <span className="rounded bg-[var(--bg-hover)] px-1.5 py-0.5 font-mono text-xs text-[var(--text-secondary)]">
+              {item.status_code}
+            </span>
+            {item.occurrences > 1 && (
+              <span className="rounded bg-[var(--bg-hover)] px-1.5 py-0.5 text-xs text-[var(--text-secondary)]">
+                ×{item.occurrences}
+              </span>
+            )}
+            <span className="ml-auto text-xs text-[var(--text-muted)]">
+              {new Date(item.last_seen * 1000).toLocaleString()}
+            </span>
+          </div>
+          <div className="mt-1.5 font-mono text-xs text-[var(--text-secondary)]">
+            <span className="text-[var(--text-muted)]">{item.method}</span> {item.path}
+            <span className="ml-2 text-[var(--text-muted)]">id={item.error_id}</span>
+          </div>
+          {item.message && (
+            <div className="mt-1 break-words text-sm text-[var(--text-primary)]">{item.message}</div>
+          )}
+          <div className="mt-1 text-xs text-[var(--text-muted)]">{meta.hint}</div>
+          {item.traceback_head && (
+            <details className="mt-2">
+              <summary className="cursor-pointer text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+                展開追蹤 (traceback)
+              </summary>
+              <pre className="mt-1 max-h-72 overflow-auto rounded-md bg-[var(--bg-hover)] p-2 font-mono text-[11px] leading-snug text-[var(--text-secondary)]">
+                {item.traceback_head}
+              </pre>
+            </details>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RecentErrorsPanel() {
+  const [items, setItems] = useState<RecentErrorItem[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await systemApi.recentErrors(50);
+      setItems(data.items);
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "載入錯誤紀錄失敗");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const clear = async () => {
+    if (!window.confirm("清空目前的錯誤緩衝？")) return;
+    try {
+      const out = await systemApi.clearErrors();
+      toast.success(`已清空 ${out.cleared} 筆錯誤`);
+      setItems([]);
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "清空失敗");
+    }
+  };
+
+  return (
+    <Panel
+      title="近期伺服器錯誤"
+      icon={<Bug size={18} aria-hidden />}
+      action={
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={load} disabled={loading} className="btn btn-ghost text-xs">
+            <RefreshCcw size={12} aria-hidden /> 重新整理
+          </button>
+          <button
+            type="button"
+            onClick={clear}
+            disabled={items.length === 0}
+            className="btn-sm btn-danger-ghost"
+          >
+            <Trash2 size={12} aria-hidden /> 清空
+          </button>
+        </div>
+      }
+    >
+      <p className="mb-3 text-xs text-[var(--text-muted)]">
+        記憶體 ring buffer，記錄最近的 5xx／未處理例外（相同錯誤聚合計數），重啟後清空。顏色代表類型：
+        <span className="mx-1 text-[var(--danger)]">紅＝資料庫/未處理</span>
+        <span className="mx-1 text-[var(--warning)]">金＝快取/逾時</span>
+        <span className="mx-1 text-[var(--text-muted)]">灰＝主動拋出的 5xx</span>
+      </p>
+      {items.length === 0 ? (
+        <p className="py-6 text-center text-sm text-[var(--text-muted)]">
+          {loading ? "載入中…" : "目前沒有錯誤紀錄 🎉"}
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {items.map((item) => (
+            <ErrorRow key={`${item.error_id}-${item.first_seen}`} item={item} />
+          ))}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function RecoveryToolsPanel({ onChanged }: { onChanged: () => void }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [lastResult, setLastResult] = useState<string | null>(null);
+
+  const clearCache = async () => {
+    setBusy("cache");
+    try {
+      const out = await systemApi.clearCache();
+      const msg = `已清除 ${out.cleared} 個應用層快取鍵`;
+      toast.success(msg);
+      setLastResult(msg);
+      onChanged();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "清除快取失敗");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const dbUpgrade = async () => {
+    if (!window.confirm("執行資料庫遷移 alembic upgrade head？建議先確認已備份。")) return;
+    setBusy("db");
+    try {
+      const out = await systemApi.dbUpgrade();
+      if (!out.ok) {
+        toast.error("資料庫升級失敗");
+        setLastResult(`升級失敗：${out.error ?? "未知錯誤"}`);
+        return;
+      }
+      const msg = out.changed
+        ? `已升級：${out.before_revision ?? "—"} → ${out.head_revision ?? "—"}`
+        : `已是最新版本（${out.head_revision ?? "—"}）`;
+      toast.success(msg);
+      setLastResult(msg);
+      onChanged();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "資料庫升級失敗");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const restart = async () => {
+    if (
+      !window.confirm(
+        "重啟服務？開發環境會觸發熱重載，正式環境會對 gunicorn master 送 SIGHUP 優雅重載 worker。",
+      )
+    )
+      return;
+    setBusy("restart");
+    try {
+      const out = await systemApi.restartService();
+      const msg = `重啟已排程（環境：${out.environment}）`;
+      toast.success(msg);
+      setLastResult(msg);
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "重啟失敗");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const Action = ({
+    icon,
+    title,
+    desc,
+    onClick,
+    btnClass,
+    actionKey,
+    label,
+  }: {
+    icon: React.ReactNode;
+    title: string;
+    desc: string;
+    onClick: () => void;
+    btnClass: string;
+    actionKey: string;
+    label: string;
+  }) => (
+    <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] p-3">
+      <div className="flex items-center gap-2 text-sm font-medium text-[var(--text-primary)]">
+        {icon}
+        {title}
+      </div>
+      <p className="mt-1 text-xs text-[var(--text-muted)]">{desc}</p>
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={busy !== null}
+        className={`btn ${btnClass} mt-3 w-full`}
+      >
+        {busy === actionKey ? "執行中…" : label}
+      </button>
+    </div>
+  );
+
+  return (
+    <Panel title="快速復原工具" icon={<Wrench size={18} aria-hidden />}>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Action
+          icon={<Eraser size={16} aria-hidden />}
+          title="清除快取"
+          desc="清應用層快取（組織/權限/公文列表），不影響登入與防護狀態。"
+          onClick={clearCache}
+          btnClass="btn-secondary"
+          actionKey="cache"
+          label="清除快取"
+        />
+        <Action
+          icon={<Database size={16} aria-hidden />}
+          title="升級資料庫"
+          desc="執行 alembic upgrade head，套用未完成的遷移。"
+          onClick={dbUpgrade}
+          btnClass="btn-secondary"
+          actionKey="db"
+          label="升級資料庫"
+        />
+        <Action
+          icon={<RotateCcw size={16} aria-hidden />}
+          title="重啟服務"
+          desc="dev 熱重載；prod 對 gunicorn master 送 SIGHUP 優雅重載。"
+          onClick={restart}
+          btnClass="btn-danger"
+          actionKey="restart"
+          label="重啟服務"
+        />
+      </div>
+      {lastResult && (
+        <div className="mt-3 break-words rounded-md border border-[var(--border)] bg-[var(--bg-hover)] px-3 py-2 text-xs text-[var(--text-secondary)]">
+          最近結果：{lastResult}
         </div>
       )}
     </Panel>

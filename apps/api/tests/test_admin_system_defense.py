@@ -120,7 +120,7 @@ async def test_cidr_block_hits_middleware_and_allowlist_wins(client: AsyncClient
         ]
     )
 
-    blocked = await client.get("/health")
+    blocked = await client.get("/")
     assert blocked.status_code == 403
 
     await publish_rules(
@@ -164,7 +164,7 @@ async def test_cidr_block_hits_middleware_and_allowlist_wins(client: AsyncClient
         ]
     )
 
-    allowed = await client.get("/health")
+    allowed = await client.get("/")
     assert allowed.status_code == 200
     await _reset_defense_cache()
 

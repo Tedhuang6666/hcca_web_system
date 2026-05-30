@@ -97,6 +97,27 @@ class Settings(BaseSettings):
     LOAD_SHED_DB_POOL_THRESHOLD: float = Field(default=0.85, ge=0.0, le=1.0)
     LOAD_SHED_RETRY_AFTER_BASE_SECONDS: int = Field(default=5, ge=1)
 
+    # --- 模組斷路器（per-module 自動維護）---
+    MODULE_CIRCUIT_ENABLED: bool = Field(default=True)
+    MODULE_CIRCUIT_5XX_THRESHOLD: int = Field(default=10, ge=1)
+    MODULE_CIRCUIT_WINDOW_SECONDS: int = Field(default=60, ge=1)
+    MODULE_CIRCUIT_COOLDOWN_SECONDS: int = Field(default=120, ge=1)
+
+    # --- 模組斷路器：升級門檻（依錯誤嚴重度）---
+    # 1h 滾動窗口內跳閘次數達門檻 → 升級為 manual 維護（不自動恢復）
+    MODULE_TRIP_THRESHOLD_CRITICAL: int = Field(default=3, ge=1)
+    MODULE_TRIP_THRESHOLD_HIGH: int = Field(default=5, ge=1)
+    MODULE_TRIP_THRESHOLD_NORMAL: int = Field(default=7, ge=1)
+    MODULE_TRIP_ESCALATION_WINDOW_SECONDS: int = Field(default=3600, ge=60)
+    MODULE_CIRCUIT_COOLDOWN_BASE_SECONDS: int = Field(default=60, ge=1)
+    MODULE_CIRCUIT_COOLDOWN_MAX_SECONDS: int = Field(default=1800, ge=1)
+    # half-open 自動探測排程間隔（Celery beat）
+    MODULE_PROBE_INTERVAL_SECONDS: int = Field(default=30, ge=10)
+    # 探測呼叫的內部 base URL（默認 self loopback）
+    MODULE_PROBE_BASE_URL: str = Field(default="http://127.0.0.1:8000")
+    # 跳閘通知接收 Discord channel id（留空則不發 Discord）
+    MODULE_ALERT_DISCORD_CHANNEL_ID: str = Field(default="")
+
     # --- JWT 設定 ---
     SECRET_KEY: str = Field(default=_DEFAULT_SECRET)
     ALGORITHM: str = "HS256"
@@ -213,6 +234,10 @@ class Settings(BaseSettings):
         description="本地備份輸出目錄；若搭配 STORAGE_BACKEND=s3 則同步上傳",
     )
     DB_BACKUP_RETENTION_DAYS: int = Field(default=7)
+
+    # --- 系統設定 / .env 編輯頁（高危：預設關閉）---
+    # 啟用後超管可在 /admin/settings 檢視與編輯設定；明文密鑰與儲存須 MFA 再驗證。
+    ENABLE_ENV_EDITOR: bool = Field(default=False)
 
     @field_validator("SECRET_KEY")
     @classmethod

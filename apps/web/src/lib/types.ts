@@ -83,7 +83,7 @@ export interface ApprovalStepOut {
 
 export interface DocumentApprovalDelegationOut {
   id: string;
-  org_id: string;
+  org_id: string | null;
   principal_user_id: string;
   delegate_user_id: string;
   start_at: string;
@@ -132,6 +132,7 @@ export interface DocumentOut {
   visibility_level: DocumentVisibility;
   is_public: boolean;
   org_id: string;
+  activity_id: string | null;
   created_by: string;
   serial_template_id: string | null;
   regulation_id: string | null;
@@ -168,13 +169,14 @@ export interface DocumentListItem {
   id: string; serial_number: string; title: string;
   urgency: DocumentUrgency; classification: DocumentClassification; category: DocumentCategory;
   subject: string | null; status: DocumentStatus;
-  org_id: string; created_by: string;
+  org_id: string; activity_id: string | null; created_by: string;
   due_date: string | null; submitted_at: string | null; completed_at: string | null; created_at: string;
   is_redacted: boolean;
 }
 
 export interface DocumentCreate {
   title: string; org_id: string;
+  activity_id?: string | null;
   issuer_full_name?: string | null;
   serial_template_id?: string | null;
   manual_serial_number?: string | null;
@@ -271,7 +273,7 @@ export interface ProductOut {
   variant_groups: ProductVariantGroupOut[];
 }
 export interface ProductCategoryOut {
-  id: string; org_id: string; name: string;
+  id: string; org_id: string; activity_id: string | null; name: string;
   description: string | null; image_url: string | null;
   sort_order: number; is_active: boolean;
   created_by: string; created_at: string; updated_at: string;
@@ -294,7 +296,7 @@ export interface CatalogSeriesOut {
   sort_order: number; products: CatalogProductOut[];
 }
 export interface CatalogCategoryOut {
-  id: string; name: string; image_url: string | null;
+  id: string; name: string; activity_id: string | null; image_url: string | null;
   sort_order: number; series: CatalogSeriesOut[];
 }
 export interface SelectedOption {
@@ -317,7 +319,7 @@ export interface OrderItemOut {
   selected_options: SelectedOption[];
 }
 export interface OrderOut {
-  id: string; serial_number: string; user_id: string; org_id: string;
+  id: string; serial_number: string; user_id: string; org_id: string; activity_id: string | null;
   status: OrderStatus; total_price: number; notes: string | null;
   class_id: string | null; class_label: string | null;
   is_paid: boolean; paid_at: string | null;
@@ -325,7 +327,7 @@ export interface OrderOut {
 }
 export interface OrderListItem {
   id: string; serial_number: string; user_id: string;
-  user_name: string | null; org_id: string;
+  user_name: string | null; org_id: string; activity_id: string | null;
   status: OrderStatus; total_price: number;
   class_id: string | null; class_label: string | null;
   is_paid: boolean; created_at: string;
@@ -1265,6 +1267,174 @@ export interface MeetingMinutesOut {
   markdown: string;
 }
 
+// ── 行事曆型別 ────────────────────────────────────────────────────────────────
+
+export type CalendarEventType =
+  | "activity"
+  | "preparation"
+  | "rehearsal"
+  | "interschool_meeting"
+  | "formal_meeting"
+  | "deadline"
+  | "other";
+export type CalendarEventStatus = "tentative" | "confirmed" | "cancelled" | "done";
+export type CalendarVisibility = "private" | "participants" | "org" | "logged_in" | "public";
+export type CalendarParticipantRole = "owner" | "organizer" | "required" | "optional";
+export type CalendarParticipantResponse = "pending" | "accepted" | "declined" | "tentative";
+export type CalendarLinkType =
+  | "document"
+  | "meeting"
+  | "survey"
+  | "announcement"
+  | "external"
+  | "custom";
+
+export interface CalendarUserBrief {
+  id: string;
+  display_name: string;
+  email: string;
+  student_id: string | null;
+}
+
+export interface CalendarParticipantCreate {
+  user_id: string;
+  role?: CalendarParticipantRole;
+  response?: CalendarParticipantResponse;
+}
+
+export interface CalendarParticipantOut {
+  id: string;
+  event_id: string;
+  user_id: string;
+  role: CalendarParticipantRole;
+  response: CalendarParticipantResponse;
+  created_at: string;
+  updated_at: string;
+  user: CalendarUserBrief | null;
+}
+
+export interface CalendarChecklistCreate {
+  title: string;
+  due_at?: string | null;
+  assignee_id?: string | null;
+}
+
+export interface CalendarChecklistOut {
+  id: string;
+  event_id: string;
+  title: string;
+  due_at: string | null;
+  assignee_id: string | null;
+  is_done: boolean;
+  done_at: string | null;
+  created_at: string;
+  updated_at: string;
+  assignee: CalendarUserBrief | null;
+}
+
+export interface CalendarLinkCreate {
+  link_type: CalendarLinkType;
+  object_id?: string | null;
+  title: string;
+  url?: string | null;
+}
+
+export interface CalendarLinkOut {
+  id: string;
+  event_id: string;
+  link_type: CalendarLinkType;
+  object_id: string | null;
+  title: string;
+  url: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CalendarEventCreate {
+  org_id: string;
+  title: string;
+  description?: string | null;
+  event_type?: CalendarEventType;
+  status?: CalendarEventStatus;
+  visibility?: CalendarVisibility;
+  location?: string | null;
+  starts_at: string;
+  ends_at?: string | null;
+  all_day?: boolean;
+  participants?: CalendarParticipantCreate[];
+  checklist_items?: CalendarChecklistCreate[];
+  links?: CalendarLinkCreate[];
+}
+
+export interface CalendarEventListItem {
+  id: string;
+  org_id: string;
+  title: string;
+  description: string | null;
+  event_type: CalendarEventType;
+  status: CalendarEventStatus;
+  visibility: CalendarVisibility;
+  location: string | null;
+  starts_at: string;
+  ends_at: string | null;
+  all_day: boolean;
+  source_meeting_id: string | null;
+  source_module: string | null;
+  source_id: string | null;
+  source_key: string | null;
+  href: string | null;
+  created_by: string;
+  updated_by: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CalendarEventOut extends CalendarEventListItem {
+  participants: CalendarParticipantOut[];
+  checklist_items: CalendarChecklistOut[];
+  links: CalendarLinkOut[];
+}
+
+// ── 活動系統 ──────────────────────────────────────────────────────────────────
+
+export type ActivityStatus = "draft" | "active" | "ended" | "archived";
+
+export interface Activity {
+  id: string;
+  name: string;
+  description: string | null;
+  org_id: string | null;
+  starts_at: string | null;
+  ends_at: string | null;
+  status: ActivityStatus;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ActivityCreate {
+  name: string;
+  description?: string | null;
+  org_id?: string | null;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  status?: ActivityStatus;
+}
+
+export interface ActivityConvener {
+  id: string;
+  activity_id: string;
+  user_id: string;
+  start_date: string;
+  end_date: string | null;
+  created_at: string;
+  updated_at: string;
+  user_name: string;
+  user_email: string;
+}
+
 // ── 使用者 ────────────────────────────────────────────────────────────────────
 
 export interface UserRead {
@@ -1411,6 +1581,7 @@ export interface MealVendorOut {
   status: string;
   review_note: string | null;
   org_id: string;
+  activity_id: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -1688,6 +1859,7 @@ export interface SurveyOut {
   opens_at: string | null;
   closes_at: string | null;
   org_id: string;
+  activity_id: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -1706,7 +1878,8 @@ export interface SurveyListItem {
   is_anonymous: boolean;
   opens_at: string | null;
   closes_at: string | null;
-  org_id: string;
+    org_id: string;
+    activity_id?: string | null;
   created_by: string;
   created_at: string;
   response_count: number;
@@ -1783,6 +1956,7 @@ export interface AnnouncementOut {
   is_published: boolean;
   published_at: string | null;
   org_id: string | null;
+  activity_id: string | null;
   author_id: string;
   author_name: string;
   created_at: string;
@@ -1800,6 +1974,7 @@ export interface AnnouncementListItem {
   is_published: boolean;
   published_at: string | null;
   org_id: string | null;
+  activity_id: string | null;
   author_id: string;
   author_name: string;
   created_at: string;
@@ -1812,6 +1987,7 @@ export interface AnnouncementCreate {
   is_urgent?: boolean;
   urgent_until?: string | null;
   org_id?: string | null;
+  activity_id?: string | null;
   audience_type?: AnnouncementAudience;
   audience_org_ids?: string[];
   audience_user_ids?: string[];
@@ -1823,6 +1999,7 @@ export interface AnnouncementUpdate {
   is_urgent?: boolean;
   urgent_until?: string | null;
   is_published?: boolean;
+  activity_id?: string | null;
   audience_type?: AnnouncementAudience;
   audience_org_ids?: string[];
   audience_user_ids?: string[];
@@ -2021,7 +2198,24 @@ export interface NotificationPreferences {
   document_approved: ChannelPref;
   document_rejected: ChannelPref;
   document_recalled: ChannelPref;
+  meeting_invited: ChannelPref;
+  meeting_today: ChannelPref;
+  meeting_minutes_ready: ChannelPref;
+  regulation_review_assigned: ChannelPref;
+  regulation_publish_ready: ChannelPref;
+  regulation_published: ChannelPref;
+  petition_assigned: ChannelPref;
+  petition_replied: ChannelPref;
+  petition_status_updated: ChannelPref;
+  meal_class_collecting: ChannelPref;
+  meal_pickup_ready: ChannelPref;
+  shop_order_paid: ChannelPref;
+  survey_invitation: ChannelPref;
   announcement: ChannelPref;
+  calendar_event_invited: ChannelPref;
+  calendar_event_updated: ChannelPref;
+  work_item_assigned: ChannelPref;
+  work_item_due: ChannelPref;
   system: ChannelPref;
 }
 
@@ -2127,7 +2321,12 @@ export interface DiscordGuildConfigOut {
   office_channel_id: string | null;
   security_alert_channel_id: string | null;
   petition_entry_channel_id: string | null;
+  petition_private_category_id: string | null;
+  petition_staff_role_id: string | null;
+  petition_private_channel_enabled: boolean;
   announcement_channel_id: string | null;
+  moderation_log_channel_id: string | null;
+  welcome_channel_id: string | null;
   admin_role_id: string | null;
   is_active: boolean;
   created_at: string;
@@ -2135,6 +2334,19 @@ export interface DiscordGuildConfigOut {
 }
 
 export type DiscordGuildConfigIn = Omit<DiscordGuildConfigOut, "id" | "created_at" | "updated_at">;
+
+export interface DiscordBotHealthOut {
+  bot_configured: boolean;
+  oauth_configured: boolean;
+  bot_user_id: string | null;
+  bot_username: string | null;
+  configured_guild_count: number;
+  has_active_links: boolean;
+}
+
+export interface DiscordSyncAllOut {
+  queued: number;
+}
 
 export interface DiscordRoleMappingOut {
   id: string;
@@ -2149,6 +2361,39 @@ export interface DiscordRoleMappingOut {
 }
 
 export type DiscordRoleMappingIn = Omit<DiscordRoleMappingOut, "id" | "created_at" | "updated_at">;
+
+export interface DiscordNicknamePrefixRuleOut {
+  id: string;
+  guild_id: string;
+  prefix: string;
+  priority: number;
+  mapping_kind: DiscordRoleMappingKind;
+  org_id: string | null;
+  position_id: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type DiscordNicknamePrefixRuleIn = Omit<
+  DiscordNicknamePrefixRuleOut,
+  "id" | "created_at" | "updated_at"
+>;
+
+export interface DiscordOrgChannelMappingOut {
+  id: string;
+  guild_id: string;
+  org_id: string;
+  channel_id: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type DiscordOrgChannelMappingIn = Omit<
+  DiscordOrgChannelMappingOut,
+  "id" | "created_at" | "updated_at"
+>;
 
 export interface DiscordGuildOptionOut {
   id: string;
@@ -2170,6 +2415,36 @@ export interface DiscordRoleOptionOut {
   position: number;
   managed: boolean;
 }
+
+export type WorkItemStatus = "open" | "done" | "canceled";
+
+export interface WorkItemOut {
+  id: string;
+  title: string;
+  description: string | null;
+  status: WorkItemStatus;
+  assigned_to_id: string | null;
+  created_by_id: string | null;
+  source_type: string | null;
+  source_id: string | null;
+  due_at: string | null;
+  reminder_sent_at: string | null;
+  completed_at: string | null;
+  discord_channel_id: string | null;
+  discord_message_id: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type WorkItemCreate = Pick<
+  WorkItemOut,
+  "title" | "description" | "assigned_to_id" | "source_type" | "source_id" | "due_at"
+>;
+
+export type WorkItemUpdate = Partial<
+  Pick<WorkItemOut, "title" | "description" | "assigned_to_id" | "due_at" | "status">
+>;
 
 // ── 公告統計 ─────────────────────────────────────────────────────────────────
 

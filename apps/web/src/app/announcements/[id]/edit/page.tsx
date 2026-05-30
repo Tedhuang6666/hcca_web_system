@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { announcementsApi, ApiError } from "@/lib/api";
+import { activitiesApi, announcementsApi, ApiError } from "@/lib/api";
 import type { AnnouncementMediaOut, AnnouncementOut } from "@/lib/types";
 import AnnouncementEditor from "@/components/announcements/AnnouncementEditor";
 import AnnouncementAudiencePicker, {
@@ -13,6 +13,8 @@ import AnnouncementAudiencePicker, {
 import { contentFromMarkdown, markdownFromContent } from "@/components/announcements/AnnouncementMarkdown";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
+import ActivitySelect from "@/components/activities/ActivitySelect";
+import type { Activity } from "@/lib/types";
 
 const DEFAULT_AUDIENCE: AudienceValue = {
   audience_type: "all",
@@ -36,12 +38,15 @@ export default function EditAnnouncementPage() {
   const [urgentUntil, setUrgentUntil] = useState("");
   const [media, setMedia] = useState<AnnouncementMediaOut[]>([]);
   const [audience, setAudience] = useState<AudienceValue>(DEFAULT_AUDIENCE);
+  const [activityId, setActivityId] = useState("");
+  const [activities, setActivities] = useState<Activity[]>([]);
   const [saving, setSaving] = useState(false);
 
-  const canEdit = can("announcement:edit");
-  const canPublish = can("announcement:publish");
+  const managesItemActivity = Boolean(item?.activity_id && activities.some((activity) => activity.id === item.activity_id));
+  const canEdit = can("announcement:edit") || managesItemActivity;
+  const canPublish = can("announcement:publish") || managesItemActivity;
   const canUrgent = can("announcement:set_urgent");
-  const canMedia = can("announcement:media_manage");
+  const canMedia = can("announcement:media_manage") || managesItemActivity;
   const draftValue = useMemo<AnnouncementEditDraft>(() => ({ title, markdown }), [markdown, title]);
   const originalDraft = useMemo<AnnouncementEditDraft | null>(() => item ? ({
     title: item.title,
@@ -64,6 +69,7 @@ export default function EditAnnouncementPage() {
   });
 
   useEffect(() => {
+    activitiesApi.mine(true).then(setActivities).catch(() => setActivities([]));
     announcementsApi.get(id)
       .then((data) => {
         setItem(data);
@@ -72,6 +78,7 @@ export default function EditAnnouncementPage() {
         setIsUrgent(data.is_urgent);
         setUrgentUntil(data.urgent_until ? data.urgent_until.slice(0, 16) : "");
         setMedia(data.media);
+        setActivityId(data.activity_id ?? "");
       })
       .catch((e) => toast.error(e instanceof ApiError ? e.message : "載入公告失敗"));
   }, [id]);
@@ -98,6 +105,7 @@ export default function EditAnnouncementPage() {
         audience_type: audience.audience_type,
         audience_org_ids: audience.audience_org_ids,
         audience_user_ids: audience.audience_user_ids,
+        activity_id: activityId || null,
       });
       setItem(updated);
       clearDraft();
@@ -203,12 +211,21 @@ export default function EditAnnouncementPage() {
       />
 
       {canEdit && (
-        <AnnouncementAudiencePicker
-          initialType={item.audience_type}
-          initialOrgs={item.audience_orgs}
-          initialMembers={item.audience_members}
-          onChange={setAudience}
-        />
+        <>
+          <AnnouncementAudiencePicker
+            initialType={item.audience_type}
+            initialOrgs={item.audience_orgs}
+            initialMembers={item.audience_members}
+            onChange={setAudience}
+          />
+          <section className="card p-4">
+            <ActivitySelect
+              value={activityId}
+              onChange={setActivityId}
+              onActivitiesLoaded={setActivities}
+            />
+          </section>
+        </>
       )}
 
       {canUrgent && (

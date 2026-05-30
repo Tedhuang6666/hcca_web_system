@@ -14,6 +14,7 @@ import SmartTextarea from "@/components/ui/SmartTextarea";
 import Toggle from "@/components/ui/Toggle";
 import { useDraftAutosave, useFileDraftAutosave } from "@/hooks/useDraftAutosave";
 import { RecipientSearch } from "@/components/documents/RecipientSearch";
+import ActivitySelect from "@/components/activities/ActivitySelect";
 
 interface Recipient {
   id: string;
@@ -34,6 +35,7 @@ type DocumentDraft = {
   subject: string;
   category: DocumentCategory;
   selectedOrgId: string;
+  activityId: string;
   docDescription: string;
   actionRequired: string;
   meetingPurpose: string;
@@ -178,6 +180,7 @@ export default function NewDocumentPage() {
   // 組織列表
   const [orgs, setOrgs] = useState<OrgRead[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState<string>("");
+  const [activityId, setActivityId] = useState("");
   const selectedOrg = orgs.find(o => o.id === selectedOrgId) ?? null;
 
   // 自動標題
@@ -238,6 +241,7 @@ export default function NewDocumentPage() {
     subject,
     category,
     selectedOrgId,
+    activityId,
     docDescription,
     actionRequired,
     meetingPurpose,
@@ -256,6 +260,7 @@ export default function NewDocumentPage() {
     selectedTemplateId,
   }), [
     actionRequired,
+    activityId,
     category,
     classification,
     docDescription,
@@ -284,6 +289,7 @@ export default function NewDocumentPage() {
     setSubject(draft.subject ?? "");
     setCategory(draft.category ?? "letter");
     setSelectedOrgId(draft.selectedOrgId ?? "");
+    setActivityId(draft.activityId ?? "");
     setDocDescription(draft.docDescription ?? "");
     setActionRequired(draft.actionRequired ?? "");
     setMeetingPurpose(draft.meetingPurpose ?? "");
@@ -428,6 +434,7 @@ export default function NewDocumentPage() {
         due_date: dueDate || undefined,
         visibility_level: visibilityLevel,
         org_id: selectedOrgId,
+        activity_id: activityId || null,
         recipients: recipients.map((r) => ({
           recipient_type: r.recipient_type,
           name: r.name,
@@ -528,6 +535,8 @@ export default function NewDocumentPage() {
                 </span>
               </div>
             )}
+
+            <ActivitySelect value={activityId} onChange={setActivityId} />
 
             <div className="grid grid-cols-2 gap-3">
               {[

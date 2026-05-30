@@ -7,6 +7,8 @@ import type { SurveyListItem, SurveyStatus } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import SmartEmptyState from "@/components/ui/SmartEmptyState";
+import ActivitySelect from "@/components/activities/ActivitySelect";
+import type { Activity } from "@/lib/types";
 
 const STATUS_CFG: Record<SurveyStatus, { label: string; color: string; bg: string }> = {
   draft:    { label: "草稿",    color: "var(--text-muted)", bg: "var(--bg-elevated)" },
@@ -28,19 +30,29 @@ export default function SurveysPage() {
   const [tab, setTab] = useState<"open" | "all">("open");
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState("newest");
+  const [activityId, setActivityId] = useState("");
+  const [activities, setActivities] = useState<Activity[]>([]);
   const { can } = usePermissions();
+  const canManage = can("survey:manage") || activities.length > 0;
 
   useEffect(() => {
     setLoading(true);
-    const params = tab === "open" ? { status: "open" } : undefined;
+    const params = {
+      ...(tab === "open" ? { status: "open" } : {}),
+      ...(activityId ? { activity_id: activityId } : {}),
+    };
     // 未登入者改用公開問卷列表（僅 is_public 且開放/已截止的問卷）
     const isLoggedIn = typeof window !== "undefined" && !!localStorage.getItem("user_id");
-    const req = isLoggedIn ? surveysApi.list(params) : surveysApi.listPublic(params);
+    const req = isLoggedIn
+      ? surveysApi.list(params)
+      : surveysApi.listPublic(tab === "open" ? { status: "open" } : undefined);
     req
       .then(setSurveys)
       .catch(e => toast.error(e instanceof ApiError ? e.message : "載入失敗"))
       .finally(() => setLoading(false));
-  }, [tab]);
+  }, [activityId, tab]);
+
+  const activityNameById = new Map(activities.map((activity) => [activity.id, activity.name]));
 
   const displayed = surveys
     .filter(s => !search.trim() || s.title.toLowerCase().includes(search.toLowerCase()))
@@ -59,7 +71,7 @@ export default function SurveysPage() {
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>問卷系統</h1>
           <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>填答問卷，表達您的意見</p>
         </div>
-        {can("survey:manage") && (
+        {canManage && (
           <Link href="/surveys/new" className="btn btn-primary self-start sm:self-auto">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
@@ -72,6 +84,16 @@ export default function SurveysPage() {
 
       {/* 搜尋 + 排序 + 分頁 */}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center flex-wrap">
+        <div className="min-w-52">
+          <ActivitySelect
+            value={activityId}
+            onChange={setActivityId}
+            label="活動"
+            noneLabel="全部問卷"
+            scope="all"
+            onActivitiesLoaded={setActivities}
+          />
+        </div>
         <div className="relative flex-1 min-w-48">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
             width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -114,10 +136,10 @@ export default function SurveysPage() {
         <ListPageSkeleton rows={5} showHeader={false} showFilters={false} />
       ) : displayed.length === 0 ? (
         <SmartEmptyState
-          reason={search ? "filtered" : (can("survey:manage") ? "new" : "none")}
+          reason={search ? "filtered" : (canManage ? "new" : "none")}
           subject="問卷"
           createHref="/surveys/new"
-          createPerm="survey:manage"
+          createPerm={can("survey:manage") ? "survey:manage" : undefined}
           onClearFilters={() => setSearch("")}
           message={!search && tab === "open" ? "目前沒有開放填答的問卷" : undefined}
         />
@@ -148,6 +170,12 @@ export default function SurveysPage() {
                       <span className="text-[10px] px-1.5 py-0.5 rounded font-medium"
                         style={{ background: "var(--info-dim)", color: "var(--info)" }}>
                         匿名
+                      </span>
+                    )}
+                    {survey.activity_id && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                        style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
+                        {activityNameById.get(survey.activity_id) ?? "活動問卷"}
                       </span>
                     )}
                   </div>

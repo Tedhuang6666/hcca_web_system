@@ -211,21 +211,31 @@ async def create_meeting(
     )
     await session.flush()
     await seed_voter_roster(session, meeting)
+    await _sync_calendar_event(session, meeting, actor_id=created_by)
     return meeting
 
 
 async def update_meeting(
-    session: AsyncSession, meeting: Meeting, *, data: MeetingUpdate
+    session: AsyncSession,
+    meeting: Meeting,
+    *,
+    data: MeetingUpdate,
+    actor_id: uuid.UUID | None = None,
 ) -> Meeting:
     values = data.model_dump(exclude_unset=True)
     for field, value in values.items():
         setattr(meeting, field, value)
     await session.flush()
+    await _sync_calendar_event(session, meeting, actor_id=actor_id or meeting.created_by)
     return meeting
 
 
 async def transition_meeting(
-    session: AsyncSession, meeting: Meeting, *, status: MeetingStatus
+    session: AsyncSession,
+    meeting: Meeting,
+    *,
+    status: MeetingStatus,
+    actor_id: uuid.UUID | None = None,
 ) -> Meeting:
     if meeting.status in {MeetingStatus.CLOSED, MeetingStatus.ARCHIVED} and status not in {
         MeetingStatus.CLOSED,
@@ -248,7 +258,22 @@ async def transition_meeting(
     if status == MeetingStatus.CLOSED and meeting.ends_at is None:
         meeting.ends_at = datetime.now(UTC)
     await session.flush()
+    await _sync_calendar_event(session, meeting, actor_id=actor_id or meeting.created_by)
     return meeting
+
+
+async def _sync_calendar_event(
+    session: AsyncSession,
+    meeting: Meeting,
+    *,
+    actor_id: uuid.UUID,
+) -> None:
+    try:
+        from api.services import calendar as calendar_svc
+
+        await calendar_svc.sync_meeting_to_event(session, meeting, actor_id=actor_id)
+    except Exception:
+        logger.warning("sync meeting calendar event failed", exc_info=True)
 
 
 async def _create_notice_document(

@@ -9,9 +9,18 @@ class PermissionCode(StrEnum):
     ADMIN_ALL = "admin:all"
     ADMIN_USERS = "admin:users"
     SYSTEM_MAINTENANCE_BYPASS = "system:maintenance_bypass"
+    SYSTEM_TRASH_VIEW = "system:trash_view"
+    SYSTEM_LIFECYCLE = "system:lifecycle"
+    SYSTEM_PRIVACY = "system:privacy"
+    SYSTEM_TERM_ROLLOVER = "system:term_rollover"
+    SYSTEM_USER_LIFECYCLE = "system:user_lifecycle"
+    SYSTEM_REPORTS = "system:reports"
     AUDIT_VIEW_ORG = "audit:view_org"
     AUDIT_VIEW_ALL = "audit:view_all"
     AUDIT_VIEW = "audit:view"
+
+    ACTIVITY_MANAGE = "activity:manage"
+    ACTIVITY_APPOINT = "activity:appoint"
 
     ORG_MANAGE = "org:manage"
     ORG_MANAGE_POSITIONS = "org:manage_positions"
@@ -115,6 +124,11 @@ class PermissionCode(StrEnum):
     MEETING_VIEW_ALL = "meeting:view_all"
     MEETING_EXPORT = "meeting:export"
 
+    CALENDAR_CREATE = "calendar:create"
+    CALENDAR_MANAGE = "calendar:manage"
+    CALENDAR_VIEW_ALL = "calendar:view_all"
+    CALENDAR_ADMIN = "calendar:admin"
+
     PARTNER_MAP_MANAGE = "partner_map:manage"
     PARTNER_MAP_VIEW_STATS = "partner_map:view_stats"
 
@@ -140,6 +154,42 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
     },
     {
         "group": "系統管理",
+        "code": PermissionCode.SYSTEM_TRASH_VIEW,
+        "label": "誤刪救援檢視",
+        "desc": "查看最近 N 天 audit log 中的刪除事件以利還原協調",
+    },
+    {
+        "group": "系統管理",
+        "code": PermissionCode.SYSTEM_LIFECYCLE,
+        "label": "資料生命週期管理",
+        "desc": "執行批次壓縮歸檔與清理（notification / outbox / audit_log 等）",
+    },
+    {
+        "group": "系統管理",
+        "code": PermissionCode.SYSTEM_PRIVACY,
+        "label": "個資匯出與假名化",
+        "desc": "處理當事人個資請求：匯出全部資料、假名化（保留 audit 痕跡）",
+    },
+    {
+        "group": "系統管理",
+        "code": PermissionCode.SYSTEM_TERM_ROLLOVER,
+        "label": "換屆精靈",
+        "desc": "批次轉移任期、結束舊一屆、建立新一屆；支援 dry-run 與 rollback",
+    },
+    {
+        "group": "系統管理",
+        "code": PermissionCode.SYSTEM_USER_LIFECYCLE,
+        "label": "學籍異動",
+        "desc": "凍結 / 校友歸檔 / 恢復個別使用者；保留 audit 痕跡",
+    },
+    {
+        "group": "系統管理",
+        "code": PermissionCode.SYSTEM_REPORTS,
+        "label": "預寫常用報表",
+        "desc": "執行平台預設的 10 個查詢報表並匯出 CSV",
+    },
+    {
+        "group": "系統管理",
         "code": PermissionCode.AUDIT_VIEW_ORG,
         "label": "查看本組織稽核日誌",
         "desc": "查看目前任期所屬組織內的操作軌跡",
@@ -149,6 +199,18 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "code": PermissionCode.AUDIT_VIEW_ALL,
         "label": "查看所有稽核日誌",
         "desc": "查看全站所有操作軌跡與稽核事件",
+    },
+    {
+        "group": "活動系統",
+        "code": PermissionCode.ACTIVITY_MANAGE,
+        "label": "管理活動",
+        "desc": "建立、編輯、封存活動基本資料",
+    },
+    {
+        "group": "活動系統",
+        "code": PermissionCode.ACTIVITY_APPOINT,
+        "label": "任命活動總召",
+        "desc": "指派、調整與卸任活動總召任期",
     },
     {
         "group": "組織管理",
@@ -671,6 +733,30 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "code": PermissionCode.MEETING_EXPORT,
         "label": "匯出會議紀錄",
         "desc": "查看會後紀錄、匯出或轉成公文草稿",
+    },
+    {
+        "group": "行事曆",
+        "code": PermissionCode.CALENDAR_CREATE,
+        "label": "建立行程",
+        "desc": "建立活動、準備、彩排、他校會議與截止日",
+    },
+    {
+        "group": "行事曆",
+        "code": PermissionCode.CALENDAR_MANAGE,
+        "label": "管理行程",
+        "desc": "管理本平台行事曆事件、參與者、準備清單與關聯連結",
+    },
+    {
+        "group": "行事曆",
+        "code": PermissionCode.CALENDAR_VIEW_ALL,
+        "label": "查看組織行程",
+        "desc": "跨組織查看組織可見的行事曆事件",
+    },
+    {
+        "group": "行事曆",
+        "code": PermissionCode.CALENDAR_ADMIN,
+        "label": "行事曆管理員",
+        "desc": "跨組織查看與管理所有行事曆事件",
     },
     {
         "group": "特約地圖",

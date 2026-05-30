@@ -65,6 +65,7 @@ class ProductVariantGroupOut(BaseModel):
 
 class ProductCategoryCreate(BaseModel):
     org_id: uuid.UUID = Field(..., description="所屬組織 ID")
+    activity_id: uuid.UUID | None = Field(None, description="所屬活動 ID")
     name: str = Field(..., min_length=1, max_length=200, description="主題名稱，如「校商」")
     description: str | None = None
     image_url: str | None = None
@@ -77,6 +78,7 @@ class ProductCategoryUpdate(BaseModel):
     image_url: str | None = None
     sort_order: int | None = None
     is_active: bool | None = None
+    activity_id: uuid.UUID | None = None
 
 
 class ProductCategoryOut(BaseModel):
@@ -84,6 +86,7 @@ class ProductCategoryOut(BaseModel):
 
     id: uuid.UUID
     org_id: uuid.UUID
+    activity_id: uuid.UUID | None = None
     name: str
     description: str | None
     image_url: str | None
@@ -202,6 +205,7 @@ class CatalogSeriesOut(BaseModel):
 class CatalogCategoryOut(BaseModel):
     id: uuid.UUID
     name: str
+    activity_id: uuid.UUID | None = None
     image_url: str | None = None
     sort_order: int = 0
     series: list[CatalogSeriesOut] = []
@@ -281,6 +285,7 @@ class OrderOut(BaseModel):
     serial_number: str
     user_id: uuid.UUID
     org_id: uuid.UUID
+    activity_id: uuid.UUID | None = None
     status: OrderStatus
     total_price: int
     notes: str | None = None
@@ -299,6 +304,7 @@ class OrderListItem(BaseModel):
     user_id: uuid.UUID
     user_name: str | None = None
     org_id: uuid.UUID
+    activity_id: uuid.UUID | None = None
     status: OrderStatus
     total_price: int
     class_id: uuid.UUID | None = None

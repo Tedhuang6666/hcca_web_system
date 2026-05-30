@@ -28,8 +28,13 @@ from api.core.database import engine
 from api.core.defense import endpoint_lockdown_reason
 from api.core.ip_blocklist import is_blocked
 from api.core.load_signals import get_5xx_ratio, get_active_requests
-from api.core.maintenance import get_load_shed_force_mode, get_maintenance_state
+from api.core.maintenance import (
+    get_load_shed_force_mode,
+    get_maintenance_state,
+    get_module_maintenance,
+)
 from api.core.metrics import get_db_pool_stats
+from api.core.modules import match_module
 from api.core.security import decode_token
 
 logger = logging.getLogger(__name__)
@@ -46,6 +51,7 @@ ALWAYS_ALLOWED_PATHS = frozenset(
         "/auth/me",
         "/auth/logout",
         "/system/maintenance",
+        "/system/module-status",
     }
 )
 ALWAYS_ALLOWED_PREFIXES = (
@@ -112,6 +118,10 @@ def _client_ip(scope: Scope) -> str:
 def _is_path_exempt(path: str) -> bool:
     if path in ALWAYS_ALLOWED_PATHS:
         return True
+    # 模組自身的健康探測端點不可被 load shed / module maintenance 攔截，
+    # 否則 half-open 探測永遠失敗，模組無法自動恢復。
+    if path.endswith("/__module_health__"):
+        return True
     return any(path.startswith(p) for p in ALWAYS_ALLOWED_PREFIXES)
 
 
@@ -168,13 +178,22 @@ class LoadShedMiddleware:
             await self._respond_lockdown(scope, send, lockdown_reason)
             return
 
-        # 2. Maintenance mode
+        # 2. Maintenance mode（全站）
         maintenance = await get_maintenance_state()
         if maintenance.get("enabled") and not can_bypass:
             await self._respond_maintenance(scope, send, maintenance)
             return
 
-        # 3. Load shed
+        # 3. Module maintenance（單一模組；admin 照常放行以便驗證/修復）
+        if not can_bypass:
+            module_id = match_module(path)
+            if module_id:
+                mstate = await get_module_maintenance(module_id)
+                if mstate and mstate.get("on"):
+                    await self._respond_module_maintenance(scope, send, module_id, mstate)
+                    return
+
+        # 4. Load shed
         if settings.LOAD_SHED_ENABLED:
             mode = await get_load_shed_force_mode()
             should_shed = False
@@ -206,6 +225,24 @@ class LoadShedMiddleware:
         message = state.get("message") or "系統維護中，請稍後再試"
         resp = JSONResponse(
             {"detail": message, "maintenance": True, "until": state.get("until")},
+            status_code=503,
+            headers={"Retry-After": "60"},
+        )
+        await self._send_response(resp, scope, send)
+
+    async def _respond_module_maintenance(
+        self, scope: Scope, send: Send, module_id: str, state: dict
+    ) -> None:
+        reason = state.get("reason") or ""
+        message = f"此功能模組維護中，請稍後再試{('：' + reason) if reason else ''}"
+        resp = JSONResponse(
+            {
+                "detail": message,
+                "module_maintenance": True,
+                "module": module_id,
+                "source": state.get("source"),
+                "until": state.get("until"),
+            },
             status_code=503,
             headers={"Retry-After": "60"},
         )

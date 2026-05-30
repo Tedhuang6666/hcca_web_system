@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import {
   FileText, Landmark, Scale, MessageSquare, CheckSquare, ShoppingCart,
   Utensils, Megaphone, Inbox, Loader2, AlertCircle, Clock, ChevronRight,
+  CalendarDays,
 } from "lucide-react";
 import {
   documentsApi,
@@ -30,6 +31,8 @@ const MODULE_ICONS: Record<TaskModule, React.ComponentType<IconProps>> = {
   shop: (p) => <ShoppingCart {...p} />,
   meal: (p) => <Utensils {...p} />,
   announcement: (p) => <Megaphone {...p} />,
+  calendar: (p) => <CalendarDays {...p} />,
+  work_item: (p) => <CheckSquare {...p} />,
 };
 
 const MODULE_LABEL: Record<TaskModule, string> = {
@@ -41,6 +44,8 @@ const MODULE_LABEL: Record<TaskModule, string> = {
   shop: "校商",
   meal: "學餐",
   announcement: "公告",
+  calendar: "行事曆",
+  work_item: "工作",
 };
 
 const SEVERITY_STYLES: Record<string, { color: string; bg: string; border: string; label: string }> = {

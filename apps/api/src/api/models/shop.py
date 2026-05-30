@@ -25,6 +25,7 @@ from api.models.school_class import ClassConsolidationMixin
 from api.models.types import JSONDict
 
 if TYPE_CHECKING:
+    from api.models.activity import Activity
     from api.models.org import Org
     from api.models.school_class import SchoolClass
     from api.models.user import User
@@ -59,6 +60,12 @@ class ProductCategory(Base, TimestampMixin):
     org_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("orgs.id", ondelete="RESTRICT"), nullable=False, index=True
     )
+    activity_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("activities.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -71,6 +78,7 @@ class ProductCategory(Base, TimestampMixin):
     )
 
     org: Mapped[Org] = relationship("Org")
+    activity: Mapped[Activity | None] = relationship("Activity")
     series: Mapped[list[ProductSeries]] = relationship(
         "ProductSeries", back_populates="category", cascade="all, delete-orphan"
     )

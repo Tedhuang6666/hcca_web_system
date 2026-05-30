@@ -141,6 +141,7 @@ async def create(
         is_urgent=body.is_urgent,
         urgent_until=body.urgent_until,
         org_id=body.org_id,
+        activity_id=body.activity_id,
         author_id=author.id,
         audience_type=body.audience_type.value,
     )
@@ -160,6 +161,7 @@ async def list_announcements(
     db: AsyncSession,
     *,
     org_id: uuid.UUID | None = None,
+    activity_id: uuid.UUID | None = None,
     published_only: bool = True,
     urgent_only: bool = False,
     skip: int = 0,
@@ -183,6 +185,8 @@ async def list_announcements(
         q = q.where(_audience_clause(scope))
     if org_id is not None:
         q = q.where(Announcement.org_id == org_id)
+    if activity_id is not None:
+        q = q.where(Announcement.activity_id == activity_id)
     q = q.order_by(Announcement.published_at.desc().nullslast(), Announcement.created_at.desc())
     q = q.offset(skip).limit(limit)
     result = await db.execute(q)
@@ -205,6 +209,8 @@ async def update(
         ann.is_urgent = body.is_urgent
     if "urgent_until" in fields:
         ann.urgent_until = body.urgent_until
+    if "activity_id" in fields:
+        ann.activity_id = body.activity_id
     if body.audience_type is not None:
         orgs, users = await _resolve_audience(
             db,

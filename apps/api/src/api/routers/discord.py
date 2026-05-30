@@ -24,13 +24,18 @@ from api.dependencies.permissions import require_permission
 from api.models.discord_account import (
     DiscordAccountLink,
     DiscordGuildConfig,
+    DiscordNicknamePrefixRule,
+    DiscordOrgChannelMapping,
     DiscordRoleMapping,
     DiscordRoleMappingKind,
 )
 from api.models.user import User
 from api.services import audit as audit_svc
 from api.services.discord_bot import (
+    bot_health_snapshot,
     consume_open_token,
+    emit_moderation_log,
+    enqueue_all_role_sync,
     enqueue_role_sync,
     fetch_bot_guilds,
     fetch_guild_channels,
@@ -65,7 +70,12 @@ class DiscordGuildConfigIn(BaseModel):
     office_channel_id: str | None = Field(None, max_length=32)
     security_alert_channel_id: str | None = Field(None, max_length=32)
     petition_entry_channel_id: str | None = Field(None, max_length=32)
+    petition_private_category_id: str | None = Field(None, max_length=32)
+    petition_staff_role_id: str | None = Field(None, max_length=32)
+    petition_private_channel_enabled: bool = True
     announcement_channel_id: str | None = Field(None, max_length=32)
+    moderation_log_channel_id: str | None = Field(None, max_length=32)
+    welcome_channel_id: str | None = Field(None, max_length=32)
     admin_role_id: str | None = Field(None, max_length=32)
     is_active: bool = True
 
@@ -103,6 +113,47 @@ class DiscordRoleMappingOut(DiscordRoleMappingIn):
     updated_at: datetime
 
 
+class DiscordOrgChannelMappingIn(BaseModel):
+    guild_id: str = Field(..., min_length=1, max_length=32)
+    org_id: uuid.UUID
+    channel_id: str = Field(..., min_length=1, max_length=32)
+    is_active: bool = True
+
+
+class DiscordOrgChannelMappingOut(DiscordOrgChannelMappingIn):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
+
+
+class DiscordNicknamePrefixRuleIn(BaseModel):
+    guild_id: str = Field(..., min_length=1, max_length=32)
+    prefix: str = Field(..., min_length=1, max_length=20)
+    priority: int = Field(100, ge=0, le=999)
+    mapping_kind: DiscordRoleMappingKind
+    org_id: uuid.UUID | None = None
+    position_id: uuid.UUID | None = None
+    is_active: bool = True
+
+    @model_validator(mode="after")
+    def target_must_match_kind(self) -> DiscordNicknamePrefixRuleIn:
+        if self.mapping_kind == DiscordRoleMappingKind.ORG and self.org_id is None:
+            raise ValueError("組織暱稱前綴規則必須提供 org_id")
+        if self.mapping_kind == DiscordRoleMappingKind.POSITION and self.position_id is None:
+            raise ValueError("職位暱稱前綴規則必須提供 position_id")
+        return self
+
+
+class DiscordNicknamePrefixRuleOut(DiscordNicknamePrefixRuleIn):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
+
+
 class DiscordGuildOptionOut(BaseModel):
     id: str
     name: str
@@ -122,6 +173,24 @@ class DiscordRoleOptionOut(BaseModel):
     color: int = 0
     position: int = 0
     managed: bool = False
+
+
+class DiscordBotHealthOut(BaseModel):
+    bot_configured: bool
+    oauth_configured: bool
+    bot_user_id: str | None = None
+    bot_username: str | None = None
+    configured_guild_count: int
+    has_active_links: bool
+
+
+class DiscordSyncAllOut(BaseModel):
+    queued: int
+
+
+class DiscordTestMessageIn(BaseModel):
+    channel_id: str = Field(..., min_length=1, max_length=32)
+    message: str = Field("HCCA Discord Bot 測試訊息", min_length=1, max_length=500)
 
 
 def _safe_next_path(value: str | None) -> str:
@@ -192,6 +261,11 @@ async def get_my_discord_binding(db: DbDep, current_user: CurrentUser) -> Discor
     )
 
 
+@router.post("/me/sync", status_code=204, summary="同步我的 Discord 身分組與暱稱")
+async def sync_my_discord(db: DbDep, current_user: CurrentUser) -> None:
+    await enqueue_role_sync(db, current_user.id)
+
+
 @router.delete("/me", status_code=204, summary="解除我的 Discord 綁定")
 async def delete_my_discord_binding(db: DbDep, current_user: CurrentUser) -> None:
     await unlink_user(db, current_user.id)
@@ -235,6 +309,79 @@ async def list_guild_configs(db: DbDep) -> list[DiscordGuildConfig]:
 
 
 @router.get(
+    "/health",
+    response_model=DiscordBotHealthOut,
+    dependencies=[Depends(require_permission(PermissionCode.ADMIN_ALL))],
+    summary="檢查 Discord Bot 產品設定與連線狀態",
+)
+async def discord_health(db: DbDep) -> DiscordBotHealthOut:
+    try:
+        return DiscordBotHealthOut(**await bot_health_snapshot(db))
+    except Exception as exc:
+        logger.warning("Discord health check failed", exc_info=True)
+        raise HTTPException(status_code=502, detail="Discord Bot 健康檢查失敗") from exc
+
+
+@router.post(
+    "/sync-all",
+    response_model=DiscordSyncAllOut,
+    dependencies=[Depends(require_permission(PermissionCode.ADMIN_ALL))],
+    summary="排程同步所有已綁定成員的 Discord 身分組與暱稱",
+)
+async def sync_all_discord_members(db: DbDep, current_user: CurrentUser) -> DiscordSyncAllOut:
+    queued = await enqueue_all_role_sync(db)
+    await audit_svc.record(
+        db,
+        entity_type="discord_account_link",
+        entity_id="all",
+        action="discord.sync_all",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={"queued": queued},
+        summary="排程同步所有 Discord 已綁定成員",
+    )
+    return DiscordSyncAllOut(queued=queued)
+
+
+@router.post(
+    "/test-message",
+    status_code=204,
+    dependencies=[Depends(require_permission(PermissionCode.ADMIN_ALL))],
+    summary="送出 Discord 測試訊息",
+)
+async def send_discord_test_message(
+    body: DiscordTestMessageIn, db: DbDep, current_user: CurrentUser
+) -> None:
+    await emit_moderation_log(
+        db,
+        guild_id=None,
+        title="Discord Bot 測試",
+        body=f"{body.message}\n目標頻道：{body.channel_id}",
+    )
+    from api.services.outbox import emit
+
+    await emit(
+        db,
+        event_type="discord.channel_alert",
+        payload={
+            "channel_id": body.channel_id,
+            "title": body.message,
+            "body": "由後台送出的測試訊息。",
+        },
+    )
+    await audit_svc.record(
+        db,
+        entity_type="discord_channel",
+        entity_id=body.channel_id,
+        action="discord.test_message",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta=body.model_dump(),
+        summary="送出 Discord 測試訊息",
+    )
+
+
+@router.get(
     "/available-guilds",
     response_model=list[DiscordGuildOptionOut],
     dependencies=[Depends(require_permission(PermissionCode.ADMIN_ALL))],
@@ -266,7 +413,7 @@ async def guild_channels(guild_id: str) -> list[DiscordChannelOptionOut]:
     except Exception as exc:
         logger.warning("Discord channel fetch failed guild=%s", guild_id, exc_info=True)
         raise HTTPException(status_code=502, detail="無法從 Discord 取得頻道清單") from exc
-    allowed_types = {0, 5, 10, 11, 12, 15, 16}
+    allowed_types = {0, 4, 5, 10, 11, 12, 15, 16}
     rows = [
         DiscordChannelOptionOut(
             id=str(item["id"]),
@@ -344,6 +491,187 @@ async def upsert_guild_config(
 )
 async def list_role_mappings(db: DbDep) -> list[DiscordRoleMapping]:
     return list((await db.execute(select(DiscordRoleMapping))).scalars().all())
+
+
+@router.get(
+    "/org-channel-mappings",
+    response_model=list[DiscordOrgChannelMappingOut],
+    dependencies=[Depends(require_permission(PermissionCode.ADMIN_ALL))],
+    summary="列出機關公告頻道映射",
+)
+async def list_org_channel_mappings(db: DbDep) -> list[DiscordOrgChannelMapping]:
+    return list((await db.execute(select(DiscordOrgChannelMapping))).scalars().all())
+
+
+@router.post(
+    "/org-channel-mappings",
+    response_model=DiscordOrgChannelMappingOut,
+    status_code=201,
+    dependencies=[Depends(require_permission(PermissionCode.ADMIN_ALL))],
+    summary="建立或更新機關公告頻道映射",
+)
+async def upsert_org_channel_mapping(
+    body: DiscordOrgChannelMappingIn, db: DbDep, current_user: CurrentUser
+) -> DiscordOrgChannelMapping:
+    mapping = await db.scalar(
+        select(DiscordOrgChannelMapping).where(
+            DiscordOrgChannelMapping.guild_id == body.guild_id,
+            DiscordOrgChannelMapping.org_id == body.org_id,
+        )
+    )
+    if mapping is None:
+        mapping = DiscordOrgChannelMapping(guild_id=body.guild_id, org_id=body.org_id)
+        db.add(mapping)
+    mapping.channel_id = body.channel_id
+    mapping.is_active = body.is_active
+    await db.flush()
+    await audit_svc.record(
+        db,
+        entity_type="discord_org_channel_mapping",
+        entity_id=str(mapping.id),
+        action="discord.org_channel_mapping.upsert",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta=body.model_dump(mode="json"),
+        summary="更新 Discord 機關公告頻道映射",
+    )
+    return mapping
+
+
+@router.delete(
+    "/org-channel-mappings/{mapping_id}",
+    status_code=204,
+    dependencies=[Depends(require_permission(PermissionCode.ADMIN_ALL))],
+    summary="停用機關公告頻道映射",
+)
+async def delete_org_channel_mapping(
+    mapping_id: uuid.UUID, db: DbDep, current_user: CurrentUser
+) -> None:
+    mapping = await db.get(DiscordOrgChannelMapping, mapping_id)
+    if mapping is None:
+        raise HTTPException(status_code=404, detail="Discord 機關公告頻道映射不存在")
+    mapping.is_active = False
+    await audit_svc.record(
+        db,
+        entity_type="discord_org_channel_mapping",
+        entity_id=str(mapping.id),
+        action="discord.org_channel_mapping.disable",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        summary="停用 Discord 機關公告頻道映射",
+    )
+
+
+@router.get(
+    "/nickname-prefix-rules",
+    response_model=list[DiscordNicknamePrefixRuleOut],
+    dependencies=[Depends(require_permission(PermissionCode.ADMIN_ALL))],
+    summary="列出 Discord 暱稱前綴同步規則",
+)
+async def list_nickname_prefix_rules(db: DbDep) -> list[DiscordNicknamePrefixRule]:
+    return list((await db.execute(select(DiscordNicknamePrefixRule))).scalars().all())
+
+
+@router.post(
+    "/nickname-prefix-rules",
+    response_model=DiscordNicknamePrefixRuleOut,
+    status_code=201,
+    dependencies=[Depends(require_permission(PermissionCode.ADMIN_ALL))],
+    summary="建立 Discord 暱稱前綴同步規則",
+)
+async def create_nickname_prefix_rule(
+    body: DiscordNicknamePrefixRuleIn, db: DbDep, current_user: CurrentUser
+) -> DiscordNicknamePrefixRule:
+    rule = DiscordNicknamePrefixRule(**body.model_dump())
+    db.add(rule)
+    await db.flush()
+    await audit_svc.record(
+        db,
+        entity_type="discord_nickname_prefix_rule",
+        entity_id=str(rule.id),
+        action="discord.nickname_prefix_rule.create",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta=body.model_dump(mode="json"),
+        summary="建立 Discord 暱稱前綴規則",
+    )
+    linked_user_ids = (
+        await db.execute(
+            select(DiscordAccountLink.user_id).where(DiscordAccountLink.is_active.is_(True))
+        )
+    ).scalars()
+    for user_id in linked_user_ids:
+        await enqueue_role_sync(db, user_id)
+    return rule
+
+
+@router.patch(
+    "/nickname-prefix-rules/{rule_id}",
+    response_model=DiscordNicknamePrefixRuleOut,
+    dependencies=[Depends(require_permission(PermissionCode.ADMIN_ALL))],
+    summary="更新 Discord 暱稱前綴同步規則",
+)
+async def update_nickname_prefix_rule(
+    rule_id: uuid.UUID,
+    body: DiscordNicknamePrefixRuleIn,
+    db: DbDep,
+    current_user: CurrentUser,
+) -> DiscordNicknamePrefixRule:
+    rule = await db.get(DiscordNicknamePrefixRule, rule_id)
+    if rule is None:
+        raise HTTPException(status_code=404, detail="Discord 暱稱前綴規則不存在")
+    for key, value in body.model_dump().items():
+        setattr(rule, key, value)
+    await db.flush()
+    await audit_svc.record(
+        db,
+        entity_type="discord_nickname_prefix_rule",
+        entity_id=str(rule.id),
+        action="discord.nickname_prefix_rule.update",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta=body.model_dump(mode="json"),
+        summary="更新 Discord 暱稱前綴規則",
+    )
+    linked_user_ids = (
+        await db.execute(
+            select(DiscordAccountLink.user_id).where(DiscordAccountLink.is_active.is_(True))
+        )
+    ).scalars()
+    for user_id in linked_user_ids:
+        await enqueue_role_sync(db, user_id)
+    return rule
+
+
+@router.delete(
+    "/nickname-prefix-rules/{rule_id}",
+    status_code=204,
+    dependencies=[Depends(require_permission(PermissionCode.ADMIN_ALL))],
+    summary="停用 Discord 暱稱前綴同步規則",
+)
+async def delete_nickname_prefix_rule(
+    rule_id: uuid.UUID, db: DbDep, current_user: CurrentUser
+) -> None:
+    rule = await db.get(DiscordNicknamePrefixRule, rule_id)
+    if rule is None:
+        raise HTTPException(status_code=404, detail="Discord 暱稱前綴規則不存在")
+    rule.is_active = False
+    await audit_svc.record(
+        db,
+        entity_type="discord_nickname_prefix_rule",
+        entity_id=str(rule.id),
+        action="discord.nickname_prefix_rule.disable",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        summary="停用 Discord 暱稱前綴規則",
+    )
+    linked_user_ids = (
+        await db.execute(
+            select(DiscordAccountLink.user_id).where(DiscordAccountLink.is_active.is_(True))
+        )
+    ).scalars()
+    for user_id in linked_user_ids:
+        await enqueue_role_sync(db, user_id)
 
 
 @router.post(

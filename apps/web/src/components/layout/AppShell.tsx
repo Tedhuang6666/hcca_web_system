@@ -2,11 +2,14 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { PermissionProvider } from "@/contexts/PermissionContext";
+import { ModuleStatusProvider, useModuleStatus } from "@/contexts/ModuleStatusContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { moduleForPath } from "@/lib/modules";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 import BottomTabBar from "./BottomTabBar";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
+import ModuleMaintenance from "@/components/ui/ModuleMaintenance";
 import UrgentAnnouncementPopup from "@/components/announcements/UrgentAnnouncementPopup";
 import CommandMenu from "./CommandMenu";
 
@@ -52,9 +55,12 @@ function requiresAuth(pathname: string): boolean {
 }
 
 function AppShellContent({ children }: { children: React.ReactNode }) {
-  const { can } = usePermissions();
+  const { can, isAdmin } = usePermissions();
+  const { isModuleDown } = useModuleStatus();
   const router = useRouter();
   const pathname = usePathname();
+  const moduleId = moduleForPath(pathname);
+  const moduleDown = isModuleDown(moduleId);
   const [authReady, setAuthReady] = useState(false);
   const [redirecting, setRedirecting] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -126,7 +132,25 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
             id="main-content"
             className="flex-1 overflow-y-auto p-5 md:p-6 pb-20 md:pb-6 animate-slide-in"
             style={{ background: "var(--bg-base)" }}>
-            {children}
+            {moduleDown && moduleId && !isAdmin ? (
+              <ModuleMaintenance moduleId={moduleId} />
+            ) : (
+              <>
+                {moduleDown && moduleId && isAdmin && (
+                  <div
+                    className="mb-4 flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium"
+                    style={{
+                      background: "var(--warning-dim)",
+                      borderColor: "var(--warning-border)",
+                      color: "var(--warning)",
+                    }}
+                    role="status">
+                    此模組維護中，僅管理員可見；一般使用者目前無法存取。
+                  </div>
+                )}
+                {children}
+              </>
+            )}
           </main>
         </div>
         {!sidebarOpen && <BottomTabBar onMoreClick={() => setSidebarOpen((p) => !p)} />}
@@ -139,5 +163,9 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
 }
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  return <AppShellContent>{children}</AppShellContent>;
+  return (
+    <ModuleStatusProvider>
+      <AppShellContent>{children}</AppShellContent>
+    </ModuleStatusProvider>
+  );
 }

@@ -36,6 +36,7 @@ class AnnouncementCreate(BaseModel):
     is_urgent: bool = Field(False, description="是否為緊急公告（觸發首頁 Popup）")
     urgent_until: datetime | None = Field(None, description="緊急公告截止時間（None=永久）")
     org_id: uuid.UUID | None = Field(None, description="所屬組織（None=全站公告）")
+    activity_id: uuid.UUID | None = Field(None, description="所屬活動（選填）")
     audience_type: AnnouncementAudience = Field(
         AnnouncementAudience.ALL, description="公告對象（決定可見範圍）"
     )
@@ -53,6 +54,7 @@ class AnnouncementUpdate(BaseModel):
     is_urgent: bool | None = None
     urgent_until: datetime | None = None
     is_published: bool | None = None
+    activity_id: uuid.UUID | None = None
     audience_type: AnnouncementAudience | None = None
     audience_org_ids: list[uuid.UUID] | None = None
     audience_user_ids: list[uuid.UUID] | None = None
@@ -69,6 +71,7 @@ class AnnouncementOut(BaseModel):
     is_published: bool
     published_at: datetime | None
     org_id: uuid.UUID | None
+    activity_id: uuid.UUID | None = None
     author_id: uuid.UUID
     author_name: str = ""
     created_at: datetime
@@ -88,6 +91,7 @@ class AnnouncementListItem(BaseModel):
     is_published: bool
     published_at: datetime | None
     org_id: uuid.UUID | None
+    activity_id: uuid.UUID | None = None
     author_id: uuid.UUID
     author_name: str = ""
     created_at: datetime

@@ -24,6 +24,10 @@ import type {
   MeetingRequestStatus, MeetingRequestType, AttendanceSourceType, MeetingArtifactType,
   MeetingMotionType, MeetingMotionStatus, MeetingDecisionStatus, MeetingScreenReadingMode,
   MeetingSpeechQueueItemOut, MeetingSpeechQueueStatus,
+  CalendarEventCreate, CalendarEventListItem, CalendarEventOut, CalendarEventType,
+  CalendarVisibility, CalendarParticipantOut, CalendarParticipantRole,
+  CalendarParticipantResponse, CalendarChecklistCreate, CalendarChecklistOut,
+  CalendarLinkCreate, CalendarLinkOut,
   MealAvailabilityOut, MealClassPickupCodeOut, MealPickupLookupOut,
   MealProductOut, MealVendorApplicationOut, MealVendorOut,
   MenuScheduleOut, MenuScheduleListItem, MenuItemOut,
@@ -44,7 +48,10 @@ import type {
   WebPushSubscriptionOut,
   LineBindingOut, LineLinkCodeOut,
   DiscordBindingOut, DiscordGuildConfigIn, DiscordGuildConfigOut,
+  DiscordBotHealthOut, DiscordSyncAllOut,
   DiscordChannelOptionOut, DiscordGuildOptionOut, DiscordRoleOptionOut,
+  DiscordNicknamePrefixRuleIn, DiscordNicknamePrefixRuleOut,
+  DiscordOrgChannelMappingIn, DiscordOrgChannelMappingOut,
   DiscordRoleMappingIn, DiscordRoleMappingOut,
   DocumentEfficiencyOut, DeptRankingItem, PendingAlertItem, AnnouncementParticipationItem,
   SurveyParticipationItem,
@@ -58,6 +65,8 @@ import type {
   PartnerTagCreate, PartnerTagOut, PartnerTagUpdate,
   ExamGradeTrack, ExamPaperDownloadOut, ExamPaperListItem, ExamPaperOut, ExamPaperUpdate,
   ExamTraceInspectOut,
+  Activity, ActivityConvener, ActivityCreate,
+  WorkItemCreate, WorkItemOut, WorkItemUpdate,
 } from "./types";
 import { API_BASE, apiUrl } from "./config";
 
@@ -244,9 +253,19 @@ async function request<T>(
         detail?: string;
         maintenance?: boolean;
         load_shed?: boolean;
+        module_maintenance?: boolean;
         until?: number | null;
       };
-      if (typeof window !== "undefined" && (payload.maintenance || payload.load_shed)) {
+      // 模組維護：只關掉該模組，不整站轉址（交由 AppShell gate 顯示插頁）。
+      // 廣播事件讓 ModuleStatus context 立即重抓，免等輪詢；照常 fall through 拋 ApiError(503)。
+      if (typeof window !== "undefined" && payload.module_maintenance) {
+        window.dispatchEvent(new CustomEvent("hcca:module-maintenance"));
+      }
+      if (
+        typeof window !== "undefined"
+        && (payload.maintenance || payload.load_shed)
+        && !payload.module_maintenance
+      ) {
         const hasLocalLogin = Boolean(localStorage.getItem("user_id"));
         if (hasLocalLogin && !retriedAfterRefresh) {
           const refreshed = await silentRefresh();
@@ -428,8 +447,13 @@ export const documentsApi = {
 
 export const shopApi = {
   // 瀏覽
-  catalog: (orgId?: string) =>
-    get<CatalogCategoryOut[]>(`/shop/catalog${orgId ? `?org_id=${orgId}` : ""}`),
+  catalog: (orgId?: string, activityId?: string) => {
+    const q = new URLSearchParams();
+    if (orgId) q.set("org_id", orgId);
+    if (activityId) q.set("activity_id", activityId);
+    const qs = q.toString();
+    return get<CatalogCategoryOut[]>(`/shop/catalog${qs ? `?${qs}` : ""}`);
+  },
   listProducts: (params?: Record<string, string>) => {
     const qs = params ? "?" + new URLSearchParams(params).toString() : "";
     return get<ProductOut[]>(`/shop/products${qs}`);
@@ -458,6 +482,7 @@ export const shopApi = {
   orderSummary: (params: {
     group_by: "class" | "grade" | "user";
     org_id?: string;
+    activity_id?: string;
     product_id?: string;
     grade?: string;
     class_id?: string;
@@ -478,8 +503,15 @@ export const shopApi = {
     post<OrderOut>(`/shop/orders/${id}/cancel`, { reason }),
   setOrderPaid: (id: string, isPaid: boolean) =>
     patch<OrderOut>(`/shop/orders/${id}/payment`, { is_paid: isPaid }),
-  downloadReport: (format: "xlsx" | "csv") =>
-    fetch(`${BASE}/shop/reports/orders.${format}`, { credentials: "include" }),
+  downloadReport: (format: "xlsx" | "csv", params?: { org_id?: string; activity_id?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.org_id) q.set("org_id", params.org_id);
+    if (params?.activity_id) q.set("activity_id", params.activity_id);
+    const qs = q.toString();
+    return fetch(`${BASE}/shop/reports/orders.${format}${qs ? `?${qs}` : ""}`, {
+      credentials: "include",
+    });
+  },
 
   // 分類管理（shop:manage）
   listCategories: (params?: Record<string, string>) => {
@@ -1019,6 +1051,11 @@ export const discordApi = {
   me: () => get<DiscordBindingOut>("/discord/me"),
   loginUrl: (next = "/profile") => `${BASE}/discord/login?next=${encodeURIComponent(next)}`,
   unlink: () => del<void>("/discord/me"),
+  syncMe: () => post<void>("/discord/me/sync", {}),
+  health: () => get<DiscordBotHealthOut>("/discord/health"),
+  syncAll: () => post<DiscordSyncAllOut>("/discord/sync-all", {}),
+  testMessage: (body: { channel_id: string; message?: string }) =>
+    post<void>("/discord/test-message", body),
   availableGuilds: () => get<DiscordGuildOptionOut[]>("/discord/available-guilds"),
   guildChannels: (guildId: string) =>
     get<DiscordChannelOptionOut[]>(`/discord/guilds/${encodeURIComponent(guildId)}/channels`),
@@ -1027,12 +1064,38 @@ export const discordApi = {
   listGuildConfigs: () => get<DiscordGuildConfigOut[]>("/discord/guild-configs"),
   saveGuildConfig: (body: DiscordGuildConfigIn) =>
     post<DiscordGuildConfigOut>("/discord/guild-configs", body),
+  listOrgChannelMappings: () =>
+    get<DiscordOrgChannelMappingOut[]>("/discord/org-channel-mappings"),
+  saveOrgChannelMapping: (body: DiscordOrgChannelMappingIn) =>
+    post<DiscordOrgChannelMappingOut>("/discord/org-channel-mappings", body),
+  deleteOrgChannelMapping: (id: string) => del<void>(`/discord/org-channel-mappings/${id}`),
+  listNicknamePrefixRules: () =>
+    get<DiscordNicknamePrefixRuleOut[]>("/discord/nickname-prefix-rules"),
+  createNicknamePrefixRule: (body: DiscordNicknamePrefixRuleIn) =>
+    post<DiscordNicknamePrefixRuleOut>("/discord/nickname-prefix-rules", body),
+  updateNicknamePrefixRule: (id: string, body: DiscordNicknamePrefixRuleIn) =>
+    patch<DiscordNicknamePrefixRuleOut>(`/discord/nickname-prefix-rules/${id}`, body),
+  deleteNicknamePrefixRule: (id: string) => del<void>(`/discord/nickname-prefix-rules/${id}`),
   listRoleMappings: () => get<DiscordRoleMappingOut[]>("/discord/role-mappings"),
   createRoleMapping: (body: DiscordRoleMappingIn) =>
     post<DiscordRoleMappingOut>("/discord/role-mappings", body),
   updateRoleMapping: (id: string, body: DiscordRoleMappingIn) =>
     patch<DiscordRoleMappingOut>(`/discord/role-mappings/${id}`, body),
   deleteRoleMapping: (id: string) => del<void>(`/discord/role-mappings/${id}`),
+};
+
+export const workItemsApi = {
+  list: (params?: { assigned_to_id?: string; include_done?: boolean; limit?: number }) => {
+    const search = new URLSearchParams();
+    if (params?.assigned_to_id) search.set("assigned_to_id", params.assigned_to_id);
+    if (params?.include_done) search.set("include_done", "true");
+    if (params?.limit) search.set("limit", String(params.limit));
+    const qs = search.toString();
+    return get<WorkItemOut[]>(`/work-items${qs ? `?${qs}` : ""}`);
+  },
+  create: (body: WorkItemCreate) => post<WorkItemOut>("/work-items", body),
+  update: (id: string, body: WorkItemUpdate) => patch<WorkItemOut>(`/work-items/${id}`, body),
+  complete: (id: string) => post<WorkItemOut>(`/work-items/${id}/complete`, {}),
 };
 
 // ── 組織（公開端點）───────────────────────────────────────────────────────────
@@ -1064,6 +1127,31 @@ export const orgsApi = {
     is_active?: boolean;
   }) =>
     patch<OrgRead>(`/orgs/${id}`, data),
+};
+
+// ── 活動 ──────────────────────────────────────────────────────────────────────
+
+export const activitiesApi = {
+  list: (params?: { org_id?: string; active_only?: boolean }) => {
+    const q = new URLSearchParams();
+    if (params?.org_id) q.set("org_id", params.org_id);
+    if (params?.active_only !== undefined) q.set("active_only", String(params.active_only));
+    const qs = q.toString();
+    return get<Activity[]>(`/activities${qs ? `?${qs}` : ""}`);
+  },
+  mine: (activeOnly = true) =>
+    get<Activity[]>(`/activities/mine?active_only=${String(activeOnly)}`),
+  get: (id: string) => get<Activity>(`/activities/${id}`),
+  create: (body: ActivityCreate) => post<Activity>("/activities", body),
+  update: (id: string, body: Partial<ActivityCreate> & { is_active?: boolean }) =>
+    patch<Activity>(`/activities/${id}`, body),
+  archive: (id: string) => post<Activity>(`/activities/${id}/archive`, {}),
+  listConveners: (id: string) => get<ActivityConvener[]>(`/activities/${id}/conveners`),
+  appointConvener: (id: string, body: { user_id: string; start_date: string; end_date?: string | null }) =>
+    post<ActivityConvener>(`/activities/${id}/conveners`, body),
+  updateConvener: (id: string, body: { start_date?: string; end_date?: string | null }) =>
+    patch<ActivityConvener>(`/activities/conveners/${id}`, body),
+  removeConvener: (id: string) => del<void>(`/activities/conveners/${id}`),
 };
 
 // ── 管理員 ────────────────────────────────────────────────────────────────────
@@ -1512,10 +1600,11 @@ export type SurveyQuestionBody = {
 };
 
 export const surveysApi = {
-  list: (params?: { status?: string; org_id?: string }) => {
+  list: (params?: { status?: string; org_id?: string; activity_id?: string }) => {
     const q = new URLSearchParams();
     if (params?.status) q.set("status", params.status);
     if (params?.org_id) q.set("org_id", params.org_id);
+    if (params?.activity_id) q.set("activity_id", params.activity_id);
     const qs = q.toString();
     return get<SurveyListItem[]>(`/surveys${qs ? `?${qs}` : ""}`);
   },
@@ -1528,9 +1617,9 @@ export const surveysApi = {
   },
   get: (id: string) => get<SurveyOut>(`/surveys/${pathSegment(id)}`),
   getPublic: (id: string) => get<SurveyOut>(`/surveys/public/${pathSegment(id)}`),
-  create: (body: { title: string; description?: string; is_anonymous?: boolean; allow_multiple?: boolean; opens_at?: string; closes_at?: string; org_id: string; is_public?: boolean; allowed_org_ids?: string[]; allowed_user_ids?: string[]; allowed_domains?: string[] }) =>
+  create: (body: { title: string; description?: string; is_anonymous?: boolean; allow_multiple?: boolean; opens_at?: string; closes_at?: string; org_id: string; activity_id?: string | null; is_public?: boolean; allowed_org_ids?: string[]; allowed_user_ids?: string[]; allowed_domains?: string[] }) =>
     post<SurveyOut>("/surveys", body),
-  update: (id: string, body: { title?: string; description?: string; opens_at?: string; closes_at?: string; is_public?: boolean; allowed_org_ids?: string[]; allowed_user_ids?: string[]; allowed_domains?: string[] }) =>
+  update: (id: string, body: { title?: string; description?: string; opens_at?: string; closes_at?: string; activity_id?: string | null; is_public?: boolean; allowed_org_ids?: string[]; allowed_user_ids?: string[]; allowed_domains?: string[] }) =>
     patch<SurveyOut>(`/surveys/${pathSegment(id)}`, body),
   open: (id: string) => post<SurveyOut>(`/surveys/${pathSegment(id)}/open`),
   close: (id: string) => post<SurveyOut>(`/surveys/${pathSegment(id)}/close`),
@@ -1675,17 +1764,19 @@ export const documentsRecipientsApi = {
 
 export const announcementsApi = {
   activeUrgent: () => get<AnnouncementOut | null>("/announcements/active-urgent"),
-  list: (params?: { org_id?: string; skip?: number; limit?: number }) => {
+  list: (params?: { org_id?: string; activity_id?: string; skip?: number; limit?: number }) => {
     const qs = new URLSearchParams();
     if (params?.org_id) qs.set("org_id", params.org_id);
+    if (params?.activity_id) qs.set("activity_id", params.activity_id);
     if (params?.skip != null) qs.set("skip", String(params.skip));
     if (params?.limit != null) qs.set("limit", String(params.limit));
     const q = qs.toString();
     return get<AnnouncementListItem[]>(`/announcements${q ? `?${q}` : ""}`);
   },
-  listAll: (params?: { org_id?: string; skip?: number; limit?: number }) => {
+  listAll: (params?: { org_id?: string; activity_id?: string; skip?: number; limit?: number }) => {
     const qs = new URLSearchParams();
     if (params?.org_id) qs.set("org_id", params.org_id);
+    if (params?.activity_id) qs.set("activity_id", params.activity_id);
     if (params?.skip != null) qs.set("skip", String(params.skip));
     if (params?.limit != null) qs.set("limit", String(params.limit));
     const q = qs.toString();
@@ -2058,6 +2149,62 @@ export const meetingsApi = {
     ),
 };
 
+// ── 行事曆 ────────────────────────────────────────────────────────────────────
+
+export const calendarApi = {
+  list: (params?: {
+    start?: string;
+    end?: string;
+    org_id?: string;
+    type?: CalendarEventType;
+    visibility?: CalendarVisibility;
+    mine?: boolean;
+  }) => {
+    const q = new URLSearchParams();
+    Object.entries(params ?? {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== "") q.set(key, String(value));
+    });
+    const qs = q.toString();
+    return get<CalendarEventListItem[]>(`/calendar/events${qs ? `?${qs}` : ""}`);
+  },
+  get: (id: string) => get<CalendarEventOut>(`/calendar/events/${id}`),
+  create: (body: CalendarEventCreate) => post<CalendarEventOut>("/calendar/events", body),
+  update: (id: string, body: Partial<CalendarEventCreate>) =>
+    patch<CalendarEventOut>(`/calendar/events/${id}`, body),
+  delete: (id: string) => del<void>(`/calendar/events/${id}`),
+  upsertParticipant: (
+    id: string,
+    body: {
+      user_id: string;
+      role?: CalendarParticipantRole;
+      response?: CalendarParticipantResponse;
+    },
+  ) => post<CalendarParticipantOut>(`/calendar/events/${id}/participants`, body),
+  updateParticipant: (
+    id: string,
+    participantId: string,
+    body: Partial<{ role: CalendarParticipantRole; response: CalendarParticipantResponse }>,
+  ) => patch<CalendarParticipantOut>(
+    `/calendar/events/${id}/participants/${participantId}`,
+    body,
+  ),
+  deleteParticipant: (id: string, participantId: string) =>
+    del<void>(`/calendar/events/${id}/participants/${participantId}`),
+  createChecklistItem: (id: string, body: CalendarChecklistCreate) =>
+    post<CalendarChecklistOut>(`/calendar/events/${id}/checklist`, body),
+  updateChecklistItem: (
+    id: string,
+    itemId: string,
+    body: Partial<CalendarChecklistCreate & { is_done: boolean }>,
+  ) => patch<CalendarChecklistOut>(`/calendar/events/${id}/checklist/${itemId}`, body),
+  deleteChecklistItem: (id: string, itemId: string) =>
+    del<void>(`/calendar/events/${id}/checklist/${itemId}`),
+  createLink: (id: string, body: CalendarLinkCreate) =>
+    post<CalendarLinkOut>(`/calendar/events/${id}/links`, body),
+  deleteLink: (id: string, linkId: string) =>
+    del<void>(`/calendar/events/${id}/links/${linkId}`),
+};
+
 // ── 電子郵件 ──────────────────────────────────────────────────────────────────
 
 export const emailApi = {
@@ -2121,11 +2268,12 @@ export const dashboardApi = {
 
 export type TaskModule =
   | "document" | "meeting" | "regulation" | "petition"
-  | "meal" | "shop" | "survey" | "announcement";
+  | "meal" | "shop" | "survey" | "announcement" | "calendar" | "work_item";
 
 export type TaskAction =
   | "approve" | "attend" | "review" | "publish"
-  | "reply" | "fill" | "collect" | "pickup" | "sign";
+  | "reply" | "fill" | "collect" | "pickup" | "sign"
+  | "complete" | "prepare" | "manage";
 
 export type TaskSeverity = "info" | "warning" | "critical";
 
@@ -2302,6 +2450,69 @@ export interface SystemFeatureFlag {
   enabled: boolean;
 }
 
+export type ModuleSeverity = "CRITICAL" | "HIGH" | "NORMAL";
+
+export interface ModuleStatus {
+  id: string;
+  label: string;
+  on: boolean;
+  source: "manual" | "auto" | null;
+  reason: string;
+  since: number | null;
+  until: number | null;
+  recent_5xx_count: number;
+  severity_breakdown: Record<string, number>;
+  trip_count: number;
+  max_severity: ModuleSeverity;
+}
+
+export interface ModuleRecoverResult {
+  module_id: string;
+  recovered: boolean;
+  probe_ok: boolean;
+  probe_reason: string;
+}
+
+export interface ModuleTripHistory {
+  module_id: string;
+  trip_count: number;
+  max_severity: ModuleSeverity;
+  recent_5xx_count: number;
+  severity_breakdown: Record<string, number>;
+  recent_events: Array<{
+    timestamp: number;
+    severity: ModuleSeverity;
+    trip_count: number;
+    cooldown_s: number;
+    escalated: boolean;
+  }>;
+}
+
+export interface ModuleStatusPublic {
+  id: string;
+  label: string;
+  on: boolean;
+  reason: string;
+  until: number | null;
+}
+
+export interface AppSettingField {
+  key: string;
+  category: string;
+  type: "bool" | "number" | "list" | "string";
+  is_secret: boolean;
+  in_file: boolean;
+  value: string;
+  description: string;
+}
+
+export interface AppSettingsListResponse {
+  enabled: boolean;
+  mfa_enabled: boolean;
+  env_path: string;
+  fields: AppSettingField[];
+}
+
 export interface IpBlockedItem {
   ip: string;
   reason: string;
@@ -2369,6 +2580,35 @@ export interface DefenseSummary {
   recent_status_counts: Record<string, number>;
 }
 
+export type ErrorCategory = "db" | "redis" | "timeout" | "http" | "unhandled";
+
+export interface RecentErrorItem {
+  error_id: string;
+  category: ErrorCategory;
+  exc_type: string;
+  message: string;
+  method: string;
+  path: string;
+  status_code: number;
+  traceback_head: string;
+  first_seen: number;
+  last_seen: number;
+  occurrences: number;
+}
+
+export interface RecentErrorsResponse {
+  count: number;
+  items: RecentErrorItem[];
+}
+
+export interface DbUpgradeResult {
+  ok: boolean;
+  error?: string;
+  before_revision?: string | null;
+  head_revision?: string | null;
+  changed?: boolean;
+}
+
 export const systemApi = {
   status: () => get<SystemMetricsSnapshot>("/admin/system/status"),
   defenseSummary: () => get<DefenseSummary>("/admin/system/defense/summary"),
@@ -2396,6 +2636,33 @@ export const systemApi = {
     patch<SystemFeatureFlag>(`/admin/system/feature-flags/${encodeURIComponent(key)}`, { enabled }),
   setLoadShedMode: (mode: LoadShedMode) =>
     put<{ mode: LoadShedMode }>("/admin/system/load-shed", { mode }),
+  moduleStatuses: () => get<ModuleStatusPublic[]>("/system/module-status"),
+  listModules: () => get<ModuleStatus[]>("/admin/system/modules"),
+  setModuleMaintenance: (id: string, body: { on: boolean; reason?: string }) =>
+    put<ModuleStatus>(`/admin/system/modules/${encodeURIComponent(id)}/maintenance`, body),
+  restartModule: (id: string) =>
+    post<{ ok: boolean; module: string }>(
+      `/admin/system/modules/${encodeURIComponent(id)}/restart`,
+      {},
+    ),
+  recoverModule: (id: string) =>
+    post<ModuleRecoverResult>(
+      `/admin/system/modules/${encodeURIComponent(id)}/recover`,
+      {},
+    ),
+  moduleTripHistory: (id: string) =>
+    get<ModuleTripHistory>(`/admin/system/modules/${encodeURIComponent(id)}/trip-history`),
+  listAppSettings: () => get<AppSettingsListResponse>("/admin/system/settings"),
+  revealAppSettings: (mfa_code: string, keys: string[]) =>
+    post<{ values: Record<string, string> }>("/admin/system/settings/reveal", {
+      mfa_code,
+      keys,
+    }),
+  saveAppSettings: (mfa_code: string, changes: Record<string, string>) =>
+    put<{ updated: string[]; restart_required: boolean }>("/admin/system/settings", {
+      mfa_code,
+      changes,
+    }),
   listIpBlocks: () => get<IpBlockedItem[]>("/admin/system/ip-blocklist"),
   addIpBlock: (body: { ip: string; reason?: string; ttl_seconds?: number | null }) =>
     post<IpBlockedItem>("/admin/system/ip-blocklist", body),
@@ -2414,4 +2681,281 @@ export const systemApi = {
       top: number;
       items: Array<{ template: string; max_ms: number; occurrences: number; last_seen: number }>;
     }>(`/admin/system/metrics/slow-queries?top=${top}`),
+  recentErrors: (top = 50) =>
+    get<RecentErrorsResponse>(`/admin/system/errors?top=${top}`),
+  clearErrors: () => post<{ cleared: number }>("/admin/system/errors/clear", {}),
+  clearCache: () =>
+    post<{ ok: boolean; cleared: number; patterns: string[] }>(
+      "/admin/system/recovery/clear-cache",
+      {},
+    ),
+  dbUpgrade: () => post<DbUpgradeResult>("/admin/system/recovery/db-upgrade", {}),
+  restartService: () =>
+    post<{ scheduled: boolean; environment: string }>("/admin/system/recovery/restart", {}),
+};
+
+// ── 資料生命週期（archive + purge）────────────────────────────────────────
+export type LifecycleAction = "archive" | "purge" | "archive_then_purge";
+
+export interface LifecycleRuleSummary {
+  id: string;
+  label: string;
+  description: string;
+  default_retention_days: number;
+  min_retention_days: number;
+  default_action: LifecycleAction;
+  danger_level: "safe" | "caution" | "dangerous";
+  extra_filter: string | null;
+  affects_modules: string[];
+  matched_count: number;
+}
+
+export interface LifecyclePreviewResult {
+  rule_id: string;
+  retention_days: number;
+  cutoff_at: string;
+  matched_count: number;
+  sample: Array<Record<string, unknown>>;
+}
+
+export interface LifecycleExecuteResult {
+  rule_id: string;
+  action: LifecycleAction;
+  retention_days: number;
+  cutoff_at: string;
+  matched_count: number;
+  archived_count: number;
+  purged_count: number;
+  archive_file: string | null;
+  started_at: string;
+  finished_at: string;
+}
+
+export interface LifecycleArchiveFile {
+  path: string;
+  size_bytes: number;
+  modified_at: string;
+}
+
+export const lifecycleApi = {
+  listRules: () => get<LifecycleRuleSummary[]>("/admin/lifecycle/rules"),
+  preview: (rule_id: string, retention_days?: number) =>
+    post<LifecyclePreviewResult>(
+      `/admin/lifecycle/rules/${encodeURIComponent(rule_id)}/preview`,
+      { retention_days: retention_days ?? null },
+    ),
+  execute: (
+    rule_id: string,
+    body: {
+      action?: LifecycleAction;
+      retention_days?: number;
+      batch_size?: number;
+      max_batches?: number;
+    },
+  ) =>
+    post<LifecycleExecuteResult>(
+      `/admin/lifecycle/rules/${encodeURIComponent(rule_id)}/execute`,
+      body,
+    ),
+  listArchives: () => get<LifecycleArchiveFile[]>("/admin/lifecycle/archives"),
+  previewArchive: (path: string, limit = 50) =>
+    get<Array<Record<string, unknown>>>(
+      `/admin/lifecycle/archives/preview?path=${encodeURIComponent(path)}&limit=${limit}`,
+    ),
+  archiveDownloadUrl: (path: string) =>
+    `/admin/lifecycle/archives/download?path=${encodeURIComponent(path)}`,
+};
+
+// ── 誤刪救援（trash MVP）─────────────────────────────────────────────────
+export interface TrashEntry {
+  audit_id: string;
+  entity_type: string;
+  entity_id: string;
+  action: string;
+  actor_id: string | null;
+  actor_email: string | null;
+  created_at: string;
+  summary: string | null;
+  meta: Record<string, unknown>;
+}
+
+export const trashApi = {
+  list: (params?: { days?: number; entity_type?: string; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.days !== undefined) q.set("days", String(params.days));
+    if (params?.entity_type) q.set("entity_type", params.entity_type);
+    if (params?.limit !== undefined) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return get<TrashEntry[]>(`/admin/trash${qs ? `?${qs}` : ""}`);
+  },
+  detail: (audit_id: string) =>
+    get<TrashEntry>(`/admin/trash/${encodeURIComponent(audit_id)}`),
+};
+
+// ── 個資處理（export + anonymize）────────────────────────────────────────
+export interface PrivacyExportResult {
+  user_id: string;
+  file_path: string;
+  size_bytes: number;
+  file_count: number;
+  generated_at: string;
+}
+
+export interface PrivacyExportFile {
+  filename: string;
+  size_bytes: number;
+  modified_at: string;
+}
+
+export interface PrivacyAnonymizeResult {
+  user_id: string;
+  fields_updated: string[];
+  anonymized_at: string;
+}
+
+export const privacyApi = {
+  exportUser: (user_id: string) =>
+    post<PrivacyExportResult>(
+      `/admin/privacy/users/${encodeURIComponent(user_id)}/export`,
+      {},
+    ),
+  anonymizeUser: (user_id: string, confirm_token: string) =>
+    post<PrivacyAnonymizeResult>(
+      `/admin/privacy/users/${encodeURIComponent(user_id)}/anonymize`,
+      { confirm_token },
+    ),
+  listExports: () => get<PrivacyExportFile[]>("/admin/privacy/exports"),
+  exportDownloadUrl: (filename: string) =>
+    `/admin/privacy/exports/download?filename=${encodeURIComponent(filename)}`,
+};
+
+// ── 換屆精靈 ────────────────────────────────────────────────────────────
+export interface NewAssignmentIn {
+  user_id: string;
+  position_id: string;
+  start_date: string; // ISO date
+  end_date?: string | null;
+}
+
+export interface DryRunBody {
+  new_term_start: string;
+  new_assignments: NewAssignmentIn[];
+  terminate_active_before: boolean;
+}
+
+export interface TerminationOut {
+  user_position_id: string;
+  user_id: string;
+  user_email: string | null;
+  position_id: string;
+  position_name: string;
+  org_name: string;
+  current_end_date: string | null;
+  new_end_date: string;
+}
+
+export interface AssignmentOut {
+  user_id: string;
+  user_email: string | null;
+  position_id: string;
+  position_name: string;
+  org_name: string;
+  start_date: string;
+  end_date: string | null;
+  warning: string | null;
+}
+
+export interface DryRunOut {
+  new_term_start: string;
+  terminations: TerminationOut[];
+  new_assignments: AssignmentOut[];
+  warnings: string[];
+  summary: Record<string, number>;
+}
+
+export interface ExecuteRolloverOut {
+  batch_id: string;
+  terminated_count: number;
+  created_count: number;
+  started_at: string;
+  finished_at: string;
+}
+
+export interface RollbackOut {
+  batch_id: string;
+  restored_terminations: number;
+  deleted_new_assignments: number;
+}
+
+export const termRolloverApi = {
+  dryRun: (body: DryRunBody) => post<DryRunOut>("/admin/term-rollover/dry-run", body),
+  execute: (body: DryRunBody, confirm_token: string) =>
+    post<ExecuteRolloverOut>("/admin/term-rollover/execute", { ...body, confirm_token }),
+  rollback: (batch_id: string, confirm_token: string) =>
+    post<RollbackOut>(
+      `/admin/term-rollover/rollback/${encodeURIComponent(batch_id)}`,
+      { confirm_token },
+    ),
+};
+
+// ── 學籍異動 ────────────────────────────────────────────────────────────
+export interface LifecycleStatus {
+  user_id: string;
+  email: string;
+  display_name: string;
+  is_active: boolean;
+  active_positions: Array<{
+    user_position_id: string;
+    position_id: string;
+    start_date: string;
+    end_date: string | null;
+  }>;
+}
+
+export interface LifecycleActionResult {
+  user_id: string;
+  action: string;
+  affected_positions: number;
+  was_active: boolean;
+  performed_at: string;
+}
+
+export const userLifecycleApi = {
+  status: (user_id: string) =>
+    get<LifecycleStatus>(`/admin/users/${encodeURIComponent(user_id)}/lifecycle/status`),
+  freeze: (user_id: string, reason: string) =>
+    post<LifecycleActionResult>(
+      `/admin/users/${encodeURIComponent(user_id)}/lifecycle/freeze`,
+      { reason },
+    ),
+  archiveAlumni: (user_id: string, reason: string) =>
+    post<LifecycleActionResult>(
+      `/admin/users/${encodeURIComponent(user_id)}/lifecycle/archive-alumni`,
+      { reason },
+    ),
+  restore: (user_id: string, reason: string) =>
+    post<LifecycleActionResult>(
+      `/admin/users/${encodeURIComponent(user_id)}/lifecycle/restore`,
+      { reason },
+    ),
+};
+
+// ── 預寫報表 ────────────────────────────────────────────────────────────
+export interface ReportSummary {
+  id: string;
+  label: string;
+  description: string;
+}
+
+export interface ReportResult {
+  id: string;
+  label: string;
+  rows: Array<Record<string, unknown>>;
+  row_count: number;
+}
+
+export const reportsApi = {
+  list: () => get<ReportSummary[]>("/admin/reports"),
+  run: (id: string) => get<ReportResult>(`/admin/reports/${encodeURIComponent(id)}`),
+  csvUrl: (id: string) => `/admin/reports/${encodeURIComponent(id)}/csv`,
 };

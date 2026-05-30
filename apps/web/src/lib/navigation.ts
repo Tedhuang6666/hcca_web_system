@@ -28,6 +28,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "dashboard", href: "/", iconKey: "dashboard", label: "平台首頁", end: true },
   { id: "tasks", href: "/tasks", iconKey: "tasks", label: "我的待辦" },
   { id: "documents", href: "/documents", iconKey: "documents", label: "公文系統" },
+  { id: "calendar", href: "/calendar", iconKey: "calendar", label: "行事曆" },
   { id: "meetings", href: "/meetings", iconKey: "meetings", label: "議事系統" },
   { id: "regulations", href: "/regulations", iconKey: "regulations", label: "法規查詢" },
   { id: "examPapers", href: "/exam-papers", iconKey: "examPapers", label: "段考題庫" },
@@ -47,6 +48,13 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "analytics", href: "/analytics", iconKey: "analytics", label: "績效統計", perm: "analytics:view" },
   { id: "orgs", href: "/orgs", iconKey: "org", label: "組織管理", perm: "org:*" },
   {
+    id: "activitiesAdmin",
+    href: "/admin/activities",
+    iconKey: "calendar",
+    label: "活動管理",
+    perm: "activity:manage",
+  },
+  {
     id: "permissions",
     href: "/admin/permissions",
     iconKey: "permissions",
@@ -58,6 +66,13 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/admin/system",
     iconKey: "systemDefense",
     label: "系統防護",
+    perm: "admin:all",
+  },
+  {
+    id: "systemSettings",
+    href: "/admin/settings",
+    iconKey: "settings",
+    label: "系統設定",
     perm: "admin:all",
   },
   {
@@ -137,7 +152,7 @@ export const NAV_DEF: NavEntry[] = [
   {
     id: "assembly",
     heading: "議事",
-    items: byIds(["documents", "meetings", "regulations", "examPapers"]),
+    items: byIds(["documents", "calendar", "meetings", "regulations", "examPapers"]),
   },
   {
     id: "services",
@@ -164,8 +179,10 @@ export const NAV_DEF: NavEntry[] = [
     items: byIds([
       "analytics",
       "orgs",
+      "activitiesAdmin",
       "permissions",
       "systemDefense",
+      "systemSettings",
       "discordAdmin",
       "audit",
       "documentTemplates",
@@ -205,6 +222,7 @@ export const DEFAULT_DESKTOP_ORDER = NAV_ITEMS.map((item) => item.id);
 export const DEFAULT_MOBILE_ORDER = [
   "dashboard",
   "tasks",
+  "calendar",
   "documents",
   "regulations",
   "examPapers",

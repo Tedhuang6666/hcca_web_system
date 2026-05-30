@@ -24,8 +24,11 @@ from api.core.config import settings
 from api.core.csrf import CSRFMiddleware
 from api.core.database import engine
 from api.core.defense import record_status as record_defense_status
+from api.core.error_audit import record_error
 from api.core.load_shed import LoadShedMiddleware
 from api.core.load_signals import dec_active, inc_active, record_status
+from api.core.module_health import maybe_trip_module, record_module_status
+from api.core.modules import match_module
 from api.core.payload_limit import PayloadLimitMiddleware
 from api.core.query_audit import (
     N_PLUS_ONE_THRESHOLD,
@@ -40,13 +43,16 @@ from api.core.security_headers import SecurityHeadersMiddleware
 from api.core.sentry import init_sentry
 from api.core.trusted_proxy import TrustedProxyMiddleware
 from api.routers import (
+    activities,
     admin,
     admin_system,
     analytics,
     announcements,
     audit,
     auth,
+    calendar,
     dashboard,
+    data_lifecycle,
     discord,
     documents,
     documents_approve,
@@ -63,17 +69,24 @@ from api.routers import (
     passkeys,
     petitions,
     positions,
+    privacy,
     regulations,
+    reports,
     saved_filters,
     school_class,
     search,
     shop,
     survey,
     tasks,
+    term_rollover,
+    trash,
+    user_lifecycle,
     user_positions,
     users,
+    work_items,
     ws,
 )
+from api.routers._module_health import attach_module_health
 from api.routers.documents_serial import serial_router, template_router
 
 logger = logging.getLogger(__name__)
@@ -107,14 +120,41 @@ async def _check_redis() -> tuple[bool, str | None]:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """應用程式啟動/關閉生命週期管理"""
+    """應用程式啟動/關閉生命週期管理 — staged startup。
+
+    Phase 1（核心）：DB / Redis / WS broker 必須就緒；任一失敗 app exit。
+    Phase 2（模組自檢）：併發跑各 module 的 startup_check；
+       失敗者進入 5min auto 維護，其他模組正常啟動。
+    """
     from api.core.database import AsyncSessionLocal
+    from api.core.module_registry import apply_startup_results, run_startup_checks
     from api.core.ws_manager import setup_broker, shutdown_broker
     from api.services.defense import sync_active_rules
+
+    # Phase 1: 核心服務
+    db_ok, db_err = await _check_database()
+    if not db_ok:
+        raise RuntimeError(f"DB readiness check failed at startup: {db_err}")
+    redis_ok, redis_err = await _check_redis()
+    if not redis_ok:
+        raise RuntimeError(f"Redis readiness check failed at startup: {redis_err}")
 
     await setup_broker()
     async with AsyncSessionLocal() as session:
         await sync_active_rules(session)
+
+    # Phase 2: 模組自檢（不阻塞啟動；每個模組自己拿獨立 session）
+    try:
+        results = await run_startup_checks()
+        failed = {mid: err for mid, err in results.items() if err}
+        if failed:
+            logger.warning("Module startup checks failed: %s", failed)
+            await apply_startup_results(results)
+        else:
+            logger.info("Module startup checks passed (%d modules)", len(results) or 0)
+    except Exception:
+        logger.exception("Module startup phase raised; app will still serve")
+
     try:
         yield
     finally:
@@ -189,6 +229,38 @@ def create_app() -> FastAPI:
         extra_cidrs=settings.CF_TRUSTED_PROXIES,
     )
 
+    # 模組健康端點：在 include_router 之前掛上，這樣每個模組會自帶
+    # GET /{prefix}/__module_health__ 給斷路器的 half-open 探測使用。
+    attach_module_health(documents.router, module_id="documents")
+    attach_module_health(regulations.router, module_id="regulations")
+    attach_module_health(meetings.router, module_id="meetings")
+    attach_module_health(announcements.router, module_id="announcements")
+    attach_module_health(shop.router, module_id="shop")
+    attach_module_health(meal.router, module_id="meal")
+    attach_module_health(survey.router, module_id="surveys")
+    attach_module_health(petitions.router, module_id="petitions")
+    attach_module_health(exam_papers.router, module_id="examPapers")
+    attach_module_health(partner_map.router, module_id="partnerMap")
+
+    # 模組啟動自檢註冊：lifespan Phase 2 會併發執行；
+    # 預設 check 只 ping DB，足以偵測「資料庫斷線」「該模組表不存在」這類致命狀態。
+    from api.core.module_registry import register as _register_module
+    from api.routers._module_health import _default_check as _module_default_check
+
+    for _mid in (
+        "documents",
+        "regulations",
+        "meetings",
+        "announcements",
+        "shop",
+        "meal",
+        "surveys",
+        "petitions",
+        "examPapers",
+        "partnerMap",
+    ):
+        _register_module(_mid, startup_check=_module_default_check)
+
     app.include_router(auth.router)
     app.include_router(mfa.router)
     app.include_router(users.router)
@@ -197,6 +269,13 @@ def create_app() -> FastAPI:
     app.include_router(admin.router)
     app.include_router(admin_system.public_router)
     app.include_router(admin_system.router)
+    app.include_router(data_lifecycle.router)
+    app.include_router(trash.router)
+    app.include_router(privacy.router)
+    app.include_router(term_rollover.router)
+    app.include_router(user_lifecycle.router)
+    app.include_router(reports.router)
+    app.include_router(activities.router)
     app.include_router(orgs.router)
     app.include_router(passkeys.router)
     app.include_router(partner_map.router)
@@ -217,6 +296,7 @@ def create_app() -> FastAPI:
     app.include_router(meal.router)
     app.include_router(meetings.router)
     app.include_router(meetings.public_router)
+    app.include_router(calendar.router)
     app.include_router(survey.router)
     app.include_router(notifications.router)
     app.include_router(email.router)
@@ -224,6 +304,7 @@ def create_app() -> FastAPI:
     app.include_router(analytics.router)
     app.include_router(dashboard.router)
     app.include_router(tasks.router)
+    app.include_router(work_items.router)
     app.include_router(line_webhook.router)
     app.include_router(ws.router)
 
@@ -272,6 +353,16 @@ def create_app() -> FastAPI:
             dec_active()
             record_status(status_code)
             await record_defense_status(status_code)
+            try:
+                # 健康探測端點不計入模組健康樣本（避免自我反饋迴圈）
+                if not request.url.path.endswith("/__module_health__"):
+                    module_id = match_module(request.url.path)
+                    if module_id:
+                        record_module_status(module_id, status_code)
+                        if settings.MODULE_CIRCUIT_ENABLED:
+                            await maybe_trip_module(module_id)
+            except Exception:  # 模組健康計數失敗不可影響回應
+                logger.debug("module health hook failed", exc_info=True)
 
     @app.exception_handler(StarletteHTTPException)
     async def _http_exception_handler(
@@ -286,6 +377,14 @@ def create_app() -> FastAPI:
                 request.url.path,
                 exc.detail,
                 exc_info=True,
+            )
+            record_error(
+                error_id=err_id,
+                exc=exc,
+                method=request.method,
+                path=request.url.path,
+                status_code=exc.status_code,
+                category="http",
             )
             return JSONResponse(
                 {"detail": "伺服器內部錯誤", "error_id": err_id},
@@ -316,6 +415,13 @@ def create_app() -> FastAPI:
             request.url.path,
             request.method,
             exc_info=True,
+        )
+        record_error(
+            error_id=err_id,
+            exc=exc,
+            method=request.method,
+            path=request.url.path,
+            status_code=500,
         )
         return JSONResponse(
             {"detail": "伺服器內部錯誤", "error_id": err_id},

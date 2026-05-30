@@ -809,6 +809,7 @@ async def list_documents(
     session: AsyncSession,
     *,
     org_id: uuid.UUID | None = None,
+    activity_id: uuid.UUID | None = None,
     status: DocumentStatus | None = None,
     category: DocumentCategory | None = None,
     classification: DocumentClassification | None = None,
@@ -841,6 +842,8 @@ async def list_documents(
             q = q.where(or_(*visibility_conditions))
     if org_id:
         q = q.where(Document.org_id == org_id)
+    if activity_id:
+        q = q.where(Document.activity_id == activity_id)
     if status:
         q = q.where(Document.status == status)
     if category:
@@ -940,6 +943,7 @@ async def create_document(
         title=data.title,
         issuer_full_name=data.issuer_full_name,
         org_id=data.org_id,
+        activity_id=data.activity_id,
         created_by=created_by,
         status=DocumentStatus.DRAFT,
         urgency=data.urgency,

@@ -31,7 +31,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user, get_optional_user
-from api.dependencies.permissions import require_permission
 from api.models.document import (
     ApprovalStepStatus,
     DelegateSource,
@@ -61,6 +60,7 @@ from api.schemas.document import (
     RecipientCreate,
     RecipientDownloadVariant,
 )
+from api.services import activity as activity_svc
 from api.services import audit as audit_svc
 from api.services import document as doc_svc
 from api.services.permission import get_user_permission_codes, get_user_permission_codes_for_org
@@ -169,10 +169,13 @@ async def create_document(
     """
     if not current_user.is_superuser:
         codes = await get_user_permission_codes_for_org(session, current_user.id, payload.org_id)
-        if "document:create" not in codes:
+        is_activity_manager = await activity_svc.can_manage_activity_resource(
+            session, current_user, payload.activity_id
+        )
+        if "document:create" not in codes and not is_activity_manager:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="您在此組織下無起草公文的權限（需 document:create）",
+                detail="您在此組織或活動下無起草公文的權限（需 document:create 或活動總召）",
             )
     doc = await doc_svc.create_document(session, data=payload, created_by=current_user.id)
     await audit_svc.record(
@@ -196,6 +199,7 @@ async def list_documents(
     session: DbDep,
     current_user: OptionalUser,
     org_id: uuid.UUID | None = Query(None, description="過濾組織（不填則依使用者所在組織）"),
+    activity_id: uuid.UUID | None = Query(None, description="過濾活動"),
     status_filter: DocumentStatus | None = Query(None, alias="status", description="過濾狀態"),
     category: DocumentCategory | None = Query(None, description="過濾公文類別"),
     classification: DocumentClassification | None = Query(None, description="過濾密等"),
@@ -234,6 +238,7 @@ async def list_documents(
     docs = await doc_svc.list_documents(
         session,
         org_id=org_id,
+        activity_id=activity_id,
         status=status_filter,
         category=category,
         classification=classification,
@@ -297,11 +302,21 @@ async def update_document(
     doc_id: str,
     payload: DocumentUpdate,
     session: DbDep,
-    current_user: Annotated[User, Depends(require_permission(PermissionCode.DOCUMENT_EDIT))],
+    current_user: CurrentUser,
 ) -> Document:
     doc = await _get_doc_or_404(doc_id, session)
-    if doc.created_by != current_user.id and not current_user.is_superuser:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有建立者可以編輯")
+    if not current_user.is_superuser:
+        codes = await get_user_permission_codes_for_org(session, current_user.id, doc.org_id)
+        is_activity_manager = await activity_svc.can_manage_activity_resource(
+            session, current_user, doc.activity_id
+        )
+        if not (
+            (doc.created_by == current_user.id and "document:edit" in codes) or is_activity_manager
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="只有建立者、document:edit 或活動總召可以編輯",
+            )
     try:
         return await doc_svc.update_document(session, doc, data=payload, changed_by=current_user.id)
     except ValueError as e:
@@ -324,9 +339,17 @@ async def delete_document(
     current_user: CurrentUser,
 ) -> None:
     doc = await _get_doc_or_404(doc_id, session)
-    if not current_user.is_superuser and doc.created_by != current_user.id:
+    if not current_user.is_superuser:
         codes = await get_user_permission_codes_for_org(session, current_user.id, doc.org_id)
-        if "document:delete" not in codes and "document:admin" not in codes:
+        is_activity_manager = await activity_svc.can_manage_activity_resource(
+            session, current_user, doc.activity_id
+        )
+        if not (
+            doc.created_by == current_user.id
+            or "document:delete" in codes
+            or "document:admin" in codes
+            or is_activity_manager
+        ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="您無刪除此公文的權限（需建立者或 document:delete/document:admin）",

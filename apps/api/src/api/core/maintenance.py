@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 MAINTENANCE_KEY = "system:maintenance_mode"
 FEATURE_FLAG_PREFIX = "feature_flag:"
 LOAD_SHED_MODE_KEY = "load_shed:force_mode"
+MODULE_MAINTENANCE_PREFIX = "module_maintenance:"
+MODULE_RESET_PREFIX = "module_reset_at:"
 
 # 預設可用的 feature flag 清單（顯示給 admin UI 用）。
 # True 代表「啟用」（功能可用）；缺值時預設啟用，避免新部署誤關。
@@ -177,3 +179,119 @@ async def set_load_shed_force_mode(mode: str) -> str:
         logger.error("set_load_shed_force_mode failed", exc_info=True)
     _cache.pop(LOAD_SHED_MODE_KEY, None)
     return mode
+
+
+# ── Per-Module Maintenance ───────────────────────────────────────────────────
+
+
+async def get_module_maintenance(module_id: str) -> dict[str, Any] | None:
+    """讀取單一模組維護狀態：{on, source, reason, since, until} 或 None（未維護）。
+
+    source: "manual"（管理員手動）| "auto"（斷路器自動）。
+    until 到期或 key 不存在皆視為未維護（回 None）。
+    """
+    key = MODULE_MAINTENANCE_PREFIX + module_id
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached or None
+    try:
+        raw = await redis_client.get(key)
+    except RedisError:
+        return None
+
+    state: dict[str, Any] | None
+    if not raw:
+        state = None
+    else:
+        try:
+            parsed = json.loads(raw)
+            until = parsed.get("until")
+            expired = bool(until and until < time.time())
+            state = parsed if parsed.get("on") and not expired else None
+        except (json.JSONDecodeError, TypeError):
+            state = None
+    # 快取 None 以 {} 表示，避免重複打 Redis。
+    _cache_set(key, state or {})
+    return state
+
+
+async def set_module_maintenance(
+    module_id: str,
+    *,
+    on: bool,
+    source: str = "manual",
+    reason: str = "",
+    ttl: int | None = None,
+) -> dict[str, Any]:
+    """開關單一模組維護。auto 通常帶 ttl（到期自動恢復）；manual 不帶 ttl。"""
+    key = MODULE_MAINTENANCE_PREFIX + module_id
+    if not on:
+        await clear_module_maintenance(module_id)
+        return {"on": False, "source": source, "reason": reason, "since": None, "until": None}
+
+    now = time.time()
+    state = {
+        "on": True,
+        "source": source,
+        "reason": reason,
+        "since": now,
+        "until": (now + ttl) if ttl else None,
+    }
+    try:
+        if ttl:
+            await redis_client.set(key, json.dumps(state), ex=ttl)
+        else:
+            await redis_client.set(key, json.dumps(state))
+    except RedisError:
+        logger.error("set_module_maintenance failed id=%s", module_id, exc_info=True)
+    _cache.pop(key, None)
+    return state
+
+
+async def clear_module_maintenance(module_id: str) -> None:
+    key = MODULE_MAINTENANCE_PREFIX + module_id
+    try:
+        await redis_client.delete(key)
+    except RedisError:
+        logger.error("clear_module_maintenance failed id=%s", module_id, exc_info=True)
+    _cache.pop(key, None)
+
+
+async def list_module_maintenance() -> dict[str, dict[str, Any] | None]:
+    """回傳所有已登錄模組的維護狀態（給 admin / public 端點）。"""
+    from api.core.modules import MODULE_IDS
+
+    out: dict[str, dict[str, Any] | None] = {}
+    for mid in MODULE_IDS:
+        out[mid] = await get_module_maintenance(mid)
+    return out
+
+
+async def set_module_reset(module_id: str, *, window_seconds: int) -> float:
+    """寫入「重置時戳」供斷路器丟棄此前的 5xx 樣本（重啟按鈕用，跨 worker 生效）。"""
+    key = MODULE_RESET_PREFIX + module_id
+    now = time.time()
+    try:
+        await redis_client.set(key, str(now), ex=max(window_seconds, 1))
+    except RedisError:
+        logger.error("set_module_reset failed id=%s", module_id, exc_info=True)
+    _cache.pop(key, None)
+    return now
+
+
+async def get_module_reset(module_id: str) -> float:
+    """回傳此模組最近重置時戳（time.time() 秒）；無則回 0.0。"""
+    key = MODULE_RESET_PREFIX + module_id
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+    try:
+        raw = await redis_client.get(key)
+    except RedisError:
+        return 0.0
+    try:
+        value = float(raw) if raw else 0.0
+    except (TypeError, ValueError):
+        value = 0.0
+    _cache_set(key, value)
+    return value
