@@ -18,7 +18,7 @@ from sqlalchemy import (
     Table,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
@@ -87,6 +87,8 @@ class Announcement(Base, TimestampMixin):
     __tablename__ = "announcements"
     __table_args__ = (
         Index("ix_announcements_org_published", "org_id", "is_published", "published_at"),
+        # 全文搜尋 GIN 索引（PostgreSQL tsvector，generated column 由 migration 建立）
+        Index("ix_announcements_search_vector", "search_vector", postgresql_using="gin"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -130,6 +132,9 @@ class Announcement(Base, TimestampMixin):
         default=AnnouncementAudience.ALL.value,
         server_default=AnnouncementAudience.ALL.value,
     )
+
+    # 全文搜尋向量（PostgreSQL GENERATED column，由 migration 維護，ORM 唯讀，勿賦值）
+    search_vector: Mapped[str | None] = mapped_column(TSVECTOR(), nullable=True)
 
     org: Mapped[Org | None] = relationship("Org")
     activity: Mapped[Activity | None] = relationship("Activity")

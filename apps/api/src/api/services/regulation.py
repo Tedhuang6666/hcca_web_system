@@ -6,7 +6,7 @@ import logging
 import re
 import uuid
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import func, or_, select
@@ -37,7 +37,12 @@ from api.schemas.regulation import (
     RegulationTreeNodeOut,
     RegulationUpdate,
 )
-from api.services.regulation_import import ImportedRegulationDraft, parse_regulation_text
+from api.services.regulation_import import (
+    ImportedRegulationDraft,
+    parse_history_date,
+    parse_regulation_text,
+    split_history_events,
+)
 
 logger = logging.getLogger(__name__)
 _PUBLICATION_DOCUMENT_STATUSES = (DocumentStatus.APPROVED, DocumentStatus.ARCHIVED)
@@ -429,6 +434,33 @@ async def create_regulation_from_import(
     return loaded or reg
 
 
+def _resolve_history_dates(
+    raw_dates: list[datetime | None], now: datetime
+) -> list[datetime]:
+    """將逐筆沿革事件的（可能缺漏的）日期補成單調可排序的具體日期。
+
+    已解析者保留原值；未解析者以前一筆 forward-fill、開頭缺漏者 backfill；
+    若全數缺漏則以 now 為終點向前每筆退一天，確保版本順序穩定。
+    """
+    resolved: list[datetime | None] = list(raw_dates)
+    last: datetime | None = None
+    for index, value in enumerate(resolved):
+        if value is not None:
+            last = value
+        elif last is not None:
+            resolved[index] = last
+    nxt: datetime | None = None
+    for index in range(len(resolved) - 1, -1, -1):
+        if resolved[index] is not None:
+            nxt = resolved[index]
+        elif nxt is not None:
+            resolved[index] = nxt
+    if any(value is None for value in resolved):
+        total = len(resolved)
+        return [now - timedelta(days=total - 1 - index) for index in range(total)]
+    return [value for value in resolved if value is not None]
+
+
 async def publish_imported_regulation(
     session: AsyncSession,
     reg: Regulation,
@@ -436,23 +468,60 @@ async def publish_imported_regulation(
     published_by: uuid.UUID,
     change_brief: str = "匯入既有現行法規",
 ) -> Regulation:
-    """將剛匯入的既有法規直接標記為現行有效，並建立初始修訂快照。"""
+    """將剛匯入的既有法規標記為現行有效，並把沿革逐筆寫入版本歷程。
+
+    沿革（legislative_history）會被拆成逐筆事件，每筆建立一個 RegulationRevision
+    （version 由舊到新遞增）。最新一筆掛上現行全文與條文快照；較早的歷史事件僅保留
+    沿革摘要（因無逐版舊文本）。若文件無沿革，則退回建立單一初始快照。
+    """
     now = datetime.now(UTC)
     reg.workflow_status = RegulationWorkflowStatus.PUBLISHED
     reg.published_at = now
-    session.add(
-        RegulationRevision(
-            regulation_id=reg.id,
-            version=reg.version,
-            change_brief=change_brief,
-            is_total_amendment=True,
-            content_snapshot=reg.content,
-            article_snapshot=_article_snapshot_json(reg.articles),
-            proposal_metadata_snapshot=reg.proposal_metadata,
-            amended_at=now,
-            amended_by=published_by,
+
+    content_snapshot = reg.content
+    article_snapshot = _article_snapshot_json(reg.articles)
+    events = split_history_events(reg.legislative_history)
+
+    if events:
+        amended_dates = _resolve_history_dates(
+            [parse_history_date(event) for event in events], now
         )
-    )
+        total = len(events)
+        for version, (event, amended_at) in enumerate(
+            zip(events, amended_dates, strict=True), start=1
+        ):
+            is_latest = version == total
+            session.add(
+                RegulationRevision(
+                    regulation_id=reg.id,
+                    version=version,
+                    change_brief=event[:500],
+                    # 首筆（制定）與最新一筆視為全文版本
+                    is_total_amendment=version == 1 or is_latest,
+                    content_snapshot=content_snapshot if is_latest else "",
+                    article_snapshot=article_snapshot if is_latest else "[]",
+                    proposal_metadata_snapshot=reg.proposal_metadata if is_latest else None,
+                    amended_at=amended_at,
+                    amended_by=published_by,
+                )
+            )
+        reg.version = total
+    else:
+        reg.version = 1
+        session.add(
+            RegulationRevision(
+                regulation_id=reg.id,
+                version=1,
+                change_brief=change_brief,
+                is_total_amendment=True,
+                content_snapshot=content_snapshot,
+                article_snapshot=article_snapshot,
+                proposal_metadata_snapshot=reg.proposal_metadata,
+                amended_at=now,
+                amended_by=published_by,
+            )
+        )
+
     await session.flush()
     loaded = await get_regulation(session, reg.id)
     return loaded or reg

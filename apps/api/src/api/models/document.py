@@ -19,7 +19,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
@@ -319,6 +319,8 @@ class Document(Base, TimestampMixin):
         Index("ix_documents_created_by_status", "created_by", "status"),
         Index("ix_documents_status_created_at", "status", "created_at"),
         Index("ix_documents_created_at_desc", "created_at"),
+        # 全文搜尋 GIN 索引（PostgreSQL tsvector，generated column 由 migration 建立）
+        Index("ix_documents_search_vector", "search_vector", postgresql_using="gin"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -426,6 +428,8 @@ class Document(Base, TimestampMixin):
     reminder_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )
+    # 全文搜尋向量（PostgreSQL GENERATED column，由 migration 維護，ORM 唯讀，勿賦值）
+    search_vector: Mapped[str | None] = mapped_column(TSVECTOR(), nullable=True)
     last_reminded_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

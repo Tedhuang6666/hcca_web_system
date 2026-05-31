@@ -8,6 +8,7 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from io import BytesIO
 from xml.etree import ElementTree as ET
 from zipfile import BadZipFile, ZipFile
@@ -355,14 +356,98 @@ def _looks_like_history(line: str) -> bool:
     )
 
 
+# 沿革事件起始 token：學年度 / 民國紀年（年月）/ 西元日期。
+# 用於把整段沿革切成「逐筆事件」，即使事件之間沒有空白分隔
+# （例：「…112學年度…修訂113學年度…修訂」需切成兩筆）。
+_HISTORY_EVENT_START_RE = re.compile(
+    r"(?:中華民國|民國)?\s*\d{2,4}\s*學年度"  # 102學年度…
+    r"|(?:中華民國|民國)\s*\d{2,4}\s*年"  # 民國114年…
+    r"|(?<!學)\d{2,4}\s*年\s*\d{1,2}\s*月"  # 114年5月…（排除「學年度」誤判）
+    r"|\d{2,4}[./-]\d{1,2}[./-]\d{1,2}"  # 2025/5/19
+)
+
+
 def _split_history_line(line: str) -> list[str]:
-    normalized = line.strip()
+    return _tokenize_history_events(line)
+
+
+def _tokenize_history_events(text: str) -> list[str]:
+    """把一段（可能含多筆事件、可能黏在一起的）沿革文字切成逐筆事件。"""
+    normalized = _normalize_spacing(text)
     if not normalized:
         return []
-    pattern = re.compile(
-        r"\s+(?=(?:中華民國|民國)\s*\d{2,4}\s*年|\d{2,4}\s*學年度|\d{2,4}[./-]\d{1,2}[./-]\d{1,2})"
+    starts = [m.start() for m in _HISTORY_EVENT_START_RE.finditer(normalized)]
+    if not starts:
+        return [normalized]
+    if starts[0] != 0:
+        starts.insert(0, 0)
+    events: list[str] = []
+    for index, start in enumerate(starts):
+        end = starts[index + 1] if index + 1 < len(starts) else len(normalized)
+        chunk = normalized[start:end].strip(" 、，,；;")
+        if chunk:
+            events.append(chunk)
+    return events
+
+
+def split_history_events(history: str | None) -> list[str]:
+    """將法規沿革（多行或單段）拆成逐筆事件，供建立版本歷程使用。"""
+    if not history:
+        return []
+    events: list[str] = []
+    for line in history.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        events.extend(_tokenize_history_events(line))
+    return events
+
+
+def parse_history_date(event: str) -> datetime | None:
+    """從單筆沿革事件解析出可排序的日期（民國紀年 / 學年度 / 西元）。"""
+    # 民國完整日期：114年5月19日
+    match = re.search(
+        r"(?:中華民國|民國)?\s*(\d{2,4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日", event
     )
-    return [part.strip() for part in pattern.split(normalized) if part.strip()]
+    if match:
+        result = _build_date(int(match.group(1)), int(match.group(2)), int(match.group(3)))
+        if result:
+            return result
+    # 學年度：102學年度第二學期 → 約略對應日期
+    match = re.search(r"(\d{2,4})\s*學年度", event)
+    if match:
+        year = _roc_year(int(match.group(1)))
+        if "第二學期" in event or "下學期" in event:
+            return _build_date(year + 1, 2, 1, roc=False)
+        if "第一學期" in event or "上學期" in event:
+            return _build_date(year, 9, 1, roc=False)
+        return _build_date(year, 8, 1, roc=False)
+    # 西元日期：2025/5/19
+    match = re.search(r"(\d{4})[./-](\d{1,2})[./-](\d{1,2})", event)
+    if match:
+        result = _build_date(int(match.group(1)), int(match.group(2)), int(match.group(3)), roc=False)
+        if result:
+            return result
+    # 民國年月：114年5月
+    match = re.search(r"(?:中華民國|民國)?\s*(\d{2,4})\s*年\s*(\d{1,2})\s*月", event)
+    if match:
+        result = _build_date(int(match.group(1)), int(match.group(2)), 1)
+        if result:
+            return result
+    # 僅有年份：114年
+    match = re.search(r"(?:中華民國|民國)?\s*(\d{2,4})\s*年", event)
+    if match:
+        return _build_date(int(match.group(1)), 1, 1)
+    return None
+
+
+def _roc_year(value: int) -> int:
+    return value + 1911 if value < 200 else value
+
+
+def _build_date(year: int, month: int, day: int, *, roc: bool = True) -> datetime | None:
+    resolved_year = _roc_year(year) if roc else year
+    try:
+        return datetime(resolved_year, month, day, tzinfo=UTC)
+    except ValueError:
+        return None
 
 
 def _structural_type(kind: str) -> ArticleType:

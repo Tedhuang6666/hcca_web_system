@@ -55,6 +55,13 @@ RegulationArticleCreate
 .dev-alembic-check.log
 .env.backup.*
 
+# Meilisearch 執行檔與執行期資料（runtime，勿進版控）
+/meilisearch
+/data.ms/
+
+# Windows 下載標記殘留檔（NTFS ADS）
+*:Zone.Identifier
+
 # Local maintainer/editor files
 .claude/
 .maintainer-notes/

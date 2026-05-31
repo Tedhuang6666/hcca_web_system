@@ -31,9 +31,11 @@ from api.models.calendar import (  # noqa: F401
 )
 from api.models.defense import DefenseRule, DefenseRuleType  # noqa: F401
 from api.models.discord_account import (  # noqa: F401
+    DEFAULT_DM_CATEGORIES,
     DiscordAccountLink,
     DiscordGuildConfig,
     DiscordNicknamePrefixRule,
+    DiscordNotificationPreference,
     DiscordOrgChannelMapping,
     DiscordRoleMapping,
     DiscordRoleMappingKind,
