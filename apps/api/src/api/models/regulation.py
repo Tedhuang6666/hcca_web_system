@@ -57,7 +57,6 @@ class ArticleType(enum.StrEnum):
     條文結構層級。
     正確層級：Volume(編) > Chapter(章) > Section(節) > Article(條) > Paragraph(項) > Subparagraph(款) > Item(目)
     SpecialClause 為特殊條文（如附則）。
-    注意：CLAUSE/SUBSECTION 為舊值，保留向下相容（對應 條/款），新建資料請使用 ARTICLE/SUBPARAGRAPH。
     """
 
     VOLUME = "volume"  # 編
@@ -68,9 +67,6 @@ class ArticleType(enum.StrEnum):
     SUBPARAGRAPH = "subparagraph"  # 款
     ITEM = "item"  # 目
     SPECIAL_CLAUSE = "special_clause"  # 特殊條文（如附則）
-    # ── 舊值保留向下相容（已廢棄，請勿新用）──
-    CLAUSE = "clause"  # 舊：條（以 ARTICLE 取代）
-    SUBSECTION = "subsection"  # 舊：款（以 SUBPARAGRAPH 取代）
 
 
 class Regulation(Base, TimestampMixin):

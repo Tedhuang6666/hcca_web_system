@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import LawTreeEditor, { inferParentIdByPrevious } from "@/components/regulations/LawTreeEditor";
@@ -54,8 +54,8 @@ export interface DraftTreeArticle {
 
 export const ARTICLE_TYPE_LABEL: Record<string, string> = {
   volume: "編", chapter: "章", section: "節",
-  article: "條", clause: "條", paragraph: "項",
-  subparagraph: "款", subsection: "款", item: "目",
+  article: "條", paragraph: "項",
+  subparagraph: "款", item: "目",
   special_clause: "附則",
 };
 
@@ -239,10 +239,8 @@ export function getTreeChangeSummary(draft: Draft) {
 
 export function buildDraftComparisonRows(draft: Draft) {
   const current = fallbackTreeContent(draft)
-    .filter(item => item.article_type === "article" || item.article_type === "clause")
     .sort((a, b) => a.sort_index - b.sort_index);
   const baseline = (draft.originalTreeContent ?? [])
-    .filter(item => item.article_type === "article" || item.article_type === "clause")
     .sort((a, b) => a.sort_index - b.sort_index);
 
   const originalById = new Map(baseline.map(item => [item.id, item]));
@@ -257,6 +255,7 @@ export function buildDraftComparisonRows(draft: Draft) {
   );
   const rows: Array<{
     id: string;
+    article_key: string;
     status: "新增" | "修改" | "移動" | "刪除";
     revised_text: string;
     current_text: string;
@@ -269,6 +268,7 @@ export function buildDraftComparisonRows(draft: Draft) {
     if (!original) {
       rows.push({
         id: item.id,
+        article_key: item.title || ARTICLE_TYPE_LABEL[item.article_type] || "新增條文",
         status: "新增",
         revised_text: revisedText || "—",
         current_text: "—",
@@ -284,6 +284,7 @@ export function buildDraftComparisonRows(draft: Draft) {
     if (contentChanged || moved) {
       rows.push({
         id: item.id,
+        article_key: item.title || original.title || ARTICLE_TYPE_LABEL[item.article_type] || "條文",
         status: contentChanged ? "修改" : "移動",
         revised_text: revisedText || "—",
         current_text: originalText || "—",
@@ -296,6 +297,7 @@ export function buildDraftComparisonRows(draft: Draft) {
     if (!currentById.has(item.id)) {
       rows.push({
         id: `deleted-${item.id}`,
+        article_key: item.title || ARTICLE_TYPE_LABEL[item.article_type] || "刪除條文",
         status: "刪除",
         revised_text: "—",
         current_text: [item.title, item.content].filter(Boolean).join("　").trim() || "—",
@@ -489,6 +491,7 @@ export function StepEditTree({
         statusById={statusById}
         onSelect={setEditingId}
         onChangeFlat={next => onUpdate(next.map((item, index) => ({
+          ...(items.find(source => source.id === item.id) ?? {}),
           id: item.id,
           parent_id: item.parent_id,
           sort_index: index + 1,
@@ -709,7 +712,6 @@ export function StepSubmit({
   const [rationale, setRationale] = useState("");
   const [summaryOverride, setSummaryOverride] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [warnings, setWarnings] = useState<Array<{ source_article_id: string; source_title: string; referenced_legal_number: string; message: string }>>([]);
   const [asOf, setAsOf] = useState(() => new Date().toISOString().slice(0, 16));
   const [timeMachine, setTimeMachine] = useState<{ version: number; amended_at: string; content_snapshot: string } | null>(null);
   const comparisonRows = buildDraftComparisonRows(draft);
@@ -718,9 +720,33 @@ export function StepSubmit({
     .join("\n\n");
   const changes = summaryOverride.trim() || autoSummary;
 
-  useEffect(() => {
-    regulationsApi.referenceWarnings(reg.id).then(setWarnings).catch(() => {});
-  }, [reg.id]);
+  const warnings = useMemo(() => {
+    const items = fallbackTreeContent(draft);
+    const legalNumbers = new Set(
+      items
+        .filter(item => item.article_type === "article" && item.legal_number)
+        .map(item => String(item.legal_number).trim())
+        .filter(Boolean),
+    );
+    const pattern = /第\s*(\d+(?:-\d+)?)\s*條/g;
+    const rows: Array<{ source_article_id: string; source_title: string; referenced_legal_number: string; message: string }> = [];
+    for (const item of items) {
+      if (!item.content) continue;
+      const matches = item.content.matchAll(pattern);
+      for (const match of matches) {
+        const ref = match[1];
+        if (ref && !legalNumbers.has(ref)) {
+          rows.push({
+            source_article_id: item.id,
+            source_title: item.title || ARTICLE_TYPE_LABEL[item.article_type] || "未命名條文",
+            referenced_legal_number: ref,
+            message: `參照的第 ${ref} 條不存在或已被刪除`,
+          });
+        }
+      }
+    }
+    return rows;
+  }, [draft]);
 
   const handleExport = () => {
     const payload = { draft, regulationId: reg.id, regulationTitle: reg.title, exportedAt: new Date().toISOString() };
@@ -732,6 +758,35 @@ export function StepSubmit({
     a.click();
     URL.revokeObjectURL(url);
     toast.success("草案已匯出");
+  };
+
+  const handleExportPdf = async () => {
+    if (comparisonRows.length === 0) {
+      toast.error("目前沒有可匯出的條文異動");
+      return;
+    }
+    try {
+      const blob = await regulationsApi.exportAmendmentComparisonPdf(reg.id, {
+        proposal_title: `${reg.title}部分條文修正草案對照表`,
+        rationale: rationale.trim() || null,
+        rows: comparisonRows.map(row => ({
+          article_key: row.article_key,
+          status: row.status,
+          revised_text: row.revised_text,
+          current_text: row.current_text,
+          note: row.note?.trim() || row.status,
+        })),
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${reg.title}_${draft.name}_修正條文對照表.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("修正條文對照表已匯出");
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "匯出 PDF 失敗");
+    }
   };
 
   const handleSubmit = async () => {
@@ -1007,6 +1062,15 @@ export function StepSubmit({
             <path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/>
           </svg>
           匯出草案 (.json)
+        </button>
+        <button onClick={handleExportPdf}
+          className="text-sm px-4 py-2 rounded-lg hover:opacity-80 inline-flex items-center gap-1.5"
+          style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="M9 15l3 3 3-3"/>
+          </svg>
+          匯出對照表 PDF
         </button>
         <button onClick={handleSubmit} disabled={submitting || !brief.trim() || !rationale.trim()}
           className="btn btn-primary text-sm px-5 ml-auto disabled:opacity-40">

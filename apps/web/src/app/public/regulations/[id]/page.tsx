@@ -16,12 +16,8 @@ import {
   computeArticleDisplayLabels,
   normalizeArticleType,
 } from "@/lib/regulationStructure";
-import {
-  SOCIAL_IMAGE,
-  SOCIAL_SHARE_TITLE,
-  SOCIAL_SITE_NAME,
-  socialDescription,
-} from "@/lib/social-metadata";
+import { socialDescription } from "@/lib/social-metadata";
+import { JsonLd, absoluteUrl, excerpt, pageMetadata } from "@/lib/seo";
 
 type RegulationArticleOut = {
   id: string;
@@ -91,27 +87,11 @@ export async function generateMetadata(
     reg ? `${reg.title}${reg.preface ? `｜${reg.preface.slice(0, 80)}` : ""}` : regTitle,
     "公開法規條文與沿革查詢。",
   );
-  return {
-    title: SOCIAL_SHARE_TITLE,
+  return pageMetadata({
+    title: regTitle,
     description: desc,
-    openGraph: {
-      title: SOCIAL_SHARE_TITLE,
-      description: desc,
-      type: "article",
-      url: reg ? publicRegulationHref(reg) : `/public/regulations/${encodeURIComponent(id)}`,
-      siteName: SOCIAL_SITE_NAME,
-      images: [SOCIAL_IMAGE],
-    },
-    twitter: {
-      card: "summary_large_image",
-      title: SOCIAL_SHARE_TITLE,
-      description: desc,
-      images: [SOCIAL_IMAGE.url],
-    },
-    alternates: {
-      canonical: reg ? publicRegulationHref(reg) : `/public/regulations/${encodeURIComponent(id)}`,
-    },
-  };
+    path: reg ? publicRegulationHref(reg) : `/public/regulations/${encodeURIComponent(id)}`,
+  });
 }
 
 function isStructural(t: string) {
@@ -175,6 +155,19 @@ export default async function PublicRegulationDetailPage({
 
   return (
     <div className="space-y-5">
+      <JsonLd
+        data={{
+          "@context": "https://schema.org",
+          "@type": "Legislation",
+          name: reg.title,
+          description: excerpt(reg.preface ?? reg.content, "公開法規條文與沿革查詢。"),
+          datePublished: reg.published_at,
+          dateModified: reg.updated_at,
+          legislationIdentifier: reg.id,
+          publisher: { "@type": "Organization", name: "新竹高中班聯會" },
+          mainEntityOfPage: absoluteUrl(publicHref),
+        }}
+      />
       <div className="flex flex-col items-start justify-between gap-3 lg:flex-row">
         <div className="min-w-0 flex-1">
           <div className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>

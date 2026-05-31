@@ -3,16 +3,30 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Time, UniqueConstraint, text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
 from api.models.base import TimestampMixin
+
+
+DEFAULT_DM_CATEGORIES: dict[str, bool] = {
+    "document_pending": True,
+    "meeting_invited": True,
+    "calendar_reminder": True,
+    "meal_closing": True,
+    "survey_closing": True,
+    "shop_ready": True,
+    "tenure": True,
+    "regulation": False,
+    "announcement_dm": False,
+    "petition_assigned": True,
+}
 
 if TYPE_CHECKING:
     from api.models.org import Org, Position
@@ -152,10 +166,40 @@ class DiscordNicknamePrefixRule(Base, TimestampMixin):
     position: Mapped[Position | None] = relationship("Position")
 
 
+class DiscordNotificationPreference(Base, TimestampMixin):
+    """使用者個人 Discord 通知偏好。預設所有 category True；可用 /notify 在 Discord 內調整。"""
+
+    __tablename__ = "discord_notification_preferences"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    # 以 JSONB 存 {category: bool}，未列出視為 True（預設訂閱）
+    preferences: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
+    # 「免打擾」時段（台北時區）。落在此區間的 DM 會被靜默捨棄並計入 metrics
+    quiet_hours_start: Mapped[time | None] = mapped_column(Time, nullable=True)
+    quiet_hours_end: Mapped[time | None] = mapped_column(Time, nullable=True)
+    digest_daily_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+    digest_weekly_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    timezone: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="Asia/Taipei", server_default="Asia/Taipei"
+    )
+
+
 __all__ = [
+    "DEFAULT_DM_CATEGORIES",
     "DiscordAccountLink",
     "DiscordGuildConfig",
     "DiscordNicknamePrefixRule",
+    "DiscordNotificationPreference",
     "DiscordOrgChannelMapping",
     "DiscordRoleMapping",
     "DiscordRoleMappingKind",

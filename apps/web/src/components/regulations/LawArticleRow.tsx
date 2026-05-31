@@ -27,8 +27,6 @@ export interface LawArticleRowProps {
   showTopDivider?: boolean;
   highlighted?: boolean;
   onClearHighlight?: () => void;
-  /** 連結別名（用於舊錨點向下相容）。 */
-  legacyAnchorId?: string;
   /** 編輯模式：傳入則會在 hover/focus 時顯示更明顯的互動樣式。 */
   interactive?: boolean;
   /** 點擊整行的 callback（編輯模式專用）。 */
@@ -86,7 +84,6 @@ export function LawArticleRow({
   showTopDivider = true,
   highlighted = false,
   onClearHighlight,
-  legacyAnchorId,
   interactive = false,
   onSelect,
   dragHandle,
@@ -260,7 +257,6 @@ export function LawArticleRow({
         }}
         {...rowProps}
       >
-        {legacyAnchorId && <span id={legacyAnchorId} aria-hidden="true" />}
         <div className="law-row-shell">
           {dragHandle && <div className="flex-shrink-0 pt-0.5">{dragHandle}</div>}
           <div className="flex flex-1 min-w-0 flex-wrap items-center gap-2" style={deletedStyle}>
@@ -303,7 +299,7 @@ export function LawArticleRow({
     );
   }
 
-  // ── 條文（article / clause）：編號 + 內文，橫向排列 ──
+  // ── 條文（article）：編號 + 內文，橫向排列 ──
   if (normalizedType === "article") {
     return (
       <div
@@ -327,7 +323,6 @@ export function LawArticleRow({
         }}
         {...rowProps}
       >
-        {legacyAnchorId && <span id={legacyAnchorId} aria-hidden="true" />}
         <div className="law-row-shell">
           {dragHandle && <div className="flex-shrink-0 pt-0.5">{dragHandle}</div>}
           <div className="flex flex-1 min-w-0 flex-col gap-1 sm:flex-row sm:gap-2" style={deletedStyle}>
@@ -395,7 +390,6 @@ export function LawArticleRow({
       }}
       {...rowProps}
     >
-      {legacyAnchorId && <span id={legacyAnchorId} aria-hidden="true" />}
       <div className="law-row-shell">
         {dragHandle && <div className="flex-shrink-0 pt-0.5">{dragHandle}</div>}
         <div className="flex flex-1 min-w-0 flex-col gap-1 sm:flex-row sm:gap-2" style={deletedStyle}>

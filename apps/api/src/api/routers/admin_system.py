@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 import uuid
 from datetime import datetime
@@ -55,7 +56,7 @@ from api.core.module_health import (
 from api.core.module_recovery import attempt_recovery, probe_module
 from api.core.modules import MODULES
 from api.core.query_audit import get_slow_queries
-from api.core.security import revoke_user
+from api.core.security import redis_client, revoke_user
 from api.core.ws_manager import manager as ws_manager
 from api.dependencies.auth import get_current_active_user
 from api.models.user import User
@@ -324,6 +325,24 @@ class DefenseSummary(BaseModel):
     recent_status_counts: dict[str, int]
 
 
+class DeadLetterItem(BaseModel):
+    timestamp: str | None = None
+    status: str | None = None
+    task: str | None = None
+    task_id: str | None = None
+    queue: str | None = None
+    retries: int | None = None
+    exception_type: str | None = None
+    exception: str | None = None
+    args: list[str] = Field(default_factory=list)
+    kwargs: dict[str, str] = Field(default_factory=dict)
+
+
+class DeadLetterResponse(BaseModel):
+    key: str
+    items: list[DeadLetterItem]
+
+
 # ── 即時指標總集 ─────────────────────────────────────────────────────────────
 
 
@@ -363,6 +382,34 @@ async def system_status(_admin: AdminUser) -> SystemMetricsSnapshot:
         maintenance=MaintenanceView(**maintenance),
         load_shed_mode=await get_load_shed_force_mode(),
     )
+
+
+@router.get(
+    "/dead-letters",
+    response_model=DeadLetterResponse,
+    summary="檢視 Celery Dead Letter Queue",
+)
+async def list_dead_letters(_admin: AdminUser, limit: int = 50) -> DeadLetterResponse:
+    raw_items = await redis_client.lrange(settings.CELERY_DLQ_REDIS_KEY, 0, max(0, limit - 1))
+    items: list[DeadLetterItem] = []
+    for raw in raw_items:
+        try:
+            parsed = json.loads(raw)
+        except (TypeError, json.JSONDecodeError):
+            continue
+        if isinstance(parsed, dict):
+            items.append(DeadLetterItem(**parsed))
+    return DeadLetterResponse(key=settings.CELERY_DLQ_REDIS_KEY, items=items)
+
+
+@router.delete(
+    "/dead-letters",
+    response_model=dict,
+    summary="清空 Celery Dead Letter Queue",
+)
+async def clear_dead_letters(_admin: AdminUser) -> dict:
+    removed = await redis_client.delete(settings.CELERY_DLQ_REDIS_KEY)
+    return {"cleared": bool(removed), "key": settings.CELERY_DLQ_REDIS_KEY}
 
 
 # ── Maintenance ──────────────────────────────────────────────────────────────

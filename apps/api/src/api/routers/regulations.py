@@ -45,6 +45,7 @@ from api.models.regulation import (
 from api.models.user import User
 from api.schemas.document import DocumentCreate
 from api.schemas.regulation import (
+    AmendmentComparisonExportRequest,
     AmendmentComparisonRowOut,
     ArticleMoveRequest,
     ArticleReorderRequest,
@@ -831,7 +832,9 @@ async def structure_regulation_content(
     reg = await _get_reg_or_404(reg_id, session)
     _assert_regulation_editable(reg)
     if reg.created_by != current_user.id and not current_user.is_superuser:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有建立者可以結構化條文")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="只有建立者可以結構化條文"
+        )
     try:
         structured = await reg_svc.structure_regulation_content(
             session,
@@ -1118,6 +1121,58 @@ async def amendment_comparison(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此法規")
     reg = await _get_reg_or_404(reg_id, session)
     return await reg_svc.compare_amendment(session, reg)
+
+
+@router.post(
+    "/{reg_id}/amendment-comparison/export.pdf",
+    summary="匯出修正條文對照表 PDF",
+    dependencies=[
+        Depends(
+            require_any(
+                PermissionCode.REGULATION_CREATE,
+                PermissionCode.REGULATION_ADMIN,
+                PermissionCode.ADMIN_ALL,
+            )
+        )
+    ],
+)
+async def export_amendment_comparison_pdf(
+    reg_id: str,
+    body: AmendmentComparisonExportRequest,
+    session: DbDep,
+    _: CurrentUser,
+) -> Response:
+    reg = await _get_reg_or_404(reg_id, session)
+    from api.services.official_print import (
+        render_print_pdf,
+        render_regulation_amendment_comparison_html,
+    )
+
+    rows = [
+        {
+            "article_key": row.article_key,
+            "status": row.status,
+            "revised_text": row.revised_text,
+            "current_text": row.current_text,
+            "note": row.note,
+        }
+        for row in body.rows
+    ]
+    html_content = render_regulation_amendment_comparison_html(
+        regulation_title=reg.title,
+        proposal_title=body.proposal_title,
+        rationale=body.rationale,
+        rows=rows,
+    )
+    pdf_bytes = await run_in_threadpool(render_print_pdf, html_content)
+    safe_title = body.proposal_title.replace("/", "_").replace("\\", "_")
+    filename = f"{safe_title}.pdf"
+    encoded = quote(filename)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded}"},
+    )
 
 
 @router.get(
@@ -1453,10 +1508,6 @@ async def president_publish(
         from sqlalchemy import select as _sel
 
         def _normalize_article_type(value: str | ArticleType) -> ArticleType:
-            if value == ArticleType.CLAUSE or value == ArticleType.CLAUSE.value:
-                return ArticleType.ARTICLE
-            if value == ArticleType.SUBSECTION or value == ArticleType.SUBSECTION.value:
-                return ArticleType.SUBPARAGRAPH
             return value if isinstance(value, ArticleType) else ArticleType(value)
 
         def _render_article_line(

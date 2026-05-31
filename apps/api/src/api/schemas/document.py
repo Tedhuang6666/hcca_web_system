@@ -424,7 +424,7 @@ class DocumentOut(BaseModel):
     subject: str | None
     doc_description: str | None
     action_required: str | None
-    content: str  # 向下相容欄位
+    content: str
     # 開會通知單專屬欄位
     meeting_purpose: str | None = None
     meeting_time: datetime | None = None
@@ -533,7 +533,7 @@ class DocumentCreate(BaseModel):
     subject: str | None = Field(None, max_length=500, description="主旨")
     doc_description: str | None = Field(None, description="說明（詳細事由、依據）")
     action_required: str | None = Field(None, description="辦法（具體行動或執行方式）")
-    content: str = Field(default="", description="整合性內容（Markdown，向下相容）")
+    content: str = Field(default="", description="整合性內容（Markdown）")
     # 開會通知單專屬欄位
     meeting_purpose: str | None = Field(None, max_length=500, description="開會事由")
     meeting_time: datetime | None = Field(None, description="開會時間")
@@ -551,7 +551,7 @@ class DocumentCreate(BaseModel):
         DocumentVisibility.ORG_ONLY,
         description="可見度：subject_only=僅當事人 / org_only=機關成員 / public=全體登入 / publicly_open=公開（含未登入）",
     )
-    is_public: bool = Field(False, description="向下相容，由 visibility_level 自動同步")
+    is_public: bool = Field(False, description="由 visibility_level 自動同步")
     page_info: str | None = Field(None, max_length=50, description="頁次資訊（列印後回填）")
     # 受文者（可隨建立一起傳入）
     recipients: list[RecipientCreate] = Field(default_factory=list, description="受文者清單")

@@ -28,6 +28,12 @@ from api.models.document import Document, DocumentStatus, DocumentVisibility
 from api.models.org import Position, UserPosition
 from api.models.petition import PetitionCase
 from api.models.user import User
+from api.services.discord_embeds import (
+    Domain,
+    Severity,
+    build_embed,
+    default_action_row,
+)
 from api.services.permission import active_tenure_filter
 
 logger = logging.getLogger(__name__)
@@ -149,31 +155,28 @@ async def list_active_role_ids_for_user(
     db: AsyncSession, user_id: uuid.UUID
 ) -> dict[str, set[str]]:
     today = datetime.now(UTC).date()
-    rows = (
-        await db.execute(
-            select(DiscordRoleMapping)
-            .join(
-                Position,
-                or_(
-                    and_(
-                        DiscordRoleMapping.mapping_kind == DiscordRoleMappingKind.POSITION,
-                        DiscordRoleMapping.position_id == Position.id,
-                    ),
-                    and_(
-                        DiscordRoleMapping.mapping_kind == DiscordRoleMappingKind.ORG,
-                        DiscordRoleMapping.org_id == Position.org_id,
-                    ),
+    result = await db.execute(
+        select(DiscordRoleMapping)
+        .join(
+            Position,
+            or_(
+                and_(
+                    DiscordRoleMapping.mapping_kind == DiscordRoleMappingKind.POSITION,
+                    DiscordRoleMapping.position_id == Position.id,
                 ),
-            )
-            .join(UserPosition, UserPosition.position_id == Position.id)
-            .where(UserPosition.user_id == user_id)
-            .where(DiscordRoleMapping.is_active.is_(True))
-            .where(*active_tenure_filter(today))
-            .distinct()
+                and_(
+                    DiscordRoleMapping.mapping_kind == DiscordRoleMappingKind.ORG,
+                    DiscordRoleMapping.org_id == Position.org_id,
+                ),
+            ),
         )
-        .scalars()
-        .all()
+        .join(UserPosition, UserPosition.position_id == Position.id)
+        .where(UserPosition.user_id == user_id)
+        .where(DiscordRoleMapping.is_active.is_(True))
+        .where(*active_tenure_filter(today))
+        .distinct()
     )
+    rows = result.scalars().all()
     by_guild: dict[str, set[str]] = {}
     for row in rows:
         by_guild.setdefault(row.guild_id, set()).add(row.role_id)
@@ -184,35 +187,32 @@ async def list_active_nickname_prefixes_for_user(
     db: AsyncSession, user_id: uuid.UUID
 ) -> dict[str, str]:
     today = datetime.now(UTC).date()
-    rows = (
-        await db.execute(
-            select(DiscordNicknamePrefixRule)
-            .join(
-                Position,
-                or_(
-                    and_(
-                        DiscordNicknamePrefixRule.mapping_kind == DiscordRoleMappingKind.POSITION,
-                        DiscordNicknamePrefixRule.position_id == Position.id,
-                    ),
-                    and_(
-                        DiscordNicknamePrefixRule.mapping_kind == DiscordRoleMappingKind.ORG,
-                        DiscordNicknamePrefixRule.org_id == Position.org_id,
-                    ),
+    result = await db.execute(
+        select(DiscordNicknamePrefixRule)
+        .join(
+            Position,
+            or_(
+                and_(
+                    DiscordNicknamePrefixRule.mapping_kind == DiscordRoleMappingKind.POSITION,
+                    DiscordNicknamePrefixRule.position_id == Position.id,
                 ),
-            )
-            .join(UserPosition, UserPosition.position_id == Position.id)
-            .where(UserPosition.user_id == user_id)
-            .where(DiscordNicknamePrefixRule.is_active.is_(True))
-            .where(*active_tenure_filter(today))
-            .order_by(
-                DiscordNicknamePrefixRule.priority.asc(),
-                DiscordNicknamePrefixRule.updated_at.desc(),
-            )
-            .distinct()
+                and_(
+                    DiscordNicknamePrefixRule.mapping_kind == DiscordRoleMappingKind.ORG,
+                    DiscordNicknamePrefixRule.org_id == Position.org_id,
+                ),
+            ),
         )
-        .scalars()
-        .all()
+        .join(UserPosition, UserPosition.position_id == Position.id)
+        .where(UserPosition.user_id == user_id)
+        .where(DiscordNicknamePrefixRule.is_active.is_(True))
+        .where(*active_tenure_filter(today))
+        .order_by(
+            DiscordNicknamePrefixRule.priority.asc(),
+            DiscordNicknamePrefixRule.updated_at.desc(),
+        )
+        .distinct()
     )
+    rows = result.scalars().all()
     by_guild: dict[str, str] = {}
     for row in rows:
         by_guild.setdefault(row.guild_id, row.prefix)
@@ -283,13 +283,18 @@ async def emit_security_alert(db: AsyncSession, *, title: str, body: str | None 
     config = await get_primary_guild_config(db)
     if config is None or not config.security_alert_channel_id:
         return
+    embed = build_embed(
+        Domain.SYSTEM,
+        Severity.DANGER,
+        title=title,
+        body=body,
+    )
     await emit(
         db,
         event_type="discord.channel_alert",
         payload={
             "channel_id": config.security_alert_channel_id,
-            "title": title,
-            "body": body,
+            "embed": embed,
         },
     )
 
@@ -304,13 +309,18 @@ async def emit_moderation_log(
     )
     if config is None or not config.moderation_log_channel_id:
         return
+    embed = build_embed(
+        Domain.MODERATION,
+        Severity.NEUTRAL,
+        title=title,
+        body=body,
+    )
     await emit(
         db,
         event_type="discord.channel_alert",
         payload={
             "channel_id": config.moderation_log_channel_id,
-            "title": title,
-            "body": body,
+            "embed": embed,
         },
     )
 
@@ -325,13 +335,24 @@ async def emit_welcome_message(
     )
     if config is None or not config.welcome_channel_id:
         return
+    embed = build_embed(
+        Domain.SYSTEM,
+        Severity.SUCCESS,
+        title=f"歡迎 {display_name}",
+        body=(
+            f"<@{discord_user_id}> 已加入伺服器。\n"
+            "若已綁定平台帳號，身分組與暱稱會自動同步；"
+            "尚未綁定者可到平台個人資料頁完成連結。"
+        ),
+    )
+    components = default_action_row(open_url="/profile", domain=Domain.SYSTEM)
     await emit(
         db,
         event_type="discord.channel_alert",
         payload={
             "channel_id": config.welcome_channel_id,
-            "title": f"歡迎 {display_name}",
-            "body": f"<@{discord_user_id}> 已加入伺服器。若已綁定平台帳號，身分組與暱稱會自動同步。",
+            "embed": embed,
+            "components": [components] if components else None,
         },
     )
 
@@ -371,25 +392,35 @@ async def emit_public_document_notice(db: AsyncSession, doc: Document) -> None:
     if doc.visibility_level not in {DocumentVisibility.PUBLIC, DocumentVisibility.PUBLICLY_OPEN}:
         return
     channel_ids = await _publication_channel_ids_for_orgs(db, {doc.org_id})
+    if not channel_ids:
+        return
     link = (
         f"/public/documents/{doc.id}"
         if doc.visibility_level == DocumentVisibility.PUBLICLY_OPEN
         else f"/documents/{doc.id}"
     )
-    body_parts = []
+    fields: list[dict[str, Any]] = []
     if doc.serial_number:
-        body_parts.append(f"字號：{doc.serial_number}")
-    if doc.subject:
-        body_parts.append(f"主旨：{doc.subject[:300]}")
+        fields.append({"name": "字號", "value": str(doc.serial_number), "inline": True})
+    body = doc.subject[:1500] if doc.subject else None
+    embed = build_embed(
+        Domain.DOCUMENT,
+        Severity.SUCCESS,
+        title=f"公開公文：{doc.title}",
+        body=body,
+        fields=fields,
+        link=link,
+    )
+    components = default_action_row(open_url=link, domain=Domain.DOCUMENT)
     for channel_id in channel_ids:
         await emit(
             db,
             event_type="discord.channel_alert",
             payload={
                 "channel_id": channel_id,
-                "title": f"公開公文：{doc.title}",
-                "body": "\n".join(body_parts) if body_parts else None,
-                "link": link,
+                "embed": embed,
+                "components": [components] if components else None,
+                "thread_name": f"討論：{doc.title[:80]}",
             },
         )
 
@@ -416,17 +447,575 @@ async def emit_announcement_notice(db: AsyncSession, ann: Announcement) -> None:
             .all()
         )
     channel_ids = await _publication_channel_ids_for_orgs(db, org_ids)
+    if not channel_ids:
+        return
+    severity = Severity.URGENT if ann.is_urgent else Severity.INFO
+    title_prefix = "【緊急】" if ann.is_urgent else "【最新】"
+    embed = build_embed(
+        Domain.ANNOUNCEMENT,
+        severity,
+        title=f"{title_prefix}{ann.title}",
+        link=f"/announcements/{ann.id}",
+    )
+    components = default_action_row(
+        open_url=f"/announcements/{ann.id}", domain=Domain.ANNOUNCEMENT
+    )
     for channel_id in channel_ids:
         await emit(
             db,
             event_type="discord.channel_alert",
             payload={
                 "channel_id": channel_id,
-                "title": f"{'緊急' if ann.is_urgent else '最新'}公告：{ann.title}",
-                "body": None,
-                "link": f"/announcements/{ann.id}",
+                "embed": embed,
+                "components": [components] if components else None,
+                "thread_name": f"留言：{ann.title[:80]}",
             },
         )
+
+
+# ── Phase 1：個人 DM 與額外 domain 推播 ────────────────────────────────────────
+
+
+async def emit_user_dm(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    embed: dict[str, Any],
+    components: list[dict[str, Any]] | None = None,
+    category: str | None = None,
+) -> None:
+    """個人 DM 推播。dispatcher 端會檢查 NotificationPreference 與綁定狀態。"""
+    from api.services.outbox import emit
+
+    await emit(
+        db,
+        event_type="discord.user_dm",
+        payload={
+            "user_id": str(user_id),
+            "embed": embed,
+            "components": components,
+            "category": category,
+        },
+    )
+
+
+def _fmt_dt(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    return value.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
+
+
+async def _emit_org_channels(
+    db: AsyncSession,
+    *,
+    org_ids: set[uuid.UUID],
+    embed: dict[str, Any],
+    components: list[dict[str, Any]] | None = None,
+    thread_name: str | None = None,
+) -> int:
+    """共用：對一組 org 解析公告頻道並推 embed_alert。回傳實際推送頻道數。"""
+    from api.services.outbox import emit
+
+    channel_ids = await _publication_channel_ids_for_orgs(db, org_ids)
+    for channel_id in channel_ids:
+        await emit(
+            db,
+            event_type="discord.channel_alert",
+            payload={
+                "channel_id": channel_id,
+                "embed": embed,
+                "components": components,
+                "thread_name": thread_name,
+            },
+        )
+    return len(channel_ids)
+
+
+# ── 會議 ──────────────────────────────────────────────────────────────────────
+
+
+async def emit_meeting_invited(db: AsyncSession, meeting: Any) -> None:
+    """新會議建立/發布；推 org channel + 與會者 DM（在 dispatcher 端套 preference）。"""
+    fields: list[dict[str, Any]] = []
+    if dt := _fmt_dt(getattr(meeting, "starts_at", None)):
+        fields.append({"name": "開會時間", "value": dt, "inline": True})
+    if loc := getattr(meeting, "location", None):
+        fields.append({"name": "地點", "value": str(loc), "inline": True})
+    if chair := getattr(meeting, "chair_name", None):
+        fields.append({"name": "主席", "value": str(chair), "inline": True})
+    link = f"/meetings/{meeting.id}"
+    embed = build_embed(
+        Domain.MEETING,
+        Severity.INFO,
+        title=f"開會通知：{meeting.title}",
+        body=getattr(meeting, "description", None),
+        fields=fields,
+        link=link,
+    )
+    components = default_action_row(open_url=link, domain=Domain.MEETING)
+    components_list = [components] if components else None
+    await _emit_org_channels(
+        db,
+        org_ids={meeting.org_id} if getattr(meeting, "org_id", None) else set(),
+        embed=embed,
+        components=components_list,
+        thread_name=f"會議：{meeting.title[:80]}",
+    )
+
+
+async def emit_meeting_agenda_changed(db: AsyncSession, meeting: Any) -> None:
+    link = f"/meetings/{meeting.id}"
+    embed = build_embed(
+        Domain.MEETING,
+        Severity.WARNING,
+        title=f"議程變更：{meeting.title}",
+        body="議程或會議資訊已更新，請至平台檢視最新版本。",
+        link=link,
+    )
+    components = default_action_row(open_url=link, domain=Domain.MEETING)
+    await _emit_org_channels(
+        db,
+        org_ids={meeting.org_id} if getattr(meeting, "org_id", None) else set(),
+        embed=embed,
+        components=[components] if components else None,
+    )
+
+
+async def emit_meeting_minutes_published(db: AsyncSession, meeting: Any) -> None:
+    link = f"/meetings/{meeting.id}"
+    embed = build_embed(
+        Domain.MEETING,
+        Severity.SUCCESS,
+        title=f"會議紀錄發布：{meeting.title}",
+        body="會議紀錄已發布，可上平台檢視全文與決議。",
+        link=link,
+    )
+    components = default_action_row(open_url=link, domain=Domain.MEETING)
+    await _emit_org_channels(
+        db,
+        org_ids={meeting.org_id} if getattr(meeting, "org_id", None) else set(),
+        embed=embed,
+        components=[components] if components else None,
+        thread_name=f"討論：{meeting.title[:80]}",
+    )
+
+
+# ── 行事曆 ────────────────────────────────────────────────────────────────────
+
+
+async def emit_calendar_event_published(db: AsyncSession, event: Any) -> None:
+    fields: list[dict[str, Any]] = []
+    if dt := _fmt_dt(getattr(event, "starts_at", None)):
+        fields.append({"name": "開始時間", "value": dt, "inline": True})
+    if dt := _fmt_dt(getattr(event, "ends_at", None)):
+        fields.append({"name": "結束時間", "value": dt, "inline": True})
+    if loc := getattr(event, "location", None):
+        fields.append({"name": "地點", "value": str(loc), "inline": True})
+    link = getattr(event, "href", None) or f"/calendar/events/{event.id}"
+    embed = build_embed(
+        Domain.CALENDAR,
+        Severity.INFO,
+        title=f"新行事曆：{event.title}",
+        body=getattr(event, "description", None),
+        fields=fields,
+        link=link,
+    )
+    components = default_action_row(open_url=link, domain=Domain.CALENDAR)
+    await _emit_org_channels(
+        db,
+        org_ids={event.org_id} if getattr(event, "org_id", None) else set(),
+        embed=embed,
+        components=[components] if components else None,
+    )
+
+
+async def emit_calendar_event_reminder(
+    db: AsyncSession, event: Any, user_id: uuid.UUID, lead: str = "即將開始"
+) -> None:
+    """提醒個別參與者；dispatcher 套 preference + quiet hours。"""
+    fields: list[dict[str, Any]] = []
+    if dt := _fmt_dt(getattr(event, "starts_at", None)):
+        fields.append({"name": "開始時間", "value": dt, "inline": True})
+    if loc := getattr(event, "location", None):
+        fields.append({"name": "地點", "value": str(loc), "inline": True})
+    link = getattr(event, "href", None) or f"/calendar/events/{event.id}"
+    embed = build_embed(
+        Domain.CALENDAR,
+        Severity.WARNING,
+        title=f"行事曆提醒（{lead}）：{event.title}",
+        fields=fields,
+        link=link,
+    )
+    components = default_action_row(open_url=link, domain=Domain.CALENDAR)
+    await emit_user_dm(
+        db,
+        user_id=user_id,
+        embed=embed,
+        components=[components] if components else None,
+        category="calendar_reminder",
+    )
+
+
+# ── 問卷 ──────────────────────────────────────────────────────────────────────
+
+
+async def emit_survey_opened(
+    db: AsyncSession, survey: Any, org_ids: set[uuid.UUID] | None = None
+) -> None:
+    link = f"/surveys/{survey.id}"
+    fields: list[dict[str, Any]] = []
+    if dt := _fmt_dt(getattr(survey, "closes_at", None)):
+        fields.append({"name": "截止時間", "value": dt, "inline": True})
+    if getattr(survey, "is_anonymous", False):
+        fields.append({"name": "填答模式", "value": "匿名", "inline": True})
+    embed = build_embed(
+        Domain.SURVEY,
+        Severity.INFO,
+        title=f"問卷開放填寫：{survey.title}",
+        body=getattr(survey, "description", None),
+        fields=fields,
+        link=link,
+    )
+    components = default_action_row(open_url=link, domain=Domain.SURVEY)
+    await _emit_org_channels(
+        db,
+        org_ids=org_ids or set(),
+        embed=embed,
+        components=[components] if components else None,
+    )
+
+
+async def emit_survey_closing_soon(
+    db: AsyncSession, survey: Any, user_id: uuid.UUID
+) -> None:
+    link = f"/surveys/{survey.id}"
+    fields: list[dict[str, Any]] = []
+    if dt := _fmt_dt(getattr(survey, "closes_at", None)):
+        fields.append({"name": "截止時間", "value": dt, "inline": True})
+    embed = build_embed(
+        Domain.SURVEY,
+        Severity.WARNING,
+        title=f"問卷即將截止：{survey.title}",
+        body="你尚未填寫此問卷，請把握時間。",
+        fields=fields,
+        link=link,
+    )
+    components = default_action_row(open_url=link, domain=Domain.SURVEY)
+    await emit_user_dm(
+        db,
+        user_id=user_id,
+        embed=embed,
+        components=[components] if components else None,
+        category="survey_closing",
+    )
+
+
+async def emit_survey_closed(
+    db: AsyncSession, survey: Any, org_ids: set[uuid.UUID] | None = None
+) -> None:
+    link = f"/surveys/{survey.id}"
+    embed = build_embed(
+        Domain.SURVEY,
+        Severity.NEUTRAL,
+        title=f"問卷已截止：{survey.title}",
+        body="問卷已關閉填答，可至平台檢視統計。",
+        link=link,
+    )
+    components = default_action_row(open_url=link, domain=Domain.SURVEY)
+    await _emit_org_channels(
+        db,
+        org_ids=org_ids or set(),
+        embed=embed,
+        components=[components] if components else None,
+    )
+
+
+# ── 學餐 ──────────────────────────────────────────────────────────────────────
+
+
+async def emit_meal_order_open(
+    db: AsyncSession, schedule: Any, vendor_org_id: uuid.UUID, vendor_name: str
+) -> None:
+    fields: list[dict[str, Any]] = [
+        {"name": "商家", "value": vendor_name, "inline": True},
+        {"name": "供餐日期", "value": str(getattr(schedule, "date", "—")), "inline": True},
+    ]
+    if dt := _fmt_dt(getattr(schedule, "order_deadline", None)):
+        fields.append({"name": "結單時間", "value": dt, "inline": True})
+    link = f"/meal/schedules/{schedule.id}"
+    embed = build_embed(
+        Domain.MEAL,
+        Severity.INFO,
+        title=f"學餐開放訂購：{vendor_name}",
+        fields=fields,
+        link=link,
+    )
+    components = default_action_row(open_url=link, domain=Domain.MEAL)
+    await _emit_org_channels(
+        db,
+        org_ids={vendor_org_id},
+        embed=embed,
+        components=[components] if components else None,
+    )
+
+
+async def emit_meal_order_closing_soon(
+    db: AsyncSession, schedule: Any, user_id: uuid.UUID, vendor_name: str
+) -> None:
+    link = f"/meal/schedules/{schedule.id}"
+    fields: list[dict[str, Any]] = [
+        {"name": "商家", "value": vendor_name, "inline": True}
+    ]
+    if dt := _fmt_dt(getattr(schedule, "order_deadline", None)):
+        fields.append({"name": "結單時間", "value": dt, "inline": True})
+    embed = build_embed(
+        Domain.MEAL,
+        Severity.WARNING,
+        title=f"學餐即將結單：{vendor_name}",
+        body="你尚未訂購此排程的學餐，請把握時間結單前下單。",
+        fields=fields,
+        link=link,
+    )
+    components = default_action_row(open_url=link, domain=Domain.MEAL)
+    await emit_user_dm(
+        db,
+        user_id=user_id,
+        embed=embed,
+        components=[components] if components else None,
+        category="meal_closing",
+    )
+
+
+async def emit_meal_order_closed(
+    db: AsyncSession, schedule: Any, vendor_org_id: uuid.UUID, vendor_name: str, order_count: int
+) -> None:
+    link = f"/meal/schedules/{schedule.id}"
+    embed = build_embed(
+        Domain.MEAL,
+        Severity.NEUTRAL,
+        title=f"學餐結單：{vendor_name}",
+        body=f"本次共 {order_count} 筆訂單，承辦人請至平台確認備餐與取餐安排。",
+        link=link,
+    )
+    components = default_action_row(open_url=link, domain=Domain.MEAL)
+    await _emit_org_channels(
+        db,
+        org_ids={vendor_org_id},
+        embed=embed,
+        components=[components] if components else None,
+    )
+
+
+# ── 福利社 ────────────────────────────────────────────────────────────────────
+
+
+async def emit_shop_item_listed(db: AsyncSession, product: Any) -> None:
+    fields: list[dict[str, Any]] = []
+    if price := getattr(product, "price", None):
+        fields.append({"name": "售價", "value": f"NT$ {price}", "inline": True})
+    if dt := _fmt_dt(getattr(product, "sale_end", None)):
+        fields.append({"name": "截止時間", "value": dt, "inline": True})
+    link = f"/shop/products/{product.id}"
+    embed = build_embed(
+        Domain.SHOP,
+        Severity.INFO,
+        title=f"新商品上架：{product.name}",
+        body=getattr(product, "description", None),
+        fields=fields,
+        link=link,
+        thumbnail_url=getattr(product, "image_url", None),
+    )
+    components = default_action_row(open_url=link, domain=Domain.SHOP)
+    await _emit_org_channels(
+        db,
+        org_ids={product.org_id} if getattr(product, "org_id", None) else set(),
+        embed=embed,
+        components=[components] if components else None,
+    )
+
+
+async def emit_shop_order_ready(
+    db: AsyncSession, order: Any, *, user_id: uuid.UUID
+) -> None:
+    link = f"/shop/orders/{order.id}"
+    fields: list[dict[str, Any]] = []
+    if serial := getattr(order, "serial_number", None):
+        fields.append({"name": "訂單字號", "value": str(serial), "inline": True})
+    embed = build_embed(
+        Domain.SHOP,
+        Severity.SUCCESS,
+        title="商品可取貨",
+        body="你訂購的商品已備齊，請依公告地點取貨。",
+        fields=fields,
+        link=link,
+    )
+    components = default_action_row(open_url=link, domain=Domain.SHOP)
+    await emit_user_dm(
+        db,
+        user_id=user_id,
+        embed=embed,
+        components=[components] if components else None,
+        category="shop_ready",
+    )
+
+
+# ── 法規 ──────────────────────────────────────────────────────────────────────
+
+
+async def emit_regulation_workflow_changed(
+    db: AsyncSession, regulation: Any, *, from_status: str | None = None
+) -> None:
+    fields: list[dict[str, Any]] = [
+        {"name": "目前狀態", "value": str(regulation.workflow_status), "inline": True}
+    ]
+    if from_status:
+        fields.insert(0, {"name": "原狀態", "value": from_status, "inline": True})
+    link = f"/regulations/{regulation.id}"
+    embed = build_embed(
+        Domain.REGULATION,
+        Severity.INFO,
+        title=f"法規流程更新：{regulation.title}",
+        body=getattr(regulation, "workflow_note", None),
+        fields=fields,
+        link=link,
+    )
+    components = default_action_row(open_url=link, domain=Domain.REGULATION)
+    await _emit_org_channels(
+        db,
+        org_ids={regulation.org_id} if getattr(regulation, "org_id", None) else set(),
+        embed=embed,
+        components=[components] if components else None,
+    )
+
+
+async def emit_regulation_published(db: AsyncSession, regulation: Any) -> None:
+    fields: list[dict[str, Any]] = [
+        {"name": "版本", "value": str(getattr(regulation, "version", 1)), "inline": True}
+    ]
+    if dt := _fmt_dt(getattr(regulation, "effective_date", None)):
+        fields.append({"name": "生效日期", "value": dt, "inline": True})
+    link = f"/regulations/{regulation.id}"
+    embed = build_embed(
+        Domain.REGULATION,
+        Severity.SUCCESS,
+        title=f"法規公布：{regulation.title}",
+        fields=fields,
+        link=link,
+    )
+    components = default_action_row(open_url=link, domain=Domain.REGULATION)
+    await _emit_org_channels(
+        db,
+        org_ids={regulation.org_id} if getattr(regulation, "org_id", None) else set(),
+        embed=embed,
+        components=[components] if components else None,
+        thread_name=f"討論：{regulation.title[:80]}",
+    )
+
+
+# ── 公文：個人待簽核 DM ───────────────────────────────────────────────────────
+
+
+async def emit_document_pending_to_approver(
+    db: AsyncSession, document: Any, approver_user_id: uuid.UUID
+) -> None:
+    fields: list[dict[str, Any]] = []
+    if serial := getattr(document, "serial_number", None):
+        fields.append({"name": "字號", "value": str(serial), "inline": True})
+    if subject := getattr(document, "subject", None):
+        fields.append({"name": "主旨", "value": str(subject)[:1000], "inline": False})
+    link = f"/documents/{document.id}"
+    embed = build_embed(
+        Domain.DOCUMENT,
+        Severity.INFO,
+        title=f"公文待你核稿：{document.title}",
+        fields=fields,
+        link=link,
+    )
+    components = default_action_row(open_url=link, domain=Domain.DOCUMENT)
+    await emit_user_dm(
+        db,
+        user_id=approver_user_id,
+        embed=embed,
+        components=[components] if components else None,
+        category="document_pending",
+    )
+
+
+# ── 任期 ──────────────────────────────────────────────────────────────────────
+
+
+async def emit_tenure_started(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    user_display_name: str,
+    org_id: uuid.UUID | None,
+    org_name: str,
+    position_name: str,
+) -> None:
+    body = f"{user_display_name} 即日起出任 {org_name} 的「{position_name}」。"
+    embed = build_embed(
+        Domain.TENURE,
+        Severity.SUCCESS,
+        title=f"任期開始：{position_name}",
+        body=body,
+    )
+    org_ids = {org_id} if org_id else set()
+    components = default_action_row(open_url=f"/orgs/{org_id}" if org_id else None)
+    await _emit_org_channels(
+        db,
+        org_ids=org_ids,
+        embed=embed,
+        components=[components] if components else None,
+    )
+    await emit_user_dm(
+        db,
+        user_id=user_id,
+        embed=build_embed(
+            Domain.TENURE,
+            Severity.SUCCESS,
+            title=f"你的任期已生效：{position_name}",
+            body=body,
+        ),
+        category="tenure",
+    )
+
+
+async def emit_tenure_ended(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    user_display_name: str,
+    org_id: uuid.UUID | None,
+    org_name: str,
+    position_name: str,
+) -> None:
+    body = f"{user_display_name} 於 {org_name} 的「{position_name}」任期已結束。"
+    embed = build_embed(
+        Domain.TENURE,
+        Severity.NEUTRAL,
+        title=f"任期結束：{position_name}",
+        body=body,
+    )
+    org_ids = {org_id} if org_id else set()
+    components = default_action_row(open_url=f"/orgs/{org_id}" if org_id else None)
+    await _emit_org_channels(
+        db,
+        org_ids=org_ids,
+        embed=embed,
+        components=[components] if components else None,
+    )
+    await emit_user_dm(
+        db,
+        user_id=user_id,
+        embed=build_embed(
+            Domain.TENURE,
+            Severity.NEUTRAL,
+            title=f"你的任期已結束：{position_name}",
+            body=body,
+        ),
+        category="tenure",
+    )
 
 
 def _discord_headers() -> dict[str, str]:
@@ -626,16 +1215,29 @@ async def enqueue_all_role_sync(db: AsyncSession) -> int:
 
 
 def send_dm(
-    discord_user_id: str, *, title: str, body: str | None = None, link: str | None = None
+    discord_user_id: str,
+    *,
+    title: str | None = None,
+    body: str | None = None,
+    link: str | None = None,
+    embed: dict[str, Any] | None = None,
+    components: list[dict[str, Any]] | None = None,
 ) -> None:
     if not bot_configured():
         logger.warning("Discord Bot 未設定，跳過 DM")
         return
-    text = title
-    if body:
-        text = f"{text}\n{body}"
-    if link:
-        text = f"{text}\n{_absolute_url(link)}"
+    payload: dict[str, Any] = {}
+    if embed is not None:
+        payload["embeds"] = [embed]
+    else:
+        text = title or "HCCA 平台通知"
+        if body:
+            text = f"{text}\n{body}"
+        if link:
+            text = f"{text}\n{_absolute_url(link)}"
+        payload["content"] = text[:1900]
+    if components:
+        payload["components"] = components
     with httpx.Client(timeout=10.0, headers=_discord_headers()) as client:
         channel = client.post(
             "https://discord.com/api/v10/users/@me/channels",
@@ -645,22 +1247,54 @@ def send_dm(
         channel_id = channel.json()["id"]
         message = client.post(
             f"https://discord.com/api/v10/channels/{channel_id}/messages",
-            json={"content": text[:1900]},
+            json=payload,
         )
         message.raise_for_status()
 
 
-def send_channel_message(channel_id: str, *, title: str, body: str | None = None) -> None:
+def send_channel_message(
+    channel_id: str,
+    *,
+    title: str | None = None,
+    body: str | None = None,
+    embed: dict[str, Any] | None = None,
+    components: list[dict[str, Any]] | None = None,
+    thread_name: str | None = None,
+) -> None:
     if not bot_configured():
         logger.warning("Discord Bot 未設定，跳過頻道訊息")
         return
-    content = title if body is None else f"{title}\n{body}"
+    payload: dict[str, Any] = {}
+    if embed is not None:
+        payload["embeds"] = [embed]
+    else:
+        content = (title or "") if body is None else f"{title or ''}\n{body}".strip()
+        payload["content"] = content[:1900]
+    if components:
+        payload["components"] = components
     with httpx.Client(timeout=10.0, headers=_discord_headers()) as client:
         res = client.post(
             f"https://discord.com/api/v10/channels/{channel_id}/messages",
-            json={"content": content[:1900]},
+            json=payload,
         )
         res.raise_for_status()
+        if thread_name:
+            message_id = str(res.json().get("id") or "")
+            if message_id:
+                thread_res = client.post(
+                    f"https://discord.com/api/v10/channels/{channel_id}/messages/{message_id}/threads",
+                    json={
+                        "name": thread_name[:100],
+                        "auto_archive_duration": 1440,
+                    },
+                )
+                if thread_res.status_code >= 400:
+                    logger.warning(
+                        "Discord 自動開 thread 失敗 channel=%s message=%s status=%s",
+                        channel_id,
+                        message_id,
+                        thread_res.status_code,
+                    )
 
 
 def _strip_managed_prefix(name: str, prefixes: list[str]) -> str:
@@ -748,15 +1382,111 @@ def format_discord_payload(payload: dict[str, Any]) -> tuple[str, str | None]:
     return title, str(body) if body else None
 
 
+def _user_dm_allowed(session: Any, user_id: uuid.UUID, category: str | None) -> bool:
+    """檢查使用者 NotificationPreference 是否允許此 category；未綁 preference 預設 True。
+
+    Phase 1.4 之後 DiscordNotificationPreference 表存在；此函式同時相容
+    表尚未建立的情境（catch ProgrammingError 視為允許）。
+    """
+    if not category:
+        return True
+    try:
+        from sqlalchemy import select as _select
+
+        from api.models.discord_account import DiscordNotificationPreference
+
+        pref = session.execute(
+            _select(DiscordNotificationPreference).where(
+                DiscordNotificationPreference.user_id == user_id
+            )
+        ).scalar_one_or_none()
+        if pref is None:
+            return True
+        prefs = pref.preferences or {}
+        return bool(prefs.get(category, True))
+    except ImportError:
+        return True
+    except Exception as exc:
+        logger.debug("讀取 DM preference 失敗，預設允許：%s", exc)
+        return True
+
+
+def dispatch_user_dm(payload: dict[str, Any]) -> None:
+    """Celery 端 user_dm 分派：解析平台 user_id → DiscordAccountLink → send_dm。
+
+    payload schema:
+        - user_id: str(UUID) 必填
+        - embed: dict 必填（純文字 DM 直接走舊 discord.push）
+        - components: list[dict] 可選
+        - category: str 可選；若帶入會查 NotificationPreference 是否允許
+    """
+    user_id_str = payload.get("user_id")
+    embed = payload.get("embed")
+    components = payload.get("components")
+    category = payload.get("category")
+    if not user_id_str or embed is None:
+        logger.warning("discord.user_dm payload 缺 user_id 或 embed")
+        return
+    try:
+        user_uuid = uuid.UUID(str(user_id_str))
+    except (TypeError, ValueError):
+        logger.warning("discord.user_dm user_id 非合法 UUID：%s", user_id_str)
+        return
+
+    from sqlalchemy import create_engine, select as _select
+    from sqlalchemy.orm import Session
+
+    sync_url = settings.DATABASE_URL.replace("+asyncpg", "")
+    eng = create_engine(sync_url)
+    with Session(eng) as session:
+        link = session.execute(
+            _select(DiscordAccountLink).where(
+                DiscordAccountLink.user_id == user_uuid,
+                DiscordAccountLink.is_active.is_(True),
+            )
+        ).scalar_one_or_none()
+        if link is None:
+            logger.info("Discord DM 略過：使用者 %s 未綁定", user_uuid)
+            return
+        if not _user_dm_allowed(session, user_uuid, category):
+            logger.info(
+                "Discord DM 略過：user=%s category=%s 已關閉", user_uuid, category
+            )
+            return
+        discord_user_id = link.discord_user_id
+
+    send_dm(str(discord_user_id), embed=embed, components=components)
+
+
 __all__ = [
     "bot_configured",
     "consume_open_token",
     "create_open_url",
     "create_petition_private_channel",
+    "dispatch_user_dm",
     "emit_announcement_notice",
+    "emit_calendar_event_published",
+    "emit_calendar_event_reminder",
+    "emit_document_pending_to_approver",
+    "emit_meal_order_closed",
+    "emit_meal_order_closing_soon",
+    "emit_meal_order_open",
+    "emit_meeting_agenda_changed",
+    "emit_meeting_invited",
+    "emit_meeting_minutes_published",
     "emit_moderation_log",
     "emit_public_document_notice",
+    "emit_regulation_published",
+    "emit_regulation_workflow_changed",
     "emit_security_alert",
+    "emit_shop_item_listed",
+    "emit_shop_order_ready",
+    "emit_survey_closed",
+    "emit_survey_closing_soon",
+    "emit_survey_opened",
+    "emit_tenure_ended",
+    "emit_tenure_started",
+    "emit_user_dm",
     "emit_welcome_message",
     "enqueue_all_role_sync",
     "enqueue_petition_private_channel",

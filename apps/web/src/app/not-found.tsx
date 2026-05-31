@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { BRANDING } from "@/lib/branding";
+
 export default function NotFound() {
   return (
     <div className="min-h-screen flex items-center justify-center p-6">
@@ -15,7 +17,7 @@ export default function NotFound() {
             找不到此頁面
           </h2>
           <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            您要尋找的頁面不存在或已被移除。
+            您要尋找的 {BRANDING.acronym} 頁面不存在或已被移除。
           </p>
         </div>
         <Link href="/" className="btn btn-primary">返回首頁</Link>

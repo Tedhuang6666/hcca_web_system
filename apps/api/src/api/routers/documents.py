@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
+from api.core.posthog import get_posthog_client
 from api.dependencies.auth import get_current_active_user, get_optional_user
 from api.models.document import (
     ApprovalStepStatus,
@@ -187,6 +188,18 @@ async def create_document(
         actor_email=current_user.email,
         summary=f"建立公文「{doc.title}」字號 {doc.serial_number}",
     )
+
+    _ph = get_posthog_client()
+    if _ph:
+        _ph.capture(
+            distinct_id=str(current_user.id),
+            event="document_created",
+            properties={
+                "category": doc.category.value if doc.category else None,
+                "org_id": str(doc.org_id) if doc.org_id else None,
+            },
+        )
+
     return doc
 
 

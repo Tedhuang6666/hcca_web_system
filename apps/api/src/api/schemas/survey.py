@@ -51,7 +51,7 @@ class QuestionCondition(BaseModel):
 
 
 def _parse_condition(raw: object) -> QuestionCondition | None:
-    """安全解析 condition_json（相容舊版單一條件格式），失敗時回傳 None。"""
+    """安全解析 condition_json，失敗時回傳 None。"""
     if not raw:
         return None
     try:
@@ -60,9 +60,6 @@ def _parse_condition(raw: object) -> QuestionCondition | None:
         return None
     if not isinstance(data, dict):
         return None
-    # 舊格式（單一條件）→ 包成單規則群組
-    if "rules" not in data and "question_id" in data:
-        data = {"rules": [data]}
     try:
         return QuestionCondition.model_validate(data)
     except ValueError:

@@ -14,7 +14,6 @@ dependencies = [
     "bleach>=6.1.0",
     "celery[redis]>=5.3.1",
     "discord-py>=2.4.0",
-    "fastapi-mail>=1.6.2",
     "fastapi[standard]>=0.135.3",
     "google-auth>=2.53.0",
     "gunicorn>=26.0.0",
@@ -36,6 +35,7 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0.49",
     "webauthn>=2.5.3",
     "weasyprint>=68.1",
+    "posthog>=7.16.2",
 ]
 
 [project.scripts]

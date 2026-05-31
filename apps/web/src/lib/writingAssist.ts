@@ -13,7 +13,7 @@ const COMMON_PHRASES: WritingSuggestion[] = [
   { group: "公文常用語", label: "辦法如下", value: "辦法如下：" },
   { group: "法規用語", label: "自公布日施行", value: "本法規自公布日施行。" },
   { group: "法規用語", label: "修正條文", value: "修正條文" },
-  { group: "法規用語", label: "經學生代表大會通過", value: "經學生代表大會通過後公布施行。" },
+  { group: "法規用語", label: "經班聯會通過", value: "經班聯會通過後公布施行。" },
   { group: "會議用語", label: "照案通過", value: "照案通過。" },
   { group: "會議用語", label: "修正後通過", value: "修正後通過。" },
   { group: "會議用語", label: "交付審查", value: "交付相關委員會審查。" },

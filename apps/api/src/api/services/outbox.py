@@ -85,8 +85,38 @@ def _dispatch(event: OutboxEvent) -> None:
     elif etype == "discord.channel_alert":
         from api.services.discord_bot import format_discord_payload, send_channel_message
 
-        title, body = format_discord_payload(payload)
-        send_channel_message(str(payload.get("channel_id")), title=title, body=body)
+        embed = payload.get("embed")
+        components = payload.get("components")
+        thread_name = payload.get("thread_name")
+        if embed is not None:
+            send_channel_message(
+                str(payload.get("channel_id")),
+                embed=embed,
+                components=components,
+                thread_name=thread_name,
+            )
+        else:
+            title, body = format_discord_payload(payload)
+            send_channel_message(
+                str(payload.get("channel_id")),
+                title=title,
+                body=body,
+                components=components,
+                thread_name=thread_name,
+            )
+    elif etype == "discord.embed_alert":
+        from api.services.discord_bot import send_channel_message
+
+        send_channel_message(
+            str(payload.get("channel_id")),
+            embed=payload.get("embed"),
+            components=payload.get("components"),
+            thread_name=payload.get("thread_name"),
+        )
+    elif etype == "discord.user_dm":
+        from api.services.discord_bot import dispatch_user_dm
+
+        dispatch_user_dm(payload)
     elif etype == "discord.role_sync":
         from api.services.discord_bot import sync_member_roles
 

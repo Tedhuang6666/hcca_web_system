@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 interface DrawerProps {
   /** 由父層控制開關，false → 觸發收起動畫後 unmount。 */
@@ -44,7 +45,7 @@ export default function Drawer({
   closeOnBackdrop = true,
   ariaLabel,
 }: DrawerProps) {
-  const [mounted, setMounted] = useState(open);
+  const [mounted, setMounted] = useState(false);
   const [entered, setEntered] = useState(false);
 
   useEffect(() => {
@@ -89,7 +90,7 @@ export default function Drawer({
     ["--drawer-sheet-height" as string]: sheetHeight,
   };
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50"
       role="dialog"
@@ -154,6 +155,7 @@ export default function Drawer({
           </div>
         )}
       </aside>
-    </div>
+    </div>,
+    document.body,
   );
 }

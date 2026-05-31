@@ -1,9 +1,10 @@
 """應用程式設定 - 使用 Pydantic Settings 管理環境變數"""
 
 import warnings
+from typing import Annotated
 
 from pydantic import Field, PostgresDsn, RedisDsn, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 _DEFAULT_SECRET = "CHANGE_ME_IN_PRODUCTION_USE_256_BIT_KEY"
 
@@ -25,6 +26,9 @@ class Settings(BaseSettings):
     ENABLE_API_DOCS: bool = False
     ALLOWED_ORIGINS: list[str] = ["http://localhost:3000"]
     ALLOWED_HOSTS: list[str] = ["localhost", "127.0.0.1", "api", "test"]
+    LOG_LEVEL: str = "INFO"
+    LOG_FORMAT: str = "json"
+    ACCESS_LOG_ENABLED: bool = True
 
     # --- 資料庫設定 ---
     DATABASE_URL: PostgresDsn = Field(
@@ -49,6 +53,12 @@ class Settings(BaseSettings):
     REDIS_SOCKET_TIMEOUT: float = Field(default=2.0, gt=0)
     REDIS_HEALTH_CHECK_INTERVAL: int = Field(default=30, ge=1)
 
+    # --- Celery failure retention / DLQ ---
+    CELERY_INSPECT_TIMEOUT_SECONDS: float = Field(default=0.25, gt=0)
+    CELERY_DLQ_ENABLED: bool = True
+    CELERY_DLQ_REDIS_KEY: str = "celery:dead_letter:v1"
+    CELERY_DLQ_MAX_ITEMS: int = Field(default=1000, ge=1)
+
     # --- Cloudflare / 信任代理 ---
     # 啟用時，從 CF-Connecting-IP 取真實 client IP（僅信任 socket peer ∈ CF 官方 CIDR）
     TRUST_CLOUDFLARE_PROXY: bool = Field(default=False)
@@ -70,6 +80,10 @@ class Settings(BaseSettings):
     SENTRY_DSN: str = Field(default="")
     SENTRY_TRACES_SAMPLE_RATE: float = Field(default=0.1, ge=0.0, le=1.0)
     SENTRY_PROFILES_SAMPLE_RATE: float = Field(default=0.0, ge=0.0, le=1.0)
+
+    # --- PostHog 產品分析 ---
+    POSTHOG_API_KEY: str = Field(default="")
+    POSTHOG_HOST: str = Field(default="https://us.i.posthog.com")
 
     # --- Search / Meilisearch ---
     MEILISEARCH_URL: str = Field(default="")
@@ -142,7 +156,7 @@ class Settings(BaseSettings):
         description="額外允許登入的完整 Email，適合管理員 Gmail 例外",
     )
     LOGIN_ALLOW_EXTERNAL_USERS: bool = Field(
-        default=True,
+        default=False,
         description=(
             "允許任何 Google 帳號登入；校外/外校帳號登入後不會被分配職位，"
             "僅有公開頁等級的檢視權限與陳情送件功能。"
@@ -150,15 +164,10 @@ class Settings(BaseSettings):
         ),
     )
 
-    # --- Email / SMTP 設定 ---
-    MAIL_USERNAME: str = Field(default="")
-    MAIL_PASSWORD: str = Field(default="")
-    MAIL_FROM: str = Field(default="noreply@campus.edu")
-    MAIL_FROM_NAME: str = Field(default="校園自治整合平台")
-    MAIL_PORT: int = Field(default=587)
-    MAIL_SERVER: str = Field(default="smtp.gmail.com")
-    MAIL_STARTTLS: bool = Field(default=True)
-    MAIL_SSL_TLS: bool = Field(default=False)
+    # --- Email / Resend 設定 ---
+    RESEND_API_KEY: str = Field(default="")
+    MAIL_FROM: str = Field(default="noreply@hct.works")
+    MAIL_FROM_NAME: str = Field(default="新竹高中班聯會 HCCA")
     # 前端基底 URL — email 內絕對連結用（退訂連結、CTA、通知偏好頁）
     FRONTEND_BASE_URL: str = Field(default="http://localhost:3000")
     # 每位使用者每日透過平台寄送 email 的「人次」上限（防濫用）
@@ -192,6 +201,12 @@ class Settings(BaseSettings):
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_REQUESTS: int = 120
     RATE_LIMIT_WINDOW_SECONDS: int = 60
+
+    # --- Idempotency ---
+    IDEMPOTENCY_ENABLED: bool = True
+    IDEMPOTENCY_TTL_SECONDS: int = Field(default=86_400, ge=60)
+    IDEMPOTENCY_LOCK_TTL_SECONDS: int = Field(default=30, ge=1)
+    IDEMPOTENCY_METHODS: set[str] = Field(default_factory=lambda: {"POST", "PUT", "PATCH"})
 
     # --- 瀏覽器安全標頭 ---
     SECURITY_HEADERS_ENABLED: bool = True
@@ -235,6 +250,55 @@ class Settings(BaseSettings):
     )
     DB_BACKUP_RETENTION_DAYS: int = Field(default=7)
 
+    # --- 異地備份（Phase A3）---
+    # 對應 docs/DR_OBJECTIVES.md。設定後備份檔會 gpg 加密 + 上傳到指定異地 bucket。
+    BACKUP_GPG_PASSPHRASE: str = Field(
+        default="",
+        description="GPG 對稱加密密碼。未設定時備份不加密（僅開發允許）",
+    )
+    BACKUP_S3_BUCKET: str = Field(
+        default="",
+        description="異地備份 S3 bucket 名稱（與主機房不同 region）",
+    )
+    BACKUP_S3_REGION: str = Field(
+        default="ap-northeast-1",
+        description="異地備份 bucket region；建議與 S3_REGION 不同 region",
+    )
+    BACKUP_S3_PREFIX: str = Field(
+        default="postgres",
+        description="S3 key prefix；可包含環境名稱以隔離 dev/prod",
+    )
+    BACKUP_VERIFY_SHA256: bool = Field(
+        default=True,
+        description="上傳前計算 sha256 並寫入 BackupRecord，還原時驗證",
+    )
+
+    # --- OIDC provider（Phase D1 / ADR-005）---
+    # 對接學校 OIDC IdP 時設定。未設則 OIDCProvider.enabled=False。
+    OIDC_DISCOVERY_URL: str = Field(
+        default="",
+        description="OIDC issuer 的 /.well-known/openid-configuration URL",
+    )
+    OIDC_CLIENT_ID: str = Field(default="")
+    OIDC_CLIENT_SECRET: str = Field(default="")
+    OIDC_REDIRECT_URI: str = Field(default="http://localhost:8000/auth/oidc/callback")
+
+    # --- SAML provider（Phase D1 / ADR-005）---
+    SAML_METADATA_URL: str = Field(
+        default="",
+        description="IdP metadata XML URL；未設則 SAMLProvider.enabled=False",
+    )
+
+    # --- 欄位級加密（Phase B3、ADR-006）---
+    # 用於敏感欄位（MFA secret、API key 明文 mirror、第三方 token）。
+    # 支援多 key（new first、舊 key 允許解密）以平滑輪替。
+    # 格式：comma-separated Fernet base64 keys，例如：
+    #   FIELD_ENCRYPTION_KEYS="<new_key_base64>,<old_key_base64>"
+    FIELD_ENCRYPTION_KEYS: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+        description="Fernet keys list（new first）。未設定時欄位加密功能停用",
+    )
+
     # --- 系統設定 / .env 編輯頁（高危：預設關閉）---
     # 啟用後超管可在 /admin/settings 檢視與編輯設定；明文密鑰與儲存須 MFA 再驗證。
     ENABLE_ENV_EDITOR: bool = Field(default=False)
@@ -267,6 +331,30 @@ class Settings(BaseSettings):
     @classmethod
     def normalize_email_settings(cls, values: list[str]) -> list[str]:
         return [value.strip().lower().lstrip("@") for value in values if value.strip()]
+
+    @field_validator("FIELD_ENCRYPTION_KEYS", mode="before")
+    @classmethod
+    def parse_field_encryption_keys(cls, value: object) -> list[str]:
+        if value is None or value == "":
+            return []
+        if isinstance(value, str):
+            raw = value.strip()
+            if not raw:
+                return []
+            if raw.startswith("["):
+                import json
+
+                try:
+                    parsed = json.loads(raw)
+                except json.JSONDecodeError:
+                    parsed = [item.strip() for item in raw.strip("[]").split(",") if item.strip()]
+                if not isinstance(parsed, list):
+                    raise ValueError("FIELD_ENCRYPTION_KEYS 必須是 JSON array 或逗號分隔字串")
+                return [str(item).strip() for item in parsed if str(item).strip()]
+            return [item.strip() for item in raw.split(",") if item.strip()]
+        if isinstance(value, list):
+            return [str(item).strip() for item in value if str(item).strip()]
+        raise ValueError("FIELD_ENCRYPTION_KEYS 必須是 JSON array 或逗號分隔字串")
 
     @model_validator(mode="after")
     def production_security_must_be_explicit(self) -> "Settings":

@@ -1,14 +1,14 @@
 {
-  "name": "HCCA 校園自治整合平台",
+  "name": "新竹高中班聯會 HCCA 校園自治整合平台",
   "short_name": "HCCA",
-  "description": "服務學生代表大會的數位治理工具，整合公文、法規、購票、學餐與問卷。",
+  "description": "新竹高中班聯會 HCCA 的數位治理工具，整合公文、法規、公告、會議、購票、學餐與問卷。",
   "lang": "zh-TW",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0f172a",
-  "theme_color": "#111827",
+  "background_color": "#1f3a5f",
+  "theme_color": "#1f3a5f",
   "categories": ["education", "productivity", "government"],
   "icons": [
     {

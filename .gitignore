@@ -20,9 +20,14 @@ apps/web/.next/
 
 # Environment files
 .env
+.env.local
+.env.development
+.env.production
+.env.*.local
 .env.*
 !.env.example
 !.env.production.example
+!.env.schema.json
 
 # Alembic local/history
 /alembic.ini
@@ -44,11 +49,20 @@ apps/web/public/window.svg
 test.txt
 RegulationArticleCreate
 
-# AI/editor local files
+# dev.sh 產生的執行 log / 暫存
+.dev-api.log
+.dev-web.log
+.dev-alembic-check.log
+.env.backup.*
+
+# Local maintainer/editor files
 .claude/
+.maintainer-notes/
 .codex/
+.maintainer-tools/
 .cursor/
 .vscode/
 docs/
 README_FOR_CLAUDE.md
 CLAUDE.md
+MAINTAINER_CONTEXT.md

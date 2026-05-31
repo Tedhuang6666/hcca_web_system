@@ -1,120 +1,68 @@
-"use client";
+import type { Metadata } from "next";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { useParams } from "next/navigation";
-import { toast } from "sonner";
-import { announcementsApi, ApiError } from "@/lib/api";
+import { serverApiUrl, uploadUrl } from "@/lib/config";
+import { JsonLd, absoluteUrl, excerpt, pageMetadata } from "@/lib/seo";
 import type { AnnouncementOut } from "@/lib/types";
-import AnnouncementMarkdown from "@/components/announcements/AnnouncementMarkdown";
-import { usePermissions } from "@/hooks/usePermissions";
-import { API_BASE } from "@/lib/config";
 
-const AUDIENCE_LABEL: Record<string, string> = {
-  all: "全體",
-  school: "全體竹中生",
-  orgs: "特定組織",
-  members: "特定成員",
-};
+import AnnouncementDetailPageClient from "./AnnouncementDetailPageClient";
 
-export default function AnnouncementDetailPage() {
-  const { id } = useParams<{ id: string }>();
-  const [item, setItem] = useState<AnnouncementOut | null>(null);
-  const [loading, setLoading] = useState(true);
-  const { canAny } = usePermissions();
-  const canManage = canAny(
-    "announcement:edit",
-    "announcement:publish",
-    "announcement:set_urgent",
-    "announcement:media_manage",
-  );
+async function fetchAnnouncement(id: string): Promise<AnnouncementOut | null> {
+  const res = await fetch(serverApiUrl(`/announcements/${encodeURIComponent(id)}`), {
+    next: { revalidate: 60 },
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
 
-  useEffect(() => {
-    announcementsApi.get(id)
-      .then(setItem)
-      .catch((e) => toast.error(e instanceof ApiError ? e.message : "載入公告失敗"))
-      .finally(() => setLoading(false));
-  }, [id]);
+function markdownFromContent(content: Record<string, unknown> | null | undefined) {
+  if (!content) return "";
+  if (typeof content.markdown === "string") return content.markdown;
+  if (typeof content.text === "string") return content.text;
+  return "";
+}
 
-  if (loading) {
-    return <div className="py-20 text-center" style={{ color: "var(--text-muted)" }}>載入中…</div>;
-  }
-  if (!item) {
-    return <div className="py-20 text-center" style={{ color: "var(--text-muted)" }}>找不到公告</div>;
-  }
+export async function generateMetadata(
+  { params }: { params: Promise<{ id: string }> },
+): Promise<Metadata> {
+  const { id } = await params;
+  const item = await fetchAnnouncement(id);
+  const title = item?.title ?? "公告";
+  const description = excerpt(markdownFromContent(item?.content), "校園自治平台公告。");
+  const path = `/announcements/${encodeURIComponent(id)}`;
+  const imagePath = item?.media?.[0]?.url ? uploadUrl(item.media[0].url) : undefined;
+
+  return pageMetadata({ title, description, path, imagePath });
+}
+
+export default async function AnnouncementDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const item = await fetchAnnouncement(id);
+  const path = `/announcements/${encodeURIComponent(id)}`;
+  const published = item?.published_at ?? item?.created_at;
 
   return (
-    <article className="mx-auto max-w-3xl space-y-5">
-      <div className="flex items-center justify-between gap-3">
-        <Link href="/announcements" className="btn btn-ghost">返回公告檢視</Link>
-        {canManage && (
-          <Link href={`/announcements/${item.id}/edit`} className="btn btn-secondary">
-            編輯公告
-          </Link>
-        )}
-      </div>
-
-      <header className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2">
-          {item.is_urgent && (
-            <span className="badge" style={{ color: "var(--danger)", background: "var(--danger-dim)", borderColor: "var(--danger-border)" }}>
-              緊急公告
-            </span>
-          )}
-          {!item.is_published && (
-            <span className="badge" style={{ color: "var(--text-muted)", background: "var(--bg-elevated)", borderColor: "var(--border)" }}>
-              草稿
-            </span>
-          )}
-          {item.audience_type !== "all" && (
-            <span className="badge" style={{ color: "var(--primary)", background: "var(--primary-dim)", borderColor: "var(--border-strong)" }}>
-              對象：{AUDIENCE_LABEL[item.audience_type] ?? item.audience_type}
-            </span>
-          )}
-          <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-            {item.published_at
-              ? new Date(item.published_at).toLocaleString("zh-TW")
-              : new Date(item.created_at).toLocaleString("zh-TW")}
-          </span>
-        </div>
-        {item.audience_type === "orgs" && item.audience_orgs.length > 0 && (
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-            對象組織：{item.audience_orgs.map((o) => o.name).join("、")}
-          </p>
-        )}
-        {item.audience_type === "members" && item.audience_members.length > 0 && (
-          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-            對象成員：{item.audience_members.map((m) => m.name).join("、")}
-          </p>
-        )}
-        <h1 className="text-2xl font-semibold leading-tight">{item.title}</h1>
-      </header>
-
-      {item.media.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {item.media.map((media, index) => {
-            const href = media.url.startsWith("/uploads/") ? `${API_BASE}${media.url}` : media.url;
-            return (
-              <a
-                key={media.id}
-                href={href}
-                target="_blank"
-                rel="noreferrer"
-                className="btn btn-ghost btn-sm"
-              >
-                圖片 {index + 1}
-              </a>
-            );
-          })}
-        </div>
+    <>
+      {item && (
+        <JsonLd
+          data={{
+            "@context": "https://schema.org",
+            "@type": "Article",
+            headline: item.title,
+            description: excerpt(markdownFromContent(item.content), "校園自治平台公告。"),
+            datePublished: published,
+            dateModified: item.updated_at,
+            author: { "@type": "Person", name: item.author_name || "新竹高中班聯會" },
+            publisher: { "@type": "Organization", name: "新竹高中班聯會" },
+            mainEntityOfPage: absoluteUrl(path),
+            image: item.media.map((media) => uploadUrl(media.url)).filter(Boolean),
+          }}
+        />
       )}
-
-      <div className="card p-5 md:p-7">
-        <AnnouncementMarkdown content={item.content} />
-        <div className="mt-8 border-t pt-4 text-sm" style={{ borderColor: "var(--border)", color: "var(--text-secondary)" }}>
-          公告人：{item.author_name || "未命名"}
-        </div>
-      </div>
-    </article>
+      <AnnouncementDetailPageClient initialItem={item} />
+    </>
   );
 }

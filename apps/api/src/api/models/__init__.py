@@ -13,7 +13,10 @@ from api.models.announcement import (  # noqa: F401
     announcement_audience_orgs,
     announcement_audience_users,
 )
+from api.models.api_key import ApiKey  # noqa: F401
+from api.models.audit_anchor import AuditLogAnchor  # noqa: F401
 from api.models.audit_log import AuditLog  # noqa: F401
+from api.models.backup_record import BackupKind, BackupRecord, BackupStatus  # noqa: F401
 from api.models.calendar import (  # noqa: F401
     CalendarEvent,
     CalendarEventChecklistItem,
@@ -56,6 +59,9 @@ from api.models.document import (  # noqa: F401
 )
 from api.models.email_message import EmailMessage, EmailStatus  # noqa: F401
 from api.models.exam_paper import ExamGradeTrack, ExamPaper, ExamPaperDownload  # noqa: F401
+
+# Feature Flag（Phase D3）
+from api.models.feature_flag import FeatureFlag  # noqa: F401
 from api.models.line_account import LineAccountLink  # noqa: F401
 from api.models.meal import (  # noqa: F401
     MealClassPickupCode,
@@ -121,6 +127,14 @@ from api.models.partner_map import (  # noqa: F401
     partner_business_tags,
 )
 from api.models.passkey import PasskeyCredential, WebAuthnChallenge  # noqa: F401
+from api.models.person import (  # noqa: F401
+    Person,
+    PersonAffiliation,
+    PersonAffiliationKind,
+    PersonAffiliationSource,
+    PersonAffiliationStatus,
+    PersonStatus,
+)
 from api.models.petition import (  # noqa: F401
     PetitionAttachment,
     PetitionAttachmentVisibility,
@@ -130,6 +144,16 @@ from api.models.petition import (  # noqa: F401
     PetitionEventVisibility,
     PetitionStatus,
     PetitionType,
+)
+
+# 政策版本與同意紀錄（Phase B1 / ADR-003）
+from api.models.policy import (  # noqa: F401
+    PolicyConsent,
+    PolicyDocument,
+    PolicyKind,
+    PrivacyRequest,
+    PrivacyRequestStatus,
+    PrivacyRequestType,
 )
 
 # 法規系統（含條文結構與修訂歷程）[M-20]
@@ -173,5 +197,15 @@ from api.models.shop import (  # noqa: F401
     ProductVariantOption,
 )
 from api.models.user import User  # noqa: F401
+
+# 外部身份綁定（Phase D1 / ADR-005）
+from api.models.user_identity import UserIdentity  # noqa: F401
 from api.models.web_push import WebPushSubscription  # noqa: F401
+
+# Webhook 訂閱與投遞紀錄（Phase D2）
+from api.models.webhook import (  # noqa: F401
+    DeliveryStatus,
+    WebhookDelivery,
+    WebhookSubscription,
+)
 from api.models.work_item import WorkItem, WorkItemStatus  # noqa: F401

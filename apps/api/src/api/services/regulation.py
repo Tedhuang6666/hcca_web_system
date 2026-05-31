@@ -110,10 +110,6 @@ async def is_publicly_effective(session: AsyncSession, reg: Regulation) -> bool:
 
 
 def _normalize_type(v: ArticleType) -> ArticleType:
-    if v == ArticleType.CLAUSE:
-        return ArticleType.ARTICLE
-    if v == ArticleType.SUBSECTION:
-        return ArticleType.SUBPARAGRAPH
     return v
 
 
@@ -472,7 +468,7 @@ async def fork_regulation_draft(
     由既有法規分支出一份新草案（workflow_status=DRAFT）。
     用於「已發布法規想新增草案」：避免對 published 直接做 workflow transition。
 
-    會複製條文結構（含 parent 關係），並將 legacy clause/subsection 映射到 article/subparagraph。
+    會複製條文結構（含 parent 關係）。
     """
     # fork 出的草案若來自已發布法規，預設為「修正」而非繼承原 amendment_type
     # （避免修正案被誤判為新法）
@@ -738,8 +734,6 @@ async def add_article(
     data: RegulationArticleCreate,
 ) -> RegulationArticle:
     """新增條文至法規"""
-    if data.article_type in (ArticleType.CLAUSE, ArticleType.SUBSECTION):
-        raise ValueError("不可新建舊層級類型，請改用 article / subparagraph")
     if data.parent_id is not None:
         parent = next(
             (a for a in reg.articles if a.id == data.parent_id and not a.is_deleted), None
@@ -1013,6 +1007,17 @@ def _article_display_label(legal_number: object, title: object) -> str:
     return str(title or "").strip() or "（未命名條文）"
 
 
+def _article_full_text(
+    *,
+    legal_number: object,
+    title: object,
+    content: object,
+) -> str:
+    label = _article_display_label(legal_number, title)
+    body = str(content or "").strip()
+    return f"{label}　{body}".strip() if body else label
+
+
 async def compare_amendment(
     session: AsyncSession,
     reg: Regulation,
@@ -1022,20 +1027,25 @@ async def compare_amendment(
     以 lineage_id 比對 → 重新排序（條號改變但仍為同一條）會正確標為「未變更」，
     不再被誤判為刪除＋新增。
     """
+    baseline_reg_id = reg.source_regulation_id or reg.id
     result = await session.execute(
         select(RegulationRevision)
-        .where(RegulationRevision.regulation_id == reg.id)
+        .where(RegulationRevision.regulation_id == baseline_reg_id)
         .order_by(RegulationRevision.amended_at.desc())
         .limit(1)
     )
     latest = result.scalar_one_or_none()
+    if latest is None and reg.source_regulation_id is not None:
+        source = await get_regulation(session, reg.source_regulation_id)
+        if source is not None:
+            latest = max(source.revisions or [], key=lambda r: r.amended_at, default=None)
     current_articles = [
         a
         for a in reg.articles
         if not a.is_deleted and _normalize_type(a.article_type) == ArticleType.ARTICLE
     ]
 
-    previous: dict[str, dict[str, str]] = {}
+    previous: dict[str, dict[str, str | int | None]] = {}
     if latest:
         import json
 
@@ -1043,17 +1053,23 @@ async def compare_amendment(
         for row in snapshot:
             if row.get("is_deleted"):
                 continue
-            if row.get("article_type") not in (
-                ArticleType.ARTICLE.value,
-                ArticleType.CLAUSE.value,
-            ):
+            if row.get("article_type") != ArticleType.ARTICLE.value:
                 continue
             key = _lineage_match_key(
                 row.get("lineage_id"), row.get("legal_number"), row.get("title")
             )
             previous[key] = {
                 "label": _article_display_label(row.get("legal_number"), row.get("title")),
+                "text": _article_full_text(
+                    legal_number=row.get("legal_number"),
+                    title=row.get("title"),
+                    content=row.get("content"),
+                ),
+                "title": row.get("title") or "",
                 "content": row.get("content") or "",
+                "legal_number": row.get("legal_number") or "",
+                "sort_index": row.get("sort_index"),
+                "parent_id": row.get("parent_id"),
             }
 
     rows: list[AmendmentComparisonRowOut] = []
@@ -1066,19 +1082,25 @@ async def compare_amendment(
         cur_label = _article_display_label(a.legal_number, a.title)
         if prev is None:
             note = "新增"
-        elif prev["content"].strip() != cur_content.strip():
+        elif (
+            str(prev["content"]).strip() != cur_content.strip()
+            or str(prev["title"]).strip() != (a.title or "").strip()
+        ):
             note = "修正"
-        elif prev["label"] != cur_label:
+        elif prev["label"] != cur_label or prev["sort_index"] != a.sort_index:
             # 內容相同但條號變了（重新排序 / 插入造成）→ 條次調整，仍算一項變更
             note = "條次調整"
         else:
-            note = "未變更"
+            continue
         rows.append(
             AmendmentComparisonRowOut(
                 article_key=cur_label,
-                revised_text=cur_content,
-                current_text=prev["content"] if prev else "",
-                note=note,
+                status=note,
+                revised_text=_article_full_text(
+                    legal_number=a.legal_number, title=a.title, content=cur_content
+                ),
+                current_text=str(prev["text"]) if prev else "",
+                note="" if note in {"新增", "修正"} else note,
             )
         )
     for key, prev in previous.items():
@@ -1086,9 +1108,10 @@ async def compare_amendment(
             continue
         rows.append(
             AmendmentComparisonRowOut(
-                article_key=prev["label"],
+                article_key=str(prev["label"]),
+                status="刪除",
                 revised_text="",
-                current_text=prev["content"],
+                current_text=str(prev["text"]),
                 note="刪除",
             )
         )

@@ -22,8 +22,6 @@ export interface LawTreeProps {
   onClearHighlight?: () => void;
   /** 第一行是否顯示頂部分隔線。 */
   showFirstDivider?: boolean;
-  /** 條文行的舊錨點 ID 計算（用於向下相容）。 */
-  legacyAnchorIdOf?: (article: RegulationArticleOut, index: number) => string | undefined;
   /** 空資料時顯示的 fallback。 */
   emptyState?: ReactNode;
   /** 套用到外層容器的 className。 */
@@ -44,7 +42,6 @@ export function LawTree({
   highlightedId = null,
   onClearHighlight,
   showFirstDivider = false,
-  legacyAnchorIdOf,
   emptyState,
   className = "",
 }: LawTreeProps) {
@@ -66,7 +63,6 @@ export function LawTree({
       {rows.map((row, idx) => {
         const isFirst = idx === 0;
         const shareUrl = shareUrlOf?.(row.article);
-        const legacyId = legacyAnchorIdOf?.(row.article, row.index);
         return (
           <LawArticleRow
             key={row.article.id}
@@ -80,7 +76,6 @@ export function LawTree({
             showTopDivider={!isFirst || showFirstDivider}
             highlighted={highlightedId === row.article.id}
             onClearHighlight={highlightedId === row.article.id ? onClearHighlight : undefined}
-            legacyAnchorId={legacyId}
           />
         );
       })}

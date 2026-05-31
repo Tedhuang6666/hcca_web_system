@@ -8,6 +8,7 @@ from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -25,11 +26,13 @@ from api.core.csrf import CSRFMiddleware
 from api.core.database import engine
 from api.core.defense import record_status as record_defense_status
 from api.core.error_audit import record_error
+from api.core.idempotency import IdempotencyMiddleware
 from api.core.load_shed import LoadShedMiddleware
 from api.core.load_signals import dec_active, inc_active, record_status
 from api.core.module_health import maybe_trip_module, record_module_status
 from api.core.modules import match_module
 from api.core.payload_limit import PayloadLimitMiddleware
+from api.core.posthog import init_posthog, shutdown_posthog
 from api.core.query_audit import (
     N_PLUS_ONE_THRESHOLD,
     get_request_counters,
@@ -39,8 +42,10 @@ from api.core.query_audit import (
     install_listeners as install_query_audit,
 )
 from api.core.rate_limit import SimpleRateLimitMiddleware
+from api.core.request_id import RequestIDMiddleware
 from api.core.security_headers import SecurityHeadersMiddleware
 from api.core.sentry import init_sentry
+from api.core.structured_logging import configure_logging
 from api.core.trusted_proxy import TrustedProxyMiddleware
 from api.routers import (
     activities,
@@ -48,6 +53,7 @@ from api.routers import (
     admin_system,
     analytics,
     announcements,
+    api_keys,
     audit,
     auth,
     calendar,
@@ -59,17 +65,23 @@ from api.routers import (
     documents_attachments,
     email,
     exam_papers,
+    feature_flags,
+    impersonation,
     line_webhook,
     meal,
     meetings,
+    metrics_endpoint,
     mfa,
     notifications,
     orgs,
     partner_map,
     passkeys,
+    people,
     petitions,
+    policies,
     positions,
     privacy,
+    public_api,
     regulations,
     reports,
     saved_filters,
@@ -83,6 +95,7 @@ from api.routers import (
     user_lifecycle,
     user_positions,
     users,
+    webhooks,
     work_items,
     ws,
 )
@@ -90,6 +103,26 @@ from api.routers._module_health import attach_module_health
 from api.routers.documents_serial import serial_router, template_router
 
 logger = logging.getLogger(__name__)
+
+# 高頻健檢 / 輪詢端點：access log 對它們意義不大，每秒洗版反而蓋掉真正有用的訊息。
+# 想要看就把 ACCESS_LOG_QUIET_POLLING=false。
+_QUIET_POLLING_PATHS: frozenset[str] = frozenset(
+    {
+        "/health",
+        "/live",
+        "/ready",
+        "/system/maintenance",
+        "/system/module-status",
+        "/notifications/inbox/count",
+    }
+)
+
+
+def _is_quiet_polling(path: str) -> bool:
+    if path in _QUIET_POLLING_PATHS:
+        return True
+    # 模組健康探測（每個 module router 都掛了一個）
+    return path.endswith("/__module_health__")
 
 
 async def _check_database() -> tuple[bool, str | None]:
@@ -159,6 +192,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         yield
     finally:
         await shutdown_broker()
+        shutdown_posthog()
         from api.core.security import redis_client
 
         await redis_client.aclose()
@@ -166,9 +200,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 def create_app() -> FastAPI:
     """應用程式工廠函式"""
+    configure_logging()
     # 在 FastAPI app 建立之前 init Sentry，這樣 ASGI / fastapi integration 才能 patch
     init_sentry()
+    init_posthog()
     install_query_audit()
+    # Phase A2：Prometheus metrics collectors（prometheus_client 未安裝時 no-op）
+    from api.core.prometheus_metrics import (
+        PrometheusMetricsMiddleware,
+        init_metrics,
+    )
+
+    init_metrics()
 
     app = FastAPI(
         title=settings.APP_NAME,
@@ -189,6 +232,8 @@ def create_app() -> FastAPI:
         hsts_max_age=settings.SECURITY_HSTS_MAX_AGE_SECONDS,
         content_security_policy=settings.SECURITY_CSP,
     )
+    # Prometheus metrics middleware（最外層、每筆 request 都會看到）
+    app.add_middleware(PrometheusMetricsMiddleware)
     app.add_middleware(SecurityAuditMiddleware)
     app.add_middleware(
         SimpleRateLimitMiddleware,
@@ -196,6 +241,7 @@ def create_app() -> FastAPI:
         requests=settings.RATE_LIMIT_REQUESTS,
         window_seconds=settings.RATE_LIMIT_WINDOW_SECONDS,
     )
+    app.add_middleware(IdempotencyMiddleware)
     app.add_middleware(CSRFMiddleware, enabled=True, secure=settings.COOKIE_SECURE)
     app.add_middleware(
         CORSMiddleware,
@@ -220,6 +266,7 @@ def create_app() -> FastAPI:
     # Load shed（admin 優先 + IP 黑名單 + maintenance mode）：在 host 檢查之後、
     # rate_limit / CSRF 之前。如此被擋下的請求不會浪費 CSRF 驗證資源。
     app.add_middleware(LoadShedMiddleware)
+    app.add_middleware(RequestIDMiddleware)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.ALLOWED_HOSTS)
     # 信任代理必須在最外層，這樣後續 middleware（rate limit / audit / CSRF）
     # 看到的 request.client.host 就已經是真實使用者 IP，而非 Cloudflare edge。
@@ -277,6 +324,7 @@ def create_app() -> FastAPI:
     app.include_router(reports.router)
     app.include_router(activities.router)
     app.include_router(orgs.router)
+    app.include_router(people.router)
     app.include_router(passkeys.router)
     app.include_router(partner_map.router)
     app.include_router(petitions.router)
@@ -307,6 +355,15 @@ def create_app() -> FastAPI:
     app.include_router(work_items.router)
     app.include_router(line_webhook.router)
     app.include_router(ws.router)
+    # Phase B1 / D2 新增
+    app.include_router(policies.router)
+    app.include_router(api_keys.router)
+    app.include_router(webhooks.router)
+    app.include_router(public_api.router)
+    # Phase A2 / C3 / D3 新增（企業級升級第三場）
+    app.include_router(metrics_endpoint.router)
+    app.include_router(impersonation.router)
+    app.include_router(feature_flags.router)
 
     # 使用者上傳檔案（公告媒體、問卷圖片等）的靜態存取；
     # 生產環境通常由反向代理直接服務，此處確保開發環境也可正常顯示。
@@ -347,6 +404,35 @@ def create_app() -> FastAPI:
                     request.method,
                     query_count,
                     query_ms,
+                )
+            if settings.ACCESS_LOG_ENABLED and not _is_quiet_polling(request.url.path):
+                # 訊息本身做成自我可讀（text/json 模式都有用）。
+                # 5xx 與 4xx 升 level 方便肉眼掃描；2xx/3xx 維持 INFO。
+                if response.status_code >= 500:
+                    log_fn = logger.error
+                elif response.status_code >= 400:
+                    log_fn = logger.warning
+                else:
+                    log_fn = logger.info
+                log_fn(
+                    "%s %s -> %d in %.1fms (q=%d db=%.1fms)",
+                    request.method,
+                    request.url.path,
+                    response.status_code,
+                    duration_ms,
+                    query_count,
+                    query_ms,
+                    extra={
+                        "event": "http.request",
+                        "method": request.method,
+                        "path": request.url.path,
+                        "status_code": response.status_code,
+                        "duration_ms": round(duration_ms, 1),
+                        "db_queries": query_count,
+                        "db_time_ms": round(query_ms, 1),
+                        "client_ip": request.client.host if request.client else None,
+                        "user_agent": request.headers.get("user-agent"),
+                    },
                 )
             return response
         finally:
@@ -402,7 +488,7 @@ def create_app() -> FastAPI:
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
         return JSONResponse(
-            {"detail": "請求格式驗證失敗", "errors": exc.errors()},
+            jsonable_encoder({"detail": "請求格式驗證失敗", "errors": exc.errors()}),
             status_code=422,
         )
 

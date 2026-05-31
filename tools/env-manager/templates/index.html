@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>環境設定管理器</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">只在這台電腦開啟</p>
+          <h1>環境設定管理器</h1>
+          <p class="lead">在這裡填寫登入、資料庫、寄信等設定。密碼類欄位會自動遮蔽，儲存前會先備份原本的 .env。</p>
+          <p id="paths">正在讀取設定檔...</p>
+        </div>
+        <div class="actions">
+          <button id="reloadButton" type="button">重新讀取</button>
+          <button id="exampleButton" type="button">產生給別人的範例</button>
+          <button id="saveButton" type="button" class="primary">儲存設定</button>
+        </div>
+      </header>
+
+      <section id="summary" class="summary" hidden></section>
+
+      <section class="quick-help">
+        <div>
+          <strong>怎麼填</strong>
+          <span>照每一列的中文說明填值；不確定的選填欄位可以先留空。</span>
+        </div>
+        <div>
+          <strong>紅色提示</strong>
+          <span>代表必填或格式不正確，修好後再儲存。</span>
+        </div>
+        <div>
+          <strong>範例檔</strong>
+          <span>按「產生給別人的範例」會移除真正密鑰。</span>
+        </div>
+      </section>
+
+      <section class="toolbar">
+        <input id="searchInput" type="search" placeholder="搜尋：Google、寄信、資料庫、密碼..." />
+        <button id="addButton" type="button">新增設定欄位</button>
+      </section>
+
+      <p id="statusMessage" class="status-message" role="status"></p>
+      <section id="fields" class="fields"></section>
+    </main>
+
+    <dialog id="fieldDialog">
+      <form method="dialog" class="dialog-form">
+        <h2>新增設定欄位</h2>
+        <label>
+          系統代碼
+          <input id="newKey" autocomplete="off" placeholder="FEATURE_FLAG" />
+        </label>
+        <label>
+          顯示名稱
+          <input id="newLabel" autocomplete="off" />
+        </label>
+        <label>
+          給使用者看的說明
+          <textarea id="newDescription" rows="3"></textarea>
+        </label>
+        <div class="grid-two">
+          <label>
+            格式
+            <select id="newType">
+              <option value="string">一般文字</option>
+              <option value="url">網址</option>
+              <option value="number">數字</option>
+              <option value="boolean">是 / 否</option>
+              <option value="json">清單或 JSON</option>
+            </select>
+          </label>
+          <label>
+            分類
+            <input id="newSection" value="Custom" autocomplete="off" />
+          </label>
+        </div>
+        <label>
+          範例值
+          <input id="newPlaceholder" autocomplete="off" />
+        </label>
+        <div class="checks">
+          <label><input id="newRequired" type="checkbox" /> 必填</label>
+          <label><input id="newSecret" type="checkbox" /> 密碼或 Token</label>
+        </div>
+        <menu>
+          <button value="cancel" type="submit">取消</button>
+          <button id="createFieldButton" value="default" type="button" class="primary">新增</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <template id="fieldTemplate">
+      <article class="field-row">
+        <div class="field-meta">
+          <div class="field-heading">
+            <strong class="field-label"></strong>
+            <span class="badge required-badge">必填</span>
+            <span class="badge secret-badge">會遮蔽</span>
+          </div>
+          <p class="field-description"></p>
+          <details class="technical-detail">
+            <summary>技術名稱</summary>
+            <code class="field-key"></code>
+          </details>
+          <p class="field-error"></p>
+        </div>
+        <div class="field-control">
+          <input class="field-input" autocomplete="off" spellcheck="false" />
+          <button class="reveal-button" type="button">顯示</button>
+        </div>
+      </article>
+    </template>
+
+    <script>
+      const state = { fields: [] };
+      const fieldsEl = document.querySelector("#fields");
+      const summaryEl = document.querySelector("#summary");
+      const pathsEl = document.querySelector("#paths");
+      const statusEl = document.querySelector("#statusMessage");
+      const template = document.querySelector("#fieldTemplate");
+      const searchInput = document.querySelector("#searchInput");
+      const dialog = document.querySelector("#fieldDialog");
+
+      function fieldMatches(field, query) {
+        const haystack = [field.key, field.label, field.description, field.section].join(" ").toLowerCase();
+        return haystack.includes(query.toLowerCase());
+      }
+
+      function groupedFields() {
+        const query = searchInput.value.trim();
+        const groups = new Map();
+        for (const field of state.fields) {
+          if (query && !fieldMatches(field, query)) continue;
+          if (!groups.has(field.section)) groups.set(field.section, []);
+          groups.get(field.section).push(field);
+        }
+        return groups;
+      }
+
+      function renderSummary(data) {
+        const messages = [];
+        if (data.missingRequired.length) {
+          messages.push(`還有必填欄位沒填：${data.missingRequired.join(", ")}`);
+        }
+        if (data.errors.length) {
+          messages.push(`有欄位格式需要修正：${data.errors.map((field) => field.label).join("、")}`);
+        }
+        summaryEl.hidden = messages.length === 0;
+        summaryEl.textContent = messages.join(" · ");
+      }
+
+      function setStatus(message, kind = "neutral") {
+        statusEl.textContent = message;
+        statusEl.dataset.kind = kind;
+      }
+
+      function renderFields() {
+        fieldsEl.innerHTML = "";
+        for (const [section, fields] of groupedFields()) {
+          const sectionEl = document.createElement("section");
+          sectionEl.className = "field-section";
+          const title = document.createElement("h2");
+          title.textContent = section;
+          sectionEl.append(title);
+          for (const field of fields) {
+            const node = template.content.firstElementChild.cloneNode(true);
+            node.dataset.key = field.key;
+            node.querySelector(".field-label").textContent = field.label;
+            node.querySelector(".field-key").textContent = field.key;
+            node.querySelector(".field-description").textContent = field.description;
+            node.querySelector(".required-badge").hidden = !field.required;
+            node.querySelector(".secret-badge").hidden = !field.secret;
+            const error = node.querySelector(".field-error");
+            error.textContent = field.error || "";
+            error.hidden = !field.error;
+
+            const input = node.querySelector(".field-input");
+            input.value = field.value;
+            input.placeholder = field.placeholder || "";
+            input.type = field.secret ? "password" : "text";
+            input.dataset.key = field.key;
+            input.addEventListener("input", () => {
+              field.value = input.value;
+            });
+
+            const reveal = node.querySelector(".reveal-button");
+            reveal.hidden = !field.secret;
+            reveal.addEventListener("click", () => {
+              const showing = input.type === "text";
+              input.type = showing ? "password" : "text";
+              reveal.textContent = showing ? "顯示" : "隱藏";
+            });
+            sectionEl.append(node);
+          }
+          fieldsEl.append(sectionEl);
+        }
+      }
+
+      async function loadEnv() {
+        setStatus("正在讀取設定...");
+        const response = await fetch("/api/env");
+        const data = await response.json();
+        state.fields = data.fields;
+        pathsEl.textContent = `正在編輯：${data.envPath}`;
+        renderSummary(data);
+        renderFields();
+        setStatus("設定已讀取。", "ok");
+      }
+
+      async function saveEnv() {
+        setStatus("正在儲存設定...");
+        const values = {};
+        for (const field of state.fields) values[field.key] = field.value;
+        const response = await fetch("/api/env", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ values }),
+        });
+        if (!response.ok) {
+          const error = await response.json();
+          setStatus("儲存失敗，請先修正紅色提示。", "error");
+          alert(JSON.stringify(error.detail, null, 2));
+          return;
+        }
+        const result = await response.json();
+        await loadEnv();
+        setStatus(result.backupPath ? `已儲存，備份在 ${result.backupPath}` : "已儲存。", "ok");
+      }
+
+      async function generateExample() {
+        setStatus("正在產生範例檔...");
+        const response = await fetch("/api/example", { method: "POST" });
+        const result = await response.json();
+        setStatus(`已產生範例檔：${result.path}`, "ok");
+      }
+
+      async function createField() {
+        const payload = {
+          key: document.querySelector("#newKey").value.trim(),
+          label: document.querySelector("#newLabel").value.trim(),
+          description: document.querySelector("#newDescription").value.trim(),
+          placeholder: document.querySelector("#newPlaceholder").value.trim(),
+          type: document.querySelector("#newType").value,
+          section: document.querySelector("#newSection").value.trim() || "Custom",
+          required: document.querySelector("#newRequired").checked,
+          secret: document.querySelector("#newSecret").checked,
+        };
+        const response = await fetch("/api/schema/fields", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!response.ok) {
+          const error = await response.json();
+          setStatus("新增欄位失敗。", "error");
+          alert(error.detail);
+          return;
+        }
+        dialog.close();
+        await loadEnv();
+        setStatus("已新增欄位。", "ok");
+      }
+
+      document.querySelector("#reloadButton").addEventListener("click", loadEnv);
+      document.querySelector("#saveButton").addEventListener("click", saveEnv);
+      document.querySelector("#exampleButton").addEventListener("click", generateExample);
+      document.querySelector("#addButton").addEventListener("click", () => dialog.showModal());
+      document.querySelector("#createFieldButton").addEventListener("click", createField);
+      searchInput.addEventListener("input", renderFields);
+      loadEnv();
+    </script>
+  </body>
+</html>

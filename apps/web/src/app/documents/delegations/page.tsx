@@ -126,7 +126,7 @@ export default function DocumentDelegationsPage() {
   const startEdit = (delegation: DocumentApprovalDelegationOut) => {
     setEditingId(delegation.id);
     setForm({
-      org_id: delegation.org_id,
+      org_id: delegation.org_id ?? "",
       delegate_user_id: delegation.delegate_user_id,
       start_at: toInputValue(delegation.start_at),
       end_at: toInputValue(delegation.end_at),

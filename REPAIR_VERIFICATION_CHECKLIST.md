@@ -233,4 +233,4 @@ cat .env.example | grep -E "LOGIN_|OWNER_"  # 檢查是否已添加
 
 ---
 
-*生成日期：2026-05-15 | 檢查者：Claude Code*
+*更新日期：2026-05-15 | 檢查者：維護人員*

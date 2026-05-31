@@ -10,6 +10,7 @@ from typing import Any
 from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from api.core.config import settings
 from api.core.security import redis_client
 
 logger = logging.getLogger(__name__)
@@ -55,7 +56,7 @@ async def get_redis_stats() -> dict[str, Any]:
         return {"connected_clients": 0, "blocked_clients": 0, "error": exc.__class__.__name__}
 
 
-async def get_celery_stats(timeout_seconds: float = 1.0) -> dict[str, Any]:
+async def get_celery_stats(timeout_seconds: float | None = None) -> dict[str, Any]:
     """
     取 Celery 各 queue 的 active/reserved 任務數。
     `inspect()` 為阻塞呼叫，包進 to_thread 避免卡 event loop；
@@ -66,9 +67,11 @@ async def get_celery_stats(timeout_seconds: float = 1.0) -> dict[str, Any]:
     except Exception as exc:  # pragma: no cover — Celery 未配置時容錯
         return {"queues": [], "error": exc.__class__.__name__}
 
+    timeout = timeout_seconds or settings.CELERY_INSPECT_TIMEOUT_SECONDS
+
     def _inspect() -> dict[str, dict[str, list]] | None:
         try:
-            insp = celery_app.control.inspect(timeout=timeout_seconds)
+            insp = celery_app.control.inspect(timeout=timeout)
             return {
                 "active": insp.active() or {},
                 "reserved": insp.reserved() or {},

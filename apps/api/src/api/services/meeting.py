@@ -588,25 +588,6 @@ async def _normalize_voting_attendance(
                     else MeetingAttendance.id.is_not(None)
                 )
             )
-            if duplicate is None:
-                legacy_rows = await session.execute(
-                    select(MeetingAttendance)
-                    .where(MeetingAttendance.meeting_id == meeting.id)
-                    .where(MeetingAttendance.voting_class_id.is_(None))
-                    .where(MeetingAttendance.is_voting_eligible == True)  # noqa: E712
-                    .where(
-                        MeetingAttendance.id != existing.id
-                        if existing is not None
-                        else MeetingAttendance.id.is_not(None)
-                    )
-                )
-                for legacy_record in legacy_rows.scalars().all():
-                    legacy_class = await active_voting_class_for_user(
-                        session, legacy_record.user_id
-                    )
-                    if legacy_class and legacy_class.id == voting_class.id:
-                        duplicate = legacy_record
-                        break
             if duplicate is not None:
                 label = class_svc.class_display_label(voting_class) or voting_class.class_code
                 raise ValueError(f"{label} 已有表決權人，請先移除原表決權人後再新增")

@@ -7,46 +7,38 @@
 export type ArticleStructureType =
   | "volume" | "chapter" | "section"
   | "article" | "paragraph" | "subparagraph" | "item"
-  | "special_clause"
-  // 舊值向下相容
-  | "clause" | "subsection";
+  | "special_clause";
 
 export const ARTICLE_TYPE_LABEL: Record<ArticleStructureType, string> = {
   volume: "編", chapter: "章", section: "節",
   article: "條", paragraph: "項", subparagraph: "款", item: "目",
   special_clause: "附則",
-  clause: "條", subsection: "款",
 };
 
 export const ARTICLE_IS_STRUCTURAL: Record<ArticleStructureType, boolean> = {
   volume: true, chapter: true, section: true,
   article: false, paragraph: false, subparagraph: false, item: false,
   special_clause: false,
-  clause: false, subsection: false,
 };
 
 export const STRUCTURAL_INDENT: Record<ArticleStructureType, number> = {
   volume: 0, chapter: 1, section: 2,
   article: 0, paragraph: 1, subparagraph: 2, item: 3,
   special_clause: 0,
-  clause: 0, subsection: 2,
 };
 
-/** 將舊值正規化為新值（clause → article、subsection → subparagraph）。 */
 export function normalizeArticleType(t: string): ArticleStructureType {
-  if (t === "clause") return "article";
-  if (t === "subsection") return "subparagraph";
   return t as ArticleStructureType;
 }
 
 // ── 層級順序與巢狀規則 ────────────────────────────────────────────────────────
 
-/** 正式層級的線性順序（不含 special_clause 與舊值），用於計算 rank、決定升降級。 */
+/** 正式層級的線性順序（不含 special_clause），用於計算 rank、決定升降級。 */
 export const ARTICLE_TYPE_ORDER: ArticleStructureType[] = [
   "volume", "chapter", "section", "article", "paragraph", "subparagraph", "item",
 ];
 
-/** 取得層級在 ARTICLE_TYPE_ORDER 中的索引；不在順序中（如 special_clause / 舊值）回傳 -1。 */
+/** 取得層級在 ARTICLE_TYPE_ORDER 中的索引；不在順序中（如 special_clause）回傳 -1。 */
 export function typeRank(t: ArticleStructureType | string): number {
   return ARTICLE_TYPE_ORDER.indexOf(normalizeArticleType(t));
 }
@@ -66,9 +58,6 @@ export const PARENT_RULES: Record<ArticleStructureType | "_root", Set<ArticleStr
   subparagraph: new Set(["item"]),
   item: new Set(),
   special_clause: new Set(),
-  // 舊值向下相容
-  clause: new Set(["paragraph"]),
-  subsection: new Set(["item"]),
 };
 
 /**
@@ -88,7 +77,7 @@ export function canNestInside(
 }
 
 /**
- * 取得 parent 之下允許的子層級類型清單（已排除舊值）。
+ * 取得 parent 之下允許的子層級類型清單。
  * 給新增條文時的下拉選單做防呆過濾。
  */
 export function allowedChildTypes(
@@ -97,7 +86,7 @@ export function allowedChildTypes(
   const set = parentType === null
     ? PARENT_RULES._root
     : PARENT_RULES[normalizeArticleType(parentType)] ?? new Set();
-  return Array.from(set).filter((t) => t !== "clause" && t !== "subsection");
+  return Array.from(set);
 }
 
 /** 取得 parent 之下「預設的子層級」（清單第一個）。 */
@@ -192,19 +181,6 @@ export const ARTICLE_TYPE_META: Record<ArticleStructureType, ArticleTypeMeta> = 
     textSize: "text-sm", fontWeight: "font-medium",
     borderWidth: 3, borderColor: "var(--text-muted)",
     badgeBg: "var(--bg-hover)", badgeColor: "var(--text-muted)",
-  },
-  // 舊值向下相容（與 article / subparagraph 同視覺）
-  clause: {
-    indentDesktop: 60, indentMobile: 30,
-    textSize: "text-sm", fontWeight: "font-medium",
-    borderWidth: 2, borderColor: "var(--border-strong)",
-    badgeBg: "var(--bg-hover)", badgeColor: "var(--text-primary)",
-  },
-  subsection: {
-    indentDesktop: 100, indentMobile: 50,
-    textSize: "text-xs", fontWeight: "font-normal",
-    borderWidth: 1, borderColor: "var(--border)",
-    badgeBg: "var(--bg-elevated)", badgeColor: "var(--text-muted)",
   },
 };
 

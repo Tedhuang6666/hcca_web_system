@@ -26,13 +26,13 @@ from api.models.document import (
     DocumentApproval,
     DocumentApprovalDelegation,
 )
+from api.models.meal import MenuSchedule
 from api.models.meeting import (
     AttendanceStatus,
     Meeting,
     MeetingAttendance,
     MeetingStatus,
 )
-from api.models.meal import MenuSchedule
 from api.models.petition import PetitionCase, PetitionStatus
 from api.models.regulation import Regulation, RegulationWorkflowStatus
 from api.models.shop import Product, ProductStatus
@@ -299,22 +299,19 @@ async def _surveys_to_fill(db: AsyncSession, user: User) -> list[TaskItem]:
 
 async def _calendar_checklist_assigned(db: AsyncSession, user: User) -> list[TaskItem]:
     rows = (
-        (
-            await db.execute(
-                select(CalendarEventChecklistItem, CalendarEvent)
-                .join(CalendarEvent, CalendarEvent.id == CalendarEventChecklistItem.event_id)
-                .where(CalendarEventChecklistItem.assignee_id == user.id)
-                .where(CalendarEventChecklistItem.is_done.is_(False))
-                .where(CalendarEvent.is_active.is_(True))
-                .order_by(
-                    CalendarEventChecklistItem.due_at.asc().nulls_last(),
-                    desc(CalendarEventChecklistItem.created_at),
-                )
-                .limit(30)
+        await db.execute(
+            select(CalendarEventChecklistItem, CalendarEvent)
+            .join(CalendarEvent, CalendarEvent.id == CalendarEventChecklistItem.event_id)
+            .where(CalendarEventChecklistItem.assignee_id == user.id)
+            .where(CalendarEventChecklistItem.is_done.is_(False))
+            .where(CalendarEvent.is_active.is_(True))
+            .order_by(
+                CalendarEventChecklistItem.due_at.asc().nulls_last(),
+                desc(CalendarEventChecklistItem.created_at),
             )
+            .limit(30)
         )
-        .all()
-    )
+    ).all()
     return [
         TaskItem(
             id=f"calendar:{item.id}:prepare",
@@ -338,7 +335,9 @@ async def _calendar_events_to_attend(db: AsyncSession, user: User) -> list[TaskI
         (
             await db.execute(
                 select(CalendarEvent)
-                .join(CalendarEventParticipant, CalendarEventParticipant.event_id == CalendarEvent.id)
+                .join(
+                    CalendarEventParticipant, CalendarEventParticipant.event_id == CalendarEvent.id
+                )
                 .where(CalendarEventParticipant.user_id == user.id)
                 .where(CalendarEvent.starts_at >= now, CalendarEvent.starts_at <= cutoff)
                 .where(CalendarEvent.is_active.is_(True))
@@ -527,7 +526,9 @@ async def build_task_inbox(db: AsyncSession, user: User) -> TaskInboxResponse:
         _safe("surveys_fill", lambda: _surveys_to_fill(db, user)),
         _safe("calendar_prepare", lambda: _calendar_checklist_assigned(db, user)),
         _safe("calendar_attend", lambda: _calendar_events_to_attend(db, user)),
-        _safe("announcements_publish", lambda: _announcements_to_publish(db, user, perms, is_admin)),
+        _safe(
+            "announcements_publish", lambda: _announcements_to_publish(db, user, perms, is_admin)
+        ),
         _safe("shop_sales", lambda: _shop_sales_to_manage(db, user, perms, is_admin)),
         _safe("meal_deadlines", lambda: _meal_deadlines_to_manage(db, user, perms, is_admin)),
         _safe("work_items_assigned", lambda: _work_items_assigned(db, user)),

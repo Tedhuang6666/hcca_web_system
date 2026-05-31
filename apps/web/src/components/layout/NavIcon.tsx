@@ -12,6 +12,7 @@ import {
   FileText,
   Files,
   Inbox,
+  Info,
   Landmark,
   LayoutGrid,
   Lock,
@@ -52,6 +53,7 @@ const Icons: Record<string, React.ComponentType<IconProps>> = {
   petition: MessageSquare,
   email: Mail,
   permissions: Lock,
+  people: Users,
   audit: ClipboardList,
   org: Network,
   classes: Users,
@@ -62,6 +64,7 @@ const Icons: Record<string, React.ComponentType<IconProps>> = {
   settings: Settings,
   bell: Bell,
   shield: Shield,
+  info: Info,
 };
 
 export default function NavIcon({ iconKey, size }: { iconKey: string; size: number }) {

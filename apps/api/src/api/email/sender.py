@@ -6,9 +6,11 @@ from api.email.renderer import render_email, sanitize_html
 from api.services.mail import enqueue_email
 
 
-def enqueue_rendered(to: list[str], subject: str, html: str) -> list[str]:
+def enqueue_rendered(
+    to: list[str], subject: str, html: str, email_message_id: str | None = None
+) -> list[str]:
     """對每位收件人各寄一封「已渲染好」的 HTML email，回傳 Celery task_id 清單。"""
-    return [enqueue_email(addr, subject, html, "html") for addr in to if addr]
+    return [enqueue_email(addr, subject, html, "html", email_message_id) for addr in to if addr]
 
 
 def send_branded_email(to: list[str], subject: str, template: str, context: dict) -> list[str]:

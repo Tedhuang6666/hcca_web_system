@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
+from api.core.posthog import get_posthog_client
 from api.dependencies.auth import get_current_active_user, get_optional_user
 from api.dependencies.permissions import require_permission
 from api.email.sender import send_branded_email
@@ -473,6 +474,19 @@ async def submit_response(
         )
         with contextlib.suppress(Exception):
             send_branded_email([user.email], subject, "generic", copy_context)
+
+    _ph = get_posthog_client()
+    if _ph:
+        _distinct_id = str(user.id) if user else "anonymous"
+        _ph.capture(
+            distinct_id=_distinct_id,
+            event="survey_response_submitted",
+            properties={
+                "survey_id": str(survey.id),
+                "is_anonymous": survey.is_anonymous,
+                "answer_count": len(payload.answers),
+            },
+        )
 
     return reloaded
 

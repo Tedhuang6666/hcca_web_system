@@ -27,8 +27,10 @@ from api.core.permission_codes import (
 )
 from api.dependencies.permissions import require_permission
 from api.models.org import Org, Permission, Position, PositionCategory, UserPosition
+from api.models.person import PersonAffiliationKind, PersonAffiliationSource
 from api.models.user import User
 from api.services import audit as audit_svc
+from api.services import person as person_svc
 from api.services.discord_bot import enqueue_role_sync
 from api.services.permission import get_user_permission_codes
 
@@ -304,12 +306,23 @@ async def pre_register_user(
                 detail=f"職位 {position.name} 所屬組織已停用，無法指派",
             )
         db.add(
-            UserPosition(
+            user_position := UserPosition(
                 user_id=user.id,
                 position_id=pos_id,
                 start_date=body.start_date,
                 end_date=body.end_date,
             )
+        )
+        await db.flush()
+        await person_svc.record_affiliation_for_user_position(
+            db,
+            user=user,
+            kind=PersonAffiliationKind.ORG_POSITION,
+            position_id=pos_id,
+            start_date=user_position.start_date,
+            end_date=user_position.end_date,
+            synced_user_position_id=user_position.id,
+            source=PersonAffiliationSource.RBAC_SYNC,
         )
 
     # 自訂權限：自動建立一個使用者專用職位並掛上權限碼
@@ -486,6 +499,16 @@ async def add_user_position(
     )
     db.add(user_position)
     await db.flush()
+    await person_svc.record_affiliation_for_user_position(
+        db,
+        user=user,
+        kind=PersonAffiliationKind.ORG_POSITION,
+        position_id=body.position_id,
+        start_date=user_position.start_date,
+        end_date=user_position.end_date,
+        synced_user_position_id=user_position.id,
+        source=PersonAffiliationSource.RBAC_SYNC,
+    )
     await audit_svc.record(
         db,
         entity_type="user_position",

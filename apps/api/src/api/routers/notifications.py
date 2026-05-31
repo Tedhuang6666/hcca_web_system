@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.config import settings
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
+from api.core.ws_manager import manager as ws_manager
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_permission
 from api.email.renderer import make_unsubscribe_token, parse_unsubscribe_token
@@ -518,16 +519,44 @@ async def create_notification(
         type, {"inapp": True, "email": False}
     )
     if channel["inapp"]:
-        db.add(
-            Notification(
-                user_id=user_id,
-                type=type,
-                title=title,
-                body=body,
-                link=link,
-                related_id=related_id,
-            )
+        notification = Notification(
+            user_id=user_id,
+            type=type,
+            title=title,
+            body=body,
+            link=link,
+            related_id=related_id,
         )
+        db.add(notification)
+        await db.flush()
+        try:
+            from sqlalchemy import func
+
+            unread = await db.scalar(
+                select(func.count(Notification.id))
+                .where(Notification.user_id == user_id)
+                .where(Notification.is_read == False)  # noqa: E712
+            )
+            await ws_manager.broadcast_to_room(
+                f"user:{user_id}",
+                {
+                    "type": "notification.created",
+                    "notification": NotificationOut.from_orm_dt(notification).model_dump(
+                        mode="json"
+                    ),
+                    "unread": int(unread or 0),
+                },
+            )
+        except Exception:
+            logger.warning("通知 WebSocket 推送失敗 user=%s type=%s", user_id, type, exc_info=True)
+        try:
+            await send_to_user(
+                db,
+                user_id,
+                {"title": title, "body": body or "", "url": link or "/notifications"},
+            )
+        except Exception:
+            logger.warning("通知 Web Push 推送失敗 user=%s type=%s", user_id, type, exc_info=True)
     if channel["email"] and user.email:
         try:
             _send_notification_email(user, type, title, body, link)

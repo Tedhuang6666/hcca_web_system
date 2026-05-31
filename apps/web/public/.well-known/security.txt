@@ -1,0 +1,11 @@
+# 漏洞回報政策 — 對應 [docs/adr/001-cloudflare-edge.md](https://github.com/) 與 Phase B4
+#
+# 若你發現本系統有安全漏洞，請以下列方式聯絡。請勿公開揭露
+# 在未經本平台確認 / 修補前。本系統感謝負責任的揭露行為。
+
+Contact: mailto:security@hcca.example
+Expires: 2027-12-31T23:59:59.000Z
+Preferred-Languages: zh-Hant, en
+Canonical: https://hcca.example/.well-known/security.txt
+Policy: https://hcca.example/legal/security-policy
+Acknowledgments: https://hcca.example/legal/security-policy#hall-of-fame

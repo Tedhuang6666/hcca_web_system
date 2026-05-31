@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
+from api.core.posthog import get_posthog_client
 from api.core.ws_manager import manager
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_permission
@@ -307,6 +308,15 @@ async def create_meeting(
         meta={"org_id": str(meeting.org_id), "title": meeting.title},
         summary=f"建立會議「{meeting.title}」",
     )
+
+    _ph = get_posthog_client()
+    if _ph:
+        _ph.capture(
+            distinct_id=str(current_user.id),
+            event="meeting_created",
+            properties={"org_id": str(meeting.org_id)},
+        )
+
     return await _meeting_or_404(session, meeting.id)
 
 

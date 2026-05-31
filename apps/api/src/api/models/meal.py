@@ -363,6 +363,12 @@ class MealOrder(Base, TimestampMixin):
         nullable=True,
         index=True,
     )
+    assistance_scope: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="self", server_default="self", index=True
+    )
+    assisted_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     status: Mapped[MealOrderStatus] = mapped_column(
         Enum(MealOrderStatus, name="mealorderstatus"),
         nullable=False,
@@ -390,6 +396,7 @@ class MealOrder(Base, TimestampMixin):
     is_no_show: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     user: Mapped[User] = relationship("User", foreign_keys=[user_id])
+    assisted_by: Mapped[User | None] = relationship("User", foreign_keys=[assisted_by_id])
     paid_by: Mapped[User | None] = relationship("User", foreign_keys=[paid_by_id])
     pickup_by: Mapped[User | None] = relationship("User", foreign_keys=[pickup_by_id])
     schedule: Mapped[MenuSchedule] = relationship("MenuSchedule", back_populates="orders")

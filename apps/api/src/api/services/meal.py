@@ -613,6 +613,8 @@ async def create_meal_order(
     *,
     user_id: uuid.UUID,
     data: MealOrderCreate,
+    assistance_scope: str = "self",
+    assisted_by_id: uuid.UUID | None = None,
 ) -> MealOrder:
     """
     建立學餐訂單。
@@ -623,7 +625,13 @@ async def create_meal_order(
     4. 同一學生對同一排程只能有一張訂單（DB UNIQUE 保護）
     """
     if data.pickup_slot_id is not None or any(item.availability_id for item in data.items):
-        return await create_platform_meal_order(session, user_id=user_id, data=data)
+        return await create_platform_meal_order(
+            session,
+            user_id=user_id,
+            data=data,
+            assistance_scope=assistance_scope,
+            assisted_by_id=assisted_by_id,
+        )
 
     if data.schedule_id is None:
         raise ValueError("請指定菜單排程或取餐時段")
@@ -680,12 +688,19 @@ async def create_meal_order(
 
     serial = await generate_meal_serial(session)
     pickup_code = await generate_pickup_code(session)
+    from api.models.user import User
+
+    user = await session.get(User, user_id)
+    school_class = await class_svc.resolve_user_class(session, user) if user else None
     order = MealOrder(
         serial_number=serial,
         pickup_code=pickup_code,
         user_id=user_id,
         schedule_id=schedule.id,
         vendor_id=schedule.vendor_id,
+        class_id=school_class.id if school_class else None,
+        assistance_scope=assistance_scope,
+        assisted_by_id=assisted_by_id,
         status=MealOrderStatus.PENDING,
         total_price=total_price,
         notes=data.notes,
@@ -712,6 +727,8 @@ async def create_platform_meal_order(
     *,
     user_id: uuid.UUID,
     data: MealOrderCreate,
+    assistance_scope: str = "self",
+    assisted_by_id: uuid.UUID | None = None,
 ) -> MealOrder:
     """建立平台式學餐訂單：商品上架 + 商品自訂取餐時段。"""
     if data.pickup_slot_id is None:
@@ -781,6 +798,8 @@ async def create_platform_meal_order(
         availability_id=availability.id,
         pickup_slot_id=pickup_slot.id,
         class_id=school_class.id if school_class else None,
+        assistance_scope=assistance_scope,
+        assisted_by_id=assisted_by_id,
         status=MealOrderStatus.PENDING,
         total_price=total_price,
         notes=data.notes,
@@ -830,6 +849,133 @@ async def cancel_meal_order(
     return order
 
 
+async def replace_meal_order_items(
+    session: AsyncSession,
+    order: MealOrder,
+    *,
+    data: MealOrderCreate,
+) -> MealOrder:
+    if order.status in {MealOrderStatus.CANCELLED, MealOrderStatus.COMPLETED}:
+        raise ValueError(f"訂單狀態 {order.status.value} 無法修改")
+
+    for item in list(order.items):
+        await session.delete(item)
+    await session.flush()
+
+    total_price = 0
+    order_items: list[MealOrderItem] = []
+    now = datetime.now(UTC)
+
+    if data.pickup_slot_id is not None or any(item.availability_id for item in data.items):
+        if data.pickup_slot_id is None:
+            raise ValueError("請選擇取餐時段")
+        pickup_slot = await get_pickup_slot(session, data.pickup_slot_id)
+        if pickup_slot is None or not pickup_slot.is_active:
+            raise ValueError("找不到此取餐時段或時段已停用")
+        availability = pickup_slot.availability
+        if not availability.is_available:
+            raise ValueError("此商品目前未開放訂購")
+        if availability.sale_start and now < availability.sale_start:
+            raise ValueError("此商品尚未開放訂購")
+        if availability.sale_end and now > availability.sale_end:
+            raise ValueError("此商品已截止訂購")
+        if now > pickup_slot.order_deadline:
+            raise ValueError("已超過此取餐時段的訂購截止時間")
+
+        total_quantity = 0
+        for item_req in data.items:
+            if item_req.availability_id != availability.id:
+                raise ValueError("同一張訂單只能包含同一商品上架與同一取餐時段")
+            total_quantity += item_req.quantity
+            total_price += availability.price * item_req.quantity
+            order_items.append(
+                MealOrderItem(
+                    order_id=order.id,
+                    menu_item_id=None,
+                    availability_id=availability.id,
+                    product_name_snapshot=availability.product.name if availability.product else None,
+                    quantity=item_req.quantity,
+                    unit_price=availability.price,
+                )
+            )
+
+        if availability.max_quantity is not None:
+            ordered = await session.scalar(
+                select(func.coalesce(func.sum(MealOrderItem.quantity), 0))
+                .join(MealOrder, MealOrderItem.order_id == MealOrder.id)
+                .where(MealOrderItem.availability_id == availability.id)
+                .where(MealOrder.status != MealOrderStatus.CANCELLED)
+            )
+            if int(ordered or 0) + total_quantity > availability.max_quantity:
+                raise ValueError("此商品剩餘數量不足")
+        if pickup_slot.capacity is not None:
+            slot_ordered = await session.scalar(
+                select(func.coalesce(func.sum(MealOrderItem.quantity), 0))
+                .join(MealOrder, MealOrderItem.order_id == MealOrder.id)
+                .where(MealOrder.pickup_slot_id == pickup_slot.id)
+                .where(MealOrder.status != MealOrderStatus.CANCELLED)
+            )
+            if int(slot_ordered or 0) + total_quantity > pickup_slot.capacity:
+                raise ValueError("此取餐時段容量已滿")
+
+        order.schedule_id = None
+        order.vendor_id = availability.vendor_id
+        order.availability_id = availability.id
+        order.pickup_slot_id = pickup_slot.id
+    else:
+        if data.schedule_id is None:
+            raise ValueError("請指定菜單排程或取餐時段")
+        schedule = await get_schedule(session, data.schedule_id)
+        if schedule is None:
+            raise ValueError("找不到此菜單排程")
+        if schedule.is_closed or now > schedule.order_deadline:
+            raise ValueError("此菜單排程已結單，無法修改")
+        if schedule.order_open_time and now < schedule.order_open_time:
+            raise ValueError("訂餐尚未開放，請稍後再試")
+
+        for item_req in data.items:
+            item_result = await session.execute(
+                select(MenuItem).where(MenuItem.id == item_req.menu_item_id).with_for_update()
+            )
+            menu_item = item_result.scalar_one_or_none()
+            if menu_item is None:
+                raise ValueError(f"找不到品項 {item_req.menu_item_id}")
+            if menu_item.schedule_id != schedule.id:
+                raise ValueError(f"品項「{menu_item.name}」不屬於此排程")
+            if not menu_item.is_available:
+                raise ValueError(f"品項「{menu_item.name}」目前不提供")
+            if menu_item.max_quantity is not None:
+                ordered_result = await session.execute(
+                    select(func.coalesce(func.sum(MealOrderItem.quantity), 0))
+                    .join(MealOrder, MealOrderItem.order_id == MealOrder.id)
+                    .where(MealOrderItem.menu_item_id == menu_item.id)
+                    .where(MealOrder.status != MealOrderStatus.CANCELLED)
+                )
+                already_ordered: int = ordered_result.scalar_one()
+                if already_ordered + item_req.quantity > menu_item.max_quantity:
+                    remaining = menu_item.max_quantity - already_ordered
+                    raise ValueError(f"品項「{menu_item.name}」數量不足（剩餘 {remaining} 份）")
+            total_price += menu_item.price * item_req.quantity
+            order_items.append(
+                MealOrderItem(
+                    order_id=order.id,
+                    menu_item_id=menu_item.id,
+                    quantity=item_req.quantity,
+                    unit_price=menu_item.price,
+                )
+            )
+        order.schedule_id = schedule.id
+        order.vendor_id = schedule.vendor_id
+        order.availability_id = None
+        order.pickup_slot_id = None
+
+    order.total_price = total_price
+    order.notes = data.notes
+    session.add_all(order_items)
+    await session.flush()
+    return order
+
+
 async def confirm_meal_order(session: AsyncSession, order: MealOrder) -> MealOrder:
     """商家確認訂單（PENDING → CONFIRMED）"""
     if order.status != MealOrderStatus.PENDING:
@@ -873,6 +1019,7 @@ async def list_class_meal_orders(
     vendor_id: uuid.UUID | None = None,
     pickup_slot_id: uuid.UUID | None = None,
     is_paid: bool | None = None,
+    assistance_scope: str | None = None,
     limit: int = 100,
     offset: int = 0,
 ) -> list[MealOrder]:
@@ -885,6 +1032,8 @@ async def list_class_meal_orders(
         q = q.where(MealOrder.pickup_slot_id == pickup_slot_id)
     if is_paid is not None:
         q = q.where(MealOrder.is_paid.is_(is_paid))
+    if assistance_scope:
+        q = q.where(MealOrder.assistance_scope == assistance_scope)
     q = q.order_by(MealOrder.created_at.desc()).limit(limit).offset(offset)
     result = await session.execute(q)
     return list(result.scalars().all())
@@ -924,6 +1073,7 @@ async def get_or_create_class_pickup_code(
             MealOrder.class_id == class_id,
             MealOrder.vendor_id == vendor_id,
             MealOrder.pickup_slot_id == pickup_slot_id,
+            MealOrder.assistance_scope == "class_assisted",
             MealOrder.status != MealOrderStatus.CANCELLED,
         )
     )
@@ -971,6 +1121,7 @@ async def lookup_and_redeem_pickup_code(
             MealOrder.class_id == class_code.class_id,
             MealOrder.vendor_id == class_code.vendor_id,
             MealOrder.pickup_slot_id == class_code.pickup_slot_id,
+            MealOrder.assistance_scope == "class_assisted",
             MealOrder.status != MealOrderStatus.CANCELLED,
         )
     )

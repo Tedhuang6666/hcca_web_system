@@ -8,17 +8,16 @@ import PwaInstallPrompt from "@/components/pwa/PwaInstallPrompt";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import TelemetryProvider from "@/components/providers/TelemetryProvider";
 import ScrollProgressBar from "@/components/ui/ScrollProgressBar";
+import { BRANDING } from "@/lib/branding";
 import { SOCIAL_IMAGE, SOCIAL_SHARE_TITLE, SOCIAL_SITE_NAME } from "@/lib/social-metadata";
+import { SITE_URL } from "@/lib/seo";
 
-const DEFAULT_DESCRIPTION = "服務學生代表大會的數位治理工具，整合公文、法規、購票、學餐與問卷。";
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL
-  || process.env.FRONTEND_BASE_URL
-  || "http://localhost:3000";
+const DEFAULT_DESCRIPTION = BRANDING.description;
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   applicationName: SOCIAL_SITE_NAME,
-  title: { default: SOCIAL_SHARE_TITLE, template: SOCIAL_SHARE_TITLE },
+  title: { default: SOCIAL_SHARE_TITLE, template: `%s｜${SOCIAL_SITE_NAME}` },
   description: DEFAULT_DESCRIPTION,
   manifest: "/manifest.webmanifest",
   openGraph: {
@@ -39,7 +38,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#1a1a2e",
+  themeColor: BRANDING.themeColor,
 };
 
 function ThemeScript() {

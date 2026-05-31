@@ -45,8 +45,6 @@ export function chineseToInt(value: string): number {
 }
 
 export function normalizedType(type: ArticleType): ArticleType {
-  if (type === "clause") return "article";
-  if (type === "subsection") return "subparagraph";
   return type;
 }
 
@@ -55,10 +53,8 @@ export const LINKABLE_ARTICLE_TYPES = new Set<ArticleType>([
   "chapter",
   "section",
   "article",
-  "clause",
   "paragraph",
   "subparagraph",
-  "subsection",
   "item",
 ]);
 
@@ -67,10 +63,8 @@ export const ARTICLE_TYPE_SUFFIX: Partial<Record<ArticleType, string>> = {
   chapter: "章",
   section: "節",
   article: "條",
-  clause: "條",
   paragraph: "項",
   subparagraph: "款",
-  subsection: "款",
   item: "目",
 };
 

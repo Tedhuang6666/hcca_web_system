@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
+import { BRANDING } from "@/lib/branding";
 import { apiUrl } from "@/lib/config";
 import { loginWithPasskey } from "@/lib/passkeys";
 
@@ -136,19 +137,19 @@ export default function LoginPage() {
             <div
               className="w-10 h-10 rounded-xl flex items-center justify-center text-base font-bold flex-shrink-0"
               style={{ background: "rgba(255,255,255,0.2)" }}>
-              自
+              {BRANDING.acronym}
             </div>
             <div>
-              <p className="text-base font-semibold leading-tight">校園自治整合平台</p>
-              <p className="text-xs mt-0.5 opacity-70">HCCA Campus Platform</p>
+              <p className="text-base font-semibold leading-tight">{BRANDING.orgShortName}</p>
+              <p className="text-xs mt-0.5 opacity-70">{BRANDING.englishName}</p>
             </div>
           </div>
 
           <h2 className="text-3xl font-bold leading-tight mb-4">
-            學生代表大會<br />數位治理工具
+            {BRANDING.slogan}
           </h2>
           <p className="text-base opacity-80 leading-relaxed">
-            整合公文、法規、訂購、學餐與問卷的全平台解決方案，提升校園自治效率。
+            {BRANDING.description}
           </p>
 
           <div className="mt-10 space-y-4">
@@ -169,7 +170,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-xs opacity-50">
-          © 2026 HCCA · v0.3.0
+          © 2026 {BRANDING.orgName} · v0.3.0
         </p>
       </div>
 
@@ -182,11 +183,11 @@ export default function LoginPage() {
             <div
               className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold flex-shrink-0"
               style={{ background: "var(--primary)", color: "var(--primary-fg)" }}>
-              自
+              {BRANDING.acronym}
             </div>
             <div>
-              <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>校園自治整合平台</p>
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>HCCA Campus Platform</p>
+              <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{BRANDING.orgShortName}</p>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>{BRANDING.englishName}</p>
             </div>
           </div>
 
@@ -204,7 +205,7 @@ export default function LoginPage() {
                 歡迎回來
               </h1>
               <p className="text-sm mt-1.5" style={{ color: "var(--text-muted)" }}>
-                請使用 Google 帳號登入系統
+                請使用竹中 Google Workspace 帳號或核准白名單登入
               </p>
             </div>
 
@@ -258,7 +259,7 @@ export default function LoginPage() {
             </a>
 
             <p className="text-center text-xs leading-relaxed mt-5" style={{ color: "var(--text-disabled)" }}>
-              校內成員享完整功能；校外帳號可檢視公開資料與送出陳情<br />
+              竹中成員依職位取得功能；白名單帳號由系統管理員核准<br />
               登入即表示同意相關使用規範
             </p>
 

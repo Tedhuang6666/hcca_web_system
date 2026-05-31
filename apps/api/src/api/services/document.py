@@ -6,7 +6,7 @@ import logging
 import uuid
 from datetime import UTC, date, datetime, time
 
-from sqlalchemy import and_, exists, func, or_, select, text
+from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -73,17 +73,6 @@ def _active_assignment_exists_for_viewer(
 
 
 # ── 字號自動生成 ───────────────────────────────────────────────────────────────
-
-
-async def generate_serial_number(session: AsyncSession) -> str:
-    """
-    使用 PostgreSQL Sequence 原子性取得序號，格式：DOC-YYYY-NNNNNN
-    此為向下相容的舊格式，新公文應使用 generate_serial_from_template。
-    """
-    result = await session.execute(text("SELECT nextval('document_serial_seq')"))
-    seq_val: int = result.scalar_one()
-    year = datetime.now(UTC).year
-    return f"DOC-{year}-{seq_val:06d}"
 
 
 async def generate_serial_from_template(
@@ -912,7 +901,7 @@ async def create_document(
     """
     建立草稿公文。
     - 若 data.serial_template_id 有值，使用組織字號模板生成字號（如：嶺代生字第 1150000001 號）
-    - 否則使用通用 PostgreSQL Sequence 格式（DOC-YYYY-NNNNNN）
+    - 若 data.manual_serial_number 有值，使用指定字號
     - 建立初始版本快照（Rev.1）
     - 若傳入受文者清單，一併建立 DocumentRecipient
     """
@@ -925,7 +914,9 @@ async def create_document(
         if existing is not None:
             raise ValueError("指定的公文字號已存在，請更換字號")
         serial = manual_serial
-    elif data.serial_template_id:
+    else:
+        if data.serial_template_id is None:
+            raise ValueError("請選擇字號模板，或手動指定公文字號")
         template = await get_serial_template(session, data.serial_template_id)
         if template is None or not template.is_active:
             msg = "指定的字號模板不存在或已停用"
@@ -934,8 +925,6 @@ async def create_document(
             msg = "字號模板不屬於此組織，無法使用"
             raise PermissionError(msg)
         serial = await generate_serial_from_template(session, template)
-    else:
-        serial = await generate_serial_number(session)
 
     visibility = data.visibility_level
     doc = Document(
@@ -1729,29 +1718,19 @@ async def resolve_recipient_match(
     命中規則（依序）：
     1. target_user_id 等於 viewer_id
     2. target_org_id 對應的機關內，viewer 目前任期有效成員
-    3. 純文字受文者：以 email 字串模糊比對（向下相容舊資料）
+    3. target_user_id 或 target_org_id 皆未設定時不視為身份命中
     """
     if not doc.recipients:
         return None
 
-    viewer = await session.scalar(select(User).where(User.id == viewer_id))
-    viewer_email = (viewer.email or "").strip().lower() if viewer else ""
-
-    matched_text: DocumentRecipient | None = None
     for r in doc.recipients:
         if r.target_user_id == viewer_id:
             return r
-        if r.target_org_id is not None:
-            if await _has_active_org_membership(session, viewer_id, r.target_org_id):
-                return r
-        elif (
-            matched_text is None
-            and r.target_user_id is None
-            and viewer_email
-            and (r.email or "").strip().lower() == viewer_email
+        if r.target_org_id is not None and await _has_active_org_membership(
+            session, viewer_id, r.target_org_id
         ):
-            matched_text = r
-    return matched_text
+            return r
+    return None
 
 
 def is_primary_variant(recipient: DocumentRecipient) -> bool:

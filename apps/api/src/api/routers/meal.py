@@ -22,6 +22,7 @@ from api.schemas.meal import (
     ItemStatOut,
     MealAvailabilityCreate,
     MealAvailabilityOut,
+    MealClassOrderUpsert,
     MealClassPickupCodeOut,
     MealOrderCancelRequest,
     MealOrderCreate,
@@ -868,6 +869,7 @@ async def list_class_meal_orders(
     vendor_id: uuid.UUID | None = Query(None),
     pickup_slot_id: uuid.UUID | None = Query(None),
     is_paid: bool | None = Query(None),
+    assisted_only: bool = Query(True, description="僅顯示午餐股長協助建立的訂單"),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> list:
@@ -880,9 +882,47 @@ async def list_class_meal_orders(
         vendor_id=vendor_id,
         pickup_slot_id=pickup_slot_id,
         is_paid=is_paid,
+        assistance_scope="class_assisted" if assisted_only else None,
         limit=limit,
         offset=offset,
     )
+
+
+@router.post(
+    "/orders/class",
+    response_model=MealOrderOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="午餐股長替本班學生建立學餐訂單",
+)
+async def create_class_meal_order(
+    payload: MealClassOrderUpsert,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> MealOrder:
+    from api.services import school_class as class_svc
+
+    target = await session.get(User, payload.user_id)
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此學生")
+    target_class = await class_svc.resolve_user_class(session, target)
+    class_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
+    if target_class is None or (
+        not current_user.is_superuser and target_class.id not in class_ids
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權替此學生訂餐")
+    try:
+        order = await meal_svc.create_meal_order(
+            session,
+            user_id=target.id,
+            data=payload.order,
+            assistance_scope="class_assisted",
+            assisted_by_id=current_user.id,
+        )
+    except IntegrityError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="此學生已下過此餐點") from e
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    return await _order_or_404(order.id, session)
 
 
 @router.post(
@@ -993,7 +1033,13 @@ async def get_meal_order(
         from api.services.permission import get_user_permission_codes
 
         codes = await get_user_permission_codes(session, current_user.id)
-        if "meal:manage" not in codes:
+        from api.services import school_class as class_svc
+
+        class_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
+        is_class_assisted = (
+            order.assistance_scope == "class_assisted" and order.class_id in class_ids
+        )
+        if "meal:manage" not in codes and not is_class_assisted:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權查看此訂單")
     return order
 
@@ -1030,6 +1076,31 @@ async def cancel_meal_order(
         summary=f"取消學餐訂單「{order.serial_number}」",
     )
     return order
+
+
+@router.patch(
+    "/orders/{order_id}",
+    response_model=MealOrderOut,
+    summary="截止前修改學餐訂單品項",
+)
+async def update_meal_order(
+    order_id: uuid.UUID,
+    payload: MealOrderCreate,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> MealOrder:
+    order = await _order_or_404(order_id, session)
+    if order.user_id != current_user.id and not current_user.is_superuser:
+        from api.services import school_class as class_svc
+
+        class_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
+        if order.assistance_scope != "class_assisted" or order.class_id not in class_ids:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權修改此訂單")
+    try:
+        await meal_svc.replace_meal_order_items(session, order, data=payload)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    return await _order_or_404(order.id, session)
 
 
 # ── 商家：訂單管理端點 ────────────────────────────────────────────────────────

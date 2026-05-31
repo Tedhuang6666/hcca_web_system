@@ -315,6 +315,8 @@ class MealOrderOut(BaseModel):
     availability_id: uuid.UUID | None = None
     pickup_slot_id: uuid.UUID | None = None
     class_id: uuid.UUID | None = None
+    assistance_scope: str = "self"
+    assisted_by_id: uuid.UUID | None = None
     status: MealOrderStatus
     total_price: int
     is_paid: bool = False
@@ -340,6 +342,8 @@ class MealOrderListItem(BaseModel):
     vendor_id: uuid.UUID
     pickup_slot_id: uuid.UUID | None = None
     class_id: uuid.UUID | None = None
+    assistance_scope: str = "self"
+    assisted_by_id: uuid.UUID | None = None
     status: MealOrderStatus
     total_price: int
     is_paid: bool = False
@@ -353,6 +357,11 @@ class MealOrderCreate(BaseModel):
     pickup_slot_id: uuid.UUID | None = Field(None, description="取餐時段 ID")
     items: list[MealOrderItemCreate] = Field(..., min_length=1, description="訂單品項（至少一項）")
     notes: str | None = Field(None, max_length=500, description="備註")
+
+
+class MealClassOrderUpsert(BaseModel):
+    user_id: uuid.UUID
+    order: MealOrderCreate
 
 
 class MealOrderCancelRequest(BaseModel):

@@ -19,6 +19,11 @@ class AuditLog(Base):
     entity_type: 資源種類，如 "document", "regulation", "user", "permission"
     action:      操作動詞，如 "create", "approve", "reject", "publish", "archive"
     meta:        任意附帶資訊（前後狀態差異、IP、備註等），不存放敏感憑證
+
+    雜湊鏈（Phase B2 / ADR-004）：
+      prev_hash: 前一筆紀錄的 self_hash；首筆為 GENESIS_HASH
+      self_hash: 本筆內容 + prev_hash 的 SHA-256
+    prev_hash / self_hash 由 audit_chain.write_audit_log_with_chain 自動填入。
     """
 
     __tablename__ = "audit_logs"
@@ -26,6 +31,7 @@ class AuditLog(Base):
         Index("ix_audit_logs_entity", "entity_type", "entity_id"),
         Index("ix_audit_logs_actor", "actor_id"),
         Index("ix_audit_logs_created_at", "created_at"),
+        Index("ix_audit_logs_self_hash", "self_hash"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -39,6 +45,10 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     # 人類可讀摘要（搜尋用）
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # 雜湊鏈；新寫入由 audit_chain.write_audit_log_with_chain 自動填。
+    prev_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    self_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
 
 __all__ = ["AuditLog"]

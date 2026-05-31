@@ -1,0 +1,46 @@
+{$SITE_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	}
+
+	handle_path /api/* {
+		reverse_proxy api-green:8000 {
+			health_uri /ready
+			health_interval 10s
+			health_timeout 3s
+		}
+	}
+
+	handle /ws/* {
+		reverse_proxy api-green:8000
+	}
+
+	handle /uploads/* {
+		reverse_proxy api-green:8000
+	}
+
+	handle /auth/google/* {
+		reverse_proxy api-green:8000
+	}
+
+	handle /health {
+		reverse_proxy api-green:8000
+	}
+
+	handle /ready {
+		reverse_proxy api-green:8000
+	}
+
+	handle /live {
+		reverse_proxy api-green:8000
+	}
+
+	handle {
+		reverse_proxy web-green:3000
+	}
+}

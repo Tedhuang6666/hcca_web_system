@@ -120,7 +120,9 @@ class CalendarEvent(Base, TimestampMixin):
         UUID(as_uuid=True), ForeignKey("meetings.id", ondelete="CASCADE"), nullable=True, index=True
     )
     source_module: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
-    source_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    source_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
+    )
     source_key: Mapped[str | None] = mapped_column(String(80), nullable=True)
     href: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_by: Mapped[uuid.UUID] = mapped_column(

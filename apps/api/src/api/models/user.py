@@ -58,6 +58,15 @@ class User(Base, TimestampMixin):
         JSONDict, nullable=False, default=dict, server_default="{}"
     )
 
+    # UI 主題偏好（Phase C4）：auto = 跟系統 prefers-color-scheme
+    ui_theme: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="auto", server_default="auto"
+    )
+    # UI 語言偏好（為 Phase C2 i18n 預留；zh-TW only 啟用）
+    ui_locale: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="zh-TW", server_default="zh-TW"
+    )
+
     # 關聯 (P2 展開)
     positions: Mapped[list["UserPosition"]] = relationship(  # noqa: F821
         "UserPosition", back_populates="user", lazy="select"

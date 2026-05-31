@@ -41,7 +41,7 @@ _SECRET_KEYS_EXPLICIT: frozenset[str] = frozenset(
         "DATABASE_URL_SYNC",
         "REDIS_URL",
         "GOOGLE_CLIENT_SECRET",
-        "MAIL_PASSWORD",
+        "RESEND_API_KEY",
         "LINE_CHANNEL_SECRET",
         "LINE_CHANNEL_ACCESS_TOKEN",
         "DISCORD_CLIENT_SECRET",
@@ -122,7 +122,11 @@ def _classify(key: str) -> str:
         return "安全與 JWT"
     if key.startswith("GOOGLE_") or key.startswith("LOGIN_"):
         return "Google OAuth / 登入"
-    if key.startswith("MAIL_") or key in {"FRONTEND_BASE_URL", "EMAIL_DAILY_QUOTA_PER_USER"}:
+    if key.startswith("MAIL_") or key in {
+        "RESEND_API_KEY",
+        "FRONTEND_BASE_URL",
+        "EMAIL_DAILY_QUOTA_PER_USER",
+    }:
         return "Email"
     if key in {"OWNER_EMAILS", "SUPERUSER_EMAILS"}:
         return "超管帳號"

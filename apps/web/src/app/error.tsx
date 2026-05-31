@@ -2,6 +2,8 @@
 import { useEffect } from "react";
 import Link from "next/link";
 
+import { BRANDING } from "@/lib/branding";
+
 export default function GlobalError({
   error,
   reset,
@@ -27,7 +29,7 @@ export default function GlobalError({
             發生錯誤
           </h2>
           <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            頁面載入時發生問題，請稍後再試。
+            {BRANDING.acronym} 頁面載入時發生問題，請稍後再試。
           </p>
           {error.digest && (
             <p className="text-xs mt-2 font-mono" style={{ color: "var(--text-disabled)" }}>

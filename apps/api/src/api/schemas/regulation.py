@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 from api.models.regulation import (
     ArticleType,
@@ -51,12 +51,6 @@ class RegulationArticleCreate(BaseModel):
     legal_number: str | None = Field(None, max_length=50, description="法律條號（如 5-1）")
     content: str | None = Field(None, description="條文內容（Chapter 類型可不填）")
 
-    @model_validator(mode="after")
-    def validate_no_legacy_type(self) -> RegulationArticleCreate:
-        if self.article_type in (ArticleType.CLAUSE, ArticleType.SUBSECTION):
-            raise ValueError("不可新建舊層級類型，請改用 article / subparagraph")
-        return self
-
 
 class RegulationArticleUpdate(BaseModel):
     """更新條文"""
@@ -93,9 +87,7 @@ class WorkflowActionRequest(BaseModel):
     """審議流程動作請求（送審/排程/核定/退回）"""
 
     note: str | None = Field(None, max_length=500, description="備註或退回原因")
-    meeting_id: uuid.UUID | None = Field(
-        None, description="排入議程時，同步加入指定議事會議的議程"
-    )
+    meeting_id: uuid.UUID | None = Field(None, description="排入議程時，同步加入指定議事會議的議程")
     serial_template_id: uuid.UUID | None = Field(
         None, description="主席公布產生公文時指定使用的字號模板"
     )
@@ -317,9 +309,24 @@ class AutoRenumberRequest(BaseModel):
 
 class AmendmentComparisonRowOut(BaseModel):
     article_key: str
+    status: str = Field(default="修正", description="異動類型：新增/修正/條次調整/刪除")
     revised_text: str
     current_text: str
     note: str
+
+
+class AmendmentComparisonExportRowIn(BaseModel):
+    article_key: str = Field(..., max_length=200)
+    status: str = Field(..., max_length=20)
+    revised_text: str = ""
+    current_text: str = ""
+    note: str = ""
+
+
+class AmendmentComparisonExportRequest(BaseModel):
+    proposal_title: str = Field(..., min_length=1, max_length=200)
+    rationale: str | None = Field(None, max_length=5000)
+    rows: list[AmendmentComparisonExportRowIn] = Field(..., min_length=1)
 
 
 class ReferenceWarningOut(BaseModel):

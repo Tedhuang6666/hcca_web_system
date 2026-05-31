@@ -70,7 +70,8 @@ def tmp_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     """把 .env 路徑導向 tmp 檔，避免污染真實 .env。"""
     env_path = tmp_path / ".env"
     env_path.write_text(
-        "MAIL_FROM=test@example.com\nMAIL_PASSWORD=initial-secret\nSLOW_REQUEST_THRESHOLD_MS=1000\n",
+        "MAIL_FROM=test@example.com\nRESEND_API_KEY=initial-secret\n"
+        "SLOW_REQUEST_THRESHOLD_MS=1000\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(app_settings_svc, "resolve_env_path", lambda: env_path)
@@ -107,9 +108,9 @@ async def test_list_settings_masks_secrets_when_enabled(
     assert body["enabled"] is True
     assert body["mfa_enabled"] is True
     assert len(body["fields"]) > 50
-    mail_password = next(f for f in body["fields"] if f["key"] == "MAIL_PASSWORD")
-    assert mail_password["is_secret"] is True
-    assert mail_password["value"] == "••••••"
+    resend_api_key = next(f for f in body["fields"] if f["key"] == "RESEND_API_KEY")
+    assert resend_api_key["is_secret"] is True
+    assert resend_api_key["value"] == "••••••"
     mail_from = next(f for f in body["fields"] if f["key"] == "MAIL_FROM")
     assert mail_from["is_secret"] is False
     assert mail_from["value"] == "test@example.com"
@@ -223,12 +224,12 @@ async def test_reveal_returns_secret_values_only(
     _override_user(admin)
     resp = await client.post(
         "/admin/system/settings/reveal",
-        json={"mfa_code": "1234", "keys": ["MAIL_PASSWORD", "MAIL_FROM"]},
+        json={"mfa_code": "1234", "keys": ["RESEND_API_KEY", "MAIL_FROM"]},
     )
     assert resp.status_code == 200
     values = resp.json()["values"]
-    # MAIL_PASSWORD 是密鑰 → 回明文；MAIL_FROM 不是密鑰 → 不在回應中
-    assert values == {"MAIL_PASSWORD": "initial-secret"}
+    # RESEND_API_KEY 是密鑰 → 回明文；MAIL_FROM 不是密鑰 → 不在回應中
+    assert values == {"RESEND_API_KEY": "initial-secret"}
 
 
 async def test_reveal_requires_mfa(
@@ -242,6 +243,6 @@ async def test_reveal_requires_mfa(
     _override_user(admin)
     resp = await client.post(
         "/admin/system/settings/reveal",
-        json={"mfa_code": "wrong", "keys": ["MAIL_PASSWORD"]},
+        json={"mfa_code": "wrong", "keys": ["RESEND_API_KEY"]},
     )
     assert resp.status_code == 403

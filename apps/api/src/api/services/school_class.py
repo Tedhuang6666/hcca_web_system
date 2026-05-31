@@ -14,6 +14,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.models.org import Org, Permission, Position, PositionCategory, UserPosition
+from api.models.person import (
+    PersonAffiliation,
+    PersonAffiliationKind,
+    PersonAffiliationSource,
+    PersonAffiliationStatus,
+)
 from api.models.school_class import (
     ClassCadre,
     ClassManualMember,
@@ -25,6 +31,7 @@ from api.models.school_class import (
     SchoolClass,
 )
 from api.models.user import User
+from api.schemas.person import PersonAffiliationCreate
 from api.schemas.school_class import (
     ClassManualMemberCreate,
     ClassManualMemberOut,
@@ -40,6 +47,7 @@ from api.schemas.school_class import (
     SchoolClassCreate,
     SchoolClassUpdate,
 )
+from api.services import person as person_svc
 from api.services.permission import active_tenure_filter
 
 CLASS_ROLE_DEFINITIONS: dict[str, tuple[str, list[str], int]] = {
@@ -538,6 +546,20 @@ async def add_membership(
     session.add(membership)
     await session.flush()
     await session.refresh(membership, attribute_names=["user"])
+    person = await person_svc.ensure_person_for_user(
+        session, user, source=PersonAffiliationSource.CLASS_WORKSPACE
+    )
+    await person_svc.create_affiliation(
+        session,
+        data=PersonAffiliationCreate(
+            person_id=person.id,
+            kind=PersonAffiliationKind.CLASS_MEMBER,
+            academic_year=sc.academic_year,
+            class_id=sc.id,
+            start_date=membership.start_date,
+            source=PersonAffiliationSource.CLASS_WORKSPACE,
+        ),
+    )
     return membership
 
 
@@ -595,16 +617,41 @@ async def assign_class_role(
         end_date=data.end_date,
     )
     session.add(up)
+    await session.flush()
+    user = await session.get(User, data.user_id)
+    if user is not None:
+        await person_svc.record_affiliation_for_user_position(
+            session,
+            user=user,
+            kind=PersonAffiliationKind.CLASS_ROLE,
+            position_id=binding.position_id,
+            start_date=up.start_date,
+            end_date=up.end_date,
+            class_id=sc.id,
+            role_key=role_key,
+            synced_user_position_id=up.id,
+            source=PersonAffiliationSource.CLASS_WORKSPACE,
+        )
     if role_key == ClassRoleKey.CLASS_REPRESENTATIVE:
         council_position = await get_or_create_council_representative_position(session)
-        if council_position is not None:
-            session.add(
-                UserPosition(
-                    user_id=data.user_id,
-                    position_id=council_position.id,
-                    start_date=data.start_date or date.today(),
-                    end_date=data.end_date,
-                )
+        if council_position is not None and user is not None:
+            council_up = UserPosition(
+                user_id=data.user_id,
+                position_id=council_position.id,
+                start_date=data.start_date or date.today(),
+                end_date=data.end_date,
+            )
+            session.add(council_up)
+            await session.flush()
+            await person_svc.record_affiliation_for_user_position(
+                session,
+                user=user,
+                kind=PersonAffiliationKind.ORG_POSITION,
+                position_id=council_position.id,
+                start_date=council_up.start_date,
+                end_date=council_up.end_date,
+                synced_user_position_id=council_up.id,
+                source=PersonAffiliationSource.CLASS_WORKSPACE,
             )
     await session.flush()
     return up
@@ -704,6 +751,21 @@ async def add_cadre(session: AsyncSession, sc: SchoolClass, *, user_id: uuid.UUI
     sc.cadres.append(cadre)
     await session.flush()
     await session.refresh(cadre, attribute_names=["user"])
+    person = await person_svc.ensure_person_for_user(
+        session, user, source=PersonAffiliationSource.CLASS_WORKSPACE
+    )
+    await person_svc.create_affiliation(
+        session,
+        data=PersonAffiliationCreate(
+            person_id=person.id,
+            kind=PersonAffiliationKind.CLASS_ROLE,
+            academic_year=sc.academic_year,
+            class_id=sc.id,
+            role_key="class_cadre",
+            title="班級幹部",
+            source=PersonAffiliationSource.CLASS_WORKSPACE,
+        ),
+    )
     return cadre
 
 
@@ -770,6 +832,28 @@ async def list_class_members(session: AsyncSession, sc: SchoolClass) -> list[Cla
     """依手動成員與學號區間列出班級成員，並標示是否為幹部。"""
     cadre_ids = {c.user_id for c in sc.cadres}
     members_by_id: dict[uuid.UUID, ClassMemberOut] = {}
+    affiliation_result = await session.execute(
+        select(PersonAffiliation)
+        .options(selectinload(PersonAffiliation.person))
+        .where(
+            PersonAffiliation.class_id == sc.id,
+            PersonAffiliation.kind == PersonAffiliationKind.CLASS_MEMBER,
+            PersonAffiliation.status == PersonAffiliationStatus.ACTIVE,
+        )
+    )
+    for affiliation in affiliation_result.scalars().all():
+        person = affiliation.person
+        if person is None:
+            continue
+        member_id = person.user_id or person.id
+        members_by_id[member_id] = ClassMemberOut(
+            id=member_id,
+            display_name=person.display_name,
+            student_id=person.student_id,
+            email=person.email or "",
+            is_cadre=person.user_id in cadre_ids if person.user_id else False,
+            source="person_affiliation",
+        )
     for member in sc.manual_members:
         if member.user is None:
             continue

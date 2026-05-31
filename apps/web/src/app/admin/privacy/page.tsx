@@ -16,8 +16,11 @@ import { usePermissions } from "@/hooks/usePermissions";
 import {
   ApiError,
   privacyApi,
+  privacyRequestsApi,
   type PrivacyExportFile,
   type PrivacyExportResult,
+  type PrivacyRequestOut,
+  type PrivacyRequestStatus,
 } from "@/lib/api";
 
 function fmtSize(bytes: number): string {
@@ -32,6 +35,8 @@ export default function PrivacyPage() {
   const [busy, setBusy] = useState(false);
   const [exports, setExports] = useState<PrivacyExportFile[]>([]);
   const [lastExport, setLastExport] = useState<PrivacyExportResult | null>(null);
+  const [requests, setRequests] = useState<PrivacyRequestOut[]>([]);
+  const [requestBusy, setRequestBusy] = useState<string | null>(null);
 
   const loadExports = useCallback(async () => {
     try {
@@ -42,9 +47,20 @@ export default function PrivacyPage() {
     }
   }, []);
 
+  const loadRequests = useCallback(async () => {
+    try {
+      setRequests(await privacyRequestsApi.listAdmin());
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "讀取個資請求失敗");
+    }
+  }, []);
+
   useEffect(() => {
-    if (isAdmin) void loadExports();
-  }, [isAdmin, loadExports]);
+    if (isAdmin) {
+      void loadExports();
+      void loadRequests();
+    }
+  }, [isAdmin, loadExports, loadRequests]);
 
   const onExport = async () => {
     const uid = userId.trim();
@@ -91,6 +107,23 @@ export default function PrivacyPage() {
       toast.error(e instanceof ApiError ? e.message : "假名化失敗");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const updateRequest = async (
+    id: string,
+    status: PrivacyRequestStatus,
+    response_message?: string | null,
+  ) => {
+    setRequestBusy(id);
+    try {
+      const row = await privacyRequestsApi.updateAdmin(id, { status, response_message });
+      setRequests((items) => items.map((item) => (item.id === id ? row : item)));
+      toast.success("已更新請求狀態");
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "更新失敗");
+    } finally {
+      setRequestBusy(null);
     }
   };
 
@@ -207,6 +240,81 @@ export default function PrivacyPage() {
               ))}
             </tbody>
           </table>
+        )}
+      </section>
+
+      <section
+        className="mb-6 rounded-lg border bg-[var(--bg-surface)]"
+        style={{ borderColor: "var(--border)" }}>
+        <header className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
+          <h2 className="text-sm font-semibold text-[var(--text-primary)]">使用者個資權利請求</h2>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={loadRequests}>
+            <RefreshCcw size={14} aria-hidden />
+            重新整理
+          </button>
+        </header>
+        {requests.length === 0 ? (
+          <p className="p-6 text-center text-sm text-[var(--text-muted)]">目前沒有待處理請求。</p>
+        ) : (
+          <ul>
+            {requests.map((item) => (
+              <li
+                key={item.id}
+                className="border-b border-[var(--border)] px-4 py-4 last:border-0">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-[var(--text-primary)]">
+                      {item.subject}
+                    </p>
+                    <p className="mt-1 font-mono text-[11px] text-[var(--text-muted)]">
+                      user={item.user_id} · type={item.request_type} · status={item.status}
+                    </p>
+                    <p className="mt-1 text-[11px] text-[var(--text-muted)]">
+                      IP {item.submitted_ip_address ?? "—"} · UA{" "}
+                      <span className="break-all">{item.submitted_user_agent ?? "—"}</span>
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="btn-sm btn-secondary"
+                      disabled={requestBusy === item.id || item.status === "in_review"}
+                      onClick={() => updateRequest(item.id, "in_review")}>
+                      標記審查
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-sm btn-primary"
+                      disabled={requestBusy === item.id || item.status === "fulfilled"}
+                      onClick={() => {
+                        const msg = window.prompt("回覆給使用者的處理說明：", item.response_message ?? "");
+                        if (msg !== null) void updateRequest(item.id, "fulfilled", msg);
+                      }}>
+                      完成
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-sm btn-danger-ghost"
+                      disabled={requestBusy === item.id || item.status === "rejected"}
+                      onClick={() => {
+                        const msg = window.prompt("請填寫駁回原因：", item.response_message ?? "");
+                        if (msg !== null) void updateRequest(item.id, "rejected", msg);
+                      }}>
+                      駁回
+                    </button>
+                  </div>
+                </div>
+                <p className="mt-2 whitespace-pre-line text-sm text-[var(--text-secondary)]">
+                  {item.description}
+                </p>
+                {item.response_message && (
+                  <p className="mt-2 rounded-md bg-[var(--bg-hover)] px-3 py-2 text-xs text-[var(--text-secondary)]">
+                    回覆：{item.response_message}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
         )}
       </section>
 

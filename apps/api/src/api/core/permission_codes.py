@@ -132,6 +132,15 @@ class PermissionCode(StrEnum):
     PARTNER_MAP_MANAGE = "partner_map:manage"
     PARTNER_MAP_VIEW_STATS = "partner_map:view_stats"
 
+    # Phase B1 / D2（企業級升級路線圖、ADR-003 / ADR-005 / Phase D2）
+    POLICY_ADMIN = "policy:admin"
+    API_KEY_ADMIN = "api_key:admin"
+    WEBHOOK_ADMIN = "webhook:admin"
+    # Phase C3 客服工具
+    ADMIN_IMPERSONATE = "admin:impersonate"
+    # Phase D3 Feature flags
+    FEATURE_FLAG_ADMIN = "feature_flag:admin"
+
 
 ALL_PERMISSION_CODES: list[dict[str, str]] = [
     {
@@ -769,6 +778,37 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "code": PermissionCode.PARTNER_MAP_VIEW_STATS,
         "label": "查看特約地圖統計",
         "desc": "查看特約店家點擊、瀏覽與互動統計（預留）",
+    },
+    # ── 企業級升級（Phase B1 / D2 / C3 / D3）──────────────────────────
+    {
+        "group": "企業級治理",
+        "code": PermissionCode.POLICY_ADMIN,
+        "label": "政策版本管理",
+        "desc": "建立 / 編輯 / 啟用隱私政策、ToS、無障礙等公開政策版本（ADR-003）",
+    },
+    {
+        "group": "企業級治理",
+        "code": PermissionCode.API_KEY_ADMIN,
+        "label": "API Key 管理",
+        "desc": "發行、查詢、撤銷對外整合用的 API Key（限管理員、有完整審計）",
+    },
+    {
+        "group": "企業級治理",
+        "code": PermissionCode.WEBHOOK_ADMIN,
+        "label": "Webhook 管理",
+        "desc": "建立 / 編輯 / 刪除事件投遞訂閱與檢視投遞紀錄",
+    },
+    {
+        "group": "企業級治理",
+        "code": PermissionCode.ADMIN_IMPERSONATE,
+        "label": "代理登入（客服）",
+        "desc": "以目標使用者身分檢視介面（read-only、有時效、完整 audit log）",
+    },
+    {
+        "group": "企業級治理",
+        "code": PermissionCode.FEATURE_FLAG_ADMIN,
+        "label": "Feature Flag 管理",
+        "desc": "管理新功能灰度開關、依角色 / 比例切流量",
     },
 ]
 

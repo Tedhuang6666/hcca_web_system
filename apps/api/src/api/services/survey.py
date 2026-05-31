@@ -412,8 +412,6 @@ def _evaluate_condition(condition_json: str | None, answers_by_id: dict[uuid.UUI
     if not isinstance(cond, dict):
         return True
     rules = cond.get("rules")
-    if rules is None and "question_id" in cond:
-        rules = [cond]  # 相容舊版單一條件格式
     if not rules:
         return True
     result = _evaluate_rule(rules[0], answers_by_id)

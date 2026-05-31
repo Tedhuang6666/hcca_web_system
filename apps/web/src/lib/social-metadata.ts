@@ -1,10 +1,12 @@
-export const SOCIAL_SHARE_TITLE = "校園自治整合系統";
-export const SOCIAL_SITE_NAME = "HCCA 校園自治整合系統";
+import { BRANDING } from "@/lib/branding";
+
+export const SOCIAL_SHARE_TITLE = BRANDING.appName;
+export const SOCIAL_SITE_NAME = `${BRANDING.orgShortName} ${BRANDING.acronym}`;
 export const SOCIAL_IMAGE = {
   url: "/opengraph-image",
   width: 1200,
   height: 630,
-  alt: SOCIAL_SHARE_TITLE,
+  alt: `${BRANDING.orgShortName} Open Graph image`,
 };
 
 export function socialDescription(kind: string, detail: string | null | undefined, fallback: string) {

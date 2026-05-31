@@ -45,6 +45,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "partnerMap", href: "/partner-map", iconKey: "partnerMap", label: "特約地圖" },
   { id: "surveys", href: "/surveys", iconKey: "survey", label: "問卷專區" },
   { id: "petitions", href: "/petitions", iconKey: "petition", label: "陳情中心" },
+  { id: "about", href: "/about", iconKey: "info", label: "關於本系統" },
   { id: "analytics", href: "/analytics", iconKey: "analytics", label: "績效統計", perm: "analytics:view" },
   { id: "orgs", href: "/orgs", iconKey: "org", label: "組織管理", perm: "org:*" },
   {
@@ -60,6 +61,13 @@ export const NAV_ITEMS: NavItem[] = [
     iconKey: "permissions",
     label: "權限管理",
     perm: "admin:all",
+  },
+  {
+    id: "peopleAdmin",
+    href: "/admin/people",
+    iconKey: "people",
+    label: "人員身分",
+    perm: "admin:users",
   },
   {
     id: "systemDefense",
@@ -135,6 +143,12 @@ export const NAV_ITEMS: NavItem[] = [
     label: "通知設定",
   },
   {
+    id: "settingsPrivacy",
+    href: "/settings/privacy",
+    iconKey: "shield",
+    label: "隱私與資料",
+  },
+  {
     id: "settingsSecurity",
     href: "/settings/security",
     iconKey: "shield",
@@ -181,6 +195,7 @@ export const NAV_DEF: NavEntry[] = [
       "orgs",
       "activitiesAdmin",
       "permissions",
+      "peopleAdmin",
       "systemDefense",
       "systemSettings",
       "discordAdmin",
@@ -200,7 +215,7 @@ export const NAV_DEF: NavEntry[] = [
     heading: "設定",
     collapsible: true,
     defaultCollapsed: true,
-    items: byIds(["settingsNavigation", "settingsNotifications", "settingsSecurity"]),
+    items: byIds(["settingsNavigation", "settingsNotifications", "settingsPrivacy", "settingsSecurity", "about"]),
   },
 ];
 
@@ -214,6 +229,7 @@ export const NAV_DEF_LOGGED_OUT: NavEntry[] = [
       { id: "publicAnnouncements", href: "/announcements", iconKey: "announcement", label: "校內公告" },
       { id: "publicPartnerMap", href: "/partner-map", iconKey: "partnerMap", label: "特約地圖" },
       { id: "publicPetition", href: "/petitions/new", iconKey: "petition", label: "我要陳情" },
+      { id: "publicAbout", href: "/about", iconKey: "info", label: "關於本系統" },
     ],
   },
 ];
@@ -234,6 +250,7 @@ export const DEFAULT_MOBILE_ORDER = [
   "partnerMap",
   "petitions",
   "settingsNavigation",
+  "settingsPrivacy",
 ];
 
 export const DEFAULT_NAV_PREFERENCES: NavPreferences = {

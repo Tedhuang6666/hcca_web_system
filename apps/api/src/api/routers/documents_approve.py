@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
+from api.core.posthog import get_posthog_client
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_permission
 from api.models.document import Document, DocumentStatus
@@ -307,6 +308,14 @@ async def submit_document(
             link=f"/documents/{updated.id}",
             related_id=updated.id,
         )
+    _ph = get_posthog_client()
+    if _ph:
+        _ph.capture(
+            distinct_id=str(current_user.id),
+            event="document_submitted_for_approval",
+            properties={"approver_count": len(updated.approvals)},
+        )
+
     bg.add_task(ws_broadcast_bg, updated)
     return updated
 
@@ -375,6 +384,15 @@ async def approve_document(
                 link=f"/documents/{updated.id}",
                 related_id=updated.id,
             )
+
+    _ph = get_posthog_client()
+    if _ph and updated.status == DocumentStatus.APPROVED:
+        _ph.capture(
+            distinct_id=str(current_user.id),
+            event="document_approved",
+            properties={"total_steps": updated.current_step},
+        )
+
     bg.add_task(ws_broadcast_bg, updated)
     return updated
 

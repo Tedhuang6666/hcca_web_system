@@ -160,11 +160,99 @@ def backup_database(self) -> dict:  # type: ignore[type-arg]
             )
             raise
 
+    # Phase A3：可選 GPG 加密 + sha256 + BackupRecord 寫入
+    final_path = target
+    encrypted = False
+    sha256_hex: str | None = None
+    try:
+        from api.services import backup_encryption
+
+        if backup_encryption.is_encryption_configured():
+            if backup_encryption.gpg_available():
+                final_path = backup_encryption.encrypt_file(target, cleanup_src=True)
+                encrypted = True
+            else:
+                logger.warning(
+                    "BACKUP_GPG_PASSPHRASE set but gpg binary missing; backup left unencrypted"
+                )
+
+        if settings.BACKUP_VERIFY_SHA256:
+            sha256_hex = backup_encryption.compute_sha256(final_path)
+    except Exception:
+        logger.exception("backup encryption/hash step failed; continuing with raw file")
+
+    _write_backup_record_sync(
+        kind="db",
+        source_label=db,
+        local_path=str(final_path),
+        size_bytes=final_path.stat().st_size if final_path.exists() else None,
+        sha256_hex=sha256_hex,
+        encrypted=encrypted,
+    )
+
     removed = _rotate_old_backups(backup_dir, settings.DB_BACKUP_RETENTION_DAYS)
     _ = proc  # silence linter
     return {
         "status": "ok",
-        "file": str(target),
-        "size": target.stat().st_size,
+        "file": str(final_path),
+        "size": final_path.stat().st_size if final_path.exists() else None,
+        "encrypted": encrypted,
+        "sha256": sha256_hex,
         "removed_old": removed,
     }
+
+
+def _write_backup_record_sync(
+    *,
+    kind: str,
+    source_label: str,
+    local_path: str,
+    size_bytes: int | None,
+    sha256_hex: str | None,
+    encrypted: bool,
+) -> None:
+    """寫入 BackupRecord 紀錄；失敗不阻斷主任務。"""
+
+    async def _go() -> None:
+        from api.core.database import AsyncSessionLocal
+        from api.models.backup_record import BackupRecord, BackupStatus
+
+        async with AsyncSessionLocal() as session:
+            try:
+                now = datetime.now(UTC)
+                row = BackupRecord(
+                    kind=kind,
+                    status=BackupStatus.SUCCEEDED.value,
+                    source_label=source_label,
+                    local_path=local_path,
+                    size_bytes=size_bytes,
+                    sha256_hex=sha256_hex,
+                    encrypted=encrypted,
+                    started_at=now,
+                    completed_at=now,
+                )
+                session.add(row)
+                await session.commit()
+            except Exception:
+                logger.exception("write BackupRecord failed")
+                await session.rollback()
+
+    try:
+        asyncio.run(_go())
+    except Exception:
+        logger.exception("backup record async wrapper failed")
+
+
+def _rotate_old_backups_all_exts(backup_dir: Path, retention_days: int) -> int:
+    """Wrapper：清舊 .sql.gz 和 .sql.gz.gpg。"""
+    cutoff = time.time() - retention_days * 86400
+    removed = 0
+    for pattern in ("hcca_backup_*.sql.gz", "hcca_backup_*.sql.gz.gpg"):
+        for f in backup_dir.glob(pattern):
+            if f.stat().st_mtime < cutoff:
+                try:
+                    f.unlink()
+                    removed += 1
+                except OSError:
+                    logger.warning("無法刪除過期備份 %s", f, exc_info=True)
+    return removed

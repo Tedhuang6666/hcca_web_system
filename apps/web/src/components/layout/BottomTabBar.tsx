@@ -1,9 +1,10 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogIn, MoreHorizontal } from "lucide-react";
 import { notificationsApi, tasksApi } from "@/lib/api";
+import { useWS } from "@/hooks/useWS";
 import {
   filterNavItems,
   NAV_PREF_EVENT,
@@ -46,6 +47,7 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
   const [roleResolved, setRoleResolved] = useState(false);
   const [taskCount, setTaskCount] = useState(0);
   const [notifCount, setNotifCount] = useState(0);
+  const [userRoom, setUserRoom] = useState<string | null>(null);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [navPrefs, setNavPrefs] = useState(() => readNavPreferences());
 
@@ -53,6 +55,7 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const userId = localStorage.getItem("user_id");
+    setUserRoom(userId ? `user:${userId}` : null);
     if (!userId) {
       setRole("guest");
       setRoleResolved(true);
@@ -85,23 +88,30 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
     };
   }, []);
 
+  const fetchCounts = useCallback(async () => {
+    try {
+      const inbox = await tasksApi.list();
+      setTaskCount(inbox.total);
+    } catch { /* ignore */ }
+    try {
+      const { unread } = await notificationsApi.count();
+      setNotifCount(unread);
+    } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => {
     if (role === "guest") return;
-    let mounted = true;
-    const fetchCounts = async () => {
-      try {
-        const inbox = await tasksApi.list();
-        if (mounted) setTaskCount(inbox.total);
-      } catch { /* ignore */ }
-      try {
-        const { unread } = await notificationsApi.count();
-        if (mounted) setNotifCount(unread);
-      } catch { /* ignore */ }
-    };
     fetchCounts();
     const timer = setInterval(fetchCounts, 60_000);
-    return () => { mounted = false; clearInterval(timer); };
-  }, [role]);
+    return () => clearInterval(timer);
+  }, [fetchCounts, role]);
+
+  useWS(userRoom, useCallback((msg) => {
+    if (msg.type !== "notification.created") return;
+    const unread = typeof msg.unread === "number" ? msg.unread : null;
+    if (unread !== null) setNotifCount(unread);
+    else void fetchCounts();
+  }, [fetchCounts]), role !== "guest");
 
   // 鍵盤彈起偵測：visualViewport 高度顯著縮小時隱藏
   useEffect(() => {

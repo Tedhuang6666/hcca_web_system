@@ -20,6 +20,7 @@ from api.core.config import settings
 from api.core.database import get_db
 from api.core.oauth import google
 from api.core.permission_codes import PermissionCode
+from api.core.posthog import get_posthog_client
 from api.core.security import (
     add_to_blacklist,
     create_access_token,
@@ -340,6 +341,12 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
     callback_qs = urlencode({"next": login_next})
     response = RedirectResponse(url=f"{frontend_origin}/auth/callback?{callback_qs}")
     _set_auth_cookies(response, access_token, refresh_token)
+
+    _ph = get_posthog_client()
+    if _ph:
+        _ph.set(distinct_id=str(user.id), properties={"is_superuser": user.is_superuser})
+        _ph.capture(distinct_id=str(user.id), event="user_logged_in", properties={"login_method": "google_oauth"})
+
     return response
 
 
@@ -396,6 +403,12 @@ async def google_one_tap(
     )
     refresh_token = create_refresh_token(subject=str(user.id))
     _set_auth_cookies(response, access_token, refresh_token)
+
+    _ph = get_posthog_client()
+    if _ph:
+        _ph.set(distinct_id=str(user.id), properties={"is_superuser": user.is_superuser})
+        _ph.capture(distinct_id=str(user.id), event="user_logged_in", properties={"login_method": "google_one_tap"})
+
     return {
         "mfa_required": False,
         "next": login_next,
@@ -477,4 +490,15 @@ async def logout(
     if refresh_cookie:
         await add_to_blacklist(refresh_cookie)
     _delete_auth_cookies(response)
+
+    _ph = get_posthog_client()
+    if _ph:
+        _raw_token = access_cookie or (auth[7:] if auth.lower().startswith("bearer ") else None)
+        if _raw_token:
+            try:
+                _tok_payload = decode_token(_raw_token)
+                _ph.capture(distinct_id=_tok_payload.get("sub", "anonymous"), event="user_logged_out")
+            except Exception:
+                pass
+
     return {"message": "已成功登出"}

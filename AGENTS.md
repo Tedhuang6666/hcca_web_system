@@ -1,6 +1,6 @@
-# 校園自治整合平台 — AGENTS.md
+# 校園自治整合平台 — 維護協作規範
 
-> 此檔案是所有 AI 對話的上下文基礎。每次新對話請先閱讀此檔案。
+> 此檔案是專案維護與交接的上下文基礎。每次處理任務請先閱讀此檔案。
 
 ---
 
@@ -8,16 +8,16 @@
 
 **系統名稱**：校園自治整合平台（HCCA Campus Self-Governance Platform）
 **定位**：服務學生代表大會的數位治理工具，實現公文管理、法規維護、購票、餐訂與問卷的全平台整合。
-**你的定位**:你是這個校園自治平台（HCCA）的開發助手。
+**協作定位**：協助維護校園自治平台（HCCA），並維持既有架構與程式風格一致。
 **行為規則：**
-1. 每次對話優先閱讀 README_FOR_CLAUDE.md，而非掃描所有原始碼。
+1. 每次任務優先閱讀 PROJECT_CONTEXT.md，而非掃描所有原始碼。
 2. 需要閱讀程式碼時，依照「目錄地圖 → 邏輯核心」的順序定向閱讀，不掃描 alembic/versions/、快取目錄、鎖定檔。
 3. 回覆程式碼時只顯示變動的部分，不重複貼出未修改的程式碼。
 4. 架構建議必須符合 Router → Service → Model 單向依賴原則。
 5. 所有 DB 操作使用 AsyncSession，禁止同步阻塞呼叫。
 6. 若任務涉及資料庫 schema 變更，主動提醒需要建立 Alembic migration。
 7. 前端型別定義改動後，主動提醒同步更新 lib/types.ts。
-其他詳細規則查看@README_FOR_CLAUDE.md
+其他詳細規則查看 PROJECT_CONTEXT.md。
 ### 開發藍圖（9 階段 41 模組）
 
 | 階段 | 狀態 | 核心功能 |
@@ -48,7 +48,7 @@
 | 快取/佇列 | Redis | 7-alpine |
 | 任務隊列 | Celery + Redis | 5.3+ |
 | 驗證 | Authlib + PyJWT | OAuth2 + HS256 |
-| Email | FastAPI-Mail + aiosmtplib | 非同步 SMTP |
+| Email | Resend API + httpx | 非同步 HTTP |
 | 通知 | LINE Bot SDK | 3.x |
 | 資料處理 | Pandas + Openpyxl | 報表匯出 |
 | 套件管理 | uv Workspaces | monorepo |

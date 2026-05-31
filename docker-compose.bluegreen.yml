@@ -1,0 +1,229 @@
+# Production blue-green compose file.
+# Run with:
+#   docker compose --env-file .env.production -f docker-compose.bluegreen.yml up -d db redis proxy
+#   bash scripts/zero-downtime-deploy.sh green
+
+x-api-common: &api-common
+  build:
+    context: .
+    dockerfile: apps/api/Dockerfile
+  env_file:
+    - ${PROD_ENV_FILE:-.env.production}
+  environment: &api-env
+    ENVIRONMENT: production
+    DEBUG: "false"
+    ENABLE_API_DOCS: "false"
+    COOKIE_SECURE: "true"
+    DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}
+    DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}
+    DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
+    DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-20}
+    DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
+    DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
+    HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
+    REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  volumes:
+    - uploads:/app/uploads
+
+x-api-service: &api-service
+  <<: *api-common
+  restart: unless-stopped
+  environment:
+    <<: *api-env
+    GUNICORN_WORKERS: ${GUNICORN_WORKERS:-4}
+    GUNICORN_KEEPALIVE: ${GUNICORN_KEEPALIVE:-5}
+    GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-60}
+    GUNICORN_GRACEFUL_TIMEOUT: ${GUNICORN_GRACEFUL_TIMEOUT:-30}
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+  healthcheck:
+    test:
+      [
+        "CMD-SHELL",
+        "python -c \"import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3).status == 200 else 1)\"",
+      ]
+    interval: 10s
+    timeout: 5s
+    retries: 6
+    start_period: 30s
+  stop_grace_period: 45s
+
+x-web-service: &web-service
+  build:
+    context: .
+    dockerfile: apps/web/Dockerfile
+    args:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
+      NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-}
+  restart: unless-stopped
+  environment:
+    NODE_ENV: production
+  healthcheck:
+    test:
+      [
+        "CMD-SHELL",
+        "node -e \"fetch('http://127.0.0.1:3000').then(r=>process.exit(r.ok ? 0 : 1)).catch(()=>process.exit(1))\"",
+      ]
+    interval: 10s
+    timeout: 5s
+    retries: 6
+    start_period: 30s
+  stop_grace_period: 30s
+
+x-worker-service: &worker-service
+  <<: *api-common
+  restart: unless-stopped
+  environment:
+    <<: *api-env
+    DB_POOL_SIZE: ${CELERY_DB_POOL_SIZE:-5}
+    DB_MAX_OVERFLOW: ${CELERY_DB_MAX_OVERFLOW:-10}
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+  stop_grace_period: 60s
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["sh", "-c", "redis-server --appendonly yes --requirepass \"$${REDIS_PASSWORD}\""]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  migrate:
+    <<: *api-common
+    restart: "no"
+    command: python -m alembic -c /app/alembic.ini upgrade head
+
+  api-blue:
+    <<: *api-service
+
+  api-green:
+    <<: *api-service
+
+  web-blue:
+    <<: *web-service
+    environment:
+      NODE_ENV: production
+      API_INTERNAL_URL: http://api-blue:8000
+    depends_on:
+      api-blue:
+        condition: service_healthy
+
+  web-green:
+    <<: *web-service
+    environment:
+      NODE_ENV: production
+      API_INTERNAL_URL: http://api-green:8000
+    depends_on:
+      api-green:
+        condition: service_healthy
+
+  celery-worker-blue:
+    <<: *worker-service
+    command: >
+      python -m celery -A api.core.celery_app.celery_app worker
+      --loglevel=info
+      --concurrency=${CELERY_WORKER_CONCURRENCY:-4}
+      --queues=celery,default,documents,email,meal,backup,recovery
+      -n worker-blue@%h
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -m celery -A api.core.celery_app.celery_app inspect ping -d worker-blue@$$HOSTNAME -t 5 >/dev/null",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  celery-worker-green:
+    <<: *worker-service
+    command: >
+      python -m celery -A api.core.celery_app.celery_app worker
+      --loglevel=info
+      --concurrency=${CELERY_WORKER_CONCURRENCY:-4}
+      --queues=celery,default,documents,email,meal,backup,recovery
+      -n worker-green@%h
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -m celery -A api.core.celery_app.celery_app inspect ping -d worker-green@$$HOSTNAME -t 5 >/dev/null",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  celery-beat:
+    <<: *worker-service
+    command: >
+      python -m celery -A api.core.celery_app.celery_app beat
+      --loglevel=info
+      --scheduler celery.beat:PersistentScheduler
+      --pidfile=/tmp/celerybeat.pid
+    environment:
+      <<: *api-env
+      DB_POOL_SIZE: ${CELERY_BEAT_DB_POOL_SIZE:-2}
+      DB_MAX_OVERFLOW: ${CELERY_BEAT_DB_MAX_OVERFLOW:-2}
+    volumes:
+      - uploads:/app/uploads
+      - celerybeat:/tmp
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/celerybeat.pid && kill -0 \"$$(cat /tmp/celerybeat.pid)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:?set SITE_DOMAIN}
+    volumes:
+      - ./deploy/bluegreen/Caddyfile.blue:/etc/caddy/Caddyfile:ro
+      - ./deploy/bluegreen:/etc/caddy/bluegreen:ro
+      - caddydata:/data
+      - caddyconfig:/config
+
+volumes:
+  pgdata:
+  redisdata:
+  uploads:
+  celerybeat:
+  caddydata:
+  caddyconfig:

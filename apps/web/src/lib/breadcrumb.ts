@@ -32,6 +32,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   "serial-templates": "字號模板",
   email: "電子郵件",
   settings: "設定",
+  about: "關於本系統",
 };
 
 const PATH_OVERRIDES: Record<string, string> = {
@@ -53,10 +54,12 @@ const PATH_OVERRIDES: Record<string, string> = {
   "/petitions/manage":            "陳情管理",
   "/petitions/admin/types":       "陳情類型",
   "/admin/permissions":           "權限管理",
+  "/admin/people":                "人員身分",
   "/admin/classes":               "班級管理",
   "/settings/navigation":         "介面導覽設定",
   "/settings/notifications":      "通知偏好",
   "/settings/security":           "安全設定",
+  "/about":                       "關於本系統",
 };
 
 /**

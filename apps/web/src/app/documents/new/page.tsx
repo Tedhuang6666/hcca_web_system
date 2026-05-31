@@ -207,12 +207,27 @@ export default function NewDocumentPage() {
   const [dueDate, setDueDate] = useState("");
   const [visibilityLevel, setVisibilityLevel] = useState<DocumentVisibility>("org_only");
   const [recipients, setRecipients] = useState<Recipient[]>([]);
+  const [templates, setTemplates] = useState<SerialTemplateOut[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const selectedTemplate = templates.find((t) => t.id === selectedTemplateId) ?? null;
 
   const fieldError = {
     org: !selectedOrgId ? "請選擇發文組織" : "",
-    subject: copy.subjectLabel && !subject.trim() ? `${copy.subjectLabel}為必填` : "",
-    recordTime: isRecord && !meetingTime ? "紀錄需填寫時間" : "",
-    recordLocation: isRecord && !meetingLocation.trim() ? "紀錄需填寫地點" : "",
+    subject: copy.subjectLabel && !subject.trim()
+      ? `${copy.subjectLabel}為必填`
+      : copy.subjectLabel && subject.trim().length < 8
+        ? `${copy.subjectLabel}至少需 8 個字`
+        : "",
+    meetingPurpose: isMeetingNotice && !meetingPurpose.trim() ? "開會通知單需填寫開會事由" : "",
+    meetingTime: (isMeetingNotice || isRecord) && !meetingTime
+      ? isRecord ? "紀錄需填寫時間" : "開會通知單需填寫開會時間"
+      : "",
+    meetingLocation: (isMeetingNotice || isRecord) && !meetingLocation.trim()
+      ? isRecord ? "紀錄需填寫地點" : "開會通知單需填寫開會地點"
+      : "",
+    serialTemplate: selectedOrgId && templates.length > 0 && !selectedTemplateId
+      ? "請選擇字號前綴"
+      : "",
     recordChairperson: isRecord && !meetingChairperson.trim() ? "紀錄需填寫主席" : "",
     recordAttendees: isRecord && recipients.length === 0 ? "紀錄需填寫出席者" : "",
     recordDiscussion: isRecord && !docDescription.trim() ? "紀錄需填寫討論事項" : "",
@@ -231,9 +246,6 @@ export default function NewDocumentPage() {
     setPendingLinks(p => [...p, { id: crypto.randomUUID(), ...newLink }]);
     setNewLink({ url: "", display_text: "" });
   };
-  const [templates, setTemplates] = useState<SerialTemplateOut[]>([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
-  const selectedTemplate = templates.find((t) => t.id === selectedTemplateId) ?? null;
   const draftKey = templateId ? `documents:new:template:${templateId}` : "documents:new";
   const draftValue = useMemo<DocumentDraft>(() => ({
     urgency,
@@ -408,8 +420,10 @@ export default function NewDocumentPage() {
     setTouched({
       org: true,
       subject: true,
-      recordTime: true,
-      recordLocation: true,
+      meetingPurpose: true,
+      meetingTime: true,
+      meetingLocation: true,
+      serialTemplate: true,
       recordChairperson: true,
       recordAttendees: true,
       recordDiscussion: true,
@@ -567,29 +581,36 @@ export default function NewDocumentPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {isMeetingNotice && (
                   <div className="sm:col-span-2">
-                    <Label>開會事由</Label>
+                    <Label required>開會事由</Label>
                     <input value={meetingPurpose} onChange={e => setMeetingPurpose(e.target.value)}
-                      placeholder="例：班級聯合自治會第1屆學生代表團第3次會議" style={inputStyle} />
+                      onBlur={() => markTouched("meetingPurpose")}
+                      placeholder="例：班級聯合自治會第1屆學生代表團第3次會議"
+                      style={showErr("meetingPurpose")
+                        ? { ...inputStyle, border: "1px solid var(--danger)" }
+                        : inputStyle} />
+                    {showErr("meetingPurpose") && (
+                      <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>{fieldError.meetingPurpose}</p>
+                    )}
                   </div>
                 )}
                 <div>
-                  <Label required={isRecord}>{isRecord ? "時間" : "開會時間"}</Label>
+                  <Label required>{isRecord ? "時間" : "開會時間"}</Label>
                   <input type="datetime-local" value={meetingTime}
                     onChange={e => setMeetingTime(e.target.value)}
-                    onBlur={() => markTouched("recordTime")}
-                    style={showErr("recordTime") ? { ...inputStyle, border: "1px solid var(--danger)" } : inputStyle} />
-                  {showErr("recordTime") && (
-                    <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>{fieldError.recordTime}</p>
+                    onBlur={() => markTouched("meetingTime")}
+                    style={showErr("meetingTime") ? { ...inputStyle, border: "1px solid var(--danger)" } : inputStyle} />
+                  {showErr("meetingTime") && (
+                    <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>{fieldError.meetingTime}</p>
                   )}
                 </div>
                 <div>
-                  <Label required={isRecord}>{isRecord ? "地點" : "開會地點"}</Label>
+                  <Label required>{isRecord ? "地點" : "開會地點"}</Label>
                   <input value={meetingLocation} onChange={e => setMeetingLocation(e.target.value)}
-                    onBlur={() => markTouched("recordLocation")}
+                    onBlur={() => markTouched("meetingLocation")}
                     placeholder="例：班聯會辦公室"
-                    style={showErr("recordLocation") ? { ...inputStyle, border: "1px solid var(--danger)" } : inputStyle} />
-                  {showErr("recordLocation") && (
-                    <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>{fieldError.recordLocation}</p>
+                    style={showErr("meetingLocation") ? { ...inputStyle, border: "1px solid var(--danger)" } : inputStyle} />
+                  {showErr("meetingLocation") && (
+                    <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>{fieldError.meetingLocation}</p>
                   )}
                 </div>
                 <div className="sm:col-span-2">
@@ -819,10 +840,16 @@ export default function NewDocumentPage() {
             ) : (
               <>
                 <div>
-                  <Label>選擇字號前綴</Label>
-                  <select value={selectedTemplateId} onChange={(e) => setSelectedTemplateId(e.target.value)}
-                    style={selectStyle}>
-                    <option value="">── 使用通用格式 ──</option>
+                  <Label required>選擇字號前綴</Label>
+                  <select
+                    value={selectedTemplateId}
+                    onChange={(e) => { setSelectedTemplateId(e.target.value); markTouched("serialTemplate"); }}
+                    onBlur={() => markTouched("serialTemplate")}
+                    style={showErr("serialTemplate")
+                      ? { ...selectStyle, border: "1px solid var(--danger)" }
+                      : selectStyle}
+                  >
+                    <option value="">選擇字號前綴…</option>
                     {templates.map((t) => (
                       <option key={t.id} value={t.id}>
                         {t.org_prefix}{t.category_char}字
@@ -830,6 +857,9 @@ export default function NewDocumentPage() {
                       </option>
                     ))}
                   </select>
+                  {showErr("serialTemplate") && (
+                    <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>{fieldError.serialTemplate}</p>
+                  )}
                 </div>
                 <div className="rounded-xl px-4 py-3 text-center"
                   style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>

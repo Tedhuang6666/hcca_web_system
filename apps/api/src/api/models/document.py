@@ -108,7 +108,7 @@ class RecipientType(enum.StrEnum):
 class DeliveryMethod(enum.StrEnum):
     """遞送方式（系統僅儲存與顯示，不直接觸發寄送行為）"""
 
-    NONE = "none"  # 未指定 / 不適用（舊資料預設）
+    NONE = "none"  # 未指定 / 不適用
     SYSTEM = "system"  # 線上系統下載
     EMAIL = "email"  # Email
     PAPER = "paper"  # 紙本親送
@@ -380,7 +380,7 @@ class Document(Base, TimestampMixin):
     subject: Mapped[str | None] = mapped_column(String(500), nullable=True)  # 主旨
     doc_description: Mapped[str | None] = mapped_column(Text, nullable=True)  # 說明
     action_required: Mapped[str | None] = mapped_column(Text, nullable=True)  # 辦法
-    # 向下相容：保留 content 作為整合性文字內容（Markdown 格式）
+    # 整合性文字內容（Markdown 格式）
     content: Mapped[str] = mapped_column(Text, nullable=False, default="")
 
     # ── 開會通知單專屬欄位（category = meeting_notice 時使用）──────────────
@@ -422,6 +422,13 @@ class Document(Base, TimestampMixin):
     )  # 限辦日期
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # 自動催辦（Phase C1）：每次催辦遞增、用以判斷升級時機
+    reminder_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    last_reminded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # 頁次資訊（列印後可回填）
     page_info: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
@@ -436,7 +443,7 @@ class Document(Base, TimestampMixin):
         default=DocumentVisibility.ORG_ONLY,
         index=True,
     )
-    # 向下相容唯讀欄位（由 service 層在寫入 visibility_level 時同步維持一致）
+    # 唯讀欄位（由 service 層在寫入 visibility_level 時同步維持一致）
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
 
     # ── 關聯鍵 ───────────────────────────────────────────────────────────────
@@ -584,6 +591,14 @@ class DocumentApproval(Base, TimestampMixin):
     is_acting: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )  # 是否以代理身份操作
+
+    # 並簽 / 會辦（Phase C1）
+    # 同 document 內共用同 parallel_group 的多筆 row 視為一組會辦
+    # approval_mode: "any" = 任一通過該組推進；"all" = 全簽才推進
+    parallel_group: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    approval_mode: Mapped[str | None] = mapped_column(
+        String(10), nullable=True
+    )  # "any" | "all" | None（None 為串行單簽）
 
     document: Mapped[Document] = relationship("Document", back_populates="approvals")
     approver: Mapped[User] = relationship("User", foreign_keys=[approver_id])

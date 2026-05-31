@@ -192,6 +192,7 @@ async def create_event(
         )
     await session.flush()
     await _notify_participants(session, event, actor, "calendar_event_invited")
+    await _publish_social_notice(session, event, action="新增行程")
     return await get_event(session, event.id) or event
 
 
@@ -217,6 +218,7 @@ async def update_event(
     if event.source_meeting_id is not None:
         await sync_event_to_meeting(session, event, actor_id=actor.id)
     await _notify_participants(session, event, actor, "calendar_event_updated")
+    await _publish_social_notice(session, event, action="更新行程")
     return await get_event(session, event.id) or event
 
 
@@ -481,5 +483,19 @@ async def _notify_participants(
                 link=f"/calendar?event={event.id}",
                 related_id=event.id,
             )
+    except Exception:
+        return
+
+
+async def _publish_social_notice(
+    session: AsyncSession,
+    event: CalendarEvent,
+    *,
+    action: str,
+) -> None:
+    try:
+        from api.services import coordination as coordination_svc
+
+        await coordination_svc.publish_calendar_social_notice(session, event, action=action)
     except Exception:
         return

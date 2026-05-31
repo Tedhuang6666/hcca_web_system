@@ -513,7 +513,7 @@ export default function EditRegulationPage() {
   };
 
 
-  // ── 發布流程（舊版，保留給直接發布路徑） ─────────────────────────────────────
+  // ── 發布流程 ───────────────────────────────────────────────────────────────
 
   const openPublishFlow = () => {
     if (!reg) return;
@@ -1101,7 +1101,6 @@ export default function EditRegulationPage() {
                         section: "節（如第一節）", article: "條（如第一條）",
                         paragraph: "項（如第一項）", subparagraph: "款（如第一款）",
                         item: "目（如第一目）", special_clause: "附則",
-                        clause: "舊：條（建議改用「條」）", subsection: "舊：款（建議改用「款」）",
                       }[v]}
                     </span>
                   </div>

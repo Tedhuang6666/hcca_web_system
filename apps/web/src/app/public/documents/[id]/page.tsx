@@ -4,12 +4,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { serverApiUrl } from "@/lib/config";
-import {
-  SOCIAL_IMAGE,
-  SOCIAL_SHARE_TITLE,
-  SOCIAL_SITE_NAME,
-  socialDescription,
-} from "@/lib/social-metadata";
+import { socialDescription } from "@/lib/social-metadata";
+import { JsonLd, absoluteUrl, excerpt, pageMetadata } from "@/lib/seo";
 
 type RecipientOut = { id: string; recipient_type: string; name: string; email: string | null };
 type AttachmentOut = {
@@ -65,25 +61,11 @@ export async function generateMetadata(
     ? `${doc.title}${doc.serial_number ? `｜${doc.serial_number}` : ""}`
     : docTitle;
   const desc = socialDescription("公文", detail, "公開公文查閱。");
-  return {
-    title: SOCIAL_SHARE_TITLE,
+  return pageMetadata({
+    title: docTitle,
     description: desc,
-    alternates: { canonical: `/public/documents/${id}` },
-    openGraph: {
-      title: SOCIAL_SHARE_TITLE,
-      description: desc,
-      type: "article",
-      url: `/public/documents/${id}`,
-      siteName: SOCIAL_SITE_NAME,
-      images: [SOCIAL_IMAGE],
-    },
-    twitter: {
-      card: "summary_large_image",
-      title: SOCIAL_SHARE_TITLE,
-      description: desc,
-      images: [SOCIAL_IMAGE.url],
-    },
-  };
+    path: `/public/documents/${encodeURIComponent(id)}`,
+  });
 }
 
 function fmtSize(bytes: number) {
@@ -113,6 +95,22 @@ export default async function PublicDocumentDetailPage({
 
   return (
     <div className="space-y-5">
+      <JsonLd
+        data={{
+          "@context": "https://schema.org",
+          "@type": "Article",
+          headline: doc.title,
+          description: excerpt(
+            doc.subject ?? doc.doc_description ?? doc.action_required ?? doc.content,
+            "公開公文查閱。",
+          ),
+          datePublished: doc.completed_at ?? doc.submitted_at ?? doc.created_at,
+          dateModified: doc.updated_at,
+          publisher: { "@type": "Organization", name: "新竹高中班聯會" },
+          mainEntityOfPage: absoluteUrl(`/public/documents/${encodeURIComponent(id)}`),
+          identifier: doc.serial_number,
+        }}
+      />
       <div className="text-xs" style={{ color: "var(--text-muted)" }}>
         <Link href="/public/documents" className="hover:underline" style={{ color: "var(--text-muted)" }}>
           公開公文

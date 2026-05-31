@@ -63,6 +63,14 @@ def _can_manage_event(user: User, codes: frozenset[str], event: CalendarEvent) -
     )
 
 
+def _assert_not_projection(event: CalendarEvent) -> None:
+    if event.source_module and event.source_meeting_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="投影事件請回到來源模組更新",
+        )
+
+
 async def _event_or_404(
     session: AsyncSession,
     event_id: uuid.UUID,
@@ -231,6 +239,7 @@ async def upsert_participant(
 ) -> CalendarEventParticipant:
     codes = await _permission_codes(session, current_user)
     event = await _manageable_event_or_404(session, event_id, current_user, codes)
+    _assert_not_projection(event)
     return await calendar_svc.upsert_participant(session, event, data=payload)
 
 
@@ -247,7 +256,8 @@ async def update_participant(
     current_user: CurrentUser,
 ) -> CalendarEventParticipant:
     codes = await _permission_codes(session, current_user)
-    await _manageable_event_or_404(session, event_id, current_user, codes)
+    event = await _manageable_event_or_404(session, event_id, current_user, codes)
+    _assert_not_projection(event)
     participant = await session.get(CalendarEventParticipant, participant_id)
     if participant is None or participant.event_id != event_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此參與者")
@@ -266,7 +276,8 @@ async def delete_participant(
     current_user: CurrentUser,
 ) -> None:
     codes = await _permission_codes(session, current_user)
-    await _manageable_event_or_404(session, event_id, current_user, codes)
+    event = await _manageable_event_or_404(session, event_id, current_user, codes)
+    _assert_not_projection(event)
     participant = await session.get(CalendarEventParticipant, participant_id)
     if participant is None or participant.event_id != event_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此參與者")
@@ -290,6 +301,7 @@ async def create_checklist_item(
 ) -> CalendarEventChecklistItem:
     codes = await _permission_codes(session, current_user)
     event = await _manageable_event_or_404(session, event_id, current_user, codes)
+    _assert_not_projection(event)
     return await calendar_svc.create_checklist_item(session, event, data=payload)
 
 
@@ -306,7 +318,8 @@ async def update_checklist_item(
     current_user: CurrentUser,
 ) -> CalendarEventChecklistItem:
     codes = await _permission_codes(session, current_user)
-    await _manageable_event_or_404(session, event_id, current_user, codes)
+    event = await _manageable_event_or_404(session, event_id, current_user, codes)
+    _assert_not_projection(event)
     item = await session.get(CalendarEventChecklistItem, item_id)
     if item is None or item.event_id != event_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此準備事項")
@@ -325,7 +338,8 @@ async def delete_checklist_item(
     current_user: CurrentUser,
 ) -> None:
     codes = await _permission_codes(session, current_user)
-    await _manageable_event_or_404(session, event_id, current_user, codes)
+    event = await _manageable_event_or_404(session, event_id, current_user, codes)
+    _assert_not_projection(event)
     item = await session.get(CalendarEventChecklistItem, item_id)
     if item is None or item.event_id != event_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此準備事項")
@@ -346,6 +360,7 @@ async def create_link(
 ) -> CalendarEventLink:
     codes = await _permission_codes(session, current_user)
     event = await _manageable_event_or_404(session, event_id, current_user, codes)
+    _assert_not_projection(event)
     return await calendar_svc.create_link(session, event, data=payload, actor_id=current_user.id)
 
 
@@ -361,7 +376,8 @@ async def delete_link(
     current_user: CurrentUser,
 ) -> None:
     codes = await _permission_codes(session, current_user)
-    await _manageable_event_or_404(session, event_id, current_user, codes)
+    event = await _manageable_event_or_404(session, event_id, current_user, codes)
+    _assert_not_projection(event)
     link = await session.scalar(
         select(CalendarEventLink).where(
             CalendarEventLink.id == link_id,

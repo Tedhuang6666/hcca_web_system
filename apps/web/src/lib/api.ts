@@ -10,7 +10,10 @@ import type {
   SchoolClassBulkCreate, SchoolClassBulkCreateOut,
   ClassMemberOut, ClassStudentRangeOut, ClassCadreOut, ClassManualMemberOut,
   ClassMembershipOut, ClassRoleOut,
+  PersonAffiliationCreate, PersonAffiliationOut, PersonAffiliationUpdate,
+  PersonCreate, PersonDetailOut, PersonListItem, PersonOut, PersonRosterImportResult, PersonUpdate,
   RegulationOut, RegulationListItem, RegulationCategory, RegulationSearchResult,
+  AmendmentComparisonRow,
   RegulationArticleOut, RegulationRevisionOut, RegulationWorkflowLogOut, RegulationTreeNodeOut,
   SerialTemplateOut,
   MeetingListItem, MeetingOut, MeetingScreenOut, MeetingMinutesOut, MeetingWorkspaceOut,
@@ -67,6 +70,7 @@ import type {
   ExamTraceInspectOut,
   Activity, ActivityConvener, ActivityCreate,
   WorkItemCreate, WorkItemOut, WorkItemUpdate,
+  PendingConsentItem, PolicyConsentOut,
 } from "./types";
 import { API_BASE, apiUrl } from "./config";
 
@@ -75,7 +79,9 @@ const BASE = API_BASE;
 // ── 核心 fetch 包裝 ────────────────────────────────────────────────────────────
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) { super(message); }
+  constructor(public status: number, message: string, public requestId?: string | null) {
+    super(message);
+  }
 }
 
 export async function withFallback<T>(
@@ -132,10 +138,12 @@ async function errorMessageFromResponse(res: Response): Promise<string> {
   let detail: unknown = res.statusText;
   try {
     const payload: unknown = await res.json();
-    detail =
-      payload && typeof payload === "object" && "detail" in payload
-        ? (payload as { detail?: unknown }).detail
-        : payload;
+    if (payload && typeof payload === "object") {
+      const record = payload as { detail?: unknown; errors?: unknown };
+      detail = record.errors ?? record.detail ?? payload;
+    } else {
+      detail = payload;
+    }
   } catch {
     // ignore non-JSON error bodies
   }
@@ -231,7 +239,11 @@ async function request<T>(
         if (retry.status === 204) return undefined as T;
         return retry.json();
       }
-      throw new ApiError(retry.status, await errorMessageFromResponse(retry));
+      throw new ApiError(
+        retry.status,
+        await errorMessageFromResponse(retry),
+        retry.headers.get("X-Request-ID"),
+      );
     }
     // refresh 失敗：
     // - 若本地「看起來已登入」（有 user_id），視為 session 過期 → 清除並導回登入
@@ -243,7 +255,7 @@ async function request<T>(
         window.location.replace("/login");
       }
     }
-    throw new ApiError(401, "登入已過期，請重新登入");
+    throw new ApiError(401, "登入已過期，請重新登入", res.headers.get("X-Request-ID"));
   }
 
   // 503 + maintenance/load_shed → 先 refresh 一次，讓舊 token 補上 admin/bypass claims
@@ -287,7 +299,14 @@ async function request<T>(
   }
 
   if (!res.ok) {
-    throw new ApiError(res.status, await errorMessageFromResponse(res));
+    if (res.status === 412 && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("hcca:policy-consent-required"));
+    }
+    throw new ApiError(
+      res.status,
+      await errorMessageFromResponse(res),
+      res.headers.get("X-Request-ID"),
+    );
   }
   if (res.status === 204) return undefined as T;
   return res.json();
@@ -499,6 +518,16 @@ export const shopApi = {
     return get<OrderSummaryOut>(`/shop/orders/summary?${p.toString()}`);
   },
   getOrder: (id: string) => get<OrderOut>(`/shop/orders/${id}`),
+  createClassOrder: (body: {
+    user_id: string;
+    items: { product_id: string; quantity: number; option_ids: string[] }[];
+    notes?: string | null;
+  }) => post<OrderOut[]>("/shop/orders/class", body),
+  updateOrder: (id: string, body: {
+    user_id: string;
+    items: { product_id: string; quantity: number; option_ids: string[] }[];
+    notes?: string | null;
+  }) => patch<OrderOut>(`/shop/orders/${id}`, body),
   cancelOrder: (id: string, reason?: string) =>
     post<OrderOut>(`/shop/orders/${id}/cancel`, { reason }),
   setOrderPaid: (id: string, isPaid: boolean) =>
@@ -678,6 +707,45 @@ export const classApi = {
   removeCadre: (id: string, userId: string) => del<void>(`/classes/${id}/cadres/${userId}`),
 };
 
+// ── 人員與身分總表 ────────────────────────────────────────────────────────────
+
+export const peopleApi = {
+  list: (params?: {
+    keyword?: string;
+    class_id?: string;
+    org_id?: string;
+    position_id?: string;
+    status?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const qs = params ? `?${new URLSearchParams(
+      Object.entries(params).reduce<Record<string, string>>((acc, [key, value]) => {
+        if (value !== undefined && value !== null && value !== "") acc[key] = String(value);
+        return acc;
+      }, {}),
+    ).toString()}` : "";
+    return get<PersonListItem[]>(`/people${qs}`);
+  },
+  create: (body: PersonCreate) => post<PersonOut>("/people", body),
+  get: (id: string) => get<PersonDetailOut>(`/people/${id}`),
+  update: (id: string, body: PersonUpdate) => patch<PersonOut>(`/people/${id}`, body),
+  importRoster: (rows: Array<{
+    student_id: string;
+    display_name: string;
+    email?: string | null;
+    class_id?: string | null;
+    academic_year?: number | null;
+    note?: string | null;
+  }>) => post<PersonRosterImportResult>("/people/import-roster", { rows }),
+  createAffiliation: (body: PersonAffiliationCreate) =>
+    post<PersonAffiliationOut>("/people/affiliations", body),
+  updateAffiliation: (id: string, body: PersonAffiliationUpdate) =>
+    patch<PersonAffiliationOut>(`/people/affiliations/${id}`, body),
+  endAffiliation: (id: string) => del<PersonAffiliationOut>(`/people/affiliations/${id}`),
+  syncPending: (id: string) => post<{ synced: number }>(`/people/${id}/sync-pending`, {}),
+};
+
 // ── 法規 ──────────────────────────────────────────────────────────────────────
 
 export interface RegulationImportItem {
@@ -848,14 +916,8 @@ export const regulationsApi = {
   // ── 條文管理 ──────────────────────────────────────────────────────────────
   listArticles: (id: string, includeDeleted = false) =>
     get<RegulationArticleOut[]>(`${regulationPath(id)}/articles${includeDeleted ? "?include_deleted=true" : ""}`),
-  addArticle: (id: string, body: { sort_index: number; order_index?: number; parent_id?: string | null; article_type: string; title?: string; subtitle?: string; legal_number?: string; content?: string }) => {
-    // 後端已禁止新建舊層級類型：clause/subsection。前端做一次向前相容轉換，避免 422。
-    const article_type =
-      body.article_type === "clause" ? "article"
-        : body.article_type === "subsection" ? "subparagraph"
-          : body.article_type;
-    return post<RegulationArticleOut>(`${regulationPath(id)}/articles`, { ...body, article_type });
-  },
+  addArticle: (id: string, body: { sort_index: number; order_index?: number; parent_id?: string | null; article_type: string; title?: string; subtitle?: string; legal_number?: string; content?: string }) =>
+    post<RegulationArticleOut>(`${regulationPath(id)}/articles`, body),
   updateArticle: (regId: string, articleId: string, body: Partial<{ sort_index: number; order_index: number; parent_id: string | null; article_type: string; title: string; subtitle: string; legal_number: string; content: string; is_deleted: boolean }>) =>
     patch<RegulationArticleOut>(`${regulationPath(regId)}/articles/${pathSegment(articleId)}`, body),
   tree: (id: string) => get<RegulationTreeNodeOut[]>(`${regulationPath(id)}/tree`),
@@ -868,7 +930,24 @@ export const regulationsApi = {
   autoRenumber: (id: string, includeSpecialNumber = false) =>
     post<RegulationArticleOut[]>(`${regulationPath(id)}/articles/auto-renumber`, { include_special_number: includeSpecialNumber }),
   amendmentComparison: (id: string) =>
-    get<{ article_key: string; revised_text: string; current_text: string; note: string }[]>(`${regulationPath(id)}/amendment-comparison`),
+    get<AmendmentComparisonRow[]>(`${regulationPath(id)}/amendment-comparison`),
+  exportAmendmentComparisonPdf: async (id: string, body: {
+    proposal_title: string;
+    rationale?: string | null;
+    rows: AmendmentComparisonRow[];
+  }): Promise<Blob> => {
+    const doFetch = () =>
+      fetch(`${BASE}${regulationPath(id)}/amendment-comparison/export.pdf`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", ...csrfHeaders("POST") },
+        body: JSON.stringify(body),
+      });
+    let res = await doFetch();
+    if (res.status === 401 && (await silentRefresh())) res = await doFetch();
+    if (!res.ok) throw new ApiError(res.status, await errorMessageFromResponse(res));
+    return res.blob();
+  },
   referenceWarnings: (id: string) =>
     get<{ source_article_id: string; source_title: string; referenced_legal_number: string; message: string }[]>(`${regulationPath(id)}/reference-warnings`),
   timeMachine: (id: string, asOfIso: string) =>
@@ -1541,17 +1620,31 @@ export const mealApi = {
     return get<MealOrderListItem[]>(`/meal/orders?${q}`);
   },
   getOrder: (id: string) => get<MealOrderOut>(`/meal/orders/${id}`),
+  createClassOrder: (body: {
+    user_id: string;
+    order: {
+      schedule_id?: string | null; pickup_slot_id?: string | null;
+      items: { menu_item_id?: string | null; availability_id?: string | null; quantity: number }[];
+      notes?: string | null;
+    };
+  }) => post<MealOrderOut>("/meal/orders/class", body),
+  updateOrder: (id: string, body: {
+    schedule_id?: string | null; pickup_slot_id?: string | null;
+    items: { menu_item_id?: string | null; availability_id?: string | null; quantity: number }[];
+    notes?: string | null;
+  }) => patch<MealOrderOut>(`/meal/orders/${id}`, body),
   cancelOrder: (id: string, reason?: string) =>
     post<MealOrderOut>(`/meal/orders/${id}/cancel`, { reason }),
   confirmOrder: (id: string) => post<MealOrderOut>(`/meal/orders/${id}/confirm`),
   completeOrder: (id: string) => post<MealOrderOut>(`/meal/orders/${id}/complete`),
   setOrderPaid: (id: string, isPaid: boolean) =>
     post<MealOrderOut>(`/meal/orders/${id}/payment?is_paid=${String(isPaid)}`),
-  listClassOrders: (params?: { vendor_id?: string; pickup_slot_id?: string; is_paid?: boolean; limit?: number; offset?: number }) => {
+  listClassOrders: (params?: { vendor_id?: string; pickup_slot_id?: string; is_paid?: boolean; assisted_only?: boolean; limit?: number; offset?: number }) => {
     const q = new URLSearchParams();
     if (params?.vendor_id) q.set("vendor_id", params.vendor_id);
     if (params?.pickup_slot_id) q.set("pickup_slot_id", params.pickup_slot_id);
     if (params?.is_paid !== undefined) q.set("is_paid", String(params.is_paid));
+    if (params?.assisted_only !== undefined) q.set("assisted_only", String(params.assisted_only));
     if (params?.limit !== undefined) q.set("limit", String(params.limit));
     if (params?.offset !== undefined) q.set("offset", String(params.offset));
     return get<MealOrderListItem[]>(`/meal/orders/class?${q}`);
@@ -2958,4 +3051,290 @@ export const reportsApi = {
   list: () => get<ReportSummary[]>("/admin/reports"),
   run: (id: string) => get<ReportResult>(`/admin/reports/${encodeURIComponent(id)}`),
   csvUrl: (id: string) => `/admin/reports/${encodeURIComponent(id)}/csv`,
+};
+
+// ── Feature Flags（後台）─────────────────────────────────────────────────
+export interface FeatureFlagOut {
+  id: string;
+  key: string;
+  description: string | null;
+  is_globally_enabled: boolean;
+  percentage_rollout: number;
+  enabled_user_ids: string[];
+  enabled_permission_codes: string[];
+  archived_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FeatureFlagCreate {
+  key: string;
+  description?: string | null;
+}
+
+export interface FeatureFlagUpdate {
+  description?: string | null;
+  is_globally_enabled?: boolean;
+  percentage_rollout?: number;
+  enabled_user_ids?: string[];
+  enabled_permission_codes?: string[];
+}
+
+export const featureFlagsApi = {
+  list: () => get<FeatureFlagOut[]>("/feature-flags"),
+  create: (body: FeatureFlagCreate) => post<FeatureFlagOut>("/feature-flags", body),
+  update: (id: string, body: FeatureFlagUpdate) =>
+    patch<FeatureFlagOut>(`/feature-flags/${encodeURIComponent(id)}`, body),
+  archive: (id: string) =>
+    post<FeatureFlagOut>(`/feature-flags/${encodeURIComponent(id)}/archive`, {}),
+};
+
+// ── API Keys ─────────────────────────────────────────────────────────────
+export interface ApiKeyOut {
+  id: string;
+  name: string;
+  key_prefix: string;
+  owner_user_id: string;
+  scopes: string[];
+  rate_limit_per_minute: number;
+  expires_at: string | null;
+  last_used_at: string | null;
+  last_used_ip: string | null;
+  revoked_at: string | null;
+  revoked_reason: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface ApiKeyCreate {
+  name: string;
+  scopes?: string[];
+  rate_limit_per_minute?: number;
+  expires_at?: string | null;
+}
+
+export interface ApiKeyCreatedResponse {
+  api_key: ApiKeyOut;
+  key_plaintext: string;
+}
+
+export const apiKeysApi = {
+  list: (include_revoked = false) =>
+    get<ApiKeyOut[]>(`/api-keys?include_revoked=${include_revoked}`),
+  create: (body: ApiKeyCreate) => post<ApiKeyCreatedResponse>("/api-keys", body),
+  detail: (id: string) => get<ApiKeyOut>(`/api-keys/${encodeURIComponent(id)}`),
+  revoke: (id: string, reason: string) =>
+    post<ApiKeyOut>(`/api-keys/${encodeURIComponent(id)}/revoke`, { reason }),
+};
+
+// ── Webhooks ─────────────────────────────────────────────────────────────
+export interface WebhookSubscriptionOut {
+  id: string;
+  name: string;
+  owner_user_id: string;
+  url: string;
+  events: string[];
+  is_active: boolean;
+  max_retries: number;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WebhookSubscriptionCreate {
+  name: string;
+  url: string;
+  events: string[];
+  description?: string | null;
+  max_retries?: number;
+}
+
+export interface WebhookSubscriptionUpdate {
+  name?: string;
+  url?: string;
+  events?: string[];
+  description?: string | null;
+  is_active?: boolean;
+  max_retries?: number;
+}
+
+export interface WebhookSubscriptionCreatedResponse {
+  subscription: WebhookSubscriptionOut;
+  signing_secret: string;
+}
+
+export interface WebhookDeliveryOut {
+  id: string;
+  subscription_id: string;
+  event_type: string;
+  status: string;
+  attempt_count: number;
+  scheduled_at: string;
+  last_attempted_at: string | null;
+  succeeded_at: string | null;
+  response_status: number | null;
+  error_message: string | null;
+  created_at: string;
+}
+
+export const webhooksApi = {
+  list: (only_active = false) =>
+    get<WebhookSubscriptionOut[]>(`/webhooks?only_active=${only_active}`),
+  create: (body: WebhookSubscriptionCreate) =>
+    post<WebhookSubscriptionCreatedResponse>("/webhooks", body),
+  update: (id: string, body: WebhookSubscriptionUpdate) =>
+    patch<WebhookSubscriptionOut>(`/webhooks/${encodeURIComponent(id)}`, body),
+  remove: (id: string) => del<{ ok: boolean }>(`/webhooks/${encodeURIComponent(id)}`),
+  deliveries: (id: string, limit = 50) =>
+    get<WebhookDeliveryOut[]>(
+      `/webhooks/${encodeURIComponent(id)}/deliveries?limit=${limit}`,
+    ),
+};
+
+// ── 政策（隱私 / ToS / Cookie / 無障礙）───────────────────────────────
+export type PolicyKind =
+  | "privacy"
+  | "terms_of_service"
+  | "cookie"
+  | "accessibility"
+  | "security";
+export type PrivacyRequestType =
+  | "access"
+  | "rectification"
+  | "erasure"
+  | "objection"
+  | "copy_export"
+  | "other";
+export type PrivacyRequestStatus =
+  | "received"
+  | "in_review"
+  | "fulfilled"
+  | "rejected"
+  | "cancelled";
+
+export interface PolicyDocumentListItem {
+  id: string;
+  kind: PolicyKind;
+  version: string;
+  title: string;
+  effective_at: string;
+  is_active: boolean;
+}
+
+export interface PolicyDocumentOut extends PolicyDocumentListItem {
+  content_md: string;
+  summary_md: string | null;
+  requires_explicit_consent: boolean;
+  published_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PolicyDocumentCreate {
+  kind: PolicyKind;
+  version: string;
+  title: string;
+  content_md: string;
+  summary_md?: string | null;
+  effective_at: string;
+  requires_explicit_consent?: boolean;
+}
+
+export interface PolicyDocumentUpdate {
+  title?: string;
+  content_md?: string;
+  summary_md?: string | null;
+  effective_at?: string;
+  requires_explicit_consent?: boolean;
+}
+
+export interface PrivacyRequestOut {
+  id: string;
+  user_id: string;
+  request_type: PrivacyRequestType;
+  status: PrivacyRequestStatus;
+  subject: string;
+  description: string;
+  submitted_ip_address: string | null;
+  submitted_user_agent: string | null;
+  response_message: string | null;
+  handled_by: string | null;
+  handled_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export const policiesApi = {
+  list: (kind?: PolicyKind) =>
+    get<PolicyDocumentListItem[]>(
+      kind ? `/policies?kind=${encodeURIComponent(kind)}` : "/policies",
+    ),
+  // 後端僅在 /policies/public/{kind}/{version} 提供 full document；用此路徑取詳情。
+  detail: (kind: PolicyKind, version: string) =>
+    get<PolicyDocumentOut>(
+      `/policies/public/${encodeURIComponent(kind)}/${encodeURIComponent(version)}`,
+    ),
+  version: (kind: PolicyKind, version: string) =>
+    get<PolicyDocumentOut>(
+      `/policies/public/${encodeURIComponent(kind)}/${encodeURIComponent(version)}`,
+    ),
+  active: (kind: PolicyKind) =>
+    get<PolicyDocumentOut>(`/policies/public/${encodeURIComponent(kind)}`),
+  create: (body: PolicyDocumentCreate) => post<PolicyDocumentOut>("/policies", body),
+  update: (id: string, body: PolicyDocumentUpdate) =>
+    patch<PolicyDocumentOut>(`/policies/${encodeURIComponent(id)}`, body),
+  activate: (id: string) =>
+    post<PolicyDocumentOut>(`/policies/${encodeURIComponent(id)}/activate`, {}),
+  listPrivacyRequests: () => get<PrivacyRequestOut[]>("/policies/privacy-requests"),
+  updatePrivacyRequest: (
+    id: string,
+    body: { status: PrivacyRequestStatus; response_message?: string | null },
+  ) =>
+    patch<PrivacyRequestOut>(
+      `/policies/privacy-requests/${encodeURIComponent(id)}`,
+      body,
+    ),
+  pendingConsents: () => get<PendingConsentItem[]>("/policies/me/pending"),
+  consent: (policy_document_id: string) =>
+    post<PolicyConsentOut>("/policies/me/consents", { policy_document_id }),
+  myConsents: () => get<PolicyConsentOut[]>("/policies/me/consents"),
+};
+
+// ── Impersonation ────────────────────────────────────────────────────────
+export interface ImpersonationStartResponse {
+  token: string;
+  expires_in_minutes: number;
+  target_user_id: string;
+  target_email: string;
+}
+
+export const impersonationApi = {
+  start: (target_user_id: string, minutes: number) =>
+    post<ImpersonationStartResponse>(
+      `/admin/impersonate/${encodeURIComponent(target_user_id)}`,
+      { minutes },
+    ),
+  end: (token: string, reason: string) =>
+    post<void>("/admin/impersonate/end", { token, reason }),
+};
+
+// ── 個資請求（policies 已合併到上方 policiesApi） ───────────────────────
+
+export const privacyRequestsApi = {
+  listMine: () => get<PrivacyRequestOut[]>("/policies/me/privacy-requests"),
+  create: (body: {
+    request_type: PrivacyRequestType;
+    subject: string;
+    description: string;
+  }) => post<PrivacyRequestOut>("/policies/me/privacy-requests", body),
+  cancelMine: (id: string, reason?: string | null) =>
+    post<PrivacyRequestOut>(
+      `/policies/me/privacy-requests/${id}/cancel`,
+      { reason: reason ?? null },
+    ),
+  listAdmin: () => get<PrivacyRequestOut[]>("/policies/privacy-requests"),
+  updateAdmin: (
+    id: string,
+    body: { status: PrivacyRequestStatus; response_message?: string | null },
+  ) => patch<PrivacyRequestOut>(`/policies/privacy-requests/${id}`, body),
 };

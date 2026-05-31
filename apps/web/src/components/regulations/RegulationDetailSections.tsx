@@ -431,7 +431,6 @@ export function ArticleRow({
       showTopDivider={showTopDivider}
       highlighted={highlighted}
       onClearHighlight={onClearHighlight}
-      legacyAnchorId={`art-${index}`}
     />
   );
 }
@@ -559,7 +558,7 @@ export function RevisionCard({
           style={{ borderColor: "var(--border)" }}
         >
           {snapshotArticles.length > 0 ? snapshotArticles.map((article) => {
-            const label = article.article_type === "article" || article.article_type === "clause"
+            const label = article.article_type === "article"
               ? `第 ${article.legal_number ?? "?"} 條`
               : article.legal_number
                 ? `${article.legal_number} ${ARTICLE_TYPE_LABEL[article.article_type] ?? article.article_type}`
@@ -578,7 +577,7 @@ export function RevisionCard({
                 <p className="text-xs font-semibold mb-1" style={{ color: isHighlighted ? "var(--primary)" : "var(--text-primary)" }}>
                   {label}
                 </p>
-                {article.title && article.article_type !== "article" && article.article_type !== "clause" && (
+                {article.title && article.article_type !== "article" && (
                   <p className="text-xs mb-1" style={{ color: "var(--text-primary)" }}>{article.title}</p>
                 )}
                 <p className="text-xs whitespace-pre-wrap leading-6" style={{ color: "var(--text-secondary)" }}>

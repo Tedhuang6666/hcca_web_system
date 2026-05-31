@@ -322,6 +322,7 @@ export interface OrderOut {
   id: string; serial_number: string; user_id: string; org_id: string; activity_id: string | null;
   status: OrderStatus; total_price: number; notes: string | null;
   class_id: string | null; class_label: string | null;
+  assistance_scope: string; assisted_by_id: string | null;
   is_paid: boolean; paid_at: string | null;
   created_at: string; updated_at: string; items: OrderItemOut[];
 }
@@ -330,6 +331,7 @@ export interface OrderListItem {
   user_name: string | null; org_id: string; activity_id: string | null;
   status: OrderStatus; total_price: number;
   class_id: string | null; class_label: string | null;
+  assistance_scope: string; assisted_by_id: string | null;
   is_paid: boolean; created_at: string;
 }
 export interface OrderSummaryRow {
@@ -701,8 +703,104 @@ export interface SchoolClassOut extends SchoolClassListItem {
 export interface ClassMemberOut {
   id: string; display_name: string;
   student_id: string | null; email: string; is_cadre: boolean;
-  source: "range" | "manual";
+  source: "range" | "manual" | "person_affiliation";
   manual_member_id: string | null;
+}
+
+// ── 人員與身分總表 ────────────────────────────────────────────────────────────
+
+export type PersonStatus = "active" | "alumni" | "transferred" | "inactive";
+export type PersonAffiliationKind = "student" | "class_member" | "class_role" | "org_position";
+export type PersonAffiliationStatus = "active" | "ended" | "pending_user";
+export type PersonAffiliationSource = "manual" | "import" | "class_workspace" | "rbac_sync";
+
+export interface PersonOut {
+  id: string;
+  user_id: string | null;
+  student_id: string | null;
+  display_name: string;
+  legal_name: string | null;
+  email: string | null;
+  status: PersonStatus;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PersonListItem extends PersonOut {
+  active_affiliation_count: number;
+  class_labels: string[];
+  role_titles: string[];
+}
+
+export interface PersonAffiliationOut {
+  id: string;
+  person_id: string;
+  kind: PersonAffiliationKind;
+  academic_year: number | null;
+  class_id: string | null;
+  class_label: string | null;
+  org_id: string | null;
+  org_name: string | null;
+  position_id: string | null;
+  position_name: string | null;
+  role_key: string | null;
+  title: string | null;
+  start_date: string;
+  end_date: string | null;
+  status: PersonAffiliationStatus;
+  source: PersonAffiliationSource;
+  synced_user_position_id: string | null;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PersonDetailOut extends PersonOut {
+  affiliations: PersonAffiliationOut[];
+}
+
+export type PersonCreate = Pick<
+  PersonOut,
+  "display_name" | "student_id" | "legal_name" | "email" | "status" | "note"
+> & { user_id?: string | null };
+
+export type PersonUpdate = Partial<PersonCreate>;
+
+export interface PersonAffiliationCreate {
+  person_id: string;
+  kind: PersonAffiliationKind;
+  academic_year?: number | null;
+  class_id?: string | null;
+  org_id?: string | null;
+  position_id?: string | null;
+  role_key?: string | null;
+  title?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  source?: PersonAffiliationSource;
+  note?: string | null;
+}
+
+export type PersonAffiliationUpdate = Partial<
+  Pick<PersonAffiliationOut, "start_date" | "end_date" | "status" | "title" | "note">
+>;
+
+export interface PersonRosterImportRow {
+  student_id: string;
+  display_name: string;
+  email?: string | null;
+  class_id?: string | null;
+  academic_year?: number | null;
+  note?: string | null;
+}
+
+export interface PersonRosterImportResult {
+  total: number;
+  people_created: number;
+  people_updated: number;
+  affiliations_created: number;
+  skipped: number;
 }
 
 // ── 法規系統型別 ──────────────────────────────────────────────────────────────
@@ -722,10 +820,7 @@ export type ArticleType =
   | "paragraph"      // 項（新）
   | "subparagraph"   // 款（新）
   | "item"           // 目（新）
-  | "special_clause" // 特殊條文（如附則）
-  // 舊值保留向下相容（已廢棄）
-  | "clause"         // 舊：條（請改用 article）
-  | "subsection";    // 舊：款（請改用 subparagraph）
+  | "special_clause"; // 特殊條文（如附則）
 
 /** 結構化條文 */
 export interface RegulationArticleOut {
@@ -840,6 +935,14 @@ export interface RegulationListItem {
 /** 全文搜尋結果：RegulationListItem 加上命中的條文 */
 export interface RegulationSearchResult extends RegulationListItem {
   matched_articles: RegulationArticleOut[];
+}
+
+export interface AmendmentComparisonRow {
+  article_key: string;
+  status: string;
+  revised_text: string;
+  current_text: string;
+  note: string;
 }
 
 // ── 議事系統型別 ──────────────────────────────────────────────────────────────
@@ -1369,7 +1472,7 @@ export interface CalendarEventCreate {
 
 export interface CalendarEventListItem {
   id: string;
-  org_id: string;
+  org_id: string | null;
   title: string;
   description: string | null;
   event_type: CalendarEventType;
@@ -1711,6 +1814,8 @@ export interface MealOrderOut {
   availability_id: string | null;
   pickup_slot_id: string | null;
   class_id: string | null;
+  assistance_scope: string;
+  assisted_by_id: string | null;
   status: MealOrderStatus;
   total_price: number;
   is_paid: boolean;
@@ -1734,6 +1839,8 @@ export interface MealOrderListItem {
   vendor_id: string;
   pickup_slot_id: string | null;
   class_id: string | null;
+  assistance_scope: string;
+  assisted_by_id: string | null;
   status: MealOrderStatus;
   total_price: number;
   is_paid: boolean;
@@ -2639,4 +2746,90 @@ export interface ExamTraceInspectOut {
   detected_trace_codes: string[];
   matches: ExamTraceInspectMatch[];
   unsupported_reason: string | null;
+}
+
+// ── 政策、同意與個資請求 ────────────────────────────────────────────────
+
+export type PolicyKind =
+  | "privacy"
+  | "terms_of_service"
+  | "accessibility"
+  | "cookie"
+  | "security";
+
+export interface PolicyDocumentOut {
+  id: string;
+  kind: PolicyKind;
+  version: string;
+  title: string;
+  content_md: string;
+  summary_md: string | null;
+  effective_at: string;
+  is_active: boolean;
+  requires_explicit_consent: boolean;
+  published_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PolicyDocumentListItem {
+  id: string;
+  kind: PolicyKind;
+  version: string;
+  title: string;
+  effective_at: string;
+  is_active: boolean;
+}
+
+export interface PendingConsentItem {
+  policy_document_id: string;
+  kind: PolicyKind;
+  version: string;
+  title: string;
+  summary_md: string | null;
+  effective_at: string;
+  requires_explicit_consent: boolean;
+}
+
+export interface PolicyConsentOut {
+  id: string;
+  user_id: string;
+  policy_document_id: string;
+  agreed_at: string;
+  ip_address: string | null;
+  user_agent: string | null;
+  policy_kind: PolicyKind | null;
+  policy_version: string | null;
+  policy_title: string | null;
+}
+
+export type PrivacyRequestType =
+  | "access"
+  | "rectification"
+  | "erasure"
+  | "objection"
+  | "copy_export"
+  | "other";
+
+export type PrivacyRequestStatus =
+  | "received"
+  | "in_review"
+  | "fulfilled"
+  | "rejected"
+  | "cancelled";
+
+export interface PrivacyRequestOut {
+  id: string;
+  user_id: string;
+  request_type: PrivacyRequestType;
+  status: PrivacyRequestStatus;
+  subject: string;
+  description: string;
+  submitted_ip_address: string | null;
+  submitted_user_agent: string | null;
+  response_message: string | null;
+  handled_by: string | null;
+  handled_at: string | null;
+  created_at: string;
+  updated_at: string;
 }

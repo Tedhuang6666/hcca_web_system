@@ -12,6 +12,7 @@ import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import ModuleMaintenance from "@/components/ui/ModuleMaintenance";
 import UrgentAnnouncementPopup from "@/components/announcements/UrgentAnnouncementPopup";
 import CommandMenu from "./CommandMenu";
+import { PolicyConsentBanner } from "@/components/legal/PolicyConsentBanner";
 
 /** 完全裸頁（不渲染 Shell）：login、auth callback、Email 退訂落地頁 */
 const BARE_PATHS = ["/login", "/auth", "/maintenance", "/profile/complete", "/public", "/unsubscribe"];
@@ -23,6 +24,7 @@ function isBare(pathname: string) {
 /** 是否需要登入 */
 function requiresAuth(pathname: string): boolean {
   if (isBare(pathname)) return false;
+  if (pathname === "/about" || pathname.startsWith("/legal")) return false;
   if (pathname === "/regulations") return false;
   // 法規詳細頁與條文深度連結（/regulations/{id}/第N條...）皆為公開可讀；
   // 僅 /edit、/amendment 子頁需要登入。
@@ -61,17 +63,21 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const moduleId = moduleForPath(pathname);
   const moduleDown = isModuleDown(moduleId);
+  const suppressPolicyConsent = pathname.startsWith("/legal");
   const [authReady, setAuthReady] = useState(false);
   const [redirecting, setRedirecting] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     if (!requiresAuth(pathname)) {
+      setIsLoggedIn(Boolean(localStorage.getItem("user_id")));
       setRedirecting(false);
       setAuthReady(true);
       return;
     }
     const userId = localStorage.getItem("user_id");
+    setIsLoggedIn(Boolean(userId));
     if (!userId) {
       setRedirecting(true);
       // 未登入的初次進站預設導向公開法規，避免被迫進 /login
@@ -156,6 +162,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
         {!sidebarOpen && <BottomTabBar onMoreClick={() => setSidebarOpen((p) => !p)} />}
         <UrgentAnnouncementPopup />
         <CommandMenu />
+        <PolicyConsentBanner isAuthenticated={isLoggedIn && !suppressPolicyConsent} />
       </div>
       </ConfirmProvider>
     </PermissionProvider>

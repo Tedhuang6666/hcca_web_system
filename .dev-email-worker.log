@@ -1,0 +1,47 @@
+00:58:25 INFO  api.core.sentry: Sentry initialized env=development traces=0.00
+00:58:25 INFO  api.core.posthog: PostHog initialized host=https://us.i.posthog.com
+00:58:25 INFO  api.core.prometheus_metrics: prometheus_client not installed; metrics disabled. Run `uv add prometheus-client --project apps/api` to enable.
+ 
+ -------------- email-dev@TedHuangsNB v5.3.1 (emerald-rush)
+--- ***** ----- 
+-- ******* ---- Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39 2026-06-01 00:58:26
+- *** --- * --- 
+- ** ---------- [config]
+- ** ---------- .> app:         campus_platform:0x70f8511f5550
+- ** ---------- .> transport:   redis://localhost:6379/0
+- ** ---------- .> results:     redis://localhost:6379/0
+- *** --- * --- .> concurrency: 1 (prefork)
+-- ******* ---- .> task events: OFF (enable -E to monitor tasks in this worker)
+--- ***** ----- 
+ -------------- [queues]
+                .> email            exchange=default(direct) key=default
+                
+
+[tasks]
+  . api.services.audit_chain_tasks.compute_daily_audit_anchor
+  . api.services.audit_chain_tasks.verify_audit_chain_integrity
+  . api.services.backup_tasks.backup_database
+  . api.services.data_lifecycle_tasks.run_safe_purges
+  . api.services.digest_tasks.send_daily_digest
+  . api.services.digest_tasks.send_weekly_digest
+  . api.services.document_reminder_tasks.send_document_reminders
+  . api.services.email_tasks.process_scheduled_emails
+  . api.services.field_crypto_tasks.rotate_user_mfa_secrets
+  . api.services.mail.send_email
+  . api.services.meal_tasks.auto_close_meal_schedules
+  . api.services.meal_tasks.check_meal_no_shows
+  . api.services.meeting_tasks.send_meeting_start_reminders
+  . api.services.outbox_tasks.process_outbox
+  . api.services.permission_tasks.invalidate_expired_user_caches
+  . api.services.recovery_tasks.process_half_open_probes
+  . api.services.regulation_tasks.audit_regulation_consistency
+  . api.services.shop_tasks.notify_class_cadres_on_deadline
+  . api.services.watchdog_tasks.run_watchdog
+  . api.services.webhook_tasks.deliver_webhook
+  . api.services.webhook_tasks.process_webhook_deliveries
+  . api.services.work_item_tasks.remind_due_work_items
+
+00:58:26 INFO  celery.worker.consumer.connection: Connected to redis://localhost:6379/0
+00:58:26 INFO  celery.worker.consumer.mingle: mingle: searching for neighbors
+00:58:27 INFO  celery.worker.consumer.mingle: mingle: all alone
+00:58:28 INFO  celery.apps.worker: email-dev@TedHuangsNB ready.

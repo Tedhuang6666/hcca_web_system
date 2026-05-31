@@ -280,6 +280,12 @@ class OrderCreate(BaseModel):
     notes: str | None = Field(None, max_length=500)
 
 
+class ClassOrderUpsert(BaseModel):
+    user_id: uuid.UUID
+    items: list[OrderItemCreate] = Field(..., min_length=1)
+    notes: str | None = Field(None, max_length=500)
+
+
 class OrderOut(BaseModel):
     id: uuid.UUID
     serial_number: str
@@ -291,6 +297,8 @@ class OrderOut(BaseModel):
     notes: str | None = None
     class_id: uuid.UUID | None = None
     class_label: str | None = None
+    assistance_scope: str = "self"
+    assisted_by_id: uuid.UUID | None = None
     is_paid: bool = False
     paid_at: datetime | None = None
     created_at: datetime
@@ -309,6 +317,8 @@ class OrderListItem(BaseModel):
     total_price: int
     class_id: uuid.UUID | None = None
     class_label: str | None = None
+    assistance_scope: str = "self"
+    assisted_by_id: uuid.UUID | None = None
     is_paid: bool = False
     created_at: datetime
 

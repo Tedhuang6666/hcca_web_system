@@ -52,7 +52,9 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["source_meeting_id"], ["meetings.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["updated_by"], ["users.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("source_module", "source_id", "source_key", name="uq_calendar_events_source"),
+        sa.UniqueConstraint(
+            "source_module", "source_id", "source_key", name="uq_calendar_events_source"
+        ),
         sa.UniqueConstraint("source_meeting_id", name="uq_calendar_events_source_meeting"),
     )
     op.create_index("ix_calendar_events_event_type", "calendar_events", ["event_type"])

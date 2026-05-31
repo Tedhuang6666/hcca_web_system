@@ -17,7 +17,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { divIcon } from "leaflet";
-import { MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, Marker, Popup, TileLayer, ZoomControl, useMap, useMapEvents } from "react-leaflet";
 import type { LatLngBounds, LatLngExpression } from "leaflet";
 import type { PartnerMapItem } from "@/lib/types";
 
@@ -183,6 +183,7 @@ export default function PartnerLeafletMap({
     <MapContainer
       center={center}
       zoom={16}
+      zoomControl={false}
       className={`h-full w-full partner-map-leaflet partner-map-theme-${theme}`}
       scrollWheelZoom>
       <TileLayer
@@ -190,6 +191,7 @@ export default function PartnerLeafletMap({
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
         url={tileUrl}
       />
+      <ZoomControl position="bottomright" />
       <ThemeClassSync theme={theme} />
       <BoundsReporter onBoundsChange={onBoundsChange} />
       <Marker

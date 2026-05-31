@@ -31,11 +31,12 @@ def encrypt_mfa_secret(secret: str) -> str:
 
 
 def decrypt_mfa_secret(stored: str | None) -> str | None:
-    """解密 TOTP secret；舊明文資料向前相容。"""
+    """解密 TOTP secret。"""
     if not stored:
         return None
     if not stored.startswith(_ENCRYPTED_PREFIX):
-        return stored
+        logger.error("MFA secret is not encrypted")
+        return None
     token = stored.removeprefix(_ENCRYPTED_PREFIX).encode("ascii")
     try:
         return _fernet().decrypt(token).decode("utf-8")

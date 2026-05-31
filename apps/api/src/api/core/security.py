@@ -29,9 +29,7 @@ redis_client: aioredis.Redis = aioredis.from_url(
     health_check_interval=settings.REDIS_HEALTH_CHECK_INTERVAL,
 )
 
-# 舊版以 token 字串為 key（向下相容）
-BLACKLIST_PREFIX = "blacklist:"
-# 新版以 jti 為 key（支援 user-level revoke）
+# 以 jti 為 key（支援 user-level revoke）
 BLACKLIST_JTI_PREFIX = "blacklist_jti:"
 # 每 user 持有的所有 jti（refresh token 期限內）
 USER_TOKENS_PREFIX = "user_tokens:"
@@ -83,11 +81,7 @@ def decode_token(token: str) -> dict:
 
 
 async def add_to_blacklist(token: str) -> None:
-    """將 Token 加入 Redis 黑名單（有效期至 Token 過期時間）。
-
-    新版以 jti 為 key（與 revoke_user 共用空間）；同時寫一份舊版的 token-key
-    以向下相容尚未升級的 jti-less token。
-    """
+    """將 Token jti 加入 Redis 黑名單（有效期至 Token 過期時間）。"""
     try:
         payload = decode_token(token)
     except InvalidTokenError:
@@ -101,13 +95,10 @@ async def add_to_blacklist(token: str) -> None:
     jti = payload.get("jti")
     if jti:
         await redis_client.setex(f"{BLACKLIST_JTI_PREFIX}{jti}", ttl, "1")
-    else:
-        # 向下相容：舊 token 沒有 jti
-        await redis_client.setex(f"{BLACKLIST_PREFIX}{token}", ttl, "1")
 
 
 async def is_blacklisted(token: str) -> bool:
-    """檢查 Token 是否已被撤銷（同時看新版 jti 與舊版 token-key 兩種空間）。"""
+    """檢查 Token jti 是否已被撤銷。"""
     try:
         payload = decode_token(token)
         jti = payload.get("jti")
@@ -115,7 +106,7 @@ async def is_blacklisted(token: str) -> bool:
             return True
     except InvalidTokenError:
         pass
-    return bool(await redis_client.exists(f"{BLACKLIST_PREFIX}{token}"))
+    return False
 
 
 # ── User-level token 追蹤與撤銷 ──────────────────────────────────────────────
@@ -124,7 +115,7 @@ async def is_blacklisted(token: str) -> bool:
 async def register_active_token(user_id: str, jti: str | None, ttl_seconds: int) -> None:
     """記錄 user 持有的 jti，讓 admin 能用 user_id 反查並撤銷。
 
-    在認證成功時呼叫（idempotent SADD）。若 token 沒有 jti（舊版）則 no-op。
+    在認證成功時呼叫（idempotent SADD）。
     """
     if not jti:
         return

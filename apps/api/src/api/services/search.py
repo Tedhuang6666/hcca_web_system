@@ -134,7 +134,7 @@ async def rebuild_index(db: AsyncSession) -> dict[str, Any]:
     for doc in (await db.execute(select(Document))).scalars():
         documents.append(
             {
-                "id": f"document:{doc.id}",
+                "id": f"document-{doc.id}",
                 "kind": "document",
                 "title": doc.title,
                 "summary": doc.content[:300],
@@ -147,7 +147,7 @@ async def rebuild_index(db: AsyncSession) -> dict[str, Any]:
     for reg in (await db.execute(select(Regulation))).scalars():
         documents.append(
             {
-                "id": f"regulation:{reg.id}",
+                "id": f"regulation-{reg.id}",
                 "kind": "regulation",
                 "title": reg.title,
                 "summary": reg.content[:300],
@@ -160,7 +160,7 @@ async def rebuild_index(db: AsyncSession) -> dict[str, Any]:
     for meeting in (await db.execute(select(Meeting))).scalars():
         documents.append(
             {
-                "id": f"meeting:{meeting.id}",
+                "id": f"meeting-{meeting.id}",
                 "kind": "meeting",
                 "title": meeting.title,
                 "summary": meeting.description or "",
@@ -173,7 +173,7 @@ async def rebuild_index(db: AsyncSession) -> dict[str, Any]:
     for ann in (await db.execute(select(Announcement))).scalars():
         documents.append(
             {
-                "id": f"announcement:{ann.id}",
+                "id": f"announcement-{ann.id}",
                 "kind": "announcement",
                 "title": ann.title,
                 "summary": "",

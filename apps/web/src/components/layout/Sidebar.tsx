@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useModuleStatus } from "@/contexts/ModuleStatusContext";
+import { BRANDING } from "@/lib/branding";
 import { NAV_ID_TO_MODULE } from "@/lib/modules";
 import NavIcon from "./NavIcon";
 import {
@@ -19,7 +20,6 @@ import {
   readNavPreferences,
   type NavEntry,
   type NavItem,
-  type NavSection,
 } from "@/lib/navigation";
 
 /* ── 折疊狀態：localStorage 持久化 ─────────────────────────────────────── */
@@ -202,18 +202,18 @@ export default function Sidebar() {
               boxShadow: "0 2px 10px rgba(201,168,76,0.35)",
               letterSpacing: "0.02em",
             }}>
-            自
+            {BRANDING.acronym}
           </div>
           <div className="min-w-0">
             <p
               className="text-sm leading-tight truncate"
               style={{ color: "var(--sidebar-text-hover)", fontWeight: 600, letterSpacing: 0 }}>
-              校園自治平台
+              {BRANDING.orgShortName}
             </p>
             <p
               className="text-[10px] leading-tight mt-0.5 tracking-widest font-medium"
               style={{ color: "var(--primary)", opacity: 0.8 }}>
-              HCCA
+              {BRANDING.acronym}
             </p>
           </div>
         </Link>

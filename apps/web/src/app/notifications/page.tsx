@@ -191,8 +191,17 @@ export default function NotificationsPage() {
     return () => clearInterval(timer);
   }, [fetchAll]);
 
-  // 訂閱 WebSocket：收到 document_* 事件時重新載入通知列表
+  // 訂閱 WebSocket：收到新通知時重新載入通知列表
   useWS(wsRoom, useCallback((msg) => {
+    if (msg.type === "notification.created") {
+      if (msg.notification && typeof msg.notification === "object") {
+        setItems((current) => [msg.notification as NotificationItem, ...current].slice(0, 80));
+      } else {
+        void fetchAll();
+      }
+      if (typeof msg.unread === "number") setUnreadCount(msg.unread);
+      return;
+    }
     if (typeof msg.type === "string" && msg.type.startsWith("document")) {
       fetchAll();
     }

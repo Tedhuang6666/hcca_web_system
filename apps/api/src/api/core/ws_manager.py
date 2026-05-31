@@ -99,7 +99,7 @@ class ConnectionManager:
         self._ws_meta[websocket] = (room, client_ip)
         self._last_pong[websocket] = asyncio.get_event_loop().time()
         self._heartbeat_tasks[websocket] = asyncio.create_task(self._heartbeat_loop(websocket))
-        logger.info(
+        logger.debug(
             "WS 連線建立 room=%s ip=%s total=%d room_count=%d ip_count=%d",
             room,
             client_ip,
@@ -126,7 +126,7 @@ class ConnectionManager:
         if hb_task and not hb_task.done():
             hb_task.cancel()
 
-        logger.info("WS 連線中斷 room=%s remaining=%d", room, self.room_count(room))
+        logger.debug("WS 連線中斷 room=%s remaining=%d", room, self.room_count(room))
 
     def notify_pong(self, websocket: WebSocket) -> None:
         """前端回 pong 時呼叫，更新最後活躍時間。"""
@@ -267,7 +267,7 @@ class _RedisBroker:
         self._pubsub = redis_client.pubsub()
         await self._pubsub.subscribe(_PUBSUB_CHANNEL)
         self._task = asyncio.create_task(self._listen(), name="ws_pubsub_listener")
-        logger.info("WS Redis pub/sub listener started")
+        logger.debug("WS Redis pub/sub listener started")
 
     async def stop(self) -> None:
         self._stopping.set()
@@ -279,7 +279,7 @@ class _RedisBroker:
             with contextlib.suppress(Exception):
                 await self._pubsub.unsubscribe(_PUBSUB_CHANNEL)
                 await self._pubsub.aclose()
-        logger.info("WS Redis pub/sub listener stopped")
+        logger.debug("WS Redis pub/sub listener stopped")
 
     async def publish(self, payload: dict) -> None:
         from api.core.security import redis_client

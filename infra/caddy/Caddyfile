@@ -1,0 +1,63 @@
+# Caddyfile — reverse proxy for HA two-replica API + admin channel + web
+# 對應 ADR-002（兩副本對稱式 HA）
+#
+# Cloudflare 接到外網、Caddy 於 origin 端做：
+#   1. 兩 api 副本輪詢（藍綠）+ health check
+#   2. 失敗自動踢出、恢復自動加回
+#   3. admin 通道單實例
+#   4. web 前端 SSR
+
+{
+	admin :2019
+	servers {
+		trusted_proxies cloudflare
+	}
+}
+
+# ── API（兩副本 LB） ─────────────────────────────────────────
+:8080 {
+	reverse_proxy /api/* api:8000 api-green:8000 {
+		lb_policy round_robin
+		lb_try_duration 5s
+		lb_try_interval 500ms
+		health_uri /ready
+		health_interval 10s
+		health_timeout 3s
+		health_status 200
+		fail_duration 30s
+		max_fails 3
+
+		# Pass real client IP
+		header_up X-Real-IP {http.request.header.cf-connecting-ip}
+		header_up X-Forwarded-For {http.request.header.cf-connecting-ip}
+		header_up X-Forwarded-Proto https
+	}
+
+	# WebSocket（同 LB 但 upgrade）
+	reverse_proxy /ws/* api:8000 api-green:8000 {
+		lb_policy round_robin
+		health_uri /ready
+		health_interval 10s
+		header_up X-Real-IP {http.request.header.cf-connecting-ip}
+	}
+
+	# 預設轉發到 web（前端）
+	reverse_proxy web:3000 {
+		header_up X-Real-IP {http.request.header.cf-connecting-ip}
+		header_up X-Forwarded-Proto https
+	}
+}
+
+# ── Admin（單實例、不參與 LB） ───────────────────────────────
+:8081 {
+	reverse_proxy api-admin:8001 {
+		header_up X-Real-IP {http.request.header.cf-connecting-ip}
+		header_up X-Forwarded-For {http.request.header.cf-connecting-ip}
+		header_up X-Forwarded-Proto https
+	}
+}
+
+# ── Web only（如需單獨 host） ────────────────────────────────
+:8082 {
+	reverse_proxy web:3000
+}

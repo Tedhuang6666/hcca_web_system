@@ -32,6 +32,7 @@ from api.schemas.shop import (
     CartOut,
     CatalogCategoryOut,
     CheckoutRequest,
+    ClassOrderUpsert,
     ImageUploadOut,
     OrderCancelRequest,
     OrderListItem,
@@ -670,14 +671,59 @@ async def list_class_orders(
     session: DbDep,
     current_user: CurrentUser,
     is_paid: bool | None = Query(None, description="篩選繳費狀態"),
+    assisted_only: bool = Query(True, description="僅顯示班級幹部協助建立的訂單"),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> list[OrderListItem]:
     class_ids = list(await class_svc.get_cadre_class_ids(session, current_user.id))
     orders = await shop_svc.list_orders(
-        session, class_ids=class_ids, is_paid=is_paid, limit=limit, offset=offset
+        session,
+        class_ids=class_ids,
+        assistance_scope="class_assisted" if assisted_only else None,
+        is_paid=is_paid,
+        limit=limit,
+        offset=offset,
     )
     return [shop_svc.serialize_order_list_item(o) for o in orders]
+
+
+@router.post(
+    "/orders/class",
+    response_model=list[OrderOut],
+    status_code=status.HTTP_201_CREATED,
+    summary="班級幹部替本班學生建立校商訂單",
+)
+async def create_class_order(
+    payload: ClassOrderUpsert,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> list[OrderOut]:
+    target = await session.get(User, payload.user_id)
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此學生")
+    target_class = await class_svc.resolve_user_class(session, target)
+    cadre_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
+    if target_class is None or (
+        not current_user.is_superuser and target_class.id not in cadre_ids
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權替此學生訂購")
+    try:
+        orders = await shop_svc.create_direct_order(
+            session,
+            user_id=target.id,
+            class_id=target_class.id,
+            data=payload,
+            assisted_by_id=current_user.id,
+        )
+    except StaleDataError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="庫存發生並發衝突") from e
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    result: list[OrderOut] = []
+    for order in orders:
+        full = await shop_svc.get_order(session, order.id)
+        result.append(shop_svc.serialize_order(full or order))
+    return result
 
 
 @router.get(
@@ -766,6 +812,28 @@ async def cancel_order(
         meta={"serial_number": order.serial_number, "reason": payload.reason},
         summary=f"取消商品訂單「{order.serial_number}」",
     )
+    refreshed = await shop_svc.get_order(session, order.id)
+    return shop_svc.serialize_order(refreshed or order)
+
+
+@router.patch("/orders/{order_id}", response_model=OrderOut, summary="截止前修改訂單品項")
+async def update_order_items(
+    order_id: uuid.UUID,
+    payload: ClassOrderUpsert,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> OrderOut:
+    order = await _get_order_or_404(order_id, session)
+    if order.user_id != current_user.id and not current_user.is_superuser:
+        cadre_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
+        if order.assistance_scope != "class_assisted" or order.class_id not in cadre_ids:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權修改此訂單")
+    try:
+        order = await shop_svc.replace_order_items(session, order, data=payload)
+    except StaleDataError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="庫存發生並發衝突") from e
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     refreshed = await shop_svc.get_order(session, order.id)
     return shop_svc.serialize_order(refreshed or order)
 

@@ -59,7 +59,7 @@ async def _dispatch_scheduled() -> dict:
                         msg.error_detail = "解析後無有效收件人"
                         continue
                     html = render_generic_message(msg.subject, msg.body, msg.context or {})
-                    task_ids = enqueue_rendered(emails, msg.subject, html)
+                    task_ids = enqueue_rendered(emails, msg.subject, html, str(msg.id))
                     msg.resolved_emails = emails
                     msg.recipient_count = len(emails)
                     msg.status = EmailStatus.QUEUED

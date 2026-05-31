@@ -20,6 +20,7 @@ from api.models.calendar import (
     CalendarParticipantRole,
     CalendarVisibility,
 )
+from api.models.discord_account import DiscordOrgChannelMapping
 from api.models.document import Document, DocumentStatus
 from api.models.email_message import EmailMessage, EmailStatus
 from api.models.meal import MealPickupSlot, MealProductAvailability, MealVendor, MenuSchedule
@@ -28,6 +29,7 @@ from api.models.partner_map import PartnerBusiness, PartnerOffer
 from api.models.shop import Product
 from api.models.survey import Survey
 from api.models.work_item import WorkItem, WorkItemStatus
+from api.services.outbox import emit
 
 
 def _overlaps(column, start: datetime | None, end: datetime | None):  # noqa: ANN001
@@ -62,6 +64,60 @@ async def sync_calendar_projections(
     total += await _project_work_items(session, start, end)
     total += await _project_activities(session, start, end)
     return total
+
+
+async def publish_calendar_social_notice(
+    session: AsyncSession,
+    event: CalendarEvent,
+    *,
+    action: str,
+) -> int:
+    """把組織級以上的行事曆事件送到既有 Discord 組織公告頻道。"""
+    if event.org_id is None:
+        return 0
+    if event.visibility not in {
+        CalendarVisibility.ORG,
+        CalendarVisibility.LOGGED_IN,
+        CalendarVisibility.PUBLIC,
+    }:
+        return 0
+
+    channel_ids = (
+        (
+            await session.execute(
+                select(DiscordOrgChannelMapping.channel_id)
+                .where(
+                    DiscordOrgChannelMapping.org_id == event.org_id,
+                    DiscordOrgChannelMapping.is_active.is_(True),
+                )
+                .order_by(DiscordOrgChannelMapping.updated_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    sent = 0
+    body_parts = []
+    if event.location:
+        body_parts.append(f"地點：{event.location}")
+    if event.starts_at:
+        body_parts.append(f"時間：{event.starts_at.isoformat()}")
+    if event.description:
+        body_parts.append(event.description[:300])
+
+    for channel_id in dict.fromkeys(channel_ids):
+        await emit(
+            session,
+            event_type="discord.channel_alert",
+            payload={
+                "channel_id": channel_id,
+                "title": f"{action}：{event.title}",
+                "body": "\n".join(body_parts) if body_parts else None,
+                "link": event.href or f"/calendar?event={event.id}",
+            },
+        )
+        sent += 1
+    return sent
 
 
 async def _upsert_projection(
@@ -129,7 +185,9 @@ async def _upsert_projection(
     return event
 
 
-async def _project_documents(session: AsyncSession, start: datetime | None, end: datetime | None) -> int:
+async def _project_documents(
+    session: AsyncSession, start: datetime | None, end: datetime | None
+) -> int:
     rows = (
         await session.execute(
             select(Document)
@@ -158,7 +216,9 @@ async def _project_documents(session: AsyncSession, start: datetime | None, end:
     return count
 
 
-async def _project_meetings(session: AsyncSession, start: datetime | None, end: datetime | None) -> int:
+async def _project_meetings(
+    session: AsyncSession, start: datetime | None, end: datetime | None
+) -> int:
     from api.services import calendar as calendar_svc
 
     rows = (
@@ -173,7 +233,9 @@ async def _project_meetings(session: AsyncSession, start: datetime | None, end: 
     return count
 
 
-async def _project_surveys(session: AsyncSession, start: datetime | None, end: datetime | None) -> int:
+async def _project_surveys(
+    session: AsyncSession, start: datetime | None, end: datetime | None
+) -> int:
     rows = (
         await session.execute(
             select(Survey)
@@ -243,7 +305,9 @@ async def _project_announcements(
                 starts_at=at,
                 created_by=ann.author_id,
                 href=f"/announcements/{ann.id}",
-                event_type=CalendarEventType.DEADLINE if key == "urgent_until" else CalendarEventType.OTHER,
+                event_type=CalendarEventType.DEADLINE
+                if key == "urgent_until"
+                else CalendarEventType.OTHER,
                 visibility=CalendarVisibility.LOGGED_IN,
             )
             count += 1
@@ -283,13 +347,17 @@ async def _project_shop_products(
                 starts_at=at,
                 created_by=product.created_by,
                 href=f"/shop/admin?product={product.id}",
-                event_type=CalendarEventType.DEADLINE if key == "sale_end" else CalendarEventType.OTHER,
+                event_type=CalendarEventType.DEADLINE
+                if key == "sale_end"
+                else CalendarEventType.OTHER,
             )
             count += 1
     return count
 
 
-async def _project_meals(session: AsyncSession, start: datetime | None, end: datetime | None) -> int:
+async def _project_meals(
+    session: AsyncSession, start: datetime | None, end: datetime | None
+) -> int:
     count = 0
     schedules = (
         await session.execute(
@@ -321,16 +389,25 @@ async def _project_meals(session: AsyncSession, start: datetime | None, end: dat
                 starts_at=at,
                 created_by=schedule.created_by,
                 href="/meal/vendor",
-                event_type=CalendarEventType.DEADLINE if key == "order_deadline" else CalendarEventType.OTHER,
+                event_type=CalendarEventType.DEADLINE
+                if key == "order_deadline"
+                else CalendarEventType.OTHER,
             )
             count += 1
 
     slots = (
         await session.execute(
             select(MealPickupSlot)
-            .join(MealProductAvailability, MealProductAvailability.id == MealPickupSlot.availability_id)
+            .join(
+                MealProductAvailability,
+                MealProductAvailability.id == MealPickupSlot.availability_id,
+            )
             .join(MealVendor, MealVendor.id == MealProductAvailability.vendor_id)
-            .options(selectinload(MealPickupSlot.availability).selectinload(MealProductAvailability.vendor))
+            .options(
+                selectinload(MealPickupSlot.availability).selectinload(
+                    MealProductAvailability.vendor
+                )
+            )
             .where(*_overlaps(MealPickupSlot.pickup_start, start, end))
             .limit(500)
         )
@@ -391,7 +468,9 @@ async def _project_partner_offers(
                 starts_at=at,
                 created_by=offer.business.created_by,
                 href=f"/partner-map?business={offer.business_id}",
-                event_type=CalendarEventType.DEADLINE if key == "ends_at" else CalendarEventType.OTHER,
+                event_type=CalendarEventType.DEADLINE
+                if key == "ends_at"
+                else CalendarEventType.OTHER,
                 visibility=CalendarVisibility.LOGGED_IN,
             )
             count += 1
@@ -430,7 +509,9 @@ async def _project_email_messages(
     return count
 
 
-async def _project_work_items(session: AsyncSession, start: datetime | None, end: datetime | None) -> int:
+async def _project_work_items(
+    session: AsyncSession, start: datetime | None, end: datetime | None
+) -> int:
     rows = (
         await session.execute(
             select(WorkItem)
@@ -461,7 +542,9 @@ async def _project_work_items(session: AsyncSession, start: datetime | None, end
     return count
 
 
-async def _project_activities(session: AsyncSession, start: datetime | None, end: datetime | None) -> int:
+async def _project_activities(
+    session: AsyncSession, start: datetime | None, end: datetime | None
+) -> int:
     rows = (
         await session.execute(
             select(Activity)

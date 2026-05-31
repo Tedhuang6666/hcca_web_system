@@ -46,6 +46,6 @@ npm audit --audit-level=moderate --omit=dev
 - `apps/api/`：FastAPI、SQLAlchemy async、Alembic、Celery。
 - `apps/web/`：Next.js App Router、React、Tailwind CSS。
 - `libs/shared/`：共用 Pydantic schema 與基礎型別。
-- `docs/`：交接、驗證與 AI 工作流文件。
+- `docs/`：交接、驗證與維護流程文件。
 
 `uploads/`、`.env`、`參考/`、`文件範例/` 屬於本機資料或參考素材，不進 Git。

@@ -307,6 +307,12 @@ class Order(Base, TimestampMixin, ClassConsolidationMixin):
         nullable=False,
         index=True,
     )
+    assistance_scope: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="self", server_default="self", index=True
+    )
+    assisted_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     status: Mapped[OrderStatus] = mapped_column(
         Enum(OrderStatus, name="orderstatus"),
         nullable=False,
@@ -318,6 +324,7 @@ class Order(Base, TimestampMixin, ClassConsolidationMixin):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     user: Mapped[User] = relationship("User", foreign_keys=[user_id])
+    assisted_by: Mapped[User | None] = relationship("User", foreign_keys=[assisted_by_id])
     org: Mapped[Org] = relationship("Org")
     school_class: Mapped[SchoolClass | None] = relationship(
         "SchoolClass", foreign_keys="Order.class_id"

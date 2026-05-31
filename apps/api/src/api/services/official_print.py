@@ -180,29 +180,6 @@ def _declassification_text(doc: Document) -> str:
     return "一般"
 
 
-def _viewer_is_recipient(doc: Document, viewer: User | None) -> bool:
-    if viewer is None:
-        return False
-    user_tokens = {
-        str(getattr(viewer, "display_name", "") or "").strip().lower(),
-        str(getattr(viewer, "email", "") or "").strip().lower(),
-    }
-    user_tokens.discard("")
-    if not user_tokens:
-        return False
-    for recipient in doc.recipients or []:
-        rec_tokens = {
-            str(getattr(recipient, "name", "") or "").strip().lower(),
-            str(getattr(recipient, "email", "") or "").strip().lower(),
-        }
-        rec_tokens.discard("")
-        if user_tokens.intersection(rec_tokens):
-            return True
-        if any(user in rec or rec in user for user in user_tokens for rec in rec_tokens):
-            return True
-    return False
-
-
 async def _position_title(
     session: AsyncSession,
     *,
@@ -434,8 +411,7 @@ async def render_document_print_html(
 ) -> str:
     """Render a ROC-style official document or meeting notice print page.
 
-    - ``copy_mark_override``：呼叫端決定後傳入「正本」或「影本」，留空時
-      退回原本的 viewer 字串模糊比對（向下相容）。
+    - ``copy_mark_override``：呼叫端決定後傳入「正本」或「影本」。
     - ``addressed_recipient_name``：管理員指定列印某筆受文者版本時，
       在「受文者」欄位顯示該名稱（覆蓋預設彙整文字）。
     """
@@ -476,10 +452,7 @@ async def render_document_print_html(
     file_number = _esc(getattr(doc, "file_number", "") or "")
     retention_period = _esc(getattr(doc, "retention_period", "") or "")
     declassification = _declassification_text(doc)
-    if copy_mark_override is not None:
-        copy_mark = copy_mark_override
-    else:
-        copy_mark = "正本" if _viewer_is_recipient(doc, viewer) else "影本"
+    copy_mark = copy_mark_override or "影本"
 
     handler_block = ""
     if doc.handler_name:
@@ -930,10 +903,6 @@ def _render_structured_articles(reg: Regulation) -> str:
     chunks: list[str] = []
     for article in articles:
         article_type = _enum_value(article.article_type)
-        if article_type == "clause":
-            article_type = "article"
-        elif article_type == "subsection":
-            article_type = "subparagraph"
         content = _br(article.content or "")
         title = _esc(article.title or article.subtitle or "")
         body = "　".join(part for part in [title, content] if part)
@@ -1149,6 +1118,113 @@ def render_regulation_print_html(reg: Regulation) -> str:
     {f'<section class="legislative-history">{history}</section>' if history else ""}
     {preface}
     <section class="articles">{articles}</section>
+  </main>
+</body>
+</html>"""
+
+
+def render_regulation_amendment_comparison_html(
+    *,
+    regulation_title: str,
+    proposal_title: str,
+    rationale: str | None,
+    rows: list[dict[str, str]],
+) -> str:
+    """Render a three-column amendment comparison table."""
+    title = _esc(proposal_title)
+    reg_title = _esc(regulation_title)
+    rationale_html = _br(rationale) if rationale else ""
+
+    def _cell(value: str) -> str:
+        text = (value or "").strip() or "無"
+        return _br(text)
+
+    table_rows = "".join(
+        "<tr>"
+        f'<td><div class="change-tag">{_esc(row.get("status"))}</div>'
+        f'<div class="article-key">{_esc(row.get("article_key"))}</div>'
+        f"{_cell(row.get('revised_text', ''))}</td>"
+        f"<td>{_cell(row.get('current_text', ''))}</td>"
+        f"<td>{_cell(row.get('note', ''))}</td>"
+        "</tr>"
+        for row in rows
+    )
+
+    return f"""<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>{title}</title>
+  <style>
+    {_font_faces()}
+    @page {{
+      size: A4 portrait;
+      margin: 15mm 12mm 14mm 12mm;
+      @bottom-center {{
+        content: "第 " counter(page) " 頁　共 " counter(pages) " 頁";
+        font-family: "OfficialKai","OfficialSerifTC","標楷體","DFKai-SB",serif;
+        font-size: 9pt;
+      }}
+    }}
+    * {{ box-sizing: border-box; font-weight: 400 !important; }}
+    body {{
+      margin: 0;
+      color: #000;
+      background: #fff;
+      font-family: "OfficialKai","OfficialSerifTC","標楷體","DFKai-SB",serif;
+      font-size: 11pt;
+      line-height: 1.65;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }}
+    .no-print {{ margin-bottom: 8mm; text-align: right; font-family: system-ui, sans-serif; }}
+    .no-print button {{ padding: 5px 14px; border: 1px solid #777; background: #f6f6f6; cursor: pointer; }}
+    @media print {{ .no-print {{ display: none; }} }}
+    .page {{ width: 186mm; margin: 0 auto; }}
+    h1 {{
+      margin: 4mm 0 2mm;
+      text-align: center;
+      font-size: 18pt;
+      line-height: 1.6;
+      letter-spacing: .04em;
+    }}
+    .subtitle {{ margin: 0 0 5mm; text-align: center; font-size: 11pt; }}
+    .rationale {{
+      margin: 0 0 5mm;
+      padding: 2.5mm 3mm;
+      border: 1px solid #000;
+      white-space: pre-wrap;
+    }}
+    table {{ width: 100%; border-collapse: collapse; table-layout: fixed; }}
+    th, td {{
+      border: 1px solid #000;
+      padding: 2.2mm 2.4mm;
+      text-align: left;
+      vertical-align: top;
+      white-space: pre-wrap;
+      break-inside: avoid;
+    }}
+    th {{ text-align: center; font-size: 12pt; }}
+    .change-tag {{ display: inline-block; margin-bottom: 1mm; }}
+    .article-key {{ margin-bottom: 1mm; }}
+  </style>
+</head>
+<body>
+  <div class="no-print"><button onclick="window.print()">列印 / 另存 PDF</button></div>
+  <main class="page">
+    <h1>{title}</h1>
+    <div class="subtitle">{reg_title}</div>
+    {f'<section class="rationale">修正理由：<br>{rationale_html}</section>' if rationale_html else ""}
+    <table>
+      <thead>
+        <tr>
+          <th>修正條文</th>
+          <th>現行條文</th>
+          <th>說明</th>
+        </tr>
+      </thead>
+      <tbody>{table_rows}</tbody>
+    </table>
   </main>
 </body>
 </html>"""

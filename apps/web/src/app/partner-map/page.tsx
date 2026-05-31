@@ -533,19 +533,17 @@ export default function PartnerMapPage() {
         </aside>
 
         <main className="relative min-h-[360px]">
-          <div
-            className="absolute left-3 right-3 top-3 z-[500] space-y-2 rounded-lg border p-3 shadow-lg lg:hidden"
-            style={{ background: "var(--bg)", borderColor: "var(--border)" }}>
+          <div className="partner-map-mobile-controls absolute left-2.5 right-2.5 top-2.5 z-[500] space-y-2.5 rounded-lg border p-3 lg:hidden">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h1 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>特約地圖</h1>
                 <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>新竹高中周邊</p>
               </div>
-              <span className="rounded-full px-2 py-1 text-[11px]" style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
+              <span className="partner-map-count-pill rounded-full px-2 py-1 text-[11px]">
                 {filteredItems.length} 點位
               </span>
             </div>
-            <label className="flex items-center gap-2 rounded-lg border px-3 py-2" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
+            <label className="partner-map-mobile-search flex items-center gap-2 rounded-lg border px-3 py-2.5">
               <Search size={15} aria-hidden="true" />
               <input
                 value={keyword}
@@ -560,12 +558,13 @@ export default function PartnerMapPage() {
                 <button
                   key={option.key}
                   onClick={() => setSelectedKind(option.key)}
-                  className="shrink-0 rounded-full border px-3 py-1.5 text-xs"
+                  className="partner-map-filter-chip shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium"
                   style={{
-                    borderColor: selectedKind === option.key ? "var(--primary)" : "var(--border)",
-                    color: selectedKind === option.key ? "var(--primary)" : "var(--text-secondary)",
-                    background: selectedKind === option.key ? "var(--primary-dim)" : "transparent",
-                  }}>
+                    ["--chip-color" as string]: selectedKind === option.key ? "var(--primary)" : "var(--text-secondary)",
+                    ["--chip-border" as string]: selectedKind === option.key ? "var(--primary)" : "var(--border-strong)",
+                    ["--chip-bg" as string]: selectedKind === option.key ? "var(--primary-dim)" : "var(--bg-elevated)",
+                  }}
+                  aria-pressed={selectedKind === option.key}>
                   {option.label}
                 </button>
               ))}
@@ -575,24 +574,25 @@ export default function PartnerMapPage() {
                 const active = selectedTagIds.has(tag.id);
                 return (
                   <button
-                    key={tag.id}
-                    onClick={() => toggleTag(tag.id)}
-                    className="shrink-0 rounded-full border px-3 py-1.5 text-xs"
+                  key={tag.id}
+                  onClick={() => toggleTag(tag.id)}
+                    className="partner-map-filter-chip shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium"
                     style={{
-                      borderColor: active ? tag.color || "var(--primary)" : "var(--border)",
-                      color: active ? tag.color || "var(--primary)" : "var(--text-secondary)",
-                      background: active ? "var(--bg-elevated)" : "transparent",
-                    }}>
+                      ["--chip-color" as string]: active ? tag.color || "var(--primary)" : "var(--text-secondary)",
+                      ["--chip-border" as string]: active ? tag.color || "var(--primary)" : "var(--border-strong)",
+                      ["--chip-bg" as string]: active ? "var(--bg-elevated)" : "var(--bg-elevated)",
+                    }}
+                    aria-pressed={active}>
                     {tag.name}
                   </button>
                 );
               })}
             </div>
             <div className="flex gap-2">
-              <button className="btn btn-ghost flex-1" onClick={locateMe}>
+              <button className="partner-map-mobile-action btn btn-ghost flex-1" onClick={locateMe}>
                 <Navigation size={14} aria-hidden="true" /> 離我最近
               </button>
-              <button className="btn btn-ghost flex-1" onClick={() => setSubmissionOpen(true)}>
+              <button className="partner-map-mobile-action btn btn-ghost flex-1" onClick={() => setSubmissionOpen(true)}>
                 <Send size={14} aria-hidden="true" /> 投稿新店
               </button>
             </div>
@@ -657,7 +657,7 @@ export default function PartnerMapPage() {
               setDetailLoading(false);
             }}
           />
-          <div className="pointer-events-none absolute left-4 top-4 rounded-lg border px-3 py-2 text-xs shadow" style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text-secondary)" }}>
+          <div className="pointer-events-none absolute left-4 top-4 hidden rounded-lg border px-3 py-2 text-xs shadow lg:block" style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text-secondary)" }}>
             <span className="inline-flex items-center gap-1"><MapPin size={13} aria-hidden="true" /> {filteredItems.length} 個點位</span>
           </div>
           {submissionOpen && (

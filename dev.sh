@@ -7,11 +7,17 @@
 # 自動處理項目：
 #   - CRLF → LF 轉換
 #   - .env 從 .env.example 自動複製
+#   - .env 缺漏 .env.example 中的 key 時提示（避免靜默吃預設）
 #   - 舊 dev.sh / uvicorn / next-server 殘留行程清理
 #   - port 3000 / 8000 佔用者自動終止
 #   - 孤兒 / 死亡 Docker 容器自動移除
 #   - PostgreSQL 資料庫不存在自動建立
+#   - Meilisearch 不在線時自動以 Docker 啟動（已有 native 7700 則沿用）
+#   - PostHog / LINE Bot 啟動前 smoke check（cloud 服務憑證有效性）
 #   - Alembic Migration 落後自動升級
+#   - Migration 前自動終止會阻塞 ALTER TABLE 的 idle-in-transaction 殭屍連線
+#   - Model 與 Migration drift（alembic check）偵測並提示如何補 migration
+#   - Email Celery worker 自動啟動，避免寄信任務只排隊不送出
 #   - uv sync 失敗自動清 .venv 重試
 #   - npm install 失敗自動清 node_modules 重試
 #   - Docker daemon 沒在跑時自動嘗試啟動
@@ -40,6 +46,30 @@ step()    {
     printf '\n%s▶%s %s\n' "$C_CYAN" "$C_RESET" "$*"
 }
 
+_is_dev_console_noise() {
+    local line="$1"
+    [[ "$line" == *"WatchFiles detected changes in"* ]] && return 0
+    [[ "$line" == "INFO:     Shutting down"* ]] && return 0
+    [[ "$line" == "INFO:     Waiting for application startup."* ]] && return 0
+    [[ "$line" == "INFO:     Waiting for application shutdown."* ]] && return 0
+    [[ "$line" == "INFO:     Application startup complete."* ]] && return 0
+    [[ "$line" == "INFO:     Application shutdown complete."* ]] && return 0
+    [[ "$line" == "INFO:     Started server process "* ]] && return 0
+    [[ "$line" == "INFO:     Finished server process "* ]] && return 0
+    [[ "$line" == "INFO:     connection open"* ]] && return 0
+    [[ "$line" == "INFO:     connection closed"* ]] && return 0
+    [[ "$line" == *"\"WebSocket /ws/"*"[accepted]"* ]] && return 0
+    [[ "$line" == *"WS 連線建立"* ]] && return 0
+    [[ "$line" == *"WS 連線中斷"* ]] && return 0
+    [[ "$line" == *"WS Redis pub/sub listener started"* ]] && return 0
+    [[ "$line" == *"WS Redis pub/sub listener stopped"* ]] && return 0
+    [[ "$line" == *"Sentry initialized"* ]] && return 0
+    [[ "$line" == *"PostHog initialized"* ]] && return 0
+    [[ "$line" == *"prometheus_client not installed"* ]] && return 0
+    [[ "$line" == *"Module startup checks passed"* ]] && return 0
+    return 1
+}
+
 # Log 串流：raw 寫進 $log_file（FD 3），透過 sed 對「token」上色後丟到終端
 # 著色範圍：HTTP method（GET/POST/...）、status code（2xx/3xx/4xx/5xx）、
 # 嚴重等級關鍵字（ERROR/Traceback/WARNING ...）。其餘內文保持白色。
@@ -52,6 +82,9 @@ _stream_log() {
     {
         while IFS= read -r line || [[ -n "$line" ]]; do
             printf '%s\n' "$line" >&3     # raw → log 檔
+            if [[ "${DEV_VERBOSE_LOGS:-0}" != "1" ]] && _is_dev_console_noise "$line"; then
+                continue
+            fi
             printf '%s\n' "$line"          # 給 sed 著色 → 終端
         done
     } 3>>"$log_file" | sed -E -u \
@@ -74,23 +107,27 @@ _stream_log() {
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 START_TIME=$(date +%s)
 API_PID=""
+EMAIL_WORKER_PID=""
 WEB_PID=""
+DISCORD_PID=""
 API_LOG="${REPO_ROOT}/.dev-api.log"
+EMAIL_WORKER_LOG="${REPO_ROOT}/.dev-email-worker.log"
 WEB_LOG="${REPO_ROOT}/.dev-web.log"
+DISCORD_LOG="${REPO_ROOT}/.dev-discord.log"
 
 # ── 結束清理：終止背景行程（含孤兒子行程） ───────────────────────────
 _cleanup() {
     local sig="${1:-EXIT}"
     echo ""
     info "收到 ${sig} 訊號，停止所有開發行程..."
-    for pid in "$API_PID" "$WEB_PID"; do
+    for pid in "$API_PID" "$EMAIL_WORKER_PID" "$WEB_PID" "$DISCORD_PID"; do
         [[ -n "$pid" ]] || continue
         kill -TERM "$pid" 2>/dev/null || true
         # 順便殺掉子行程（uvicorn reload watcher / next-server 等）
         pkill -TERM -P "$pid" 2>/dev/null || true
     done
     sleep 1
-    for pid in "$API_PID" "$WEB_PID"; do
+    for pid in "$API_PID" "$EMAIL_WORKER_PID" "$WEB_PID" "$DISCORD_PID"; do
         [[ -n "$pid" ]] || continue
         kill -KILL "$pid" 2>/dev/null || true
         pkill -KILL -P "$pid" 2>/dev/null || true
@@ -106,7 +143,7 @@ trap '_cleanup TERM' TERM
 # ──────────────────────────────────────────────────────────────────────────
 # 0. 環境前置檢查
 # ──────────────────────────────────────────────────────────────────────────
-step "0/7 環境檢查"
+step "0/8 環境檢查"
 
 # 0.1 確認在 WSL/Linux（不是 Git Bash on Windows）
 case "${OSTYPE:-}" in
@@ -189,7 +226,7 @@ success "環境檢查通過（Node v${NODE_VERSION}, Docker $(docker --version |
 # ──────────────────────────────────────────────────────────────────────────
 # 1. .env 自動準備
 # ──────────────────────────────────────────────────────────────────────────
-step "1/7 載入環境變數"
+step "1/8 載入環境變數"
 
 ENV_FILE="${REPO_ROOT}/.env"
 if [[ ! -f "$ENV_FILE" ]]; then
@@ -217,10 +254,22 @@ while IFS= read -r line || [[ -n "$line" ]]; do
 done < "$ENV_FILE"
 success ".env 載入完成"
 
+# 1.x .env vs .env.example key 對齊檢查（缺漏多為非必填，但提醒避免靜默吃預設）
+if [[ -f "${REPO_ROOT}/.env.example" ]]; then
+    MISSING_KEYS=$(comm -23 \
+        <(grep -oE '^[A-Z_][A-Z0-9_]*=' "${REPO_ROOT}/.env.example" | sed 's/=$//' | sort -u) \
+        <(grep -oE '^[A-Z_][A-Z0-9_]*=' "$ENV_FILE"                 | sed 's/=$//' | sort -u))
+    if [[ -n "$MISSING_KEYS" ]]; then
+        MISSING_COUNT=$(echo "$MISSING_KEYS" | wc -l)
+        warn ".env 缺漏 .env.example 中的 ${MISSING_COUNT} 個 key（多為非必填，建議補齊以利對照）："
+        echo "$MISSING_KEYS" | sed "s/^/    ${C_DIM}·${C_RESET} /"
+    fi
+fi
+
 # ──────────────────────────────────────────────────────────────────────────
 # 2. 舊行程與 port 佔用清理
 # ──────────────────────────────────────────────────────────────────────────
-step "2/7 清理舊行程與 port 佔用"
+step "2/8 清理舊行程與 port 佔用"
 
 # 2.1 終止舊的 dev.sh 實例（不含自己）
 OLD_DEV_PIDS=$(pgrep -f "bash[[:space:]]+.*dev\.sh" 2>/dev/null | grep -v "^$$\$" || true)
@@ -273,13 +322,15 @@ _kill_port() {
 _kill_port 3000 "Next.js" || exit 1
 _kill_port 8000 "FastAPI" || exit 1
 
-# 2.3 清理孤兒 uvicorn / next-server / next dev
-ORPHAN=$(pgrep -f "uvicorn[[:space:]]+api:app|next-server|next[[:space:]]+dev" 2>/dev/null || true)
+# 2.3 清理孤兒 uvicorn / next-server / next dev / celery worker / discord_worker
+# Celery 重點：殘留 worker 會跟新 worker 共用 -n nodename，造成 DuplicateNodenameWarning。
+ORPHAN_PATTERN="uvicorn[[:space:]]+api:app|next-server|next[[:space:]]+dev|celery.*worker|api\\.discord_worker"
+ORPHAN=$(pgrep -f "$ORPHAN_PATTERN" 2>/dev/null || true)
 if [[ -n "$ORPHAN" ]]; then
     warn "終止孤兒行程：$(echo $ORPHAN | tr '\n' ' ')"
     echo "$ORPHAN" | xargs -r kill -TERM 2>/dev/null || true
     sleep 1
-    pkill -KILL -f "uvicorn[[:space:]]+api:app|next-server|next[[:space:]]+dev" 2>/dev/null || true
+    pkill -KILL -f "$ORPHAN_PATTERN" 2>/dev/null || true
 fi
 
 success "舊行程清理完成"
@@ -287,7 +338,7 @@ success "舊行程清理完成"
 # ──────────────────────────────────────────────────────────────────────────
 # 3. Docker 基礎設施
 # ──────────────────────────────────────────────────────────────────────────
-step "3/7 啟動 Docker 基礎設施（db + redis）"
+step "3/8 啟動 Docker 基礎設施（db + redis）"
 
 # 3.1 移除狀態異常的孤兒容器
 for name in campus_db campus_redis; do
@@ -355,9 +406,98 @@ if ! docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T db \
 fi
 
 # ──────────────────────────────────────────────────────────────────────────
-# 4. Python 依賴同步
+# 4. Meilisearch + Cloud 服務（PostHog / LINE Bot）smoke check
+#    - Meilisearch：native 7700 已在線時沿用，否則用 docker compose 啟一個
+#    - PostHog：cloud 服務，僅做 /decide ping 驗證 API key
+#    - LINE Bot：cloud 服務，呼叫 /v2/bot/info 驗證 access token
+#    任何一項失敗只發 warn，不中止啟動（沒設定也應該能跑）
 # ──────────────────────────────────────────────────────────────────────────
-step "4/7 同步 Python 依賴（uv sync）"
+step "4/8 全站搜尋與外部服務（Meilisearch + PostHog + LINE Bot）"
+
+# 4.1 Meilisearch ──────────────────────────────────────────────────────────
+MEILI_URL_LOCAL="${MEILISEARCH_URL:-http://localhost:7700}"
+MEILI_KEY="${MEILISEARCH_API_KEY:-}"
+
+_meili_health() {
+    curl -fsS --max-time 3 "${MEILI_URL_LOCAL%/}/health" >/dev/null 2>&1
+}
+_meili_auth_ok() {
+    # 沒設 key → 視為通過（dev 環境允許）
+    [[ -z "$MEILI_KEY" ]] && return 0
+    local code
+    code=$(curl -s -o /dev/null -w "%{http_code}" \
+        -H "Authorization: Bearer ${MEILI_KEY}" \
+        --max-time 3 "${MEILI_URL_LOCAL%/}/version" 2>/dev/null || echo "000")
+    [[ "$code" == "200" ]]
+}
+
+if _meili_health; then
+    if _meili_auth_ok; then
+        success "Meilisearch 已在線並通過驗證（${MEILI_URL_LOCAL}）"
+    else
+        warn "Meilisearch 在線但 MEILISEARCH_API_KEY 驗證失敗，請確認 .env 與 master key 一致"
+    fi
+else
+    info "Meilisearch 未在線，嘗試以 Docker 啟動 campus_meilisearch..."
+    if docker compose -f "${REPO_ROOT}/docker-compose.yml" up -d meilisearch 2>&1 | tail -5; then
+        for i in $(seq 1 30); do
+            if _meili_health; then
+                success "Meilisearch 已透過 Docker 啟動（${MEILI_URL_LOCAL}）"
+                break
+            fi
+            if [[ $i -eq 30 ]]; then
+                warn "Meilisearch 30 秒內未回應，搜尋將自動 fallback DB 搜尋"
+                docker compose -f "${REPO_ROOT}/docker-compose.yml" logs --tail=20 meilisearch 2>&1 || true
+            fi
+            sleep 1
+        done
+    else
+        warn "Docker 啟動 Meilisearch 失敗（可能 port 被佔用）；搜尋將 fallback DB"
+    fi
+fi
+
+# 4.2 PostHog（cloud；POSTHOG_API_KEY 從 apps/api/.env 讀取，root .env 沒有也 OK） ─
+PH_HOST_FOR_CHECK="${POSTHOG_HOST:-${NEXT_PUBLIC_POSTHOG_HOST:-https://us.i.posthog.com}}"
+PH_KEY_FOR_CHECK="${POSTHOG_API_KEY:-${NEXT_PUBLIC_POSTHOG_KEY:-}}"
+# 若 root .env 沒有 POSTHOG_API_KEY，從 apps/api/.env 讀
+if [[ -z "$PH_KEY_FOR_CHECK" && -f "${REPO_ROOT}/apps/api/.env" ]]; then
+    PH_KEY_FOR_CHECK=$(grep -E '^POSTHOG_API_KEY=' "${REPO_ROOT}/apps/api/.env" | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'")
+fi
+if [[ -z "$PH_KEY_FOR_CHECK" ]]; then
+    info "PostHog 未設定（POSTHOG_API_KEY 空）→ 分析事件 no-op，跳過"
+else
+    PH_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 \
+        -X POST "${PH_HOST_FOR_CHECK%/}/decide/?v=3" \
+        -H "Content-Type: application/json" \
+        -d "{\"api_key\":\"${PH_KEY_FOR_CHECK}\",\"distinct_id\":\"dev-smoke\"}" 2>/dev/null || echo "000")
+    if [[ "$PH_CODE" == "200" ]]; then
+        success "PostHog 已連線（host=${PH_HOST_FOR_CHECK}）"
+    else
+        warn "PostHog 連線失敗 HTTP=${PH_CODE}（host=${PH_HOST_FOR_CHECK}）；分析事件可能失效"
+    fi
+fi
+
+# 4.3 LINE Bot（cloud；webhook 由 FastAPI /line/webhook 提供） ──────────────
+if [[ -z "${LINE_CHANNEL_ACCESS_TOKEN:-}" || -z "${LINE_CHANNEL_SECRET:-}" ]]; then
+    info "LINE Bot 未完整設定（缺 token 或 secret）→ /line/webhook 將停用，跳過"
+else
+    LINE_INFO=$(curl -sS --max-time 5 \
+        -H "Authorization: Bearer ${LINE_CHANNEL_ACCESS_TOKEN}" \
+        "https://api.line.me/v2/bot/info" 2>/dev/null || echo "")
+    if echo "$LINE_INFO" | grep -q '"userId"'; then
+        LINE_NAME=$(echo "$LINE_INFO" | sed -nE 's/.*"displayName":"([^"]+)".*/\1/p')
+        LINE_BASIC=$(echo "$LINE_INFO" | sed -nE 's/.*"basicId":"([^"]+)".*/\1/p')
+        success "LINE Bot 已連線（${LINE_NAME} ${LINE_BASIC}）"
+        info "  webhook 路徑：POST /line/webhook（對外需 HTTPS 通道，例：cloudflared / ngrok）"
+    else
+        warn "LINE Bot access token 驗證失敗：${LINE_INFO:0:200}"
+    fi
+fi
+
+# ──────────────────────────────────────────────────────────────────────────
+# 5. Python 依賴同步
+# ──────────────────────────────────────────────────────────────────────────
+step "5/8 同步 Python 依賴（uv sync）"
 
 if ! (cd "${REPO_ROOT}" && uv sync --project apps/api); then
     warn "uv sync 失敗，清理 .venv 後重試..."
@@ -373,7 +513,7 @@ success "Python 依賴同步完成"
 # ──────────────────────────────────────────────────────────────────────────
 # 5. Alembic Migration（自動偵測落後並升級）
 # ──────────────────────────────────────────────────────────────────────────
-step "5/7 資料庫 Migration"
+step "6/8 資料庫 Migration"
 
 _alembic() {
     (
@@ -381,6 +521,31 @@ _alembic() {
         export PYTHONPATH="${REPO_ROOT}/apps/api/src"
         uv run --project "${REPO_ROOT}/apps/api" python -m alembic "$@"
     )
+}
+
+# 終止會阻塞 ALTER TABLE 的殭屍連線（前次 API crash / kill -9 留下的 idle-in-transaction）
+_kill_stale_db_connections() {
+    local db="${1:-${POSTGRES_DB:-campus_platform}}"
+    local cnt
+    cnt=$(docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T db \
+        psql -U postgres -tAc "
+            SELECT COUNT(*) FROM pg_stat_activity
+            WHERE datname='${db}'
+              AND state IN ('idle in transaction','idle in transaction (aborted)')
+              AND pid <> pg_backend_pid()
+        " 2>/dev/null | tr -d '[:space:]')
+    [[ "$cnt" =~ ^[0-9]+$ ]] || cnt=0
+    if (( cnt > 0 )); then
+        warn "偵測到 ${cnt} 條 idle-in-transaction 殭屍連線，會阻塞 Migration 的 ALTER TABLE → 終止"
+        docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T db \
+            psql -U postgres -d "${db}" -c "
+                SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+                WHERE datname='${db}'
+                  AND state IN ('idle in transaction','idle in transaction (aborted)')
+                  AND pid <> pg_backend_pid()
+            " >/dev/null 2>&1 || true
+        fix "殭屍連線已終止"
+    fi
 }
 
 info "檢查 Migration 狀態..."
@@ -395,25 +560,79 @@ else
     else
         info "Migration 落後：${CURRENT_REV:0:8} → ${HEAD_REV:0:8}，自動升級"
     fi
+    _kill_stale_db_connections
     if ! _alembic upgrade head; then
-        error "Migration 失敗，當前狀態："
-        _alembic current 2>&1 || true
-        echo "—— heads ——"
-        _alembic heads 2>&1 || true
-        error "請手動排查：uv run --project apps/api alembic upgrade head"
-        exit 1
+        # 第一次失敗可能因為新出現的殭屍連線；再清一次重試
+        warn "Migration 失敗，重新清理殭屍連線後再試一次..."
+        _kill_stale_db_connections
+        if ! _alembic upgrade head; then
+            error "Migration 失敗，當前狀態："
+            _alembic current 2>&1 || true
+            echo "—— heads ——"
+            _alembic heads 2>&1 || true
+            error "請手動排查：uv run --project apps/api alembic upgrade head"
+            exit 1
+        fi
     fi
     success "Migration 升級完成"
+fi
+
+# 6.x Model / Migration drift 偵測
+#     場景：有人改了 SQLAlchemy model 卻忘記產 migration → alembic current==head
+#           但 DB schema 與 model 對不上，啟動後就會噴 UndefinedColumnError
+#     注意：autogenerate 對 NOT NULL constraint 偵測常有假陽性，所以這裡只強調
+#           會真的炸 query 的操作（新表 / 加減欄位 / 改欄位型別）。
+info "檢查 Model / Migration drift（autogenerate diff）..."
+DRIFT_LOG="${REPO_ROOT}/.dev-alembic-check.log"
+_alembic check >"$DRIFT_LOG" 2>&1 || true
+
+if grep -qi "no new upgrade operations detected" "$DRIFT_LOG"; then
+    success "Model / Migration 一致"
+elif grep -qi "new upgrade operations detected" "$DRIFT_LOG"; then
+    # 統計各類操作數（過濾掉只動 NOT NULL 的假陽性）
+    N_ADD_TABLE=$(grep -oE "'add_table'"   "$DRIFT_LOG" | wc -l | tr -d ' ')
+    N_DROP_TABLE=$(grep -oE "'drop_table'" "$DRIFT_LOG" | wc -l | tr -d ' ')
+    N_ADD_COL=$(grep -oE "'add_column'"    "$DRIFT_LOG" | wc -l | tr -d ' ')
+    N_DROP_COL=$(grep -oE "'drop_column'"  "$DRIFT_LOG" | wc -l | tr -d ' ')
+    N_ALTER_TYPE=$(grep -oE "'modify_type'" "$DRIFT_LOG" | wc -l | tr -d ' ')
+    REAL_DRIFT=$(( N_ADD_TABLE + N_DROP_TABLE + N_ADD_COL + N_DROP_COL + N_ALTER_TYPE ))
+    if (( REAL_DRIFT > 0 )); then
+        warn "偵測到 ${REAL_DRIFT} 處 Model / Migration drift（會導致 UndefinedColumnError）："
+        (( N_ADD_TABLE  > 0 )) && warn "    · 新增 table 缺 migration：${N_ADD_TABLE}"
+        (( N_DROP_TABLE > 0 )) && warn "    · 移除 table 缺 migration：${N_DROP_TABLE}"
+        (( N_ADD_COL    > 0 )) && warn "    · 新增 column 缺 migration：${N_ADD_COL}"
+        (( N_DROP_COL   > 0 )) && warn "    · 移除 column 缺 migration：${N_DROP_COL}"
+        (( N_ALTER_TYPE > 0 )) && warn "    · 變更 column type 缺 migration：${N_ALTER_TYPE}"
+        # 印出真正的 table.column 名稱（過濾噪音）
+        grep -oE "Table\('[a-z_]+'" "$DRIFT_LOG" | sort -u | head -10 | \
+            sed "s/Table('/    ${C_YELLOW}·${C_RESET} table /; s/'$//"
+        warn "→ 修法："
+        warn "    1) uv run --project apps/api python -m alembic revision --autogenerate -m '<說明>'"
+        warn "    2) 審視 apps/api/alembic/versions/ 下新檔案（刪除假陽性的 NOT NULL alter）"
+        warn "    3) uv run --project apps/api python -m alembic upgrade head"
+        warn "→ 完整 diff：${DRIFT_LOG}"
+    else
+        # 只有 NOT NULL 之類的假陽性
+        N_NULL=$(grep -c "NOT NULL" "$DRIFT_LOG" 2>/dev/null || echo 0)
+        info "alembic 偵測到 ${N_NULL} 處 NOT NULL constraint 差異（通常是 autogenerate 假陽性），略過"
+    fi
+else
+    # alembic check 可能因 import 失敗 / 連不上 DB 而異常；不阻擋啟動
+    info "alembic check 無法判定（可能版本不支援或匯入失敗），略過 → ${DRIFT_LOG}"
 fi
 
 # ──────────────────────────────────────────────────────────────────────────
 # 6. 啟動 FastAPI 後端
 # ──────────────────────────────────────────────────────────────────────────
-step "6/7 啟動 FastAPI（port 8000）"
+step "7/8 啟動 FastAPI（port 8000）"
 
 : > "$API_LOG"
 (
     cd "${REPO_ROOT}/apps/api"
+    # dev 一律 text 格式：若父 shell 不小心 export LOG_FORMAT=json（pydantic-settings
+    # 中環境變數會壓過 .env），這裡強制覆寫，避免 console 變成 JSON 大水缸。
+    # 想要 json log 請手動跑 `LOG_FORMAT=json uv run ...`。
+    export LOG_FORMAT=text
     exec uv run --project "${REPO_ROOT}/apps/api" python -m uvicorn api:app \
         --host 0.0.0.0 \
         --port 8000 \
@@ -447,9 +666,64 @@ fi
 success "FastAPI 已啟動 PID=${API_PID} → http://localhost:8000/docs"
 
 # ──────────────────────────────────────────────────────────────────────────
-# 7. 啟動 Next.js 前端
+# 7.x 啟動 Discord Bot（若已設定 DISCORD_BOT_TOKEN）
 # ──────────────────────────────────────────────────────────────────────────
-step "7/7 啟動 Next.js（port 3000）"
+if [[ -n "${DISCORD_BOT_TOKEN:-}" ]]; then
+    step "7.5/8 啟動 Discord Bot"
+    : > "$DISCORD_LOG"
+    (
+        cd "${REPO_ROOT}/apps/api"
+        export PYTHONPATH="${REPO_ROOT}/apps/api/src"
+        exec uv run --project "${REPO_ROOT}/apps/api" python -m api.discord_worker \
+            > >(_stream_log "discord" "$DISCORD_LOG" "$C_CYAN") 2>&1
+    ) &
+    DISCORD_PID=$!
+
+    sleep 2
+    if kill -0 "$DISCORD_PID" 2>/dev/null; then
+        success "Discord Bot 已啟動 PID=${DISCORD_PID} → log: ${DISCORD_LOG}"
+    else
+        error "Discord Bot 啟動後立即退出，最後 40 行 log："
+        tail -n 40 "$DISCORD_LOG" >&2
+        exit 1
+    fi
+else
+    info "DISCORD_BOT_TOKEN 未設定，略過 Discord Bot 啟動"
+fi
+
+# ──────────────────────────────────────────────────────────────────────────
+# 7.y 啟動 Email Celery Worker
+# ──────────────────────────────────────────────────────────────────────────
+step "7.6/8 啟動 Email Worker（Celery email queue）"
+
+: > "$EMAIL_WORKER_LOG"
+(
+    cd "${REPO_ROOT}/apps/api"
+    export PYTHONPATH="${REPO_ROOT}/apps/api/src"
+    export LOG_FORMAT=text  # 與 API 一致：dev 模式 text、prod 才 json
+    exec uv run --project "${REPO_ROOT}/apps/api" python -m celery \
+        -A api.core.celery_app.celery_app worker \
+        --loglevel=info \
+        --concurrency=1 \
+        --queues=email \
+        -n email-dev@%h \
+        > >(_stream_log "email" "$EMAIL_WORKER_LOG" "$C_CYAN") 2>&1
+) &
+EMAIL_WORKER_PID=$!
+
+sleep 3
+if kill -0 "$EMAIL_WORKER_PID" 2>/dev/null; then
+    success "Email Worker 已啟動 PID=${EMAIL_WORKER_PID} → log: ${EMAIL_WORKER_LOG}"
+else
+    error "Email Worker 啟動後立即退出，最後 60 行 log："
+    tail -n 60 "$EMAIL_WORKER_LOG" >&2
+    exit 1
+fi
+
+# ──────────────────────────────────────────────────────────────────────────
+# 8. 啟動 Next.js 前端
+# ──────────────────────────────────────────────────────────────────────────
+step "8/8 啟動 Next.js（port 3000）"
 
 WEB_DIR="${REPO_ROOT}/apps/web"
 
@@ -518,10 +792,17 @@ printf '  %sREADY%s  開發環境已就緒（耗時 %ss）\n' "$C_GREEN" "$C_RES
 printf '\n'
 printf '  API Docs   http://localhost:8000/docs\n'
 printf '  Web UI     http://localhost:3000\n'
+printf '  Meili      %s\n' "${MEILI_URL_LOCAL:-http://localhost:7700}"
 printf '  API Log    %s\n' "$API_LOG"
+printf '  Email Log  %s\n' "$EMAIL_WORKER_LOG"
 printf '  Web Log    %s\n' "$WEB_LOG"
+[[ -n "$DISCORD_PID" ]] && printf '  Discord   %s\n' "$DISCORD_LOG"
 printf '\n'
 printf '  按 Ctrl+C 停止所有服務\n\n'
 
 # 等待背景行程（保持腳本存活以接收 Ctrl+C）
-wait "$API_PID" "$WEB_PID"
+if [[ -n "$DISCORD_PID" ]]; then
+    wait "$API_PID" "$EMAIL_WORKER_PID" "$WEB_PID" "$DISCORD_PID"
+else
+    wait "$API_PID" "$EMAIL_WORKER_PID" "$WEB_PID"
+fi

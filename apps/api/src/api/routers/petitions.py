@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
+from api.core.posthog import get_posthog_client
 from api.dependencies.auth import get_current_active_user, get_optional_user
 from api.dependencies.permissions import require_any
 from api.models.notification import Notification
@@ -248,6 +249,20 @@ async def create_petition(
         summary=f"建立陳情案件 {case_obj.case_number}",
     )
     await enqueue_petition_private_channel(session, case_obj)
+
+    _ph = get_posthog_client()
+    if _ph:
+        _distinct_id = str(current_user.id) if current_user else "anonymous"
+        _ph.capture(
+            distinct_id=_distinct_id,
+            event="petition_submitted",
+            properties={
+                "petition_type_id": str(case_obj.type_id),
+                "is_named": case_obj.is_named,
+                "is_authenticated": current_user is not None,
+            },
+        )
+
     return PetitionCreatedOut(
         id=case_obj.id,
         case_number=case_obj.case_number,

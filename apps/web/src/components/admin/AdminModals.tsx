@@ -165,7 +165,7 @@ export function NewOrgModal({
       <div className="space-y-3">
         <div>
           <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>組織名稱 *</label>
-          <input value={name} onChange={e => setName(e.target.value)} placeholder="例：學生代表大會"
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="例：班聯會"
             className="w-full bg-transparent text-sm px-3 py-2 rounded-lg outline-none"
             style={{ border: "1px solid var(--border)" }} />
         </div>

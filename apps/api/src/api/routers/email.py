@@ -216,7 +216,7 @@ async def _send_now(db: AsyncSession, user: User, msg: EmailMessage) -> None:
         )
     await _check_quota(db, user, len(emails))
     html = render_generic_message(msg.subject, msg.body, msg.context or {})
-    task_ids = enqueue_rendered(emails, msg.subject, html)
+    task_ids = enqueue_rendered(emails, msg.subject, html, str(msg.id))
     msg.resolved_emails = emails
     msg.recipient_count = len(emails)
     msg.status = EmailStatus.QUEUED
@@ -369,9 +369,12 @@ async def create_message(body: EmailMessageCreate, db: DbDep, user: EmailUser) -
         msg.status = EmailStatus.SCHEDULED
         msg.scheduled_at = scheduled
     else:  # send
+        db.add(msg)
+        await db.flush()
         await _send_now(db, user, msg)
 
-    db.add(msg)
+    if msg not in db:
+        db.add(msg)
     await db.flush()
     await _audit(db, user, msg, body.action)
     await db.refresh(msg)

@@ -31,6 +31,8 @@ from api.schemas.shop import (
     CatalogCategoryOut,
     CatalogProductOut,
     CatalogSeriesOut,
+    ClassOrderUpsert,
+    OrderItemCreate,
     OrderItemOut,
     OrderListItem,
     OrderOut,
@@ -647,6 +649,8 @@ async def _create_order_from_items(
     class_id: uuid.UUID | None,
     cart_items: list[CartItem],
     notes: str | None,
+    assistance_scope: str = "self",
+    assisted_by_id: uuid.UUID | None = None,
 ) -> Order:
     total_price = 0
     specs: list[dict] = []
@@ -692,6 +696,8 @@ async def _create_order_from_items(
         user_id=user_id,
         org_id=org_id,
         class_id=class_id,
+        assistance_scope=assistance_scope,
+        assisted_by_id=assisted_by_id,
         status=OrderStatus.PENDING,
         total_price=total_price,
         notes=notes,
@@ -703,6 +709,59 @@ async def _create_order_from_items(
     await session.flush()
     logger.info("訂單建立 serial=%s total=%d", serial, total_price)
     return order
+
+
+async def _order_items_to_cart_items(
+    session: AsyncSession, items: list[OrderItemCreate]
+) -> list[CartItem]:
+    cart_items: list[CartItem] = []
+    for item in items:
+        product = await get_product(session, item.product_id)
+        if product is None:
+            raise ValueError("找不到此商品")
+        selected = _resolve_selected_options(product, item.option_ids)
+        cart_items.append(
+            CartItem(
+                product_id=item.product_id,
+                quantity=item.quantity,
+                selected_options=selected,
+            )
+        )
+    return cart_items
+
+
+async def create_direct_order(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    class_id: uuid.UUID | None,
+    data: ClassOrderUpsert,
+    assistance_scope: str = "class_assisted",
+    assisted_by_id: uuid.UUID | None = None,
+) -> list[Order]:
+    cart_items = await _order_items_to_cart_items(session, data.items)
+    by_org: dict[uuid.UUID, list[CartItem]] = {}
+    for item in cart_items:
+        product = await get_product(session, item.product_id)
+        if product is None:
+            raise ValueError("找不到此商品")
+        by_org.setdefault(product.org_id, []).append(item)
+
+    orders: list[Order] = []
+    for org_id, grouped_items in by_org.items():
+        orders.append(
+            await _create_order_from_items(
+                session,
+                user_id=user_id,
+                org_id=org_id,
+                class_id=class_id,
+                cart_items=grouped_items,
+                notes=data.notes,
+                assistance_scope=assistance_scope,
+                assisted_by_id=assisted_by_id,
+            )
+        )
+    return orders
 
 
 async def checkout(session: AsyncSession, user, *, notes: str | None = None) -> list[Order]:
@@ -767,6 +826,7 @@ async def list_orders(
     org_id: uuid.UUID | None = None,
     activity_id: uuid.UUID | None = None,
     class_ids: list[uuid.UUID] | None = None,
+    assistance_scope: str | None = None,
     status: OrderStatus | None = None,
     is_paid: bool | None = None,
     limit: int = 20,
@@ -802,6 +862,8 @@ async def list_orders(
         if not class_ids:
             return []
         q = q.where(Order.class_id.in_(class_ids))
+    if assistance_scope:
+        q = q.where(Order.assistance_scope == assistance_scope)
     if status:
         q = q.where(Order.status == status)
     if is_paid is not None:
@@ -835,6 +897,8 @@ def serialize_order(order: Order) -> OrderOut:
         notes=order.notes,
         class_id=order.class_id,
         class_label=class_svc.class_display_label(order.school_class),
+        assistance_scope=order.assistance_scope,
+        assisted_by_id=order.assisted_by_id,
         is_paid=order.is_paid,
         paid_at=order.paid_at,
         created_at=order.created_at,
@@ -855,6 +919,8 @@ def serialize_order_list_item(order: Order) -> OrderListItem:
         total_price=order.total_price,
         class_id=order.class_id,
         class_label=class_svc.class_display_label(order.school_class),
+        assistance_scope=order.assistance_scope,
+        assisted_by_id=order.assisted_by_id,
         is_paid=order.is_paid,
         created_at=order.created_at,
     )
@@ -885,6 +951,53 @@ async def cancel_order(
         order.notes = f"[取消原因] {reason}" + (f"\n{order.notes}" if order.notes else "")
     await session.flush()
     logger.info("訂單取消 serial=%s by=%s", order.serial_number, requested_by)
+    return order
+
+
+async def replace_order_items(
+    session: AsyncSession,
+    order: Order,
+    *,
+    data: ClassOrderUpsert,
+) -> Order:
+    if order.status not in (OrderStatus.PENDING, OrderStatus.CONFIRMED):
+        raise ValueError(f"訂單狀態 {order.status} 無法修改")
+    for requested_item in data.items:
+        product = await get_product(session, requested_item.product_id)
+        if product is None:
+            raise ValueError("找不到此商品")
+        if product.org_id != order.org_id:
+            raise ValueError("修改訂單不可跨商品組織，請另外建立新訂單")
+
+    for item in list(order.items):
+        product = await session.get(Product, item.product_id)
+        if product and not product.is_unlimited:
+            product.stock_quantity += item.quantity
+            if product.status == ProductStatus.SOLD_OUT:
+                product.status = ProductStatus.ACTIVE
+        await session.delete(item)
+    await session.flush()
+
+    temp_items = await _order_items_to_cart_items(session, data.items)
+    specs_order = await _create_order_from_items(
+        session,
+        user_id=order.user_id,
+        org_id=order.org_id,
+        class_id=order.class_id,
+        cart_items=temp_items,
+        notes=data.notes,
+        assistance_scope=order.assistance_scope,
+        assisted_by_id=order.assisted_by_id,
+    )
+    order.total_price = specs_order.total_price
+    order.notes = data.notes
+    temp_result = await session.execute(
+        select(OrderItem).where(OrderItem.order_id == specs_order.id)
+    )
+    for item in temp_result.scalars().all():
+        item.order_id = order.id
+    await session.delete(specs_order)
+    await session.flush()
     return order
 
 
