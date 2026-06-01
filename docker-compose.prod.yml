@@ -103,7 +103,8 @@ services:
     command: >
       python -m celery -A api.core.celery_app.celery_app worker
       --loglevel=info
-      --concurrency=${CELERY_WORKER_CONCURRENCY:-4}
+      --concurrency=${CELERY_WORKER_CONCURRENCY:-2}
+      --max-tasks-per-child=${CELERY_MAX_TASKS_PER_CHILD:-200}
       --queues=celery
     environment:
       ENVIRONMENT: production

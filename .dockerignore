@@ -20,6 +20,16 @@ uploads
 參考
 文件範例
 
+# Meilisearch 執行檔與執行期資料（runtime，勿進 build context）
+meilisearch
+data.ms
+
+# 法規原始文件 / 參考檔（非建置所需，避免拖慢 build context）
+*.pdf
+*.docx
+已廢止法規
+法條docx檔
+
 *.pyc
 *.pyo
 *.log

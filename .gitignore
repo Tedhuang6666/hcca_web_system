@@ -75,3 +75,6 @@ CLAUDE.md
 MAINTAINER_CONTEXT.md
 meilisearch
 test.env
+
+# Celery beat 執行期排程狀態（runtime，勿進版控）
+apps/api/celerybeat-schedule
