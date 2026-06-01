@@ -1382,33 +1382,55 @@ def format_discord_payload(payload: dict[str, Any]) -> tuple[str, str | None]:
     return title, str(body) if body else None
 
 
-def _user_dm_allowed(session: Any, user_id: uuid.UUID, category: str | None) -> bool:
-    """檢查使用者 NotificationPreference 是否允許此 category；未綁 preference 預設 True。
-
-    Phase 1.4 之後 DiscordNotificationPreference 表存在；此函式同時相容
-    表尚未建立的情境（catch ProgrammingError 視為允許）。
-    """
-    if not category:
-        return True
+def _get_user_preference(session: Any, user_id: uuid.UUID) -> Any | None:
+    """讀取 DiscordNotificationPreference；若表不存在或讀取失敗回 None。"""
     try:
         from sqlalchemy import select as _select
 
         from api.models.discord_account import DiscordNotificationPreference
 
-        pref = session.execute(
+        return session.execute(
             _select(DiscordNotificationPreference).where(
                 DiscordNotificationPreference.user_id == user_id
             )
         ).scalar_one_or_none()
-        if pref is None:
-            return True
-        prefs = pref.preferences or {}
-        return bool(prefs.get(category, True))
     except ImportError:
-        return True
+        return None
     except Exception as exc:
-        logger.debug("讀取 DM preference 失敗，預設允許：%s", exc)
+        logger.debug("讀取 DM preference 失敗：%s", exc)
+        return None
+
+
+def _user_dm_allowed(session: Any, user_id: uuid.UUID, category: str | None) -> bool:
+    """檢查 NotificationPreference category 是否允許；未綁定 preference 預設 True。"""
+    if not category:
         return True
+    pref = _get_user_preference(session, user_id)
+    if pref is None:
+        return True
+    prefs = pref.preferences or {}
+    return bool(prefs.get(category, True))
+
+
+def _in_quiet_hours(pref: Any) -> bool:
+    """檢查當前時刻是否落在 user quiet hours 區間（依 pref.timezone）。"""
+    if pref is None:
+        return False
+    start = getattr(pref, "quiet_hours_start", None)
+    end = getattr(pref, "quiet_hours_end", None)
+    if start is None or end is None:
+        return False
+    try:
+        from zoneinfo import ZoneInfo
+
+        tz_name = getattr(pref, "timezone", None) or "Asia/Taipei"
+        now_local = datetime.now(ZoneInfo(tz_name)).time()
+    except Exception:
+        now_local = datetime.now(UTC).time()
+    if start <= end:
+        return start <= now_local < end
+    # 跨午夜，例如 22:00 → 08:00
+    return now_local >= start or now_local < end
 
 
 def dispatch_user_dm(payload: dict[str, Any]) -> None:
@@ -1448,9 +1470,19 @@ def dispatch_user_dm(payload: dict[str, Any]) -> None:
         if link is None:
             logger.info("Discord DM 略過：使用者 %s 未綁定", user_uuid)
             return
-        if not _user_dm_allowed(session, user_uuid, category):
+        pref = _get_user_preference(session, user_uuid)
+        if category and pref is not None:
+            prefs = pref.preferences or {}
+            if not bool(prefs.get(category, True)):
+                logger.info(
+                    "Discord DM 略過：user=%s category=%s 已關閉", user_uuid, category
+                )
+                return
+        if _in_quiet_hours(pref):
             logger.info(
-                "Discord DM 略過：user=%s category=%s 已關閉", user_uuid, category
+                "Discord DM 略過：user=%s category=%s 在 quiet hours 區間",
+                user_uuid,
+                category,
             )
             return
         discord_user_id = link.discord_user_id

@@ -11,6 +11,29 @@ from discord.ext import commands
 from api.discord_cogs._helpers import audit_discord_action, require_platform_admin
 
 
+_TIMEOUT_PRESETS = [
+    ("5 分鐘", 5),
+    ("10 分鐘", 10),
+    ("30 分鐘", 30),
+    ("1 小時", 60),
+    ("4 小時", 240),
+    ("1 天", 1440),
+    ("3 天", 4320),
+    ("1 週", 10080),
+]
+
+
+async def _timeout_minutes_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[int]]:
+    current_lower = (current or "").lower()
+    return [
+        app_commands.Choice(name=label, value=minutes)
+        for label, minutes in _TIMEOUT_PRESETS
+        if current_lower in label.lower()
+    ][:25]
+
+
 class ModerationCog(commands.Cog):
     """伺服器管理指令；皆需平台 admin:all 權限。"""
 
@@ -39,6 +62,7 @@ class ModerationCog(commands.Cog):
         await interaction.followup.send(f"已清除 {len(deleted)} 則訊息。", ephemeral=True)
 
     @app_commands.command(name="timeout", description="將成員暫時禁言")
+    @app_commands.autocomplete(minutes=_timeout_minutes_autocomplete)
     async def timeout(
         self,
         interaction: discord.Interaction,

@@ -1,13 +1,13 @@
-00:58:25 INFO  api.core.sentry: Sentry initialized env=development traces=0.00
-00:58:25 INFO  api.core.posthog: PostHog initialized host=https://us.i.posthog.com
-00:58:25 INFO  api.core.prometheus_metrics: prometheus_client not installed; metrics disabled. Run `uv add prometheus-client --project apps/api` to enable.
+04:26:01 INFO  api.core.sentry: Sentry initialized env=development traces=0.00
+04:26:01 INFO  api.core.posthog: PostHog initialized host=https://us.i.posthog.com
+04:26:01 INFO  api.core.prometheus_metrics: prometheus_client not installed; metrics disabled. Run `uv add prometheus-client --project apps/api` to enable.
  
  -------------- email-dev@TedHuangsNB v5.3.1 (emerald-rush)
 --- ***** ----- 
--- ******* ---- Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39 2026-06-01 00:58:26
+-- ******* ---- Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39 2026-06-01 04:26:02
 - *** --- * --- 
 - ** ---------- [config]
-- ** ---------- .> app:         campus_platform:0x70f8511f5550
+- ** ---------- .> app:         campus_platform:0x7ae53f3c4800
 - ** ---------- .> transport:   redis://localhost:6379/0
 - ** ---------- .> results:     redis://localhost:6379/0
 - *** --- * --- .> concurrency: 1 (prefork)
@@ -24,6 +24,9 @@
   . api.services.data_lifecycle_tasks.run_safe_purges
   . api.services.digest_tasks.send_daily_digest
   . api.services.digest_tasks.send_weekly_digest
+  . api.services.discord_reminders.reminder_sweep
+  . api.services.discord_reminders.send_daily_digest
+  . api.services.discord_reminders.send_weekly_digest
   . api.services.document_reminder_tasks.send_document_reminders
   . api.services.email_tasks.process_scheduled_emails
   . api.services.field_crypto_tasks.rotate_user_mfa_secrets
@@ -41,7 +44,7 @@
   . api.services.webhook_tasks.process_webhook_deliveries
   . api.services.work_item_tasks.remind_due_work_items
 
-00:58:26 INFO  celery.worker.consumer.connection: Connected to redis://localhost:6379/0
-00:58:26 INFO  celery.worker.consumer.mingle: mingle: searching for neighbors
-00:58:27 INFO  celery.worker.consumer.mingle: mingle: all alone
-00:58:28 INFO  celery.apps.worker: email-dev@TedHuangsNB ready.
+04:26:02 INFO  celery.worker.consumer.connection: Connected to redis://localhost:6379/0
+04:26:02 INFO  celery.worker.consumer.mingle: mingle: searching for neighbors
+04:26:03 INFO  celery.worker.consumer.mingle: mingle: all alone
+04:26:03 INFO  celery.apps.worker: email-dev@TedHuangsNB ready.

@@ -105,6 +105,7 @@ celery_app.conf.include = list(celery_app.conf.include or []) + [
     "api.services.webhook_tasks",
     "api.services.document_reminder_tasks",
     "api.services.watchdog_tasks",
+    "api.services.discord_reminders",
 ]
 
 celery_app.conf.beat_schedule = {
@@ -208,6 +209,20 @@ celery_app.conf.beat_schedule = {
     "watchdog-every-10min": {
         "task": "api.services.watchdog_tasks.run_watchdog",
         "schedule": 600.0,
+    },
+    # Discord 個人摘要 DM（每日 08:00 / 週日 20:00 台北）
+    "discord-daily-digest-at-0am-utc": {
+        "task": "api.services.discord_reminders.send_daily_digest",
+        "schedule": crontab(hour="0", minute="0"),  # 台北 08:00 = UTC 00:00
+    },
+    "discord-weekly-digest-sunday-12-utc": {
+        "task": "api.services.discord_reminders.send_weekly_digest",
+        "schedule": crontab(hour="12", minute="0", day_of_week="0"),  # 台北週日 20:00
+    },
+    # Discord 行事曆 T-1h / T-24h 個人提醒掃描
+    "discord-reminder-sweep-every-15min": {
+        "task": "api.services.discord_reminders.reminder_sweep",
+        "schedule": 900.0,
     },
 }
 

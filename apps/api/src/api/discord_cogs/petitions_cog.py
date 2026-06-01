@@ -9,6 +9,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from api.core.database import AsyncSessionLocal
+from api.discord_cogs._autocomplete import assigned_petition_autocomplete
 from api.discord_cogs._helpers import has_permission, require_bound_user
 from api.discord_cogs._views import PetitionManageView, PetitionModal
 from api.schemas.petition import PetitionInternalNoteCreate
@@ -50,6 +51,7 @@ class PetitionsCog(commands.Cog):
                 )
 
     @app_commands.command(name="petition_note", description="新增陳情內部備註")
+    @app_commands.autocomplete(case_id=assigned_petition_autocomplete)
     async def petition_note(
         self, interaction: discord.Interaction, case_id: str, content: str
     ) -> None:
@@ -85,6 +87,7 @@ class PetitionsCog(commands.Cog):
         await interaction.response.send_message("已新增內部備註。", ephemeral=True)
 
     @app_commands.command(name="petition_channel", description="為陳情案件建立私密討論頻道")
+    @app_commands.autocomplete(case_id=assigned_petition_autocomplete)
     async def petition_channel(self, interaction: discord.Interaction, case_id: str) -> None:
         user = await require_bound_user(interaction)
         if user is None:

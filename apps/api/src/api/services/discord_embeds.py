@@ -213,8 +213,7 @@ def build_embed(
     return embed
 
 
-def _enforce_total_limit(embed: dict[str, Any]) -> None:
-    """確保 embed 文字總和不超過 6000 字（Discord 上限），超過就先砍 description。"""
+def _embed_total_chars(embed: dict[str, Any]) -> int:
     total = sum(
         len(str(embed.get(key) or ""))
         for key in ("title", "description")
@@ -223,13 +222,35 @@ def _enforce_total_limit(embed: dict[str, Any]) -> None:
     total += len(str((embed.get("author") or {}).get("name") or ""))
     for field in embed.get("fields") or []:
         total += len(str(field.get("name") or "")) + len(str(field.get("value") or ""))
+    return total
+
+
+def _enforce_total_limit(embed: dict[str, Any]) -> None:
+    """確保 embed 文字總和不超過 6000 字（Discord 上限）。
+
+    優先順序：先砍 description；仍超過再從 fields 尾端 pop；最後對最後一個 field
+    的 value 做截斷。author/title/footer/timestamp 不動。
+    """
+    total = _embed_total_chars(embed)
     if total <= _TOTAL_MAX:
         return
     overflow = total - _TOTAL_MAX
     desc = embed.get("description")
-    if desc and overflow > 0:
+    if desc:
         new_len = max(0, len(desc) - overflow - 1)
         embed["description"] = desc[:new_len] + "…" if new_len > 0 else ""
+        total = _embed_total_chars(embed)
+        if total <= _TOTAL_MAX:
+            return
+    fields = embed.get("fields") or []
+    while fields and _embed_total_chars(embed) > _TOTAL_MAX:
+        fields.pop()
+    if fields and _embed_total_chars(embed) > _TOTAL_MAX:
+        last = fields[-1]
+        overflow = _embed_total_chars(embed) - _TOTAL_MAX
+        value = last.get("value") or ""
+        new_len = max(0, len(value) - overflow - 1)
+        last["value"] = value[:new_len] + "…" if new_len > 0 else "…"
 
 
 def link_button(label: str, url: str, *, emoji: str | None = None) -> dict[str, Any]:

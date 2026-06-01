@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 from api.core.database import AsyncSessionLocal
+from api.discord_cogs._autocomplete import (
+    due_at_autocomplete,
+    my_work_item_autocomplete,
+    parse_due_at,
+)
 from api.discord_cogs._helpers import require_bound_user
 from api.schemas.work_item import WorkItemCreate
 from api.services import audit as audit_svc
@@ -24,6 +28,7 @@ class WorkCog(commands.Cog):
         self.bot = bot
 
     @app_commands.command(name="assign_task", description="指派工作與期限提醒")
+    @app_commands.autocomplete(due_at=due_at_autocomplete)
     async def assign_task(
         self,
         interaction: discord.Interaction,
@@ -40,17 +45,13 @@ class WorkCog(commands.Cog):
             if assignee is None:
                 await interaction.response.send_message("對方尚未綁定平台帳號。", ephemeral=True)
                 return
-            due = None
-            if due_at:
-                try:
-                    due = datetime.fromisoformat(due_at.replace("Z", "+00:00"))
-                    if due.tzinfo is None:
-                        due = due.replace(tzinfo=UTC)
-                except ValueError:
-                    await interaction.response.send_message(
-                        "期限格式請用 ISO，例如 2026-05-30T18:00:00+08:00。", ephemeral=True
-                    )
-                    return
+            due = parse_due_at(due_at)
+            if due_at and due is None:
+                await interaction.response.send_message(
+                    "期限格式不接受。可用 autocomplete 預設選項，或輸入 ISO 例 2026-05-30T18:00:00+08:00。",
+                    ephemeral=True,
+                )
+                return
             item = await work_item_svc.create_work_item(
                 db,
                 data=WorkItemCreate(
@@ -78,6 +79,7 @@ class WorkCog(commands.Cog):
         )
 
     @app_commands.command(name="complete_task", description="完成一筆工作分配")
+    @app_commands.autocomplete(task_id=my_work_item_autocomplete)
     async def complete_task(self, interaction: discord.Interaction, task_id: str) -> None:
         user = await require_bound_user(interaction)
         if user is None:

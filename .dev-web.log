@@ -6,48 +6,11 @@
 - Local:         http://localhost:3000
 - Network:       http://10.255.255.254:3000
 - Environments: .env.local
-✓ Ready in 385ms
+✓ Ready in 235ms
 - Experiments (use with caution):
   · clientTraceMetadata
 
-[browser] ⨯ unhandledRejection: ChunkLoadError: Loading chunk app/global-error failed.
-(error: http://localhost:3000/_next/static/chunks/app/global-error.js)
-    at __webpack_require__.f.j (file:///home/ted98/projects/main/apps/web/.next/dev/static/chunks/webpack.js?v=1780245087135:865:29)
-    at <unknown> (file:///home/ted98/projects/main/apps/web/.next/dev/static/chunks/webpack.js?v=1780245087135:145:40)
-    at Array.reduce (<anonymous>)
-    at __webpack_require__.e (file:///home/ted98/projects/main/apps/web/.next/dev/static/chunks/webpack.js?v=1780245087135:144:67)
-    at fn.e (file:///home/ted98/projects/main/apps/web/.next/dev/static/chunks/webpack.js?v=1780245087135:381:50)
- GET / 200 in 4.1s (next.js: 2.9s, proxy.ts: 143ms, application-code: 1037ms)
+ GET / 200 in 3.8s (next.js: 2.9s, proxy.ts: 154ms, application-code: 749ms)
 ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
- GET / 200 in 147ms (next.js: 11ms, proxy.ts: 40ms, application-code: 95ms)
-[browser] Error: 登入已過期，請重新登入
-    at request (src/lib/api.ts:258:11)
-  256 |       }
-  257 |     }
-> 258 |     throw new ApiError(401, "登入已過期，請重新登入", res.headers.get("X-Request-ID"));
-      |           ^
-  259 |   }
-  260 |
-  261 |   // 503 + maintenance/load_shed → 先 refresh 一次，讓舊 token 補上 admin/bypass claims (src/app/page.tsx:218:17)
-[browser] Error: 登入已過期，請重新登入
-    at request (src/lib/api.ts:258:11)
-  256 |       }
-  257 |     }
-> 258 |     throw new ApiError(401, "登入已過期，請重新登入", res.headers.get("X-Request-ID"));
-      |           ^
-  259 |   }
-  260 |
-  261 |   // 503 + maintenance/load_shed → 先 refresh 一次，讓舊 token 補上 admin/bypass claims (src/app/page.tsx:218:17)
-○ Compiling /profile ...
- GET /profile?discord=linked 200 in 4.9s (next.js: 4.4s, proxy.ts: 19ms, application-code: 455ms)
- GET / 200 in 522ms (next.js: 56ms, proxy.ts: 389ms, application-code: 78ms)
- GET /login 200 in 2.5s (next.js: 1581ms, proxy.ts: 470ms, application-code: 479ms)
- GET /profile?discord=linked 200 in 561ms (next.js: 23ms, proxy.ts: 388ms, application-code: 150ms)
- GET /login?next=%2Fprofile 200 in 66ms (next.js: 16ms, proxy.ts: 8ms, application-code: 42ms)
- GET / 200 in 50ms (next.js: 5ms, proxy.ts: 10ms, application-code: 35ms)
- GET /legal/privacy?v=1.0.0 200 in 1675ms (next.js: 1473ms, proxy.ts: 10ms, application-code: 192ms)
- GET / 200 in 185ms (next.js: 66ms, proxy.ts: 11ms, application-code: 108ms)
- GET /login?next=%2Fprofile 200 in 209ms (next.js: 19ms, proxy.ts: 6ms, application-code: 184ms)
- GET / 200 in 140ms (next.js: 7ms, proxy.ts: 25ms, application-code: 108ms)
- GET / 200 in 126ms (next.js: 27ms, proxy.ts: 49ms, application-code: 49ms)
- GET /tasks 200 in 1746ms (next.js: 1662ms, proxy.ts: 7ms, application-code: 78ms)
+ GET / 200 in 4.0s (next.js: 2.9s, proxy.ts: 156ms, application-code: 964ms)
+ GET / 200 in 112ms (next.js: 12ms, proxy.ts: 42ms, application-code: 59ms)
