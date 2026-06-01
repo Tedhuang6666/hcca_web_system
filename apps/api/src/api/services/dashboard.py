@@ -179,14 +179,11 @@ async def _w_doc_pending_my_approval(
     count = len(rows)
     if count == 0:
         return None
-<<<<<<< HEAD
 
     # S10.4 SLA 預警：偵測逾期（updated_at > 3 天）的公文
     sla_cutoff = now - timedelta(days=3)
     overdue = sum(1 for (d, _a) in rows if d.updated_at and d.updated_at < sla_cutoff)
 
-=======
->>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
     preview = rows[:3]
     items = [
         DashboardWidgetItem(
@@ -194,7 +191,6 @@ async def _w_doc_pending_my_approval(
             subtitle=d.serial_number,
             href=f"/documents/{d.serial_number}" if d.serial_number else "/documents",
             timestamp=d.updated_at,
-<<<<<<< HEAD
             badge=(
                 f"逾期 {(now - d.updated_at).days} 天"
                 if d.updated_at and d.updated_at < sla_cutoff
@@ -221,18 +217,6 @@ async def _w_doc_pending_my_approval(
         count=count,
         href="/documents?status=pending&my_approval=true",
         severity=severity,
-=======
-        )
-        for (d, _a) in preview
-    ]
-    return DashboardWidget(
-        key="doc_pending_my_approval",
-        title="待我簽核",
-        summary=f"{count} 份等待您決定",
-        count=count,
-        href="/documents?status=pending&my_approval=true",
-        severity="warning" if count <= 5 else "critical",
->>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
         items=items,
     )
 
@@ -257,7 +241,6 @@ async def _w_meeting_upcoming(db: AsyncSession, user: User) -> DashboardWidget |
     rows = (await db.execute(stmt)).scalars().all()
     if not rows:
         return None
-<<<<<<< HEAD
 
     # S10.1 時間感知：依「最早一場會議距離現在多久」調整 severity 與標題
     soonest = min(m.starts_at for m in rows if m.starts_at is not None)
@@ -279,8 +262,6 @@ async def _w_meeting_upcoming(db: AsyncSession, user: User) -> DashboardWidget |
         title = "即將出席的會議"
         summary = f"{len(rows)} 場（72 小時內）"
 
-=======
->>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
     items = [
         DashboardWidgetItem(
             title=m.title,
@@ -292,19 +273,11 @@ async def _w_meeting_upcoming(db: AsyncSession, user: User) -> DashboardWidget |
     ]
     return DashboardWidget(
         key="meeting_upcoming",
-<<<<<<< HEAD
         title=title,
         summary=summary,
         count=len(rows),
         href="/meetings",
         severity=severity,
-=======
-        title="即將出席的會議",
-        summary=f"{len(rows)} 場（72 小時內）",
-        count=len(rows),
-        href="/meetings",
-        severity="warning",
->>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
         items=items,
     )
 

@@ -871,7 +871,6 @@ class MeetingEvent(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     meeting_id: Mapped[uuid.UUID] = mapped_column(
-<<<<<<< HEAD
         UUID(as_uuid=True),
         ForeignKey("meetings.id", ondelete="CASCADE"),
         nullable=False,
@@ -881,24 +880,14 @@ class MeetingEvent(Base):
         UUID(as_uuid=True),
         ForeignKey("meeting_agenda_items.id", ondelete="SET NULL"),
         nullable=True,
-=======
-        UUID(as_uuid=True), ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    agenda_item_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("meeting_agenda_items.id", ondelete="SET NULL"), nullable=True
->>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
     )
     event_type: Mapped[str] = mapped_column(String(80), nullable=False)
     actor_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-<<<<<<< HEAD
     payload: Mapped[dict] = mapped_column(
         JSONDict, nullable=False, default=dict, server_default="{}"
     )
-=======
-    payload: Mapped[dict] = mapped_column(JSONDict, nullable=False, default=dict, server_default="{}")
->>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )

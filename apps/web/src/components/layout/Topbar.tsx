@@ -1,28 +1,17 @@
 "use client";
-<<<<<<< HEAD
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowLeft, Search } from "lucide-react";
-=======
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter, usePathname } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
->>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { notificationsApi, tasksApi } from "@/lib/api";
 import type { NotificationItem, TaskItem } from "@/lib/api";
 import { apiUrl } from "@/lib/config";
-<<<<<<< HEAD
 import { useWS } from "@/hooks/useWS";
 import { getBreadcrumbs, getCompactCrumbs, getPageTitle } from "@/lib/breadcrumb";
 import type { Crumb } from "@/lib/breadcrumb";
-=======
-import { getBreadcrumbs, getCompactCrumbs, getPageTitle } from "@/lib/breadcrumb";
->>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 
 interface TopbarProps {
   onMenuClick?: () => void;
@@ -94,10 +83,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
   const [previewNtfs, setPreviewNtfs] = useState<NotificationItem[]>([]);
   const [previewTasks, setPreviewTasks] = useState<TaskItem[]>([]);
   const [taskCount, setTaskCount] = useState(0);
-<<<<<<< HEAD
   const [userRoom, setUserRoom] = useState<string | null>(null);
-=======
->>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
   const menuRef = useRef<HTMLDivElement>(null);
   const bellRef = useRef<HTMLDivElement>(null);
 
@@ -130,7 +116,6 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
     return () => document.removeEventListener("mousedown", handle);
   }, [showMenu, showBell]);
 
-<<<<<<< HEAD
   const fetchCounts = useCallback(async () => {
     try {
       const { unread } = await notificationsApi.count();
@@ -140,26 +125,6 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
       const inbox = await tasksApi.list();
       setTaskCount(inbox.total);
     } catch { /* ignore */ }
-=======
-  // 通知 + 待辦輪詢
-  useEffect(() => {
-    const userId = typeof window !== "undefined" ? localStorage.getItem("user_id") : null;
-    if (!userId) return;
-    let mounted = true;
-    const fetchCounts = async () => {
-      try {
-        const { unread } = await notificationsApi.count();
-        if (mounted) setUnreadCount(unread);
-      } catch { /* ignore */ }
-      try {
-        const inbox = await tasksApi.list();
-        if (mounted) setTaskCount(inbox.total);
-      } catch { /* ignore */ }
-    };
-    fetchCounts();
-    const timer = setInterval(fetchCounts, 60_000);
-    return () => { mounted = false; clearInterval(timer); };
->>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
   }, []);
 
   // 通知 + 待辦輪詢
@@ -273,7 +238,6 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
           <Breadcrumb items={crumbs} />
         </div>
 
-<<<<<<< HEAD
         {/* 行動裝置：上層小字、當前頁突出顯示 */}
         <div className="md:hidden min-w-0 flex-1">
           <MobileBreadcrumb items={compactCrumbs} fallbackTitle={pageTitle} />
@@ -292,24 +256,6 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
             <Search size={15} aria-hidden={true} />
           </Link>
         )}
-=======
-        {/* 行動裝置：縮減麵包屑（首頁 / … / 上層 / 當前）或單一標題 */}
-        <div className="md:hidden min-w-0 flex-1">
-          {crumbs.length > 2 ? (
-            <Breadcrumb items={compactCrumbs} />
-          ) : (
-            <h1
-              className="text-sm truncate"
-              style={{ color: "var(--text-primary)", fontWeight: 600 }}>
-              {pageTitle}
-            </h1>
-          )}
-        </div>
-      </div>
-
-      {/* 右側：通知 + 主題 + 使用者 */}
-      <div className="flex items-center gap-1.5">
->>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
         {isLoggedIn && (
         <div className="relative" ref={bellRef}>
           <button

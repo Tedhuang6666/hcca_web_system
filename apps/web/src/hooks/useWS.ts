@@ -130,10 +130,7 @@ export function useWS(
     connect();
     return () => {
       sessionId.current = activeSession + 1; // 使所有進行中的 async onclose 失效
-<<<<<<< HEAD
       clearWatchdog();
-=======
->>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
       ws.current?.close(1000, "component unmounted");
       ws.current = null;
     };

@@ -593,12 +593,9 @@ class MeetingScreenOut(BaseModel):
     attendance_summary: dict[str, int]
     screen_state: ScreenStateOut | None = None
     vote_roster: VoteRosterOut | None = None
-<<<<<<< HEAD
     active_speech: SpeechQueueItemOut | None = None
     speech_queue: list[SpeechQueueItemOut] = []
     timer_state: TimerStateOut | None = None
-=======
->>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 
 
 class MeetingJoinOut(BaseModel):
@@ -609,12 +606,9 @@ class MeetingJoinOut(BaseModel):
     can_vote: bool
     active_vote: VoteOut | None
     my_ballot: BallotOut | None = None
-<<<<<<< HEAD
     my_speech_queue_items: list[SpeechQueueItemOut] = []
     active_speech: SpeechQueueItemOut | None = None
     timer_state: TimerStateOut | None = None
-=======
->>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 
 
 class MeetingWorkspaceOut(BaseModel):

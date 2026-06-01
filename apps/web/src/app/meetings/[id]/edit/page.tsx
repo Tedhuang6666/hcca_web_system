@@ -70,11 +70,8 @@ function toUpdatePayload(form: SettingsForm) {
     expected_voters: form.expected_voters,
     quorum_count: form.quorum_count,
     default_pass_threshold: form.default_pass_threshold,
-<<<<<<< HEAD
     default_speech_seconds: form.default_speech_seconds,
     allow_observer_requests: form.allow_observer_requests,
-=======
->>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
     bill_stage: form.bill_stage || null,
   };
 }

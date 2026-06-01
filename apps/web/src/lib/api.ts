@@ -10,11 +10,8 @@ import type {
   SchoolClassBulkCreate, SchoolClassBulkCreateOut,
   ClassMemberOut, ClassStudentRangeOut, ClassCadreOut, ClassManualMemberOut,
   ClassMembershipOut, ClassRoleOut,
-<<<<<<< HEAD
   PersonAffiliationCreate, PersonAffiliationOut, PersonAffiliationUpdate,
   PersonCreate, PersonDetailOut, PersonListItem, PersonOut, PersonRosterImportResult, PersonUpdate,
-=======
->>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
   RegulationOut, RegulationListItem, RegulationCategory, RegulationSearchResult,
   AmendmentComparisonRow,
   RegulationArticleOut, RegulationRevisionOut, RegulationWorkflowLogOut, RegulationTreeNodeOut,
@@ -69,14 +66,11 @@ import type {
   PartnerRankingItem, PartnerRatingCreate, PartnerRatingOut,
   PartnerSubmissionCreate, PartnerSubmissionOut,
   PartnerTagCreate, PartnerTagOut, PartnerTagUpdate,
-<<<<<<< HEAD
   ExamGradeTrack, ExamPaperDownloadOut, ExamPaperListItem, ExamPaperOut, ExamPaperUpdate,
   ExamTraceInspectOut,
   Activity, ActivityConvener, ActivityCreate,
   WorkItemCreate, WorkItemOut, WorkItemUpdate,
   PendingConsentItem, PolicyConsentOut,
-=======
->>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 } from "./types";
 import { API_BASE, apiUrl } from "./config";
 
@@ -906,7 +900,6 @@ export const regulationsApi = {
     get<{ id: string; title: string; status: string; bill_stage: string | null; starts_at: string | null }[]>(
       `${regulationPath(id)}/eligible-meetings`,
     ),
-<<<<<<< HEAD
   presidentPublish: (
     id: string,
     note?: string,
@@ -916,9 +909,6 @@ export const regulationsApi = {
     serial_template_id: options?.serial_template_id ?? null,
     manual_serial_number: options?.manual_serial_number ?? null,
   }),
-=======
-  presidentPublish: (id: string, note?: string) => post<RegulationOut>(`${regulationPath(id)}/president_publish`, { note }),
->>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
   rejectRegulation: (id: string, note: string) => post<RegulationOut>(`${regulationPath(id)}/reject`, { note }),
   freeze: (id: string, reason: string, freeze_document_id?: string) =>
     post<RegulationOut>(`${regulationPath(id)}/freeze`, { reason, freeze_document_id: freeze_document_id ?? null }),
@@ -2371,20 +2361,12 @@ export const dashboardApi = {
 
 export type TaskModule =
   | "document" | "meeting" | "regulation" | "petition"
-<<<<<<< HEAD
   | "meal" | "shop" | "survey" | "announcement" | "calendar" | "work_item";
 
 export type TaskAction =
   | "approve" | "attend" | "review" | "publish"
   | "reply" | "fill" | "collect" | "pickup" | "sign"
   | "complete" | "prepare" | "manage";
-=======
-  | "meal" | "shop" | "survey" | "announcement";
-
-export type TaskAction =
-  | "approve" | "attend" | "review" | "publish"
-  | "reply" | "fill" | "collect" | "pickup" | "sign";
->>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 
 export type TaskSeverity = "info" | "warning" | "critical";
 
@@ -2409,7 +2391,6 @@ export interface TaskInboxResponse {
 export const tasksApi = {
   list: () => get<TaskInboxResponse>("/tasks"),
 };
-<<<<<<< HEAD
 
 // ── 段考題庫 ────────────────────────────────────────────────────────────────
 
@@ -3357,5 +3338,3 @@ export const privacyRequestsApi = {
     body: { status: PrivacyRequestStatus; response_message?: string | null },
   ) => patch<PrivacyRequestOut>(`/policies/privacy-requests/${id}`, body),
 };
-=======
->>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71

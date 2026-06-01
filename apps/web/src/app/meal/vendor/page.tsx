@@ -9,10 +9,6 @@ import {
   PackagePlus,
   Plus,
   QrCode,
-<<<<<<< HEAD
-=======
-  Search,
->>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
   Settings,
   Store,
   Users,
@@ -20,12 +16,8 @@ import {
 import { toast } from "sonner";
 
 import Modal from "@/components/ui/Modal";
-<<<<<<< HEAD
 import { UserPicker } from "@/components/meal/UserPicker";
 import { mealApi, type UserSummary } from "@/lib/api";
-=======
-import { mealApi, usersApi, type UserSummary } from "@/lib/api";
->>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 import type {
   MealAvailabilityOut,
   MealOrderListItem,
@@ -90,150 +82,6 @@ const tabs: { key: VendorTab; label: string; icon: typeof Store }[] = [
   { key: "settings", label: "設定", icon: Settings },
 ];
 
-<<<<<<< HEAD
-=======
-const statusLabel: Record<string, string> = {
-  pending_review: "待審",
-  approved: "已通過",
-  rejected: "已退回",
-  suspended: "已停用",
-};
-
-const orderLabel: Record<string, string> = {
-  pending: "待確認",
-  confirmed: "已確認",
-  cancelled: "已取消",
-  completed: "已完成",
-};
-
-type QuickPickupSlot = {
-  label: string;
-  start: string;
-  end: string;
-  deadline: string;
-};
-
-const quickPickupSlots: QuickPickupSlot[] = [
-  { label: "第1節下課", start: "08:50", end: "09:10", deadline: "08:20" },
-  { label: "第2節下課", start: "10:00", end: "10:10", deadline: "09:30" },
-  { label: "第3節下課", start: "11:00", end: "11:10", deadline: "10:30" },
-  { label: "午餐／午休", start: "12:00", end: "13:05", deadline: "11:30" },
-  { label: "第5節下課", start: "13:55", end: "14:05", deadline: "13:25" },
-  { label: "第6節下課", start: "14:55", end: "15:10", deadline: "14:25" },
-  { label: "第7節下課", start: "16:00", end: "16:10", deadline: "15:30" },
-];
-
-function today() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function addDays(days: number) {
-  const value = new Date();
-  value.setDate(value.getDate() + days);
-  return value.toISOString().slice(0, 10);
-}
-
-function toIso(value: string) {
-  return value ? new Date(value).toISOString() : null;
-}
-
-function datetimeLocal(date: string, time: string) {
-  return `${date}T${time}`;
-}
-
-function eachDate(from: string, to: string) {
-  const dates: string[] = [];
-  const cursor = new Date(`${from}T00:00:00`);
-  const end = new Date(`${to}T00:00:00`);
-  while (cursor <= end) {
-    dates.push(cursor.toISOString().slice(0, 10));
-    cursor.setDate(cursor.getDate() + 1);
-  }
-  return dates;
-}
-
-function weekdayIndex(dateString: string) {
-  const day = new Date(`${dateString}T00:00:00`).getDay();
-  return day === 0 ? 6 : day - 1;
-}
-
-function combineDateTime(dateString: string, timeString: string) {
-  return new Date(datetimeLocal(dateString, timeString)).toISOString();
-}
-
-function money(value: number) {
-  return `NT$ ${value.toLocaleString("zh-TW")}`;
-}
-
-function UserPicker({
-  placeholder,
-  onPick,
-}: {
-  placeholder: string;
-  onPick: (user: UserSummary) => void;
-}) {
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<UserSummary[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (query.trim().length < 2) {
-      setResults([]);
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      setLoading(true);
-      usersApi
-        .listForSearch(query.trim())
-        .then((items) => setResults(items.slice(0, 8)))
-        .catch(() => setResults([]))
-        .finally(() => setLoading(false));
-    }, 220);
-    return () => window.clearTimeout(timer);
-  }, [query]);
-
-  return (
-    <div className="relative">
-      <div className="flex items-center gap-2 rounded-md px-3 py-2"
-        style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
-        <Search size={15} style={{ color: "var(--text-muted)" }} />
-        <input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          className="w-full bg-transparent text-sm outline-none"
-          placeholder={placeholder}
-          style={{ color: "var(--text-primary)" }}
-        />
-      </div>
-      {(results.length > 0 || loading) && (
-        <div className="absolute z-30 mt-1 w-full overflow-hidden rounded-md"
-          style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>
-          {loading && <div className="px-3 py-2 text-xs text-muted">搜尋中...</div>}
-          {results.map((user) => (
-            <button
-              key={user.id}
-              type="button"
-              onClick={() => {
-                onPick(user);
-                setQuery("");
-                setResults([]);
-              }}
-              className="block w-full px-3 py-2 text-left text-sm hover:bg-black/5"
-              style={{ color: "var(--text-primary)" }}
-            >
-              <span className="font-medium">{user.display_name}</span>
-              <span className="ml-2 text-xs" style={{ color: "var(--text-muted)" }}>
-                {user.email}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
->>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 export default function VendorAdminPage() {
   const [tab, setTab] = useState<VendorTab>("overview");
   const [vendors, setVendors] = useState<MealVendorOut[]>([]);

@@ -1336,12 +1336,9 @@ export interface MeetingScreenOut {
   attendance_summary: Record<string, number>;
   screen_state: MeetingScreenStateOut | null;
   vote_roster: MeetingVoteRosterOut | null;
-<<<<<<< HEAD
   active_speech: MeetingSpeechQueueItemOut | null;
   speech_queue: MeetingSpeechQueueItemOut[];
   timer_state: MeetingTimerStateOut | null;
-=======
->>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 }
 
 export interface MeetingJoinOut {
@@ -1352,12 +1349,9 @@ export interface MeetingJoinOut {
   can_vote: boolean;
   active_vote: MeetingVoteOut | null;
   my_ballot: MeetingBallotOut | null;
-<<<<<<< HEAD
   my_speech_queue_items: MeetingSpeechQueueItemOut[];
   active_speech: MeetingSpeechQueueItemOut | null;
   timer_state: MeetingTimerStateOut | null;
-=======
->>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 }
 
 export interface MeetingWorkspaceOut {

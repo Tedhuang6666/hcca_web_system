@@ -33,14 +33,11 @@ NOTIFICATION_TYPES: tuple[str, ...] = (
     # 問卷 / 公告
     "survey_invitation",
     "announcement",
-<<<<<<< HEAD
     # 行事曆 / 工作
     "calendar_event_invited",
     "calendar_event_updated",
     "work_item_assigned",
     "work_item_due",
-=======
->>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
     # 系統
     "system",
 )

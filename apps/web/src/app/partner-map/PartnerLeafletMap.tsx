@@ -10,22 +10,14 @@ import {
   Landmark,
   Printer,
   Sandwich,
-<<<<<<< HEAD
   School,
   Soup,
   TrainFront,
-=======
-  Soup,
->>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
   UtensilsCrossed,
   type LucideIcon,
 } from "lucide-react";
 import { divIcon } from "leaflet";
-<<<<<<< HEAD
 import { MapContainer, Marker, Popup, TileLayer, ZoomControl, useMap, useMapEvents } from "react-leaflet";
-=======
-import { MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
->>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 import type { LatLngBounds, LatLngExpression } from "leaflet";
 import type { PartnerMapItem } from "@/lib/types";
 
@@ -58,7 +50,6 @@ function BoundsReporter({ onBoundsChange }: { onBoundsChange: (bounds: PartnerMa
   return null;
 }
 
-<<<<<<< HEAD
 function ThemeClassSync({ theme }: { theme: "light" | "dark" }) {
   const map = useMap();
   useEffect(() => {
@@ -69,8 +60,6 @@ function ThemeClassSync({ theme }: { theme: "light" | "dark" }) {
   return null;
 }
 
-=======
->>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 export type MarkerKind =
   | "all"
   | "drink"
@@ -131,7 +120,6 @@ function storeIcon(item: PartnerMapItem) {
   });
 }
 
-<<<<<<< HEAD
 function landmarkIcon(kind: "school" | "station") {
   if (kind === "station") {
     const iconMarkup = renderToStaticMarkup(<TrainFront size={19} strokeWidth={2.4} aria-hidden="true" />);
@@ -154,8 +142,6 @@ function landmarkIcon(kind: "school" | "station") {
   });
 }
 
-=======
->>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 function useMapTheme() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
 
@@ -191,7 +177,6 @@ export default function PartnerLeafletMap({
     theme === "dark"
       ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
       : "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
-<<<<<<< HEAD
   const hsinchuStation: LatLngExpression = [24.801645, 120.971703];
 
   return (
@@ -201,17 +186,11 @@ export default function PartnerLeafletMap({
       zoomControl={false}
       className={`h-full w-full partner-map-leaflet partner-map-theme-${theme}`}
       scrollWheelZoom>
-=======
-
-  return (
-    <MapContainer center={center} zoom={16} className="h-full w-full partner-map-leaflet" scrollWheelZoom>
->>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
       <TileLayer
         key={theme}
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
         url={tileUrl}
       />
-<<<<<<< HEAD
       <ZoomControl position="bottomright" />
       <ThemeClassSync theme={theme} />
       <BoundsReporter onBoundsChange={onBoundsChange} />
@@ -225,23 +204,6 @@ export default function PartnerLeafletMap({
         icon={landmarkIcon("station")}>
         <Popup>新竹火車站</Popup>
       </Marker>
-=======
-      <BoundsReporter onBoundsChange={onBoundsChange} />
-      <Marker
-        position={center}
-        icon={divIcon({
-          className: "partner-map-marker-shell",
-          iconSize: [48, 48],
-          iconAnchor: [24, 42],
-          html: `
-            <div class="partner-map-school-marker">
-              <span>竹</span>
-            </div>
-          `,
-        })}>
-        <Popup>新竹高中周邊</Popup>
-      </Marker>
->>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
       {userLocation && (
         <Marker
           position={userLocation}
