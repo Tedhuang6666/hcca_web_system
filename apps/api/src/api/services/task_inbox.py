@@ -17,8 +17,11 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import and_, desc, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+<<<<<<< HEAD
 from api.models.announcement import Announcement
 from api.models.calendar import CalendarEvent, CalendarEventChecklistItem, CalendarEventParticipant
+=======
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 from api.models.document import (
     ApprovalStepStatus,
     DelegateSource,
@@ -26,7 +29,10 @@ from api.models.document import (
     DocumentApproval,
     DocumentApprovalDelegation,
 )
+<<<<<<< HEAD
 from api.models.meal import MenuSchedule
+=======
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 from api.models.meeting import (
     AttendanceStatus,
     Meeting,
@@ -35,10 +41,15 @@ from api.models.meeting import (
 )
 from api.models.petition import PetitionCase, PetitionStatus
 from api.models.regulation import Regulation, RegulationWorkflowStatus
+<<<<<<< HEAD
 from api.models.shop import Product, ProductStatus
 from api.models.survey import Survey, SurveyStatus
 from api.models.user import User
 from api.models.work_item import WorkItem, WorkItemStatus
+=======
+from api.models.survey import Survey, SurveyStatus
+from api.models.user import User
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 from api.schemas.task import TaskInboxResponse, TaskItem
 from api.services.permission import get_user_permission_codes
 
@@ -297,6 +308,7 @@ async def _surveys_to_fill(db: AsyncSession, user: User) -> list[TaskItem]:
     ]
 
 
+<<<<<<< HEAD
 async def _calendar_checklist_assigned(db: AsyncSession, user: User) -> list[TaskItem]:
     rows = (
         await db.execute(
@@ -502,6 +514,8 @@ async def _work_items_assigned(db: AsyncSession, user: User) -> list[TaskItem]:
     ]
 
 
+=======
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 # ── 聚合 ─────────────────────────────────────────────────────────────────────
 
 
@@ -524,6 +538,7 @@ async def build_task_inbox(db: AsyncSession, user: User) -> TaskInboxResponse:
         _safe("regulations_review", lambda: _regulations_to_review(db, user, perms, is_admin)),
         _safe("petitions_assigned", lambda: _petitions_assigned(db, user, perms, is_admin)),
         _safe("surveys_fill", lambda: _surveys_to_fill(db, user)),
+<<<<<<< HEAD
         _safe("calendar_prepare", lambda: _calendar_checklist_assigned(db, user)),
         _safe("calendar_attend", lambda: _calendar_events_to_attend(db, user)),
         _safe(
@@ -532,6 +547,8 @@ async def build_task_inbox(db: AsyncSession, user: User) -> TaskInboxResponse:
         _safe("shop_sales", lambda: _shop_sales_to_manage(db, user, perms, is_admin)),
         _safe("meal_deadlines", lambda: _meal_deadlines_to_manage(db, user, perms, is_admin)),
         _safe("work_items_assigned", lambda: _work_items_assigned(db, user)),
+=======
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
     )
     items: list[TaskItem] = [it for g in groups for it in g]
 

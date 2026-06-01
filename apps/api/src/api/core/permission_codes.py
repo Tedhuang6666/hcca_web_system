@@ -124,6 +124,7 @@ class PermissionCode(StrEnum):
     MEETING_VIEW_ALL = "meeting:view_all"
     MEETING_EXPORT = "meeting:export"
 
+<<<<<<< HEAD
     CALENDAR_CREATE = "calendar:create"
     CALENDAR_MANAGE = "calendar:manage"
     CALENDAR_VIEW_ALL = "calendar:view_all"
@@ -141,6 +142,11 @@ class PermissionCode(StrEnum):
     # Phase D3 Feature flags
     FEATURE_FLAG_ADMIN = "feature_flag:admin"
 
+=======
+    PARTNER_MAP_MANAGE = "partner_map:manage"
+    PARTNER_MAP_VIEW_STATS = "partner_map:view_stats"
+
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 
 ALL_PERMISSION_CODES: list[dict[str, str]] = [
     {
@@ -744,6 +750,7 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "desc": "查看會後紀錄、匯出或轉成公文草稿",
     },
     {
+<<<<<<< HEAD
         "group": "行事曆",
         "code": PermissionCode.CALENDAR_CREATE,
         "label": "建立行程",
@@ -768,6 +775,8 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "desc": "跨組織查看與管理所有行事曆事件",
     },
     {
+=======
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
         "group": "特約地圖",
         "code": PermissionCode.PARTNER_MAP_MANAGE,
         "label": "管理特約地圖",
@@ -779,6 +788,7 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "label": "查看特約地圖統計",
         "desc": "查看特約店家點擊、瀏覽與互動統計（預留）",
     },
+<<<<<<< HEAD
     # ── 企業級升級（Phase B1 / D2 / C3 / D3）──────────────────────────
     {
         "group": "企業級治理",
@@ -810,6 +820,8 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "label": "Feature Flag 管理",
         "desc": "管理新功能灰度開關、依角色 / 比例切流量",
     },
+=======
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 ]
 
 KNOWN_PERMISSION_CODES: frozenset[str] = frozenset(

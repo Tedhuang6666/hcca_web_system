@@ -5,6 +5,7 @@ import {
   BadgeCheck,
   BookUser,
   CalendarDays,
+<<<<<<< HEAD
   CheckSquare,
   GraduationCap,
   ListChecks,
@@ -14,6 +15,13 @@ import {
   ShieldCheck,
   Square,
   Trash2,
+=======
+  GraduationCap,
+  ListChecks,
+  Plus,
+  Search,
+  ShieldCheck,
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
   UsersRound,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -291,6 +299,7 @@ function CreateClassPanel({ onCreated }: { onCreated: () => void }) {
 function ClassList({
   classes,
   selectedId,
+<<<<<<< HEAD
   selectedIds,
   onSelect,
   onSelectionChange,
@@ -304,12 +313,20 @@ function ClassList({
   onSelectionChange: (ids: string[]) => void;
   onBulkAction: (action: "activate" | "deactivate" | "delete") => Promise<void>;
   bulkBusy: boolean;
+=======
+  onSelect,
+}: {
+  classes: SchoolClassListItem[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 }) {
   const [query, setQuery] = useState("");
   const filtered = classes.filter((item) => {
     const haystack = `${item.academic_year} ${item.class_code} ${item.grade} ${item.label ?? ""}`;
     return haystack.includes(query.trim());
   });
+<<<<<<< HEAD
   const selectedSet = new Set(selectedIds);
   const filteredIds = filtered.map((item) => item.id);
   const allVisibleSelected = filteredIds.length > 0 && filteredIds.every((id) => selectedSet.has(id));
@@ -330,6 +347,8 @@ function ClassList({
     }
     onSelectionChange(Array.from(new Set([...selectedIds, ...filteredIds])));
   };
+=======
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 
   return (
     <section className="rounded-md" style={{ border: "1px solid var(--border)" }}>
@@ -351,6 +370,7 @@ function ClassList({
             style={{ color: "var(--text-primary)" }}
           />
         </div>
+<<<<<<< HEAD
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <button
             type="button"
@@ -392,19 +412,31 @@ function ClassList({
             </>
           )}
         </div>
+=======
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
       </div>
       <div className="max-h-[520px] overflow-auto">
         {filtered.map((item) => {
           const active = item.id === selectedId;
+<<<<<<< HEAD
           const selected = selectedSet.has(item.id);
           return (
             <div
               key={item.id}
               className="flex items-stretch"
+=======
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onSelect(item.id)}
+              className="w-full px-4 py-3 text-left transition-colors"
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
               style={{
                 borderBottom: "1px solid var(--border)",
                 background: active ? "var(--primary-dim)" : "transparent",
               }}>
+<<<<<<< HEAD
               <button
                 type="button"
                 onClick={() => toggleSelected(item.id)}
@@ -418,6 +450,9 @@ function ClassList({
                 onClick={() => onSelect(item.id)}
                 className="min-w-0 flex-1 px-2 py-3 text-left transition-colors">
                 <div className="flex items-center justify-between gap-3">
+=======
+              <div className="flex items-center justify-between gap-3">
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
                 <div>
                   <p className="text-sm font-semibold"
                     style={{ color: active ? "var(--primary)" : "var(--text-primary)" }}>
@@ -437,8 +472,12 @@ function ClassList({
                   {item.is_active ? "當前" : "停用"}
                 </span>
               </div>
+<<<<<<< HEAD
               </button>
             </div>
+=======
+            </button>
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
           );
         })}
         {filtered.length === 0 && (
@@ -943,8 +982,11 @@ export default function ClassesAdminPage() {
   const allowed = can("class:manage");
   const [classes, setClasses] = useState<SchoolClassListItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+<<<<<<< HEAD
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
   const [bulkBusy, setBulkBusy] = useState(false);
+=======
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
   const [loading, setLoading] = useState(true);
 
   const loadClasses = useCallback(() => {
@@ -953,10 +995,14 @@ export default function ClassesAdminPage() {
       .list()
       .then((items) => {
         setClasses(items);
+<<<<<<< HEAD
         setSelectedClassIds((current) => current.filter((id) => items.some((item) => item.id === id)));
         setSelectedId((current) =>
           current && items.some((item) => item.id === current) ? current : items[0]?.id ?? null,
         );
+=======
+        setSelectedId((current) => current ?? items[0]?.id ?? null);
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
       })
       .catch((error) => toast.error(getErrorMessage(error, "載入班級清單失敗")))
       .finally(() => setLoading(false));
@@ -966,6 +1012,7 @@ export default function ClassesAdminPage() {
     if (allowed) loadClasses();
     else setLoading(false);
   }, [allowed, loadClasses]);
+<<<<<<< HEAD
 
   const runBulkAction = async (action: "activate" | "deactivate" | "delete") => {
     if (selectedClassIds.length === 0) return;
@@ -987,6 +1034,8 @@ export default function ClassesAdminPage() {
       setBulkBusy(false);
     }
   };
+=======
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 
   if (!allowed) {
     return (
@@ -1020,6 +1069,7 @@ export default function ClassesAdminPage() {
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[360px_1fr]">
         <aside className="space-y-4">
           <CreateClassPanel onCreated={loadClasses} />
+<<<<<<< HEAD
           <ClassList
             classes={classes}
             selectedId={selectedId}
@@ -1029,6 +1079,9 @@ export default function ClassesAdminPage() {
             onBulkAction={runBulkAction}
             bulkBusy={bulkBusy}
           />
+=======
+          <ClassList classes={classes} selectedId={selectedId} onSelect={setSelectedId} />
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
         </aside>
         <main>
           {selectedId ? (

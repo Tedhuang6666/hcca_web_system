@@ -111,13 +111,20 @@ export default function MeetingJoinPage({ params }: { params: Promise<{ token: s
   const hasCheckedIn = attendance?.status === "present";
   const votedChoice = payload.my_ballot?.choice ?? null;
   const canCast = Boolean(activeVote && payload.can_vote && !votedChoice);
+<<<<<<< HEAD
   const myQueue = payload.my_speech_queue_items ?? [];
   const activeSpeech = payload.active_speech;
+=======
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col gap-4 px-5 py-5">
       <header>
+<<<<<<< HEAD
         <p className="text-xs font-medium text-[var(--muted)]">議員現場入口</p>
+=======
+        <p className="text-xs font-medium text-[var(--muted)]">現場工作台</p>
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
         <h1 className="mt-1 text-2xl font-semibold tracking-normal">{meeting.title}</h1>
         <div className="mt-3 grid gap-2 text-sm">
           <span className="inline-flex items-center gap-2 rounded-md border border-[var(--border)] px-3 py-2">
@@ -144,6 +151,7 @@ export default function MeetingJoinPage({ params }: { params: Promise<{ token: s
       </button>
 
       <section className="rounded-lg border border-[var(--border)] p-4">
+<<<<<<< HEAD
         <p className="text-xs font-medium text-[var(--muted)]">目前發言</p>
         <h2 className="mt-1 text-xl font-semibold">
           {activeSpeech?.speaker_name || "尚未開始發言"}
@@ -167,6 +175,8 @@ export default function MeetingJoinPage({ params }: { params: Promise<{ token: s
       </section>
 
       <section className="rounded-lg border border-[var(--border)] p-4">
+=======
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
         <p className="text-xs font-medium text-[var(--muted)]">目前議程</p>
         <h2 className="mt-1 text-xl font-semibold">{current?.title || "尚未選定議程"}</h2>
         {current?.description && <p className="mt-2 whitespace-pre-wrap text-sm">{current.description}</p>}
@@ -261,7 +271,11 @@ export default function MeetingJoinPage({ params }: { params: Promise<{ token: s
           <button
             onClick={() => createRequest("speech")}
             disabled={busyAction === "request-speech"}
+<<<<<<< HEAD
             className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[var(--primary)] px-4 py-3 text-sm font-semibold text-black">
+=======
+            className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-[var(--border)] px-4 py-3 text-sm">
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
             <MessageSquare size={16} aria-hidden="true" />
             {busyAction === "request-speech" ? "送出中..." : "請求發言"}
           </button>

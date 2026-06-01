@@ -11,6 +11,7 @@ os.environ.setdefault(
     "ALLOWED_HOSTS",
     '["localhost","127.0.0.1","api","test","testserver"]',
 )
+<<<<<<< HEAD
 # Load shedding 會根據 active_requests / 5xx_ratio / db_pool 動態擋 request。
 # 在 pytest 連續執行多 test 時，前面 test 故意觸發的 5xx 會污染同進程的滑動視窗，
 # 導致後面 test 全部 503。測試環境一律關閉。
@@ -67,6 +68,23 @@ def _isolate_redis_client_per_test():
             pass
         _security.redis_client.connection_pool = old_pool
 
+=======
+
+from collections.abc import AsyncGenerator  # noqa: E402
+from typing import Any  # noqa: E402
+
+import pytest_asyncio  # noqa: E402
+from httpx import ASGITransport, AsyncClient, Response  # noqa: E402
+from sqlalchemy import text  # noqa: E402
+from sqlalchemy.ext.asyncio import (  # noqa: E402
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
+from api import app  # noqa: E402
+from api.core.database import Base, get_db  # noqa: E402
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 
 # 優先使用 PostgreSQL test DB，支援 TSVECTOR 等 PG-specific 特性
 # 若無法連線，退回到 aiosqlite in-memory

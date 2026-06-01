@@ -286,9 +286,13 @@ async def create_meeting(
     payload: MeetingCreate, session: DbDep, current_user: CurrentUser
 ) -> Meeting:
     try:
+<<<<<<< HEAD
         meeting = await meeting_svc.create_meeting(
             session, data=payload, created_by=current_user.id
         )
+=======
+        meeting = await meeting_svc.create_meeting(session, data=payload, created_by=current_user.id)
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     await _record_event(
@@ -339,9 +343,13 @@ async def update_meeting(
 ) -> Meeting:
     meeting = await _meeting_or_404(session, meeting_id)
     old_agenda_item_id = meeting.current_agenda_item_id
+<<<<<<< HEAD
     meeting = await meeting_svc.update_meeting(
         session, meeting, data=payload, actor_id=current_user.id
     )
+=======
+    meeting = await meeting_svc.update_meeting(session, meeting, data=payload)
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
     values = payload.model_dump(exclude_unset=True, mode="json")
     if "current_agenda_item_id" in values and old_agenda_item_id != meeting.current_agenda_item_id:
         await _record_event(
@@ -385,6 +393,7 @@ async def update_meeting(
     summary="開始會議（meeting:chair）",
     dependencies=[Depends(require_permission(PermissionCode.MEETING_CHAIR))],
 )
+<<<<<<< HEAD
 async def start_meeting(
     meeting_id: uuid.UUID, session: DbDep, current_user: CurrentUser
 ) -> Meeting:
@@ -395,6 +404,11 @@ async def start_meeting(
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+=======
+async def start_meeting(meeting_id: uuid.UUID, session: DbDep, current_user: CurrentUser) -> Meeting:
+    meeting = await _meeting_or_404(session, meeting_id)
+    await meeting_svc.transition_meeting(session, meeting, status=MeetingStatus.ACTIVE)
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
     await _record_event(session, meeting, event_type="meeting.started", actor=current_user)
     await _broadcast_meeting(session, meeting.id, "meeting.started")
     return await _meeting_or_404(session, meeting.id)
@@ -425,6 +439,7 @@ async def open_checkin(meeting_id: uuid.UUID, session: DbDep, current_user: Curr
     summary="暫停會議（meeting:chair）",
     dependencies=[Depends(require_permission(PermissionCode.MEETING_CHAIR))],
 )
+<<<<<<< HEAD
 async def pause_meeting(
     meeting_id: uuid.UUID, session: DbDep, current_user: CurrentUser
 ) -> Meeting:
@@ -435,6 +450,11 @@ async def pause_meeting(
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+=======
+async def pause_meeting(meeting_id: uuid.UUID, session: DbDep, current_user: CurrentUser) -> Meeting:
+    meeting = await _meeting_or_404(session, meeting_id)
+    await meeting_svc.transition_meeting(session, meeting, status=MeetingStatus.PAUSED)
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
     await _record_event(session, meeting, event_type="meeting.paused", actor=current_user)
     await _broadcast_meeting(session, meeting.id, "meeting.paused")
     return await _meeting_or_404(session, meeting.id)
@@ -473,6 +493,7 @@ async def break_meeting(
     summary="結束會議（meeting:chair）",
     dependencies=[Depends(require_permission(PermissionCode.MEETING_CHAIR))],
 )
+<<<<<<< HEAD
 async def close_meeting(
     meeting_id: uuid.UUID, session: DbDep, current_user: CurrentUser
 ) -> Meeting:
@@ -483,6 +504,11 @@ async def close_meeting(
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+=======
+async def close_meeting(meeting_id: uuid.UUID, session: DbDep, current_user: CurrentUser) -> Meeting:
+    meeting = await _meeting_or_404(session, meeting_id)
+    await meeting_svc.transition_meeting(session, meeting, status=MeetingStatus.CLOSED)
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
     await _record_event(session, meeting, event_type="meeting.closed", actor=current_user)
     await _broadcast_meeting(session, meeting.id, "meeting.closed")
     return await _meeting_or_404(session, meeting.id)

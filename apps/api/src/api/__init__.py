@@ -56,10 +56,14 @@ from api.routers import (
     api_keys,
     audit,
     auth,
+<<<<<<< HEAD
     calendar,
     dashboard,
     data_lifecycle,
     discord,
+=======
+    dashboard,
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
     documents,
     documents_approve,
     documents_attachments,
@@ -75,8 +79,11 @@ from api.routers import (
     notifications,
     orgs,
     partner_map,
+<<<<<<< HEAD
     passkeys,
     people,
+=======
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
     petitions,
     policies,
     positions,
@@ -90,9 +97,12 @@ from api.routers import (
     shop,
     survey,
     tasks,
+<<<<<<< HEAD
     term_rollover,
     trash,
     user_lifecycle,
+=======
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
     user_positions,
     users,
     webhooks,
@@ -324,8 +334,11 @@ def create_app() -> FastAPI:
     app.include_router(reports.router)
     app.include_router(activities.router)
     app.include_router(orgs.router)
+<<<<<<< HEAD
     app.include_router(people.router)
     app.include_router(passkeys.router)
+=======
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
     app.include_router(partner_map.router)
     app.include_router(petitions.router)
     app.include_router(positions.router)
@@ -352,7 +365,10 @@ def create_app() -> FastAPI:
     app.include_router(analytics.router)
     app.include_router(dashboard.router)
     app.include_router(tasks.router)
+<<<<<<< HEAD
     app.include_router(work_items.router)
+=======
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
     app.include_router(line_webhook.router)
     app.include_router(ws.router)
     # Phase B1 / D2 新增

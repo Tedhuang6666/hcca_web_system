@@ -809,7 +809,11 @@ function StatsView({ activityId }: { activityId: string }) {
   useEffect(() => {
     Promise.all([
       orgsApi.list({ active_only: true }).catch(() => []),
+<<<<<<< HEAD
       shopApi.listProducts({ limit: "100", activity_id: activityId }).catch(() => []),
+=======
+      shopApi.listProducts({ limit: "100" }).catch(() => []),
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
       classApi.list({ limit: "500" }).catch(() => []),
       shopApi.orderSummary({ group_by: "user", activity_id: activityId }).catch(() => null),
     ]).then(([loadedOrgs, loadedProducts, loadedClasses, userSummary]) => {
@@ -1148,7 +1152,11 @@ export default function ShopAdminPage() {
     loadCategories();
     loadAllProducts();
     orgsApi.list({ active_only: true }).then(setOrgs).catch(() => setOrgs([]));
+<<<<<<< HEAD
   }, [activityId, allowed, loadAllProducts, loadCategories]);
+=======
+  }, [allowed, loadAllProducts, loadCategories]);
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 
   useEffect(() => { if (cat) loadSeries(cat.id); }, [cat, loadSeries]);
   useEffect(() => { if (series) loadProducts(series.id); }, [series, loadProducts]);

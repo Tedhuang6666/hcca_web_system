@@ -128,6 +128,7 @@ from api.models.partner_map import (  # noqa: F401
     PartnerTag,
     partner_business_tags,
 )
+<<<<<<< HEAD
 from api.models.passkey import PasskeyCredential, WebAuthnChallenge  # noqa: F401
 from api.models.person import (  # noqa: F401
     Person,
@@ -137,6 +138,8 @@ from api.models.person import (  # noqa: F401
     PersonAffiliationStatus,
     PersonStatus,
 )
+=======
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 from api.models.petition import (  # noqa: F401
     PetitionAttachment,
     PetitionAttachmentVisibility,

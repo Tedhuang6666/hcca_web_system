@@ -914,9 +914,13 @@ async def create_document(
         if existing is not None:
             raise ValueError("指定的公文字號已存在，請更換字號")
         serial = manual_serial
+<<<<<<< HEAD
     else:
         if data.serial_template_id is None:
             raise ValueError("請選擇字號模板，或手動指定公文字號")
+=======
+    elif data.serial_template_id:
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
         template = await get_serial_template(session, data.serial_template_id)
         if template is None or not template.is_active:
             msg = "指定的字號模板不存在或已停用"

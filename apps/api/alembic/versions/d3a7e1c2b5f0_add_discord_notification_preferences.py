@@ -18,7 +18,16 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def _has_table(name: str) -> bool:
+    bind = op.get_bind()
+    return sa.inspect(bind).has_table(name)
+
+
 def upgrade() -> None:
+    # 冪等保護：catch-up 漂移修補 migration (98ecdc290340) 已建立此表，
+    # 若先跑過則此處略過，避免 "already exists"。
+    if _has_table("discord_notification_preferences"):
+        return
     op.create_table(
         "discord_notification_preferences",
         sa.Column("user_id", sa.UUID(), nullable=False),
@@ -66,4 +75,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_table("discord_notification_preferences")
+    if _has_table("discord_notification_preferences"):
+        op.drop_table("discord_notification_preferences")

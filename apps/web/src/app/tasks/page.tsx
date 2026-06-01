@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import {
   FileText, Landmark, Scale, MessageSquare, CheckSquare, ShoppingCart,
   Utensils, Megaphone, Inbox, Loader2, AlertCircle, Clock, ChevronRight,
+<<<<<<< HEAD
   CalendarDays,
 } from "lucide-react";
 import {
@@ -18,6 +19,10 @@ import {
 } from "@/lib/api";
 import type { RegulationWorkflowStatus } from "@/lib/types";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
+=======
+} from "lucide-react";
+import { tasksApi, type TaskItem, type TaskInboxResponse, type TaskModule } from "@/lib/api";
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 
 type IconProps = { size: number; "aria-hidden": boolean };
 function FallbackModuleIcon(p: IconProps) { return <FileText {...p} />; }
@@ -31,8 +36,11 @@ const MODULE_ICONS: Record<TaskModule, React.ComponentType<IconProps>> = {
   shop: (p) => <ShoppingCart {...p} />,
   meal: (p) => <Utensils {...p} />,
   announcement: (p) => <Megaphone {...p} />,
+<<<<<<< HEAD
   calendar: (p) => <CalendarDays {...p} />,
   work_item: (p) => <CheckSquare {...p} />,
+=======
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 };
 
 const MODULE_LABEL: Record<TaskModule, string> = {
@@ -44,8 +52,11 @@ const MODULE_LABEL: Record<TaskModule, string> = {
   shop: "校商",
   meal: "學餐",
   announcement: "公告",
+<<<<<<< HEAD
   calendar: "行事曆",
   work_item: "工作",
+=======
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 };
 
 const SEVERITY_STYLES: Record<string, { color: string; bg: string; border: string; label: string }> = {
@@ -70,13 +81,17 @@ function formatDueAt(s?: string | null) {
 
 export default function TasksPage() {
   const [data, setData] = useState<TaskInboxResponse | null>(null);
+<<<<<<< HEAD
   const [docStats, setDocStats] = useState<DocumentStats | null>(null);
   const [regCounts, setRegCounts] = useState<Record<string, number>>({});
+=======
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<TaskModule | "all">("all");
 
   useEffect(() => {
     let mounted = true;
+<<<<<<< HEAD
     Promise.allSettled([
       tasksApi.list(),
       documentsApi.stats(),
@@ -95,6 +110,11 @@ export default function TasksPage() {
         });
       })
       .catch((e: unknown) => {
+=======
+    tasksApi.list()
+      .then((res) => { if (mounted) setData(res); })
+      .catch((e) => {
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
         toast.error("無法載入待辦中心");
         console.error(e);
       })
@@ -136,6 +156,7 @@ export default function TasksPage() {
         )}
       </header>
 
+<<<<<<< HEAD
       <section
         className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4"
         aria-label="治理工作台摘要"
@@ -152,6 +173,8 @@ export default function TasksPage() {
         <QuickAction href="/meetings" label="議事與通知單" detail="確認議程後產生開會通知單" />
       </section>
 
+=======
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
       {/* Tabs */}
       <div className="flex gap-0.5 p-1 rounded-xl overflow-x-auto"
         style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
@@ -180,7 +203,14 @@ export default function TasksPage() {
 
       {/* List */}
       {loading ? (
+<<<<<<< HEAD
         <ListPageSkeleton rows={5} showHeader={false} showFilters={false} />
+=======
+        <div className="flex items-center justify-center py-12">
+          <Loader2 size={20} className="animate-spin" aria-hidden={true}
+            style={{ color: "var(--text-muted)" }} />
+        </div>
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
       ) : filtered.length === 0 ? (
         <EmptyState />
       ) : (
@@ -192,6 +222,7 @@ export default function TasksPage() {
   );
 }
 
+<<<<<<< HEAD
 function WorkspaceMetric({
   href,
   label,
@@ -234,6 +265,8 @@ function QuickAction({ href, label, detail }: { href: string; label: string; det
   );
 }
 
+=======
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 function TaskRow({ t }: { t: TaskItem }) {
   const sev = SEVERITY_STYLES[t.severity] ?? SEVERITY_STYLES.info;
   const Icon = MODULE_ICONS[t.module] ?? FallbackModuleIcon;

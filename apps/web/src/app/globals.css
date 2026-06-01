@@ -71,6 +71,7 @@
 .partner-map-school-marker {
   position: relative;
   display: grid;
+<<<<<<< HEAD
   width: 34px;
   height: 34px;
   place-items: center;
@@ -100,6 +101,26 @@
 
 .partner-map-station-marker svg {
   transform: none;
+=======
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #123b73, #0f172a 58%, #c9a84c);
+  color: #fff8db;
+  border: 3px solid #fff;
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.3), 0 0 0 7px rgba(201, 168, 76, 0.16);
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.partner-map-school-marker::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border-radius: 20px;
+  border: 1px solid rgba(201, 168, 76, 0.55);
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 }
 
 .partner-map-user-marker {
@@ -126,17 +147,21 @@
   border-color: var(--border) !important;
 }
 
+<<<<<<< HEAD
 @media (max-width: 1023.98px) {
   .partner-map-leaflet .leaflet-bottom.leaflet-right {
     bottom: 168px;
   }
 }
 
+=======
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 .partner-map-leaflet .leaflet-control-attribution {
   background: color-mix(in srgb, var(--bg) 86%, transparent) !important;
   color: var(--text-muted) !important;
 }
 
+<<<<<<< HEAD
 .partner-map-theme-dark {
   background: #10151b;
 }
@@ -235,6 +260,8 @@
   background: rgba(201, 168, 76, 0.16);
 }
 
+=======
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 .partner-map-mobile-strip {
   scrollbar-width: none;
   scroll-padding-inline: 0.75rem;

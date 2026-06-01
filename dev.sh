@@ -79,6 +79,7 @@ _stream_log() {
     local prefix_color="$3"
     local line=""
 
+<<<<<<< HEAD
     {
         while IFS= read -r line || [[ -n "$line" ]]; do
             printf '%s\n' "$line" >&3     # raw → log 檔
@@ -163,6 +164,22 @@ if head -1 "${BASH_SOURCE[0]}" | grep -q $'\r$'; then
     }
     fix "CRLF 已修正，請重新執行 bash dev.sh"
     exit 0
+=======
+# ── 載入 .env ─────────────────────────────────────────────────────────────────
+ENV_FILE="${REPO_ROOT}/.env"
+if [[ -f "$ENV_FILE" ]]; then
+    info "載入環境變數：$ENV_FILE"
+    # 保留 JSON list 內的雙引號，避免 Bash source 將 ["..."] 變成 [...]。
+    while IFS= read -r line; do
+        [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+        key="${line%%=*}"
+        value="${line#*=}"
+        export "${key}=${value}"
+    done < "$ENV_FILE"
+    success ".env 載入完成"
+else
+    warn ".env 不存在，使用應用程式預設值（建議複製 .env.example 並填入實際數值）"
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 fi
 
 # 0.3 必要工具檢查

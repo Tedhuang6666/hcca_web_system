@@ -262,6 +262,7 @@ async def transition_meeting(
     return meeting
 
 
+<<<<<<< HEAD
 async def _sync_calendar_event(
     session: AsyncSession,
     meeting: Meeting,
@@ -276,6 +277,8 @@ async def _sync_calendar_event(
         logger.warning("sync meeting calendar event failed", exc_info=True)
 
 
+=======
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 async def _create_notice_document(
     session: AsyncSession,
     meeting: Meeting,
@@ -588,6 +591,28 @@ async def _normalize_voting_attendance(
                     else MeetingAttendance.id.is_not(None)
                 )
             )
+<<<<<<< HEAD
+=======
+            if duplicate is None:
+                legacy_rows = await session.execute(
+                    select(MeetingAttendance)
+                    .where(MeetingAttendance.meeting_id == meeting.id)
+                    .where(MeetingAttendance.voting_class_id.is_(None))
+                    .where(MeetingAttendance.is_voting_eligible == True)  # noqa: E712
+                    .where(
+                        MeetingAttendance.id != existing.id
+                        if existing is not None
+                        else MeetingAttendance.id.is_not(None)
+                    )
+                )
+                for legacy_record in legacy_rows.scalars().all():
+                    legacy_class = await active_voting_class_for_user(
+                        session, legacy_record.user_id
+                    )
+                    if legacy_class and legacy_class.id == voting_class.id:
+                        duplicate = legacy_record
+                        break
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
             if duplicate is not None:
                 label = class_svc.class_display_label(voting_class) or voting_class.class_code
                 raise ValueError(f"{label} 已有表決權人，請先移除原表決權人後再新增")
@@ -1447,6 +1472,7 @@ async def screen_payload(session: AsyncSession, meeting: Meeting) -> dict:
         "attendance_summary": await attendance_summary(session, meeting.id),
         "screen_state": await get_or_create_screen_state(session, meeting),
         "vote_roster": await vote_roster_payload(session, meeting, active_vote),
+<<<<<<< HEAD
         "active_speech": active_speech,
         "speech_queue": [
             item
@@ -1455,6 +1481,8 @@ async def screen_payload(session: AsyncSession, meeting: Meeting) -> dict:
             in {SpeechQueueStatus.QUEUED, SpeechQueueStatus.SPEAKING, SpeechQueueStatus.PAUSED}
         ],
         "timer_state": timer_state,
+=======
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
     }
 
 
@@ -1474,6 +1502,7 @@ async def join_payload(session: AsyncSession, meeting: Meeting, *, user_id: uuid
         if active_vote
         else None
     )
+<<<<<<< HEAD
     timer_state = await get_or_create_timer_state(session, meeting)
     active_speech = next(
         (
@@ -1484,6 +1513,8 @@ async def join_payload(session: AsyncSession, meeting: Meeting, *, user_id: uuid
         ),
         None,
     )
+=======
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
     return {
         "meeting": meeting,
         "current_agenda_item": current,
@@ -1496,6 +1527,7 @@ async def join_payload(session: AsyncSession, meeting: Meeting, *, user_id: uuid
         if active_vote
         else None,
         "my_ballot": my_ballot,
+<<<<<<< HEAD
         "my_speech_queue_items": [
             item
             for item in sorted(meeting.speech_queue, key=lambda item: item.order_index)
@@ -1505,6 +1537,8 @@ async def join_payload(session: AsyncSession, meeting: Meeting, *, user_id: uuid
         ],
         "active_speech": active_speech,
         "timer_state": timer_state,
+=======
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
     }
 
 

@@ -16,6 +16,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   "document-templates": "公文範本",
   meetings: "議事系統",
   regulations: "法規查詢",
+<<<<<<< HEAD
   announcements: "校內公告",
   shop: "校商訂購",
   meal: "學餐訂購",
@@ -24,6 +25,16 @@ const SEGMENT_LABELS: Record<string, string> = {
   petitions: "陳情中心",
   notifications: "通知中心",
   tasks: "我的待辦",
+=======
+  announcements: "公告",
+  shop: "校商訂購",
+  meal: "學餐訂購",
+  "partner-map": "特約地圖",
+  surveys: "問卷",
+  petitions: "陳情",
+  notifications: "通知中心",
+  tasks: "待辦中心",
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
   orgs: "組織",
   profile: "個人資料",
   admin: "管理",
@@ -32,11 +43,18 @@ const SEGMENT_LABELS: Record<string, string> = {
   "serial-templates": "字號模板",
   email: "電子郵件",
   settings: "設定",
+<<<<<<< HEAD
   about: "關於本系統",
 };
 
 const PATH_OVERRIDES: Record<string, string> = {
   "/":                            "平台首頁",
+=======
+};
+
+const PATH_OVERRIDES: Record<string, string> = {
+  "/":                            "儀表板",
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
   "/documents/new":               "新增公文",
   "/documents/delegations":       "簽核代理",
   "/regulations/new":             "新增法規",
@@ -54,12 +72,18 @@ const PATH_OVERRIDES: Record<string, string> = {
   "/petitions/manage":            "陳情管理",
   "/petitions/admin/types":       "陳情類型",
   "/admin/permissions":           "權限管理",
+<<<<<<< HEAD
   "/admin/people":                "人員身分",
   "/admin/classes":               "班級管理",
   "/settings/navigation":         "介面導覽設定",
   "/settings/notifications":      "通知偏好",
   "/settings/security":           "安全設定",
   "/about":                       "關於本系統",
+=======
+  "/admin/classes":               "班級管理",
+  "/settings/notifications":      "通知偏好",
+  "/settings/security":           "安全設定",
+>>>>>>> 27e0ebc9c13e971c3303ece60e51366e8c113b71
 };
 
 /**
