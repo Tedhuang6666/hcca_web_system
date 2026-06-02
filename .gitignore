@@ -82,7 +82,8 @@ test.env
 
 .dev-api.log
 .dev-web.log
-
+.dev-email-worker.log
+.dev-discord.log
 .dev-alembic-check.log
 .env.backup.*
 

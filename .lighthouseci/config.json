@@ -4,13 +4,7 @@
     "collect": {
       "numberOfRuns": 2,
       "settings": {
-        "preset": "desktop",
-        "emulatedFormFactor": "mobile",
-        "throttling": {
-          "rttMs": 150,
-          "throughputKbps": 1638.4,
-          "cpuSlowdownMultiplier": 4
-        }
+        "preset": "desktop"
       }
     },
     "assert": {

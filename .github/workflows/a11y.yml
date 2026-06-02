@@ -29,6 +29,11 @@ permissions:
   contents: read
   pull-requests: write
 
+# GitHub 已棄用 Node 20 runtime（2026-06-16 起強制 Node 24）。先用官方 opt-in
+# 旗標讓所有 JS action 直接跑 Node 24，免去逐一升級 action 版本的風險。
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   axe:
     name: axe-core scan
@@ -58,14 +63,19 @@ jobs:
       - name: Start Next.js (background)
         working-directory: apps/web
         run: |
-          npm run start &
-          # wait for it
+          # next.config 設 output:standalone，因此「不能」用 `next start`
+          #（會直接報錯退出）。改跑 standalone server，並手動補上 static / public
+          # ——next build 不會自動把它們放進 .next/standalone。
+          cp -r .next/static .next/standalone/.next/static
+          cp -r public .next/standalone/public
+          HOSTNAME=127.0.0.1 PORT=3000 node .next/standalone/server.js &
           for i in $(seq 1 30); do
             if curl -sf http://127.0.0.1:3000/ > /dev/null; then
-              echo "Next.js is up"; break;
+              echo "Next.js is up"; exit 0;
             fi
             sleep 2
           done
+          echo "::error::Next.js failed to start within 60s"; exit 1
 
       - name: Install axe-core CLI
         run: npm install -g @axe-core/cli@4.9
@@ -112,6 +122,23 @@ jobs:
         working-directory: apps/web
         run: npm run build
 
+      - name: Start Next.js (background)
+        working-directory: apps/web
+        run: |
+          # 同 axe job：output:standalone 不能用 `next start`，改跑 standalone server。
+          # treosh action 沒有可靠的 startServerCommand 輸入（原本的 START_SERVER_COMMAND
+          # env 根本不會被讀），所以這裡自行把 server 拉起來，action 只負責對既有 URL 收數據。
+          cp -r .next/static .next/standalone/.next/static
+          cp -r public .next/standalone/public
+          HOSTNAME=127.0.0.1 PORT=3000 node .next/standalone/server.js &
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:3000/ > /dev/null; then
+              echo "Next.js is up"; exit 0;
+            fi
+            sleep 2
+          done
+          echo "::error::Next.js failed to start within 60s"; exit 1
+
       - name: Lighthouse CI
         uses: treosh/lighthouse-ci-action@v12
         with:
@@ -121,6 +148,3 @@ jobs:
           configPath: ./.lighthouseci/config.json
           uploadArtifacts: true
           temporaryPublicStorage: true
-        env:
-          # 啟動 server
-          START_SERVER_COMMAND: cd apps/web && npm run start

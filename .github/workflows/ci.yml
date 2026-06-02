@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main, develop]
 
+# 官方 opt-in：讓所有 JS action 跑 Node 24，清掉 Node 20 棄用警告
+#（2026-06-16 起 Node 24 將成預設）。
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   lint:
     name: Ruff Lint & Mypy Types
