@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, policiesApi } from "@/lib/api";
 import { normalizeCouncilName } from "@/lib/copy";
+import { prefersReducedNetworkUsage } from "@/lib/data-saver";
 import type { PendingConsentItem, PolicyKind } from "@/lib/types";
 
 const KIND_LABEL: Record<PolicyKind, string> = {
@@ -25,6 +26,32 @@ const KIND_LABEL: Record<PolicyKind, string> = {
   cookie: "Cookie 政策",
   security: "安全政策",
 };
+
+const NO_PENDING_CACHE_PREFIX = "hcca-policy-no-pending";
+const NO_PENDING_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+
+function noPendingCacheKey(): string | null {
+  if (typeof window === "undefined") return null;
+  const userId = localStorage.getItem("user_id");
+  return userId ? `${NO_PENDING_CACHE_PREFIX}:${userId}` : null;
+}
+
+function hasFreshNoPendingCache(): boolean {
+  const key = noPendingCacheKey();
+  if (!key) return false;
+  const checkedAt = Number(localStorage.getItem(key));
+  return Number.isFinite(checkedAt) && Date.now() - checkedAt < NO_PENDING_CACHE_TTL_MS;
+}
+
+function writeNoPendingCache() {
+  const key = noPendingCacheKey();
+  if (key) localStorage.setItem(key, String(Date.now()));
+}
+
+function clearNoPendingCache() {
+  const key = noPendingCacheKey();
+  if (key) localStorage.removeItem(key);
+}
 
 export function PolicyConsentBanner({
   isAuthenticated,
@@ -36,16 +63,33 @@ export function PolicyConsentBanner({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadPending = useCallback(() => {
+  const loadPending = useCallback((force = false) => {
     if (!isAuthenticated) {
       setItems([]);
+      return () => {};
+    }
+    if (!force && hasFreshNoPendingCache()) {
+      setItems([]);
+      setError(null);
+      return () => {};
+    }
+    if (!force && prefersReducedNetworkUsage()) {
+      setItems([]);
+      setError(null);
       return () => {};
     }
     let cancelled = false;
     (async () => {
       try {
         const data = await policiesApi.pendingConsents();
-        if (!cancelled) setItems(data);
+        if (cancelled) return;
+        setItems(data);
+        if (data.length === 0) {
+          writeNoPendingCache();
+          setError(null);
+        } else {
+          clearNoPendingCache();
+        }
       } catch (e) {
         if (!cancelled && e instanceof ApiError && e.status !== 401) {
           setError(e.message);
@@ -62,7 +106,10 @@ export function PolicyConsentBanner({
   }, [loadPending]);
 
   useEffect(() => {
-    const handler = () => loadPending();
+    const handler = () => {
+      clearNoPendingCache();
+      loadPending(true);
+    };
     window.addEventListener("hcca:policy-consent-required", handler);
     return () => window.removeEventListener("hcca:policy-consent-required", handler);
   }, [loadPending]);
@@ -83,6 +130,7 @@ export function PolicyConsentBanner({
         }
       }
       setItems([]);
+      writeNoPendingCache();
     } catch (e) {
       setError((e as Error).message);
     } finally {
