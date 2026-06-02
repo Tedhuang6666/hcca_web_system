@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.models.org import Org
 from api.models.shop import Order, OrderItem, OrderStatus, Product
 from api.models.user import User
 from api.schemas.school_class import (
@@ -44,6 +45,19 @@ async def _make_user(db: AsyncSession, *, student_id: str | None = None) -> User
     return user
 
 
+async def _make_org(db: AsyncSession, *, name: str = "校商組織") -> Org:
+    org = Org(name=name)
+    db.add(org)
+    await db.flush()
+    return org
+
+
+async def _make_actor(db: AsyncSession) -> uuid.UUID:
+    """建立真實 user 並回傳 id，供 created_by / actor_id 等 FK 欄位使用。"""
+    user = await _make_user(db)
+    return user.id
+
+
 async def _make_class(db: AsyncSession, *, start: str = "11501", end: str = "11540") -> object:
     return await class_svc.create_class(
         db,
@@ -53,16 +67,17 @@ async def _make_class(db: AsyncSession, *, start: str = "11501", end: str = "115
             grade=1,
             ranges=[ClassStudentRangeCreate(student_id_start=start, student_id_end=end)],
         ),
-        created_by=uuid.uuid4(),
+        created_by=await _make_actor(db),
     )
 
 
 async def _make_product(
     db: AsyncSession, *, price: int = 100, stock: int = 50, sale_end: datetime | None = None
 ) -> Product:
-    creator = uuid.uuid4()
+    org = await _make_org(db)
+    creator = await _make_actor(db)
     category = await shop_svc.create_category(
-        db, data=ProductCategoryCreate(org_id=uuid.uuid4(), name="校商"), created_by=creator
+        db, data=ProductCategoryCreate(org_id=org.id, name="校商"), created_by=creator
     )
     series = await shop_svc.create_series(
         db, data=ProductSeriesCreate(category_id=category.id, name="衣服系列")
@@ -189,7 +204,7 @@ async def test_bulk_create_classes_builds_class_codes_and_student_ranges(
             academic_year=115,
             grades=[SchoolClassBulkGradeCreate(grade=1, class_start=1, class_end=2)],
         ),
-        created_by=uuid.uuid4(),
+        created_by=await _make_actor(db_session),
     )
 
     assert result.succeeded == 2
@@ -217,7 +232,7 @@ async def test_bulk_create_classes_allows_per_class_student_count_override(
                 )
             ],
         ),
-        created_by=uuid.uuid4(),
+        created_by=await _make_actor(db_session),
     )
 
     assert result.succeeded == 2
@@ -343,16 +358,18 @@ async def test_checkout_after_sale_end_is_rejected(
 
 
 async def test_set_order_paid_can_toggle_both_directions(db_session: AsyncSession) -> None:
+    org = await _make_org(db_session)
+    buyer = await _make_user(db_session)
     order = Order(
         serial_number="ORD-PAY-1",
-        user_id=uuid.uuid4(),
-        org_id=uuid.uuid4(),
+        user_id=buyer.id,
+        org_id=org.id,
         status=OrderStatus.PENDING,
         total_price=100,
     )
     db_session.add(order)
     await db_session.flush()
-    actor = uuid.uuid4()
+    actor = await _make_actor(db_session)
 
     await shop_svc.set_order_paid(db_session, order, is_paid=True, actor_id=actor)
     assert order.is_paid is True
@@ -367,12 +384,14 @@ async def test_set_order_paid_can_toggle_both_directions(db_session: AsyncSessio
 
 async def test_order_summary_groups_by_class_with_paid_split(db_session: AsyncSession) -> None:
     sc = await _make_class(db_session)
+    org = await _make_org(db_session)
+    buyer = await _make_user(db_session)
     db_session.add_all(
         [
             Order(
                 serial_number="ORD-S-1",
-                user_id=uuid.uuid4(),
-                org_id=uuid.uuid4(),
+                user_id=buyer.id,
+                org_id=org.id,
                 class_id=sc.id,
                 status=OrderStatus.PENDING,
                 total_price=200,
@@ -380,8 +399,8 @@ async def test_order_summary_groups_by_class_with_paid_split(db_session: AsyncSe
             ),
             Order(
                 serial_number="ORD-S-2",
-                user_id=uuid.uuid4(),
-                org_id=uuid.uuid4(),
+                user_id=buyer.id,
+                org_id=org.id,
                 class_id=sc.id,
                 status=OrderStatus.PENDING,
                 total_price=300,
@@ -389,8 +408,8 @@ async def test_order_summary_groups_by_class_with_paid_split(db_session: AsyncSe
             ),
             Order(
                 serial_number="ORD-S-3",
-                user_id=uuid.uuid4(),
-                org_id=uuid.uuid4(),
+                user_id=buyer.id,
+                org_id=org.id,
                 class_id=sc.id,
                 status=OrderStatus.CANCELLED,
                 total_price=999,
@@ -413,9 +432,10 @@ async def test_order_summary_filters_product_and_grade_amount(
     sc = await _make_class(db_session)
     product_a = await _make_product(db_session, price=100, stock=10)
     product_b = await _make_product(db_session, price=300, stock=10)
+    buyer = await _make_user(db_session)
     order = Order(
         serial_number="ORD-FILTER-1",
-        user_id=uuid.uuid4(),
+        user_id=buyer.id,
         org_id=product_a.org_id,
         class_id=sc.id,
         status=OrderStatus.PENDING,
@@ -455,9 +475,10 @@ async def test_product_create_rejects_unknown_series(db_session: AsyncSession) -
 
 
 async def test_draft_product_not_in_catalog_tree(db_session: AsyncSession) -> None:
-    creator = uuid.uuid4()
+    org = await _make_org(db_session)
+    creator = await _make_actor(db_session)
     category = await shop_svc.create_category(
-        db_session, data=ProductCategoryCreate(org_id=uuid.uuid4(), name="校商"), created_by=creator
+        db_session, data=ProductCategoryCreate(org_id=org.id, name="校商"), created_by=creator
     )
     series = await shop_svc.create_series(
         db_session, data=ProductSeriesCreate(category_id=category.id, name="文具系列")

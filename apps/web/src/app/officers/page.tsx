@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { Mail, UserRound } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -15,9 +16,12 @@ function OfficerCard({ officer }: { officer: PublicOfficerOut }) {
           className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full"
           style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
           {officer.avatar_url ? (
-            <img
+            <Image
               src={officer.avatar_url}
               alt={`${officer.display_name} 頭像`}
+              width={56}
+              height={56}
+              unoptimized
               className="h-14 w-14 rounded-full object-cover"
             />
           ) : (

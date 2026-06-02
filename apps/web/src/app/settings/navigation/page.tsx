@@ -61,6 +61,8 @@ export default function NavigationSettingsPage() {
       hasPrefix: (prefix: string) =>
         superuser || permissions.has("admin:all") || Array.from(permissions).some((p) => p.startsWith(prefix)),
     };
+    // ready 翻 true（掛載後）刻意觸發重算，從 localStorage 取得真正權限；body 未直接引用故停用規則。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
 
   const orderKey = surface === "desktop" ? "desktopOrder" : "mobileOrder";

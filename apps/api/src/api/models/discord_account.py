@@ -14,7 +14,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from api.core.database import Base
 from api.models.base import TimestampMixin
 
-
 DEFAULT_DM_CATEGORIES: dict[str, bool] = {
     "document_pending": True,
     "meeting_invited": True,

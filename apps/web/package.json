@@ -11,7 +11,7 @@
     "build": "next build --webpack",
     "analyze": "ANALYZE=true next build --webpack",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "node ./node_modules/eslint/bin/eslint.js",
     "type-check": "tsc --noEmit",
     "generate:types": "openapi-typescript http://localhost:8000/openapi.json -o ./src/lib/api-types.ts"
   },

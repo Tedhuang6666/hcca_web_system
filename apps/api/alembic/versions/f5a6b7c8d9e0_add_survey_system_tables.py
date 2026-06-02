@@ -3,6 +3,7 @@
 """
 
 from collections.abc import Sequence
+
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
@@ -39,7 +40,7 @@ def upgrade() -> None:
         sa.Column("description", sa.Text, nullable=True),
         # 修正點 2：加入 create_type=False，防止重複建立
         sa.Column("status", postgresql.ENUM("draft", "open", "closed", "archived",
-                                          name="surveystatus", create_type=False), 
+                                          name="surveystatus", create_type=False),
                   nullable=False, server_default="draft"),
         sa.Column("is_anonymous", sa.Boolean, nullable=False, server_default="false"),
         sa.Column("allow_multiple", sa.Boolean, nullable=False, server_default="false"),
@@ -66,7 +67,7 @@ def upgrade() -> None:
         sa.Column("question_text", sa.Text, nullable=False),
         # 修正點 3：加入 create_type=False
         sa.Column("question_type", postgresql.ENUM("text", "textarea", "single", "multiple", "rating", "date",
-                                                 name="questiontype", create_type=False), 
+                                                 name="questiontype", create_type=False),
                   nullable=False, server_default="text"),
         sa.Column("is_required", sa.Boolean, nullable=False, server_default="true"),
         sa.Column("options_json", sa.Text, nullable=True),

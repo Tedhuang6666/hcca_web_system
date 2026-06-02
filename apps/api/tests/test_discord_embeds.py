@@ -5,9 +5,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
-import pytest
+from datetime import UTC, datetime
 
 from api.services.discord_embeds import (
     Domain,
@@ -104,7 +102,7 @@ def test_build_embed_enforces_total_char_limit():
 
 
 def test_build_embed_timestamp_is_iso8601():
-    ts = datetime(2026, 6, 1, 8, 0, tzinfo=timezone.utc)
+    ts = datetime(2026, 6, 1, 8, 0, tzinfo=UTC)
     embed = build_embed(Domain.SYSTEM, Severity.INFO, title="t", timestamp=ts)
     assert embed["timestamp"].startswith("2026-06-01T08:00:00")
 

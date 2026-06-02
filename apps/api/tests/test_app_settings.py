@@ -81,7 +81,11 @@ def tmp_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
 # ── disabled / auth ────────────────────────────────────────────────────────
 
 
-async def test_settings_disabled_returns_404(client: AsyncClient, db_session: AsyncSession) -> None:
+async def test_settings_disabled_returns_404(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # 顯式關閉旗標：避免受 repo .env 的 ENABLE_ENV_EDITOR=true 影響而誤判。
+    monkeypatch.setattr(settings, "ENABLE_ENV_EDITOR", False)
     admin = await _seed_admin(db_session)
     _override_user(admin)
     resp = await client.get("/admin/system/settings")

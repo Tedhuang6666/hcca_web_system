@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -47,9 +48,12 @@ export default function CmsPage() {
               )}
             </header>
             {page.cover_image_url && (
-              <img
+              <Image
                 src={page.cover_image_url}
                 alt={page.cover_image_alt || page.title}
+                width={1200}
+                height={360}
+                unoptimized
                 className="max-h-[360px] w-full rounded-lg object-cover"
               />
             )}

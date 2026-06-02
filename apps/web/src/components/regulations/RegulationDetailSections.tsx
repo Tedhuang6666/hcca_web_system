@@ -43,7 +43,6 @@ type ParsedProposalSnapshot = {
 
 type ArticleDisplayRow = {
   article: RegulationArticleOut;
-  index: number;
   displayLabel: string;
   hiddenByChapter: boolean;
 };
@@ -394,7 +393,6 @@ export function WorkflowTimeline({
 
 export function ArticleRow({
   article,
-  index,
   displayLabel,
   hidden = false,
   chapterCollapsed = false,
@@ -406,7 +404,8 @@ export function ArticleRow({
   onClearHighlight,
 }: {
   article: RegulationArticleOut;
-  index: number;
+  /** 已棄用：保留相容，元件內未使用。 */
+  index?: number;
   displayLabel: string;
   /** 已棄用：原本控制摺疊預覽，新元件直接根據 hidden 隱藏。 */
   collapsed?: boolean;

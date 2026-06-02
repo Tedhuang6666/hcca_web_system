@@ -16,6 +16,8 @@ from api.models.survey import (
     SurveyResponse,
     SurveyStatus,
 )
+from api.models.org import Org
+from api.models.user import User
 from api.schemas.survey import (
     SurveyCreate,
     SurveyOut,
@@ -25,11 +27,27 @@ from api.schemas.survey import (
 from api.services import survey as survey_svc
 
 
+async def _make_user(db: AsyncSession) -> User:
+    user = User(email=f"u-{uuid.uuid4().hex[:8]}@test.edu", display_name="填答者")
+    db.add(user)
+    await db.flush()
+    return user
+
+
+async def _make_respondent_id(db: AsyncSession) -> uuid.UUID:
+    """survey_responses.respondent_id 對 users 有 FK，需真實 user。"""
+    return (await _make_user(db)).id
+
+
 async def _make_draft_survey(db: AsyncSession) -> Survey:
+    org = Org(name=f"問卷組織-{uuid.uuid4().hex[:6]}")
+    db.add(org)
+    await db.flush()
+    creator = await _make_user(db)
     return await survey_svc.create_survey(
         db,
-        data=SurveyCreate(title=f"測試問卷-{uuid.uuid4().hex[:8]}", org_id=uuid.uuid4()),
-        created_by=uuid.uuid4(),
+        data=SurveyCreate(title=f"測試問卷-{uuid.uuid4().hex[:8]}", org_id=org.id),
+        created_by=creator.id,
     )
 
 
@@ -80,7 +98,7 @@ async def test_get_survey_includes_response_count(db_session: AsyncSession) -> N
         db_session.add(
             SurveyResponse(
                 survey_id=survey.id,
-                respondent_id=uuid.uuid4(),
+                respondent_id=await _make_respondent_id(db_session),
                 submitted_at=datetime.now(UTC),
             )
         )
@@ -96,7 +114,7 @@ async def test_list_surveys_includes_response_count(db_session: AsyncSession) ->
     db_session.add(
         SurveyResponse(
             survey_id=survey.id,
-            respondent_id=uuid.uuid4(),
+            respondent_id=await _make_respondent_id(db_session),
             submitted_at=datetime.now(UTC),
         )
     )
@@ -147,7 +165,7 @@ async def test_build_survey_export_returns_xlsx(db_session: AsyncSession) -> Non
     survey.status = SurveyStatus.OPEN
     response = SurveyResponse(
         survey_id=survey.id,
-        respondent_id=uuid.uuid4(),
+        respondent_id=await _make_respondent_id(db_session),
         submitted_at=datetime.now(UTC),
     )
     db_session.add(response)

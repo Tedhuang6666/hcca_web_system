@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_client: "Posthog | None" = None
+_client: Posthog | None = None
 
 
 def init_posthog() -> bool:
@@ -53,6 +53,6 @@ def shutdown_posthog() -> None:
         _client.shutdown()
 
 
-def get_posthog_client() -> "Posthog | None":
+def get_posthog_client() -> Posthog | None:
     """回傳已初始化的 PostHog 客戶端，未啟用時回傳 None。"""
     return _client

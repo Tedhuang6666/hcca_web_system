@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
 import type { ComboboxOption } from "./Combobox";
@@ -42,6 +42,7 @@ export default function FreeformCombobox({
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listboxId = useId();
 
   useEffect(() => {
     if (!open) setKeyword(value);
@@ -101,6 +102,7 @@ export default function FreeformCombobox({
         type="text"
         role="combobox"
         aria-expanded={open}
+        aria-controls={listboxId}
         aria-autocomplete="list"
         aria-label={ariaLabel ?? placeholder}
         disabled={disabled}
@@ -160,6 +162,7 @@ export default function FreeformCombobox({
       )}
       {open && itemCount > 0 && (
         <ul
+          id={listboxId}
           role="listbox"
           className="absolute left-0 right-0 top-full z-30 mt-1 overflow-y-auto rounded-xl shadow-lg"
           style={{

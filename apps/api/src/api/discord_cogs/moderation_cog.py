@@ -10,7 +10,6 @@ from discord.ext import commands
 
 from api.discord_cogs._helpers import audit_discord_action, require_platform_admin
 
-
 _TIMEOUT_PRESETS = [
     ("5 分鐘", 5),
     ("10 分鐘", 10),

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import {
   FileText, Landmark, Scale, MessageSquare, CheckSquare, ShoppingCart,
-  Utensils, Megaphone, Inbox, Loader2, AlertCircle, Clock, ChevronRight,
+  Utensils, Megaphone, Inbox, AlertCircle, Clock, ChevronRight,
   CalendarDays,
 } from "lucide-react";
 import {

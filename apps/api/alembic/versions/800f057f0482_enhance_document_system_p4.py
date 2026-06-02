@@ -5,16 +5,17 @@ Revises: d05c8d53bf3a
 Create Date: 2026-04-10 01:50:32.619573
 
 """
-from typing import Sequence, Union
-from alembic import op
+from collections.abc import Sequence
+
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = '800f057f0482'
-down_revision: Union[str, Sequence[str], None] = 'd05c8d53bf3a'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = 'd05c8d53bf3a'
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     # 1. 建立 Sequence
@@ -65,7 +66,7 @@ def upgrade() -> None:
     op.add_column('documents', sa.Column('urgency', postgresql.ENUM('EXPRESS', 'PRIORITY', 'NORMAL', name='documenturgency', create_type=False), nullable=False))
     op.add_column('documents', sa.Column('classification', postgresql.ENUM('NORMAL', 'CONFIDENTIAL', 'SECRET', name='documentclassification', create_type=False), nullable=False))
     op.add_column('documents', sa.Column('category', postgresql.ENUM('DECREE', 'LETTER', 'ANNOUNCEMENT', 'REPORT', 'OTHER', name='documentcategory', create_type=False), nullable=False))
-    
+
     op.add_column('documents', sa.Column('subject', sa.String(length=500), nullable=True))
     op.add_column('documents', sa.Column('doc_description', sa.Text(), nullable=True))
     op.add_column('documents', sa.Column('action_required', sa.Text(), nullable=True))
@@ -81,11 +82,11 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_index(op.f('ix_documents_category'), table_name='documents')
-    
+
     columns_to_drop = [
-        'due_date', 'issued_at', 'handler_email', 'handler_phone', 
-        'handler_unit', 'handler_name', 'issuer_org_name', 
-        'action_required', 'doc_description', 'subject', 
+        'due_date', 'issued_at', 'handler_email', 'handler_phone',
+        'handler_unit', 'handler_name', 'issuer_org_name',
+        'action_required', 'doc_description', 'subject',
         'category', 'classification', 'urgency'
     ]
     for col in columns_to_drop:
@@ -103,7 +104,7 @@ def downgrade() -> None:
     op.execute("DROP TYPE IF EXISTS documenturgency")
     op.execute("DROP TYPE IF EXISTS documentclassification")
     op.execute("DROP TYPE IF EXISTS documentcategory")
-    
+
     # 移除 Sequence
     op.execute("DROP SEQUENCE IF EXISTS document_serial_seq")
     op.execute("DROP SEQUENCE IF EXISTS order_serial_seq")

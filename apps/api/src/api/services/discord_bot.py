@@ -1455,7 +1455,8 @@ def dispatch_user_dm(payload: dict[str, Any]) -> None:
         logger.warning("discord.user_dm user_id 非合法 UUID：%s", user_id_str)
         return
 
-    from sqlalchemy import create_engine, select as _select
+    from sqlalchemy import create_engine
+    from sqlalchemy import select as _select
     from sqlalchemy.orm import Session
 
     sync_url = settings.DATABASE_URL.replace("+asyncpg", "")

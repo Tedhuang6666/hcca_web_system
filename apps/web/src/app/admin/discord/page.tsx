@@ -38,7 +38,7 @@ const emptyConfig: DiscordGuildConfigIn = {
 };
 
 export default function DiscordAdminPage() {
-  const [configs, setConfigs] = useState<DiscordGuildConfigOut[]>([]);
+  const [, setConfigs] = useState<DiscordGuildConfigOut[]>([]);
   const [mappings, setMappings] = useState<DiscordRoleMappingOut[]>([]);
   const [nicknameRules, setNicknameRules] = useState<DiscordNicknamePrefixRuleOut[]>([]);
   const [orgChannelMappings, setOrgChannelMappings] = useState<DiscordOrgChannelMappingOut[]>([]);

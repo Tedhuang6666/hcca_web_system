@@ -400,9 +400,8 @@ class Settings(BaseSettings):
             self.OIDC_REDIRECT_URI = f"{origin}/auth/oidc/callback"
         if _is_local_url(self.PASSKEY_ORIGIN):
             self.PASSKEY_ORIGIN = origin
-        if self.PASSKEY_RP_ID in _LOCAL_HOSTS or not self.PASSKEY_RP_ID:
-            if host:
-                self.PASSKEY_RP_ID = host
+        if host and (self.PASSKEY_RP_ID in _LOCAL_HOSTS or not self.PASSKEY_RP_ID):
+            self.PASSKEY_RP_ID = host
 
         return self
 

@@ -29,19 +29,19 @@ def upgrade() -> None:
     op.execute("COMMIT")
 
     # ── 2. 更新數據 (此時事務會自動重新開始) ──────────────────────────────
-    
+
     # 更新 documents 表
     op.execute("""
         UPDATE documents
-        SET 
+        SET
             urgency = LOWER(urgency::text)::documenturgency,
             classification = LOWER(classification::text)::documentclassification,
             category = LOWER(category::text)::documentcategory,
             status = LOWER(status::text)::documentstatus
-        WHERE 
-            urgency::text ~ '^[A-Z]+$' OR 
-            classification::text ~ '^[A-Z]+$' OR 
-            category::text ~ '^[A-Z]+$' OR 
+        WHERE
+            urgency::text ~ '^[A-Z]+$' OR
+            classification::text ~ '^[A-Z]+$' OR
+            category::text ~ '^[A-Z]+$' OR
             status::text ~ '^[A-Z]+$'
     """)
 

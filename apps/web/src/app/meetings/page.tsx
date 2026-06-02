@@ -66,6 +66,8 @@ export default function MeetingsPage() {
 
   useEffect(() => {
     void load();
+    // 僅在掛載時載入一次；load 為元件內函式，刻意不列入相依。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function createMeeting() {

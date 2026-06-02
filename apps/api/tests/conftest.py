@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 
 # 測試用 HTTP client 以 base_url="http://test" 發送請求；
@@ -61,10 +62,8 @@ def _isolate_redis_client_per_test():
     try:
         yield
     finally:
-        try:
+        with contextlib.suppress(Exception):
             fresh_pool.disconnect(inuse_connections=True)
-        except Exception:
-            pass
         _security.redis_client.connection_pool = old_pool
 
 

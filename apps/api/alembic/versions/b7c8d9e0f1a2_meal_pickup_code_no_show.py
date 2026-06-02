@@ -11,8 +11,8 @@ Create Date: 2026-04-19 12:00:00.000000
 
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "b7c8d9e0f1a2"
@@ -34,12 +34,12 @@ def upgrade() -> None:
         UPDATE meal_orders
         SET pickup_code = sub.new_code
         FROM (
-            SELECT 
-                id, 
+            SELECT
+                id,
                 LPAD(ROW_NUMBER() OVER (ORDER BY created_at)::TEXT, 5, '0') as new_code
             FROM meal_orders
         ) AS sub
-        WHERE meal_orders.id = sub.id 
+        WHERE meal_orders.id = sub.id
         AND meal_orders.pickup_code IS NULL
     """)
 

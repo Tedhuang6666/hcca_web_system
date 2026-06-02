@@ -12,6 +12,7 @@ from api.schemas.document import (
     DocumentTemplateDraftCreate,
     DocumentTemplateUpdate,
     RecipientCreate,
+    SerialTemplateCreate,
 )
 from api.services import document as doc_svc
 
@@ -56,14 +57,24 @@ async def test_document_template_crud_and_create_draft(
     assert template.version == 2
     assert template.description == "常用核銷範本"
 
-    async def fake_serial(_: AsyncSession) -> str:
+    serial_template = await doc_svc.create_serial_template(
+        db_session,
+        data=SerialTemplateCreate(org_id=org.id, category_char="生"),
+        created_by=user.id,
+    )
+
+    async def fake_serial(_session: AsyncSession, _template: object) -> str:
         return "DOC-2026-000777"
 
-    monkeypatch.setattr(doc_svc, "generate_serial_number", fake_serial)
+    monkeypatch.setattr(doc_svc, "generate_serial_from_template", fake_serial)
     draft = await doc_svc.create_document_from_template(
         db_session,
         template=template,
-        data=DocumentTemplateDraftCreate(title="活動經費核銷函", handler_name="王小明"),
+        data=DocumentTemplateDraftCreate(
+            title="活動經費核銷函",
+            handler_name="王小明",
+            serial_template_id=serial_template.id,
+        ),
         created_by=user.id,
     )
     assert draft.serial_number == "DOC-2026-000777"

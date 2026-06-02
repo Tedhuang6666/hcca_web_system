@@ -968,11 +968,10 @@ export default function RegulationDetailPageClient() {
                   <div className="w-full min-w-0 flex-1 glass overflow-hidden" style={zoomStyle}>
                     {activeArticles.length === 0
                       ? <p className="p-6 text-center" style={{ color: "var(--text-muted)" }}>尚無條文記錄</p>
-                      : articleDisplayRows.map(({ article, index, displayLabel, hiddenByChapter }) => (
+                      : articleDisplayRows.map(({ article, displayLabel, hiddenByChapter }) => (
                           <ArticleRow
                             key={article.id}
                             article={article}
-                            index={index}
                             displayLabel={displayLabel}
                             collapsed={hiddenByChapter && !ARTICLE_IS_STRUCTURAL[article.article_type]}
                             hidden={hiddenByChapter}

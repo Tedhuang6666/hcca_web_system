@@ -32,7 +32,7 @@ export function useOnlineAutosave<T>({
 
   useEffect(() => {
     readyRef.current = false;
-    lastSavedJsonRef.current = JSON.stringify(value);
+    lastSavedJsonRef.current = JSON.stringify(valueRef.current);
     const timer = window.setTimeout(() => {
       readyRef.current = true;
     }, 0);

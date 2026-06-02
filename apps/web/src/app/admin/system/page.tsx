@@ -1290,6 +1290,44 @@ function RecentErrorsPanel() {
   );
 }
 
+function Action({
+  icon,
+  title,
+  desc,
+  onClick,
+  btnClass,
+  actionKey,
+  label,
+  busy,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  desc: string;
+  onClick: () => void;
+  btnClass: string;
+  actionKey: string;
+  label: string;
+  busy: string | null;
+}) {
+  return (
+    <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] p-3">
+      <div className="flex items-center gap-2 text-sm font-medium text-[var(--text-primary)]">
+        {icon}
+        {title}
+      </div>
+      <p className="mt-1 text-xs text-[var(--text-muted)]">{desc}</p>
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={busy !== null}
+        className={`btn ${btnClass} mt-3 w-full`}
+      >
+        {busy === actionKey ? "執行中…" : label}
+      </button>
+    </div>
+  );
+}
+
 function RecoveryToolsPanel({ onChanged }: { onChanged: () => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<string | null>(null);
@@ -1352,40 +1390,6 @@ function RecoveryToolsPanel({ onChanged }: { onChanged: () => void }) {
     }
   };
 
-  const Action = ({
-    icon,
-    title,
-    desc,
-    onClick,
-    btnClass,
-    actionKey,
-    label,
-  }: {
-    icon: React.ReactNode;
-    title: string;
-    desc: string;
-    onClick: () => void;
-    btnClass: string;
-    actionKey: string;
-    label: string;
-  }) => (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] p-3">
-      <div className="flex items-center gap-2 text-sm font-medium text-[var(--text-primary)]">
-        {icon}
-        {title}
-      </div>
-      <p className="mt-1 text-xs text-[var(--text-muted)]">{desc}</p>
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={busy !== null}
-        className={`btn ${btnClass} mt-3 w-full`}
-      >
-        {busy === actionKey ? "執行中…" : label}
-      </button>
-    </div>
-  );
-
   return (
     <Panel title="快速復原工具" icon={<Wrench size={18} aria-hidden />}>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -1397,6 +1401,7 @@ function RecoveryToolsPanel({ onChanged }: { onChanged: () => void }) {
           btnClass="btn-secondary"
           actionKey="cache"
           label="清除快取"
+          busy={busy}
         />
         <Action
           icon={<Database size={16} aria-hidden />}
@@ -1406,6 +1411,7 @@ function RecoveryToolsPanel({ onChanged }: { onChanged: () => void }) {
           btnClass="btn-secondary"
           actionKey="db"
           label="升級資料庫"
+          busy={busy}
         />
         <Action
           icon={<RotateCcw size={16} aria-hidden />}
@@ -1415,6 +1421,7 @@ function RecoveryToolsPanel({ onChanged }: { onChanged: () => void }) {
           btnClass="btn-danger"
           actionKey="restart"
           label="重啟服務"
+          busy={busy}
         />
       </div>
       {lastResult && (

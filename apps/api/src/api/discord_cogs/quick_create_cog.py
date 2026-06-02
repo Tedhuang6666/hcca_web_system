@@ -16,7 +16,7 @@ from discord.ext import commands
 from sqlalchemy import select
 
 from api.core.database import AsyncSessionLocal
-from api.discord_cogs._autocomplete import due_at_autocomplete, parse_due_at
+from api.discord_cogs._autocomplete import parse_due_at
 from api.discord_cogs._helpers import has_permission, require_bound_user
 from api.models.org import Position, UserPosition
 from api.models.user import User

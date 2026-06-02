@@ -282,7 +282,7 @@ export default function ShopPage() {
       })
       .catch((e) => toast.error(e instanceof ApiError ? e.message : "載入失敗"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [setSelectedCategoryId]);
 
   const loadCart = useCallback(() => {
     shopApi

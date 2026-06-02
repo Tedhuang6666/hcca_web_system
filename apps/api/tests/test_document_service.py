@@ -201,18 +201,16 @@ async def test_decree_print_hides_empty_recipient_and_subject() -> None:
 async def test_create_document_generates_serial() -> None:
     """create_document 應自動生成字號並建立初始版本"""
     session = _make_session()
+    # 手動字號路徑會先查重；回傳 None 表示字號未被使用。
+    session.scalar = AsyncMock(return_value=None)
 
-    # 服務層呼叫 generate_serial_number，mock 回傳固定值
     async def return_created_document(*_: object) -> Document:
         return session.add.call_args_list[0].args[0]
 
-    with (
-        patch("api.services.document.generate_serial_number", return_value="DOC-2026-000001"),
-        patch("api.services.document.get_document", side_effect=return_created_document),
-    ):
+    with patch("api.services.document.get_document", side_effect=return_created_document):
         doc = await create_document(
             session,
-            data=_make_create_payload(),
+            data=_make_create_payload(manual_serial_number="DOC-2026-000001"),
             created_by=uuid.uuid4(),
         )
 

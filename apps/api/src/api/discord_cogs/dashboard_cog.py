@@ -16,7 +16,6 @@ from sqlalchemy import select
 
 from api.core.database import AsyncSessionLocal
 from api.discord_cogs._helpers import require_bound_user
-from api.discord_cogs._views import DocumentActionView, PetitionManageView
 from api.models.calendar import CalendarEvent, CalendarEventParticipant
 from api.models.meeting import Meeting, MeetingStatus
 from api.models.org import Position, UserPosition

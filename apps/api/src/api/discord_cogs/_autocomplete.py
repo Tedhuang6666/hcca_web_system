@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import uuid
 from datetime import UTC, datetime, timedelta
 
 import discord
@@ -16,7 +15,6 @@ from api.core.database import AsyncSessionLocal
 from api.discord_cogs._helpers import bound_user
 from api.models.petition import PetitionCase
 from api.models.work_item import WorkItem
-
 
 DUE_AT_PRESETS: list[tuple[str, int]] = [
     ("今天 18:00", 0),

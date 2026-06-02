@@ -361,9 +361,6 @@ export default function PeopleAdminPage() {
           ) : detail ? (
             <PersonDetailPanel
               person={detail}
-              classes={classes}
-              orgs={orgs}
-              positions={positions}
               users={users}
               onChanged={refreshAll}
               onAssign={() => setShowAffiliation(true)}
@@ -428,17 +425,11 @@ function Stat({ icon, label, value }: { icon: React.ReactNode; label: string; va
 
 function PersonDetailPanel({
   person,
-  classes,
-  orgs,
-  positions,
   users,
   onChanged,
   onAssign,
 }: {
   person: PersonDetailOut;
-  classes: SchoolClassListItem[];
-  orgs: OrgRead[];
-  positions: PositionSummary[];
   users: AdminUserDetail[];
   onChanged: () => Promise<void>;
   onAssign: () => void;
