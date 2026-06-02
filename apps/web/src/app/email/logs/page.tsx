@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { ApiError, emailApi } from "@/lib/api";
-import type { EmailMessageOut, EmailStatus } from "@/lib/types";
+import type { EmailMessageDetailOut, EmailMessageOut, EmailStatus } from "@/lib/types";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import SmartEmptyState from "@/components/ui/SmartEmptyState";
 
@@ -15,6 +15,7 @@ const TABS: { key: string; label: string }[] = [
   { key: "queued", label: "寄送中" },
   { key: "sent", label: "已寄送" },
   { key: "failed", label: "失敗" },
+  { key: "partial", label: "部分失敗" },
 ];
 
 const STATUS_META: Record<EmailStatus, { label: string; color: string }> = {
@@ -23,6 +24,7 @@ const STATUS_META: Record<EmailStatus, { label: string; color: string }> = {
   queued: { label: "寄送中", color: "var(--primary)" },
   sent: { label: "已寄送", color: "var(--success)" },
   failed: { label: "失敗", color: "var(--danger)" },
+  partial: { label: "部分失敗", color: "var(--warning)" },
   cancelled: { label: "已取消", color: "var(--text-muted)" },
 };
 
@@ -34,6 +36,7 @@ function fmt(iso: string | null): string {
 export default function EmailLogsPage() {
   const [tab, setTab] = useState("");
   const [rows, setRows] = useState<EmailMessageOut[]>([]);
+  const [detail, setDetail] = useState<EmailMessageDetailOut | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -58,6 +61,17 @@ export default function EmailLogsPage() {
       load();
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "寄送失敗");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const showDetail = async (id: string) => {
+    setBusyId(id);
+    try {
+      setDetail(await emailApi.getMessage(id));
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "載入詳情失敗");
     } finally {
       setBusyId(null);
     }
@@ -146,6 +160,13 @@ export default function EmailLogsPage() {
                     {meta.label}
                   </span>
                   <div className="flex gap-1.5">
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      disabled={busyId === m.id}
+                      onClick={() => showDetail(m.id)}
+                    >
+                      詳情
+                    </button>
                     {m.status === "draft" && (
                       <>
                         <Link href={`/email?draft=${m.id}`} className="btn btn-ghost btn-sm">
@@ -183,6 +204,52 @@ export default function EmailLogsPage() {
           </ul>
         )}
       </section>
+
+      {detail && (
+        <section className="card p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="truncate text-base font-semibold">{detail.subject}</h2>
+              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                {detail.sender_name ?? "—"} · {detail.recipient_count} 人 · {fmt(detail.created_at)}
+              </p>
+            </div>
+            <button className="btn btn-ghost btn-sm" onClick={() => setDetail(null)}>
+              關閉
+            </button>
+          </div>
+
+          <div className="mt-4 grid gap-2 sm:grid-cols-3">
+            {(["queued", "sent", "failed"] as const).map((key) => (
+              <div key={key} className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--border)" }}>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  {STATUS_META[key].label}
+                </p>
+                <p className="mt-1 text-lg font-semibold">{detail.recipient_status_counts[key] ?? 0}</p>
+              </div>
+            ))}
+          </div>
+
+          {detail.error_detail && (
+            <p className="mt-4 rounded-lg px-3 py-2 text-sm" style={{ background: "var(--danger-soft)", color: "var(--danger)" }}>
+              {detail.error_detail}
+            </p>
+          )}
+
+          {detail.recent_errors.length > 0 && (
+            <div className="mt-4">
+              <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
+                最近錯誤
+              </p>
+              <ul className="mt-2 space-y-1 text-sm" style={{ color: "var(--danger)" }}>
+                {detail.recent_errors.map((err, idx) => (
+                  <li key={`${idx}-${err}`}>{err}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
 }

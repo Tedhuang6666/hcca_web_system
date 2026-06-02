@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated, Literal
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -17,8 +19,13 @@ from api.core.config import settings
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.permissions import require_any
-from api.email.sender import enqueue_rendered, render_generic_message
-from api.models.email_message import EmailMessage, EmailStatus
+from api.email.renderer import (
+    build_personalization_context,
+    validate_required_variables,
+    validate_variable_definitions,
+)
+from api.email.sender import enqueue_rendered, render_generic_message, render_generic_subject
+from api.models.email_message import EmailCampaignRecipient, EmailMessage, EmailStatus
 from api.models.user import User
 from api.services import audit as audit_svc
 from api.services.permission import get_user_permission_codes
@@ -54,9 +61,9 @@ class RecipientSelector(BaseModel):
     include_school：全部校內使用者（email 屬校內網域）。
     """
 
-    user_ids: list[uuid.UUID] = []
-    position_ids: list[uuid.UUID] = []
-    org_ids: list[uuid.UUID] = []
+    user_ids: list[uuid.UUID] = Field(default_factory=list)
+    position_ids: list[uuid.UUID] = Field(default_factory=list)
+    org_ids: list[uuid.UUID] = Field(default_factory=list)
     include_all: bool = False
     include_school: bool = False
 
@@ -66,16 +73,34 @@ class CardRow(BaseModel):
     value: str = Field(min_length=1, max_length=200)
 
 
+class EmailVariableDefinition(BaseModel):
+    key: str = Field(min_length=1, max_length=64)
+    label: str = Field(default="", max_length=80)
+    required: bool = False
+    default_value: str = Field(default="", max_length=500)
+
+
+class EmailRecipientVariableInput(BaseModel):
+    user_id: uuid.UUID | None = None
+    email: str | None = Field(default=None, max_length=255)
+    name: str | None = Field(default=None, max_length=100)
+    variables: dict[str, str] = Field(default_factory=dict)
+
+
 class EmailComposePayload(BaseModel):
     """寄信內容（預覽 / 草稿 / 寄送共用）。"""
 
     subject: str = Field(min_length=1, max_length=255)
     heading: str = Field(default="", max_length=200)
     body: str = ""  # 富文本 HTML（渲染時以 bleach 清洗）
-    card_rows: list[CardRow] = []
+    card_rows: list[CardRow] = Field(default_factory=list)
     cta_label: str = Field(default="", max_length=40)
     cta_url: str = Field(default="", max_length=500)
-    recipients: RecipientSelector = RecipientSelector()
+    recipients: RecipientSelector = Field(default_factory=RecipientSelector)
+    variable_definitions: list[EmailVariableDefinition] = Field(default_factory=list)
+    default_variables: dict[str, str] = Field(default_factory=dict)
+    recipient_variables: list[EmailRecipientVariableInput] = Field(default_factory=list)
+    preview_variables: dict[str, str] = Field(default_factory=dict)
 
 
 class EmailMessageCreate(EmailComposePayload):
@@ -93,6 +118,9 @@ class EmailMessageUpdate(BaseModel):
     cta_label: str | None = Field(default=None, max_length=40)
     cta_url: str | None = Field(default=None, max_length=500)
     recipients: RecipientSelector | None = None
+    variable_definitions: list[EmailVariableDefinition] | None = None
+    default_variables: dict[str, str] | None = None
+    recipient_variables: list[EmailRecipientVariableInput] | None = None
     scheduled_at: datetime | None = None
 
 
@@ -126,8 +154,31 @@ class EmailMessageDetailOut(EmailMessageOut):
     cta_label: str
     cta_url: str
     recipient_spec: dict
+    variable_definitions: list[dict]
+    default_variables: dict
+    recipient_variables: list[dict]
     resolved_emails: list[str]
+    recipient_status_counts: dict[str, int]
+    recent_errors: list[str]
     error_detail: str | None
+
+
+class EmailCampaignRecipientOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    message_id: uuid.UUID
+    user_id: uuid.UUID | None
+    email: str
+    name: str | None
+    variables: dict
+    status: str
+    celery_task_id: str | None
+    provider_id: str | None
+    sent_at: datetime | None
+    error_detail: str | None
+    created_at: datetime
+    updated_at: datetime
 
 
 class TestSendOut(BaseModel):
@@ -136,6 +187,15 @@ class TestSendOut(BaseModel):
 
 
 # ── 內部輔助 ──────────────────────────────────────────────────────────────────
+
+
+@dataclass
+class PersonalizedRecipient:
+    user_id: uuid.UUID | None
+    email: str
+    name: str | None
+    student_id: str | None
+    variables: dict[str, str]
 
 
 def _to_utc(dt: datetime) -> datetime:
@@ -157,6 +217,117 @@ def _spec_from_selector(sel: RecipientSelector) -> dict:
 
 def _is_bulk(sel: RecipientSelector) -> bool:
     return bool(sel.position_ids or sel.org_ids or sel.include_all or sel.include_school)
+
+
+def _safe_url_or_empty(value: str) -> str:
+    if not value:
+        return ""
+    parsed = urlparse(value)
+    if parsed.scheme not in {"http", "https", "mailto"}:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="CTA 連結只允許 http、https 或 mailto",
+        )
+    return value
+
+
+def _normalize_definitions(definitions: list[EmailVariableDefinition]) -> list[dict]:
+    try:
+        return validate_variable_definitions([d.model_dump() for d in definitions])
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+
+def _merged_custom_variables(
+    definitions: list[dict], defaults: dict[str, str], recipient_vars: dict[str, str]
+) -> dict[str, str]:
+    allowed = {str(item["key"]) for item in definitions}
+    merged: dict[str, str] = {
+        str(item["key"]): str(item.get("default_value") or "") for item in definitions
+    }
+    merged.update({k: str(v) for k, v in defaults.items() if k in allowed})
+    merged.update({k: str(v) for k, v in recipient_vars.items() if k in allowed})
+    return merged
+
+
+def _make_personalization_context(row: PersonalizedRecipient) -> dict:
+    return build_personalization_context(
+        user_id=row.user_id,
+        name=row.name,
+        email=row.email,
+        student_id=row.student_id,
+        custom_variables=row.variables,
+    )
+
+
+async def _resolve_personalized_recipients(
+    db: AsyncSession,
+    msg: EmailMessage,
+) -> list[PersonalizedRecipient]:
+    users, emails = await resolve_recipients(
+        db, **spec_to_resolve_kwargs(msg.recipient_spec or {})
+    )
+    definitions = list(msg.variable_definitions or [])
+    defaults = {str(k): str(v) for k, v in (msg.default_variables or {}).items()}
+    inputs = list(msg.recipient_variables or [])
+    by_user_id = {str(row.get("user_id")): row for row in inputs if row.get("user_id")}
+    by_email = {
+        str(row.get("email", "")).strip().lower(): row
+        for row in inputs
+        if str(row.get("email", "")).strip()
+    }
+
+    rows: list[PersonalizedRecipient] = []
+    seen_emails: set[str] = set()
+    for user_obj, email in zip(users, emails, strict=False):
+        imported = by_user_id.get(str(user_obj.id)) or by_email.get(email.strip().lower()) or {}
+        custom = _merged_custom_variables(
+            definitions, defaults, dict(imported.get("variables") or {})
+        )
+        label = user_obj.display_name or email
+        try:
+            validate_required_variables(definitions, custom, recipient_label=label)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            ) from exc
+        normalized_email = email.strip().lower()
+        seen_emails.add(normalized_email)
+        rows.append(
+            PersonalizedRecipient(
+                user_id=user_obj.id,
+                email=email,
+                name=user_obj.display_name,
+                student_id=user_obj.student_id,
+                variables=custom,
+            )
+        )
+
+    for imported in inputs:
+        email = str(imported.get("email") or "").strip()
+        if not email or email.lower() in seen_emails:
+            continue
+        custom = _merged_custom_variables(
+            definitions, defaults, dict(imported.get("variables") or {})
+        )
+        label = str(imported.get("name") or email)
+        try:
+            validate_required_variables(definitions, custom, recipient_label=label)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            ) from exc
+        seen_emails.add(email.lower())
+        rows.append(
+            PersonalizedRecipient(
+                user_id=None,
+                email=email,
+                name=str(imported.get("name") or "") or None,
+                student_id=None,
+                variables=custom,
+            )
+        )
+    return rows
 
 
 async def _ensure_can_send(db: AsyncSession, user: User, sel: RecipientSelector) -> None:
@@ -193,36 +364,76 @@ async def _check_quota(db: AsyncSession, user: User, count: int) -> None:
 
 
 def _apply_compose(msg: EmailMessage, payload: EmailComposePayload) -> None:
+    definitions = _normalize_definitions(payload.variable_definitions)
     msg.subject = payload.subject
     msg.body = payload.body
     msg.template = "generic"
     msg.context = {
         "heading": payload.heading,
         "card_rows": [r.model_dump() for r in payload.card_rows],
-        "cta_url": payload.cta_url,
+        "cta_url": _safe_url_or_empty(payload.cta_url),
         "cta_label": payload.cta_label,
     }
     msg.recipient_spec = _spec_from_selector(payload.recipients)
+    msg.variable_definitions = definitions
+    msg.default_variables = {
+        k: str(v)
+        for k, v in payload.default_variables.items()
+        if k in {str(item["key"]) for item in definitions}
+    }
+    msg.recipient_variables = [
+        {
+            "user_id": str(row.user_id) if row.user_id else None,
+            "email": row.email,
+            "name": row.name,
+            "variables": {
+                k: str(v)
+                for k, v in row.variables.items()
+                if k in {str(item["key"]) for item in definitions}
+            },
+        }
+        for row in payload.recipient_variables
+    ]
 
 
 async def _send_now(db: AsyncSession, user: User, msg: EmailMessage) -> None:
     """解析收件人、配額檢查、渲染、逐封排入寄送佇列，並更新 msg 狀態。"""
-    _users, emails = await resolve_recipients(
-        db, **spec_to_resolve_kwargs(msg.recipient_spec or {})
-    )
-    if not emails:
+    rows = await _resolve_personalized_recipients(db, msg)
+    if not rows:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="解析後無有效收件人"
         )
-    await _check_quota(db, user, len(emails))
-    html = render_generic_message(msg.subject, msg.body, msg.context or {})
-    task_ids = enqueue_rendered(emails, msg.subject, html, str(msg.id))
-    msg.resolved_emails = emails
-    msg.recipient_count = len(emails)
+    await _check_quota(db, user, len(rows))
+    await db.execute(delete(EmailCampaignRecipient).where(EmailCampaignRecipient.message_id == msg.id))
+    await db.flush()
+    recipient_models: list[EmailCampaignRecipient] = []
+    for row in rows:
+        recipient = EmailCampaignRecipient(
+            message_id=msg.id,
+            user_id=row.user_id,
+            email=row.email,
+            name=row.name,
+            variables=row.variables,
+        )
+        db.add(recipient)
+        recipient_models.append(recipient)
+    await db.flush()
+    msg.resolved_emails = [row.email for row in rows]
+    msg.recipient_count = len(rows)
     msg.status = EmailStatus.QUEUED
-    msg.celery_task_id = task_ids[0] if task_ids else None
     msg.scheduled_at = None
     msg.error_detail = None
+    await db.flush()
+    task_ids: list[str] = []
+    for row, recipient in zip(rows, recipient_models, strict=True):
+        personal = _make_personalization_context(row)
+        subject = render_generic_subject(msg.subject, personal)
+        html = render_generic_message(msg.subject, msg.body, msg.context or {}, personal)
+        task_ids.extend(
+            enqueue_rendered([row.email], subject, html, str(msg.id), str(recipient.id))
+        )
+        recipient.celery_task_id = task_ids[-1] if task_ids else None
+    msg.celery_task_id = task_ids[0] if task_ids else None
 
 
 def _to_out(msg: EmailMessage, sender_name: str | None) -> EmailMessageOut:
@@ -241,7 +452,12 @@ def _to_out(msg: EmailMessage, sender_name: str | None) -> EmailMessageOut:
 
 
 def _to_detail(
-    msg: EmailMessage, sender_name: str | None, *, can_view_emails: bool
+    msg: EmailMessage,
+    sender_name: str | None,
+    *,
+    can_view_emails: bool,
+    recipient_status_counts: dict[str, int] | None = None,
+    recent_errors: list[str] | None = None,
 ) -> EmailMessageDetailOut:
     ctx = msg.context or {}
     return EmailMessageDetailOut(
@@ -252,7 +468,12 @@ def _to_detail(
         cta_label=str(ctx.get("cta_label", "")),
         cta_url=str(ctx.get("cta_url", "")),
         recipient_spec=msg.recipient_spec or {},
+        variable_definitions=list(msg.variable_definitions or []),
+        default_variables=dict(msg.default_variables or {}),
+        recipient_variables=list(msg.recipient_variables or []),
         resolved_emails=list(msg.resolved_emails or []) if can_view_emails else [],
+        recipient_status_counts=recipient_status_counts or {},
+        recent_errors=recent_errors or [],
         error_detail=msg.error_detail,
     )
 
@@ -308,15 +529,29 @@ async def preview_recipients(
 
 @router.post("/preview", response_model=EmailPreviewOut, summary="渲染品牌信件預覽 HTML")
 async def preview_email(body: EmailComposePayload, user: EmailUser) -> EmailPreviewOut:
+    definitions = _normalize_definitions(body.variable_definitions)
+    custom = _merged_custom_variables(definitions, body.default_variables, body.preview_variables)
+    try:
+        validate_required_variables(definitions, custom, recipient_label=user.display_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    personal = build_personalization_context(
+        user_id=user.id,
+        name=user.display_name,
+        email=user.email,
+        student_id=user.student_id,
+        custom_variables=custom,
+    )
     html = render_generic_message(
         body.subject,
         body.body,
         {
             "heading": body.heading,
             "card_rows": [r.model_dump() for r in body.card_rows],
-            "cta_url": body.cta_url,
+            "cta_url": _safe_url_or_empty(body.cta_url),
             "cta_label": body.cta_label,
         },
+        personal,
     )
     return EmailPreviewOut(html=html)
 
@@ -329,17 +564,32 @@ async def test_send(body: EmailComposePayload, user: EmailUser) -> TestSendOut:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="您的帳號沒有 Email"
         )
+    definitions = _normalize_definitions(body.variable_definitions)
+    custom = _merged_custom_variables(definitions, body.default_variables, body.preview_variables)
+    try:
+        validate_required_variables(definitions, custom, recipient_label=user.display_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    personal = build_personalization_context(
+        user_id=user.id,
+        name=user.display_name,
+        email=user.email,
+        student_id=user.student_id,
+        custom_variables=custom,
+    )
+    subject = render_generic_subject(body.subject, personal)
     html = render_generic_message(
         body.subject,
         body.body,
         {
             "heading": body.heading,
             "card_rows": [r.model_dump() for r in body.card_rows],
-            "cta_url": body.cta_url,
+            "cta_url": _safe_url_or_empty(body.cta_url),
             "cta_label": body.cta_label,
         },
+        personal,
     )
-    enqueue_rendered([user.email], f"[測試] {body.subject}", html)
+    enqueue_rendered([user.email], f"[測試] {subject}", html)
     return TestSendOut(status="queued", sent_to=user.email)
 
 
@@ -402,13 +652,30 @@ async def update_message(
     if body.card_rows is not None:
         ctx["card_rows"] = [r.model_dump() for r in body.card_rows]
     if body.cta_url is not None:
-        ctx["cta_url"] = body.cta_url
+        ctx["cta_url"] = _safe_url_or_empty(body.cta_url)
     if body.cta_label is not None:
         ctx["cta_label"] = body.cta_label
     msg.context = ctx
     if body.recipients is not None:
         await _ensure_can_send(db, user, body.recipients)
         msg.recipient_spec = _spec_from_selector(body.recipients)
+    if body.variable_definitions is not None:
+        msg.variable_definitions = _normalize_definitions(body.variable_definitions)
+    allowed_keys = {str(item["key"]) for item in msg.variable_definitions or []}
+    if body.default_variables is not None:
+        msg.default_variables = {
+            k: str(v) for k, v in body.default_variables.items() if k in allowed_keys
+        }
+    if body.recipient_variables is not None:
+        msg.recipient_variables = [
+            {
+                "user_id": str(row.user_id) if row.user_id else None,
+                "email": row.email,
+                "name": row.name,
+                "variables": {k: str(v) for k, v in row.variables.items() if k in allowed_keys},
+            }
+            for row in body.recipient_variables
+        ]
     if body.scheduled_at is not None:
         scheduled = _to_utc(body.scheduled_at)
         if msg.status == EmailStatus.SCHEDULED and scheduled <= datetime.now(UTC):
@@ -509,8 +776,73 @@ async def get_message(
     )
     if msg.sender_id != user.id and not can_view_all:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無法檢視他人的郵件")
+    status_rows = (
+        (
+            await db.execute(
+                select(EmailCampaignRecipient.status, func.count())
+                .where(EmailCampaignRecipient.message_id == message_id)
+                .group_by(EmailCampaignRecipient.status)
+            )
+        )
+        .all()
+    )
+    recent_errors = (
+        (
+            await db.execute(
+                select(EmailCampaignRecipient.email, EmailCampaignRecipient.error_detail)
+                .where(
+                    EmailCampaignRecipient.message_id == message_id,
+                    EmailCampaignRecipient.error_detail.is_not(None),
+                )
+                .order_by(EmailCampaignRecipient.updated_at.desc())
+                .limit(5)
+            )
+        )
+        .all()
+    )
     return _to_detail(
         msg,
         msg.sender.display_name if msg.sender else None,
         can_view_emails=can_view_all,
+        recipient_status_counts={str(row[0]): int(row[1]) for row in status_rows},
+        recent_errors=[f"{email}: {err}" for email, err in recent_errors if err],
     )
+
+
+@router.get(
+    "/messages/{message_id}/recipients",
+    response_model=list[EmailCampaignRecipientOut],
+    summary="郵件收件人個人化變數與寄送狀態",
+)
+async def list_message_recipients(
+    message_id: uuid.UUID,
+    db: DbDep,
+    user: EmailUser,
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+) -> list[EmailCampaignRecipientOut]:
+    msg = await db.get(EmailMessage, message_id)
+    if msg is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="郵件不存在")
+    codes = await get_user_permission_codes(db, user.id)
+    can_view_all = (
+        user.is_superuser
+        or PermissionCode.EMAIL_VIEW_LOGS in codes
+        or PermissionCode.ADMIN_ALL in codes
+    )
+    if msg.sender_id != user.id and not can_view_all:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無法檢視他人的郵件")
+    rows = (
+        (
+            await db.execute(
+                select(EmailCampaignRecipient)
+                .where(EmailCampaignRecipient.message_id == message_id)
+                .order_by(EmailCampaignRecipient.created_at.asc())
+                .limit(limit)
+                .offset(offset)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [EmailCampaignRecipientOut.model_validate(row, from_attributes=True) for row in rows]

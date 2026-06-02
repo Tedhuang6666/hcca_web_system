@@ -201,9 +201,16 @@ async def _check_backup_freshness() -> dict[str, Any]:
     backup_dir = Path(getattr(settings, "DB_BACKUP_DIR", "uploads/backups"))
     if not backup_dir.exists():
         return {"ok": True, "skipped": "no_backup_dir"}
-    candidates = list(backup_dir.glob("hcca_backup_*.sql.gz")) + list(
-        backup_dir.glob("hcca_backup_*.sql.gz.gpg")
-    )
+    candidates = [
+        item
+        for pattern in (
+            "hcca_backup_*.dump",
+            "hcca_backup_*.dump.gpg",
+            "hcca_backup_*.sql.gz",
+            "hcca_backup_*.sql.gz.gpg",
+        )
+        for item in backup_dir.glob(pattern)
+    ]
     if not candidates:
         # 真的沒備份檔 → 一次性告警（首次跑、或新環境）
         fired = await _flag_state("backup_missing")

@@ -71,7 +71,8 @@ class Person(Base, TimestampMixin):
         nullable=False,
         default=PersonStatus.ACTIVE,
         server_default=PersonStatus.ACTIVE,
-        index=True,
+        # 索引由上方 __table_args__ 的 Index("ix_people_status") 建立；
+        # 此處不可再加 index=True，否則會產生同名重複索引，create_all 會 DuplicateTable。
     )
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
 

@@ -5,13 +5,22 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 import bleach
 from itsdangerous import URLSafeTimedSerializer
-from jinja2 import Environment, FileSystemLoader, select_autoescape
+from jinja2 import (
+    Environment,
+    FileSystemLoader,
+    StrictUndefined,
+    TemplateError,
+    select_autoescape,
+)
+from jinja2.sandbox import SandboxedEnvironment
 from markupsafe import Markup, escape
 
 from api.core.config import settings
@@ -26,6 +35,8 @@ _ALLOWED_TAGS = [
 ]
 _ALLOWED_ATTRS = {"a": ["href", "title"]}
 _ALLOWED_PROTOCOLS = ["http", "https", "mailto"]
+_VARIABLE_KEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
+_RESERVED_VARIABLE_KEYS = {"user", "app", "unsubscribe_url", "frontend_base_url"}
 
 _UNSUBSCRIBE_SALT = "hcca-email-unsubscribe"
 
@@ -81,6 +92,81 @@ def sanitize_html(raw: str | None) -> str:
         protocols=_ALLOWED_PROTOCOLS,
         strip=True,
     )
+
+
+def validate_variable_definitions(definitions: list[dict]) -> list[dict]:
+    """正規化自訂佔位符定義，避免覆蓋系統變數與危險 key。"""
+    normalized: list[dict] = []
+    seen: set[str] = set()
+    for item in definitions or []:
+        key = str(item.get("key", "")).strip()
+        if not _VARIABLE_KEY_RE.match(key) or key in _RESERVED_VARIABLE_KEYS:
+            raise ValueError(f"不合法的自訂佔位符：{key}")
+        if key in seen:
+            raise ValueError(f"重複的自訂佔位符：{key}")
+        seen.add(key)
+        normalized.append(
+            {
+                "key": key,
+                "label": str(item.get("label") or key).strip()[:80],
+                "required": bool(item.get("required", False)),
+                "default_value": str(item.get("default_value") or ""),
+            }
+        )
+    return normalized
+
+
+def validate_required_variables(
+    definitions: list[dict], variables: dict[str, Any], *, recipient_label: str
+) -> None:
+    """檢查單一收件人的 required 自訂變數是否都有值。"""
+    for item in definitions or []:
+        if not item.get("required"):
+            continue
+        key = str(item.get("key", ""))
+        value = variables.get(key, item.get("default_value", ""))
+        if value is None or str(value).strip() == "":
+            raise ValueError(f"{recipient_label} 缺少必要佔位符：{key}")
+
+
+@lru_cache(maxsize=1)
+def _personalization_environment() -> SandboxedEnvironment:
+    env = SandboxedEnvironment(autoescape=False, undefined=StrictUndefined)
+    return env
+
+
+def render_personalized_text(raw: str, variables: dict[str, Any]) -> str:
+    """以受限 Jinja2 語法渲染文字欄位；變數不存在會明確失敗。"""
+    try:
+        return _personalization_environment().from_string(raw or "").render(**variables)
+    except TemplateError as exc:
+        raise ValueError(f"佔位符渲染失敗：{exc}") from exc
+
+
+def build_personalization_context(
+    *,
+    user_id: uuid.UUID | None,
+    name: str | None,
+    email: str,
+    student_id: str | None,
+    custom_variables: dict[str, Any],
+) -> dict[str, Any]:
+    """建立系統預設佔位符與自訂佔位符合併後的 context。"""
+    unsubscribe_url = ""
+    if user_id:
+        token = make_unsubscribe_token(user_id, "email")
+        unsubscribe_url = f"{settings.FRONTEND_BASE_URL.rstrip('/')}/unsubscribe?token={token}"
+    return {
+        **{key: "" if value is None else str(value) for key, value in custom_variables.items()},
+        "user": {
+            "id": str(user_id) if user_id else "",
+            "name": name or "",
+            "email": email,
+            "student_id": student_id or "",
+        },
+        "unsubscribe_url": unsubscribe_url,
+        "frontend_base_url": settings.FRONTEND_BASE_URL.rstrip("/"),
+    }
 
 
 def make_unsubscribe_token(user_id: uuid.UUID, notification_type: str) -> str:

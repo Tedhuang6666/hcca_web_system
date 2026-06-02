@@ -8,13 +8,12 @@
 
 from __future__ import annotations
 
-import os
 import uuid
 from typing import Annotated
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,7 +29,7 @@ from api.routers.documents_helpers import (
 )
 from api.schemas.document import AttachmentLinkCreate, AttachmentOut
 from api.services import document as doc_svc
-from api.services.storage import get_storage
+from api.services.storage import StorageBackend, get_storage
 
 router = APIRouter(prefix="/documents", tags=["公文系統"])
 
@@ -41,6 +40,33 @@ OptionalUser = Annotated[User | None, Depends(get_optional_user)]
 
 class AttachmentRenameRequest(BaseModel):
     filename: str
+
+
+async def _serve_attachment(
+    storage: StorageBackend,
+    att: DocumentAttachment,
+    disposition: str,
+) -> FileResponse | RedirectResponse:
+    """依儲存後端提供附件：本機後端直接 serve 檔案，遠端後端重導向至 presigned URL。
+
+    disposition 為 "attachment"（下載）或 "inline"（預覽）。集中此邏輯以免
+    將後端類型寫死在各端點（見 [services/storage.py](../services/storage.py)）。
+    """
+    filename = att.display_name or att.filename
+    encoded_filename = quote(filename.encode("utf-8"))
+    local = storage.local_path(att.storage_key)
+    if local is not None:
+        if not local.exists():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="附件檔案不存在")
+        headers = {"Content-Disposition": f"{disposition}; filename*=UTF-8''{encoded_filename}"}
+        media_type = att.content_type or "application/octet-stream"
+        if disposition == "attachment":
+            return FileResponse(
+                path=str(local), filename=filename, media_type=media_type, headers=headers
+            )
+        return FileResponse(path=str(local), media_type=media_type, headers=headers)
+    url = await storage.get_url(att.storage_key, disposition=disposition, download_name=filename)
+    return RedirectResponse(url=url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
 
 
 @router.get(
@@ -211,13 +237,14 @@ async def rename_attachment(
 @router.get(
     "/{doc_id}/attachments/{att_id}/download",
     summary="下載附件（公開公文可匿名下載）",
+    response_model=None,
 )
 async def download_attachment(
     doc_id: str,
     att_id: uuid.UUID,
     session: DbDep,
     current_user: OptionalUser,
-) -> FileResponse:
+) -> FileResponse | RedirectResponse:
     doc = await get_doc_or_404(doc_id, session)
     if current_user is None:
         if not doc_svc.can_anonymous_access_document(doc):
@@ -238,27 +265,20 @@ async def download_attachment(
             status_code=status.HTTP_400_BAD_REQUEST, detail="此附件為外部連結，無法直接下載"
         )
 
-    file_path = os.path.join("uploads", att.storage_key)
-    filename = att.display_name or att.filename
-    encoded_filename = quote(filename.encode("utf-8"))
-    return FileResponse(
-        path=file_path,
-        filename=filename,
-        media_type=att.content_type,
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"},
-    )
+    return await _serve_attachment(get_storage(), att, disposition="attachment")
 
 
 @router.get(
     "/{doc_id}/attachments/{att_id}/preview",
     summary="預覽附件（inline；避免瀏覽器自動下載）",
+    response_model=None,
 )
 async def preview_attachment(
     doc_id: str,
     att_id: uuid.UUID,
     session: DbDep,
     current_user: OptionalUser,
-) -> FileResponse:
+) -> FileResponse | RedirectResponse:
     doc = await get_doc_or_404(doc_id, session)
     if current_user is None:
         if not doc_svc.can_anonymous_access_document(doc):
@@ -279,11 +299,4 @@ async def preview_attachment(
             status_code=status.HTTP_400_BAD_REQUEST, detail="此附件為外部連結，無法直接預覽"
         )
 
-    file_path = os.path.join("uploads", att.storage_key)
-    filename = att.display_name or att.filename
-    encoded_filename = quote(filename.encode("utf-8"))
-    return FileResponse(
-        path=file_path,
-        media_type=att.content_type,
-        headers={"Content-Disposition": f"inline; filename*=UTF-8''{encoded_filename}"},
-    )
+    return await _serve_attachment(get_storage(), att, disposition="inline")

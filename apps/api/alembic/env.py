@@ -10,6 +10,7 @@ import api.models.announcement  # noqa: F401
 import api.models.calendar  # noqa: F401
 import api.models.defense  # noqa: F401
 import api.models.document  # noqa: F401
+import api.models.email_message  # noqa: F401
 import api.models.exam_paper  # noqa: F401
 import api.models.meal  # noqa: F401
 import api.models.meeting  # noqa: F401

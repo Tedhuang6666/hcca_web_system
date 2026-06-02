@@ -91,23 +91,32 @@ def _attach_display_names(regs: list[Regulation]) -> list[Regulation]:
 
 
 def _where_publicly_effective(q):
-    """Require both legal publication metadata and a completed publication document.
+    """限定為「現行有效且已公布」的法規。
 
     停用 / 廢止 / 被修正版本取代（is_active=False）的法規不再對外現行有效，
     必須排除，否則公開列表會同時出現修正前與修正後兩個版本。
+
+    公布文（published_document_id）為「選填」：經主席公布流程的法規會掛上一份公布
+    令公文；但匯入既有現行法規（publish_imported_regulation）等路徑不會建立公文，
+    這些法規在現實中早已制定生效，仍應對外公開。因此用 outer join，只在「公布文
+    存在但尚未核定（draft/under_review）」時排除，避免公布程序進行中的法規提早外洩。
     """
-    return q.join(Document, Regulation.published_document_id == Document.id).where(
+    return q.outerjoin(Document, Regulation.published_document_id == Document.id).where(
         Regulation.is_active.is_(True),
         Regulation.published_at.is_not(None),
-        Regulation.published_document_id.is_not(None),
-        Document.status.in_(_PUBLICATION_DOCUMENT_STATUSES),
+        or_(
+            Regulation.published_document_id.is_(None),
+            Document.status.in_(_PUBLICATION_DOCUMENT_STATUSES),
+        ),
     )
 
 
 async def is_publicly_effective(session: AsyncSession, reg: Regulation) -> bool:
-    """A law is public only after its publication decree is actually completed."""
-    if not reg.is_active or reg.published_at is None or reg.published_document_id is None:
+    """現行有效且已公布即對外公開；若掛有公布令公文，則該公文須已核定。"""
+    if not reg.is_active or reg.published_at is None:
         return False
+    if reg.published_document_id is None:
+        return True
     result = await session.execute(
         select(Document.status).where(Document.id == reg.published_document_id)
     )

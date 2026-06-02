@@ -61,3 +61,37 @@ known-first-party = ["api", "shared"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["apps/api/tests"]
+
+# ── 型別檢查（漸進式採用）─────────────────────────────────────────────────────
+# 整個 codebase 一次全綠不現實；改採「乾淨模組 allowlist」由 CI 強制，
+# 清理一個模組就加進 files 清單，逐步擴大覆蓋面。新加入前請先本機跑：
+#   uv run --project apps/api mypy <module>
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = "apps/api/src"
+# gate 範圍（安全關鍵模組優先）。乾淨後再往清單加。
+files = [
+    "apps/api/src/api/core/idempotency.py",
+    "apps/api/src/api/core/login_lockout.py",
+    "apps/api/src/api/core/anomaly_detection.py",
+    "apps/api/src/api/core/field_crypto.py",
+    "apps/api/src/api/services/storage.py",
+]
+
+[tool.coverage.run]
+source = ["apps/api/src/api"]
+omit = [
+    "*/__pycache__/*",
+    "*/email/node_modules/*",
+    "*/alembic/*",
+]
+
+[tool.coverage.report]
+# 起始門檻：以目前實測值為基準的保守值，避免覆蓋率默默下滑。
+# 補測試後可逐步調高。
+fail_under = 45
+show_missing = true
+skip_covered = false

@@ -2,11 +2,23 @@
 
 import warnings
 from typing import Annotated
+from urllib.parse import urlsplit
 
 from pydantic import Field, PostgresDsn, RedisDsn, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 _DEFAULT_SECRET = "CHANGE_ME_IN_PRODUCTION_USE_256_BIT_KEY"
+
+# 視為「本機預設」的 host；這些值代表尚未為部署環境設定，可被部署網址自動覆寫。
+_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0"})
+
+
+def _is_local_url(value: str) -> bool:
+    """判斷 URL（或裸 host）是否為本機預設值。空字串視為未設定 → True。"""
+    if not value:
+        return True
+    host = urlsplit(value).hostname or value
+    return host in _LOCAL_HOSTS
 
 
 class Settings(BaseSettings):
@@ -168,7 +180,10 @@ class Settings(BaseSettings):
     RESEND_API_KEY: str = Field(default="")
     MAIL_FROM: str = Field(default="noreply@hct.works")
     MAIL_FROM_NAME: str = Field(default="新竹高中班聯會 HCCA")
-    # 前端基底 URL — email 內絕對連結用（退訂連結、CTA、通知偏好頁）
+    # 部署網址單一來源 — 整個系統對外的基底 URL（前端入口；/api、/ws、OAuth 回呼皆同源轉發）。
+    # 只要在此填入正式網址（例如 https://hcca40.hct.works），derive_public_urls 會自動推導
+    # ALLOWED_ORIGINS / ALLOWED_HOSTS / 各 OAuth 回呼 / Passkey 等仍停留在 localhost 預設的欄位，
+    # 不需逐一手動填寫。email 內的絕對連結（退訂、CTA、通知偏好頁）亦以此為基底。
     FRONTEND_BASE_URL: str = Field(default="http://localhost:3000")
     # 每位使用者每日透過平台寄送 email 的「人次」上限（防濫用）
     EMAIL_DAILY_QUOTA_PER_USER: int = Field(default=500)
@@ -355,6 +370,41 @@ class Settings(BaseSettings):
         if isinstance(value, list):
             return [str(item).strip() for item in value if str(item).strip()]
         raise ValueError("FIELD_ENCRYPTION_KEYS 必須是 JSON array 或逗號分隔字串")
+
+    @model_validator(mode="after")
+    def derive_public_urls(self) -> "Settings":
+        """以 FRONTEND_BASE_URL 為單一來源，自動套用部署網址到尚未設定的 URL 家族。
+
+        規則：只有當 FRONTEND_BASE_URL 是真正對外網域（非 localhost）時才推導，
+        且僅覆寫仍停留在本機預設的欄位——使用者已明確指向其他網域的設定不會被動到。
+        ALLOWED_ORIGINS / ALLOWED_HOSTS 採「補進」而非覆寫，保留 localhost 以利本機開發。
+        """
+        base = self.FRONTEND_BASE_URL.rstrip("/")
+        if _is_local_url(base):
+            return self
+
+        parts = urlsplit(base)
+        origin = f"{parts.scheme}://{parts.netloc}"
+        host = parts.hostname or ""
+
+        if origin not in self.ALLOWED_ORIGINS:
+            self.ALLOWED_ORIGINS = [origin, *self.ALLOWED_ORIGINS]
+        if host and host not in self.ALLOWED_HOSTS:
+            self.ALLOWED_HOSTS = [host, *self.ALLOWED_HOSTS]
+
+        if _is_local_url(self.GOOGLE_REDIRECT_URI):
+            self.GOOGLE_REDIRECT_URI = f"{origin}/auth/google/callback"
+        if _is_local_url(self.DISCORD_REDIRECT_URI):
+            self.DISCORD_REDIRECT_URI = f"{origin}/discord/callback"
+        if _is_local_url(self.OIDC_REDIRECT_URI):
+            self.OIDC_REDIRECT_URI = f"{origin}/auth/oidc/callback"
+        if _is_local_url(self.PASSKEY_ORIGIN):
+            self.PASSKEY_ORIGIN = origin
+        if self.PASSKEY_RP_ID in _LOCAL_HOSTS or not self.PASSKEY_RP_ID:
+            if host:
+                self.PASSKEY_RP_ID = host
+
+        return self
 
     @model_validator(mode="after")
     def production_security_must_be_explicit(self) -> "Settings":

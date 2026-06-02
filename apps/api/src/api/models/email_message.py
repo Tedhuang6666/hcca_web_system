@@ -30,7 +30,16 @@ class EmailStatus(enum.StrEnum):
     QUEUED = "queued"        # 已解析收件人並排入 Celery 寄送佇列
     SENT = "sent"            # 已送出
     FAILED = "failed"        # 解析或寄送失敗
+    PARTIAL = "partial"      # 部分收件人已送出、部分失敗
     CANCELLED = "cancelled"  # 已取消（取消預約 / 刪除）
+
+
+class EmailRecipientStatus(enum.StrEnum):
+    """大量寄送時單一收件人的寄送狀態。"""
+
+    QUEUED = "queued"
+    SENT = "sent"
+    FAILED = "failed"
 
 
 class EmailMessage(Base, TimestampMixin):
@@ -56,6 +65,12 @@ class EmailMessage(Base, TimestampMixin):
     context: Mapped[dict] = mapped_column(JSONDict, nullable=False, default=dict)
     # 收件條件快照（user_ids / position_ids / org_ids / include_all）
     recipient_spec: Mapped[dict] = mapped_column(JSONDict, nullable=False, default=dict)
+    # 自訂佔位符定義（key / label / required / default_value）
+    variable_definitions: Mapped[list] = mapped_column(JSONDict, nullable=False, default=list)
+    # 全 Campaign 共用預設變數，會被每位收件人的 variables 覆蓋
+    default_variables: Mapped[dict] = mapped_column(JSONDict, nullable=False, default=dict)
+    # 建立時匯入的逐收件人變數快照，供草稿續編與預約寄送使用
+    recipient_variables: Mapped[list] = mapped_column(JSONDict, nullable=False, default=list)
     # 寄送時解析後去重的 email 清單（稽核關鍵欄位）
     resolved_emails: Mapped[list] = mapped_column(JSONDict, nullable=False, default=list)
     recipient_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -66,6 +81,48 @@ class EmailMessage(Base, TimestampMixin):
     error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     sender: Mapped[User | None] = relationship("User", lazy="select")
+    recipients: Mapped[list[EmailCampaignRecipient]] = relationship(
+        "EmailCampaignRecipient",
+        back_populates="message",
+        lazy="select",
+        cascade="all, delete-orphan",
+    )
 
     def __repr__(self) -> str:
         return f"<EmailMessage id={self.id} status={self.status} count={self.recipient_count}>"
+
+
+class EmailCampaignRecipient(Base, TimestampMixin):
+    """一次大量寄送中的單一收件人與其個人化變數。"""
+
+    __tablename__ = "email_campaign_recipients"
+    __table_args__ = (
+        Index("ix_email_campaign_recipients_message_status", "message_id", "status"),
+        Index("ix_email_campaign_recipients_email", "email"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    message_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("email_messages.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    variables: Mapped[dict] = mapped_column(JSONDict, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=EmailRecipientStatus.QUEUED
+    )
+    celery_task_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    provider_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    message: Mapped[EmailMessage] = relationship(
+        "EmailMessage", back_populates="recipients", lazy="select"
+    )
+    user: Mapped[User | None] = relationship("User", lazy="select")

@@ -74,7 +74,26 @@ def test_enqueue_email_accepts_message_id() -> None:
         enqueue_email("to@example.com", "subject", "body", email_message_id="message-id")
 
     mock_delay.assert_called_once_with(
-        ["to@example.com"], "subject", "body", "html", "message-id"
+        ["to@example.com"], "subject", "body", "html", "message-id", None
+    )
+
+
+def test_enqueue_email_accepts_campaign_recipient_id() -> None:
+    """enqueue_email 可把單一收件人 id 帶進 Celery task，供逐人回寫狀態。"""
+    mock_task_result = MagicMock()
+    mock_task_result.id = "task-with-recipient"
+
+    with patch("api.services.mail.send_email.delay", return_value=mock_task_result) as mock_delay:
+        enqueue_email(
+            "to@example.com",
+            "subject",
+            "body",
+            email_message_id="message-id",
+            email_recipient_id="recipient-id",
+        )
+
+    mock_delay.assert_called_once_with(
+        ["to@example.com"], "subject", "body", "html", "message-id", "recipient-id"
     )
 
 

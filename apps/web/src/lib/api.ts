@@ -58,6 +58,7 @@ import type {
   DiscordRoleMappingIn, DiscordRoleMappingOut,
   DocumentEfficiencyOut, DeptRankingItem, PendingAlertItem, AnnouncementParticipationItem,
   SurveyParticipationItem,
+  EmailCampaignRecipientOut,
   EmailComposePayload, EmailMessageCreate, EmailMessageOut, EmailMessageDetailOut,
   RecipientSelector, RecipientPreviewOut, EmailPosition,
   PartnerBusinessCreate, PartnerBusinessListItem, PartnerBusinessOut, PartnerBusinessUpdate,
@@ -2323,6 +2324,14 @@ export const emailApi = {
     return get<EmailMessageOut[]>(`/email/messages${q.size ? `?${q}` : ""}`);
   },
   getMessage: (id: string) => get<EmailMessageDetailOut>(`/email/messages/${id}`),
+  listMessageRecipients: (id: string, params?: { limit?: number; offset?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.limit) q.set("limit", String(params.limit));
+    if (params?.offset) q.set("offset", String(params.offset));
+    return get<EmailCampaignRecipientOut[]>(
+      `/email/messages/${id}/recipients${q.size ? `?${q}` : ""}`,
+    );
+  },
   orgPositions: (orgId: string) => get<EmailPosition[]>(`/orgs/${orgId}/positions`),
 };
 

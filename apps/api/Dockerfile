@@ -27,12 +27,14 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         fontconfig \
         fonts-noto-cjk \
+        gnupg \
         libgdk-pixbuf-2.0-0 \
         libharfbuzz-subset0 \
         libjpeg62-turbo \
         libopenjp2-7 \
         libpango-1.0-0 \
-        libpangoft2-1.0-0 && \
+        libpangoft2-1.0-0 \
+        postgresql-client && \
     mkdir -p /usr/share/fonts/truetype/hcca /usr/share/fonts/opentype/noto-custom && \
     rm -rf /var/lib/apt/lists/*
 
@@ -52,7 +54,7 @@ COPY apps/api/alembic /app/alembic
 COPY apps/api/alembic.ini /app/alembic.ini
 COPY apps/api/gunicorn.conf.py /app/gunicorn.conf.py
 
-RUN mkdir -p /app/uploads && chown -R appuser:appgroup /app/uploads
+RUN mkdir -p /app/uploads /app/backups && chown -R appuser:appgroup /app/uploads /app/backups
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \

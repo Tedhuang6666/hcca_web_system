@@ -35,7 +35,10 @@ async def check_suspicious_login(user_id: str, current_ip: str) -> tuple[bool, s
         return False, None
 
     try:
-        last_ip, _, last_time_str = last_login.decode().split("|")
+        # redis_client 以 decode_responses=True 建立，get() 已回傳 str；
+        # 不可再 .decode()（會 AttributeError 被吞掉，導致偵測永遠失效）。
+        raw = last_login.decode() if isinstance(last_login, bytes) else last_login
+        last_ip, _, last_time_str = raw.split("|")
         if last_ip == current_ip:
             return False, None  # 同位置
 

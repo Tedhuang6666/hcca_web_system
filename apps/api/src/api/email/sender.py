@@ -2,15 +2,23 @@
 
 from __future__ import annotations
 
-from api.email.renderer import render_email, sanitize_html
+from api.email.renderer import render_email, render_personalized_text, sanitize_html
 from api.services.mail import enqueue_email
 
 
 def enqueue_rendered(
-    to: list[str], subject: str, html: str, email_message_id: str | None = None
+    to: list[str],
+    subject: str,
+    html: str,
+    email_message_id: str | None = None,
+    email_recipient_id: str | None = None,
 ) -> list[str]:
     """對每位收件人各寄一封「已渲染好」的 HTML email，回傳 Celery task_id 清單。"""
-    return [enqueue_email(addr, subject, html, "html", email_message_id) for addr in to if addr]
+    return [
+        enqueue_email(addr, subject, html, "html", email_message_id, email_recipient_id)
+        for addr in to
+        if addr
+    ]
 
 
 def send_branded_email(to: list[str], subject: str, template: str, context: dict) -> list[str]:
@@ -19,7 +27,12 @@ def send_branded_email(to: list[str], subject: str, template: str, context: dict
     return enqueue_rendered(to, subject, html)
 
 
-def render_generic_message(subject: str, body_markdown: str, context: dict) -> str:
+def render_generic_message(
+    subject: str,
+    body_markdown: str,
+    context: dict,
+    variables: dict | None = None,
+) -> str:
     """組裝 generic 範本 context 並渲染為完整 HTML（寄信頁、預約寄送共用）。
 
     body_markdown 為使用者用富文本編輯器輸入的 Markdown，先轉 HTML、再以
@@ -27,20 +40,56 @@ def render_generic_message(subject: str, body_markdown: str, context: dict) -> s
     """
     from markdown_it import MarkdownIt
 
+    personal = variables or {}
+    rendered_subject = render_personalized_text(subject, personal) if personal else subject
+    rendered_body = (
+        render_personalized_text(body_markdown or "", personal) if personal else body_markdown or ""
+    )
+    rendered_heading = (
+        render_personalized_text(str(context.get("heading") or ""), personal)
+        if personal
+        else context.get("heading", "")
+    )
+    rendered_rows = [
+        {
+            "label": render_personalized_text(str(row.get("label", "")), personal)
+            if personal
+            else row.get("label", ""),
+            "value": render_personalized_text(str(row.get("value", "")), personal)
+            if personal
+            else row.get("value", ""),
+        }
+        for row in context.get("card_rows", [])
+    ]
+    rendered_cta_url = (
+        render_personalized_text(str(context.get("cta_url") or ""), personal)
+        if personal
+        else context.get("cta_url", "")
+    )
+    rendered_cta_label = (
+        render_personalized_text(str(context.get("cta_label") or ""), personal)
+        if personal
+        else context.get("cta_label", "")
+    )
     html_body = (
         MarkdownIt("commonmark", {"html": False})
         .enable("strikethrough", True)
-        .render(body_markdown or "")
+        .render(rendered_body)
     )
     return render_email(
         "generic",
         {
-            "subject": subject,
-            "preview_text": (context.get("heading") or subject)[:80],
+            "subject": rendered_subject,
+            "preview_text": (rendered_heading or rendered_subject)[:80],
             "body_html": sanitize_html(html_body),
-            "heading": context.get("heading", ""),
-            "card_rows": context.get("card_rows", []),
-            "cta_url": context.get("cta_url", ""),
-            "cta_label": context.get("cta_label", ""),
+            "heading": rendered_heading,
+            "card_rows": rendered_rows,
+            "cta_url": rendered_cta_url,
+            "cta_label": rendered_cta_label,
         },
     )
+
+
+def render_generic_subject(subject: str, variables: dict | None = None) -> str:
+    """渲染個人化主旨，供逐封寄送時與 HTML 內容保持一致。"""
+    return render_personalized_text(subject, variables or {}) if variables else subject

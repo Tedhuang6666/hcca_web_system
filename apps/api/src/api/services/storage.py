@@ -40,8 +40,27 @@ class StorageBackend(abc.ABC):
         """刪除指定 key 的檔案"""
 
     @abc.abstractmethod
-    async def get_url(self, storage_key: str, expires: int = 3600) -> str:
-        """取得檔案的存取 URL（本地回傳靜態路徑；S3 回傳 presigned URL）"""
+    async def get_url(
+        self,
+        storage_key: str,
+        expires: int = 3600,
+        *,
+        disposition: str | None = None,
+        download_name: str | None = None,
+    ) -> str:
+        """取得檔案的存取 URL（本地回傳靜態路徑；S3 回傳 presigned URL）。
+
+        disposition / download_name 僅遠端後端使用，用於在 presigned URL 內
+        指定 Content-Disposition（inline/attachment 與檔名）；本地後端忽略。
+        """
+
+    def local_path(self, storage_key: str) -> Path | None:
+        """本地後端回傳實體檔案路徑；遠端後端回傳 None（改用 get_url 重導向）。
+
+        下載/預覽端點以此判斷該直接 serve 本機檔案或重導向到遠端 URL，
+        避免將後端類型寫死在路由層。
+        """
+        return None
 
 
 class StoredFile:
@@ -153,8 +172,18 @@ class LocalStorageBackend(StorageBackend):
             target.unlink()
             logger.info("檔案刪除 key=%s", storage_key)
 
-    async def get_url(self, storage_key: str, expires: int = 3600) -> str:
+    async def get_url(
+        self,
+        storage_key: str,
+        expires: int = 3600,
+        *,
+        disposition: str | None = None,
+        download_name: str | None = None,
+    ) -> str:
         return f"/uploads/{storage_key}"
+
+    def local_path(self, storage_key: str) -> Path | None:
+        return self._base / storage_key
 
 
 # ── S3StorageBackend（介面預留）────────────────────────────────────────────────
@@ -207,10 +236,26 @@ class S3StorageBackend(StorageBackend):
     async def delete(self, storage_key: str) -> None:
         self._client.delete_object(Bucket=self._bucket, Key=storage_key)
 
-    async def get_url(self, storage_key: str, expires: int = 3600) -> str:
+    async def get_url(
+        self,
+        storage_key: str,
+        expires: int = 3600,
+        *,
+        disposition: str | None = None,
+        download_name: str | None = None,
+    ) -> str:
+        params: dict[str, str] = {"Bucket": self._bucket, "Key": storage_key}
+        if disposition:
+            value = disposition
+            if download_name:
+                from urllib.parse import quote
+
+                encoded = quote(download_name.encode("utf-8"))
+                value = f"{disposition}; filename*=UTF-8''{encoded}"
+            params["ResponseContentDisposition"] = value
         return self._client.generate_presigned_url(
             "get_object",
-            Params={"Bucket": self._bucket, "Key": storage_key},
+            Params=params,
             ExpiresIn=expires,
         )
 

@@ -25,9 +25,9 @@ async def _dispatch_scheduled() -> dict:
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
     from api.core.config import settings
-    from api.email.sender import enqueue_rendered, render_generic_message
     from api.models.email_message import EmailMessage, EmailStatus
-    from api.services.recipient import resolve_recipients, spec_to_resolve_kwargs
+    from api.models.user import User
+    from api.routers.email import _send_now
 
     engine = create_async_engine(str(settings.DATABASE_URL))
     dispatched = 0
@@ -50,21 +50,13 @@ async def _dispatch_scheduled() -> dict:
             )
             for msg in rows:
                 try:
-                    # 寄送當下才解析收件人，反映最新職位/組織成員
-                    _users, emails = await resolve_recipients(
-                        session, **spec_to_resolve_kwargs(msg.recipient_spec or {})
-                    )
-                    if not emails:
+                    sender = await session.get(User, msg.sender_id) if msg.sender_id else None
+                    if sender is None:
                         msg.status = EmailStatus.FAILED
-                        msg.error_detail = "解析後無有效收件人"
+                        msg.error_detail = "找不到寄件者"
                         continue
-                    html = render_generic_message(msg.subject, msg.body, msg.context or {})
-                    task_ids = enqueue_rendered(emails, msg.subject, html, str(msg.id))
-                    msg.resolved_emails = emails
-                    msg.recipient_count = len(emails)
-                    msg.status = EmailStatus.QUEUED
-                    msg.celery_task_id = task_ids[0] if task_ids else None
-                    msg.error_detail = None
+                    # 寄送當下才解析收件人，反映最新職位/組織成員
+                    await _send_now(session, sender, msg)
                     dispatched += 1
                 except Exception as exc:  # noqa: BLE001
                     msg.status = EmailStatus.FAILED

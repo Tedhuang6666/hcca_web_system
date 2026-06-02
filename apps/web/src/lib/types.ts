@@ -2610,6 +2610,7 @@ export type EmailStatus =
   | "queued"
   | "sent"
   | "failed"
+  | "partial"
   | "cancelled";
 
 export interface RecipientSelector {
@@ -2627,6 +2628,20 @@ export interface EmailCardRow {
   value: string;
 }
 
+export interface EmailVariableDefinition {
+  key: string;
+  label: string;
+  required: boolean;
+  default_value: string;
+}
+
+export interface EmailRecipientVariableInput {
+  user_id?: string | null;
+  email?: string | null;
+  name?: string | null;
+  variables: Record<string, string>;
+}
+
 export interface EmailComposePayload {
   subject: string;
   heading: string;
@@ -2635,6 +2650,10 @@ export interface EmailComposePayload {
   cta_label: string;
   cta_url: string;
   recipients: RecipientSelector;
+  variable_definitions?: EmailVariableDefinition[];
+  default_variables?: Record<string, string>;
+  recipient_variables?: EmailRecipientVariableInput[];
+  preview_variables?: Record<string, string>;
 }
 
 export interface EmailMessageCreate extends EmailComposePayload {
@@ -2668,8 +2687,29 @@ export interface EmailMessageDetailOut extends EmailMessageOut {
   cta_label: string;
   cta_url: string;
   recipient_spec: RecipientSelector;
+  variable_definitions: EmailVariableDefinition[];
+  default_variables: Record<string, string>;
+  recipient_variables: EmailRecipientVariableInput[];
   resolved_emails: string[];
+  recipient_status_counts: Record<string, number>;
+  recent_errors: string[];
   error_detail: string | null;
+}
+
+export interface EmailCampaignRecipientOut {
+  id: string;
+  message_id: string;
+  user_id: string | null;
+  email: string;
+  name: string | null;
+  variables: Record<string, string>;
+  status: "queued" | "sent" | "failed";
+  celery_task_id: string | null;
+  provider_id: string | null;
+  sent_at: string | null;
+  error_detail: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 /** 職位精簡資訊（收件人選擇器用） */

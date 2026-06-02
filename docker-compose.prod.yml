@@ -28,6 +28,7 @@ x-api-common: &api-common
       condition: service_healthy
   volumes:
     - uploads:/app/uploads
+    - backups:/app/backups
 
 services:
   db:
@@ -80,6 +81,7 @@ services:
       DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
       REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
+      DB_BACKUP_DIR: ${DB_BACKUP_DIR:-/app/backups}
       GUNICORN_WORKERS: ${GUNICORN_WORKERS:-4}
       GUNICORN_KEEPALIVE: ${GUNICORN_KEEPALIVE:-5}
       GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-60}
@@ -105,7 +107,7 @@ services:
       --loglevel=info
       --concurrency=${CELERY_WORKER_CONCURRENCY:-2}
       --max-tasks-per-child=${CELERY_MAX_TASKS_PER_CHILD:-200}
-      --queues=celery
+      --queues=celery,backup,recovery
     environment:
       ENVIRONMENT: production
       DEBUG: "false"
@@ -119,6 +121,7 @@ services:
       DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
       REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
+      DB_BACKUP_DIR: ${DB_BACKUP_DIR:-/app/backups}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -154,6 +157,7 @@ services:
       DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
       REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
+      DB_BACKUP_DIR: ${DB_BACKUP_DIR:-/app/backups}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -213,6 +217,7 @@ volumes:
   pgdata:
   redisdata:
   uploads:
+  backups:
   celerybeat:
   caddydata:
   caddyconfig:

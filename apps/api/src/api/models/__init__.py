@@ -59,7 +59,12 @@ from api.models.document import (  # noqa: F401
     RecipientType,
     YearMode,
 )
-from api.models.email_message import EmailMessage, EmailStatus  # noqa: F401
+from api.models.email_message import (  # noqa: F401
+    EmailCampaignRecipient,
+    EmailMessage,
+    EmailRecipientStatus,
+    EmailStatus,
+)
 from api.models.exam_paper import ExamGradeTrack, ExamPaper, ExamPaperDownload  # noqa: F401
 
 # Feature Flag（Phase D3）

@@ -70,13 +70,19 @@ def _rotate_old_backups(backup_dir: Path, retention_days: int) -> int:
     """刪除 retention_days 前的備份；回傳刪除數量。"""
     cutoff = time.time() - retention_days * 86400
     removed = 0
-    for f in backup_dir.glob("hcca_backup_*.sql.gz"):
-        if f.stat().st_mtime < cutoff:
-            try:
-                f.unlink()
-                removed += 1
-            except OSError:
-                logger.warning("無法刪除過期備份 %s", f, exc_info=True)
+    for pattern in (
+        "hcca_backup_*.dump",
+        "hcca_backup_*.dump.gpg",
+        "hcca_backup_*.sql.gz",
+        "hcca_backup_*.sql.gz.gpg",
+    ):
+        for f in backup_dir.glob(pattern):
+            if f.stat().st_mtime < cutoff:
+                try:
+                    f.unlink()
+                    removed += 1
+                except OSError:
+                    logger.warning("無法刪除過期備份 %s", f, exc_info=True)
     return removed
 
 
@@ -96,7 +102,7 @@ def backup_database(self) -> dict:  # type: ignore[type-arg]
 
     user, password, host, port, db = _parse_database_url()
     stamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
-    target = backup_dir / f"hcca_backup_{db}_{stamp}.sql.gz"
+    target = backup_dir / f"hcca_backup_{db}_{stamp}.dump"
 
     env = {"PGPASSWORD": password}
     cmd = [
@@ -244,10 +250,15 @@ def _write_backup_record_sync(
 
 
 def _rotate_old_backups_all_exts(backup_dir: Path, retention_days: int) -> int:
-    """Wrapper：清舊 .sql.gz 和 .sql.gz.gpg。"""
+    """Wrapper：清舊 custom dump 與歷史 .sql.gz 檔名。"""
     cutoff = time.time() - retention_days * 86400
     removed = 0
-    for pattern in ("hcca_backup_*.sql.gz", "hcca_backup_*.sql.gz.gpg"):
+    for pattern in (
+        "hcca_backup_*.dump",
+        "hcca_backup_*.dump.gpg",
+        "hcca_backup_*.sql.gz",
+        "hcca_backup_*.sql.gz.gpg",
+    ):
         for f in backup_dir.glob(pattern):
             if f.stat().st_mtime < cutoff:
                 try:

@@ -9,7 +9,13 @@ import RichTextarea from "@/components/ui/RichTextarea";
 import RecipientPicker from "@/components/email/RecipientPicker";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import { ApiError, emailApi } from "@/lib/api";
-import type { EmailCardRow, EmailComposePayload, RecipientSelector } from "@/lib/types";
+import type {
+  EmailCardRow,
+  EmailComposePayload,
+  EmailRecipientVariableInput,
+  EmailVariableDefinition,
+  RecipientSelector,
+} from "@/lib/types";
 
 const EMPTY_RECIPIENTS: RecipientSelector = {
   user_ids: [],
@@ -100,6 +106,9 @@ type ComposeDraft = {
   cardRows: EmailCardRow[];
   ctaLabel: string;
   ctaUrl: string;
+  variableDefinitions: EmailVariableDefinition[];
+  previewVariables: Record<string, string>;
+  recipientVariablesText: string;
 };
 
 function ComposeInner() {
@@ -112,6 +121,9 @@ function ComposeInner() {
   const [cardRows, setCardRows] = useState<EmailCardRow[]>([]);
   const [ctaLabel, setCtaLabel] = useState("");
   const [ctaUrl, setCtaUrl] = useState("");
+  const [variableDefinitions, setVariableDefinitions] = useState<EmailVariableDefinition[]>([]);
+  const [previewVariables, setPreviewVariables] = useState<Record<string, string>>({});
+  const [recipientVariablesText, setRecipientVariablesText] = useState("");
   const [recipients, setRecipients] = useState<RecipientSelector>(EMPTY_RECIPIENTS);
   const [scheduledAt, setScheduledAt] = useState("");
 
@@ -133,6 +145,10 @@ function ComposeInner() {
         setCardRows(m.card_rows);
         setCtaLabel(m.cta_label);
         setCtaUrl(m.cta_url);
+        setVariableDefinitions(m.variable_definitions);
+        setRecipientVariablesText(
+          m.recipient_variables.length ? JSON.stringify(m.recipient_variables, null, 2) : "",
+        );
       })
       .catch((e) => toast.error(e instanceof ApiError ? e.message : "載入草稿失敗"));
   }, [draftId]);
@@ -146,6 +162,9 @@ function ComposeInner() {
     setCardRows(d.cardRows);
     setCtaLabel(d.ctaLabel);
     setCtaUrl(d.ctaUrl);
+    setVariableDefinitions(d.variableDefinitions);
+    setPreviewVariables(d.previewVariables);
+    setRecipientVariablesText(d.recipientVariablesText);
     toast.info("已還原上次未送出的內容");
   }, []);
 
@@ -156,20 +175,48 @@ function ComposeInner() {
       !d.body.trim() &&
       d.cardRows.length === 0 &&
       !d.ctaLabel.trim() &&
-      !d.ctaUrl.trim(),
+      !d.ctaUrl.trim() &&
+      d.variableDefinitions.length === 0 &&
+      !d.recipientVariablesText.trim(),
     [],
   );
 
   const { clearDraft, lastSavedAt } = useDraftAutosave<ComposeDraft>({
     key: AUTOSAVE_KEY,
-    value: { subject, heading, body, cardRows, ctaLabel, ctaUrl },
+    value: {
+      subject,
+      heading,
+      body,
+      cardRows,
+      ctaLabel,
+      ctaUrl,
+      variableDefinitions,
+      previewVariables,
+      recipientVariablesText,
+    },
     enabled: !draftId,
     onRestore: restoreDraft,
     isEmpty: isDraftEmpty,
   });
 
+  const parseRecipientVariables = useCallback(
+    (strict: boolean): EmailRecipientVariableInput[] => {
+      const raw = recipientVariablesText.trim();
+      if (!raw) return [];
+      try {
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) throw new Error("not array");
+        return parsed as EmailRecipientVariableInput[];
+      } catch {
+        if (strict) toast.error("逐收件人變數必須是 JSON 陣列");
+        return [];
+      }
+    },
+    [recipientVariablesText],
+  );
+
   const buildPayload = useCallback(
-    (): EmailComposePayload => ({
+    (strictVariables = false): EmailComposePayload => ({
       subject: subject.trim(),
       heading: heading.trim(),
       body,
@@ -177,8 +224,22 @@ function ComposeInner() {
       cta_label: ctaLabel.trim(),
       cta_url: ctaUrl.trim(),
       recipients,
+      variable_definitions: variableDefinitions.filter((v) => v.key.trim()),
+      preview_variables: previewVariables,
+      recipient_variables: parseRecipientVariables(strictVariables),
     }),
-    [subject, heading, body, cardRows, ctaLabel, ctaUrl, recipients],
+    [
+      subject,
+      heading,
+      body,
+      cardRows,
+      ctaLabel,
+      ctaUrl,
+      recipients,
+      variableDefinitions,
+      previewVariables,
+      parseRecipientVariables,
+    ],
   );
 
   // 收件人預覽（debounce）
@@ -219,6 +280,27 @@ function ComposeInner() {
   const removeRow = (i: number) =>
     setCardRows((rows) => rows.filter((_, idx) => idx !== i));
 
+  const addVariable = () =>
+    setVariableDefinitions((rows) => [
+      ...rows,
+      { key: "", label: "", required: false, default_value: "" },
+    ]);
+  const updateVariable = (i: number, patch: Partial<EmailVariableDefinition>) =>
+    setVariableDefinitions((rows) =>
+      rows.map((row, idx) => (idx === i ? { ...row, ...patch } : row)),
+    );
+  const removeVariable = (i: number) => {
+    const key = variableDefinitions[i]?.key;
+    setVariableDefinitions((rows) => rows.filter((_, idx) => idx !== i));
+    if (key) {
+      setPreviewVariables((vars) => {
+        const next = { ...vars };
+        delete next[key];
+        return next;
+      });
+    }
+  };
+
   const applyPreset = (key: string) => {
     const preset = PRESETS.find((p) => p.key === key);
     if (!preset) return;
@@ -232,7 +314,11 @@ function ComposeInner() {
       toast.error("請填寫信件主旨");
       return false;
     }
-    if (needRecipients && !count) {
+    const importedRecipients = parseRecipientVariables(true);
+    if (recipientVariablesText.trim() && importedRecipients.length === 0) {
+      return false;
+    }
+    if (needRecipients && !count && !importedRecipients.some((row) => row.email?.trim())) {
       toast.error("請選擇至少一位有效收件人");
       return false;
     }
@@ -243,7 +329,7 @@ function ComposeInner() {
     if (!validate(false)) return;
     setBusy(true);
     try {
-      const res = await emailApi.test(buildPayload());
+      const res = await emailApi.test(buildPayload(true));
       toast.success(`測試信已寄出至 ${res.sent_to}`);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "測試寄送失敗");
@@ -256,7 +342,7 @@ function ComposeInner() {
     if (!validate(false)) return;
     setBusy(true);
     try {
-      await emailApi.createMessage({ ...buildPayload(), action: "draft" });
+      await emailApi.createMessage({ ...buildPayload(true), action: "draft" });
       clearDraft();
       toast.success("草稿已儲存");
       router.push("/email/logs");
@@ -276,7 +362,7 @@ function ComposeInner() {
     setBusy(true);
     try {
       await emailApi.createMessage({
-        ...buildPayload(),
+        ...buildPayload(true),
         action: "schedule",
         scheduled_at: new Date(scheduledAt).toISOString(),
       });
@@ -294,7 +380,7 @@ function ComposeInner() {
     setConfirmOpen(false);
     setBusy(true);
     try {
-      await emailApi.createMessage({ ...buildPayload(), action: "send" });
+      await emailApi.createMessage({ ...buildPayload(true), action: "send" });
       clearDraft();
       toast.success("信件已排入寄送佇列");
       router.push("/email/logs");
@@ -429,6 +515,76 @@ function ComposeInner() {
           <section className="card space-y-2 p-4">
             <h2 className="text-sm font-semibold">內文</h2>
             <RichTextarea value={body} onChange={setBody} placeholder="撰寫信件內文…" />
+          </section>
+
+          <section className="card space-y-3 p-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold">個人化佔位符</h2>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={addVariable}>
+                + 新增變數
+              </button>
+            </div>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+              可在主旨、主標題、內文、重點卡片與按鈕連結使用：{" "}
+              <code>{"{{ user.name }}"}</code>、<code>{"{{ user.email }}"}</code>、{" "}
+              <code>{"{{ unsubscribe_url }}"}</code> 或自訂變數。
+            </p>
+            {variableDefinitions.map((row, i) => (
+              <div key={i} className="grid gap-2 md:grid-cols-[1.1fr_1.2fr_1.4fr_auto_auto]">
+                <input
+                  className="input"
+                  value={row.key}
+                  maxLength={64}
+                  placeholder="key，例如 interview_time"
+                  onChange={(e) => updateVariable(i, { key: e.target.value.trim() })}
+                />
+                <input
+                  className="input"
+                  value={row.label}
+                  maxLength={80}
+                  placeholder="顯示名稱"
+                  onChange={(e) => updateVariable(i, { label: e.target.value })}
+                />
+                <input
+                  className="input"
+                  value={previewVariables[row.key] ?? row.default_value}
+                  maxLength={500}
+                  placeholder="預覽/預設值"
+                  onChange={(e) => {
+                    updateVariable(i, { default_value: e.target.value });
+                    if (row.key) {
+                      setPreviewVariables((vars) => ({ ...vars, [row.key]: e.target.value }));
+                    }
+                  }}
+                />
+                <label className="flex items-center gap-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                  <input
+                    type="checkbox"
+                    checked={row.required}
+                    onChange={(e) => updateVariable(i, { required: e.target.checked })}
+                  />
+                  必填
+                </label>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => removeVariable(i)}>
+                  移除
+                </button>
+              </div>
+            ))}
+            <textarea
+              className="input min-h-28 font-mono text-xs"
+              value={recipientVariablesText}
+              onChange={(e) => setRecipientVariablesText(e.target.value)}
+              placeholder={`逐收件人變數 JSON，例如：
+[
+  {
+    "email": "student@example.com",
+    "name": "王小明",
+    "variables": {
+      "interview_time": "6/10 13:30"
+    }
+  }
+]`}
+            />
           </section>
 
           <section className="card space-y-3 p-4">
