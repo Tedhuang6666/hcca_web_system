@@ -214,10 +214,7 @@ def build_embed(
 
 
 def _embed_total_chars(embed: dict[str, Any]) -> int:
-    total = sum(
-        len(str(embed.get(key) or ""))
-        for key in ("title", "description")
-    )
+    total = sum(len(str(embed.get(key) or "")) for key in ("title", "description"))
     total += len(str((embed.get("footer") or {}).get("text") or ""))
     total += len(str((embed.get("author") or {}).get("name") or ""))
     for field in embed.get("fields") or []:

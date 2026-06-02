@@ -42,7 +42,9 @@ def parse_due_at(value: str | None) -> datetime | None:
     for label, delta_days in DUE_AT_PRESETS:
         if stripped == label:
             base = datetime.now(UTC) + timedelta(days=delta_days)
-            return base.replace(hour=10, minute=0, second=0, microsecond=0)  # UTC 10:00 = 台北 18:00
+            return base.replace(
+                hour=10, minute=0, second=0, microsecond=0
+            )  # UTC 10:00 = 台北 18:00
     return None
 
 

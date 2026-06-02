@@ -101,7 +101,9 @@ class PartnerBusiness(Base, TimestampMixin):
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     view_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     click_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
-    checkin_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    checkin_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     internal_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True

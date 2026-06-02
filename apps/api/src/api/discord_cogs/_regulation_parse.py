@@ -15,8 +15,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.regulation import Regulation, RegulationArticle
 
 _CN_DIGITS = {
-    "零": 0, "〇": 0, "一": 1, "二": 2, "兩": 2, "三": 3, "四": 4,
-    "五": 5, "六": 6, "七": 7, "八": 8, "九": 9,
+    "零": 0,
+    "〇": 0,
+    "一": 1,
+    "二": 2,
+    "兩": 2,
+    "三": 3,
+    "四": 4,
+    "五": 5,
+    "六": 6,
+    "七": 7,
+    "八": 8,
+    "九": 9,
 }
 
 # 法規名稱常見結尾，用來界定「法名」邊界
@@ -61,6 +71,7 @@ def _strip_leading_particle(law: str) -> str:
                 changed = True
                 break
     return law
+
 
 # 例：公民投票法第十條之一第二項第三款 / 學生自治會組織章程第 5 條
 _CITATION_RE = re.compile(
@@ -178,13 +189,17 @@ async def _match_regulation(db: AsyncSession, law: str) -> Regulation | None:
         return reg
 
     candidates = (
-        await db.execute(
-            select(Regulation)
-            .where(Regulation.is_active.is_(True))
-            .order_by(Regulation.updated_at.desc())
-            .limit(300)
+        (
+            await db.execute(
+                select(Regulation)
+                .where(Regulation.is_active.is_(True))
+                .order_by(Regulation.updated_at.desc())
+                .limit(300)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     reg = next((r for r in candidates if r.title and r.title in law), None)
     if reg is not None:
@@ -192,9 +207,7 @@ async def _match_regulation(db: AsyncSession, law: str) -> Regulation | None:
 
     # 子序列簡稱比對（law 至少 3 字才啟用，避免過度寬鬆）
     if len(law) >= 3:
-        matches = [
-            r for r in candidates if r.title and _is_subsequence(law, r.title)
-        ]
+        matches = [r for r in candidates if r.title and _is_subsequence(law, r.title)]
         if matches:
             # 取標題最短者（最貼近簡稱、最不易誤判）
             return min(matches, key=lambda r: len(r.title))

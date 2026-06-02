@@ -32,8 +32,16 @@ from api.services.discord_bot import create_open_url, emit_user_dm
 from api.services.discord_embeds import Domain, Severity, build_embed, default_action_row
 
 _POLL_NUMBER_EMOJIS = [
-    "1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣",
-    "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟",
+    "1️⃣",
+    "2️⃣",
+    "3️⃣",
+    "4️⃣",
+    "5️⃣",
+    "6️⃣",
+    "7️⃣",
+    "8️⃣",
+    "9️⃣",
+    "🔟",
 ]
 
 
@@ -51,9 +59,7 @@ async def _regulation_autocomplete(
         if needle:
             stmt = stmt.where(func.lower(Regulation.title).contains(needle))
         rows = (await db.execute(stmt)).all()
-    return [
-        app_commands.Choice(name=title[:100], value=str(rid)) for rid, title in rows
-    ][:25]
+    return [app_commands.Choice(name=title[:100], value=str(rid)) for rid, title in rows][:25]
 
 
 async def _survey_autocomplete(
@@ -282,7 +288,9 @@ class ToolsCog(commands.Cog):
         )
 
     # ── /poll ──────────────────────────────────────────────────────────────
-    @app_commands.command(name="poll", description="發起投票並分享到頻道（Discord 原生投票，可複選/設時長）")
+    @app_commands.command(
+        name="poll", description="發起投票並分享到頻道（Discord 原生投票，可複選/設時長）"
+    )
     @app_commands.describe(
         question="題目",
         options="選項，用「|」分隔，例：要 | 不要 | 還沒想好",

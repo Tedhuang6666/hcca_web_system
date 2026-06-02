@@ -261,7 +261,7 @@ export default function DashboardPage() {
               : "目前沒有等您處理的事項"}
           </p>
         </div>
-        {can("document:create") && (
+        {can("document:draft") && (
           <Link href="/documents/new" className="btn btn-primary self-start sm:self-auto">
             <Plus size={13} aria-hidden={true} />
             新增公文

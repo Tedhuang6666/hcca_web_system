@@ -80,7 +80,9 @@ async def update_settings(db: AsyncSession, data: PublicSiteSettingsUpdate) -> P
 async def list_link_categories(
     db: AsyncSession, active_only: bool = False
 ) -> list[PublicLinkCategory]:
-    stmt = select(PublicLinkCategory).order_by(PublicLinkCategory.sort_order, PublicLinkCategory.title)
+    stmt = select(PublicLinkCategory).order_by(
+        PublicLinkCategory.sort_order, PublicLinkCategory.title
+    )
     if active_only:
         stmt = stmt.where(PublicLinkCategory.is_active.is_(True))
     return list((await db.execute(stmt)).scalars().all())
@@ -148,28 +150,45 @@ def _active_term_filter(stmt: Select[Any], on_date: date) -> Select[Any]:
 async def list_officers(
     db: AsyncSession, active_only: bool = True, featured_only: bool = False
 ) -> list[PublicOfficerOut]:
+    """公開幹部名單（混合模式）。
+
+    預設自動列出所有「目前任期有效」的幹部；若該任期建有 PublicOfficerProfile，
+    則套用覆寫（顯示名稱、稱謂、簡介、排序、精選），並可透過 is_visible=False 隱藏。
+    尚未建立覆寫設定的幹部仍會以使用者/職位的預設值自動顯示。
+    """
     today = date.today()
     stmt = (
-        select(PublicOfficerProfile)
-        .join(PublicOfficerProfile.user_position)
+        select(UserPosition)
         .join(UserPosition.user)
         .join(UserPosition.position)
         .join(Position.org)
-        .where(PublicOfficerProfile.is_visible.is_(True))
         .options(
-            selectinload(PublicOfficerProfile.user_position).selectinload(UserPosition.user),
-            selectinload(PublicOfficerProfile.user_position)
-            .selectinload(UserPosition.position)
-            .selectinload(Position.org),
+            selectinload(UserPosition.user),
+            selectinload(UserPosition.position).selectinload(Position.org),
         )
-        .order_by(PublicOfficerProfile.sort_order, Position.weight.desc(), Position.name)
+        .order_by(Position.weight.desc(), Position.name, User.display_name)
     )
     if active_only:
         stmt = _active_term_filter(stmt, today)
-    if featured_only:
-        stmt = stmt.where(PublicOfficerProfile.is_featured.is_(True))
-    profiles = (await db.execute(stmt)).scalars().all()
-    return [_profile_to_public_officer(profile) for profile in profiles]
+    tenures = (await db.execute(stmt)).scalars().all()
+
+    profiles_by_position = {
+        profile.user_position_id: profile
+        for profile in (await db.execute(select(PublicOfficerProfile))).scalars().all()
+    }
+
+    officers: list[PublicOfficerOut] = []
+    for tenure in tenures:
+        profile = profiles_by_position.get(tenure.id)
+        if profile is not None and not profile.is_visible:
+            continue  # 管理員手動隱藏
+        if featured_only and not (profile.is_featured if profile else False):
+            continue
+        officers.append(_tenure_to_public_officer(tenure, profile))
+
+    # 依覆寫排序值排序；同值時維持查詢順序（職位權重 desc → 名稱）
+    officers.sort(key=lambda officer: officer.sort_order)
+    return officers
 
 
 async def list_officer_profiles(db: AsyncSession) -> list[PublicOfficerProfile]:
@@ -250,28 +269,33 @@ async def list_officer_candidates(
     ]
 
 
-def _profile_to_public_officer(profile: PublicOfficerProfile) -> PublicOfficerOut:
-    user_position = profile.user_position
+def _tenure_to_public_officer(
+    user_position: UserPosition, profile: PublicOfficerProfile | None
+) -> PublicOfficerOut:
     user = user_position.user
     position = user_position.position
     org = position.org
+    # Email 對外顯示一律以使用者 show_email 為前提；有覆寫則優先用覆寫值。
+    public_email = None
+    if user.show_email:
+        public_email = (profile.public_email if profile else None) or user.email
     return PublicOfficerOut(
-        id=user.id,
-        profile_id=profile.id,
+        id=user_position.id,
+        profile_id=profile.id if profile else None,
         user_position_id=user_position.id,
         user_id=user.id,
-        display_name=profile.display_name_override or user.display_name,
-        title=profile.title_override or position.name,
+        display_name=(profile.display_name_override if profile else None) or user.display_name,
+        title=(profile.title_override if profile else None) or position.name,
         org_name=org.name if org else "",
         position_name=position.name,
         avatar_url=user.avatar_url,
-        public_email=profile.public_email if user.show_email else None,
-        bio=profile.bio,
-        external_links=profile.external_links,
+        public_email=public_email,
+        bio=profile.bio if profile else None,
+        external_links=profile.external_links if profile else {},
         start_date=user_position.start_date,
         end_date=user_position.end_date,
-        sort_order=profile.sort_order,
-        is_featured=profile.is_featured,
+        sort_order=profile.sort_order if profile else 0,
+        is_featured=profile.is_featured if profile else False,
     )
 
 

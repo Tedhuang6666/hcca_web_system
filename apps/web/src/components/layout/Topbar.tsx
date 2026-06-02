@@ -583,7 +583,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
             className="flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-medium transition-colors"
             style={{
               background: "var(--primary-dim)",
-              color: "var(--primary)",
+              color: "var(--primary-text)",
               border: "1px solid var(--border-strong)",
               textDecoration: "none",
             }}

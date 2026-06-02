@@ -29,6 +29,7 @@ class PermissionCode(StrEnum):
     ORG_EDIT_PREFIX = "org:edit_prefix"
 
     DOCUMENT_CREATE = "document:create"
+    DOCUMENT_DRAFT = "document:draft"
     DOCUMENT_EDIT = "document:edit"
     DOCUMENT_DELETE = "document:delete"
     DOCUMENT_SUBMIT = "document:submit"
@@ -259,8 +260,14 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
     {
         "group": "公文系統",
         "code": PermissionCode.DOCUMENT_CREATE,
-        "label": "起草公文",
-        "desc": "建立公文草稿（限本組織）",
+        "label": "發起公文",
+        "desc": "代表本組織發起公文流程，可送審由部門最高權限者發出",
+    },
+    {
+        "group": "公文系統",
+        "code": PermissionCode.DOCUMENT_DRAFT,
+        "label": "草擬公文",
+        "desc": "代本組織建立與編輯公文草稿，不包含正式送審或發文",
     },
     {
         "group": "公文系統",

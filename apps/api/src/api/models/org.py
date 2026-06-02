@@ -47,6 +47,9 @@ class Org(Base, TimestampMixin):
     parent_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("orgs.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    leader_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     # Adjacency List 自我關聯
     parent: Mapped[Org | None] = relationship(
@@ -54,6 +57,7 @@ class Org(Base, TimestampMixin):
     )
     children: Mapped[list[Org]] = relationship("Org", back_populates="parent")
     positions: Mapped[list[Position]] = relationship("Position", back_populates="org")
+    leader: Mapped[User | None] = relationship("User", foreign_keys=[leader_user_id])
 
 
 class Position(Base, TimestampMixin):

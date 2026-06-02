@@ -29,9 +29,28 @@ _COMPILED_DIR = Path(__file__).resolve().parent / "compiled"
 
 # 富文本白名單 — 寄信頁內文（Markdown 轉 HTML 後）的清洗規則
 _ALLOWED_TAGS = [
-    "p", "br", "b", "strong", "i", "em", "u", "s", "del", "a",
-    "ul", "ol", "li", "h1", "h2", "h3", "h4", "blockquote", "span",
-    "code", "pre", "hr",
+    "p",
+    "br",
+    "b",
+    "strong",
+    "i",
+    "em",
+    "u",
+    "s",
+    "del",
+    "a",
+    "ul",
+    "ol",
+    "li",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "blockquote",
+    "span",
+    "code",
+    "pre",
+    "hr",
 ]
 _ALLOWED_ATTRS = {"a": ["href", "title"]}
 _ALLOWED_PROTOCOLS = ["http", "https", "mailto"]
@@ -50,8 +69,26 @@ _CONTEXT_DEFAULTS: dict = {
     "card_rows": [],
     "cta_url": "",
     "cta_label": "",
+    "buttons": [],
+    "blocks": [],
     "unsubscribe_url": "",
 }
+
+
+def absolutize_url(url: str | None) -> str:
+    """把相對路徑（如 /uploads/x.png）補上 FRONTEND_BASE_URL，供 email 內圖片載入。
+
+    email 客戶端無法載入相對路徑，因此上傳後的圖片網址需轉為絕對網址。
+    已是 http/https 的網址原樣回傳；其他（含空字串）回傳空字串。
+    """
+    value = (url or "").strip()
+    if not value:
+        return ""
+    if value.startswith(("http://", "https://")):
+        return value
+    if value.startswith("/"):
+        return f"{settings.FRONTEND_BASE_URL.rstrip('/')}{value}"
+    return ""
 
 
 def _nl2br(value: str | None) -> Markup:

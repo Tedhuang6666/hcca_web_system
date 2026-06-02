@@ -179,11 +179,7 @@ async def _check_disk() -> dict[str, Any]:
         if not fired:
             await _emit_alert(
                 title="⚠️ 磁碟使用率超過 80%",
-                body=(
-                    f"路徑：{target}\n"
-                    f"使用率：{pct:.1f}%\n"
-                    f"剩餘：{usage.free / 1024**3:.2f} GB"
-                ),
+                body=(f"路徑：{target}\n使用率：{pct:.1f}%\n剩餘：{usage.free / 1024**3:.2f} GB"),
             )
             await _set_flag("disk", True)
     else:
@@ -228,7 +224,9 @@ async def _check_backup_freshness() -> dict[str, Any]:
 
     await _set_flag("backup_missing", False)
     latest = max(candidates, key=lambda p: p.stat().st_mtime)
-    age_hours = (datetime.now(UTC) - datetime.fromtimestamp(latest.stat().st_mtime, UTC)) / timedelta(hours=1)
+    age_hours = (
+        datetime.now(UTC) - datetime.fromtimestamp(latest.stat().st_mtime, UTC)
+    ) / timedelta(hours=1)
     fired = await _flag_state("backup_stale")
     if age_hours > _BACKUP_STALE_HOURS:
         if not fired:

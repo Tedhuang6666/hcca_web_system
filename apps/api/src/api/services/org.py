@@ -47,7 +47,29 @@ async def _org_exists(db: AsyncSession, org_id: uuid.UUID) -> bool:
     return result.scalar_one_or_none() is not None
 
 
-async def _has_ancestor(db: AsyncSession, child_id: uuid.UUID, ancestor_candidate: uuid.UUID) -> bool:
+async def _user_has_active_position_in_org(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    org_id: uuid.UUID,
+) -> bool:
+    today = date.today()
+    result = await db.execute(
+        select(UserPosition.id)
+        .join(Position, UserPosition.position_id == Position.id)
+        .where(
+            UserPosition.user_id == user_id,
+            Position.org_id == org_id,
+            UserPosition.start_date <= today,
+            (UserPosition.end_date.is_(None)) | (UserPosition.end_date >= today),
+        )
+        .limit(1)
+    )
+    return result.scalar_one_or_none() is not None
+
+
+async def _has_ancestor(
+    db: AsyncSession, child_id: uuid.UUID, ancestor_candidate: uuid.UUID
+) -> bool:
     """用遞迴 CTE 檢查 ancestor_candidate 是否在 child_id 的祖先鏈中（避免 N+1 查詢）"""
     query = text("""
     WITH RECURSIVE ancestors AS (
@@ -58,7 +80,9 @@ async def _has_ancestor(db: AsyncSession, child_id: uuid.UUID, ancestor_candidat
     )
     SELECT EXISTS(SELECT 1 FROM ancestors WHERE parent_id = :ancestor_id)
     """)
-    result = await db.execute(query, {"child_id": str(child_id), "ancestor_id": str(ancestor_candidate)})
+    result = await db.execute(
+        query, {"child_id": str(child_id), "ancestor_id": str(ancestor_candidate)}
+    )
     return result.scalar_one_or_none() or False
 
 
@@ -90,6 +114,12 @@ async def update_org(db: AsyncSession, org: Org, data: OrgUpdate) -> Org:
             raise ValueError("指定的上層組織不存在")
         if await _has_ancestor(db, parent_id, org.id):
             raise ValueError("組織不可將自己的下層組織設為上級")
+    if (
+        "leader_user_id" in updates
+        and updates["leader_user_id"] is not None
+        and not await _user_has_active_position_in_org(db, updates["leader_user_id"], org.id)
+    ):
+        raise ValueError("指定部長必須是此組織的現任成員")
     for field, value in updates.items():
         setattr(org, field, value)
     await db.flush()

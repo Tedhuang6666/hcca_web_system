@@ -60,7 +60,7 @@ from api.services import activity as activity_svc
 from api.services import audit as audit_svc
 from api.services import document as doc_svc
 from api.services.discord_bot import emit_public_document_notice
-from api.services.permission import get_user_permission_codes_for_org
+from api.services.permission import get_user_permission_codes_for_org, user_is_org_leader
 
 router = APIRouter(prefix="/documents", tags=["公文系統"])
 
@@ -284,13 +284,16 @@ async def submit_document(
         is_activity_manager = await activity_svc.can_manage_activity_resource(
             session, current_user, doc.activity_id
         )
+        is_org_leader = await user_is_org_leader(session, current_user.id, doc.org_id)
         if not (
             (doc.created_by == current_user.id and "document:submit" in codes)
+            or is_org_leader
+            or "document:admin" in codes
             or is_activity_manager
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="只有建立者、document:submit 或活動總召可以送審",
+                detail="只有部門最高權限者、建立者 + document:submit、document:admin 或活動總召可以送審",
             )
     try:
         updated = await doc_svc.submit_document(session, doc, approver_ids=payload.approver_ids)

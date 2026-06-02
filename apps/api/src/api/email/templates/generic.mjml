@@ -30,7 +30,22 @@
               </div>
             {% endif %}
             <div class="hcca-body">{{ body_html | safe }}</div>
-            {% if cta_url %}
+            {% for blk in blocks %}
+              {% if blk.type == 'image' %}
+                <div style="padding:18px 0 0;text-align:center;"><img src="{{ blk.url }}" alt="{{ blk.alt }}" width="540" style="max-width:100%;height:auto;border-radius:14px;" /></div>
+              {% elif blk.type == 'divider' %}
+                <div style="border-top:1px solid #e5e7eb;margin:22px 0;"></div>
+              {% elif blk.type == 'text' %}
+                <div class="hcca-body" style="padding-top:6px;">{{ blk.html | safe }}</div>
+              {% endif %}
+            {% endfor %}
+            {% if buttons %}
+              <div style="padding:24px 0 0;">
+                {% for b in buttons %}
+                  <a href="{{ b.url }}" style="display:inline-block;margin:0 10px 10px 0;font-size:15px;font-weight:800;text-decoration:none;padding:14px 28px;border-radius:12px;{% if b.style == 'secondary' %}background-color:#d6b34a;color:#111827;{% elif b.style == 'outline' %}background-color:#ffffff;color:#111827;border:1px solid #111827;{% else %}background-color:#111827;color:#ffffff;{% endif %}">{{ b.label or '查看詳情' }}</a>
+                {% endfor %}
+              </div>
+            {% elif cta_url %}
               <div style="padding:24px 0 0;">
                 <a href="{{ cta_url }}" style="display:inline-block;background-color:#111827;color:#ffffff;font-size:15px;font-weight:800;text-decoration:none;padding:14px 28px;border-radius:12px;">{{ cta_label or '查看詳情' }}</a>
               </div>

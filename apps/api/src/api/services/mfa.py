@@ -75,11 +75,10 @@ def _pyotp():
     """延遲導入 pyotp（避免啟動時報錯，安裝後自動生效）"""
     try:
         import pyotp
+
         return pyotp
     except ImportError as e:
-        raise ImportError(
-            "pyotp 未安裝，請執行：uv add pyotp --project apps/api"
-        ) from e
+        raise ImportError("pyotp 未安裝，請執行：uv add pyotp --project apps/api") from e
 
 
 def generate_totp_secret() -> str:

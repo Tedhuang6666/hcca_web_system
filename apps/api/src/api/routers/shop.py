@@ -703,9 +703,7 @@ async def create_class_order(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此學生")
     target_class = await class_svc.resolve_user_class(session, target)
     cadre_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
-    if target_class is None or (
-        not current_user.is_superuser and target_class.id not in cadre_ids
-    ):
+    if target_class is None or (not current_user.is_superuser and target_class.id not in cadre_ids):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權替此學生訂購")
     try:
         orders = await shop_svc.create_direct_order(

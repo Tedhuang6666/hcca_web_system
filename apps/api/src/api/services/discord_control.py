@@ -69,9 +69,7 @@ async def read_bot_status() -> dict[str, Any] | None:
         return None
 
 
-async def request_control(
-    action: str, *, timeout: float = 6.0, **kwargs: Any
-) -> dict[str, Any]:
+async def request_control(action: str, *, timeout: float = 6.0, **kwargs: Any) -> dict[str, Any]:
     """發送控制指令並等待 bot 回覆。
 
     回傳 bot 的回覆 dict；逾時則回 `{"ok": False, "error": "timeout"}`（代表 bot 可能離線）。
@@ -100,9 +98,7 @@ async def request_control(
 
 async def write_bot_status(payload: dict[str, Any]) -> None:
     """bot 心跳：寫入狀態並設定 TTL（過期即視為離線）。"""
-    await _blocking_redis.set(
-        BOT_STATUS_KEY, json.dumps(payload), ex=BOT_STATUS_TTL_SECONDS
-    )
+    await _blocking_redis.set(BOT_STATUS_KEY, json.dumps(payload), ex=BOT_STATUS_TTL_SECONDS)
 
 
 async def send_control_reply(req_id: str, payload: dict[str, Any]) -> None:

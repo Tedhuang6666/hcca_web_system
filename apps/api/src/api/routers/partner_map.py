@@ -442,7 +442,9 @@ async def admin_review_submission(
     if submission is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此投稿")
     if body.business_id is not None and await map_svc.get_business(db, body.business_id) is None:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="指定店家不存在")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="指定店家不存在"
+        )
     submission = await map_svc.review_submission(db, submission, body, user.id)
     return PartnerSubmissionOut.model_validate(submission)
 

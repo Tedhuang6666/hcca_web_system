@@ -47,7 +47,7 @@ export default function LegalLayout({ children }: { children: ReactNode }) {
         <p>
           若對本政策有疑問，請透過平台管理員或班聯會指定窗口聯繫。
           安全漏洞回報請見{" "}
-          <Link className="underline" href="/legal/security-policy" style={{ color: "var(--primary)" }}>
+          <Link className="underline" href="/legal/security-policy" style={{ color: "var(--primary-text)" }}>
             安全揭露政策
           </Link>
           。

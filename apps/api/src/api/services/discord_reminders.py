@@ -60,8 +60,9 @@ def _enqueue_user_dm(
 def _digest_eligible_users(session: Session, *, weekly: bool) -> list[tuple[uuid.UUID, str]]:
     """回傳 (user_id, discord_user_id) 清單；篩選綁定 + 對應 digest 開啟者。"""
     rows = session.execute(
-        select(DiscordAccountLink.user_id, DiscordAccountLink.discord_user_id)
-        .where(DiscordAccountLink.is_active.is_(True))
+        select(DiscordAccountLink.user_id, DiscordAccountLink.discord_user_id).where(
+            DiscordAccountLink.is_active.is_(True)
+        )
     ).all()
     if not rows:
         return []
@@ -107,15 +108,13 @@ def _count_user_summary(
     session: Session, *, user_id: uuid.UUID, since: datetime, until: datetime
 ) -> dict[str, int]:
     """計算單一 user 在 [since, until) 區間的摘要數字。"""
-    pending_meetings = (
-        session.execute(
-            select(Meeting)
-            .where(Meeting.starts_at.is_not(None))
-            .where(Meeting.starts_at >= since)
-            .where(Meeting.starts_at < until)
-            .where(Meeting.status.in_([MeetingStatus.DRAFT, MeetingStatus.IN_PROGRESS]))
-        ).all()
-    )
+    pending_meetings = session.execute(
+        select(Meeting)
+        .where(Meeting.starts_at.is_not(None))
+        .where(Meeting.starts_at >= since)
+        .where(Meeting.starts_at < until)
+        .where(Meeting.status.in_([MeetingStatus.DRAFT, MeetingStatus.IN_PROGRESS]))
+    ).all()
     # TODO: 公文 / 學餐 / 問卷的個人化過濾留 Phase 2 dashboard 上線後串接 task_inbox。
     # 目前先給出 0，避免錯誤統計；之後在此填入真實查詢。
     return {
@@ -200,20 +199,28 @@ def reminder_sweep() -> dict[str, int]:
     reminded = 0
     with Session(eng) as session:
         # 找在 1 小時內或 24 小時內開始的活動
-        events = session.execute(
-            select(CalendarEvent)
-            .where(CalendarEvent.starts_at >= now)
-            .where(CalendarEvent.starts_at <= one_day)
-            .where(CalendarEvent.is_active.is_(True))
-        ).scalars().all()
+        events = (
+            session.execute(
+                select(CalendarEvent)
+                .where(CalendarEvent.starts_at >= now)
+                .where(CalendarEvent.starts_at <= one_day)
+                .where(CalendarEvent.is_active.is_(True))
+            )
+            .scalars()
+            .all()
+        )
         for event in events:
             lead = "1 小時內" if event.starts_at <= one_hour else "明日"
             # 取出參與者
-            participant_ids = session.execute(
-                select(CalendarEventParticipant.user_id).where(
-                    CalendarEventParticipant.event_id == event.id
+            participant_ids = (
+                session.execute(
+                    select(CalendarEventParticipant.user_id).where(
+                        CalendarEventParticipant.event_id == event.id
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             for user_id in participant_ids:
                 embed = build_embed(
                     Domain.CALENDAR,

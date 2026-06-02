@@ -40,9 +40,7 @@ _CATEGORY_LABEL: dict[str, str] = {
 _QUIET_PATTERN = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 
 
-async def _get_or_create_preference(
-    db, user_id: uuid.UUID
-) -> DiscordNotificationPreference:
+async def _get_or_create_preference(db, user_id: uuid.UUID) -> DiscordNotificationPreference:
     pref = await db.scalar(
         select(DiscordNotificationPreference).where(
             DiscordNotificationPreference.user_id == user_id
@@ -270,7 +268,12 @@ class NotifyCog(commands.Cog):
         if start is None and end is None:
             new_start = new_end = None
         else:
-            if not start or not end or not _QUIET_PATTERN.match(start) or not _QUIET_PATTERN.match(end):
+            if (
+                not start
+                or not end
+                or not _QUIET_PATTERN.match(start)
+                or not _QUIET_PATTERN.match(end)
+            ):
                 await interaction.response.send_message(
                     "時間格式請用 HH:MM，例如 22:00 與 08:00。", ephemeral=True
                 )

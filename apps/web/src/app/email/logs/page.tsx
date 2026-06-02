@@ -66,6 +66,20 @@ export default function EmailLogsPage() {
     }
   };
 
+  const resend = async (id: string) => {
+    setBusyId(id);
+    try {
+      await emailApi.resendMessage(id);
+      toast.success("已將未送達的收件人重新排入寄送佇列");
+      if (detail?.id === id) setDetail(await emailApi.getMessage(id));
+      load();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "重新寄送失敗");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const showDetail = async (id: string) => {
     setBusyId(id);
     try {
@@ -197,6 +211,16 @@ export default function EmailLogsPage() {
                         取消預約
                       </button>
                     )}
+                    {(m.status === "queued" || m.status === "failed" || m.status === "partial") && (
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        disabled={busyId === m.id}
+                        onClick={() => resend(m.id)}
+                        title="把卡住或失敗的收件人重新排入寄送佇列"
+                      >
+                        重新寄送
+                      </button>
+                    )}
                   </div>
                 </li>
               );
@@ -214,10 +238,27 @@ export default function EmailLogsPage() {
                 {detail.sender_name ?? "—"} · {detail.recipient_count} 人 · {fmt(detail.created_at)}
               </p>
             </div>
-            <button className="btn btn-ghost btn-sm" onClick={() => setDetail(null)}>
-              關閉
-            </button>
+            <div className="flex shrink-0 gap-1.5">
+              {(detail.status === "queued" || detail.status === "failed" || detail.status === "partial") && (
+                <button
+                  className="btn btn-secondary btn-sm"
+                  disabled={busyId === detail.id}
+                  onClick={() => resend(detail.id)}
+                >
+                  重新寄送未送達
+                </button>
+              )}
+              <button className="btn btn-ghost btn-sm" onClick={() => setDetail(null)}>
+                關閉
+              </button>
+            </div>
           </div>
+
+          {detail.status === "queued" && (detail.recipient_status_counts.queued ?? 0) > 0 && (
+            <p className="mt-3 rounded-lg px-3 py-2 text-xs" style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
+              仍有 {detail.recipient_status_counts.queued} 位收件人停留在「寄送中」。若長時間沒有變成「已寄送」，通常代表背景寄信服務（Celery worker）未啟動，或 Resend 寄信金鑰未設定。請確認服務運作後，再按「重新寄送未送達」補寄。
+            </p>
+          )}
 
           <div className="mt-4 grid gap-2 sm:grid-cols-3">
             {(["queued", "sent", "failed"] as const).map((key) => (

@@ -662,12 +662,24 @@ function OrgPanel({
   const [prefix, setPrefix] = useState(org.prefix ?? "");
   const [billStage, setBillStage] = useState<"" | MeetingBillStage>(org.bill_stage ?? "");
   const [parentId, setParentId] = useState(org.parent_id ?? "");
+  const [leaderUserId, setLeaderUserId] = useState(org.leader_user_id ?? "");
   const [newPositionName, setNewPositionName] = useState("");
   const [newPositionCategory, setNewPositionCategory] = useState<PositionCategory>("council");
   const [newWeight, setNewWeight] = useState(0);
   const [newCodes, setNewCodes] = useState<string[]>([]);
   const orgPositions = positions.filter((p) => p.org_id === org.id);
   const orgMembers = users.filter((u) => orgPositions.some((p) => u.positions.some((up) => up.id === p.id)));
+  const fallbackLeader = orgMembers
+    .map((user) => {
+      const maxWeight = Math.max(
+        ...user.positions
+          .filter((position) => position.org_id === org.id)
+          .map((position) => position.weight),
+        0,
+      );
+      return { user, maxWeight };
+    })
+    .sort((a, b) => b.maxWeight - a.maxWeight || a.user.display_name.localeCompare(b.user.display_name, "zh-Hant"))[0]?.user;
   const descendantIds = new Set<string>();
   const collectDescendants = (parentId: string) => {
     orgs.filter((o) => o.parent_id === parentId).forEach((child) => {
@@ -685,6 +697,7 @@ function OrgPanel({
     setPrefix(org.prefix ?? "");
     setBillStage(org.bill_stage ?? "");
     setParentId(org.parent_id ?? "");
+    setLeaderUserId(org.leader_user_id ?? "");
   }, [org]);
 
   const save = async () => {
@@ -695,6 +708,7 @@ function OrgPanel({
         prefix: prefix.trim() || null,
         bill_stage: billStage || null,
         parent_id: parentId || null,
+        leader_user_id: leaderUserId || null,
       });
       toast.success("組織已更新");
       await onRefresh();
@@ -815,6 +829,17 @@ function OrgPanel({
           <label className="text-xs sm:col-span-2" style={{ color: "var(--text-muted)" }}>議事角色（法案審議階段）<SelectInput value={billStage} onChange={(e) => setBillStage(e.target.value as "" | MeetingBillStage)} className="mt-1">{BILL_STAGE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</SelectInput><span className="block mt-1 text-[10px]" style={{ color: "var(--text-disabled)" }}>設定後，此組織所辦會議的議程會自動偵測對應階段的待審法案。</span></label>
           <label className="text-xs sm:col-span-2" style={{ color: "var(--text-muted)" }}>描述<TextInput value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1" /></label>
           <label className="text-xs sm:col-span-2" style={{ color: "var(--text-muted)" }}>上層組織<SelectInput value={parentId} onChange={(e) => setParentId(e.target.value)} className="mt-1"><option value="">無（頂層）</option>{orgs.filter((o) => o.is_active && o.id !== org.id && !descendantIds.has(o.id)).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</SelectInput></label>
+          <label className="text-xs sm:col-span-2" style={{ color: "var(--text-muted)" }}>
+            部長 / 最高權限者
+            <SelectInput value={leaderUserId} onChange={(e) => setLeaderUserId(e.target.value)} className="mt-1">
+              <option value="">
+                未指定（預設：{fallbackLeader?.display_name ?? "同組織最高權重成員"}）
+              </option>
+              {orgMembers.map((member) => (
+                <option key={member.id} value={member.id}>{member.display_name} · {member.email}</option>
+              ))}
+            </SelectInput>
+          </label>
         </div>
       </section>
       <section className="rounded-xl p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>

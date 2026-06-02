@@ -212,7 +212,7 @@ export default function Sidebar() {
             </p>
             <p
               className="text-[10px] leading-tight mt-0.5 tracking-widest font-medium"
-              style={{ color: "var(--primary)", opacity: 0.8 }}>
+              style={{ color: "var(--primary-text)" }}>
               {BRANDING.acronym}
             </p>
           </div>
@@ -340,7 +340,7 @@ export default function Sidebar() {
             className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg w-full transition-colors"
             style={{
               background: "var(--primary-dim)",
-              color: "var(--primary)",
+              color: "var(--primary-text)",
               border: "1px solid var(--border-strong)",
               textDecoration: "none",
             }}

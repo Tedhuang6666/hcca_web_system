@@ -79,7 +79,9 @@ async def _case_or_404(session: AsyncSession, case_id: uuid.UUID) -> PetitionCas
     return case_obj
 
 
-async def _manageable_org_ids(session: AsyncSession, user: User, *permissions: str) -> list[uuid.UUID] | None:
+async def _manageable_org_ids(
+    session: AsyncSession, user: User, *permissions: str
+) -> list[uuid.UUID] | None:
     codes = await get_user_permission_codes(session, user.id)
     if _has_all_scope(codes, user):
         return None
@@ -96,7 +98,11 @@ async def _assert_case_access(
     codes = await get_user_permission_codes(session, user.id)
     if case_obj.submitter_id == user.id:
         return False, True
-    if user.is_superuser or str(PermissionCode.ADMIN_ALL) in codes or str(PermissionCode.PETITION_ADMIN) in codes:
+    if (
+        user.is_superuser
+        or str(PermissionCode.ADMIN_ALL) in codes
+        or str(PermissionCode.PETITION_ADMIN) in codes
+    ):
         return True, case_obj.is_named
     if str(PermissionCode.PETITION_VIEW_ALL) in codes:
         return True, case_obj.is_named
@@ -235,7 +241,9 @@ async def create_petition(
     current_user: OptionalUser,
 ) -> PetitionCreatedOut:
     try:
-        case_obj, code = await petition_svc.create_case(session, data=payload, submitter=current_user)
+        case_obj, code = await petition_svc.create_case(
+            session, data=payload, submitter=current_user
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     await audit_svc.record(
@@ -317,7 +325,9 @@ async def list_my_cases(
     "/admin/types",
     response_model=list[PetitionTypeOut],
     summary="管理端列出全部陳情類型",
-    dependencies=[Depends(require_any(PermissionCode.PETITION_TYPE_MANAGE, PermissionCode.PETITION_ADMIN))],
+    dependencies=[
+        Depends(require_any(PermissionCode.PETITION_TYPE_MANAGE, PermissionCode.PETITION_ADMIN))
+    ],
 )
 async def list_admin_types(session: DbDep, _: CurrentUser) -> list[PetitionType]:
     return await petition_svc.list_types(session, active_only=False)
@@ -328,9 +338,13 @@ async def list_admin_types(session: DbDep, _: CurrentUser) -> list[PetitionType]
     response_model=PetitionTypeOut,
     status_code=status.HTTP_201_CREATED,
     summary="新增陳情類型",
-    dependencies=[Depends(require_any(PermissionCode.PETITION_TYPE_MANAGE, PermissionCode.PETITION_ADMIN))],
+    dependencies=[
+        Depends(require_any(PermissionCode.PETITION_TYPE_MANAGE, PermissionCode.PETITION_ADMIN))
+    ],
 )
-async def create_type(payload: PetitionTypeCreate, session: DbDep, user: CurrentUser) -> PetitionType:
+async def create_type(
+    payload: PetitionTypeCreate, session: DbDep, user: CurrentUser
+) -> PetitionType:
     petition_type = await petition_svc.create_type(session, payload)
     await audit_svc.record(
         session,
@@ -349,7 +363,9 @@ async def create_type(payload: PetitionTypeCreate, session: DbDep, user: Current
     "/admin/types/{type_id}",
     response_model=PetitionTypeOut,
     summary="更新陳情類型",
-    dependencies=[Depends(require_any(PermissionCode.PETITION_TYPE_MANAGE, PermissionCode.PETITION_ADMIN))],
+    dependencies=[
+        Depends(require_any(PermissionCode.PETITION_TYPE_MANAGE, PermissionCode.PETITION_ADMIN))
+    ],
 )
 async def update_type(
     type_id: uuid.UUID,
@@ -378,7 +394,9 @@ async def update_type(
     "/admin/types/{type_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="刪除陳情類型（若已有案件請改停用）",
-    dependencies=[Depends(require_any(PermissionCode.PETITION_TYPE_MANAGE, PermissionCode.PETITION_ADMIN))],
+    dependencies=[
+        Depends(require_any(PermissionCode.PETITION_TYPE_MANAGE, PermissionCode.PETITION_ADMIN))
+    ],
 )
 async def delete_type(type_id: uuid.UUID, session: DbDep, user: CurrentUser) -> None:
     petition_type = await petition_svc.get_type(session, type_id)
@@ -441,13 +459,17 @@ async def get_stats(session: DbDep, user: CurrentUser) -> PetitionStatsOut:
     include_by_org = include_all or bool(
         codes & {str(PermissionCode.PETITION_ANALYTICS_ORG), str(PermissionCode.PETITION_VIEW_ORG)}
     )
-    org_ids = None if include_all else await _manageable_org_ids(
-        session,
-        user,
-        str(PermissionCode.PETITION_ANALYTICS_ORG),
-        str(PermissionCode.PETITION_VIEW_ORG),
-        str(PermissionCode.PETITION_ASSIGN),
-        str(PermissionCode.PETITION_HANDLE),
+    org_ids = (
+        None
+        if include_all
+        else await _manageable_org_ids(
+            session,
+            user,
+            str(PermissionCode.PETITION_ANALYTICS_ORG),
+            str(PermissionCode.PETITION_VIEW_ORG),
+            str(PermissionCode.PETITION_ASSIGN),
+            str(PermissionCode.PETITION_HANDLE),
+        )
     )
     return await petition_svc.stats(
         session,
@@ -469,7 +491,9 @@ async def get_case(case_id: uuid.UUID, session: DbDep, user: CurrentUser) -> Pet
 
 
 @router.get("/{case_id}/assignable-users", response_model=list[dict], summary="列出可分案承辦人")
-async def list_assignable_users(case_id: uuid.UUID, session: DbDep, user: CurrentUser) -> list[dict]:
+async def list_assignable_users(
+    case_id: uuid.UUID, session: DbDep, user: CurrentUser
+) -> list[dict]:
     case_obj = await _case_or_404(session, case_id)
     await _assert_case_access(session, case_obj, user)
     from datetime import date
@@ -494,17 +518,25 @@ async def list_assignable_users(case_id: uuid.UUID, session: DbDep, user: Curren
     ]
 
 
-@router.post("/{case_id}/discord-channel", response_model=PetitionCaseOut, summary="建立陳情私密 Discord 頻道")
+@router.post(
+    "/{case_id}/discord-channel",
+    response_model=PetitionCaseOut,
+    summary="建立陳情私密 Discord 頻道",
+)
 async def create_petition_discord_channel(
     case_id: uuid.UUID, session: DbDep, current_user: CurrentUser
 ) -> PetitionCaseOut:
     case_obj = await _case_or_404(session, case_id)
-    include_internal, can_view_submitter = await _assert_case_access(session, case_obj, current_user)
+    include_internal, can_view_submitter = await _assert_case_access(
+        session, case_obj, current_user
+    )
     if not include_internal:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權建立陳情私密頻道")
     queued = await enqueue_petition_private_channel(session, case_obj, force=True)
     if not queued:
-        raise HTTPException(status_code=409, detail="此案件已建立頻道，或 Discord 陳情頻道設定尚未完成")
+        raise HTTPException(
+            status_code=409, detail="此案件已建立頻道，或 Discord 陳情頻道設定尚未完成"
+        )
     await audit_svc.record(
         session,
         entity_type="petition_case",
@@ -528,14 +560,13 @@ async def supplement_case(
     user: OptionalUser,
 ) -> PetitionCaseOut:
     case_obj = await _case_or_404(session, case_id)
-    if (
-        (user is None or case_obj.submitter_id != user.id)
-        and (
-            not payload.verification_code
-            or not petition_svc.verify_code(case_obj, payload.verification_code)
-        )
+    if (user is None or case_obj.submitter_id != user.id) and (
+        not payload.verification_code
+        or not petition_svc.verify_code(case_obj, payload.verification_code)
     ):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="需要本人登入或正確驗證碼")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="需要本人登入或正確驗證碼"
+        )
     if case_obj.status != PetitionStatus.NEEDS_INFO:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="此案件目前不需要補件")
     case_obj = await petition_svc.supplement_case(
@@ -560,7 +591,9 @@ async def supplement_case(
     "/{case_id}/assign",
     response_model=PetitionCaseOut,
     summary="機關內部分案",
-    dependencies=[Depends(require_any(PermissionCode.PETITION_ASSIGN, PermissionCode.PETITION_ADMIN))],
+    dependencies=[
+        Depends(require_any(PermissionCode.PETITION_ASSIGN, PermissionCode.PETITION_ADMIN))
+    ],
 )
 async def assign_case(
     case_id: uuid.UUID,
@@ -583,14 +616,18 @@ async def assign_case(
         link=f"/petitions/manage?case={case_obj.id}",
         related_id=case_obj.id,
     )
-    return await _decorate_case(case_obj, include_internal=True, can_view_submitter=case_obj.is_named)
+    return await _decorate_case(
+        case_obj, include_internal=True, can_view_submitter=case_obj.is_named
+    )
 
 
 @router.patch(
     "/{case_id}/transfer",
     response_model=PetitionCaseOut,
     summary="轉派負責機關",
-    dependencies=[Depends(require_any(PermissionCode.PETITION_TRANSFER, PermissionCode.PETITION_ADMIN))],
+    dependencies=[
+        Depends(require_any(PermissionCode.PETITION_TRANSFER, PermissionCode.PETITION_ADMIN))
+    ],
 )
 async def transfer_case(
     case_id: uuid.UUID,
@@ -601,7 +638,9 @@ async def transfer_case(
     case_obj = await _case_or_404(session, case_id)
     await _assert_case_access(session, case_obj, user)
     try:
-        case_obj = await petition_svc.transfer_case(session, case_obj, data=payload, actor_id=user.id)
+        case_obj = await petition_svc.transfer_case(
+            session, case_obj, data=payload, actor_id=user.id
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     await _notify(
@@ -613,14 +652,18 @@ async def transfer_case(
         link=f"/petitions/{case_obj.id}",
         related_id=case_obj.id,
     )
-    return await _decorate_case(case_obj, include_internal=True, can_view_submitter=case_obj.is_named)
+    return await _decorate_case(
+        case_obj, include_internal=True, can_view_submitter=case_obj.is_named
+    )
 
 
 @router.post(
     "/{case_id}/reply",
     response_model=PetitionCaseOut,
     summary="承辦回覆",
-    dependencies=[Depends(require_any(PermissionCode.PETITION_HANDLE, PermissionCode.PETITION_ADMIN))],
+    dependencies=[
+        Depends(require_any(PermissionCode.PETITION_HANDLE, PermissionCode.PETITION_ADMIN))
+    ],
 )
 async def reply_case(
     case_id: uuid.UUID,
@@ -640,14 +683,18 @@ async def reply_case(
         link=f"/petitions/{case_obj.id}",
         related_id=case_obj.id,
     )
-    return await _decorate_case(case_obj, include_internal=True, can_view_submitter=case_obj.is_named)
+    return await _decorate_case(
+        case_obj, include_internal=True, can_view_submitter=case_obj.is_named
+    )
 
 
 @router.patch(
     "/{case_id}/status",
     response_model=PetitionCaseOut,
     summary="更新案件狀態",
-    dependencies=[Depends(require_any(PermissionCode.PETITION_HANDLE, PermissionCode.PETITION_ADMIN))],
+    dependencies=[
+        Depends(require_any(PermissionCode.PETITION_HANDLE, PermissionCode.PETITION_ADMIN))
+    ],
 )
 async def update_status(
     case_id: uuid.UUID,
@@ -658,7 +705,9 @@ async def update_status(
     case_obj = await _case_or_404(session, case_id)
     await _assert_case_access(session, case_obj, user)
     try:
-        case_obj = await petition_svc.update_status(session, case_obj, data=payload, actor_id=user.id)
+        case_obj = await petition_svc.update_status(
+            session, case_obj, data=payload, actor_id=user.id
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     await _notify(
@@ -670,14 +719,18 @@ async def update_status(
         link=f"/petitions/{case_obj.id}",
         related_id=case_obj.id,
     )
-    return await _decorate_case(case_obj, include_internal=True, can_view_submitter=case_obj.is_named)
+    return await _decorate_case(
+        case_obj, include_internal=True, can_view_submitter=case_obj.is_named
+    )
 
 
 @router.post(
     "/{case_id}/notes",
     response_model=PetitionCaseOut,
     summary="新增內部備註",
-    dependencies=[Depends(require_any(PermissionCode.PETITION_HANDLE, PermissionCode.PETITION_ADMIN))],
+    dependencies=[
+        Depends(require_any(PermissionCode.PETITION_HANDLE, PermissionCode.PETITION_ADMIN))
+    ],
 )
 async def add_note(
     case_id: uuid.UUID,
@@ -687,8 +740,12 @@ async def add_note(
 ) -> PetitionCaseOut:
     case_obj = await _case_or_404(session, case_id)
     await _assert_case_access(session, case_obj, user)
-    case_obj = await petition_svc.add_internal_note(session, case_obj, data=payload, actor_id=user.id)
-    return await _decorate_case(case_obj, include_internal=True, can_view_submitter=case_obj.is_named)
+    case_obj = await petition_svc.add_internal_note(
+        session, case_obj, data=payload, actor_id=user.id
+    )
+    return await _decorate_case(
+        case_obj, include_internal=True, can_view_submitter=case_obj.is_named
+    )
 
 
 # ── 附件 ─────────────────────────────────────────────────────────────────────
@@ -767,7 +824,9 @@ async def download_attachment(
         )
     )
     att = result.scalar_one_or_none()
-    if att is None or (att.visibility == PetitionAttachmentVisibility.INTERNAL and not include_internal):
+    if att is None or (
+        att.visibility == PetitionAttachmentVisibility.INTERNAL and not include_internal
+    ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此附件")
     filename = att.display_name or att.filename
     encoded_filename = quote(filename.encode("utf-8"))
@@ -779,7 +838,11 @@ async def download_attachment(
     )
 
 
-@router.get("/{case_number}/{verification_code}", response_model=PetitionLookupOut, summary="以分享連結查詢案件")
+@router.get(
+    "/{case_number}/{verification_code}",
+    response_model=PetitionLookupOut,
+    summary="以分享連結查詢案件",
+)
 async def lookup_case_by_share_link(
     case_number: str,
     verification_code: str,

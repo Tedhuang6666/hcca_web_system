@@ -2,7 +2,8 @@
 公文系統 Router
 =============
 RBAC 權限說明：
-  - document:create  → 建立公文
+  - document:draft   → 草擬公文
+  - document:create  → 發起公文流程
   - document:approve → 審核（核准/退件）
   - document:admin   → 管理員操作（封存、不受組織限制的列表查詢）
 所有讀取端點依「組織可見性」過濾（同組成員、建立者、審核人）。
@@ -64,7 +65,11 @@ from api.schemas.document import (
 from api.services import activity as activity_svc
 from api.services import audit as audit_svc
 from api.services import document as doc_svc
-from api.services.permission import get_user_permission_codes, get_user_permission_codes_for_org
+from api.services.permission import (
+    get_user_permission_codes,
+    get_user_permission_codes_for_org,
+    user_is_org_leader,
+)
 
 router = APIRouter(prefix="/documents", tags=["公文系統"])
 # template_router / serial_router 由 documents_serial.py 提供（透過檔案底部 re-export 帶入）
@@ -166,17 +171,20 @@ async def create_document(
     current_user: CurrentUser,
 ) -> Document:
     """
-    建立草稿公文並生成字號。需在目標組織下擁有 document:create 權限（org-scoped）。
+    建立草稿公文並生成字號。需在目標組織下擁有 document:draft 或 document:create 權限。
     """
     if not current_user.is_superuser:
         codes = await get_user_permission_codes_for_org(session, current_user.id, payload.org_id)
         is_activity_manager = await activity_svc.can_manage_activity_resource(
             session, current_user, payload.activity_id
         )
-        if "document:create" not in codes and not is_activity_manager:
+        if (
+            not ({"document:draft", "document:create", "document:admin"} & set(codes))
+            and not is_activity_manager
+        ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="您在此組織或活動下無起草公文的權限（需 document:create 或活動總召）",
+                detail="您在此組織或活動下無草擬公文的權限（需 document:draft/document:create 或活動總召）",
             )
     doc = await doc_svc.create_document(session, data=payload, created_by=current_user.id)
     await audit_svc.record(
@@ -323,12 +331,19 @@ async def update_document(
         is_activity_manager = await activity_svc.can_manage_activity_resource(
             session, current_user, doc.activity_id
         )
+        is_org_leader = await user_is_org_leader(session, current_user.id, doc.org_id)
         if not (
-            (doc.created_by == current_user.id and "document:edit" in codes) or is_activity_manager
+            (
+                doc.created_by == current_user.id
+                and {"document:draft", "document:edit", "document:create"} & set(codes)
+            )
+            or is_org_leader
+            or "document:admin" in codes
+            or is_activity_manager
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="只有建立者、document:edit 或活動總召可以編輯",
+                detail="只有草擬者、部門最高權限者、document:edit/document:admin 或活動總召可以編輯",
             )
     try:
         return await doc_svc.update_document(session, doc, data=payload, changed_by=current_user.id)
@@ -357,15 +372,17 @@ async def delete_document(
         is_activity_manager = await activity_svc.can_manage_activity_resource(
             session, current_user, doc.activity_id
         )
+        is_org_leader = await user_is_org_leader(session, current_user.id, doc.org_id)
         if not (
             doc.created_by == current_user.id
+            or is_org_leader
             or "document:delete" in codes
             or "document:admin" in codes
             or is_activity_manager
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="您無刪除此公文的權限（需建立者或 document:delete/document:admin）",
+                detail="您無刪除此公文的權限（需建立者、部門最高權限者或 document:delete/document:admin）",
             )
     try:
         await doc_svc.delete_document(session, doc)
@@ -422,10 +439,14 @@ async def update_recipients(
     公文規格：受文者 = 主旨對象；正本 = 需執行單位；副本 = 知悉備查單位。
     """
     doc = await _get_doc_or_404(doc_id, session)
-    if doc.created_by != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="只有建立者可以修改受文者"
-        )
+    if not current_user.is_superuser:
+        codes = await get_user_permission_codes_for_org(session, current_user.id, doc.org_id)
+        is_org_leader = await user_is_org_leader(session, current_user.id, doc.org_id)
+        if not (doc.created_by == current_user.id or is_org_leader or "document:admin" in codes):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="只有草擬者、部門最高權限者或 document:admin 可以修改受文者",
+            )
     try:
         await doc_svc.upsert_recipients(session, doc, recipients=recipients)
     except ValueError as e:

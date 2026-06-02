@@ -893,7 +893,9 @@ async def replace_meal_order_items(
                     order_id=order.id,
                     menu_item_id=None,
                     availability_id=availability.id,
-                    product_name_snapshot=availability.product.name if availability.product else None,
+                    product_name_snapshot=availability.product.name
+                    if availability.product
+                    else None,
                     quantity=item_req.quantity,
                     unit_price=availability.price,
                 )

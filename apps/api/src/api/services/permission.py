@@ -5,10 +5,10 @@ from __future__ import annotations
 import uuid
 from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.models.org import Permission, Position, UserPosition
+from api.models.org import Org, Permission, Position, UserPosition
 
 
 def active_tenure_filter(check_date: date) -> list:
@@ -56,7 +56,11 @@ async def get_user_permission_codes(
         )
         .distinct()
     )
-    codes = frozenset(result.scalars().all())
+    codes = set(result.scalars().all())
+    org_ids = await get_user_org_ids(db, user_id, on_date=check_date)
+    for org_id in org_ids:
+        if await user_is_org_leader(db, user_id, org_id, on_date=check_date):
+            codes.update(await get_org_permission_codes(db, org_id))
 
     # 快取今天的權限結果（180 秒 TTL）
     if on_date is None:
@@ -64,7 +68,7 @@ async def get_user_permission_codes(
 
         await cache_set(cache_key, list(codes), ttl=180)
 
-    return codes
+    return frozenset(codes)
 
 
 async def get_user_permission_codes_for_org(
@@ -89,6 +93,20 @@ async def get_user_permission_codes_for_org(
             Position.org_id == org_id,
             *active_tenure_filter(check_date),
         )
+        .distinct()
+    )
+    codes = set(result.scalars().all())
+    if await user_is_org_leader(db, user_id, org_id, on_date=check_date):
+        codes.update(await get_org_permission_codes(db, org_id))
+    return frozenset(codes)
+
+
+async def get_org_permission_codes(db: AsyncSession, org_id: uuid.UUID) -> frozenset[str]:
+    """回傳組織內所有職位權限碼聯集。"""
+    result = await db.execute(
+        select(Permission.code)
+        .join(Position, Permission.position_id == Position.id)
+        .where(Position.org_id == org_id)
         .distinct()
     )
     return frozenset(result.scalars().all())
@@ -118,7 +136,83 @@ async def get_user_org_ids_with_permission(
         )
         .distinct()
     )
-    return list(result.scalars().all())
+    org_ids = set(result.scalars().all())
+    for org_id in await get_user_org_ids(db, user_id, on_date=check_date):
+        codes = await get_user_permission_codes_for_org(db, user_id, org_id, on_date=check_date)
+        if permission_code in codes:
+            org_ids.add(org_id)
+    return list(org_ids)
+
+
+async def get_user_org_ids_with_any_permission(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    permission_codes: set[str],
+    on_date: date | None = None,
+) -> list[uuid.UUID]:
+    """回傳使用者在哪些組織內擁有任一指定權限碼。"""
+    if not permission_codes:
+        return []
+    check_date = on_date or date.today()
+
+    result = await db.execute(
+        select(Position.org_id)
+        .join(Permission, Permission.position_id == Position.id)
+        .join(UserPosition, UserPosition.position_id == Position.id)
+        .where(
+            UserPosition.user_id == user_id,
+            Permission.code.in_(permission_codes),
+            *active_tenure_filter(check_date),
+        )
+        .distinct()
+    )
+    org_ids = set(result.scalars().all())
+    for org_id in await get_user_org_ids(db, user_id, on_date=check_date):
+        codes = await get_user_permission_codes_for_org(db, user_id, org_id, on_date=check_date)
+        if permission_codes & set(codes):
+            org_ids.add(org_id)
+    return list(org_ids)
+
+
+async def get_org_leader_user_id(
+    db: AsyncSession,
+    org_id: uuid.UUID,
+    on_date: date | None = None,
+) -> uuid.UUID | None:
+    """取得組織最高權限者。
+
+    優先使用 Org.leader_user_id。未指定時，取目前在該組織有效任期中
+    Position.weight 最高者；若同分，以任期較早建立者優先，確保結果穩定。
+    """
+    org = await db.scalar(select(Org).where(Org.id == org_id))
+    if org is None:
+        return None
+    if org.leader_user_id is not None:
+        return org.leader_user_id
+
+    check_date = on_date or date.today()
+    result = await db.execute(
+        select(UserPosition.user_id)
+        .join(Position, UserPosition.position_id == Position.id)
+        .where(
+            Position.org_id == org_id,
+            *active_tenure_filter(check_date),
+        )
+        .order_by(desc(Position.weight), UserPosition.created_at, UserPosition.id)
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
+async def user_is_org_leader(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    org_id: uuid.UUID,
+    on_date: date | None = None,
+) -> bool:
+    """使用者是否為組織指定最高權限者，或未指定時的權限係數最高者。"""
+    leader_id = await get_org_leader_user_id(db, org_id, on_date=on_date)
+    return leader_id == user_id
 
 
 async def get_user_org_ids(

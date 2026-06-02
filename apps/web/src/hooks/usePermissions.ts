@@ -26,6 +26,7 @@ export function usePermissions() {
     isAdmin
     || permissions.has("admin:all")
     || permissions.has(code)
+    || (code === "document:draft" && permissions.has("document:create"))
     || (code === "audit:view_org" && (permissions.has("audit:view_all") || permissions.has("audit:view"))),
     [isAdmin, permissions],
   );
@@ -36,6 +37,7 @@ export function usePermissions() {
     || permissions.has("admin:all")
     || codes.some(c =>
       permissions.has(c)
+      || (c === "document:draft" && permissions.has("document:create"))
       || (c === "audit:view_org" && (permissions.has("audit:view_all") || permissions.has("audit:view")))
     ),
     [isAdmin, permissions],

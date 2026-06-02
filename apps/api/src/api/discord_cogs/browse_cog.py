@@ -103,16 +103,20 @@ class BrowseCog(commands.Cog):
         horizon = now + timedelta(days=14)
         async with AsyncSessionLocal() as db:
             rows = (
-                await db.execute(
-                    select(Meeting)
-                    .where(Meeting.starts_at.is_not(None))
-                    .where(Meeting.starts_at >= now)
-                    .where(Meeting.starts_at <= horizon)
-                    .where(Meeting.status.in_(_UPCOMING_MEETING_STATUSES))
-                    .order_by(Meeting.starts_at)
-                    .limit(10)
+                (
+                    await db.execute(
+                        select(Meeting)
+                        .where(Meeting.starts_at.is_not(None))
+                        .where(Meeting.starts_at >= now)
+                        .where(Meeting.starts_at <= horizon)
+                        .where(Meeting.status.in_(_UPCOMING_MEETING_STATUSES))
+                        .order_by(Meeting.starts_at)
+                        .limit(10)
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
         if not rows:
             await reply_embed(
                 interaction,
@@ -155,15 +159,19 @@ class BrowseCog(commands.Cog):
         day_end = day_start + timedelta(days=1)
         async with AsyncSessionLocal() as db:
             rows = (
-                await db.execute(
-                    select(CalendarEvent)
-                    .where(CalendarEvent.starts_at >= day_start)
-                    .where(CalendarEvent.starts_at < day_end)
-                    .where(CalendarEvent.is_active.is_(True))
-                    .order_by(CalendarEvent.starts_at)
-                    .limit(10)
+                (
+                    await db.execute(
+                        select(CalendarEvent)
+                        .where(CalendarEvent.starts_at >= day_start)
+                        .where(CalendarEvent.starts_at < day_end)
+                        .where(CalendarEvent.is_active.is_(True))
+                        .order_by(CalendarEvent.starts_at)
+                        .limit(10)
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
         if not rows:
             await reply_embed(
                 interaction,
@@ -203,13 +211,17 @@ class BrowseCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         async with AsyncSessionLocal() as db:
             rows = (
-                await db.execute(
-                    select(Survey)
-                    .where(Survey.status == SurveyStatus.OPEN)
-                    .order_by(Survey.closes_at.asc().nullslast())
-                    .limit(10)
+                (
+                    await db.execute(
+                        select(Survey)
+                        .where(Survey.status == SurveyStatus.OPEN)
+                        .order_by(Survey.closes_at.asc().nullslast())
+                        .limit(10)
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
         if not rows:
             await reply_embed(
                 interaction,
@@ -226,9 +238,7 @@ class BrowseCog(commands.Cog):
             fields.append(
                 {
                     "name": f"📝 {s.title[:200]}",
-                    "value": (
-                        f"{anon}｜截止：{close_str}\n[填寫]({url})"
-                    ),
+                    "value": (f"{anon}｜截止：{close_str}\n[填寫]({url})"),
                     "inline": False,
                 }
             )
@@ -249,13 +259,17 @@ class BrowseCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         async with AsyncSessionLocal() as db:
             rows = (
-                await db.execute(
-                    select(Regulation)
-                    .where(Regulation.is_active.is_(True))
-                    .order_by(Regulation.updated_at.desc())
-                    .limit(10)
+                (
+                    await db.execute(
+                        select(Regulation)
+                        .where(Regulation.is_active.is_(True))
+                        .order_by(Regulation.updated_at.desc())
+                        .limit(10)
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
         if not rows:
             await reply_embed(
                 interaction,

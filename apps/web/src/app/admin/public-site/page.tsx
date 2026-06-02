@@ -125,6 +125,65 @@ function Toggle({
   );
 }
 
+function ImageField({
+  label,
+  hint,
+  value,
+  alt,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  value: string;
+  alt?: string;
+  onChange: (url: string) => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const handleFile = async (file: File) => {
+    setUploading(true);
+    try {
+      const result = await siteApi.uploadImage(file);
+      onChange(result.url);
+      toast.success("圖片已上傳");
+    } catch (error) {
+      displayError(error, "圖片上傳失敗");
+    } finally {
+      setUploading(false);
+    }
+  };
+  return (
+    <div className="grid gap-4 md:grid-cols-[1fr_12rem] md:items-end">
+      <Field label={label} hint={hint ?? "可貼上圖片網址，或點右側「上傳」直接從電腦選圖（JPEG/PNG/GIF/WebP，上限 20MB）。"}>
+        <div className="flex gap-2">
+          <TextInput value={value} onChange={(e) => onChange(e.target.value)} placeholder="https://… 或點右側上傳" />
+          <label className={`btn btn-secondary shrink-0 ${uploading ? "cursor-wait opacity-70" : "cursor-pointer"}`}>
+            {uploading ? "上傳中…" : "上傳"}
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/gif,image/webp"
+              className="hidden"
+              disabled={uploading}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void handleFile(file);
+                e.currentTarget.value = "";
+              }}
+            />
+          </label>
+        </div>
+      </Field>
+      <div className="grid h-28 place-items-center rounded-lg" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+        {value ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={value} alt={alt || `${label}預覽`} className="max-h-24 max-w-full object-contain" />
+        ) : (
+          <span className="text-xs text-[var(--text-muted)]">{label}預覽</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function parseJsonObject(value: string, label: string) {
   if (!value.trim()) return {};
   const parsed = JSON.parse(value);
@@ -399,29 +458,27 @@ export default function PublicSiteAdminPage() {
           <div className="card space-y-4 p-5">
             <Field label="網站標題"><TextInput value={settings.site_title} onChange={(e) => setSettings({ ...settings, site_title: e.target.value })} /></Field>
             <Field label="網站描述"><TextArea value={settings.site_description ?? ""} onChange={(e) => setSettings({ ...settings, site_description: e.target.value })} /></Field>
-            <div className="grid gap-4 md:grid-cols-[1fr_12rem] md:items-end">
-              <Field label="班聯會會徽 URL" hint="可填上傳後圖片網址或公開圖片 URL，會顯示在導覽列與首頁。">
-                <TextInput value={settings.site_logo_url ?? ""} onChange={(e) => setSettings({ ...settings, site_logo_url: e.target.value })} />
-              </Field>
-              <div className="grid h-28 place-items-center rounded-lg" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-                {settings.site_logo_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={settings.site_logo_url} alt={settings.site_logo_alt || "班聯會會徽預覽"} className="max-h-20 max-w-24 object-contain" />
-                ) : (
-                  <span className="text-xs text-[var(--text-muted)]">會徽預覽</span>
-                )}
-              </div>
-            </div>
+            <ImageField
+              label="班聯會會徽"
+              hint="會顯示在導覽列與首頁。可貼上圖片網址，或點「上傳」直接選圖（JPEG/PNG/GIF/WebP，上限 20MB）。"
+              value={settings.site_logo_url ?? ""}
+              alt={settings.site_logo_alt ?? undefined}
+              onChange={(url) => setSettings({ ...settings, site_logo_url: url })}
+            />
             <Field label="會徽替代文字"><TextInput value={settings.site_logo_alt ?? ""} onChange={(e) => setSettings({ ...settings, site_logo_alt: e.target.value })} /></Field>
             <div className="grid gap-4 md:grid-cols-2">
               <Field label="首頁主標"><TextInput value={settings.hero_title} onChange={(e) => setSettings({ ...settings, hero_title: e.target.value })} /></Field>
               <Field label="CTA 文字"><TextInput value={settings.cta_label} onChange={(e) => setSettings({ ...settings, cta_label: e.target.value })} /></Field>
             </div>
             <Field label="首頁副標"><TextArea value={settings.hero_subtitle ?? ""} onChange={(e) => setSettings({ ...settings, hero_subtitle: e.target.value })} /></Field>
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label="CTA 連結"><TextInput value={settings.cta_href} onChange={(e) => setSettings({ ...settings, cta_href: e.target.value })} /></Field>
-              <Field label="封面圖 URL"><TextInput value={settings.hero_image_url ?? ""} onChange={(e) => setSettings({ ...settings, hero_image_url: e.target.value })} /></Field>
-            </div>
+            <Field label="CTA 連結"><TextInput value={settings.cta_href} onChange={(e) => setSettings({ ...settings, cta_href: e.target.value })} /></Field>
+            <ImageField
+              label="首頁封面圖"
+              hint="顯示於首頁主視覺。可貼上圖片網址，或點「上傳」直接選圖。"
+              value={settings.hero_image_url ?? ""}
+              alt={settings.hero_image_alt ?? undefined}
+              onChange={(url) => setSettings({ ...settings, hero_image_url: url })}
+            />
             <Field label="封面圖替代文字"><TextInput value={settings.hero_image_alt ?? ""} onChange={(e) => setSettings({ ...settings, hero_image_alt: e.target.value })} /></Field>
             <button type="button" onClick={saveSettings} className="btn btn-primary"><Save size={16} aria-hidden /> 儲存基本設定</button>
           </div>
@@ -533,7 +590,10 @@ export default function PublicSiteAdminPage() {
       {tab === "officers" && (
         <section className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
           <div className="card space-y-4 p-5">
-            <h2 className="font-semibold">從既有任期挑選公開幹部</h2>
+            <h2 className="font-semibold">幹部覆寫 / 隱藏設定</h2>
+            <p className="text-xs text-[var(--text-muted)]">
+              公開幹部頁會<strong>自動列出當屆所有幹部</strong>，不需逐一新增。只有在你想覆寫顯示名稱／稱謂／簡介、調整排序、設為首頁精選，或<strong>隱藏</strong>某位成員時，才需要在此建立設定。
+            </p>
             <Field label="幹部候選人">
               <Select value={officerDraft.user_position_id} onChange={(e) => setOfficerDraft({ ...officerDraft, user_position_id: e.target.value })}>
                 <option value="">請選擇</option>

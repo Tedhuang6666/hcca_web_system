@@ -18,7 +18,11 @@ from api.models.user import User
 from api.schemas.org import OrgCreate, OrgRead, OrgTree, OrgUpdate
 from api.services import audit as audit_svc
 from api.services import org as org_svc
-from api.services.permission import get_user_org_ids_with_permission, get_user_permission_codes
+from api.services.permission import (
+    get_user_org_ids_with_any_permission,
+    get_user_org_ids_with_permission,
+    get_user_permission_codes,
+)
 
 router = APIRouter(prefix="/orgs", tags=["組織架構"])
 
@@ -71,13 +75,15 @@ async def get_org_tree(db: DbDep, _: CurrentUser) -> list:
 )
 async def list_my_create_orgs(db: DbDep, current_user: CurrentUser) -> list:
     """
-    回傳使用者在哪些組織擁有 document:create 權限。
+    回傳使用者在哪些組織擁有 document:create 或 document:draft 權限。
     superuser 直接回傳所有組織。
     """
     if current_user.is_superuser:
         result = await db.execute(select(Org).where(Org.is_active.is_(True)).order_by(Org.name))
         return list(result.scalars().all())
-    org_ids = await get_user_org_ids_with_permission(db, current_user.id, "document:create")
+    org_ids = await get_user_org_ids_with_any_permission(
+        db, current_user.id, {"document:create", "document:draft"}
+    )
     if not org_ids:
         return []
     result = await db.execute(
@@ -190,6 +196,7 @@ async def update_org(
         "parent_id": str(org.parent_id) if org.parent_id else None,
         "prefix": org.prefix,
         "bill_stage": org.bill_stage,
+        "leader_user_id": str(org.leader_user_id) if org.leader_user_id else None,
         "is_active": org.is_active,
     }
     try:
@@ -211,6 +218,7 @@ async def update_org(
                 "parent_id": str(org.parent_id) if org.parent_id else None,
                 "prefix": org.prefix,
                 "bill_stage": org.bill_stage,
+                "leader_user_id": str(org.leader_user_id) if org.leader_user_id else None,
                 "is_active": org.is_active,
             },
         },

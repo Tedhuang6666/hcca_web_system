@@ -110,7 +110,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/document-templates",
     iconKey: "documentTemplates",
     label: "公文範本",
-    perm: "document:create",
+    perm: "document:draft",
   },
   {
     id: "serialTemplates",

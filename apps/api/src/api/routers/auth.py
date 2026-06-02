@@ -345,7 +345,11 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
     _ph = get_posthog_client()
     if _ph:
         _ph.set(distinct_id=str(user.id), properties={"is_superuser": user.is_superuser})
-        _ph.capture(distinct_id=str(user.id), event="user_logged_in", properties={"login_method": "google_oauth"})
+        _ph.capture(
+            distinct_id=str(user.id),
+            event="user_logged_in",
+            properties={"login_method": "google_oauth"},
+        )
 
     return response
 
@@ -407,7 +411,11 @@ async def google_one_tap(
     _ph = get_posthog_client()
     if _ph:
         _ph.set(distinct_id=str(user.id), properties={"is_superuser": user.is_superuser})
-        _ph.capture(distinct_id=str(user.id), event="user_logged_in", properties={"login_method": "google_one_tap"})
+        _ph.capture(
+            distinct_id=str(user.id),
+            event="user_logged_in",
+            properties={"login_method": "google_one_tap"},
+        )
 
     return {
         "mfa_required": False,
@@ -497,7 +505,9 @@ async def logout(
         if _raw_token:
             try:
                 _tok_payload = decode_token(_raw_token)
-                _ph.capture(distinct_id=_tok_payload.get("sub", "anonymous"), event="user_logged_out")
+                _ph.capture(
+                    distinct_id=_tok_payload.get("sub", "anonymous"), event="user_logged_out"
+                )
             except Exception:
                 pass
 

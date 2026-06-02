@@ -25,12 +25,12 @@ if TYPE_CHECKING:
 class EmailStatus(enum.StrEnum):
     """寄信生命週期狀態。"""
 
-    DRAFT = "draft"          # 草稿，尚未送出
+    DRAFT = "draft"  # 草稿，尚未送出
     SCHEDULED = "scheduled"  # 已排程，等待預約時間
-    QUEUED = "queued"        # 已解析收件人並排入 Celery 寄送佇列
-    SENT = "sent"            # 已送出
-    FAILED = "failed"        # 解析或寄送失敗
-    PARTIAL = "partial"      # 部分收件人已送出、部分失敗
+    QUEUED = "queued"  # 已解析收件人並排入 Celery 寄送佇列
+    SENT = "sent"  # 已送出
+    FAILED = "failed"  # 解析或寄送失敗
+    PARTIAL = "partial"  # 部分收件人已送出、部分失敗
     CANCELLED = "cancelled"  # 已取消（取消預約 / 刪除）
 
 

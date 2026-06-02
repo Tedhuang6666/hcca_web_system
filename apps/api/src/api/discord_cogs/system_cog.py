@@ -110,7 +110,9 @@ class SystemCog(commands.Cog):
         async with AsyncSessionLocal() as db:
             user = await get_user_by_discord_id(db, str(target.id))
         platform = f"平台：{user.display_name} / {user.email}" if user else "平台：未綁定"
-        roles = ", ".join(role.name for role in target.roles[-5:] if role.name != "@everyone") or "無"
+        roles = (
+            ", ".join(role.name for role in target.roles[-5:] if role.name != "@everyone") or "無"
+        )
         text = (
             f"{target} ({target.id})\n"
             f"{platform}\n"

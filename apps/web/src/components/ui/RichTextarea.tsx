@@ -5,7 +5,7 @@
  * 支援格式：粗體、斜體、刪除線、底線、行內程式碼、
  *           H1/H2/H3、有序/無序清單、引言、水平線、程式碼區塊
  */
-import { useEffect, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
@@ -154,12 +154,17 @@ interface RichTextareaProps {
   className?: string;
 }
 
-export default function RichTextarea({
+/** 命令式介面：供外部（例如「插入變數」）在游標處插入文字。 */
+export interface RichTextareaHandle {
+  insertText: (text: string) => void;
+}
+
+const RichTextarea = forwardRef<RichTextareaHandle, RichTextareaProps>(function RichTextarea({
   value,
   onChange,
   minRows = 4,
   placeholder = "",
-}: RichTextareaProps) {
+}, ref) {
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
@@ -189,6 +194,17 @@ export default function RichTextarea({
       onChangeRef.current(md);
     },
   });
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      insertText: (text: string) => {
+        if (!editor) return;
+        editor.chain().focus().insertContent(text).run();
+      },
+    }),
+    [editor],
+  );
 
   // Sync external value changes into editor (e.g., on load)
   useEffect(() => {
@@ -272,4 +288,6 @@ export default function RichTextarea({
       </div>
     </div>
   );
-}
+});
+
+export default RichTextarea;

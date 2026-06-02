@@ -69,7 +69,11 @@ class MealVendor(Base, TimestampMixin):
     contact_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     status: Mapped[str] = mapped_column(
-        String(30), nullable=False, default=MealVendorStatus.APPROVED, server_default="approved", index=True
+        String(30),
+        nullable=False,
+        default=MealVendorStatus.APPROVED,
+        server_default="approved",
+        index=True,
     )
     review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -111,7 +115,11 @@ class MealVendorApplication(Base, TimestampMixin):
         UUID(as_uuid=True), ForeignKey("orgs.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     status: Mapped[str] = mapped_column(
-        String(30), nullable=False, default=MealVendorStatus.PENDING_REVIEW, server_default="pending_review", index=True
+        String(30),
+        nullable=False,
+        default=MealVendorStatus.PENDING_REVIEW,
+        server_default="pending_review",
+        index=True,
     )
     review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     reviewed_by_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -145,7 +153,9 @@ class MealVendorManager(Base, TimestampMixin):
     user_position_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("user_positions.id", ondelete="SET NULL"), nullable=True
     )
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
 
     vendor: Mapped[MealVendor] = relationship("MealVendor")
     user: Mapped[User] = relationship("User", foreign_keys=[user_id])
@@ -158,7 +168,10 @@ class MealProduct(Base, TimestampMixin):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     vendor_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("meal_vendors.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("meal_vendors.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -166,7 +179,9 @@ class MealProduct(Base, TimestampMixin):
     image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     price: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     default_max_quantity: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true", index=True)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true", index=True
+    )
 
     vendor: Mapped[MealVendor] = relationship("MealVendor", back_populates="products")
     availabilities: Mapped[list[MealProductAvailability]] = relationship(
@@ -181,17 +196,25 @@ class MealProductAvailability(Base, TimestampMixin):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     product_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("meal_products.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("meal_products.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     vendor_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("meal_vendors.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("meal_vendors.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     service_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     sale_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     sale_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     price: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     max_quantity: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    is_available: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true", index=True)
+    is_available: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true", index=True
+    )
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     product: Mapped[MealProduct] = relationship("MealProduct", back_populates="availabilities")
@@ -208,7 +231,9 @@ class MealPickupSlot(Base, TimestampMixin):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     availability_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("meal_product_availabilities.id", ondelete="CASCADE"), index=True
+        UUID(as_uuid=True),
+        ForeignKey("meal_product_availabilities.id", ondelete="CASCADE"),
+        index=True,
     )
     label: Mapped[str] = mapped_column(String(80), nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -216,7 +241,9 @@ class MealPickupSlot(Base, TimestampMixin):
     pickup_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     order_deadline: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     capacity: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true", index=True)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true", index=True
+    )
 
     availability: Mapped[MealProductAvailability] = relationship(
         "MealProductAvailability", back_populates="pickup_slots"
@@ -256,7 +283,10 @@ class MenuSchedule(Base, TimestampMixin):
         index=True,
     )
     class_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("school_classes.id", ondelete="SET NULL"), nullable=True, index=True
+        UUID(as_uuid=True),
+        ForeignKey("school_classes.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     # 服務日期（YYYY-MM-DD），僅日期不含時間
     date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
@@ -376,13 +406,19 @@ class MealOrder(Base, TimestampMixin):
         index=True,
     )
     total_price: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    is_paid: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    is_paid: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     paid_by_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     pickup_status: Mapped[str] = mapped_column(
-        String(30), nullable=False, default=MealPickupStatus.NOT_PICKED, server_default="not_picked", index=True
+        String(30),
+        nullable=False,
+        default=MealPickupStatus.NOT_PICKED,
+        server_default="not_picked",
+        index=True,
     )
     pickup_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     pickup_by_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -452,7 +488,9 @@ class MealClassPickupCode(Base, TimestampMixin):
 
     __tablename__ = "meal_class_pickup_codes"
     __table_args__ = (
-        UniqueConstraint("class_id", "vendor_id", "pickup_slot_id", name="uq_meal_class_pickup_scope"),
+        UniqueConstraint(
+            "class_id", "vendor_id", "pickup_slot_id", name="uq_meal_class_pickup_scope"
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

@@ -457,9 +457,7 @@ async def emit_announcement_notice(db: AsyncSession, ann: Announcement) -> None:
         title=f"{title_prefix}{ann.title}",
         link=f"/announcements/{ann.id}",
     )
-    components = default_action_row(
-        open_url=f"/announcements/{ann.id}", domain=Domain.ANNOUNCEMENT
-    )
+    components = default_action_row(open_url=f"/announcements/{ann.id}", domain=Domain.ANNOUNCEMENT)
     for channel_id in channel_ids:
         await emit(
             db,
@@ -685,9 +683,7 @@ async def emit_survey_opened(
     )
 
 
-async def emit_survey_closing_soon(
-    db: AsyncSession, survey: Any, user_id: uuid.UUID
-) -> None:
+async def emit_survey_closing_soon(db: AsyncSession, survey: Any, user_id: uuid.UUID) -> None:
     link = f"/surveys/{survey.id}"
     fields: list[dict[str, Any]] = []
     if dt := _fmt_dt(getattr(survey, "closes_at", None)):
@@ -763,9 +759,7 @@ async def emit_meal_order_closing_soon(
     db: AsyncSession, schedule: Any, user_id: uuid.UUID, vendor_name: str
 ) -> None:
     link = f"/meal/schedules/{schedule.id}"
-    fields: list[dict[str, Any]] = [
-        {"name": "商家", "value": vendor_name, "inline": True}
-    ]
+    fields: list[dict[str, Any]] = [{"name": "商家", "value": vendor_name, "inline": True}]
     if dt := _fmt_dt(getattr(schedule, "order_deadline", None)):
         fields.append({"name": "結單時間", "value": dt, "inline": True})
     embed = build_embed(
@@ -834,9 +828,7 @@ async def emit_shop_item_listed(db: AsyncSession, product: Any) -> None:
     )
 
 
-async def emit_shop_order_ready(
-    db: AsyncSession, order: Any, *, user_id: uuid.UUID
-) -> None:
+async def emit_shop_order_ready(db: AsyncSession, order: Any, *, user_id: uuid.UUID) -> None:
     link = f"/shop/orders/{order.id}"
     fields: list[dict[str, Any]] = []
     if serial := getattr(order, "serial_number", None):
@@ -1050,7 +1042,9 @@ async def enqueue_petition_private_channel(
         or not config.petition_staff_role_id
     ):
         return False
-    submitter_link = await get_user_link(db, case_obj.submitter_id) if case_obj.submitter_id else None
+    submitter_link = (
+        await get_user_link(db, case_obj.submitter_id) if case_obj.submitter_id else None
+    )
     await emit(
         db,
         event_type="discord.petition_channel_create",
@@ -1475,9 +1469,7 @@ def dispatch_user_dm(payload: dict[str, Any]) -> None:
         if category and pref is not None:
             prefs = pref.preferences or {}
             if not bool(prefs.get(category, True)):
-                logger.info(
-                    "Discord DM 略過：user=%s category=%s 已關閉", user_uuid, category
-                )
+                logger.info("Discord DM 略過：user=%s category=%s 已關閉", user_uuid, category)
                 return
         if _in_quiet_hours(pref):
             logger.info(

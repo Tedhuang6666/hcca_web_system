@@ -109,8 +109,12 @@ class ClassMembership(Base, TimestampMixin):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
     academic_year: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
-    source: Mapped[str] = mapped_column(String(20), nullable=False, default=ClassMembershipSource.MANUAL)
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default=ClassMembershipStatus.ACTIVE)
+    source: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=ClassMembershipSource.MANUAL
+    )
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=ClassMembershipStatus.ACTIVE
+    )
     start_date: Mapped[date] = mapped_column(Date, nullable=False, default=date.today)
     end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
@@ -122,9 +126,7 @@ class ClassRoleBinding(Base, TimestampMixin):
     """班級角色與 RBAC Position 的綁定。"""
 
     __tablename__ = "class_role_bindings"
-    __table_args__ = (
-        UniqueConstraint("class_id", "role_key", name="uq_class_role_binding"),
-    )
+    __table_args__ = (UniqueConstraint("class_id", "role_key", name="uq_class_role_binding"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     class_id: Mapped[uuid.UUID] = mapped_column(
@@ -174,9 +176,7 @@ class ClassManualMember(Base, TimestampMixin):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
 
-    school_class: Mapped[SchoolClass] = relationship(
-        "SchoolClass", back_populates="manual_members"
-    )
+    school_class: Mapped[SchoolClass] = relationship("SchoolClass", back_populates="manual_members")
     user: Mapped[User] = relationship("User")
 
 

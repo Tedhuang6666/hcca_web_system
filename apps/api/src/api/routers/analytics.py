@@ -72,7 +72,9 @@ class SurveyParticipationItem(BaseModel):
 )
 async def document_efficiency(
     db: DbDep,
-    _: Annotated[object, Depends(require_any(PermissionCode.ANALYTICS_VIEW, PermissionCode.ADMIN_ALL))],
+    _: Annotated[
+        object, Depends(require_any(PermissionCode.ANALYTICS_VIEW, PermissionCode.ADMIN_ALL))
+    ],
     org_id: uuid.UUID | None = Query(None),
     date_from: datetime | None = Query(None),
     date_to: datetime | None = Query(None),
@@ -92,9 +94,7 @@ async def document_efficiency(
 
     avg_seconds = await db.scalar(
         select(
-            func.avg(
-                func.extract("epoch", Document.completed_at - Document.submitted_at)
-            )
+            func.avg(func.extract("epoch", Document.completed_at - Document.submitted_at))
         ).select_from(completed_q.subquery())
     )
     avg_hours = float(avg_seconds) / 3600 if avg_seconds else None
@@ -126,7 +126,9 @@ async def document_efficiency(
 )
 async def dept_ranking(
     db: DbDep,
-    _: Annotated[object, Depends(require_any(PermissionCode.ANALYTICS_VIEW, PermissionCode.ADMIN_ALL))],
+    _: Annotated[
+        object, Depends(require_any(PermissionCode.ANALYTICS_VIEW, PermissionCode.ADMIN_ALL))
+    ],
     date_from: datetime | None = Query(None),
     date_to: datetime | None = Query(None),
 ) -> list[DeptRankingItem]:
@@ -135,9 +137,9 @@ async def dept_ranking(
             Document.org_id,
             Org.name.label("org_name"),
             func.count(Document.id).label("total_docs"),
-            func.avg(
-                func.extract("epoch", Document.completed_at - Document.submitted_at)
-            ).label("avg_seconds"),
+            func.avg(func.extract("epoch", Document.completed_at - Document.submitted_at)).label(
+                "avg_seconds"
+            ),
         )
         .join(Org, Org.id == Document.org_id)
         .where(Document.submitted_at.isnot(None))
@@ -180,18 +182,14 @@ async def pending_alerts(
             DocumentApproval.document_id,
             Document.title.label("document_title"),
             DocumentApproval.step_order,
-            func.extract(
-                "epoch", func.now() - DocumentApproval.created_at
-            ).label("waiting_seconds"),
+            func.extract("epoch", func.now() - DocumentApproval.created_at).label(
+                "waiting_seconds"
+            ),
         )
         .join(Document, Document.id == DocumentApproval.document_id)
         .where(DocumentApproval.status == ApprovalStepStatus.PENDING)
-        .where(
-            func.extract("epoch", func.now() - DocumentApproval.created_at) > threshold_seconds
-        )
-        .order_by(
-            func.extract("epoch", func.now() - DocumentApproval.created_at).desc()
-        )
+        .where(func.extract("epoch", func.now() - DocumentApproval.created_at) > threshold_seconds)
+        .order_by(func.extract("epoch", func.now() - DocumentApproval.created_at).desc())
     )
     rows = (await db.execute(q)).all()
     return [
@@ -216,7 +214,9 @@ async def pending_alerts(
 )
 async def announcement_participation(
     db: DbDep,
-    _: Annotated[object, Depends(require_any(PermissionCode.ANALYTICS_VIEW, PermissionCode.ADMIN_ALL))],
+    _: Annotated[
+        object, Depends(require_any(PermissionCode.ANALYTICS_VIEW, PermissionCode.ADMIN_ALL))
+    ],
     org_id: uuid.UUID | None = Query(None),
     date_from: datetime | None = Query(None),
     date_to: datetime | None = Query(None),
@@ -264,7 +264,9 @@ async def announcement_participation(
 )
 async def survey_participation(
     db: DbDep,
-    _: Annotated[object, Depends(require_any(PermissionCode.ANALYTICS_VIEW, PermissionCode.ADMIN_ALL))],
+    _: Annotated[
+        object, Depends(require_any(PermissionCode.ANALYTICS_VIEW, PermissionCode.ADMIN_ALL))
+    ],
     org_id: uuid.UUID | None = Query(None),
     date_from: datetime | None = Query(None),
     date_to: datetime | None = Query(None),

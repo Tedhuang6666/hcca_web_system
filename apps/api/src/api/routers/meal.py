@@ -90,9 +90,7 @@ async def _vendor_or_404(vendor_id: uuid.UUID, session: DbDep) -> MealVendor:
     return v
 
 
-async def _require_vendor_manager(
-    session: AsyncSession, vendor_id: uuid.UUID, user: User
-) -> None:
+async def _require_vendor_manager(session: AsyncSession, vendor_id: uuid.UUID, user: User) -> None:
     if user.is_superuser:
         return
     from api.services.permission import get_user_permission_codes
@@ -906,9 +904,7 @@ async def create_class_meal_order(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此學生")
     target_class = await class_svc.resolve_user_class(session, target)
     class_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
-    if target_class is None or (
-        not current_user.is_superuser and target_class.id not in class_ids
-    ):
+    if target_class is None or (not current_user.is_superuser and target_class.id not in class_ids):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權替此學生訂餐")
     try:
         order = await meal_svc.create_meal_order(
@@ -919,7 +915,9 @@ async def create_class_meal_order(
             assisted_by_id=current_user.id,
         )
     except IntegrityError as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="此學生已下過此餐點") from e
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="此學生已下過此餐點"
+        ) from e
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     return await _order_or_404(order.id, session)
@@ -942,9 +940,7 @@ async def update_meal_order_payment(
     class_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
     if not current_user.is_superuser and order.class_id not in class_ids:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權標示此訂單收款")
-    return await meal_svc.set_order_paid(
-        session, order, is_paid=is_paid, actor_id=current_user.id
-    )
+    return await meal_svc.set_order_paid(session, order, is_paid=is_paid, actor_id=current_user.id)
 
 
 @router.post(

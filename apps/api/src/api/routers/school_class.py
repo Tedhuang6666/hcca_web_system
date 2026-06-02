@@ -169,9 +169,7 @@ async def list_members(class_id: uuid.UUID, session: DbDep, _: ManagerUser) -> l
     response_model=list[ClassMembershipOut],
     summary="列出年度班級名冊快照",
 )
-async def list_memberships(
-    class_id: uuid.UUID, session: DbDep, _: ManagerUser
-) -> list:
+async def list_memberships(class_id: uuid.UUID, session: DbDep, _: ManagerUser) -> list:
     sc = await _get_class_or_404(class_id, session)
     return await class_svc.list_memberships(session, sc)
 
@@ -212,9 +210,7 @@ async def end_membership(
     response_model=list[ClassRoleOut],
     summary="列出班級 RBAC 職位綁定",
 )
-async def list_class_roles(
-    class_id: uuid.UUID, session: DbDep, _: ManagerUser
-) -> list:
+async def list_class_roles(class_id: uuid.UUID, session: DbDep, _: ManagerUser) -> list:
     sc = await _get_class_or_404(class_id, session)
     return await class_svc.list_class_roles(session, sc)
 

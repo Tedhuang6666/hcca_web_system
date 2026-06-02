@@ -57,10 +57,7 @@ async def get_document_count_by_category(
     if cached is not None:
         return cached
 
-    q = (
-        select(DocumentCategory, func.count(Document.id))
-        .group_by(DocumentCategory)
-    )
+    q = select(DocumentCategory, func.count(Document.id)).group_by(DocumentCategory)
     if org_id:
         q = q.where(Document.org_id == org_id)
 
@@ -89,9 +86,7 @@ async def get_org_summary(
     if cached is not None:
         return cached
 
-    org_result = await db.execute(
-        select(Org).where(Org.id == org_id)
-    )
+    org_result = await db.execute(select(Org).where(Org.id == org_id))
     org = org_result.scalar_one_or_none()
     if not org:
         return {}

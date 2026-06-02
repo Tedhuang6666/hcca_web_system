@@ -422,7 +422,9 @@ def parse_history_date(event: str) -> datetime | None:
     # 西元日期：2025/5/19
     match = re.search(r"(\d{4})[./-](\d{1,2})[./-](\d{1,2})", event)
     if match:
-        result = _build_date(int(match.group(1)), int(match.group(2)), int(match.group(3)), roc=False)
+        result = _build_date(
+            int(match.group(1)), int(match.group(2)), int(match.group(3)), roc=False
+        )
         if result:
             return result
     # 民國年月：114年5月

@@ -280,7 +280,7 @@
   /* 文字 */
   --text-primary:   #1a1a2e;
   --text-secondary: #475569;
-  --text-muted:     #64748b;
+  --text-muted:     #5f6b7e;
   --text-disabled:  #94a3b8;
 
   /* 邊框（淡土黃） */
@@ -293,6 +293,9 @@
   --primary-hover:  #b8962f;
   --primary-fg:     #1a1a2e;
   --primary-dim:    #faf4e4;
+  /* 金色當「文字」用時的深色版本：原 #c9a84c 在淺底僅 2.3:1，未過 WCAG AA。
+     此 token 在淺底達 ~5:1（含 primary-dim 按鈕底）。深色主題另有覆寫。 */
+  --primary-text:   #856518;
 
   /* 語意色 */
   --success:        #3d8b5e;
@@ -328,13 +331,13 @@
   --sidebar-w:             240px;
   --sidebar-bg:            #fffef9;
   --sidebar-border:        #e8e2d6;
-  --sidebar-text:          #9896a4;
+  --sidebar-text:          #6f6a5d;
   --sidebar-text-hover:    #1a1a2e;
   --sidebar-text-active:   #b8962f;
   --sidebar-hover:         #f5f2ea;
   --sidebar-active:        rgba(201,168,76,0.09);
   --sidebar-active-border: #c9a84c;
-  --sidebar-section-label: #c5bfb2;
+  --sidebar-section-label: #78725f;
 
   /* Topbar（毛玻璃背景） */
   --topbar-bg:     rgba(255,254,249,0.88);
@@ -380,6 +383,8 @@
   --primary-hover:  #d4b45e;
   --primary-fg:     #0f1117;
   --primary-dim:    rgba(201,168,76,0.12);
+  /* 深底上金色文字本就高對比，沿用較亮的金 */
+  --primary-text:   #d4b45e;
 
   --success:        #5aad7f;
   --success-dim:    rgba(90,173,127,0.10);
@@ -1666,7 +1671,7 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
   letter-spacing: 0;
 }
 .prose p   { color: var(--text-secondary); line-height: 1.8; margin-bottom: 1em; }
-.prose a   { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
+.prose a   { color: var(--primary-text); text-decoration: underline; text-underline-offset: 3px; }
 .prose code {
   background: var(--primary-dim);
   color: var(--primary-hover);

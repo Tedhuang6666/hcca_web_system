@@ -60,7 +60,7 @@ import type {
   SurveyParticipationItem,
   EmailCampaignRecipientOut,
   EmailComposePayload, EmailMessageCreate, EmailMessageOut, EmailMessageDetailOut,
-  RecipientSelector, RecipientPreviewOut, EmailPosition,
+  RecipientSelector, RecipientPreviewOut, EmailPosition, UploadedImageOut,
   PartnerBusinessCreate, PartnerBusinessListItem, PartnerBusinessOut, PartnerBusinessUpdate,
   PartnerLocationCreate, PartnerLocationOut, PartnerLocationUpdate,
   PartnerMapItem, PartnerOfferCreate, PartnerOfferOut, PartnerOfferUpdate,
@@ -1196,7 +1196,7 @@ export const orgsApi = {
   get: (id: string) => get<OrgRead>(`/orgs/${id}`),
   /** 取得組織樹（巢狀結構） */
   tree: () => get<(OrgRead & { children: OrgRead[] })[]>("/orgs/tree"),
-  /** 取得當前使用者有 document:create 權限的組織列表（RBAC 過濾） */
+  /** 取得當前使用者有 document:create 或 document:draft 權限的組織列表（RBAC 過濾） */
   myCreateOrgs: () => get<OrgRead[]>("/orgs/my-create-orgs"),
   /** 取得當前使用者有 regulation:create 權限的組織列表（RBAC 過濾） */
   myRegulationCreateOrgs: () => get<OrgRead[]>("/orgs/my-regulation-create-orgs"),
@@ -1208,6 +1208,7 @@ export const orgsApi = {
     name?: string;
     description?: string | null;
     parent_id?: string | null;
+    leader_user_id?: string | null;
     note?: string | null;
     remark?: string | null;
     is_active?: boolean;
@@ -1335,6 +1336,7 @@ export const adminApi = {
     parent_id?: string | null;
     prefix?: string | null;
     bill_stage?: MeetingBillStage | null;
+    leader_user_id?: string | null;
   }) => post<OrgRead>("/orgs", body),
   updateOrg: (id: string, body: {
     name?: string;
@@ -1342,6 +1344,7 @@ export const adminApi = {
     parent_id?: string | null;
     prefix?: string | null;
     bill_stage?: MeetingBillStage | null;
+    leader_user_id?: string | null;
     note?: string | null;
     remark?: string | null;
     is_active?: boolean;
@@ -1930,6 +1933,27 @@ export const siteApi = {
   updateSettings: (body: PublicSiteSettingsUpdate) =>
     patch<PublicSiteSettingsOut>("/site/admin/settings", body),
 
+  uploadImage: async (file: File): Promise<UploadedImageOut> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const doFetch = () =>
+      fetch(`${BASE}/site/admin/images`, {
+        method: "POST",
+        credentials: "include",
+        headers: csrfHeaders("POST"),
+        body: fd,
+      });
+    let res = await doFetch();
+    if (res.status === 401) {
+      const ok = await silentRefresh();
+      if (ok) res = await doFetch();
+    }
+    if (!res.ok) {
+      throw new ApiError(res.status, await errorMessageFromResponse(res));
+    }
+    return res.json();
+  },
+
   adminLinkCategories: () => get<PublicLinkCategoryOut[]>("/site/admin/link-categories"),
   createLinkCategory: (body: PublicLinkCategoryCreate) =>
     post<PublicLinkCategoryOut>("/site/admin/link-categories", body),
@@ -2367,6 +2391,7 @@ export const emailApi = {
     body: Partial<EmailComposePayload> & { scheduled_at?: string | null },
   ) => patch<EmailMessageOut>(`/email/messages/${id}`, body),
   sendMessage: (id: string) => post<EmailMessageOut>(`/email/messages/${id}/send`),
+  resendMessage: (id: string) => post<EmailMessageOut>(`/email/messages/${id}/resend`),
   deleteMessage: (id: string) => del<void>(`/email/messages/${id}`),
   listMessages: (params?: { status?: string; limit?: number; offset?: number }) => {
     const q = new URLSearchParams();
@@ -2376,6 +2401,26 @@ export const emailApi = {
     return get<EmailMessageOut[]>(`/email/messages${q.size ? `?${q}` : ""}`);
   },
   getMessage: (id: string) => get<EmailMessageDetailOut>(`/email/messages/${id}`),
+  uploadImage: async (file: File): Promise<UploadedImageOut> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const doFetch = () =>
+      fetch(`${BASE}/email/images`, {
+        method: "POST",
+        credentials: "include",
+        headers: csrfHeaders("POST"),
+        body: fd,
+      });
+    let res = await doFetch();
+    if (res.status === 401) {
+      const ok = await silentRefresh();
+      if (ok) res = await doFetch();
+    }
+    if (!res.ok) {
+      throw new ApiError(res.status, await errorMessageFromResponse(res));
+    }
+    return res.json();
+  },
   listMessageRecipients: (id: string, params?: { limit?: number; offset?: number }) => {
     const q = new URLSearchParams();
     if (params?.limit) q.set("limit", String(params.limit));

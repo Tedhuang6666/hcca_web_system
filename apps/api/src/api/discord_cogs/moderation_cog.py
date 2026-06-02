@@ -104,9 +104,7 @@ class ModerationCog(commands.Cog):
             summary=f"Discord 解除禁言 {member}",
             meta={"target_id": str(member.id), "reason": reason},
         )
-        await interaction.response.send_message(
-            f"已解除 {member.mention} 的禁言。", ephemeral=True
-        )
+        await interaction.response.send_message(f"已解除 {member.mention} 的禁言。", ephemeral=True)
 
     @app_commands.command(name="kick", description="踢出成員")
     async def kick(

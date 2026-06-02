@@ -32,7 +32,6 @@ export function PolicyConsentBanner({
   isAuthenticated: boolean;
 }) {
   const [items, setItems] = useState<PendingConsentItem[]>([]);
-  const [loading, setLoading] = useState(false);
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +42,6 @@ export function PolicyConsentBanner({
       return () => {};
     }
     let cancelled = false;
-    setLoading(true);
     (async () => {
       try {
         const data = await policiesApi.pendingConsents();
@@ -52,8 +50,6 @@ export function PolicyConsentBanner({
         if (!cancelled && e instanceof ApiError && e.status !== 401) {
           setError(e.message);
         }
-      } finally {
-        if (!cancelled) setLoading(false);
       }
     })();
     return () => {
@@ -94,7 +90,10 @@ export function PolicyConsentBanner({
     }
   }, [allChecked, items, submitting]);
 
-  if (!loading && items.length === 0) return null;
+  // 只有「真的有待同意的政策」時才顯示彈窗。
+  // 早期版本在 loading 期間也會 render，導致每次切換頁面、重新查 pending 時
+  // 都會閃一次彈窗（即使使用者早已同意）。改為僅依 items 是否非空判斷。
+  if (items.length === 0) return null;
 
   return (
     <div
@@ -120,13 +119,8 @@ export function PolicyConsentBanner({
           下列政策已更新或為新增、請閱讀後勾選同意，方能繼續使用本平台。
         </p>
 
-        {loading && items.length === 0 ? (
-          <p className="mt-5 text-sm" style={{ color: "var(--text-muted)" }}>
-            正在檢查政策版本…
-          </p>
-        ) : (
-          <ul className="mt-4 space-y-3 max-h-[50vh] overflow-y-auto pr-1">
-            {items.map((it) => (
+        <ul className="mt-4 space-y-3 max-h-[50vh] overflow-y-auto pr-1">
+          {items.map((it) => (
               <li
                 key={it.policy_document_id}
                 className="rounded border p-3"
@@ -172,7 +166,6 @@ export function PolicyConsentBanner({
               </li>
             ))}
           </ul>
-        )}
 
         {error && (
           <p

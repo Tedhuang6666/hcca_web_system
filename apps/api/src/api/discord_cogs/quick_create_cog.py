@@ -71,9 +71,7 @@ class _AnnounceModal(discord.ui.Modal, title="建立公告"):
         async with AsyncSessionLocal() as db:
             codes = await get_user_permission_codes(db, self.platform_user.id)
             if not has_permission(self.platform_user, codes, "announcement:create"):
-                await interaction.response.send_message(
-                    "你沒有建立公告的權限。", ephemeral=True
-                )
+                await interaction.response.send_message("你沒有建立公告的權限。", ephemeral=True)
                 return
             org_id = await _user_primary_org(db, self.platform_user.id)
             if org_id is None:
@@ -193,15 +191,11 @@ class _CalendarModal(discord.ui.Modal, title="建立行事曆事件"):
         async with AsyncSessionLocal() as db:
             codes = await get_user_permission_codes(db, self.platform_user.id)
             if not has_permission(self.platform_user, codes, "calendar:create"):
-                await interaction.response.send_message(
-                    "你沒有建立行事曆的權限。", ephemeral=True
-                )
+                await interaction.response.send_message("你沒有建立行事曆的權限。", ephemeral=True)
                 return
             org_id = await _user_primary_org(db, self.platform_user.id)
             if org_id is None:
-                await interaction.response.send_message(
-                    "找不到你的所屬機關。", ephemeral=True
-                )
+                await interaction.response.send_message("找不到你的所屬機關。", ephemeral=True)
                 return
             data = CalendarEventCreate(
                 org_id=org_id,
@@ -210,9 +204,7 @@ class _CalendarModal(discord.ui.Modal, title="建立行事曆事件"):
                 location=str(self.location_input.value) or None,
                 starts_at=starts_at,
             )
-            event = await calendar_svc.create_event(
-                db, data=data, created_by=self.platform_user.id
-            )
+            event = await calendar_svc.create_event(db, data=data, created_by=self.platform_user.id)
             await audit_svc.record(
                 db,
                 entity_type="calendar_event",
@@ -253,15 +245,11 @@ class _SurveyModal(discord.ui.Modal, title="快速建立問卷"):
         async with AsyncSessionLocal() as db:
             codes = await get_user_permission_codes(db, self.platform_user.id)
             if not has_permission(self.platform_user, codes, "survey:create"):
-                await interaction.response.send_message(
-                    "你沒有建立問卷的權限。", ephemeral=True
-                )
+                await interaction.response.send_message("你沒有建立問卷的權限。", ephemeral=True)
                 return
             org_id = await _user_primary_org(db, self.platform_user.id)
             if org_id is None:
-                await interaction.response.send_message(
-                    "找不到你的所屬機關。", ephemeral=True
-                )
+                await interaction.response.send_message("找不到你的所屬機關。", ephemeral=True)
                 return
             data = SurveyCreate(
                 title=str(self.title_input.value),
@@ -270,9 +258,7 @@ class _SurveyModal(discord.ui.Modal, title="快速建立問卷"):
                 org_id=org_id,
                 closes_at=datetime.now(UTC) + timedelta(days=7),
             )
-            survey = await survey_svc.create_survey(
-                db, data=data, created_by=self.platform_user.id
-            )
+            survey = await survey_svc.create_survey(db, data=data, created_by=self.platform_user.id)
             await audit_svc.record(
                 db,
                 entity_type="survey",

@@ -26,6 +26,7 @@ from api.services import document as doc_svc
 from api.services.permission import (
     get_user_permission_codes,
     get_user_permission_codes_for_org,
+    user_is_org_leader,
 )
 
 
@@ -111,7 +112,9 @@ async def assert_can_edit(session: AsyncSession, doc: Document, user: User) -> N
     if user.is_superuser or doc.created_by == user.id:
         return
     codes = await get_user_permission_codes_for_org(session, user.id, doc.org_id)
-    if "document:admin" in codes:
+    if "document:admin" in codes or "document:edit" in codes:
+        return
+    if await user_is_org_leader(session, user.id, doc.org_id):
         return
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="您無權編輯此公文")
 
@@ -142,7 +145,7 @@ async def org_ids_with_document_permissions(session: AsyncSession, user: User) -
     org_ids: list[uuid.UUID] = []
     for org_id in result.scalars().all():
         codes = await get_user_permission_codes_for_org(session, user.id, org_id)
-        if {"document:create", "document:admin", "admin:all"} & set(codes):
+        if {"document:draft", "document:create", "document:admin", "admin:all"} & set(codes):
             org_ids.append(org_id)
     return org_ids
 
@@ -170,10 +173,10 @@ async def require_document_template_use(
     if user.is_superuser:
         return
     codes = await get_user_permission_codes_for_org(session, user.id, org_id)
-    if not ({"document:create", "document:admin", "admin:all"} & set(codes)):
+    if not ({"document:draft", "document:create", "document:admin", "admin:all"} & set(codes)):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="您在此組織下無使用公文範本起稿的權限（需 document:create）",
+            detail="您在此組織下無使用公文範本草擬的權限（需 document:draft 或 document:create）",
         )
 
 

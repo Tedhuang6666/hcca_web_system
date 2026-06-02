@@ -107,15 +107,12 @@ async def _update_campaign_recipient_status(
             if status == EmailRecipientStatus.SENT:
                 recipient.sent_at = datetime.now(UTC)
             counts = (
-                (
-                    await session.execute(
-                        select(EmailCampaignRecipient.status, func.count())
-                        .where(EmailCampaignRecipient.message_id == recipient.message_id)
-                        .group_by(EmailCampaignRecipient.status)
-                    )
+                await session.execute(
+                    select(EmailCampaignRecipient.status, func.count())
+                    .where(EmailCampaignRecipient.message_id == recipient.message_id)
+                    .group_by(EmailCampaignRecipient.status)
                 )
-                .all()
-            )
+            ).all()
             by_status = {str(row[0]): int(row[1]) for row in counts}
             queued = by_status.get(EmailRecipientStatus.QUEUED, 0)
             sent = by_status.get(EmailRecipientStatus.SENT, 0)

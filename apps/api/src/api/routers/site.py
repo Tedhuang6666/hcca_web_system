@@ -5,7 +5,8 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,6 +37,7 @@ from api.schemas.site import (
 )
 from api.services import audit as audit_svc
 from api.services import site as site_svc
+from api.services.storage import get_storage
 
 router = APIRouter(prefix="/site", tags=["公開官網"])
 
@@ -123,13 +125,54 @@ async def admin_update_settings(
     return settings
 
 
+class UploadedImageOut(BaseModel):
+    url: str
+    filename: str
+    content_type: str
+    file_size: int
+
+
+_IMAGE_TYPES = frozenset({"image/jpeg", "image/png", "image/gif", "image/webp"})
+
+
+@router.post(
+    "/admin/images",
+    response_model=UploadedImageOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[SiteAdminDep],
+    summary="上傳公開官網圖片（會徽 / 封面 / 幹部頭像等），回傳可直接填入設定的 URL",
+)
+async def admin_upload_image(
+    current_user: CurrentUser,
+    file: UploadFile = File(...),
+) -> UploadedImageOut:
+    if (file.content_type or "") not in _IMAGE_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="僅支援 JPEG / PNG / GIF / WebP 圖片",
+        )
+    storage = get_storage()
+    try:
+        stored = await storage.save(file, prefix="public-site")
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    return UploadedImageOut(
+        url=stored.url or f"/uploads/{stored.storage_key}",
+        filename=stored.filename,
+        content_type=stored.content_type,
+        file_size=stored.file_size,
+    )
+
+
 @router.get(
     "/admin/link-categories",
     response_model=list[PublicLinkCategoryOut],
     dependencies=[SiteAdminDep],
 )
 async def admin_list_link_categories(db: DbDep, _: CurrentUser) -> list:
-    return [PublicLinkCategoryOut.model_validate(i) for i in await site_svc.list_link_categories(db)]
+    return [
+        PublicLinkCategoryOut.model_validate(i) for i in await site_svc.list_link_categories(db)
+    ]
 
 
 @router.post(

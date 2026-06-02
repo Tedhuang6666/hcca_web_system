@@ -97,11 +97,7 @@ class _ScheduleSelect(discord.ui.Select):
         self.parent_view = parent
         options = []
         for sid, (schedule, vendor) in parent.schedules.items():
-            deadline = (
-                schedule.order_deadline.strftime("%H:%M")
-                if schedule.order_deadline
-                else "—"
-            )
+            deadline = schedule.order_deadline.strftime("%H:%M") if schedule.order_deadline else "—"
             closed = not _orderable(schedule)
             options.append(
                 discord.SelectOption(
@@ -155,7 +151,8 @@ class _ItemSelect(discord.ui.Select):
             discord.SelectOption(
                 label=f"{item.name[:80]}",
                 value=str(item.id),
-                description=f"${item.price}" + (f"｜{item.description[:60]}" if item.description else ""),
+                description=f"${item.price}"
+                + (f"｜{item.description[:60]}" if item.description else ""),
                 emoji="🍙",
             )
             for item in items[:25]
@@ -268,9 +265,7 @@ class MealCog(commands.Cog):
             return
         fields = []
         for schedule, vendor in schedules:
-            deadline = (
-                schedule.order_deadline.strftime("%H:%M") if schedule.order_deadline else "—"
-            )
+            deadline = schedule.order_deadline.strftime("%H:%M") if schedule.order_deadline else "—"
             status = "🔒 已結單" if not _orderable(schedule) else f"🟢 結單 {deadline}"
             items = [i for i in schedule.items if i.is_available]
             menu = "、".join(f"{i.name}(${i.price})" for i in items[:5]) or "（進階訂購，請看網頁）"
@@ -301,10 +296,7 @@ class MealCog(commands.Cog):
                 db, date_from=today, date_to=today + timedelta(days=7), limit=40
             )
             vendor_names = {
-                v.id: v.name
-                for v in (
-                    await db.execute(select(MealVendor))
-                ).scalars().all()
+                v.id: v.name for v in (await db.execute(select(MealVendor))).scalars().all()
             }
         if not schedules:
             await reply_embed(
@@ -381,7 +373,9 @@ class MealCog(commands.Cog):
             )
         orders = (pending + confirmed)[:25]
         if not orders:
-            await reply_error(interaction, title="沒有可取消的訂單", body="目前沒有待確認/已確認的訂單。")
+            await reply_error(
+                interaction, title="沒有可取消的訂單", body="目前沒有待確認/已確認的訂單。"
+            )
             return
         view = _CancelOrderView(user_id=user.id, orders=orders)
         await interaction.followup.send(

@@ -90,7 +90,7 @@ export default function OfficersPage() {
           <p className="text-sm font-semibold text-[var(--primary)]">Officers</p>
           <h1 className="mt-2 text-3xl font-bold">班聯會幹部</h1>
           <p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--text-secondary)]">
-            本頁連結既有任期資料，並由後台控制公開稱謂、簡介與排序。
+            本頁自動列出當屆所有幹部任期，後台可進一步調整公開稱謂、簡介、排序，或隱藏特定成員。
           </p>
         </header>
         <div className="space-y-8">

@@ -145,6 +145,4 @@ class CommunityCog(commands.Cog):
             await interaction.response.send_message(f"找不到訊息：{exc}", ephemeral=True)
             return
         await message.pin(reason=reason)
-        await interaction.response.send_message(
-            f"已 pin 訊息 {message_id}。", ephemeral=True
-        )
+        await interaction.response.send_message(f"已 pin 訊息 {message_id}。", ephemeral=True)

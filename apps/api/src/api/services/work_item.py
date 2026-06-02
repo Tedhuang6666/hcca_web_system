@@ -40,7 +40,9 @@ async def list_work_items(
         stmt = stmt.where(WorkItem.assigned_to_id == user_id)
     if not include_done:
         stmt = stmt.where(WorkItem.status == WorkItemStatus.OPEN)
-    stmt = stmt.order_by(WorkItem.due_at.asc().nulls_last(), WorkItem.created_at.desc()).limit(limit)
+    stmt = stmt.order_by(WorkItem.due_at.asc().nulls_last(), WorkItem.created_at.desc()).limit(
+        limit
+    )
     return list((await db.execute(stmt)).scalars().all())
 
 

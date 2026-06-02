@@ -163,7 +163,8 @@ class PublicOfficerProfileOut(PublicOfficerProfileBase):
 
 class PublicOfficerOut(BaseModel):
     id: uuid.UUID
-    profile_id: uuid.UUID
+    # 自動列出的幹部（尚未建立覆寫設定）profile_id 為 None
+    profile_id: uuid.UUID | None = None
     user_position_id: uuid.UUID
     user_id: uuid.UUID
     display_name: str

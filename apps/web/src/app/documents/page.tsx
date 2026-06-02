@@ -512,12 +512,12 @@ export default function DocumentListPage() {
               簽核代理
             </Link>
           )}
-          {can("document:create") && (
+          {can("document:draft") && (
             <Link href="/document-templates" className="btn btn-ghost">
               公文範本
             </Link>
           )}
-          {can("document:create") && (
+          {can("document:draft") && (
             <Link href="/documents/new" className="btn btn-primary">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                 strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">

@@ -1579,6 +1579,7 @@ export interface OrgRead {
   name: string;
   description: string | null;
   parent_id: string | null;
+  leader_user_id: string | null;
   prefix: string | null;
   bill_stage: MeetingBillStage | null;
   is_active: boolean;
@@ -2642,6 +2643,23 @@ export interface EmailRecipientVariableInput {
   variables: Record<string, string>;
 }
 
+export type EmailButtonStyle = "primary" | "secondary" | "outline";
+
+export interface EmailButton {
+  label: string;
+  url: string;
+  style: EmailButtonStyle;
+}
+
+export type EmailBlockType = "text" | "image" | "divider";
+
+export interface EmailBlock {
+  type: EmailBlockType;
+  md?: string;
+  url?: string;
+  alt?: string;
+}
+
 export interface EmailComposePayload {
   subject: string;
   heading: string;
@@ -2649,6 +2667,8 @@ export interface EmailComposePayload {
   card_rows: EmailCardRow[];
   cta_label: string;
   cta_url: string;
+  buttons: EmailButton[];
+  blocks: EmailBlock[];
   recipients: RecipientSelector;
   variable_definitions?: EmailVariableDefinition[];
   default_variables?: Record<string, string>;
@@ -2686,6 +2706,8 @@ export interface EmailMessageDetailOut extends EmailMessageOut {
   card_rows: EmailCardRow[];
   cta_label: string;
   cta_url: string;
+  buttons: EmailButton[];
+  blocks: EmailBlock[];
   recipient_spec: RecipientSelector;
   variable_definitions: EmailVariableDefinition[];
   default_variables: Record<string, string>;
@@ -2876,6 +2898,13 @@ export interface PrivacyRequestOut {
 
 // ── 公開官網 / Linktree ──────────────────────────────────────────────────────
 
+export interface UploadedImageOut {
+  url: string;
+  filename: string;
+  content_type: string;
+  file_size: number;
+}
+
 export interface PublicSiteSettingsOut {
   id: string;
   site_title: string;
@@ -2967,7 +2996,7 @@ export type PublicOfficerProfileUpdate = Partial<PublicOfficerProfileCreate>;
 
 export interface PublicOfficerOut {
   id: string;
-  profile_id: string;
+  profile_id: string | null;
   user_position_id: string;
   user_id: string;
   display_name: string;

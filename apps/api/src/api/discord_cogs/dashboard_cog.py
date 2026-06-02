@@ -158,8 +158,7 @@ def _calendar_field(event) -> dict:
     return {
         "name": event.title[:200],
         "value": (
-            f"時間：{event.starts_at.strftime('%Y-%m-%d %H:%M')}\n"
-            f"地點：{event.location or '—'}"
+            f"時間：{event.starts_at.strftime('%Y-%m-%d %H:%M')}\n地點：{event.location or '—'}"
         ),
         "inline": False,
     }

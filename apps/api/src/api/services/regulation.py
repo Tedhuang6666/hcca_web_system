@@ -443,9 +443,7 @@ async def create_regulation_from_import(
     return loaded or reg
 
 
-def _resolve_history_dates(
-    raw_dates: list[datetime | None], now: datetime
-) -> list[datetime]:
+def _resolve_history_dates(raw_dates: list[datetime | None], now: datetime) -> list[datetime]:
     """將逐筆沿革事件的（可能缺漏的）日期補成單調可排序的具體日期。
 
     已解析者保留原值；未解析者以前一筆 forward-fill、開頭缺漏者 backfill；
@@ -492,9 +490,7 @@ async def publish_imported_regulation(
     events = split_history_events(reg.legislative_history)
 
     if events:
-        amended_dates = _resolve_history_dates(
-            [parse_history_date(event) for event in events], now
-        )
+        amended_dates = _resolve_history_dates([parse_history_date(event) for event in events], now)
         total = len(events)
         for version, (event, amended_at) in enumerate(
             zip(events, amended_dates, strict=True), start=1

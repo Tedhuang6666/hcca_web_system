@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from api.email.renderer import render_email, render_personalized_text, sanitize_html
+from api.email.renderer import (
+    absolutize_url,
+    render_email,
+    render_personalized_text,
+    sanitize_html,
+)
 from api.services.mail import enqueue_email
 
 
@@ -40,6 +45,11 @@ def render_generic_message(
     """
     from markdown_it import MarkdownIt
 
+    md = MarkdownIt("commonmark", {"html": False}).enable("strikethrough", True)
+
+    def _text(value: str) -> str:
+        return render_personalized_text(value, personal) if personal else value
+
     personal = variables or {}
     rendered_subject = render_personalized_text(subject, personal) if personal else subject
     rendered_body = (
@@ -71,11 +81,33 @@ def render_generic_message(
         if personal
         else context.get("cta_label", "")
     )
-    html_body = (
-        MarkdownIt("commonmark", {"html": False})
-        .enable("strikethrough", True)
-        .render(rendered_body)
-    )
+    rendered_buttons = [
+        {
+            "label": _text(str(btn.get("label", ""))),
+            "url": _text(str(btn.get("url", ""))),
+            "style": str(btn.get("style") or "primary"),
+        }
+        for btn in context.get("buttons", [])
+        if str(btn.get("url", "")).strip()
+    ]
+    rendered_blocks = []
+    for block in context.get("blocks", []):
+        block_type = str(block.get("type", ""))
+        if block_type == "image":
+            url = absolutize_url(_text(str(block.get("url", ""))))
+            if url:
+                rendered_blocks.append(
+                    {"type": "image", "url": url, "alt": _text(str(block.get("alt", "")))}
+                )
+        elif block_type == "divider":
+            rendered_blocks.append({"type": "divider"})
+        elif block_type == "text":
+            block_text = _text(str(block.get("md", "")))
+            if block_text.strip():
+                rendered_blocks.append(
+                    {"type": "text", "html": sanitize_html(md.render(block_text))}
+                )
+    html_body = md.render(rendered_body)
     return render_email(
         "generic",
         {
@@ -86,6 +118,8 @@ def render_generic_message(
             "card_rows": rendered_rows,
             "cta_url": rendered_cta_url,
             "cta_label": rendered_cta_label,
+            "buttons": rendered_buttons,
+            "blocks": rendered_blocks,
         },
     )
 
