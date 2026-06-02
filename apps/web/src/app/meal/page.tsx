@@ -19,6 +19,7 @@ import type {
   MealVendorOut,
 } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
+import { usePersistedState } from "@/hooks/usePersistedState";
 
 const RANGE_DAYS = 14;
 
@@ -229,8 +230,8 @@ export default function MealPage() {
   const [availabilities, setAvailabilities] = useState<MealAvailabilityOut[]>([]);
   const [holidays, setHolidays] = useState<Map<string, TaiwanCalendarDay>>(new Map());
   const [loading, setLoading] = useState(true);
-  const [vendorFilter, setVendorFilter] = useState("all");
-  const [dateFilter, setDateFilter] = useState("all");
+  const [vendorFilter, setVendorFilter] = usePersistedState<string>("hcca:pref:meal:vendor:v1", "all");
+  const [dateFilter, setDateFilter] = usePersistedState<string>("hcca:pref:meal:date:v1", "all");
   const [ordering, setOrdering] = useState<MealAvailabilityOut | null>(null);
 
   const load = useCallback(async () => {

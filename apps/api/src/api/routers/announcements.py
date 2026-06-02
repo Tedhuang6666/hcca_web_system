@@ -44,6 +44,9 @@ _MANAGE_CODES = frozenset(
         PermissionCode.ANNOUNCEMENT_PUBLISH,
         PermissionCode.ANNOUNCEMENT_SET_URGENT,
         PermissionCode.ANNOUNCEMENT_MEDIA_MANAGE,
+        PermissionCode.ANNOUNCEMENT_PUBLIC_LIST,
+        PermissionCode.ANNOUNCEMENT_PUBLIC_DETAIL,
+        PermissionCode.ANNOUNCEMENT_PUBLIC_LAYOUT,
         PermissionCode.ADMIN_ALL,
     )
 )

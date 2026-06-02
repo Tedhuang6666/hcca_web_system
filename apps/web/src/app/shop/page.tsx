@@ -8,6 +8,7 @@ import { uploadUrl } from "@/lib/config";
 import type { CatalogCategoryOut, CatalogProductOut, ProductOut } from "@/lib/types";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import SmartEmptyState from "@/components/ui/SmartEmptyState";
+import { usePersistedState } from "@/hooks/usePersistedState";
 
 function Thumb({ url, alt, size = 64 }: { url: string | null; alt: string; size?: number }) {
   if (!url) {
@@ -269,7 +270,7 @@ export default function ShopPage() {
   const [loading, setLoading] = useState(true);
   const [openProduct, setOpenProduct] = useState<string | null>(null);
   const [cartCount, setCartCount] = useState(0);
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [selectedCategoryId, setSelectedCategoryId] = usePersistedState<string | null>("hcca:pref:shop:category:v1", null);
 
   const loadCatalog = useCallback(() => {
     setLoading(true);

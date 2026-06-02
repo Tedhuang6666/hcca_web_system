@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Command } from "cmdk";
-import { FileText, Gavel, Megaphone, Search, Settings, Users } from "lucide-react";
+import { Clock, FileText, Gavel, Megaphone, Search, Settings, Users } from "lucide-react";
 import { searchApi } from "@/lib/api";
 import type { SearchResultOut } from "@/lib/types";
+import { useRecentItems } from "@/hooks/useRecentItems";
 
 const STATIC_ACTIONS = [
   { label: "公文列表", href: "/documents", icon: FileText },
@@ -23,6 +24,7 @@ function kindLabel(kind: string) {
     regulation: "法規",
     meeting: "會議",
     announcement: "公告",
+    survey: "問卷",
   }[kind] ?? kind;
 }
 
@@ -31,6 +33,8 @@ export default function CommandMenu() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResultOut[]>([]);
+  const recents = useRecentItems(6);
+  const showRecents = query.trim().length === 0 && recents.length > 0;
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -104,6 +108,27 @@ export default function CommandMenu() {
           >
             沒有找到結果
           </Command.Empty>
+
+          {showRecents && (
+            <Command.Group heading="最近開啟">
+              {recents.map((item) => (
+                <Command.Item
+                  key={`recent-${item.kind}-${item.id}`}
+                  value={`recent-${item.title}`}
+                  onSelect={() => go(item.href)}
+                  className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm"
+                >
+                  <Clock size={15} aria-hidden={true} style={{ color: "var(--text-muted)" }} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">{item.title}</span>
+                    <span className="mt-0.5 block truncate text-xs" style={{ color: "var(--text-muted)" }}>
+                      {kindLabel(item.kind)}
+                    </span>
+                  </span>
+                </Command.Item>
+              ))}
+            </Command.Group>
+          )}
 
           {filteredActions.length > 0 && (
             <Command.Group heading="功能">

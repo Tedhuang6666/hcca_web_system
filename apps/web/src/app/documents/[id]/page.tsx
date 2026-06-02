@@ -15,6 +15,7 @@ import { VersionHistory } from "@/components/documents/VersionHistory";
 import { usePersistedZoom } from "@/hooks/usePersistedZoom";
 import { useWS } from "@/hooks/useWS";
 import { apiUrl } from "@/lib/config";
+import { recordRecent } from "@/lib/recents";
 
 function toROCDate(dateStr: string) {
   const d = new Date(dateStr);
@@ -179,6 +180,9 @@ export default function DocumentDetailPage() {
 
   useEffect(() => { fetchDoc(); }, [fetchDoc]);
   useEffect(() => { usersApi.list().then(setAllUsers).catch(() => {}); }, []);
+  useEffect(() => {
+    if (doc) recordRecent({ kind: "document", id, title: doc.serial_number ?? doc.title, href: `/documents/${id}` });
+  }, [doc, id]);
 
   // 即時 WebSocket 更新
   useWS(doc ? `org:${doc.org_id}` : null, (msg) => {

@@ -230,6 +230,7 @@ export function ApprovalPanel({
         {steps.map((step) => {
           const s = STATUS_STYLE[step.status] ?? STATUS_STYLE.waiting;
           const isMyStep = step.approver.id === currentUserId;
+          const isMyTurn = isMyStep && step.status === "pending";
           const canDelegate = isMyStep && (step.status === "pending" || step.status === "waiting");
           const actorDisplay = formatStepActor(step);
 
@@ -237,10 +238,18 @@ export function ApprovalPanel({
             <div key={step.id}>
               <div
                 className="rounded-xl p-3.5"
-                style={{
-                  background: "var(--bg-elevated)",
-                  border: `1px solid var(${s.bgVar})`,
-                }}>
+                style={
+                  isMyTurn
+                    ? {
+                        background: "var(--warning-dim)",
+                        border: "1px solid var(--warning)",
+                        boxShadow: "0 0 0 3px var(--warning-dim)",
+                      }
+                    : {
+                        background: "var(--bg-elevated)",
+                        border: `1px solid var(${s.bgVar})`,
+                      }
+                }>
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span
@@ -268,6 +277,17 @@ export function ApprovalPanel({
                       }}>
                       {STATUS_LABEL[step.status]}
                     </span>
+                    {isMyTurn && (
+                      <span
+                        className="badge text-[10px] font-semibold"
+                        style={{
+                          color: "var(--warning)",
+                          background: "var(--warning-dim)",
+                          borderColor: "var(--warning)",
+                        }}>
+                        輪到你
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     {step.decided_at && (

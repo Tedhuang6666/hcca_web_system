@@ -1,13 +1,13 @@
-04:26:01 INFO  api.core.sentry: Sentry initialized env=development traces=0.00
-04:26:01 INFO  api.core.posthog: PostHog initialized host=https://us.i.posthog.com
-04:26:01 INFO  api.core.prometheus_metrics: prometheus_client not installed; metrics disabled. Run `uv add prometheus-client --project apps/api` to enable.
+23:57:58 INFO  api.core.sentry: Sentry initialized env=development traces=0.00
+23:57:58 INFO  api.core.posthog: PostHog initialized host=https://us.i.posthog.com
+23:57:58 INFO  api.core.prometheus_metrics: prometheus_client not installed; metrics disabled. Run `uv add prometheus-client --project apps/api` to enable.
  
  -------------- email-dev@TedHuangsNB v5.3.1 (emerald-rush)
 --- ***** ----- 
--- ******* ---- Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39 2026-06-01 04:26:02
+-- ******* ---- Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39 2026-06-02 23:58:00
 - *** --- * --- 
 - ** ---------- [config]
-- ** ---------- .> app:         campus_platform:0x7ae53f3c4800
+- ** ---------- .> app:         campus_platform:0x7c70f19b8e90
 - ** ---------- .> transport:   redis://localhost:6379/0
 - ** ---------- .> results:     redis://localhost:6379/0
 - *** --- * --- .> concurrency: 1 (prefork)
@@ -44,7 +44,7 @@
   . api.services.webhook_tasks.process_webhook_deliveries
   . api.services.work_item_tasks.remind_due_work_items
 
-04:26:02 INFO  celery.worker.consumer.connection: Connected to redis://localhost:6379/0
-04:26:02 INFO  celery.worker.consumer.mingle: mingle: searching for neighbors
-04:26:03 INFO  celery.worker.consumer.mingle: mingle: all alone
-04:26:03 INFO  celery.apps.worker: email-dev@TedHuangsNB ready.
+23:58:00 INFO  celery.worker.consumer.connection: Connected to redis://localhost:6379/0
+23:58:00 INFO  celery.worker.consumer.mingle: mingle: searching for neighbors
+23:58:01 INFO  celery.worker.consumer.mingle: mingle: all alone
+23:58:01 INFO  celery.apps.worker: email-dev@TedHuangsNB ready.

@@ -203,6 +203,13 @@ from api.models.shop import (  # noqa: F401
     ProductVariantGroup,
     ProductVariantOption,
 )
+from api.models.site import (  # noqa: F401
+    PublicLink,
+    PublicLinkCategory,
+    PublicOfficerProfile,
+    PublicSitePage,
+    PublicSiteSettings,
+)
 from api.models.user import User  # noqa: F401
 
 # 外部身份綁定（Phase D1 / ADR-005）

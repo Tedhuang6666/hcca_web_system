@@ -7,6 +7,7 @@ import { CalendarDays, Plus, Radio, ScreenShare, Settings } from "lucide-react";
 import { meetingsApi, orgsApi } from "@/lib/api";
 import type { MeetingListItem, MeetingWorkspaceOut, OrgRead } from "@/lib/types";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
+import { usePersistedState } from "@/hooks/usePersistedState";
 
 const statusLabel: Record<string, string> = {
   draft: "草稿",
@@ -21,7 +22,8 @@ export default function MeetingsPage() {
   const [orgs, setOrgs] = useState<OrgRead[]>([]);
   const [workspace, setWorkspace] = useState<MeetingWorkspaceOut | null>(null);
   const [title, setTitle] = useState("");
-  const [orgId, setOrgId] = useState("");
+  // 記住上次建立會議所選的組織，常為同一組織辦會議者免每次重選。
+  const [orgId, setOrgId] = usePersistedState<string>("hcca:pref:meetings:org:v1", "");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [permissions, setPermissions] = useState<Set<string>>(new Set());
@@ -78,7 +80,7 @@ export default function MeetingsPage() {
         default_pass_threshold: 0,
       });
       setTitle("");
-      setOrgId("");
+      // 保留 orgId 作為下次預設（常為同一組織連續辦會議）。
       router.push(`/meetings/${meeting.id}/edit`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "建立會議失敗");

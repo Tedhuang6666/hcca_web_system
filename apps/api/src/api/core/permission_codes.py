@@ -107,6 +107,9 @@ class PermissionCode(StrEnum):
     ANNOUNCEMENT_SET_URGENT = "announcement:set_urgent"
     ANNOUNCEMENT_MEDIA_MANAGE = "announcement:media_manage"
     ANNOUNCEMENT_VIEW_STATS = "announcement:view_stats"
+    ANNOUNCEMENT_PUBLIC_LIST = "announcement:public_list"
+    ANNOUNCEMENT_PUBLIC_DETAIL = "announcement:public_detail"
+    ANNOUNCEMENT_PUBLIC_LAYOUT = "announcement:public_layout"
 
     ANALYTICS_VIEW = "analytics:view"
 
@@ -131,6 +134,8 @@ class PermissionCode(StrEnum):
 
     PARTNER_MAP_MANAGE = "partner_map:manage"
     PARTNER_MAP_VIEW_STATS = "partner_map:view_stats"
+
+    SITE_MANAGE = "site:manage"
 
     # Phase B1 / D2（企業級升級路線圖、ADR-003 / ADR-005 / Phase D2）
     POLICY_ADMIN = "policy:admin"
@@ -672,6 +677,24 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "desc": "查看公告閱讀率與參與統計",
     },
     {
+        "group": "公告系統",
+        "code": PermissionCode.ANNOUNCEMENT_PUBLIC_LIST,
+        "label": "管理公開公告列表",
+        "desc": "調整對外公告列表頁的分類、排序與呈現規則",
+    },
+    {
+        "group": "公告系統",
+        "code": PermissionCode.ANNOUNCEMENT_PUBLIC_DETAIL,
+        "label": "管理公開公告詳情",
+        "desc": "調整對外公告詳情頁的顯示欄位、分享資訊與版面",
+    },
+    {
+        "group": "公告系統",
+        "code": PermissionCode.ANNOUNCEMENT_PUBLIC_LAYOUT,
+        "label": "管理公開公告版面",
+        "desc": "管理公開公告頁的 SEO、導覽入口與視覺設定",
+    },
+    {
         "group": "數據分析",
         "code": PermissionCode.ANALYTICS_VIEW,
         "label": "查看數據分析",
@@ -778,6 +801,12 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "code": PermissionCode.PARTNER_MAP_VIEW_STATS,
         "label": "查看特約地圖統計",
         "desc": "查看特約店家點擊、瀏覽與互動統計（預留）",
+    },
+    {
+        "group": "公開網站",
+        "code": PermissionCode.SITE_MANAGE,
+        "label": "管理公開網站",
+        "desc": "管理官網首頁、公開頁面、平台連結與公開幹部顯示設定",
     },
     # ── 企業級升級（Phase B1 / D2 / C3 / D3）──────────────────────────
     {

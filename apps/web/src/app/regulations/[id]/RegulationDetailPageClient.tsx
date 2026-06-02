@@ -43,6 +43,7 @@ import { usePersistedZoom } from "@/hooks/usePersistedZoom";
 import { ApiError, documentsApi, regulationsApi, regulationHref } from "@/lib/api";
 import { apiUrl } from "@/lib/config";
 import { formatGeneratedHistoryRows, splitLegislativeHistory } from "@/lib/regulationHistory";
+import { recordRecent } from "@/lib/recents";
 import {
   LINKABLE_ARTICLE_TYPES,
   decodeRouteSegment,
@@ -123,6 +124,10 @@ export default function RegulationDetailPageClient() {
   const reload = useCallback(() => {
     regulationsApi.get(id).then(setReg).catch(() => {});
   }, [id]);
+
+  useEffect(() => {
+    if (reg) recordRecent({ kind: "regulation", id, title: reg.title, href: regulationHref(reg) });
+  }, [reg, id]);
 
   useEffect(() => {
     regulationsApi.get(id)

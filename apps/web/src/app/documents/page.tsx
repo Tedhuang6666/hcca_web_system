@@ -875,7 +875,7 @@ export default function DocumentListPage() {
                   className="btn btn-primary text-xs"
                   disabled={batchBusy || selectedPendingArray.length === 0}
                   onClick={() => runBatch("approve")}>
-                  批量核准
+                  {batchBusy ? "處理中…" : "批量核准"}
                 </button>
               )}
               {can("document:reject") && (
@@ -883,7 +883,7 @@ export default function DocumentListPage() {
                   className="btn btn-danger text-xs"
                   disabled={batchBusy || selectedPendingArray.length === 0}
                   onClick={() => runBatch("reject")}>
-                  批量退件
+                  {batchBusy ? "處理中…" : "批量退件"}
                 </button>
               )}
               {can("document:archive") && (
@@ -891,7 +891,7 @@ export default function DocumentListPage() {
                   className="btn btn-ghost text-xs"
                   disabled={batchBusy || selectedApprovedArray.length === 0}
                   onClick={() => runBatch("archive")}>
-                  批量封存
+                  {batchBusy ? "處理中…" : "批量封存"}
                 </button>
               )}
               {can("document:forward") && (

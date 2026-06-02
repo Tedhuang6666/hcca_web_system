@@ -5,11 +5,13 @@ Revises: d3a7e1c2b5f0
 Create Date: 2026-06-02 00:00:00.000000
 
 """
+
 from collections.abc import Sequence
 
-import sqlalchemy as sa
 from alembic import op
+import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
 
 revision: str = "e4b7c8d9a001"
 down_revision: str | Sequence[str] | None = "d3a7e1c2b5f0"
@@ -19,8 +21,18 @@ depends_on: str | Sequence[str] | None = None
 
 def _timestamps() -> list[sa.Column]:
     return [
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
     ]
 
 
@@ -93,11 +105,7 @@ def upgrade() -> None:
         sa.Column("title_override", sa.String(length=120), nullable=True),
         sa.Column("bio", sa.Text(), nullable=True),
         sa.Column("public_email", sa.String(length=255), nullable=True),
-        sa.Column(
-            "external_links",
-            postgresql.JSONB(astext_type=sa.Text()),
-            nullable=False,
-        ),
+        sa.Column("external_links", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column("sort_order", sa.Integer(), nullable=False),
         sa.Column("is_featured", sa.Boolean(), server_default="false", nullable=False),
         sa.Column("is_visible", sa.Boolean(), server_default="true", nullable=False),
@@ -161,8 +169,8 @@ def upgrade() -> None:
         ["is_published", "sort_order"],
     )
     op.create_index(op.f("ix_public_site_pages_is_published"), "public_site_pages", ["is_published"])
-    op.create_index(op.f("ix_public_site_pages_page_kind"), "public_site_pages", ["page_kind"])
     op.create_index(op.f("ix_public_site_pages_nav_order"), "public_site_pages", ["nav_order"])
+    op.create_index(op.f("ix_public_site_pages_page_kind"), "public_site_pages", ["page_kind"])
     op.create_index(op.f("ix_public_site_pages_show_in_nav"), "public_site_pages", ["show_in_nav"])
     op.create_index(op.f("ix_public_site_pages_sort_order"), "public_site_pages", ["sort_order"])
 
@@ -176,7 +184,10 @@ def downgrade() -> None:
     op.drop_index("ix_public_site_pages_published_sort", table_name="public_site_pages")
     op.drop_index("ix_public_site_pages_nav", table_name="public_site_pages")
     op.drop_table("public_site_pages")
-    op.drop_index(op.f("ix_public_officer_profiles_user_position_id"), table_name="public_officer_profiles")
+    op.drop_index(
+        op.f("ix_public_officer_profiles_user_position_id"),
+        table_name="public_officer_profiles",
+    )
     op.drop_index(op.f("ix_public_officer_profiles_sort_order"), table_name="public_officer_profiles")
     op.drop_index(op.f("ix_public_officer_profiles_is_visible"), table_name="public_officer_profiles")
     op.drop_index(op.f("ix_public_officer_profiles_is_featured"), table_name="public_officer_profiles")

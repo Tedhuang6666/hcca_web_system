@@ -1,0 +1,614 @@
+"use client";
+
+import { Eye, FileText, Link as LinkIcon, Plus, RefreshCw, Save, Trash2, Users } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+
+import { ApiError, siteApi } from "@/lib/api";
+import type {
+  PublicLinkCategoryOut,
+  PublicLinkOut,
+  PublicOfficerCandidateOut,
+  PublicOfficerProfileOut,
+  PublicSitePageOut,
+  PublicSiteSettingsOut,
+} from "@/lib/types";
+
+type Tab = "settings" | "pages" | "links" | "officers" | "advanced";
+
+const emptySettings: PublicSiteSettingsOut = {
+  id: "",
+  site_title: "新竹高中班聯會",
+  site_description: "",
+  site_logo_url: "",
+  site_logo_alt: "",
+  hero_title: "新竹高中班聯會",
+  hero_subtitle: "",
+  hero_image_url: "",
+  hero_image_alt: "",
+  about_title: "關於班聯會",
+  about_body_md: "請在後台編輯關於本會內容。",
+  mission_md: "",
+  history_md: "",
+  cta_label: "查看公開資料",
+  cta_href: "/public",
+  public_database_label: "公開資料庫",
+  public_database_description: "",
+  theme_config: {},
+  homepage_blocks: {},
+  custom_css: "",
+  seo_title: "",
+  seo_description: "",
+  created_at: "",
+  updated_at: "",
+};
+
+const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
+  { id: "settings", label: "基本設定", icon: <Save size={16} aria-hidden /> },
+  { id: "pages", label: "頁面內容", icon: <FileText size={16} aria-hidden /> },
+  { id: "links", label: "平台連結", icon: <LinkIcon size={16} aria-hidden /> },
+  { id: "officers", label: "幹部顯示", icon: <Users size={16} aria-hidden /> },
+  { id: "advanced", label: "進階樣式", icon: <Eye size={16} aria-hidden /> },
+];
+
+function displayError(error: unknown, fallback: string) {
+  toast.error(error instanceof ApiError ? error.message : fallback);
+}
+
+function Field({
+  label,
+  children,
+  hint,
+}: {
+  label: string;
+  children: React.ReactNode;
+  hint?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="text-sm font-medium text-[var(--text-secondary)]">{label}</span>
+      <div className="mt-1">{children}</div>
+      {hint && <span className="mt-1 block text-xs text-[var(--text-muted)]">{hint}</span>}
+    </label>
+  );
+}
+
+function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      {...props}
+      className={`w-full rounded-lg px-3 py-2 text-sm outline-none ${props.className ?? ""}`}
+      style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-primary)", ...props.style }}
+    />
+  );
+}
+
+function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return (
+    <textarea
+      {...props}
+      className={`min-h-28 w-full rounded-lg px-3 py-2 text-sm leading-6 outline-none ${props.className ?? ""}`}
+      style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-primary)", ...props.style }}
+    />
+  );
+}
+
+function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <select
+      {...props}
+      className={`w-full rounded-lg px-3 py-2 text-sm outline-none ${props.className ?? ""}`}
+      style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-primary)", ...props.style }}
+    />
+  );
+}
+
+function Toggle({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <label className="inline-flex min-h-11 items-center gap-2 text-sm text-[var(--text-secondary)]">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="h-4 w-4"
+      />
+      {label}
+    </label>
+  );
+}
+
+function parseJsonObject(value: string, label: string) {
+  if (!value.trim()) return {};
+  const parsed = JSON.parse(value);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`${label} 必須是 JSON object`);
+  }
+  return parsed as Record<string, unknown>;
+}
+
+export default function PublicSiteAdminPage() {
+  const [tab, setTab] = useState<Tab>("settings");
+  const [loading, setLoading] = useState(true);
+  const [settings, setSettings] = useState<PublicSiteSettingsOut>(emptySettings);
+  const [pages, setPages] = useState<PublicSitePageOut[]>([]);
+  const [categories, setCategories] = useState<PublicLinkCategoryOut[]>([]);
+  const [links, setLinks] = useState<PublicLinkOut[]>([]);
+  const [candidates, setCandidates] = useState<PublicOfficerCandidateOut[]>([]);
+  const [profiles, setProfiles] = useState<PublicOfficerProfileOut[]>([]);
+  const [themeJson, setThemeJson] = useState("{}");
+  const [blocksJson, setBlocksJson] = useState("{}");
+
+  const [pageDraft, setPageDraft] = useState({
+    slug: "",
+    title: "",
+    summary: "",
+    body_md: "",
+    page_kind: "standard",
+    nav_label: "",
+    nav_order: 0,
+    sort_order: 0,
+    show_in_nav: false,
+    is_published: false,
+  });
+  const [categoryDraft, setCategoryDraft] = useState({
+    slug: "",
+    title: "",
+    description: "",
+    sort_order: 0,
+    is_active: true,
+  });
+  const [linkDraft, setLinkDraft] = useState({
+    title: "",
+    url: "",
+    description: "",
+    category_id: "",
+    icon_key: "",
+    sort_order: 0,
+    is_active: true,
+  });
+  const [officerDraft, setOfficerDraft] = useState({
+    user_position_id: "",
+    display_name_override: "",
+    title_override: "",
+    bio: "",
+    public_email: "",
+    sort_order: 0,
+    is_featured: false,
+    is_visible: true,
+  });
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [
+        nextSettings,
+        nextPages,
+        nextCategories,
+        nextLinks,
+        nextCandidates,
+        nextProfiles,
+      ] = await Promise.all([
+        siteApi.adminSettings(),
+        siteApi.adminPages(),
+        siteApi.adminLinkCategories(),
+        siteApi.adminLinks(),
+        siteApi.officerCandidates(true),
+        siteApi.officerProfiles(),
+      ]);
+      setSettings(nextSettings);
+      setPages(nextPages);
+      setCategories(nextCategories);
+      setLinks(nextLinks);
+      setCandidates(nextCandidates);
+      setProfiles(nextProfiles);
+      setThemeJson(JSON.stringify(nextSettings.theme_config ?? {}, null, 2));
+      setBlocksJson(JSON.stringify(nextSettings.homepage_blocks ?? {}, null, 2));
+    } catch (error) {
+      displayError(error, "載入公開網站設定失敗");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const candidateByUserPosition = useMemo(
+    () => new Map(candidates.map((candidate) => [candidate.user_position_id, candidate])),
+    [candidates],
+  );
+
+  const saveSettings = async () => {
+    try {
+      const next = await siteApi.updateSettings({
+        site_title: settings.site_title,
+        site_description: settings.site_description,
+        site_logo_url: settings.site_logo_url,
+        site_logo_alt: settings.site_logo_alt,
+        hero_title: settings.hero_title,
+        hero_subtitle: settings.hero_subtitle,
+        hero_image_url: settings.hero_image_url,
+        hero_image_alt: settings.hero_image_alt,
+        about_title: settings.about_title,
+        about_body_md: settings.about_body_md,
+        mission_md: settings.mission_md,
+        history_md: settings.history_md,
+        cta_label: settings.cta_label,
+        cta_href: settings.cta_href,
+        public_database_label: settings.public_database_label,
+        public_database_description: settings.public_database_description,
+        seo_title: settings.seo_title,
+        seo_description: settings.seo_description,
+      });
+      setSettings(next);
+      toast.success("公開網站設定已儲存");
+    } catch (error) {
+      displayError(error, "儲存設定失敗");
+    }
+  };
+
+  const saveAdvanced = async () => {
+    try {
+      const next = await siteApi.updateSettings({
+        theme_config: parseJsonObject(themeJson, "主題設定"),
+        homepage_blocks: parseJsonObject(blocksJson, "首頁區塊"),
+        custom_css: settings.custom_css,
+      });
+      setSettings(next);
+      setThemeJson(JSON.stringify(next.theme_config ?? {}, null, 2));
+      setBlocksJson(JSON.stringify(next.homepage_blocks ?? {}, null, 2));
+      toast.success("進階設定已儲存");
+    } catch (error) {
+      displayError(error, error instanceof Error ? error.message : "儲存進階設定失敗");
+    }
+  };
+
+  const createPage = async () => {
+    try {
+      await siteApi.createPage({
+        ...pageDraft,
+        summary: pageDraft.summary || null,
+        nav_label: pageDraft.nav_label || null,
+        layout_config: {},
+        content_blocks: {},
+        cover_image_url: null,
+        cover_image_alt: null,
+        seo_title: null,
+        seo_description: null,
+      });
+      toast.success("頁面已新增");
+      setPageDraft({ slug: "", title: "", summary: "", body_md: "", page_kind: "standard", nav_label: "", nav_order: 0, sort_order: 0, show_in_nav: false, is_published: false });
+      await load();
+    } catch (error) {
+      displayError(error, "新增頁面失敗");
+    }
+  };
+
+  const createCategory = async () => {
+    try {
+      await siteApi.createLinkCategory({
+        ...categoryDraft,
+        description: categoryDraft.description || null,
+      });
+      toast.success("連結類別已新增");
+      setCategoryDraft({ slug: "", title: "", description: "", sort_order: 0, is_active: true });
+      await load();
+    } catch (error) {
+      displayError(error, "新增類別失敗");
+    }
+  };
+
+  const createLink = async () => {
+    try {
+      await siteApi.createLink({
+        ...linkDraft,
+        description: linkDraft.description || null,
+        category_id: linkDraft.category_id || null,
+        icon_key: linkDraft.icon_key || null,
+      });
+      toast.success("連結已新增");
+      setLinkDraft({ title: "", url: "", description: "", category_id: "", icon_key: "", sort_order: 0, is_active: true });
+      await load();
+    } catch (error) {
+      displayError(error, "新增連結失敗");
+    }
+  };
+
+  const createOfficerProfile = async () => {
+    try {
+      await siteApi.createOfficerProfile({
+        ...officerDraft,
+        display_name_override: officerDraft.display_name_override || null,
+        title_override: officerDraft.title_override || null,
+        bio: officerDraft.bio || null,
+        public_email: officerDraft.public_email || null,
+        external_links: {},
+      });
+      toast.success("公開幹部已新增");
+      setOfficerDraft({ user_position_id: "", display_name_override: "", title_override: "", bio: "", public_email: "", sort_order: 0, is_featured: false, is_visible: true });
+      await load();
+    } catch (error) {
+      displayError(error, "新增幹部顯示失敗");
+    }
+  };
+
+  const patchPage = async (page: PublicSitePageOut, body: Partial<PublicSitePageOut>) => {
+    await siteApi.updatePage(page.id, body);
+    await load();
+  };
+
+  const patchLink = async (link: PublicLinkOut, body: Partial<PublicLinkOut>) => {
+    await siteApi.updateLink(link.id, body);
+    await load();
+  };
+
+  const patchProfile = async (profile: PublicOfficerProfileOut, body: Partial<PublicOfficerProfileOut>) => {
+    await siteApi.updateOfficerProfile(profile.id, body);
+    await load();
+  };
+
+  if (loading) {
+    return <div className="py-20 text-center text-sm text-[var(--text-muted)]">載入公開網站設定...</div>;
+  }
+
+  return (
+    <div className="mx-auto max-w-7xl space-y-5">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-xl font-semibold">公開網站設定</h1>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">
+            管理官網首頁、CMS 頁面、Linktree、幹部顯示與公告對外入口。
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button type="button" onClick={load} className="btn btn-ghost">
+            <RefreshCw size={16} aria-hidden /> 重新整理
+          </button>
+          <a href="/" target="_blank" rel="noreferrer" className="btn btn-secondary">
+            <Eye size={16} aria-hidden /> 預覽官網
+          </a>
+        </div>
+      </header>
+
+      <nav className="flex gap-2 overflow-x-auto rounded-xl p-2" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }} aria-label="公開網站設定分頁">
+        {tabs.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => setTab(item.id)}
+            className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium"
+            style={{
+              background: tab === item.id ? "var(--primary-dim)" : "transparent",
+              color: tab === item.id ? "var(--primary)" : "var(--text-secondary)",
+            }}>
+            {item.icon}
+            {item.label}
+          </button>
+        ))}
+      </nav>
+
+      {tab === "settings" && (
+        <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+          <div className="card space-y-4 p-5">
+            <Field label="網站標題"><TextInput value={settings.site_title} onChange={(e) => setSettings({ ...settings, site_title: e.target.value })} /></Field>
+            <Field label="網站描述"><TextArea value={settings.site_description ?? ""} onChange={(e) => setSettings({ ...settings, site_description: e.target.value })} /></Field>
+            <div className="grid gap-4 md:grid-cols-[1fr_12rem] md:items-end">
+              <Field label="班聯會會徽 URL" hint="可填上傳後圖片網址或公開圖片 URL，會顯示在導覽列與首頁。">
+                <TextInput value={settings.site_logo_url ?? ""} onChange={(e) => setSettings({ ...settings, site_logo_url: e.target.value })} />
+              </Field>
+              <div className="grid h-28 place-items-center rounded-lg" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+                {settings.site_logo_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={settings.site_logo_url} alt={settings.site_logo_alt || "班聯會會徽預覽"} className="max-h-20 max-w-24 object-contain" />
+                ) : (
+                  <span className="text-xs text-[var(--text-muted)]">會徽預覽</span>
+                )}
+              </div>
+            </div>
+            <Field label="會徽替代文字"><TextInput value={settings.site_logo_alt ?? ""} onChange={(e) => setSettings({ ...settings, site_logo_alt: e.target.value })} /></Field>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="首頁主標"><TextInput value={settings.hero_title} onChange={(e) => setSettings({ ...settings, hero_title: e.target.value })} /></Field>
+              <Field label="CTA 文字"><TextInput value={settings.cta_label} onChange={(e) => setSettings({ ...settings, cta_label: e.target.value })} /></Field>
+            </div>
+            <Field label="首頁副標"><TextArea value={settings.hero_subtitle ?? ""} onChange={(e) => setSettings({ ...settings, hero_subtitle: e.target.value })} /></Field>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="CTA 連結"><TextInput value={settings.cta_href} onChange={(e) => setSettings({ ...settings, cta_href: e.target.value })} /></Field>
+              <Field label="封面圖 URL"><TextInput value={settings.hero_image_url ?? ""} onChange={(e) => setSettings({ ...settings, hero_image_url: e.target.value })} /></Field>
+            </div>
+            <Field label="封面圖替代文字"><TextInput value={settings.hero_image_alt ?? ""} onChange={(e) => setSettings({ ...settings, hero_image_alt: e.target.value })} /></Field>
+            <button type="button" onClick={saveSettings} className="btn btn-primary"><Save size={16} aria-hidden /> 儲存基本設定</button>
+          </div>
+          <div className="card space-y-4 p-5">
+            <Field label="關於標題"><TextInput value={settings.about_title} onChange={(e) => setSettings({ ...settings, about_title: e.target.value })} /></Field>
+            <Field label="關於內文 Markdown"><TextArea rows={8} value={settings.about_body_md} onChange={(e) => setSettings({ ...settings, about_body_md: e.target.value })} /></Field>
+            <Field label="使命 Markdown"><TextArea value={settings.mission_md ?? ""} onChange={(e) => setSettings({ ...settings, mission_md: e.target.value })} /></Field>
+            <Field label="沿革 Markdown"><TextArea value={settings.history_md ?? ""} onChange={(e) => setSettings({ ...settings, history_md: e.target.value })} /></Field>
+          </div>
+        </section>
+      )}
+
+      {tab === "pages" && (
+        <section className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+          <div className="card space-y-4 p-5">
+            <h2 className="font-semibold">新增 CMS 頁面</h2>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="Slug"><TextInput value={pageDraft.slug} onChange={(e) => setPageDraft({ ...pageDraft, slug: e.target.value })} placeholder="history" /></Field>
+              <Field label="頁面類別"><TextInput value={pageDraft.page_kind} onChange={(e) => setPageDraft({ ...pageDraft, page_kind: e.target.value })} placeholder="standard" /></Field>
+            </div>
+            <Field label="標題"><TextInput value={pageDraft.title} onChange={(e) => setPageDraft({ ...pageDraft, title: e.target.value })} /></Field>
+            <Field label="摘要"><TextArea value={pageDraft.summary} onChange={(e) => setPageDraft({ ...pageDraft, summary: e.target.value })} /></Field>
+            <Field label="內文 Markdown"><TextArea rows={8} value={pageDraft.body_md} onChange={(e) => setPageDraft({ ...pageDraft, body_md: e.target.value })} /></Field>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="導覽名稱"><TextInput value={pageDraft.nav_label} onChange={(e) => setPageDraft({ ...pageDraft, nav_label: e.target.value })} /></Field>
+              <Field label="排序"><TextInput type="number" value={pageDraft.sort_order} onChange={(e) => setPageDraft({ ...pageDraft, sort_order: Number(e.target.value) })} /></Field>
+            </div>
+            <div className="flex flex-wrap gap-4">
+              <Toggle label="發布" checked={pageDraft.is_published} onChange={(value) => setPageDraft({ ...pageDraft, is_published: value })} />
+              <Toggle label="顯示在導覽" checked={pageDraft.show_in_nav} onChange={(value) => setPageDraft({ ...pageDraft, show_in_nav: value })} />
+            </div>
+            <button type="button" onClick={createPage} className="btn btn-primary"><Plus size={16} aria-hidden /> 新增頁面</button>
+          </div>
+          <div className="space-y-3">
+            {pages.map((page) => (
+              <div key={page.id} className="card p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h3 className="font-semibold">{page.title}</h3>
+                    <p className="mt-1 text-xs text-[var(--text-muted)]">/{page.slug} / {page.page_kind}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" className="btn btn-sm btn-ghost" onClick={() => patchPage(page, { is_published: !page.is_published }).catch((e) => displayError(e, "更新頁面失敗"))}>
+                      {page.is_published ? "取消發布" : "發布"}
+                    </button>
+                    <button type="button" className="btn btn-sm btn-ghost" onClick={() => patchPage(page, { show_in_nav: !page.show_in_nav }).catch((e) => displayError(e, "更新導覽失敗"))}>
+                      {page.show_in_nav ? "移出導覽" : "放入導覽"}
+                    </button>
+                    <button type="button" className="btn btn-sm btn-ghost" onClick={() => siteApi.deletePage(page.id).then(load).catch((e) => displayError(e, "刪除頁面失敗"))}>
+                      <Trash2 size={14} aria-hidden /> 刪除
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {tab === "links" && (
+        <section className="grid gap-4 lg:grid-cols-2">
+          <div className="card space-y-4 p-5">
+            <h2 className="font-semibold">新增連結類別</h2>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="Slug"><TextInput value={categoryDraft.slug} onChange={(e) => setCategoryDraft({ ...categoryDraft, slug: e.target.value })} /></Field>
+              <Field label="名稱"><TextInput value={categoryDraft.title} onChange={(e) => setCategoryDraft({ ...categoryDraft, title: e.target.value })} /></Field>
+            </div>
+            <Field label="說明"><TextInput value={categoryDraft.description} onChange={(e) => setCategoryDraft({ ...categoryDraft, description: e.target.value })} /></Field>
+            <button type="button" onClick={createCategory} className="btn btn-primary"><Plus size={16} aria-hidden /> 新增類別</button>
+            <div className="space-y-2">
+              {categories.map((category) => (
+                <div key={category.id} className="flex items-center justify-between rounded-lg px-3 py-2" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+                  <span className="text-sm">{category.title}</span>
+                  <button type="button" className="btn btn-sm btn-ghost" onClick={() => siteApi.deleteLinkCategory(category.id).then(load).catch((e) => displayError(e, "刪除類別失敗"))}>刪除</button>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="card space-y-4 p-5">
+            <h2 className="font-semibold">新增 Linktree 連結</h2>
+            <Field label="標題"><TextInput value={linkDraft.title} onChange={(e) => setLinkDraft({ ...linkDraft, title: e.target.value })} /></Field>
+            <Field label="URL"><TextInput value={linkDraft.url} onChange={(e) => setLinkDraft({ ...linkDraft, url: e.target.value })} /></Field>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="類別">
+                <Select value={linkDraft.category_id} onChange={(e) => setLinkDraft({ ...linkDraft, category_id: e.target.value })}>
+                  <option value="">不分類</option>
+                  {categories.map((category) => <option key={category.id} value={category.id}>{category.title}</option>)}
+                </Select>
+              </Field>
+              <Field label="排序"><TextInput type="number" value={linkDraft.sort_order} onChange={(e) => setLinkDraft({ ...linkDraft, sort_order: Number(e.target.value) })} /></Field>
+            </div>
+            <Field label="說明"><TextInput value={linkDraft.description} onChange={(e) => setLinkDraft({ ...linkDraft, description: e.target.value })} /></Field>
+            <Toggle label="啟用" checked={linkDraft.is_active} onChange={(value) => setLinkDraft({ ...linkDraft, is_active: value })} />
+            <button type="button" onClick={createLink} className="btn btn-primary"><Plus size={16} aria-hidden /> 新增連結</button>
+            <div className="space-y-2">
+              {links.map((link) => (
+                <div key={link.id} className="flex items-center justify-between gap-3 rounded-lg px-3 py-2" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+                  <span className="min-w-0 text-sm"><span className="font-medium">{link.title}</span><span className="ml-2 text-[var(--text-muted)]">{link.category?.title ?? "未分類"}</span></span>
+                  <button type="button" className="btn btn-sm btn-ghost" onClick={() => patchLink(link, { is_active: !link.is_active }).catch((e) => displayError(e, "更新連結失敗"))}>
+                    {link.is_active ? "停用" : "啟用"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {tab === "officers" && (
+        <section className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+          <div className="card space-y-4 p-5">
+            <h2 className="font-semibold">從既有任期挑選公開幹部</h2>
+            <Field label="幹部候選人">
+              <Select value={officerDraft.user_position_id} onChange={(e) => setOfficerDraft({ ...officerDraft, user_position_id: e.target.value })}>
+                <option value="">請選擇</option>
+                {candidates.map((candidate) => (
+                  <option key={candidate.user_position_id} value={candidate.user_position_id}>
+                    {candidate.display_name} / {candidate.org_name} / {candidate.position_name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="公開姓名覆寫"><TextInput value={officerDraft.display_name_override} onChange={(e) => setOfficerDraft({ ...officerDraft, display_name_override: e.target.value })} /></Field>
+              <Field label="公開稱謂覆寫"><TextInput value={officerDraft.title_override} onChange={(e) => setOfficerDraft({ ...officerDraft, title_override: e.target.value })} /></Field>
+            </div>
+            <Field label="公開簡介"><TextArea value={officerDraft.bio} onChange={(e) => setOfficerDraft({ ...officerDraft, bio: e.target.value })} /></Field>
+            <Field label="公開 Email" hint="後端仍會檢查使用者 show_email，未允許時不會對外顯示。">
+              <TextInput value={officerDraft.public_email} onChange={(e) => setOfficerDraft({ ...officerDraft, public_email: e.target.value })} />
+            </Field>
+            <div className="flex flex-wrap gap-4">
+              <Toggle label="顯示" checked={officerDraft.is_visible} onChange={(value) => setOfficerDraft({ ...officerDraft, is_visible: value })} />
+              <Toggle label="首頁精選" checked={officerDraft.is_featured} onChange={(value) => setOfficerDraft({ ...officerDraft, is_featured: value })} />
+            </div>
+            <button type="button" onClick={createOfficerProfile} className="btn btn-primary"><Plus size={16} aria-hidden /> 新增公開幹部</button>
+          </div>
+          <div className="space-y-3">
+            {profiles.map((profile) => {
+              const candidate = candidateByUserPosition.get(profile.user_position_id);
+              return (
+                <div key={profile.id} className="card p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <h3 className="font-semibold">{profile.display_name_override || candidate?.display_name || "未命名幹部"}</h3>
+                      <p className="mt-1 text-xs text-[var(--text-muted)]">
+                        {profile.title_override || candidate?.position_name || "職位未載入"} / {candidate?.org_name ?? "既有任期"}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => patchProfile(profile, { is_visible: !profile.is_visible }).catch((e) => displayError(e, "更新幹部失敗"))}>
+                        {profile.is_visible ? "隱藏" : "顯示"}
+                      </button>
+                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => patchProfile(profile, { is_featured: !profile.is_featured }).catch((e) => displayError(e, "更新精選失敗"))}>
+                        {profile.is_featured ? "取消精選" : "設為精選"}
+                      </button>
+                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => siteApi.deleteOfficerProfile(profile.id).then(load).catch((e) => displayError(e, "刪除幹部失敗"))}>刪除</button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {tab === "advanced" && (
+        <section className="grid gap-4 lg:grid-cols-2">
+          <div className="card space-y-4 p-5">
+            <Field label="主題設定 JSON" hint="可放色彩、區塊開關、品牌設定等。">
+              <TextArea rows={10} value={themeJson} onChange={(e) => setThemeJson(e.target.value)} />
+            </Field>
+            <Field label="首頁區塊 JSON" hint="保留彈性給之後擴充首頁區塊排序與內容。">
+              <TextArea rows={10} value={blocksJson} onChange={(e) => setBlocksJson(e.target.value)} />
+            </Field>
+          </div>
+          <div className="card space-y-4 p-5">
+            <Field label="自訂 CSS" hint="管理員可微調公開站視覺；請避免影響可讀性與 focus ring。">
+              <TextArea rows={18} value={settings.custom_css ?? ""} onChange={(e) => setSettings({ ...settings, custom_css: e.target.value })} />
+            </Field>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="SEO Title"><TextInput value={settings.seo_title ?? ""} onChange={(e) => setSettings({ ...settings, seo_title: e.target.value })} /></Field>
+              <Field label="SEO Description"><TextInput value={settings.seo_description ?? ""} onChange={(e) => setSettings({ ...settings, seo_description: e.target.value })} /></Field>
+            </div>
+            <button type="button" onClick={saveAdvanced} className="btn btn-primary"><Save size={16} aria-hidden /> 儲存進階設定</button>
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}

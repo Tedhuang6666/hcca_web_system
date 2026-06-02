@@ -26,6 +26,7 @@ import type { SurveyOut, SurveyQuestionOut, SurveyStats, SurveyResponseAdminItem
 import { uploadUrl } from "@/lib/config";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
+import { recordRecent } from "@/lib/recents";
 
 const DISPLAY_TYPES = new Set(["section_text", "page_break", "image", "video"]);
 
@@ -850,6 +851,9 @@ export default function SurveyDetailPage() {
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (survey) recordRecent({ kind: "survey", id: survey.id, title: survey.title, href: `/surveys/${encodeURIComponent(survey.title)}` });
+  }, [survey]);
 
   const submit = async () => {
     if (!survey) return;

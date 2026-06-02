@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { meetingsApi } from "@/lib/api";
 import type { MeetingMinutesOut, MeetingOut } from "@/lib/types";
+import { recordRecent } from "@/lib/recents";
 
 const WORKFLOW_LABEL: Record<string, string> = {
   draft: "草稿",
@@ -82,6 +83,10 @@ export default function MeetingDetailPageClient({
       setError(err instanceof Error ? err.message : "載入會議失敗");
     });
   }, [id, initialMeeting]);
+
+  useEffect(() => {
+    if (id && meeting) recordRecent({ kind: "meeting", id, title: meeting.title, href: `/meetings/${id}` });
+  }, [id, meeting]);
 
   useEffect(() => {
     if (!id || meeting?.status !== "closed") return;

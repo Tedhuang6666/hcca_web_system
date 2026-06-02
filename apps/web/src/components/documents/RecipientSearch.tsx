@@ -5,6 +5,18 @@ import { useEffect, useMemo, useState } from "react";
 import type { OrgRead, UserSummary } from "@/lib/api";
 import { usersApi } from "@/lib/api";
 import type { RecipientType } from "@/lib/types";
+import { getRecentRecipients, pushRecentRecipients, type RecentRecipient } from "@/lib/recentRecipients";
+
+// 收件者沒有穩定 id（可自由輸入），用 name + email 以 JSON 編碼成去重鍵。
+const encodeRecipientId = (name: string, email: string) => JSON.stringify([name, email]);
+const decodeRecipientId = (id: string): { name: string; email: string } => {
+  try {
+    const [name = "", email = ""] = JSON.parse(id) as [string, string];
+    return { name, email };
+  } catch {
+    return { name: id, email: "" };
+  }
+};
 
 /**
  * 公文收件人快選器。
@@ -61,8 +73,19 @@ export function RecipientSearch({
   const [query, setQuery] = useState("");
   const [email, setEmail] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
+  const [recents, setRecents] = useState<RecentRecipient[]>([]);
+
+  useEffect(() => {
+    setRecents(getRecentRecipients());
+  }, []);
 
   const suggestions = useDebouncedUserSuggestions(query);
+
+  // 記住此收件者，方便日後快選；同時更新本地 chips。
+  const remember = (name: string, mail: string) => {
+    pushRecentRecipients([{ id: encodeRecipientId(name, mail), label: name }]);
+    setRecents(getRecentRecipients());
+  };
 
   const selectUser = (u: UserSummary) => {
     setQuery(u.display_name);
@@ -72,7 +95,10 @@ export function RecipientSearch({
 
   const add = () => {
     if (!query.trim()) return;
-    onAdd({ recipient_type: type, name: query.trim(), email: email.trim() });
+    const name = query.trim();
+    const mail = email.trim();
+    onAdd({ recipient_type: type, name, email: mail });
+    remember(name, mail);
     setQuery("");
     setEmail("");
   };
@@ -90,13 +116,45 @@ export function RecipientSearch({
 
   const selectOrg = (o: OrgRead) => {
     onAdd({ recipient_type: type, name: o.name, email: "" });
+    remember(o.name, "");
     setQuery("");
     setEmail("");
     setShowDropdown(false);
   };
 
+  // 點擊「最近使用」chip：用目前選擇的收件人類型重新加入。
+  const addRecent = (recipient: RecentRecipient) => {
+    const { name, email: mail } = decodeRecipientId(recipient.id);
+    onAdd({ recipient_type: type, name, email: mail });
+    remember(name, mail);
+  };
+
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="space-y-2">
+      {recents.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[10px] font-semibold" style={{ color: "var(--text-muted)" }}>
+            最近使用：
+          </span>
+          {recents.map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              onClick={() => addRecent(r)}
+              className="text-[11px] px-2 py-0.5 rounded-full transition-opacity hover:opacity-80"
+              style={{
+                background: "var(--bg-surface)",
+                color: "var(--text-secondary)",
+                border: "1px solid var(--border)",
+              }}
+              title={`新增收件者：${r.label}`}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="flex flex-wrap gap-2">
       <select
         value={type}
         onChange={(e) => setType(e.target.value as RecipientType)}
@@ -255,6 +313,7 @@ export function RecipientSearch({
         </svg>
         新增
       </button>
+      </div>
     </div>
   );
 }

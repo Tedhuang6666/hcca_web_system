@@ -1,337 +1,142 @@
 "use client";
-import { useEffect, useState } from "react";
+
 import Link from "next/link";
-import { toast } from "sonner";
-import {
-  FileText, ListChecks, Landmark, Scale, Megaphone, MessageSquare,
-  CheckSquare, ChevronRight, Plus, Loader2, Sparkles,
-} from "lucide-react";
-import { dashboardApi, type DashboardResponse, type DashboardWidget } from "@/lib/api";
-import { usePermissions } from "@/hooks/usePermissions";
-import OnboardingHint from "@/components/ui/OnboardingHint";
+import { ArrowRight, Database, ExternalLink, Landmark, Megaphone, UsersRound } from "lucide-react";
+import { useEffect, useState } from "react";
 
-type IconProps = { size: number; "aria-hidden": boolean };
-function FallbackWidgetIcon(p: IconProps) { return <FileText {...p} />; }
+import PublicSiteShell from "@/components/site/PublicSiteShell";
+import MarkdownBlock from "@/components/site/MarkdownBlock";
+import { siteApi } from "@/lib/api";
+import type { PublicSiteBundleOut } from "@/lib/types";
 
-const WIDGET_ICONS: Record<string, React.ComponentType<IconProps>> = {
-  doc_draft: (p) => <FileText {...p} />,
-  doc_pending_my_approval: (p) => <ListChecks {...p} />,
-  meeting_upcoming: (p) => <Landmark {...p} />,
-  regulation_review: (p) => <Scale {...p} />,
-  regulation_publish: (p) => <Scale {...p} />,
-  announcements_recent: (p) => <Megaphone {...p} />,
-  petition_assigned: (p) => <MessageSquare {...p} />,
-  open_surveys: (p) => <CheckSquare {...p} />,
-  today_meal: (p) => <FileText {...p} />,
-  class_order_collecting: (p) => <ListChecks {...p} />,
-};
+export default function PublicHomePage() {
+  const [data, setData] = useState<PublicSiteBundleOut | null>(null);
 
-const SEVERITY_STYLES: Record<string, { color: string; bg: string; border: string }> = {
-  info: {
-    color: "var(--primary)",
-    bg: "var(--primary-dim)",
-    border: "var(--info-border)",
-  },
-  warning: {
-    color: "var(--warning)",
-    bg: "var(--warning-dim)",
-    border: "var(--warning-border)",
-  },
-  critical: {
-    color: "var(--danger)",
-    bg: "var(--danger-dim)",
-    border: "var(--danger-border)",
-  },
-};
+  useEffect(() => {
+    siteApi.public().then(setData).catch(() => setData(null));
+  }, []);
 
-const HINT_LABEL: Record<string, string> = {
-  student: "學生視角",
-  officer: "幹部視角",
-  leader: "領導視角",
-};
-
-function formatDate(s?: string | null) {
-  if (!s) return "";
-  const d = new Date(s);
-  return `${d.getMonth() + 1}/${d.getDate()}`;
-}
-
-function WidgetCard({ w }: { w: DashboardWidget }) {
-  const Icon = WIDGET_ICONS[w.key] ?? FallbackWidgetIcon;
-  const sev = SEVERITY_STYLES[w.severity] ?? SEVERITY_STYLES.info;
+  const settings = data?.settings;
+  const links = data?.links.slice(0, 4) ?? [];
+  const officers = data?.featured_officers ?? [];
+  const emblemAlt = settings?.site_logo_alt || `${settings?.site_title ?? "班聯會"}會徽`;
 
   return (
-    <section
-      aria-labelledby={`widget-${w.key}`}
-      className="card overflow-hidden flex flex-col"
-      style={{
-        background: "var(--bg-surface)",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius-lg)",
-        boxShadow: "var(--shadow-sm)",
-      }}>
-      <header className="px-5 py-4 flex items-center justify-between gap-3"
-        style={{ borderBottom: "1px solid var(--border)" }}>
-        <div className="flex items-center gap-3 min-w-0">
-          <div
-            className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
-            style={{ background: sev.bg, color: sev.color, border: `1px solid ${sev.border}` }}
-            aria-hidden="true">
-            <Icon size={16} aria-hidden={true} />
+    <PublicSiteShell navPages={data?.nav_pages ?? []} settings={settings}>
+      {settings?.custom_css && <style dangerouslySetInnerHTML={{ __html: settings.custom_css }} />}
+      <section className="public-hero">
+        <div className="public-hero-inner">
+          <div className="public-hero-copy">
+            <p className="public-eyebrow">學生自治公開網站</p>
+            <h1>{settings?.hero_title ?? settings?.site_title ?? "新竹高中班聯會"}</h1>
+            <p className="public-hero-subtitle">
+              {settings?.hero_subtitle ?? "連結學生、整理公共資訊，讓校園自治被更多人看見。"}
+            </p>
+            <div className="public-hero-actions">
+              <Link href={settings?.cta_href ?? "/links"} className="public-cta-primary">
+                {settings?.cta_label ?? "查看平台連結"}
+                <ArrowRight size={16} aria-hidden />
+              </Link>
+              <Link href="/news" className="public-cta-secondary">
+                最新公告
+              </Link>
+            </div>
           </div>
-          <div className="min-w-0">
-            <h2 id={`widget-${w.key}`} className="text-sm font-semibold truncate"
-              style={{ color: "var(--text-primary)" }}>
-              {w.title}
-            </h2>
-            {w.summary && (
-              <p className="text-xs truncate mt-0.5" style={{ color: "var(--text-muted)" }}>
-                {w.summary}
-              </p>
-            )}
-          </div>
-        </div>
-        {w.count !== null && w.count !== undefined && (
-          <span className="text-2xl font-bold leading-none flex-shrink-0"
-            style={{ color: sev.color }}>
-            {w.count > 99 ? "99+" : w.count}
-          </span>
-        )}
-      </header>
-
-      {w.items.length > 0 && (
-        <ul className="flex-1">
-          {w.items.map((it, idx) => (
-            <li key={`${w.key}-${idx}`}
-              style={idx < w.items.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}}>
-              {it.href ? (
-                <Link
-                  href={it.href}
-                  className="flex items-center gap-3 px-5 py-3 transition-colors"
-                  style={{ textDecoration: "none" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm truncate" style={{ color: "var(--text-primary)" }}>
-                      {it.title}
-                    </p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      {it.badge && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded font-medium"
-                          style={{ color: sev.color, background: sev.bg, border: `1px solid ${sev.border}` }}>
-                          {it.badge}
-                        </span>
-                      )}
-                      {it.subtitle && (
-                        <span className="text-xs truncate" style={{ color: "var(--text-muted)" }}>
-                          {it.subtitle}
-                        </span>
-                      )}
-                      {it.timestamp && (
-                        <span className="text-xs flex-shrink-0 ml-auto"
-                          style={{ color: "var(--text-disabled)" }}>
-                          {formatDate(it.timestamp)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <ChevronRight size={14} aria-hidden={true}
-                    style={{ color: "var(--text-disabled)" }} />
-                </Link>
+          <div className="public-signboard" aria-label="班聯會招牌">
+            <div className="public-signboard-topline" />
+            <div className="public-signboard-emblem">
+              {settings?.site_logo_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={settings.site_logo_url} alt={emblemAlt} />
               ) : (
-                <div className="flex items-center gap-3 px-5 py-3">
-                  <p className="text-sm flex-1 truncate" style={{ color: "var(--text-primary)" }}>
-                    {it.title}
-                  </p>
-                </div>
+                <span>竹中<br />班聯</span>
               )}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {w.href && (
-        <Link
-          href={w.href}
-          className="px-5 py-2.5 text-xs font-medium flex items-center justify-end gap-1 transition-colors"
-          style={{
-            color: "var(--primary)",
-            borderTop: "1px solid var(--border)",
-            textDecoration: "none",
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-          查看全部 <ChevronRight size={12} aria-hidden={true} />
-        </Link>
-      )}
-    </section>
-  );
-}
-
-function SkeletonCard() {
-  return (
-    <div
-      className="rounded-lg p-5 animate-pulse"
-      style={{
-        background: "var(--bg-surface)",
-        border: "1px solid var(--border)",
-      }}
-      aria-hidden="true">
-      <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-lg" style={{ background: "var(--bg-hover)" }} />
-        <div className="flex-1">
-          <div className="h-3 w-24 rounded mb-2" style={{ background: "var(--bg-hover)" }} />
-          <div className="h-2 w-32 rounded" style={{ background: "var(--bg-hover)" }} />
-        </div>
-      </div>
-      <div className="mt-4 space-y-2">
-        <div className="h-3 w-full rounded" style={{ background: "var(--bg-hover)" }} />
-        <div className="h-3 w-4/5 rounded" style={{ background: "var(--bg-hover)" }} />
-      </div>
-    </div>
-  );
-}
-
-export default function DashboardPage() {
-  const [userName, setUserName] = useState("");
-  const [greeting, setGreeting] = useState("歡迎回來");
-  const [data, setData] = useState<DashboardResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const { can } = usePermissions();
-
-  useEffect(() => {
-    const name = localStorage.getItem("user_name");
-    if (name) setUserName(name);
-    const h = new Date().getHours();
-    if (h < 12) setGreeting("早安");
-    else if (h < 18) setGreeting("午安");
-    else setGreeting("晚安");
-  }, []);
-
-  useEffect(() => {
-    const userId = localStorage.getItem("user_id");
-    if (!userId) { setLoading(false); return; }
-    dashboardApi.get()
-      .then((res) => setData(res))
-      .catch((e) => {
-        toast.error("無法載入儀表板");
-        console.error(e);
-      })
-      .finally(() => setLoading(false));
-  }, []);
-
-  const widgets = data?.widgets ?? [];
-  const layoutHint = data?.layout_hint ?? "student";
-  const hasAny = widgets.length > 0;
-
-  return (
-    <div className="max-w-6xl mx-auto space-y-6">
-
-      {/* 一次性引導：首次進站時提示 */}
-      <OnboardingHint id="hint.dashboard.first-visit">
-        歡迎使用平台首頁！下面的卡片會依您的角色顯示最相關的待辦與最新消息，
-        點任一卡片可以直接開始。
-      </OnboardingHint>
-
-      {/* 頁首 */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
-              {greeting}，{userName || "使用者"}
-            </h1>
-            {data && (
-              <span
-                className="text-[10px] px-1.5 py-0.5 rounded font-medium inline-flex items-center gap-1"
-                style={{
-                  background: "var(--primary-dim)",
-                  color: "var(--primary)",
-                  border: "1px solid var(--info-border)",
-                }}>
-                <Sparkles size={10} aria-hidden={true} />
-                {HINT_LABEL[layoutHint]}
-              </span>
-            )}
+            </div>
+            <div className="public-signboard-copy">
+              <p>{settings?.site_title ?? "新竹高中班聯會"}</p>
+              <span>Campus Self-Governance</span>
+            </div>
           </div>
-          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            {hasAny
-              ? "以下是依您的角色聚合的待辦與最新項目"
-              : "目前沒有等您處理的事項"}
-          </p>
         </div>
-        {can("document:create") && (
-          <Link href="/documents/new" className="btn btn-primary self-start sm:self-auto">
-            <Plus size={13} aria-hidden={true} />
-            新增公文
-          </Link>
-        )}
-      </div>
+      </section>
 
-      {/* Widget Grid */}
-      {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
+      <section className="public-quick-grid" aria-label="公開網站主要入口">
+        {[
+          { href: "/news", title: "最新公告", desc: "查看班聯會發布的公開消息。", icon: Megaphone },
+          { href: "/officers", title: "幹部名單", desc: "認識目前任期的公開幹部。", icon: UsersRound },
+          {
+            href: "/public",
+            title: "公開資料庫",
+            desc: settings?.public_database_description ?? "查詢公開法規、公文與治理資料。",
+            icon: Database,
+          },
+          { href: "/about", title: "關於班聯會", desc: "理解本會任務、沿革與公共角色。", icon: Landmark },
+        ].map((item) => {
+          const Icon = item.icon;
+          return (
+            <Link key={item.href} href={item.href} className="public-feature-card">
+              <span className="public-feature-icon"><Icon size={21} aria-hidden /></span>
+              <span>
+                <span className="block text-base font-semibold">{item.title}</span>
+                <span className="mt-1 block text-sm leading-6 text-[var(--public-secondary)]">
+                  {item.desc}
+                </span>
+              </span>
+            </Link>
+          );
+        })}
+      </section>
+
+      <section className="public-editorial">
+        <div className="public-panel public-about-panel">
+          <p className="public-section-kicker">About</p>
+          <h2>
+            {settings?.about_title ?? "關於班聯會"}
+          </h2>
+          <MarkdownBlock markdown={settings?.about_body_md} />
         </div>
-      ) : hasAny ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {widgets.map((w) => (
-            <WidgetCard key={w.key} w={w} />
-          ))}
-        </div>
-      ) : (
-        <EmptyState />
-      )}
-
-      {loading && (
-        <p className="flex items-center justify-center gap-2 text-xs"
-          style={{ color: "var(--text-muted)" }}>
-          <Loader2 size={12} className="animate-spin" aria-hidden={true} />
-          載入儀表板…
-        </p>
-      )}
-    </div>
-  );
-}
-
-function EmptyState() {
-  const links = [
-    { href: "/announcements", label: "看公告" },
-    { href: "/regulations", label: "查法規" },
-    { href: "/shop", label: "校商訂購" },
-    { href: "/meal", label: "學餐訂購" },
-    { href: "/surveys", label: "問卷" },
-  ];
-  return (
-    <div className="card p-8 text-center"
-      style={{
-        background: "var(--bg-surface)",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius-lg)",
-      }}>
-      <Sparkles size={32} aria-hidden={true}
-        style={{ color: "var(--primary)", display: "inline-block", marginBottom: 12 }} />
-      <p className="text-sm font-medium mb-2" style={{ color: "var(--text-primary)" }}>
-        今天一片寧靜
-      </p>
-      <p className="text-xs mb-5" style={{ color: "var(--text-muted)" }}>
-        沒有待辦也沒有新訊息。要不要逛一下這些地方？
-      </p>
-      <div className="flex flex-wrap gap-2 justify-center">
-        {links.map((l) => (
-          <Link
-            key={l.href}
-            href={l.href}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
-            style={{
-              background: "var(--primary-dim)",
-              color: "var(--primary)",
-              border: "1px solid var(--border-strong)",
-              textDecoration: "none",
-            }}>
-            {l.label}
-          </Link>
-        ))}
-      </div>
-    </div>
+        <aside className="public-side-stack">
+          {officers.length > 0 && (
+            <div className="public-panel public-side-panel">
+              <div className="flex items-center justify-between gap-3">
+                <h2>精選幹部</h2>
+                <Link href="/officers" className="public-text-link">全部</Link>
+              </div>
+              <div className="public-mini-list">
+                {officers.map((officer) => (
+                  <div key={officer.profile_id} className="public-mini-item">
+                    <p className="font-medium">{officer.display_name}</p>
+                    <p className="text-sm text-[var(--public-muted)]">
+                      {officer.title} · {officer.org_name}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {links.length > 0 && (
+            <div className="public-panel public-side-panel">
+              <div className="flex items-center justify-between gap-3">
+                <h2>常用連結</h2>
+                <Link href="/links" className="public-text-link">更多</Link>
+              </div>
+              <div className="public-link-list">
+                {links.map((link) => (
+                  <a
+                    key={link.id}
+                    href={link.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="public-link-row">
+                    <span>{link.title}</span>
+                    <ExternalLink size={14} aria-hidden />
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+        </aside>
+      </section>
+    </PublicSiteShell>
   );
 }

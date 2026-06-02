@@ -15,6 +15,7 @@ import Toggle from "@/components/ui/Toggle";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import SmartEmptyState from "@/components/ui/SmartEmptyState";
 import { usePermissions } from "@/hooks/usePermissions";
+import { usePersistedState } from "@/hooks/usePersistedState";
 
 const CATEGORIES: { key: RegulationCategory | "all"; label: string }[] = [
   { key: "all",                label: "全部" },
@@ -107,8 +108,8 @@ function articleLabel(article: RegulationArticleOut): string {
 export default function RegulationsPage() {
   const [allRegs, setAllRegs] = useState<Array<RegulationListItem | RegulationSearchResult>>([]);
   const [loading, setLoading] = useState(true);
-  const [category, setCategory] = useState<RegulationCategory | "all">("all");
-  const [workflow, setWorkflow] = useState<RegulationWorkflowStatus | "all">("all");
+  const [category, setCategory] = usePersistedState<RegulationCategory | "all">("hcca:pref:regulations:category:v1", "all");
+  const [workflow, setWorkflow] = usePersistedState<RegulationWorkflowStatus | "all">("hcca:pref:regulations:workflow:v1", "all");
   const [search, setSearch] = useState("");
   const [showAll, setShowAll] = useState(false);
   const { can } = usePermissions();

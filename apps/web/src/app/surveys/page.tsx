@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { surveysApi, ApiError } from "@/lib/api";
 import type { SurveyListItem, SurveyStatus } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
+import { usePersistedState } from "@/hooks/usePersistedState";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import SmartEmptyState from "@/components/ui/SmartEmptyState";
 import ActivitySelect from "@/components/activities/ActivitySelect";
@@ -27,10 +28,10 @@ const SURVEY_SORT = [
 export default function SurveysPage() {
   const [surveys, setSurveys] = useState<SurveyListItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"open" | "all">("open");
+  const [tab, setTab] = usePersistedState<"open" | "all">("hcca:pref:surveys:tab:v1", "open");
   const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState("newest");
-  const [activityId, setActivityId] = useState("");
+  const [sortKey, setSortKey] = usePersistedState<string>("hcca:pref:surveys:sort:v1", "newest");
+  const [activityId, setActivityId] = usePersistedState<string>("hcca:pref:surveys:activity:v1", "");
   const [activities, setActivities] = useState<Activity[]>([]);
   const { can } = usePermissions();
   const canManage = can("survey:manage") || activities.length > 0;

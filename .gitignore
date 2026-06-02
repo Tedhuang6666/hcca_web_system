@@ -79,3 +79,11 @@ test.env
 # Celery beat 執行期排程狀態（runtime，勿進版控）
 apps/api/celerybeat-schedule
 test.env
+
+.dev-api.log
+.dev-web.log
+.dev-alembic-check.log
+.env.backup.*
+
+# Windows 下載標記殘留檔（NTFS ADS）
+*:Zone.Identifier

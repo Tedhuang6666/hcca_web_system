@@ -4,10 +4,11 @@ import Link from "next/link";
 import { toast } from "sonner";
 import {
   FileText, ListChecks, Landmark, Scale, Megaphone, MessageSquare,
-  CheckSquare, ChevronRight, Plus, Loader2, Sparkles,
+  CheckSquare, ChevronRight, Plus, Loader2, Sparkles, Clock,
 } from "lucide-react";
 import { dashboardApi, type DashboardResponse, type DashboardWidget } from "@/lib/api";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useRecentItems } from "@/hooks/useRecentItems";
 import OnboardingHint from "@/components/ui/OnboardingHint";
 
 type IconProps = { size: number; "aria-hidden": boolean };
@@ -198,6 +199,7 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const { can } = usePermissions();
+  const recents = useRecentItems(6);
 
   useEffect(() => {
     const name = localStorage.getItem("user_name");
@@ -266,6 +268,31 @@ export default function DashboardPage() {
           </Link>
         )}
       </div>
+
+      {/* 最近開啟：個人化捷徑，少翻選單 */}
+      {recents.length > 0 && (
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 -mb-1">
+          <span className="flex items-center gap-1 text-xs flex-shrink-0" style={{ color: "var(--text-muted)" }}>
+            <Clock size={12} aria-hidden={true} />
+            最近開啟
+          </span>
+          {recents.map((item) => (
+            <Link
+              key={`${item.kind}-${item.id}`}
+              href={item.href}
+              className="flex-shrink-0 max-w-[180px] truncate px-3 py-1.5 rounded-full text-xs font-medium transition-opacity hover:opacity-80"
+              style={{
+                background: "var(--bg-surface)",
+                color: "var(--text-secondary)",
+                border: "1px solid var(--border)",
+                textDecoration: "none",
+              }}
+              title={item.title}>
+              {item.title}
+            </Link>
+          ))}
+        </div>
+      )}
 
       {/* Widget Grid */}
       {loading ? (

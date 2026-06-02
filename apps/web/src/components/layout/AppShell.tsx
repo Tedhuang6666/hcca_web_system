@@ -14,8 +14,21 @@ import UrgentAnnouncementPopup from "@/components/announcements/UrgentAnnounceme
 import CommandMenu from "./CommandMenu";
 import { PolicyConsentBanner } from "@/components/legal/PolicyConsentBanner";
 
-/** 完全裸頁（不渲染 Shell）：login、auth callback、Email 退訂落地頁 */
-const BARE_PATHS = ["/login", "/auth", "/maintenance", "/profile/complete", "/public", "/unsubscribe"];
+/** 完全裸頁（不渲染 Shell）：公開官網、login、auth callback、Email 退訂落地頁 */
+const BARE_PATHS = [
+  "/",
+  "/about",
+  "/links",
+  "/news",
+  "/officers",
+  "/pages",
+  "/login",
+  "/auth",
+  "/maintenance",
+  "/profile/complete",
+  "/public",
+  "/unsubscribe",
+];
 
 function isBare(pathname: string) {
   return BARE_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
@@ -80,12 +93,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
     setIsLoggedIn(Boolean(userId));
     if (!userId) {
       setRedirecting(true);
-      // 未登入的初次進站預設導向公開法規，避免被迫進 /login
-      if (pathname === "/") {
-        router.replace("/regulations");
-      } else {
-        router.replace(`/login?next=${encodeURIComponent(pathname)}`);
-      }
+      router.replace(`/login?next=${encodeURIComponent(pathname)}`);
       setAuthReady(true);
       return;
     }

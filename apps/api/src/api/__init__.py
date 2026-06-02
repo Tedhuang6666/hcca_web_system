@@ -88,6 +88,7 @@ from api.routers import (
     school_class,
     search,
     shop,
+    site,
     survey,
     tasks,
     term_rollover,
@@ -339,6 +340,7 @@ def create_app() -> FastAPI:
     app.include_router(regulations.router)
     app.include_router(saved_filters.router)
     app.include_router(search.router)
+    app.include_router(site.router)
     app.include_router(shop.router)
     app.include_router(school_class.router)
     app.include_router(meal.router)

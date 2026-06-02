@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { toast } from "sonner";
 import { announcementsApi, ApiError } from "@/lib/api";
 import type { AnnouncementOut } from "@/lib/types";
+import { recordRecent } from "@/lib/recents";
 import AnnouncementMarkdown from "@/components/announcements/AnnouncementMarkdown";
 import { usePermissions } from "@/hooks/usePermissions";
 import { API_BASE } from "@/lib/config";
@@ -43,6 +44,10 @@ export default function AnnouncementDetailPageClient({
       .catch((e) => toast.error(e instanceof ApiError ? e.message : "載入公告失敗"))
       .finally(() => setLoading(false));
   }, [id, initialItem]);
+
+  useEffect(() => {
+    if (item) recordRecent({ kind: "announcement", id, title: item.title, href: `/announcements/${id}` });
+  }, [item, id]);
 
   if (loading) {
     return <div className="py-20 text-center" style={{ color: "var(--text-muted)" }}>載入中…</div>;

@@ -20,6 +20,7 @@ import api.models.passkey  # noqa: F401
 import api.models.petition  # noqa: F401
 import api.models.regulation  # noqa: F401
 import api.models.shop  # noqa: F401
+import api.models.site  # noqa: F401
 import api.models.survey  # noqa: F401
 import api.models.user  # noqa: F401
 import api.models.web_push  # noqa: F401

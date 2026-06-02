@@ -2873,3 +2873,162 @@ export interface PrivacyRequestOut {
   created_at: string;
   updated_at: string;
 }
+
+// ── 公開官網 / Linktree ──────────────────────────────────────────────────────
+
+export interface PublicSiteSettingsOut {
+  id: string;
+  site_title: string;
+  site_description: string | null;
+  site_logo_url: string | null;
+  site_logo_alt: string | null;
+  hero_title: string;
+  hero_subtitle: string | null;
+  hero_image_url: string | null;
+  hero_image_alt: string | null;
+  about_title: string;
+  about_body_md: string;
+  mission_md: string | null;
+  history_md: string | null;
+  cta_label: string;
+  cta_href: string;
+  public_database_label: string;
+  public_database_description: string | null;
+  theme_config: Record<string, unknown>;
+  homepage_blocks: Record<string, unknown>;
+  custom_css: string | null;
+  seo_title: string | null;
+  seo_description: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type PublicSiteSettingsUpdate = Partial<
+  Omit<PublicSiteSettingsOut, "id" | "created_at" | "updated_at">
+>;
+
+export interface PublicLinkCategoryOut {
+  id: string;
+  slug: string;
+  title: string;
+  description: string | null;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type PublicLinkCategoryCreate = Omit<
+  PublicLinkCategoryOut,
+  "id" | "created_at" | "updated_at"
+>;
+export type PublicLinkCategoryUpdate = Partial<PublicLinkCategoryCreate>;
+
+export interface PublicLinkOut {
+  id: string;
+  title: string;
+  url: string;
+  description: string | null;
+  category_id: string | null;
+  category: PublicLinkCategoryOut | null;
+  icon_key: string | null;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type PublicLinkCreate = Omit<
+  PublicLinkOut,
+  "id" | "category" | "created_at" | "updated_at"
+>;
+export type PublicLinkUpdate = Partial<PublicLinkCreate>;
+
+export interface PublicOfficerProfileOut {
+  id: string;
+  user_position_id: string;
+  display_name_override: string | null;
+  title_override: string | null;
+  bio: string | null;
+  public_email: string | null;
+  external_links: Record<string, unknown>;
+  sort_order: number;
+  is_featured: boolean;
+  is_visible: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type PublicOfficerProfileCreate = Omit<
+  PublicOfficerProfileOut,
+  "id" | "created_at" | "updated_at"
+>;
+export type PublicOfficerProfileUpdate = Partial<PublicOfficerProfileCreate>;
+
+export interface PublicOfficerOut {
+  id: string;
+  profile_id: string;
+  user_position_id: string;
+  user_id: string;
+  display_name: string;
+  title: string;
+  org_name: string;
+  position_name: string;
+  avatar_url: string | null;
+  public_email: string | null;
+  bio: string | null;
+  external_links: Record<string, unknown>;
+  start_date: string;
+  end_date: string | null;
+  sort_order: number;
+  is_featured: boolean;
+}
+
+export interface PublicOfficerCandidateOut {
+  user_position_id: string;
+  user_id: string;
+  display_name: string;
+  email: string;
+  show_email: boolean;
+  avatar_url: string | null;
+  org_id: string;
+  org_name: string;
+  position_id: string;
+  position_name: string;
+  start_date: string;
+  end_date: string | null;
+  has_public_profile: boolean;
+}
+
+export interface PublicSitePageOut {
+  id: string;
+  slug: string;
+  title: string;
+  summary: string | null;
+  body_md: string;
+  page_kind: string;
+  layout_config: Record<string, unknown>;
+  content_blocks: Record<string, unknown>;
+  cover_image_url: string | null;
+  cover_image_alt: string | null;
+  seo_title: string | null;
+  seo_description: string | null;
+  nav_label: string | null;
+  nav_order: number;
+  sort_order: number;
+  show_in_nav: boolean;
+  is_published: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type PublicSitePageCreate = Omit<PublicSitePageOut, "id" | "created_at" | "updated_at">;
+export type PublicSitePageUpdate = Partial<PublicSitePageCreate>;
+
+export interface PublicSiteBundleOut {
+  settings: PublicSiteSettingsOut;
+  links: PublicLinkOut[];
+  link_categories: PublicLinkCategoryOut[];
+  featured_officers: PublicOfficerOut[];
+  nav_pages: PublicSitePageOut[];
+}
