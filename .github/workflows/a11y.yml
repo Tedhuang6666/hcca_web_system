@@ -29,21 +29,16 @@ permissions:
   contents: read
   pull-requests: write
 
-# GitHub 已棄用 Node 20 runtime（2026-06-16 起強制 Node 24）。先用官方 opt-in
-# 旗標讓所有 JS action 直接跑 Node 24，免去逐一升級 action 版本的風險。
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   axe:
     name: axe-core scan
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "20"
           cache: "npm"
@@ -77,8 +72,17 @@ jobs:
           done
           echo "::error::Next.js failed to start within 60s"; exit 1
 
-      - name: Install axe-core CLI
-        run: npm install -g @axe-core/cli@4.9
+      - name: Install axe-core CLI + Chrome-matched ChromeDriver
+        run: |
+          set -e
+          npm install -g @axe-core/cli@4.9
+          # @axe-core/cli 內建的 chromedriver 版本會比 runner 上（會自動更新的）Chrome
+          # 還新，造成 "session not created" → 退出碼 2。改裝一支對應已安裝 Chrome
+          # 版本的 chromedriver（DETECT_CHROMEDRIVER_VERSION 會自動偵測），稍後用
+          # --chromedriver-path 指給 axe，這樣不論 runner 的 Chrome 升到哪版都不會壞。
+          DETECT_CHROMEDRIVER_VERSION=true npm install -g chromedriver
+          google-chrome --version || true
+          "$(npm root -g)/chromedriver/bin/chromedriver" --version || true
 
       - name: axe scan main routes
         run: |
@@ -87,6 +91,8 @@ jobs:
               http://127.0.0.1:3000/legal/privacy \
               http://127.0.0.1:3000/legal/terms \
               http://127.0.0.1:3000/legal/accessibility \
+            --chromedriver-path "$(npm root -g)/chromedriver/bin/chromedriver" \
+            --chrome-options="no-sandbox,disable-setuid-sandbox,disable-dev-shm-usage" \
             --exit \
             --tags wcag2a,wcag2aa,wcag21a,wcag21aa \
             --save axe-report.json
@@ -94,7 +100,7 @@ jobs:
 
       - name: Upload axe report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: axe-report
           path: axe-report.json
@@ -105,10 +111,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "20"
           cache: "npm"

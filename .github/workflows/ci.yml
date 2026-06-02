@@ -6,17 +6,12 @@ on:
   pull_request:
     branches: [main, develop]
 
-# 官方 opt-in：讓所有 JS action 跑 Node 24，清掉 Node 20 棄用警告
-#（2026-06-16 起 Node 24 將成預設）。
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   lint:
     name: Ruff Lint & Mypy Types
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
@@ -81,7 +76,7 @@ jobs:
       SECRET_KEY: ci-test-secret-key-32-characters-min
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
@@ -106,7 +101,7 @@ jobs:
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: coverage-xml
           path: coverage.xml
@@ -119,10 +114,10 @@ jobs:
       run:
         working-directory: apps/web
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Node 20
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "20"
           cache: npm
