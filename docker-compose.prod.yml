@@ -113,7 +113,7 @@ services:
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
       REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
       DB_BACKUP_DIR: ${DB_BACKUP_DIR:-/app/backups}
-      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-4}
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
       GUNICORN_KEEPALIVE: ${GUNICORN_KEEPALIVE:-5}
       GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-60}
     depends_on:
@@ -123,11 +123,11 @@ services:
       test:
         [
           "CMD-SHELL",
-          "python -c \"import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3).status == 200 else 1)\"",
+          "python -c \"import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=5).status == 200 else 1)\"",
         ]
-      interval: 15s
-      timeout: 5s
-      retries: 5
+      interval: 30s
+      timeout: 10s
+      retries: 10
       # 拉長至 90s：給 lifespan 啟動 readiness 退避重試空間，避免重試期間被判 unhealthy
       start_period: 90s
 
@@ -146,7 +146,7 @@ services:
     command: >
       python -m celery -A api.core.celery_app.celery_app worker
       --loglevel=info
-      --concurrency=${CELERY_WORKER_CONCURRENCY:-2}
+      --concurrency=${CELERY_WORKER_CONCURRENCY:-1}
       --max-tasks-per-child=${CELERY_MAX_TASKS_PER_CHILD:-200}
       --queues=default,email,meal,documents,backup,recovery,celery
     environment:
