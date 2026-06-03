@@ -1672,6 +1672,15 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 .prose p   { color: var(--text-secondary); line-height: 1.8; margin-bottom: 1em; }
 .prose a   { color: var(--primary-text); text-decoration: underline; text-underline-offset: 3px; }
+.legal-document .prose p,
+.legal-document .prose li,
+.legal-document footer p {
+  color: var(--text-secondary);
+}
+.legal-document .prose a,
+.legal-document footer a {
+  color: var(--text-primary);
+}
 .prose code {
   background: var(--primary-dim);
   color: var(--primary-hover);

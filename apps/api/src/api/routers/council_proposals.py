@@ -110,7 +110,9 @@ async def list_proposals(
 
 
 @router.get("/{proposal_id}", response_model=CouncilProposalOut, summary="取得議會提案詳情")
-async def get_proposal(proposal_id: uuid.UUID, session: DbDep, user: CurrentUser) -> CouncilProposal:
+async def get_proposal(
+    proposal_id: uuid.UUID, session: DbDep, user: CurrentUser
+) -> CouncilProposal:
     proposal = await _proposal_or_404(session, proposal_id)
     if proposal.submitter_id == user.id or user.is_superuser:
         return proposal

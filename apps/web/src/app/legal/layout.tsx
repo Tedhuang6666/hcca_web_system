@@ -17,7 +17,7 @@ const LEGAL_LINKS = [
 
 export default function LegalLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="mx-auto max-w-4xl px-4 py-10 lg:py-14">
+    <div className="legal-document mx-auto max-w-4xl px-4 py-10 lg:py-14">
       <nav
         aria-label="法律文件導覽"
         className="mb-8 flex flex-wrap gap-2 border-b pb-4 text-sm"
@@ -42,12 +42,12 @@ export default function LegalLayout({ children }: { children: ReactNode }) {
       <article className="prose prose-slate max-w-none">{children}</article>
       <footer
         className="mt-12 border-t pt-4 text-xs"
-        style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}
+        style={{ borderColor: "var(--border)", color: "var(--text-secondary)" }}
       >
         <p>
           若對本政策有疑問，請透過平台管理員或班聯會指定窗口聯繫。
           安全漏洞回報請見{" "}
-          <Link className="underline" href="/legal/security-policy" style={{ color: "var(--primary-text)" }}>
+          <Link className="underline" href="/legal/security-policy" style={{ color: "var(--text-primary)" }}>
             安全揭露政策
           </Link>
           。

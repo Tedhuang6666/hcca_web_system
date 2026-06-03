@@ -54,7 +54,7 @@ export default function PolicyDocumentViewer({
     return (
       <>
         <h1>{fallbackTitle}</h1>
-        <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
           正在載入目前生效版本…
         </p>
       </>
@@ -64,7 +64,7 @@ export default function PolicyDocumentViewer({
   return (
     <>
       <h1>{normalizeCouncilName(doc.title)}</h1>
-      <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+      <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
         生效版本：v{doc.version} · 生效日期：{new Date(doc.effective_at).toLocaleDateString("zh-TW")}
       </p>
       {doc.summary_md && (

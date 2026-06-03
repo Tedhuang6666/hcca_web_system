@@ -155,7 +155,9 @@ async def admin_upload_image(
     try:
         stored = await storage.save(file, prefix="public-site")
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
     return UploadedImageOut(
         url=stored.url or f"/uploads/{stored.storage_key}",
         filename=stored.filename,

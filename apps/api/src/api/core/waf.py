@@ -51,16 +51,31 @@ def _c(pattern: str) -> re.Pattern[str]:
 
 _RULES: tuple[_Rule, ...] = (
     # ---- 掃描器 / 自動化探測（path 上絕不該出現）----
-    ("scanner_probe", "high", _c(
-        r"(?:^|/)(?:wp-admin|wp-login|wp-content|xmlrpc\.php|phpmyadmin|"
-        r"administrator/index|eval-stdin\.php|cgi-bin|boaform|hudson|"
-        r"actuator/env|console/login)"
-    ), "path"),
-    ("sensitive_file", "high", _c(
-        r"(?:^|/)\.(?:env|git|aws|ssh|htpasswd|svn)(?:/|$)|"
-        r"(?:^|/)(?:config\.php|wp-config\.php|id_rsa|credentials)(?:$|\?)"
-    ), "path"),
-    ("script_extension", "high", _c(r"\.(?:php\d?|asp|aspx|jsp|cgi|bak|sql|env)(?:$|\?|/)"), "path"),
+    (
+        "scanner_probe",
+        "high",
+        _c(
+            r"(?:^|/)(?:wp-admin|wp-login|wp-content|xmlrpc\.php|phpmyadmin|"
+            r"administrator/index|eval-stdin\.php|cgi-bin|boaform|hudson|"
+            r"actuator/env|console/login)"
+        ),
+        "path",
+    ),
+    (
+        "sensitive_file",
+        "high",
+        _c(
+            r"(?:^|/)\.(?:env|git|aws|ssh|htpasswd|svn)(?:/|$)|"
+            r"(?:^|/)(?:config\.php|wp-config\.php|id_rsa|credentials)(?:$|\?)"
+        ),
+        "path",
+    ),
+    (
+        "script_extension",
+        "high",
+        _c(r"\.(?:php\d?|asp|aspx|jsp|cgi|bak|sql|env)(?:$|\?|/)"),
+        "path",
+    ),
     # ---- 路徑穿越 / LFI ----
     ("path_traversal", "high", _c(r"(?:\.\./|\.\.\\|%2e%2e[/\\%]|/etc/passwd|/proc/self/)"), "any"),
     # ---- Null byte / 控制字元注入 ----
@@ -68,17 +83,42 @@ _RULES: tuple[_Rule, ...] = (
     # ---- Log4Shell / JNDI 注入 ----
     ("jndi_injection", "high", _c(r"\$\{(?:jndi|env|sys|lower|upper|date):"), "any"),
     # ---- SSTI 模板注入 ----
-    ("template_injection", "medium", _c(r"\{\{.{0,40}(?:config|self|request|__class__).{0,40}\}\}"), "any"),
+    (
+        "template_injection",
+        "medium",
+        _c(r"\{\{.{0,40}(?:config|self|request|__class__).{0,40}\}\}"),
+        "any",
+    ),
     # ---- SQL 注入特徵 ----
     ("sqli_union", "medium", _c(r"\bunion\b[\s/*]+.{0,40}\bselect\b"), "any"),
-    ("sqli_tautology", "medium", _c(r"(?:'|\")\s*(?:or|and)\s+(?:'?\d'?|\"?\w\"?)\s*=\s*(?:'?\d'?|\"?\w\"?)"), "any"),
-    ("sqli_keyword", "medium", _c(
-        r"(?:;|'|\")\s*(?:drop|truncate|insert\s+into|delete\s+from|update\s+\w+\s+set)\b|"
-        r"\binformation_schema\b|\bxp_cmdshell\b|\bpg_sleep\s*\(|\bsleep\s*\(\s*\d|\bbenchmark\s*\("
-    ), "any"),
+    (
+        "sqli_tautology",
+        "medium",
+        _c(r"(?:'|\")\s*(?:or|and)\s+(?:'?\d'?|\"?\w\"?)\s*=\s*(?:'?\d'?|\"?\w\"?)"),
+        "any",
+    ),
+    (
+        "sqli_keyword",
+        "medium",
+        _c(
+            r"(?:;|'|\")\s*(?:drop|truncate|insert\s+into|delete\s+from|update\s+\w+\s+set)\b|"
+            r"\binformation_schema\b|\bxp_cmdshell\b|\bpg_sleep\s*\(|\bsleep\s*\(\s*\d|\bbenchmark\s*\("
+        ),
+        "any",
+    ),
     # ---- XSS 特徵 ----
-    ("xss_tag", "medium", _c(r"<\s*(?:script|iframe|svg|img|object|embed|body)\b[^>]*(?:on\w+|src|>)"), "any"),
-    ("xss_handler", "medium", _c(r"(?:javascript:|vbscript:|data:text/html|on(?:error|load|click|mouseover|focus)\s*=)"), "any"),
+    (
+        "xss_tag",
+        "medium",
+        _c(r"<\s*(?:script|iframe|svg|img|object|embed|body)\b[^>]*(?:on\w+|src|>)"),
+        "any",
+    ),
+    (
+        "xss_handler",
+        "medium",
+        _c(r"(?:javascript:|vbscript:|data:text/html|on(?:error|load|click|mouseover|focus)\s*=)"),
+        "any",
+    ),
 )
 
 
@@ -97,7 +137,9 @@ def _decoded_variants(value: str) -> list[str]:
     return out
 
 
-def scan_request(path: str, query: str, user_agent: str, referer: str) -> tuple[str, Severity] | None:
+def scan_request(
+    path: str, query: str, user_agent: str, referer: str
+) -> tuple[str, Severity] | None:
     """純函式特徵掃描；命中回 (rule_name, severity)，否則 None。可單測。"""
     path_hay = _decoded_variants(path)
     any_hay = path_hay + _decoded_variants(query) + [user_agent, referer]
@@ -159,9 +201,7 @@ class WAFMiddleware:
             return
 
         name, severity = hit
-        should_block = severity == "high" or (
-            severity == "medium" and settings.WAF_BLOCK_MEDIUM
-        )
+        should_block = severity == "high" or (severity == "medium" and settings.WAF_BLOCK_MEDIUM)
         if settings.WAF_BLOCK_MODE and should_block:
             await self._reject(scope, send, name, severity)
             if severity == "high":
@@ -171,7 +211,11 @@ class WAFMiddleware:
         # detect-only（或 medium 在不攔截設定下）：放行但留痕
         logger.warning(
             "WAF detect-only hit rule=%s severity=%s ip=%s method=%s path=%s",
-            name, severity, _client_ip(scope), scope.get("method"), path,
+            name,
+            severity,
+            _client_ip(scope),
+            scope.get("method"),
+            path,
         )
         await self.app(scope, receive, send)
 
@@ -179,7 +223,11 @@ class WAFMiddleware:
         ip = _client_ip(scope)
         logger.warning(
             "WAF blocked rule=%s severity=%s ip=%s method=%s path=%s query=%s",
-            rule, severity, ip, scope.get("method"), scope.get("path"),
+            rule,
+            severity,
+            ip,
+            scope.get("method"),
+            scope.get("path"),
             scope.get("query_string", b"")[:256],
         )
         resp = JSONResponse({"detail": "請求遭安全防護攔截"}, status_code=400)
