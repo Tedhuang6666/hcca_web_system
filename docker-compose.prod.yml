@@ -102,12 +102,17 @@ services:
   celery-worker:
     <<: *api-common
     restart: unless-stopped
+    # 記憶體護欄：容器吃到 mem_limit 就只 OOM-kill 自己（不再拖垮全機）；
+    # memswap_limit 設成與 mem_limit 相等 = 禁用 swap，失控時快速失敗而非吃光
+    # 5GB swap 把整台機器拖到龜速。可用 CELERY_WORKER_MEM_LIMIT 覆寫。
+    mem_limit: ${CELERY_WORKER_MEM_LIMIT:-1200m}
+    memswap_limit: ${CELERY_WORKER_MEM_LIMIT:-1200m}
     command: >
       python -m celery -A api.core.celery_app.celery_app worker
       --loglevel=info
       --concurrency=${CELERY_WORKER_CONCURRENCY:-2}
       --max-tasks-per-child=${CELERY_MAX_TASKS_PER_CHILD:-200}
-      --queues=celery,backup,recovery
+      --queues=default,email,meal,documents,backup,recovery,celery
     environment:
       ENVIRONMENT: production
       DEBUG: "false"
@@ -139,6 +144,9 @@ services:
   celery-beat:
     <<: *api-common
     restart: unless-stopped
+    # beat 只排程、不執行任務，記憶體很小；給個硬上限防意外洩漏。
+    mem_limit: ${CELERY_BEAT_MEM_LIMIT:-256m}
+    memswap_limit: ${CELERY_BEAT_MEM_LIMIT:-256m}
     command: >
       python -m celery -A api.core.celery_app.celery_app beat
       --loglevel=info

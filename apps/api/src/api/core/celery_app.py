@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from datetime import UTC, datetime
 
 from celery import Celery
@@ -56,6 +57,12 @@ celery_app.conf.update(
     task_acks_late=True,  # Worker 完成後才 ACK，確保不丟失
     task_reject_on_worker_lost=True,  # worker 被 kill 時交還 broker，不默默吞掉任務
     worker_prefetch_multiplier=1,  # 避免搶佔過多任務
+    # 記憶體護欄（第一層）：worker 子進程常駐記憶體超過此值（KB）時，
+    # 完成當前任務後優雅重啟該 child 回收記憶體，趕在被 OS OOM SIGKILL 前自救。
+    # 搭配 docker-compose 的 mem_limit（容器硬上限，第二層）形成雙層防線。
+    worker_max_memory_per_child=int(
+        os.getenv("CELERY_MAX_MEMORY_PER_CHILD_KB", "450000")  # ≈ 450 MB / child
+    ),
     task_default_retry_delay=60,
     broker_transport_options={
         "visibility_timeout": 3600,
