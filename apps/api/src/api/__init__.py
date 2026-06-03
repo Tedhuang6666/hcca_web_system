@@ -1,5 +1,6 @@
 """校園自治整合平台 API - FastAPI Application"""
 
+import asyncio
 import logging
 import time
 import uuid
@@ -155,6 +156,44 @@ async def _check_redis() -> tuple[bool, str | None]:
     return True, None
 
 
+async def _await_readiness(
+    check: Callable[[], Awaitable[tuple[bool, str | None]]],
+    label: str,
+) -> None:
+    """啟動時等待依賴服務就緒：退避重試直到 STARTUP_READINESS_MAX_WAIT_SECONDS 才放棄。
+
+    避免資源緊張時 DB / Redis 短暫變慢，就讓 app 立刻 raise → 容器 crash-loop flapping。
+    退避間隔 1→2→4→8s（上限 8s）。
+    """
+    max_wait = settings.STARTUP_READINESS_MAX_WAIT_SECONDS
+    deadline = time.monotonic() + max_wait
+    delay = 1.0
+    attempt = 0
+    last_err: str | None = None
+    while True:
+        attempt += 1
+        ok, err = await check()
+        if ok:
+            if attempt > 1:
+                logger.info("%s readiness OK after %d attempt(s)", label, attempt)
+            return
+        last_err = err
+        if time.monotonic() >= deadline:
+            raise RuntimeError(
+                f"{label} readiness check failed at startup after "
+                f"{attempt} attempt(s)/{max_wait}s: {last_err}"
+            )
+        logger.warning(
+            "%s not ready (attempt %d, err=%s); retrying in %.0fs",
+            label,
+            attempt,
+            last_err,
+            delay,
+        )
+        await asyncio.sleep(delay)
+        delay = min(delay * 2, 8.0)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """應用程式啟動/關閉生命週期管理 — staged startup。
@@ -168,13 +207,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from api.core.ws_manager import setup_broker, shutdown_broker
     from api.services.defense import sync_active_rules
 
-    # Phase 1: 核心服務
-    db_ok, db_err = await _check_database()
-    if not db_ok:
-        raise RuntimeError(f"DB readiness check failed at startup: {db_err}")
-    redis_ok, redis_err = await _check_redis()
-    if not redis_ok:
-        raise RuntimeError(f"Redis readiness check failed at startup: {redis_err}")
+    # Phase 1: 核心服務（退避重試，給依賴服務暖機時間，避免 crash-loop flapping）
+    await _await_readiness(_check_database, "DB")
+    await _await_readiness(_check_redis, "Redis")
 
     await setup_broker()
     async with AsyncSessionLocal() as session:

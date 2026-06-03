@@ -54,9 +54,14 @@ class Settings(BaseSettings):
     DB_MAX_OVERFLOW: int = Field(default=20, ge=0)
     DB_POOL_TIMEOUT_SECONDS: int = Field(default=30, ge=1)
     DB_POOL_RECYCLE_SECONDS: int = Field(default=1800, ge=60)
+    # 走 PgBouncer（transaction pooling）時設 true：app 端改用 NullPool 並關閉
+    # asyncpg server-side prepared statement cache，避免 "prepared statement does not exist"。
+    DB_USE_PGBOUNCER: bool = Field(default=False)
 
     # --- 健康檢查 ---
     HEALTHCHECK_TIMEOUT_SECONDS: float = Field(default=2.0, gt=0)
+    # 啟動時等待 DB / Redis 就緒的總上限（退避重試）；逾時才 app exit。
+    STARTUP_READINESS_MAX_WAIT_SECONDS: float = Field(default=60.0, ge=0)
     SLOW_REQUEST_THRESHOLD_MS: int = Field(default=1000, ge=1)
 
     # --- Redis 設定 ---
