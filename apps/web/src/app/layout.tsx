@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import { Suspense } from "react";
 import "./globals.css";
 import { Toaster } from "sonner";
@@ -41,7 +42,8 @@ export const viewport: Viewport = {
   themeColor: BRANDING.themeColor,
 };
 
-function ThemeScript() {
+async function ThemeScript() {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   const script = `
     (function(){
       try {
@@ -53,7 +55,15 @@ function ThemeScript() {
       } catch(e) {}
     })();
   `;
-  return <script dangerouslySetInnerHTML={{ __html: script }} />;
+  // 瀏覽器在解析後會隱藏 nonce 屬性（nonce hiding），client 端會看到空字串，
+  // 造成預期內的 hydration 不一致，故在此元素抑制警告。
+  return (
+    <script
+      nonce={nonce}
+      suppressHydrationWarning
+      dangerouslySetInnerHTML={{ __html: script }}
+    />
+  );
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -27,6 +27,60 @@ const MAINTENANCE_EXEMPT_PATHS = new Set([
   "/sw.js",
 ]);
 
+/** 產生 per-request CSP nonce（Edge runtime：用 Web Crypto，不可用 Buffer）。 */
+function generateNonce(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary);
+}
+
+/**
+ * 前端 HTML 的 Content-Security-Policy。
+ *
+ * script-src 採 nonce + 'strict-dynamic'，不含 'unsafe-inline'：
+ *   - Next.js 會自動把此 nonce 套到框架腳本與 <Script> 元件（含 Google One Tap）。
+ *   - 'strict-dynamic' 讓已信任（帶 nonce）的腳本可載入其子腳本（GSI、PostHog 錄製）。
+ *   - 明列的 https 來源是給支援 nonce 但不支援 strict-dynamic 的舊瀏覽器的後備。
+ * style-src 仍保留 'unsafe-inline'：React 行內樣式、站台自訂 CSS、Toaster 需要，
+ *   且樣式注入風險遠低於腳本注入。
+ */
+function buildCsp(nonce: string): string {
+  // 開發模式 Next.js Fast Refresh (HMR) 需要 eval；正式環境不含 'unsafe-eval'。
+  const devEval = process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'";
+  return [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+    "form-action 'self'",
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://accounts.google.com https://us-assets.i.posthog.com${devEval}`,
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com",
+    "font-src 'self' https://fonts.gstatic.com data:",
+    "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://*.googleusercontent.com",
+    "connect-src 'self' https://accounts.google.com https://us.i.posthog.com https://us-assets.i.posthog.com https://cdn.jsdelivr.net",
+    "frame-src 'self' https://accounts.google.com",
+    "worker-src 'self' blob:",
+    "manifest-src 'self'",
+  ].join("; ");
+}
+
+/**
+ * 套用 CSP：把 nonce 經 x-nonce 與請求端 CSP 標頭傳給 Next（讓框架腳本帶 nonce），
+ * 同時把 CSP 寫到回應標頭交給瀏覽器強制執行。
+ */
+function withCsp(req: NextRequest): NextResponse {
+  const nonce = generateNonce();
+  const csp = buildCsp(nonce);
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("content-security-policy", csp);
+  const res = NextResponse.next({ request: { headers: requestHeaders } });
+  res.headers.set("content-security-policy", csp);
+  return res;
+}
+
 function isMaintenanceExempt(pathname: string) {
   return MAINTENANCE_EXEMPT_PATHS.has(pathname)
     || MAINTENANCE_EXEMPT_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
@@ -128,7 +182,7 @@ export async function proxy(req: NextRequest) {
     }
   }
 
-  return NextResponse.next();
+  return withCsp(req);
 }
 
 export const config = {

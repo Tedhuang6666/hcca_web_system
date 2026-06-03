@@ -226,11 +226,15 @@ class Settings(BaseSettings):
     # --- 瀏覽器安全標頭 ---
     SECURITY_HEADERS_ENABLED: bool = True
     SECURITY_HSTS_MAX_AGE_SECONDS: int = 31_536_000
+    # 此 CSP 套在 API（FastAPI）回應上：JSON API 與 /uploads 靜態檔。
+    # script-src 不含 'unsafe-inline'——API 不需行內腳本，移除後可大幅降低
+    # 同源 /uploads 若被上傳惡意 HTML 時的 XSS 風險。
+    # 前端 HTML 頁面的 CSP 由 Next.js proxy.ts 以 per-request nonce 另行套用。
     SECURITY_CSP: str = (
         "default-src 'self'; "
         "img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com; "
-        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline'; "
+        "script-src 'self'; "
         "frame-ancestors 'none'; "
         "object-src 'none'; "
         "base-uri 'self'"

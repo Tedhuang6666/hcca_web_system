@@ -18,6 +18,7 @@ from api.core.config import settings
 from api.core.database import get_db
 from api.core.oauth import discord
 from api.core.permission_codes import PermissionCode
+from api.core.redirects import safe_next_path
 from api.core.security import create_access_token, create_refresh_token
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_permission
@@ -194,9 +195,7 @@ class DiscordTestMessageIn(BaseModel):
 
 
 def _safe_next_path(value: str | None) -> str:
-    if not value or not value.startswith("/") or value.startswith("//"):
-        return "/profile"
-    return value
+    return safe_next_path(value, default="/profile")
 
 
 @router.get("/login", summary="發起 Discord OAuth 綁定")

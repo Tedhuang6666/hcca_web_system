@@ -21,6 +21,7 @@ from api.core.database import get_db
 from api.core.oauth import google
 from api.core.permission_codes import PermissionCode
 from api.core.posthog import get_posthog_client
+from api.core.redirects import safe_next_path
 from api.core.security import (
     add_to_blacklist,
     create_access_token,
@@ -67,9 +68,22 @@ def _frontend_origin_param(request: Request) -> str | None:
     return raw
 
 
+def _origin_if_allowed(origin: str | None) -> str | None:
+    """只接受位於 ALLOWED_ORIGINS 白名單內的來源，否則回傳 None。
+
+    防 Host header injection：``X-Forwarded-Host`` / ``Origin`` / ``Referer`` /
+    ``Host`` 全是用戶端可控標頭，未經白名單驗證就拿來組 OAuth ``redirect_uri``
+    或登入後導回網址，會被用來把流程導向攻擊者網域。
+    """
+    if origin and origin in settings.ALLOWED_ORIGINS:
+        return origin
+    return None
+
+
 def _frontend_origin_for(request: Request, *, use_saved: bool = True) -> str:
     if use_saved:
         saved_origin = request.session.get("frontend_origin")
+        # session 由本服務簽章，且寫入時已通過白名單驗證，可信任。
         if isinstance(saved_origin, str):
             return saved_origin
 
@@ -82,13 +96,16 @@ def _frontend_origin_for(request: Request, *, use_saved: bool = True) -> str:
         host = forwarded_host.split(",", maxsplit=1)[0].strip()
         proto = request.headers.get("x-forwarded-proto", request.url.scheme)
         proto = proto.split(",", maxsplit=1)[0].strip()
-        return _origin_from_host(host, proto)
+        allowed = _origin_if_allowed(_origin_from_host(host, proto))
+        if allowed:
+            return allowed
+        logger.warning("Rejected X-Forwarded-Host not in ALLOWED_ORIGINS: %s", host)
 
-    header_origin = _origin_from_url(request.headers.get("origin"))
+    header_origin = _origin_if_allowed(_origin_from_url(request.headers.get("origin")))
     if header_origin:
         return header_origin
 
-    referer_origin = _origin_from_url(request.headers.get("referer"))
+    referer_origin = _origin_if_allowed(_origin_from_url(request.headers.get("referer")))
     if referer_origin:
         return referer_origin
 
@@ -96,15 +113,15 @@ def _frontend_origin_for(request: Request, *, use_saved: bool = True) -> str:
     if host and not host.startswith(("localhost:8000", "127.0.0.1:8000")):
         proto = request.headers.get("x-forwarded-proto", request.url.scheme)
         proto = proto.split(",", maxsplit=1)[0].strip()
-        return _origin_from_host(host, proto)
+        allowed = _origin_if_allowed(_origin_from_host(host, proto))
+        if allowed:
+            return allowed
 
     return _FRONTEND_ORIGIN
 
 
 def _safe_next_path(value: str | None) -> str:
-    if not value or not value.startswith("/") or value.startswith("//"):
-        return "/"
-    return value
+    return safe_next_path(value, default="/")
 
 
 def _email_can_login(email: str, existing_user: User | None = None) -> bool:
