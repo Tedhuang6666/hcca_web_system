@@ -30,7 +30,8 @@ function fmtSize(bytes: number): string {
 }
 
 export default function PrivacyPage() {
-  const { isAdmin } = usePermissions();
+  const { can } = usePermissions();
+  const canHandlePrivacy = can("system:privacy");
   const [userId, setUserId] = useState("");
   const [busy, setBusy] = useState(false);
   const [exports, setExports] = useState<PrivacyExportFile[]>([]);
@@ -56,11 +57,11 @@ export default function PrivacyPage() {
   }, []);
 
   useEffect(() => {
-    if (isAdmin) {
+    if (canHandlePrivacy) {
       void loadExports();
       void loadRequests();
     }
-  }, [isAdmin, loadExports, loadRequests]);
+  }, [canHandlePrivacy, loadExports, loadRequests]);
 
   const onExport = async () => {
     const uid = userId.trim();
@@ -127,7 +128,7 @@ export default function PrivacyPage() {
     }
   };
 
-  if (!isAdmin) {
+  if (!canHandlePrivacy) {
     return (
       <main className="mx-auto max-w-3xl p-6">
         <section
@@ -135,7 +136,7 @@ export default function PrivacyPage() {
           style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}>
           <Lock className="mx-auto mb-3 text-[var(--danger)]" size={32} aria-hidden />
           <h1 className="text-xl font-semibold text-[var(--text-primary)]">
-            需要超級管理員權限
+            需要個資處理權限
           </h1>
         </section>
       </main>
@@ -285,10 +286,10 @@ export default function PrivacyPage() {
                     <button
                       type="button"
                       className="btn-sm btn-primary"
-                      disabled={requestBusy === item.id || item.status === "fulfilled"}
+                      disabled={requestBusy === item.id || item.status === "completed"}
                       onClick={() => {
                         const msg = window.prompt("回覆給使用者的處理說明：", item.response_message ?? "");
-                        if (msg !== null) void updateRequest(item.id, "fulfilled", msg);
+                        if (msg !== null) void updateRequest(item.id, "completed", msg);
                       }}>
                       完成
                     </button>

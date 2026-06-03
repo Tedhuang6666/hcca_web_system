@@ -3356,21 +3356,21 @@ export const webhooksApi = {
 // ── 政策（隱私 / ToS / Cookie / 無障礙）───────────────────────────────
 export type PolicyKind =
   | "privacy"
-  | "terms_of_service"
+  | "terms"
   | "cookie"
   | "accessibility"
   | "security";
 export type PrivacyRequestType =
   | "access"
-  | "rectification"
-  | "erasure"
-  | "objection"
-  | "copy_export"
-  | "other";
+  | "export"
+  | "correction"
+  | "deletion"
+  | "restriction"
+  | "objection";
 export type PrivacyRequestStatus =
-  | "received"
+  | "submitted"
   | "in_review"
-  | "fulfilled"
+  | "completed"
   | "rejected"
   | "cancelled";
 

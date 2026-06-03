@@ -2928,7 +2928,7 @@ export interface ExamTraceInspectOut {
 
 export type PolicyKind =
   | "privacy"
-  | "terms_of_service"
+  | "terms"
   | "accessibility"
   | "cookie"
   | "security";
@@ -2981,16 +2981,16 @@ export interface PolicyConsentOut {
 
 export type PrivacyRequestType =
   | "access"
-  | "rectification"
-  | "erasure"
-  | "objection"
-  | "copy_export"
-  | "other";
+  | "export"
+  | "correction"
+  | "deletion"
+  | "restriction"
+  | "objection";
 
 export type PrivacyRequestStatus =
-  | "received"
+  | "submitted"
   | "in_review"
-  | "fulfilled"
+  | "completed"
   | "rejected"
   | "cancelled";
 
