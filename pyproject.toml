@@ -90,8 +90,8 @@ omit = [
 ]
 
 [tool.coverage.report]
-# 起始門檻：以目前實測值為基準的保守值，避免覆蓋率默默下滑。
+# Ratchet 門檻：以目前實測覆蓋率（~51.5%）為基準、保留小幅 headroom，避免默默下滑。
 # 補測試後可逐步調高。
-fail_under = 45
+fail_under = 50
 show_missing = true
 skip_covered = false

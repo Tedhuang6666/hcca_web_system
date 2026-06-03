@@ -6,7 +6,8 @@ import logging
 import uuid
 from datetime import UTC, date, datetime, time
 
-from sqlalchemy import and_, exists, func, or_, select, text
+from sqlalchemy import and_, bindparam, exists, func, or_, select, text
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -136,8 +137,7 @@ async def build_org_serial_prefix(session: AsyncSession, org_id: uuid.UUID) -> s
         SELECT prefix, name, depth
         FROM org_path
         ORDER BY depth DESC
-        """),
-        {"org_id": str(org_id)},
+        """).bindparams(bindparam("org_id", value=org_id, type_=PGUUID(as_uuid=True))),
     )
     rows = result.all()
     if not rows:

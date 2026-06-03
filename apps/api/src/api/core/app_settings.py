@@ -330,15 +330,25 @@ def validate_changes(changes: Mapping[str, str]) -> None:
     current = read_env_file()
     merged = {**current, **changes}
 
+    # pydantic-settings 的 os.environ 優先序高於 _env_file，若被改的 key 也存在於
+    # 程序環境變數（如部署/CI 注入的 DATABASE_URL），重建時會讀到舊的 env 值而非
+    # tmp 檔裡待驗證的新值，導致非法輸入矇混過關。驗證期間先移除這些 key，讓 tmp
+    # 檔成為唯一來源；驗證後還原。Settings case_sensitive=False，故以大寫比對。
+    changed_upper = {k.upper() for k in changes}
+    shadowed = {k: os.environ[k] for k in list(os.environ) if k.upper() in changed_upper}
+
     fd, tmp = tempfile.mkstemp(suffix=".env")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             for k, v in merged.items():
                 fh.write(f"{k}={_quote_if_needed(v)}\n")
+        for k in shadowed:
+            del os.environ[k]
         try:
             Settings(_env_file=tmp, _env_file_encoding="utf-8")
         except ValidationError:
             raise
     finally:
+        os.environ.update(shadowed)
         with contextlib.suppress(Exception):
             os.unlink(tmp)
