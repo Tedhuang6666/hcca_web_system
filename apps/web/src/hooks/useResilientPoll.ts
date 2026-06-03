@@ -49,6 +49,11 @@ export function useResilientPoll(task: () => Promise<PollOutcome>, opts: Options
       timer = setTimeout(run, ms);
     };
 
+    // 頁面可見且未離線時才算「醒著」，否則一律停止輪詢
+    const isAwake = () =>
+      (typeof document === "undefined" || document.visibilityState === "visible")
+      && (typeof navigator === "undefined" || navigator.onLine !== false);
+
     async function run() {
       if (cancelled) return;
       let outcome: PollOutcome;
@@ -71,20 +76,30 @@ export function useResilientPoll(task: () => Promise<PollOutcome>, opts: Options
       schedule(intervalMs);
     }
 
-    // online / 重新可見 / 重新聚焦 → 若先前停掉了就恢復
+    // online / 重新可見 / 重新聚焦 → 若先前停掉了且已醒著就恢復
     const resume = () => {
-      if (cancelled || !halted) return;
-      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      if (cancelled || !halted || !isAwake()) return;
       halted = false;
       failures = 0;
       run();
     };
+    // 頁面隱藏或離線 → 立即停止輪詢（清計時器並標記 halted，待喚醒再續）
+    const pause = () => {
+      if (cancelled || halted) return;
+      halted = true;
+      clear();
+    };
     const onVisibility = () => {
       if (document.visibilityState === "visible") resume();
+      else pause();
     };
 
-    run();
+    // 啟動時若已隱藏/離線就先不發第一發
+    if (isAwake()) run();
+    else halted = true;
+
     window.addEventListener("online", resume);
+    window.addEventListener("offline", pause);
     window.addEventListener("focus", resume);
     document.addEventListener("visibilitychange", onVisibility);
 
@@ -92,6 +107,7 @@ export function useResilientPoll(task: () => Promise<PollOutcome>, opts: Options
       cancelled = true;
       clear();
       window.removeEventListener("online", resume);
+      window.removeEventListener("offline", pause);
       window.removeEventListener("focus", resume);
       document.removeEventListener("visibilitychange", onVisibility);
     };

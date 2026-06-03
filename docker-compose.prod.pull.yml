@@ -72,6 +72,10 @@ services:
   api:
     <<: *api-common
     restart: unless-stopped
+    # 記憶體護欄：吃到上限只 OOM-kill 自己，不再靠 swap 拖垮整台（memswap=mem 即禁用 swap）。
+    mem_limit: ${API_MEM_LIMIT:-1200m}
+    memswap_limit: ${API_MEM_LIMIT:-1200m}
+    mem_reservation: 256m
     environment:
       ENVIRONMENT: production
       DEBUG: "false"
@@ -103,16 +107,22 @@ services:
       retries: 10
       start_period: 60s
 
+  # 一般背景任務 worker：不吃 email queue（寄信交給專責的 email-worker，
+  # 避免大量背景任務把寄信卡住）。
   celery-worker:
     <<: *api-common
     restart: unless-stopped
     profiles: ["workers"]
+    # 記憶體護欄：吃到上限只 OOM-kill 自己，不再靠 swap 拖垮整台（memswap=mem 即禁用 swap）。
+    mem_limit: ${CELERY_WORKER_MEM_LIMIT:-1200m}
+    memswap_limit: ${CELERY_WORKER_MEM_LIMIT:-1200m}
+    mem_reservation: 256m
     command: >
       python -m celery -A api.core.celery_app.celery_app worker
       --loglevel=info
       --concurrency=${CELERY_WORKER_CONCURRENCY:-1}
       --max-tasks-per-child=${CELERY_MAX_TASKS_PER_CHILD:-200}
-      --queues=celery,backup,recovery
+      --queues=default,meal,documents,backup,recovery,celery
     environment:
       ENVIRONMENT: production
       DEBUG: "false"
@@ -141,10 +151,58 @@ services:
       retries: 3
       start_period: 30s
 
+  # 寄信專責 worker：只吃 email queue、concurrency=1，與背景任務隔離。
+  # 獨立 "email" profile：需要寄信時才開
+  #   docker compose --env-file .env.production -f docker-compose.prod.pull.yml --profile email up -d email-worker
+  email-worker:
+    <<: *api-common
+    restart: unless-stopped
+    profiles: ["email"]
+    mem_limit: ${EMAIL_WORKER_MEM_LIMIT:-512m}
+    memswap_limit: ${EMAIL_WORKER_MEM_LIMIT:-512m}
+    mem_reservation: 128m
+    command: >
+      python -m celery -A api.core.celery_app.celery_app worker
+      --loglevel=info
+      --concurrency=${EMAIL_WORKER_CONCURRENCY:-1}
+      --max-tasks-per-child=${CELERY_MAX_TASKS_PER_CHILD:-200}
+      --queues=email
+    environment:
+      ENVIRONMENT: production
+      DEBUG: "false"
+      ENABLE_API_DOCS: "false"
+      COOKIE_SECURE: "true"
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}
+      DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}
+      DB_POOL_SIZE: ${EMAIL_WORKER_DB_POOL_SIZE:-3}
+      DB_MAX_OVERFLOW: ${EMAIL_WORKER_DB_MAX_OVERFLOW:-5}
+      DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
+      DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
+      HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
+      DB_BACKUP_DIR: ${DB_BACKUP_DIR:-/app/backups}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -m celery -A api.core.celery_app.celery_app inspect ping -d celery@$$HOSTNAME -t 5 >/dev/null",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
   celery-beat:
     <<: *api-common
     restart: unless-stopped
     profiles: ["workers"]
+    # beat 只排程、不執行任務，記憶體很小；給個硬上限防意外洩漏（memswap=mem 即禁用 swap）。
+    mem_limit: ${CELERY_BEAT_MEM_LIMIT:-256m}
+    memswap_limit: ${CELERY_BEAT_MEM_LIMIT:-256m}
+    mem_reservation: 48m
     # 啟動前清掉殘留 pidfile（celerybeat volume 會保留 /tmp），
     # 否則上次非正常結束留下的 pid 會讓 beat 卡在 "pidfile already exists" 重啟迴圈。
     # exec 讓 celery 接手 PID 1，訊號才能正確傳遞。
@@ -187,6 +245,10 @@ services:
   web:
     image: ghcr.io/tedhuang6666/hcca_web_system-web:latest
     restart: unless-stopped
+    # 記憶體護欄：吃到上限只 OOM-kill 自己（memswap=mem 即禁用 swap）。
+    mem_limit: ${WEB_MEM_LIMIT:-768m}
+    memswap_limit: ${WEB_MEM_LIMIT:-768m}
+    mem_reservation: 192m
     environment:
       NODE_ENV: production
       API_INTERNAL_URL: http://api:8000

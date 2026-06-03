@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import httpx
 from sqlalchemy import func, select
@@ -23,6 +23,10 @@ from api.models.email_message import (
 logger = logging.getLogger(__name__)
 
 RESEND_EMAILS_URL = "https://api.resend.com/emails"
+
+# 重試退避排程（秒）：第 1 次失敗 1 分鐘後、第 2 次 5 分、第 3 次 15 分、第 4 次 1 小時，
+# 超過後進入 dead-letter（status=DEAD，不再自動重試）。max_retries 由此長度決定。
+EMAIL_RETRY_BACKOFF = [60, 300, 900, 3600]
 
 
 def _format_from() -> str:
@@ -70,6 +74,8 @@ async def _update_email_message_status(
     status: EmailStatus,
     *,
     error_detail: str | None = None,
+    attempt_count: int | None = None,
+    next_retry_at: datetime | None = None,
 ) -> None:
     if not email_message_id:
         return
@@ -81,6 +87,10 @@ async def _update_email_message_status(
                 return
             msg.status = status
             msg.error_detail = error_detail
+            if attempt_count is not None:
+                msg.attempt_count = attempt_count
+            # 非 RETRYING（終態或成功）時清掉下一次重試時間
+            msg.next_retry_at = next_retry_at if status == EmailStatus.RETRYING else None
             await session.commit()
     finally:
         await engine.dispose()
@@ -92,6 +102,8 @@ async def _update_campaign_recipient_status(
     *,
     provider_id: str | None = None,
     error_detail: str | None = None,
+    attempt_count: int | None = None,
+    next_retry_at: datetime | None = None,
 ) -> None:
     if not email_recipient_id:
         return
@@ -104,6 +116,11 @@ async def _update_campaign_recipient_status(
             recipient.status = status
             recipient.provider_id = provider_id
             recipient.error_detail = error_detail
+            if attempt_count is not None:
+                recipient.attempt_count = attempt_count
+            recipient.next_retry_at = (
+                next_retry_at if status == EmailRecipientStatus.RETRYING else None
+            )
             if status == EmailRecipientStatus.SENT:
                 recipient.sent_at = datetime.now(UTC)
             counts = (
@@ -114,11 +131,19 @@ async def _update_campaign_recipient_status(
                 )
             ).all()
             by_status = {str(row[0]): int(row[1]) for row in counts}
-            queued = by_status.get(EmailRecipientStatus.QUEUED, 0)
+            # 仍在途中的收件人（待寄或退避重試中）→ 尚未到終態盤點時機
+            in_flight = (
+                by_status.get(EmailRecipientStatus.QUEUED, 0)
+                + by_status.get(EmailRecipientStatus.RETRYING, 0)
+            )
             sent = by_status.get(EmailRecipientStatus.SENT, 0)
-            failed = by_status.get(EmailRecipientStatus.FAILED, 0)
+            # FAILED 與 DEAD 皆計為終態失敗
+            failed = (
+                by_status.get(EmailRecipientStatus.FAILED, 0)
+                + by_status.get(EmailRecipientStatus.DEAD, 0)
+            )
             message = await session.get(EmailMessage, recipient.message_id)
-            if message is not None and queued == 0:
+            if message is not None and in_flight == 0:
                 if failed == 0:
                     message.status = EmailStatus.SENT
                     message.error_detail = None
@@ -136,7 +161,9 @@ async def _update_campaign_recipient_status(
 # ── Celery Task（同步函式內用 asyncio.run 執行非同步郵件發送）────────────────
 
 
-@celery_app.task(name="api.services.mail.send_email", bind=True, max_retries=3)
+@celery_app.task(
+    name="api.services.mail.send_email", bind=True, max_retries=len(EMAIL_RETRY_BACKOFF)
+)
 def send_email(
     self,  # noqa: ANN001
     to: list[str],
@@ -150,8 +177,10 @@ def send_email(
     Celery 背景郵件發送任務。
 
     - bind=True：可透過 self 呼叫 retry()
-    - max_retries=3：Resend API 失敗自動重試最多 3 次（指數退避）
+    - 失敗依 EMAIL_RETRY_BACKOFF 退避重試（1m→5m→15m→1h），期間 status=RETRYING
+      並記錄 attempt_count / next_retry_at；耗盡後標記 DEAD（dead-letter）。
     """
+    attempt = self.request.retries + 1  # 本次嘗試（1-based）
 
     try:
         message_id = asyncio.run(_send_via_resend(to, subject, body, subtype))
@@ -161,32 +190,53 @@ def send_email(
                     email_recipient_id,
                     EmailRecipientStatus.SENT,
                     provider_id=message_id,
+                    attempt_count=attempt,
                 )
             )
-        if email_recipient_id is None:
-            asyncio.run(_update_email_message_status(email_message_id, EmailStatus.SENT))
+        else:
+            asyncio.run(
+                _update_email_message_status(
+                    email_message_id, EmailStatus.SENT, attempt_count=attempt
+                )
+            )
         logger.info("郵件已送出 to=%s subject=%s resend_id=%s", to, subject, message_id)
         return {"status": "sent", "to": to, "subject": subject, "provider_id": message_id}
     except Exception as exc:
-        if self.request.retries >= self.max_retries:
-            if email_recipient_id is not None:
-                asyncio.run(
-                    _update_campaign_recipient_status(
-                        email_recipient_id,
-                        EmailRecipientStatus.FAILED,
-                        error_detail=str(exc)[:500],
-                    )
+        exhausted = self.request.retries >= self.max_retries
+        err = str(exc)[:500]
+        delay = EMAIL_RETRY_BACKOFF[min(self.request.retries, len(EMAIL_RETRY_BACKOFF) - 1)]
+        next_retry_at = None if exhausted else datetime.now(UTC) + timedelta(seconds=delay)
+
+        if email_recipient_id is not None:
+            asyncio.run(
+                _update_campaign_recipient_status(
+                    email_recipient_id,
+                    EmailRecipientStatus.DEAD if exhausted else EmailRecipientStatus.RETRYING,
+                    error_detail=err,
+                    attempt_count=attempt,
+                    next_retry_at=next_retry_at,
                 )
-            if email_recipient_id is None:
-                asyncio.run(
-                    _update_email_message_status(
-                        email_message_id,
-                        EmailStatus.FAILED,
-                        error_detail=str(exc)[:500],
-                    )
+            )
+        else:
+            asyncio.run(
+                _update_email_message_status(
+                    email_message_id,
+                    EmailStatus.DEAD if exhausted else EmailStatus.RETRYING,
+                    error_detail=err,
+                    attempt_count=attempt,
+                    next_retry_at=next_retry_at,
                 )
-        logger.warning("郵件發送失敗，準備重試: %s", exc)
-        raise self.retry(exc=exc, countdown=2**self.request.retries) from exc
+            )
+
+        if exhausted:
+            # 進入 dead-letter：raise self.retry 會丟出 MaxRetriesExceededError，
+            # 觸發 celery task_failure → Redis DLQ（見 celery_app._push_dead_letter）。
+            logger.error("郵件重試耗盡進入 dead-letter to=%s: %s", to, exc)
+        else:
+            logger.warning(
+                "郵件發送失敗，第 %d 次嘗試，%ds 後重試 to=%s: %s", attempt, delay, to, exc
+            )
+        raise self.retry(exc=exc, countdown=delay) from exc
 
 
 # ── 輔助函式（FastAPI 路由層呼叫）────────────────────────────────────────────

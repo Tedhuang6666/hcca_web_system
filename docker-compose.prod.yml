@@ -149,7 +149,7 @@ services:
       --loglevel=info
       --concurrency=${CELERY_WORKER_CONCURRENCY:-1}
       --max-tasks-per-child=${CELERY_MAX_TASKS_PER_CHILD:-200}
-      --queues=default,email,meal,documents,backup,recovery,celery
+      --queues=default,meal,documents,backup,recovery,celery
     environment:
       ENVIRONMENT: production
       DEBUG: "false"
@@ -159,6 +159,53 @@ services:
       DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}
       DB_POOL_SIZE: ${CELERY_DB_POOL_SIZE:-5}
       DB_MAX_OVERFLOW: ${CELERY_DB_MAX_OVERFLOW:-10}
+      DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
+      DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
+      HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
+      DB_BACKUP_DIR: ${DB_BACKUP_DIR:-/app/backups}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -m celery -A api.core.celery_app.celery_app inspect ping -d celery@$$HOSTNAME -t 5 >/dev/null",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # 寄信專責 worker：只吃 email queue、concurrency=1，與背景任務隔離。
+  # 獨立 "email" profile：需要寄信時才開（建議常駐）
+  #   docker compose --env-file .env.production -f docker-compose.prod.yml --profile email up -d email-worker
+  email-worker:
+    <<: *api-common
+    restart: unless-stopped
+    profiles: ["email"]
+    mem_limit: ${EMAIL_WORKER_MEM_LIMIT:-512m}
+    memswap_limit: ${EMAIL_WORKER_MEM_LIMIT:-512m}
+    mem_reservation: 128m
+    cpus: ${EMAIL_WORKER_CPUS:-0.75}
+    labels:
+      autoheal: "true"
+    command: >
+      python -m celery -A api.core.celery_app.celery_app worker
+      --loglevel=info
+      --concurrency=${EMAIL_WORKER_CONCURRENCY:-1}
+      --max-tasks-per-child=${CELERY_MAX_TASKS_PER_CHILD:-200}
+      --queues=email
+    environment:
+      ENVIRONMENT: production
+      DEBUG: "false"
+      ENABLE_API_DOCS: "false"
+      COOKIE_SECURE: "true"
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@${DB_HOST:-db}:${DB_PORT:-5432}/${POSTGRES_DB:?set POSTGRES_DB}
+      DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}
+      DB_POOL_SIZE: ${EMAIL_WORKER_DB_POOL_SIZE:-3}
+      DB_MAX_OVERFLOW: ${EMAIL_WORKER_DB_MAX_OVERFLOW:-5}
       DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
       DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}

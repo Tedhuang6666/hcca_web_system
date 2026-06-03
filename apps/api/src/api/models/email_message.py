@@ -30,6 +30,8 @@ class EmailStatus(enum.StrEnum):
     QUEUED = "queued"  # 已解析收件人並排入 Celery 寄送佇列
     SENT = "sent"  # 已送出
     FAILED = "failed"  # 解析或寄送失敗
+    RETRYING = "retrying"  # 寄送失敗、退避中等待下一次重試
+    DEAD = "dead"  # 超過重試上限，進入 dead-letter（不再自動重試）
     PARTIAL = "partial"  # 部分收件人已送出、部分失敗
     CANCELLED = "cancelled"  # 已取消（取消預約 / 刪除）
 
@@ -40,6 +42,8 @@ class EmailRecipientStatus(enum.StrEnum):
     QUEUED = "queued"
     SENT = "sent"
     FAILED = "failed"
+    RETRYING = "retrying"  # 退避中等待下一次重試
+    DEAD = "dead"  # 超過重試上限，進入 dead-letter
 
 
 class EmailMessage(Base, TimestampMixin):
@@ -79,6 +83,11 @@ class EmailMessage(Base, TimestampMixin):
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     celery_task_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 重試簿記：已嘗試次數與下一次重試時間（retry/dead-letter 用）
+    attempt_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0", default=0
+    )
+    next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     sender: Mapped[User | None] = relationship("User", lazy="select")
     recipients: Mapped[list[EmailCampaignRecipient]] = relationship(
@@ -121,6 +130,11 @@ class EmailCampaignRecipient(Base, TimestampMixin):
     provider_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 重試簿記：已嘗試次數與下一次重試時間（retry/dead-letter 用）
+    attempt_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0", default=0
+    )
+    next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     message: Mapped[EmailMessage] = relationship(
         "EmailMessage", back_populates="recipients", lazy="select"

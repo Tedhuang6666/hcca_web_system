@@ -19,6 +19,8 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from redis.exceptions import RedisError
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core import app_settings as app_settings_svc
@@ -59,6 +61,7 @@ from api.core.query_audit import get_slow_queries
 from api.core.security import redis_client, revoke_user
 from api.core.ws_manager import manager as ws_manager
 from api.dependencies.auth import get_current_active_user
+from api.models.email_message import EmailMessage
 from api.models.user import User
 from api.services import audit as audit_svc
 from api.services import defense as defense_svc
@@ -69,6 +72,12 @@ router = APIRouter(prefix="/admin/system", tags=["管理員 / 系統"])
 public_router = APIRouter(prefix="/system", tags=["系統"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
+
+# 進程啟動時間（用於 diagnostics uptime；模組載入 ≈ app 啟動）
+_PROCESS_START_MONO = time.monotonic()
+
+# diagnostics 觀測的 Celery queue（與 docker-compose worker --queues 對齊）
+_DIAGNOSTIC_QUEUES = ["default", "email", "meal", "documents", "backup", "recovery", "celery"]
 
 
 async def require_superuser(user: User = Depends(get_current_active_user)) -> User:
@@ -381,6 +390,87 @@ async def system_status(_admin: AdminUser) -> SystemMetricsSnapshot:
         load_signals=LoadSignalsView(**load_snapshot()),
         maintenance=MaintenanceView(**maintenance),
         load_shed_mode=await get_load_shed_force_mode(),
+    )
+
+
+class DiagnosticsCheck(BaseModel):
+    ok: bool
+    detail: str | None = None
+
+
+class QueueDepth(BaseModel):
+    name: str
+    pending: int  # broker backlog（-1 代表查詢失敗）
+
+
+class DiagnosticsView(BaseModel):
+    timestamp: float
+    version: str
+    uptime_seconds: float
+    db: DiagnosticsCheck
+    redis: DiagnosticsCheck
+    celery: DiagnosticsCheck
+    workers: list[CeleryQueueView]
+    queue_depths: list[QueueDepth]
+    email_queue_pending: int
+    email_outbox: dict[str, int]  # status -> 件數（含 retrying / dead）
+
+
+@router.get("/diagnostics", response_model=DiagnosticsView, summary="一鍵健康診斷（管理員）")
+async def system_diagnostics(_admin: AdminUser, db: DbDep) -> DiagnosticsView:
+    """彙整 DB / Redis / Celery / queue 積壓 / email outbox / uptime / 版本，
+    供管理員一眼判斷系統健康與寄信積壓。每項皆容錯，不因單一子系統故障而整體 500。"""
+    # DB
+    try:
+        await db.execute(text("SELECT 1"))
+        db_check = DiagnosticsCheck(ok=True)
+    except Exception as exc:  # noqa: BLE001
+        db_check = DiagnosticsCheck(ok=False, detail=exc.__class__.__name__)
+
+    # Redis
+    redis = await get_redis_stats()
+    redis_check = DiagnosticsCheck(ok=redis.get("error") is None, detail=redis.get("error"))
+
+    # Celery workers
+    celery = await get_celery_stats()
+    workers = [CeleryQueueView(**q) for q in celery.get("queues", [])]
+    celery_err = celery.get("error") or (None if workers else "no_workers")
+    celery_check = DiagnosticsCheck(ok=celery_err is None, detail=celery_err)
+
+    # Queue 積壓（Celery on Redis：每個 queue 是一條 Redis list）
+    depths: list[QueueDepth] = []
+    email_pending = 0
+    for q in _DIAGNOSTIC_QUEUES:
+        try:
+            n = int(await redis_client.llen(q))
+        except RedisError:
+            n = -1
+        depths.append(QueueDepth(name=q, pending=n))
+        if q == "email":
+            email_pending = max(n, 0)
+
+    # Email outbox 狀態彙總
+    try:
+        rows = (
+            await db.execute(
+                select(EmailMessage.status, func.count()).group_by(EmailMessage.status)
+            )
+        ).all()
+        outbox = {str(row[0]): int(row[1]) for row in rows}
+    except Exception:  # noqa: BLE001
+        outbox = {}
+
+    return DiagnosticsView(
+        timestamp=time.time(),
+        version=settings.APP_VERSION,
+        uptime_seconds=round(time.monotonic() - _PROCESS_START_MONO, 1),
+        db=db_check,
+        redis=redis_check,
+        celery=celery_check,
+        workers=workers,
+        queue_depths=depths,
+        email_queue_pending=email_pending,
+        email_outbox=outbox,
     )
 
 

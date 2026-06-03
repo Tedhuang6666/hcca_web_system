@@ -79,6 +79,13 @@ export const NAV_ITEMS: NavItem[] = [
     perm: "admin:all",
   },
   {
+    id: "systemDiagnostics",
+    href: "/admin/diagnostics",
+    iconKey: "analytics",
+    label: "系統診斷",
+    perm: "admin:all",
+  },
+  {
     id: "systemSettings",
     href: "/admin/settings",
     iconKey: "settings",

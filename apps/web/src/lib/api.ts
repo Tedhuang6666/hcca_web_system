@@ -193,12 +193,55 @@ function csrfHeaders(method?: string): Record<string, string> {
 const GET_NETWORK_RETRIES = 2;
 const RETRY_BACKOFF_MS = [400, 900];
 
+// ── 端點熔斷器 ────────────────────────────────────────────────────────────────
+// 同一路徑連續「硬失敗」（網路斷線 / 5xx / 5字頭閘道）達門檻就短暫開斷，
+// 開斷期間直接快速失敗，不再對著掛掉的後端雪崩式重打。伺服器只要回得了
+// （含 4xx）就算可達 → 重置。與後端 mem_limit/healthcheck 形成前後端雙層保護。
+const CIRCUIT_THRESHOLD = 3;
+const CIRCUIT_OPEN_MS = 60_000;
+const circuits = new Map<string, { failures: number; openUntil: number }>();
+
+function circuitKey(path: string): string {
+  const q = path.indexOf("?");
+  return q === -1 ? path : path.slice(0, q);
+}
+function circuitOpen(key: string): boolean {
+  const c = circuits.get(key);
+  return c ? c.openUntil > Date.now() : false;
+}
+function recordHardFailure(key: string): void {
+  const c = circuits.get(key) ?? { failures: 0, openUntil: 0 };
+  c.failures += 1;
+  if (c.failures >= CIRCUIT_THRESHOLD) c.openUntil = Date.now() + CIRCUIT_OPEN_MS;
+  circuits.set(key, c);
+}
+function recordReachable(key: string): void {
+  // 伺服器有回應（即使是 4xx）→ 視為可達，清掉熔斷計數
+  if (circuits.has(key)) circuits.delete(key);
+}
+
+/** 瀏覽器明確處於離線狀態（navigator.onLine === false）。 */
+function isOffline(): boolean {
+  return typeof navigator !== "undefined" && navigator.onLine === false;
+}
+
 async function request<T>(
   path: string,
   init: RequestInit = {},
   retriedAfterRefresh = false,
 ): Promise<T> {
   const method = (init.method ?? "GET").toUpperCase();
+  const cKey = circuitKey(path);
+
+  // 離線：直接快速失敗，不浪費一輪 fetch（由呼叫端/輪詢退避處理）
+  if (isOffline()) {
+    throw new ApiError(0, "目前處於離線狀態");
+  }
+  // 熔斷開斷中：同一端點剛連續失敗過，60 秒內不再嘗試
+  if (circuitOpen(cKey)) {
+    throw new ApiError(0, "暫時無法連線至後端（熔斷中），請稍候再試");
+  }
+
   let res: Response;
   let lastError: unknown = null;
   const maxRetries = method === "GET" ? GET_NETWORK_RETRIES : 0;
@@ -218,6 +261,7 @@ async function request<T>(
     } catch (err) {
       lastError = err;
       if (attempt >= maxRetries) {
+        recordHardFailure(cKey);
         throw new ApiError(0, `無法連線至後端 API：${BASE}`);
       }
       await new Promise((r) => setTimeout(r, RETRY_BACKOFF_MS[attempt] ?? 1500));
@@ -225,6 +269,10 @@ async function request<T>(
     }
   }
   void lastError;
+
+  // 熔斷記帳：5xx/5字頭閘道算硬失敗；其餘（含 4xx）代表伺服器可達 → 重置
+  if (res.status >= 500) recordHardFailure(cKey);
+  else recordReachable(cKey);
 
   // 401 → 嘗試 silent refresh，成功後重試一次
   if (res.status === 401) {
@@ -2864,6 +2912,19 @@ export interface DbUpgradeResult {
   changed?: boolean;
 }
 
+export interface SystemDiagnostics {
+  timestamp: number;
+  version: string;
+  uptime_seconds: number;
+  db: { ok: boolean; detail?: string | null };
+  redis: { ok: boolean; detail?: string | null };
+  celery: { ok: boolean; detail?: string | null };
+  workers: { name: string; active: number; reserved: number }[];
+  queue_depths: { name: string; pending: number }[];
+  email_queue_pending: number;
+  email_outbox: Record<string, number>;
+}
+
 export const systemApi = {
   status: () => get<SystemMetricsSnapshot>("/admin/system/status"),
   defenseSummary: () => get<DefenseSummary>("/admin/system/defense/summary"),
@@ -2892,6 +2953,7 @@ export const systemApi = {
   setLoadShedMode: (mode: LoadShedMode) =>
     put<{ mode: LoadShedMode }>("/admin/system/load-shed", { mode }),
   moduleStatuses: () => get<ModuleStatusPublic[]>("/system/module-status"),
+  diagnostics: () => get<SystemDiagnostics>("/admin/system/diagnostics"),
   listModules: () => get<ModuleStatus[]>("/admin/system/modules"),
   setModuleMaintenance: (id: string, body: { on: boolean; reason?: string }) =>
     put<ModuleStatus>(`/admin/system/modules/${encodeURIComponent(id)}/maintenance`, body),

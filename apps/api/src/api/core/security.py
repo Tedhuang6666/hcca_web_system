@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 import jwt
 import redis.asyncio as aioredis
 from jwt.exceptions import InvalidTokenError
+from redis.exceptions import RedisError
 
 from api.core.config import settings
 
@@ -98,15 +99,24 @@ async def add_to_blacklist(token: str) -> None:
 
 
 async def is_blacklisted(token: str) -> bool:
-    """檢查 Token jti 是否已被撤銷。"""
+    """檢查 Token jti 是否已被撤銷。
+
+    Redis 不可用時採「fail-open」：回傳 False（視為未撤銷），讓 API 進入降級模式
+    而非每個帶 token 的請求都 500。撤銷檢查是縱深防禦的一層，短暫失效可接受——
+    token 本身仍有簽章與過期驗證把關，且 Redis 恢復後撤銷立即重新生效。
+    """
     try:
         payload = decode_token(token)
-        jti = payload.get("jti")
-        if jti and await redis_client.exists(f"{BLACKLIST_JTI_PREFIX}{jti}"):
-            return True
     except InvalidTokenError:
-        pass
-    return False
+        return False
+    jti = payload.get("jti")
+    if not jti:
+        return False
+    try:
+        return bool(await redis_client.exists(f"{BLACKLIST_JTI_PREFIX}{jti}"))
+    except (RedisError, TimeoutError):
+        logger.warning("is_blacklisted: Redis 不可用，降級放行（fail-open）jti=%s", jti)
+        return False
 
 
 # ── User-level token 追蹤與撤銷 ──────────────────────────────────────────────
