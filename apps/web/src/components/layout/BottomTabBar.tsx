@@ -3,8 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogIn, MoreHorizontal } from "lucide-react";
-import { notificationsApi, tasksApi } from "@/lib/api";
 import { useWS } from "@/hooks/useWS";
+import { useInboxCounts } from "@/hooks/useInboxCounts";
 import {
   filterNavItems,
   NAV_PREF_EVENT,
@@ -45,11 +45,16 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
   const pathname = usePathname();
   const [role, setRole] = useState<Role>("guest");
   const [roleResolved, setRoleResolved] = useState(false);
-  const [taskCount, setTaskCount] = useState(0);
-  const [notifCount, setNotifCount] = useState(0);
   const [userRoom, setUserRoom] = useState<string | null>(null);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [navPrefs, setNavPrefs] = useState(() => readNavPreferences());
+  // 待辦／未讀計數輪詢：訪客（未登入）不請求；致命狀態會自動停止。
+  const {
+    taskCount,
+    unreadCount: notifCount,
+    setUnreadCount: setNotifCount,
+    refresh: refreshCounts,
+  } = useInboxCounts(role !== "guest");
 
   // 解析身分（依登入狀態與權限分桶）
   useEffect(() => {
@@ -88,30 +93,12 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
     };
   }, []);
 
-  const fetchCounts = useCallback(async () => {
-    try {
-      const inbox = await tasksApi.list();
-      setTaskCount(inbox.total);
-    } catch { /* ignore */ }
-    try {
-      const { unread } = await notificationsApi.count();
-      setNotifCount(unread);
-    } catch { /* ignore */ }
-  }, []);
-
-  useEffect(() => {
-    if (role === "guest") return;
-    fetchCounts();
-    const timer = setInterval(fetchCounts, 60_000);
-    return () => clearInterval(timer);
-  }, [fetchCounts, role]);
-
   useWS(userRoom, useCallback((msg) => {
     if (msg.type !== "notification.created") return;
     const unread = typeof msg.unread === "number" ? msg.unread : null;
     if (unread !== null) setNotifCount(unread);
-    else void fetchCounts();
-  }, [fetchCounts]), role !== "guest");
+    else refreshCounts();
+  }, [refreshCounts, setNotifCount]), role !== "guest");
 
   // 鍵盤彈起偵測：visualViewport 高度顯著縮小時隱藏
   useEffect(() => {

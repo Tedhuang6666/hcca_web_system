@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { PermissionProvider } from "@/contexts/PermissionContext";
 import { ModuleStatusProvider, useModuleStatus } from "@/contexts/ModuleStatusContext";
@@ -83,24 +83,28 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
   const [redirecting, setRedirecting] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // 記住已對哪個 pathname 觸發過導向，避免同一路徑重複呼叫 router.replace
+  // 造成 effect ↔ 導航無限互相觸發。
+  const redirectedFrom = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!requiresAuth(pathname)) {
-      setIsLoggedIn(Boolean(localStorage.getItem("user_id")));
+    const loggedIn = Boolean(localStorage.getItem("user_id"));
+    setIsLoggedIn(loggedIn);
+
+    if (!requiresAuth(pathname) || loggedIn) {
+      redirectedFrom.current = null;
       setRedirecting(false);
       setAuthReady(true);
       return;
     }
-    const userId = localStorage.getItem("user_id");
-    setIsLoggedIn(Boolean(userId));
-    if (!userId) {
-      setRedirecting(true);
-      router.replace(`/login?next=${encodeURIComponent(pathname)}`);
-      setAuthReady(true);
-      return;
-    }
-    setRedirecting(false);
+
+    // 需要登入但未登入：導向 /login（同一路徑只導一次）
+    setRedirecting(true);
     setAuthReady(true);
+    if (redirectedFrom.current !== pathname) {
+      redirectedFrom.current = pathname;
+      router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+    }
   }, [pathname, router]);
 
   // 路由變更時自動關閉行動版側邊欄

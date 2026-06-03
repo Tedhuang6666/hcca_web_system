@@ -11,6 +11,7 @@ import type { NotificationItem, TaskItem } from "@/lib/api";
 import { apiUrl } from "@/lib/config";
 import { useWS } from "@/hooks/useWS";
 import { useLowDataMode } from "@/hooks/useLowDataMode";
+import { useInboxCounts } from "@/hooks/useInboxCounts";
 import { getBreadcrumbs, getCompactCrumbs, getPageTitle } from "@/lib/breadcrumb";
 import type { Crumb } from "@/lib/breadcrumb";
 
@@ -80,12 +81,14 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showBell, setShowBell] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [previewNtfs, setPreviewNtfs] = useState<NotificationItem[]>([]);
   const [previewTasks, setPreviewTasks] = useState<TaskItem[]>([]);
-  const [taskCount, setTaskCount] = useState(0);
   const [userRoom, setUserRoom] = useState<string | null>(null);
   const lowDataMode = useLowDataMode();
+  // 待辦／未讀計數輪詢：未登入（userRoom 為 null）前完全不請求；
+  // 命中 401/522 等致命狀態會自動停止，不再每分鐘空打。
+  const { taskCount, unreadCount, setTaskCount, setUnreadCount, refresh: refreshCounts } =
+    useInboxCounts(Boolean(userRoom));
   const menuRef = useRef<HTMLDivElement>(null);
   const bellRef = useRef<HTMLDivElement>(null);
 
@@ -118,37 +121,18 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
     return () => document.removeEventListener("mousedown", handle);
   }, [showMenu, showBell]);
 
-  const fetchCounts = useCallback(async () => {
-    try {
-      const { unread } = await notificationsApi.count();
-      setUnreadCount(unread);
-    } catch { /* ignore */ }
-    try {
-      const inbox = await tasksApi.list();
-      setTaskCount(inbox.total);
-    } catch { /* ignore */ }
-  }, []);
-
-  // 通知 + 待辦輪詢
-  useEffect(() => {
-    if (!userRoom) return;
-    fetchCounts();
-    const timer = setInterval(fetchCounts, lowDataMode ? 300_000 : 60_000);
-    return () => clearInterval(timer);
-  }, [fetchCounts, lowDataMode, userRoom]);
-
   useWS(
     userRoom,
     useCallback((msg) => {
       if (msg.type !== "notification.created") return;
       const unread = typeof msg.unread === "number" ? msg.unread : null;
       if (unread !== null) setUnreadCount(unread);
-      else void fetchCounts();
+      else refreshCounts();
       if (msg.notification && typeof msg.notification === "object") {
         setPreviewNtfs((items) => [msg.notification as NotificationItem, ...items].slice(0, 5));
       }
-    }, [fetchCounts]),
-    !lowDataMode,
+    }, [refreshCounts, setUnreadCount]),
+    Boolean(userRoom) && !lowDataMode,
   );
 
   const openBell = async () => {

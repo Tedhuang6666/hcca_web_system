@@ -95,7 +95,13 @@ export function useWS(
       if (mySession !== sessionId.current) return;
       if (e.code === 1000 || e.code === 1001) return;
 
-      // 1013 = 伺服器容量達上限，給較長的 backoff
+      // 4001/4003 = 後端因驗證失敗主動關閉；不重連，直接走 auth error。
+      if (e.code === 4001 || e.code === 4003) {
+        stableAuthError.current?.();
+        return;
+      }
+
+      // 1013 = 伺服器容量達上限，給較長的 backoff 起點
       const isCapacityReject = e.code === 1013;
 
       retries.current++;
@@ -108,15 +114,16 @@ export function useWS(
           stableAuthError.current?.();
           return;
         }
-      } else if (retries.current > 5) {
-        // 超過 5 次仍失敗：放棄（通常是網路問題或長時間無法連線）
+      } else if (retries.current > 6) {
+        // 連續多次仍失敗：放棄（通常是網路問題或長時間無法連線）
         stableAuthError.current?.();
         return;
       }
 
-      const delay = isCapacityReject
-        ? Math.min(30_000, 5_000 * 2 ** (retries.current - 1))
-        : 3_000;
+      // 指數退避 + jitter：避免後端恢復瞬間所有 client 同時重連造成驚群。
+      const baseMs = isCapacityReject ? 5_000 : 1_000;
+      const backoff = Math.min(30_000, baseMs * 2 ** (retries.current - 1));
+      const delay = backoff + Math.random() * 1_000;
       setTimeout(connect, delay);
     };
 
