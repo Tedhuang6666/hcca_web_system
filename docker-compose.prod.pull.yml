@@ -2,6 +2,11 @@
 # Run with:
 #   docker compose --env-file .env.production -f docker-compose.prod.pull.yml pull
 #   docker compose --env-file .env.production -f docker-compose.prod.pull.yml up -d db redis api web proxy
+#
+# 穩定核心：db / redis / api / web / proxy（上面那行）。
+# celery-worker / celery-beat 已歸到 "workers" profile，預設不啟動，
+# 連 `up -d`（不指定服務）也不會把它們拉起來。確定要常駐 Celery 時才加：
+#   docker compose --env-file .env.production -f docker-compose.prod.pull.yml --profile workers up -d
 
 x-api-common: &api-common
   image: ghcr.io/tedhuang6666/hcca_web_system-api:latest
@@ -101,6 +106,7 @@ services:
   celery-worker:
     <<: *api-common
     restart: unless-stopped
+    profiles: ["workers"]
     command: >
       python -m celery -A api.core.celery_app.celery_app worker
       --loglevel=info
@@ -138,11 +144,19 @@ services:
   celery-beat:
     <<: *api-common
     restart: unless-stopped
-    command: >
-      python -m celery -A api.core.celery_app.celery_app beat
-      --loglevel=info
-      --scheduler celery.beat:PersistentScheduler
-      --pidfile=/tmp/celerybeat.pid
+    profiles: ["workers"]
+    # 啟動前清掉殘留 pidfile（celerybeat volume 會保留 /tmp），
+    # 否則上次非正常結束留下的 pid 會讓 beat 卡在 "pidfile already exists" 重啟迴圈。
+    # exec 讓 celery 接手 PID 1，訊號才能正確傳遞。
+    command:
+      - sh
+      - -c
+      - >
+        rm -f /tmp/celerybeat.pid &&
+        exec python -m celery -A api.core.celery_app.celery_app beat
+        --loglevel=info
+        --scheduler celery.beat:PersistentScheduler
+        --pidfile=/tmp/celerybeat.pid
     environment:
       ENVIRONMENT: production
       DEBUG: "false"

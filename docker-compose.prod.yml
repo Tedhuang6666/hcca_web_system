@@ -134,6 +134,7 @@ services:
   celery-worker:
     <<: *api-common
     restart: unless-stopped
+    profiles: ["workers"]
     # 記憶體護欄：容器吃到 mem_limit 就只 OOM-kill 自己（不再拖垮全機）；
     # memswap_limit 設成與 mem_limit 相等 = 禁用 swap，失控時快速失敗而非吃光
     # 5GB swap 把整台機器拖到龜速。可用 CELERY_WORKER_MEM_LIMIT 覆寫。
@@ -180,6 +181,7 @@ services:
   celery-beat:
     <<: *api-common
     restart: unless-stopped
+    profiles: ["workers"]
     # beat 只排程、不執行任務，記憶體很小；給個硬上限防意外洩漏。
     mem_limit: ${CELERY_BEAT_MEM_LIMIT:-256m}
     memswap_limit: ${CELERY_BEAT_MEM_LIMIT:-256m}
@@ -187,11 +189,18 @@ services:
     cpus: ${CELERY_BEAT_CPUS:-0.25}
     labels:
       autoheal: "true"
-    command: >
-      python -m celery -A api.core.celery_app.celery_app beat
-      --loglevel=info
-      --scheduler celery.beat:PersistentScheduler
-      --pidfile=/tmp/celerybeat.pid
+    # 啟動前清掉殘留 pidfile（celerybeat volume 會保留 /tmp），
+    # 否則上次非正常結束留下的 pid 會讓 beat 卡在 "pidfile already exists" 重啟迴圈。
+    # exec 讓 celery 接手 PID 1，訊號才能正確傳遞。
+    command:
+      - sh
+      - -c
+      - >
+        rm -f /tmp/celerybeat.pid &&
+        exec python -m celery -A api.core.celery_app.celery_app beat
+        --loglevel=info
+        --scheduler celery.beat:PersistentScheduler
+        --pidfile=/tmp/celerybeat.pid
     environment:
       ENVIRONMENT: production
       DEBUG: "false"
