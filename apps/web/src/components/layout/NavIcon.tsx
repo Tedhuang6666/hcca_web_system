@@ -29,6 +29,7 @@ import {
   Users,
   Utensils,
   Warehouse,
+  WifiOff,
 } from "lucide-react";
 
 type IconProps = { size: number; "aria-hidden": boolean };
@@ -63,6 +64,7 @@ const Icons: Record<string, React.ComponentType<IconProps>> = {
   systemDefense: Shield,
   settings: Settings,
   bell: Bell,
+  wifiOff: WifiOff,
   shield: Shield,
   info: Info,
 };

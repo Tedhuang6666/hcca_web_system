@@ -44,6 +44,8 @@ import type {
   MFASetupOut, MFAStatusOut,
   PetitionCaseListItem, PetitionCaseOut, PetitionCreate, PetitionCreatedOut,
   PetitionStatsOut, PetitionStatus, PetitionTypeOut,
+  CouncilProposalCreate, CouncilProposalListItem, CouncilProposalOut, CouncilProposalStatus,
+  JudicialPetitionCreate, JudicialPetitionListItem, JudicialPetitionOut, JudicialPetitionStatus,
   NotificationPreferences,
   PasskeyCredentialOut,
   SearchResultOut,
@@ -1851,6 +1853,60 @@ export const petitionsApi = {
     const qs = verificationCode ? `?${new URLSearchParams({ verification_code: verificationCode }).toString()}` : "";
     return `${BASE}/petitions/${id}/attachments/${attachmentId}/download${qs}`;
   },
+};
+
+// ── 議會提案 ───────────────────────────────────────────────────────────────
+
+export const councilProposalsApi = {
+  create: (body: CouncilProposalCreate) => post<CouncilProposalOut>("/council-proposals", body),
+  my: (params?: { status?: CouncilProposalStatus }) => {
+    const qs = params?.status
+      ? `?${new URLSearchParams({ status: params.status }).toString()}`
+      : "";
+    return get<CouncilProposalListItem[]>(`/council-proposals/my${qs}`);
+  },
+  list: (params?: { status?: CouncilProposalStatus }) => {
+    const qs = params?.status
+      ? `?${new URLSearchParams({ status: params.status }).toString()}`
+      : "";
+    return get<CouncilProposalListItem[]>(`/council-proposals${qs}`);
+  },
+  get: (id: string) => get<CouncilProposalOut>(`/council-proposals/${id}`),
+  updateStatus: (
+    id: string,
+    body: {
+      status: CouncilProposalStatus;
+      committee_review_note?: string | null;
+      scheduled_meeting_id?: string | null;
+    },
+  ) => patch<CouncilProposalOut>(`/council-proposals/${id}/status`, body),
+};
+
+// ── 評議委員會訴訟 ───────────────────────────────────────────────────────
+
+export const judicialPetitionsApi = {
+  create: (body: JudicialPetitionCreate) => post<JudicialPetitionOut>("/judicial-petitions", body),
+  my: (params?: { status?: JudicialPetitionStatus }) => {
+    const qs = params?.status
+      ? `?${new URLSearchParams({ status: params.status }).toString()}`
+      : "";
+    return get<JudicialPetitionListItem[]>(`/judicial-petitions/my${qs}`);
+  },
+  list: (params?: { status?: JudicialPetitionStatus }) => {
+    const qs = params?.status
+      ? `?${new URLSearchParams({ status: params.status }).toString()}`
+      : "";
+    return get<JudicialPetitionListItem[]>(`/judicial-petitions${qs}`);
+  },
+  get: (id: string) => get<JudicialPetitionOut>(`/judicial-petitions/${id}`),
+  updateStatus: (
+    id: string,
+    body: {
+      status: JudicialPetitionStatus;
+      docketing_note?: string | null;
+      decision_summary?: string | null;
+    },
+  ) => patch<JudicialPetitionOut>(`/judicial-petitions/${id}/status`, body),
 };
 
 // ── 公文受文者 ─────────────────────────────────────────────────────────────────

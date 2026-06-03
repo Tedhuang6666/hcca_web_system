@@ -29,6 +29,11 @@ from api.models.calendar import (  # noqa: F401
     CalendarParticipantRole,
     CalendarVisibility,
 )
+from api.models.council_proposal import (  # noqa: F401
+    CouncilProposal,
+    CouncilProposalKind,
+    CouncilProposalStatus,
+)
 from api.models.defense import DefenseRule, DefenseRuleType  # noqa: F401
 from api.models.discord_account import (  # noqa: F401
     DEFAULT_DM_CATEGORIES,
@@ -69,6 +74,11 @@ from api.models.exam_paper import ExamGradeTrack, ExamPaper, ExamPaperDownload  
 
 # Feature Flag（Phase D3）
 from api.models.feature_flag import FeatureFlag  # noqa: F401
+from api.models.judicial_petition import (  # noqa: F401
+    JudicialPetition,
+    JudicialPetitionStatus,
+    JudicialPetitionType,
+)
 from api.models.line_account import LineAccountLink  # noqa: F401
 from api.models.meal import (  # noqa: F401
     MealClassPickupCode,

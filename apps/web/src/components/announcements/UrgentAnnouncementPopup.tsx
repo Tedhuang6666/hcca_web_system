@@ -3,18 +3,64 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { announcementsApi } from "@/lib/api";
+import { useLowDataMode } from "@/hooks/useLowDataMode";
 import type { AnnouncementOut } from "@/lib/types";
 import AnnouncementMarkdown from "./AnnouncementMarkdown";
+
+const URGENT_CACHE_KEY = "hcca:urgent-announcement-cache";
+const URGENT_CACHE_TTL_MS = 10 * 60 * 1000;
+
+type UrgentAnnouncementCache = {
+  checkedAt: number;
+  item: AnnouncementOut | null;
+};
+
+function readUrgentCache(): UrgentAnnouncementCache | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(URGENT_CACHE_KEY);
+    if (!raw) return null;
+    const cache = JSON.parse(raw) as UrgentAnnouncementCache;
+    if (!Number.isFinite(cache.checkedAt)) return null;
+    if (Date.now() - cache.checkedAt > URGENT_CACHE_TTL_MS) return null;
+    return cache;
+  } catch {
+    return null;
+  }
+}
+
+function writeUrgentCache(item: AnnouncementOut | null) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(URGENT_CACHE_KEY, JSON.stringify({ checkedAt: Date.now(), item }));
+  } catch {
+    /* storage quota or private mode */
+  }
+}
 
 export default function UrgentAnnouncementPopup() {
   const [item, setItem] = useState<AnnouncementOut | null>(null);
   const [open, setOpen] = useState(false);
+  const lowDataMode = useLowDataMode();
 
   useEffect(() => {
     let mounted = true;
+    const cached = lowDataMode ? readUrgentCache() : null;
+    if (cached) {
+      if (cached.item) {
+        const key = `urgent-announcement:${cached.item.id}:${cached.item.updated_at}`;
+        if (sessionStorage.getItem(key) !== "dismissed") {
+          setItem(cached.item);
+          setOpen(true);
+        }
+      }
+      return () => { mounted = false; };
+    }
     announcementsApi.activeUrgent()
       .then((announcement) => {
-        if (!mounted || !announcement) return;
+        if (!mounted) return;
+        writeUrgentCache(announcement);
+        if (!announcement) return;
         const key = `urgent-announcement:${announcement.id}:${announcement.updated_at}`;
         if (sessionStorage.getItem(key) === "dismissed") return;
         setItem(announcement);
@@ -22,7 +68,7 @@ export default function UrgentAnnouncementPopup() {
       })
       .catch(() => { /* public best-effort popup */ });
     return () => { mounted = false; };
-  }, []);
+  }, [lowDataMode]);
 
   if (!item || !open) return null;
 

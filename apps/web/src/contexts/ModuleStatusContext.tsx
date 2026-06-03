@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { systemApi, type ModuleStatusPublic } from "@/lib/api";
 import type { ModuleId } from "@/lib/modules";
 import { useWS } from "@/hooks/useWS";
+import { useLowDataMode } from "@/hooks/useLowDataMode";
 
 interface ModuleStatusValue {
   statuses: Record<string, ModuleStatusPublic>;
@@ -18,11 +19,13 @@ const ModuleStatusContext = createContext<ModuleStatusValue>({
   refresh: () => {},
 });
 
-const POLL_MS = 30_000;
+const DEFAULT_POLL_MS = 30_000;
+const LOW_DATA_POLL_MS = 300_000;
 
 export function ModuleStatusProvider({ children }: { children: React.ReactNode }) {
   const [statuses, setStatuses] = useState<Record<string, ModuleStatusPublic>>({});
   const [wsRoom, setWsRoom] = useState<string | null>(null);
+  const lowDataMode = useLowDataMode();
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const refresh = useCallback(async () => {
@@ -38,7 +41,8 @@ export function ModuleStatusProvider({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     refresh();
-    timer.current = setInterval(refresh, POLL_MS);
+    if (timer.current) clearInterval(timer.current);
+    timer.current = setInterval(refresh, lowDataMode ? LOW_DATA_POLL_MS : DEFAULT_POLL_MS);
     const onNudge = () => refresh();
     window.addEventListener("hcca:module-maintenance", onNudge);
     // 取使用者 ID 訂閱 WebSocket（已登入時才連）
@@ -50,7 +54,7 @@ export function ModuleStatusProvider({ children }: { children: React.ReactNode }
       if (timer.current) clearInterval(timer.current);
       window.removeEventListener("hcca:module-maintenance", onNudge);
     };
-  }, [refresh]);
+  }, [lowDataMode, refresh]);
 
   // 接收後端 broadcast_all 的 module_maintenance 事件，立即重新整理（不等 30s 輪詢）
   useWS(
@@ -63,7 +67,7 @@ export function ModuleStatusProvider({ children }: { children: React.ReactNode }
       },
       [refresh],
     ),
-    Boolean(wsRoom),
+    Boolean(wsRoom) && !lowDataMode,
   );
 
   const isModuleDown = useCallback(

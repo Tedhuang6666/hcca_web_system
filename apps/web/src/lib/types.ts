@@ -2292,6 +2292,120 @@ export interface PetitionStatsOut {
   by_org: PetitionOrgStatsItem[];
 }
 
+// ── 議會提案 ───────────────────────────────────────────────────────────────
+
+export type CouncilProposalKind = RegulationAmendmentType;
+
+export type CouncilProposalStatus =
+  | "submitted"
+  | "committee_review"
+  | "scheduled"
+  | "council_review"
+  | "passed"
+  | "rejected"
+  | "withdrawn";
+
+export interface CouncilProposalCreate {
+  contact_name?: string | null;
+  contact_email: string;
+  proposer_name: string;
+  co_sponsors?: string | null;
+  kind: CouncilProposalKind;
+  title: string;
+  summary: string;
+  legal_basis?: string | null;
+  proposal_text: string;
+  rationale: string;
+  expected_effect?: string | null;
+}
+
+export interface CouncilProposalListItem {
+  id: string;
+  serial_number: string;
+  submitter_id: string | null;
+  proposer_name: string;
+  kind: CouncilProposalKind;
+  title: string;
+  summary: string;
+  status: CouncilProposalStatus;
+  scheduled_at: string | null;
+  decided_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CouncilProposalOut extends CouncilProposalListItem {
+  contact_name: string | null;
+  contact_email: string;
+  co_sponsors: string | null;
+  legal_basis: string | null;
+  proposal_text: string;
+  rationale: string;
+  expected_effect: string | null;
+  committee_review_note: string | null;
+  scheduled_meeting_id: string | null;
+}
+
+// ── 評議委員會訴訟 ───────────────────────────────────────────────────────
+
+export type JudicialPetitionType =
+  | "constitutional_norm_review"
+  | "org_dispute"
+  | "election_dispute"
+  | "disciplinary_appeal"
+  | "other";
+
+export type JudicialPetitionStatus =
+  | "submitted"
+  | "docketing_review"
+  | "accepted"
+  | "in_review"
+  | "decided"
+  | "dismissed"
+  | "withdrawn";
+
+export interface JudicialPetitionCreate {
+  petitioner_name: string;
+  petitioner_email: string;
+  representative?: string | null;
+  respondent?: string | null;
+  petition_type: JudicialPetitionType;
+  title: string;
+  challenged_norm: string;
+  constitutional_provisions: string;
+  petition_claim: string;
+  facts_and_reasons: string;
+  evidence?: string | null;
+  attachments_description?: string | null;
+}
+
+export interface JudicialPetitionListItem {
+  id: string;
+  docket_number: string;
+  submitter_id: string | null;
+  petitioner_name: string;
+  petition_type: JudicialPetitionType;
+  title: string;
+  status: JudicialPetitionStatus;
+  decided_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface JudicialPetitionOut extends JudicialPetitionListItem {
+  petitioner_email: string;
+  representative: string | null;
+  respondent: string | null;
+  challenged_norm: string;
+  constitutional_provisions: string;
+  petition_claim: string;
+  facts_and_reasons: string;
+  evidence: string | null;
+  attachments_description: string | null;
+  docketing_note: string | null;
+  decision_summary: string | null;
+}
+
 // ── 通知偏好（站內 / Email 多管道）──────────────────────────────────────────
 
 export interface ChannelPref {

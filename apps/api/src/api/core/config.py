@@ -236,6 +236,23 @@ class Settings(BaseSettings):
         "base-uri 'self'"
     )
 
+    # --- WAF（注入特徵偵測）---
+    # 在請求進到 router 前掃描 URL / query / 部分 header 的攻擊特徵
+    # （路徑穿越、SQLi/XSS、${jndi:}、null byte、掃描器探測等）。
+    WAF_ENABLED: bool = True
+    # False = detect-only：只記 log 不攔截（剛上線想觀察誤判時用）。
+    WAF_BLOCK_MODE: bool = True
+    # 中信心規則（SQLi / XSS 字串特徵，較可能誤判使用者輸入）是否一併攔截；
+    # 高信心規則（掃描器探測 / 路徑穿越 / null byte / jndi）永遠攔截。
+    WAF_BLOCK_MEDIUM: bool = True
+    # 短時間內多次命中高信心規則的 IP，自動丟進既有 ip_blocklist。
+    WAF_AUTOBLOCK_ENABLED: bool = True
+    WAF_AUTOBLOCK_THRESHOLD: int = Field(default=8, ge=1)
+    WAF_AUTOBLOCK_WINDOW_SECONDS: int = Field(default=300, ge=10)
+    WAF_AUTOBLOCK_TTL_SECONDS: int = Field(default=3600, ge=60)
+    # 整條 URL（path + query）長度上限，防超長 URL 灌爆 / 規避。
+    WAF_MAX_URL_LENGTH: int = Field(default=8192, ge=256)
+
     # --- LINE Bot 設定 ---
     LINE_CHANNEL_SECRET: str = Field(default="")
     LINE_CHANNEL_ACCESS_TOKEN: str = Field(default="")

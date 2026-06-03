@@ -128,6 +128,9 @@ class PermissionCode(StrEnum):
     MEETING_VIEW_ALL = "meeting:view_all"
     MEETING_EXPORT = "meeting:export"
 
+    COUNCIL_PROPOSAL_MANAGE = "council_proposal:manage"
+    JUDICIAL_PETITION_MANAGE = "judicial_petition:manage"
+
     CALENDAR_CREATE = "calendar:create"
     CALENDAR_MANAGE = "calendar:manage"
     CALENDAR_VIEW_ALL = "calendar:view_all"
@@ -772,6 +775,18 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "code": PermissionCode.MEETING_EXPORT,
         "label": "匯出會議紀錄",
         "desc": "查看會後紀錄、匯出或轉成公文草稿",
+    },
+    {
+        "group": "議事系統",
+        "code": PermissionCode.COUNCIL_PROPOSAL_MANAGE,
+        "label": "管理議會提案",
+        "desc": "審查議會提案、記錄常委審查與排入議程狀態",
+    },
+    {
+        "group": "評議委員會",
+        "code": PermissionCode.JUDICIAL_PETITION_MANAGE,
+        "label": "管理評議聲請",
+        "desc": "收案、審查與更新評議委員會訴訟或法規範審查聲請",
     },
     {
         "group": "行事曆",

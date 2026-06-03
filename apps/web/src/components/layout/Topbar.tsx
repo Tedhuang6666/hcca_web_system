@@ -3,13 +3,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, Search } from "lucide-react";
+import { ArrowLeft, Search, WifiOff } from "lucide-react";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { notificationsApi, tasksApi } from "@/lib/api";
 import type { NotificationItem, TaskItem } from "@/lib/api";
 import { apiUrl } from "@/lib/config";
 import { useWS } from "@/hooks/useWS";
+import { useLowDataMode } from "@/hooks/useLowDataMode";
 import { getBreadcrumbs, getCompactCrumbs, getPageTitle } from "@/lib/breadcrumb";
 import type { Crumb } from "@/lib/breadcrumb";
 
@@ -84,6 +85,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
   const [previewTasks, setPreviewTasks] = useState<TaskItem[]>([]);
   const [taskCount, setTaskCount] = useState(0);
   const [userRoom, setUserRoom] = useState<string | null>(null);
+  const lowDataMode = useLowDataMode();
   const menuRef = useRef<HTMLDivElement>(null);
   const bellRef = useRef<HTMLDivElement>(null);
 
@@ -131,19 +133,23 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
   useEffect(() => {
     if (!userRoom) return;
     fetchCounts();
-    const timer = setInterval(fetchCounts, 60_000);
+    const timer = setInterval(fetchCounts, lowDataMode ? 300_000 : 60_000);
     return () => clearInterval(timer);
-  }, [fetchCounts, userRoom]);
+  }, [fetchCounts, lowDataMode, userRoom]);
 
-  useWS(userRoom, useCallback((msg) => {
-    if (msg.type !== "notification.created") return;
-    const unread = typeof msg.unread === "number" ? msg.unread : null;
-    if (unread !== null) setUnreadCount(unread);
-    else void fetchCounts();
-    if (msg.notification && typeof msg.notification === "object") {
-      setPreviewNtfs((items) => [msg.notification as NotificationItem, ...items].slice(0, 5));
-    }
-  }, [fetchCounts]));
+  useWS(
+    userRoom,
+    useCallback((msg) => {
+      if (msg.type !== "notification.created") return;
+      const unread = typeof msg.unread === "number" ? msg.unread : null;
+      if (unread !== null) setUnreadCount(unread);
+      else void fetchCounts();
+      if (msg.notification && typeof msg.notification === "object") {
+        setPreviewNtfs((items) => [msg.notification as NotificationItem, ...items].slice(0, 5));
+      }
+    }, [fetchCounts]),
+    !lowDataMode,
+  );
 
   const openBell = async () => {
     setShowBell(v => !v);
@@ -539,6 +545,17 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
                       <path d="M13.73 21a2 2 0 0 1-3.46 0" />
                     </svg>
                     通知偏好
+                  </Link>
+                  <Link
+                    href="/settings/data-saver"
+                    role="menuitem"
+                    onClick={() => setShowMenu(false)}
+                    className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-2.5 transition-colors cursor-pointer"
+                    style={{ color: "var(--text-secondary)", textDecoration: "none", display: "flex" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+                    <WifiOff size={14} aria-hidden={true} />
+                    省流模式
                   </Link>
                   <Link
                     href="/settings/security"

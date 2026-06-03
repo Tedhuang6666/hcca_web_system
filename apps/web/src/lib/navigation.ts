@@ -31,6 +31,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "documents", href: "/documents", iconKey: "documents", label: "公文系統" },
   { id: "calendar", href: "/calendar", iconKey: "calendar", label: "行事曆" },
   { id: "meetings", href: "/meetings", iconKey: "meetings", label: "議事系統" },
+  { id: "councilProposals", href: "/council-proposals", iconKey: "meetings", label: "議會提案" },
   { id: "regulations", href: "/regulations", iconKey: "regulations", label: "法規查詢" },
   { id: "meal", href: "/meal", iconKey: "meal", label: "學餐訂購" },
   { id: "shop", href: "/shop", iconKey: "shop", label: "校商訂購" },
@@ -44,6 +45,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "partnerMap", href: "/partner-map", iconKey: "partnerMap", label: "特約地圖" },
   { id: "surveys", href: "/surveys", iconKey: "survey", label: "問卷專區" },
   { id: "petitions", href: "/petitions", iconKey: "petition", label: "陳情中心" },
+  { id: "judicialPetitions", href: "/judicial-petitions", iconKey: "shield", label: "評議訴訟" },
   { id: "examPapers", href: "/exam-papers", iconKey: "examPapers", label: "段考題庫" },
   { id: "about", href: "/about", iconKey: "info", label: "關於本系統" },
   { id: "analytics", href: "/analytics", iconKey: "analytics", label: "績效統計", perm: "analytics:view" },
@@ -150,6 +152,12 @@ export const NAV_ITEMS: NavItem[] = [
     label: "通知設定",
   },
   {
+    id: "settingsDataSaver",
+    href: "/settings/data-saver",
+    iconKey: "wifiOff",
+    label: "省流模式",
+  },
+  {
     id: "settingsPrivacy",
     href: "/settings/privacy",
     iconKey: "shield",
@@ -178,7 +186,7 @@ export const NAV_DEF: NavEntry[] = [
   {
     id: "governance",
     heading: "自治核心",
-    items: byIds(["documents", "calendar", "meetings", "regulations"]),
+    items: byIds(["documents", "calendar", "meetings", "councilProposals", "regulations", "judicialPetitions"]),
   },
   {
     id: "campusServices",
@@ -231,7 +239,14 @@ export const NAV_DEF: NavEntry[] = [
     heading: "設定",
     collapsible: true,
     defaultCollapsed: true,
-    items: byIds(["settingsNavigation", "settingsNotifications", "settingsPrivacy", "settingsSecurity", "about"]),
+    items: byIds([
+      "settingsNavigation",
+      "settingsNotifications",
+      "settingsDataSaver",
+      "settingsPrivacy",
+      "settingsSecurity",
+      "about",
+    ]),
   },
 ];
 
@@ -245,6 +260,8 @@ export const NAV_DEF_LOGGED_OUT: NavEntry[] = [
       { id: "publicAnnouncements", href: "/announcements", iconKey: "announcement", label: "校內公告" },
       { id: "publicPartnerMap", href: "/partner-map", iconKey: "partnerMap", label: "特約地圖" },
       { id: "publicPetition", href: "/petitions/new", iconKey: "petition", label: "我要陳情" },
+      { id: "publicCouncilProposal", href: "/council-proposals", iconKey: "meetings", label: "議會提案" },
+      { id: "publicJudicialPetition", href: "/judicial-petitions", iconKey: "shield", label: "評議訴訟" },
       { id: "publicAbout", href: "/about", iconKey: "info", label: "關於本系統" },
     ],
   },
@@ -255,8 +272,10 @@ export const DEFAULT_MOBILE_ORDER = [
   "dashboard",
   "tasks",
   "calendar",
+  "councilProposals",
   "documents",
   "regulations",
+  "judicialPetitions",
   "examPapers",
   "meal",
   "shop",
@@ -266,6 +285,7 @@ export const DEFAULT_MOBILE_ORDER = [
   "partnerMap",
   "petitions",
   "settingsNavigation",
+  "settingsDataSaver",
   "settingsPrivacy",
 ];
 

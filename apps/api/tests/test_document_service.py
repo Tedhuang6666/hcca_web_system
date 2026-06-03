@@ -30,6 +30,7 @@ from api.services.document import (
     _get_current_approval,
     approve_step,
     build_document_list_items,
+    build_org_serial_prefix,
     can_anonymous_access_document,
     check_document_access,
     create_document,
@@ -231,7 +232,7 @@ async def test_create_president_publish_template_clears_president_default_global
     sibling_in_other_org = SimpleNamespace(is_default_president_publish=True)
 
     org_result = MagicMock()
-    org_result.first.return_value = ("嶺班", "主席團")
+    org_result.all.return_value = [SimpleNamespace(prefix="嶺班", name="主席團", depth=0)]
     sibling_result = _mock_scalars_result([sibling_in_other_org])
     session.execute = AsyncMock(side_effect=[org_result, sibling_result])
 
@@ -248,6 +249,23 @@ async def test_create_president_publish_template_clears_president_default_global
 
     assert template.is_default_president_publish is True
     assert sibling_in_other_org.is_default_president_publish is False
+
+
+@pytest.mark.asyncio
+async def test_build_org_serial_prefix_combines_ancestor_prefixes() -> None:
+    """字號前綴應由上層到本層逐層組合。"""
+    session = _make_session()
+    result = MagicMock()
+    result.all.return_value = [
+        SimpleNamespace(prefix="嶺", name="嶺東高中", depth=2),
+        SimpleNamespace(prefix="班", name="學生會", depth=1),
+        SimpleNamespace(prefix="活", name="活動部", depth=0),
+    ]
+    session.execute = AsyncMock(return_value=result)
+
+    prefix = await build_org_serial_prefix(session, uuid.uuid4())
+
+    assert prefix == "嶺班活"
 
 
 @pytest.mark.asyncio

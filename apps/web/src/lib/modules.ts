@@ -28,8 +28,8 @@ export const FE_MODULES: Record<ModuleId, FeModuleSpec> = {
   regulations: { label: "法規系統", routePrefixes: ["/regulations"], navIds: ["regulations"] },
   meetings: {
     label: "議事系統",
-    routePrefixes: ["/meetings", "/calendar"],
-    navIds: ["meetings", "calendar"],
+    routePrefixes: ["/meetings", "/calendar", "/council-proposals", "/judicial-petitions"],
+    navIds: ["meetings", "calendar", "councilProposals", "judicialPetitions"],
   },
   announcements: {
     label: "校內公告",

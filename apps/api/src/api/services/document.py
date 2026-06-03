@@ -6,7 +6,7 @@ import logging
 import uuid
 from datetime import UTC, date, datetime, time
 
-from sqlalchemy import and_, exists, func, or_, select
+from sqlalchemy import and_, exists, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -27,7 +27,6 @@ from api.models.document import (
     RecipientType,
     YearMode,
 )
-from api.models.org import Org
 from api.models.user import User
 from api.schemas.document import (
     DocumentApprovalDelegationCreate,
@@ -116,6 +115,45 @@ async def generate_serial_from_template(
     )
 
 
+async def build_org_serial_prefix(session: AsyncSession, org_id: uuid.UUID) -> str:
+    """
+    由目標組織往上收集每層 Org.prefix，組成字號模板前綴。
+
+    例：嶺東高中(prefix=嶺) → 學生會(prefix=班) → 活動部(prefix=活)
+    會組成「嶺班活」。
+    """
+    result = await session.execute(
+        text("""
+        WITH RECURSIVE org_path AS (
+            SELECT id, parent_id, prefix, name, 0 AS depth
+            FROM orgs
+            WHERE id = :org_id
+            UNION ALL
+            SELECT o.id, o.parent_id, o.prefix, o.name, org_path.depth + 1
+            FROM orgs o
+            JOIN org_path ON o.id = org_path.parent_id
+        )
+        SELECT prefix, name, depth
+        FROM org_path
+        ORDER BY depth DESC
+        """),
+        {"org_id": str(org_id)},
+    )
+    rows = result.all()
+    if not rows:
+        raise ValueError("指定的組織不存在")
+
+    parts = [str(row.prefix).strip() for row in rows if row.prefix and str(row.prefix).strip()]
+    if not parts:
+        org_name = next((row.name for row in rows if row.depth == 0), rows[-1].name)
+        raise ValueError(f"組織「{org_name}」及其上層組織尚未設定任何字號前綴")
+
+    prefix = "".join(parts)
+    if len(prefix) > 20:
+        raise ValueError("組織階層字號前綴合併後超過 20 字，請縮短各層前綴")
+    return prefix
+
+
 # ── 字號模板 CRUD ──────────────────────────────────────────────────────────────
 
 
@@ -127,17 +165,10 @@ async def create_serial_template(
 ) -> DocumentSerialTemplate:
     """
     建立字號模板（需有 serial:create 權限）。
-    org_prefix 自動從組織的 Org.prefix 欄位取得。
+    org_prefix 自動由目標組織與其上層組織的 Org.prefix 逐層組合。
     重複的 org_id + org_prefix + category_char 組合會觸發 UniqueConstraint 錯誤。
     """
-    # 取得組織 prefix（只查詢必要欄位）
-    org_result = await session.execute(select(Org.prefix, Org.name).where(Org.id == data.org_id))
-    org_row = org_result.first()
-    if org_row is None:
-        raise ValueError("指定的組織不存在")
-    prefix, org_name = org_row
-    if not prefix:
-        raise ValueError(f"組織「{org_name}」尚未設定字號前綴（Org.prefix），請先由管理員設定")
+    prefix = await build_org_serial_prefix(session, data.org_id)
 
     now = datetime.now(UTC)
     current_year = now.year - 1911 if data.year_mode == YearMode.ROC else now.year

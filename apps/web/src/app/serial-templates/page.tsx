@@ -44,7 +44,9 @@ export default function SerialTemplatesPage() {
 
   // 可用的組織列表（擁有 serial:create 權限）
   const [orgs, setOrgs] = useState<OrgRead[]>([]);
-  // 當前選取組織的 prefix（可能被 org:manage 使用者修改）
+  // 完整組織列表，用於依 parent_id 組合字號前綴預覽
+  const [allOrgs, setAllOrgs] = useState<OrgRead[]>([]);
+  // 當前選取組織的本層 prefix（可能被 org:manage 使用者修改）
   const [orgPrefixInput, setOrgPrefixInput] = useState<string>("");
 
   const selectedOrg = orgs.find(o => o.id === form.org_id) ?? null;
@@ -70,6 +72,9 @@ export default function SerialTemplatesPage() {
   useEffect(() => {
     orgsApi.mySerialTemplateOrgs()
       .then(setOrgs)
+      .catch(() => {});
+    orgsApi.list({ active_only: true })
+      .then(setAllOrgs)
       .catch(() => {});
   }, []);
 
@@ -120,9 +125,27 @@ export default function SerialTemplatesPage() {
     }
   };
 
-  // 預覽字號格式（使用已輸入的前綴或佔位符）
+  const getHierarchicalPrefix = (orgId: string) => {
+    const orgMap = new Map<string, OrgRead>();
+    [...allOrgs, ...orgs].forEach((org) => orgMap.set(org.id, org));
+    const selected = orgMap.get(orgId);
+    if (selected) orgMap.set(orgId, { ...selected, prefix: orgPrefixInput || null });
+
+    const parts: string[] = [];
+    const seen = new Set<string>();
+    let current = orgMap.get(orgId) ?? null;
+    while (current && !seen.has(current.id)) {
+      seen.add(current.id);
+      const part = current.prefix?.trim();
+      if (part) parts.unshift(part);
+      current = current.parent_id ? (orgMap.get(current.parent_id) ?? null) : null;
+    }
+    return parts.join("");
+  };
+
+  // 預覽字號格式（依組織樹由上到下組合本層前綴）
   const preview = (() => {
-    const pfx = orgPrefixInput || (selectedOrg ? "○○" : "○○");
+    const pfx = form.org_id ? getHierarchicalPrefix(form.org_id) || "○○" : "○○";
     const cat = form.category_char || "?";
     const year = form.year_mode === "roc"
       ? `${new Date().getFullYear() - 1911}`
@@ -137,7 +160,7 @@ export default function SerialTemplatesPage() {
         <div>
           <h1 className="text-xl font-semibold ">字號模板管理</h1>
           <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>
-            管理公文字號格式，例如：嶺代生字第 1150000001 號
+            管理公文字號格式，例如：嶺班活字第 1150000001 號
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -180,17 +203,17 @@ export default function SerialTemplatesPage() {
               )}
             </div>
 
-            {/* Step 2：組織前綴（自動帶入，org:manage 可編輯） */}
+            {/* Step 2：本層組織前綴（自動帶入，org:manage 可編輯） */}
             {form.org_id && (
               <div>
                 <label className="text-xs mb-1 block" style={{ color: "var(--text-muted)" }}>
-                  組織前綴{canManageOrg ? "（可修改）" : "（唯讀）"}
+                  本層字號前綴{canManageOrg ? "（可修改）" : "（唯讀）"}
                 </label>
                 <input
                   value={orgPrefixInput}
                   onChange={e => canManageOrg && setOrgPrefixInput(e.target.value)}
                   readOnly={!canManageOrg}
-                  placeholder={canManageOrg ? "例：嶺代" : "（尚未設定）"}
+                  placeholder={canManageOrg ? "例：活" : "（尚未設定）"}
                   maxLength={10}
                   className="w-full bg-transparent text-sm px-3 py-2 rounded-lg outline-none"
                   style={{
@@ -200,8 +223,8 @@ export default function SerialTemplatesPage() {
                   }} />
                 <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>
                   {canManageOrg
-                    ? "修改後將同步更新組織設定"
-                    : "前綴由組織管理員設定，請聯繫管理員修改"}
+                    ? "只設定這一層，系統會自動接上上層前綴"
+                    : "本層前綴由組織管理員設定，系統會自動接上上層前綴"}
                 </p>
               </div>
             )}

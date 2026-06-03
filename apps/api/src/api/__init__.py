@@ -47,6 +47,7 @@ from api.core.security_headers import SecurityHeadersMiddleware
 from api.core.sentry import init_sentry
 from api.core.structured_logging import configure_logging
 from api.core.trusted_proxy import TrustedProxyMiddleware
+from api.core.waf import WAFMiddleware
 from api.routers import (
     activities,
     admin,
@@ -57,6 +58,7 @@ from api.routers import (
     audit,
     auth,
     calendar,
+    council_proposals,
     dashboard,
     data_lifecycle,
     discord,
@@ -67,6 +69,7 @@ from api.routers import (
     exam_papers,
     feature_flags,
     impersonation,
+    judicial_petitions,
     line_webhook,
     meal,
     meetings,
@@ -267,6 +270,10 @@ def create_app() -> FastAPI:
     # Load shed（admin 優先 + IP 黑名單 + maintenance mode）：在 host 檢查之後、
     # rate_limit / CSRF 之前。如此被擋下的請求不會浪費 CSRF 驗證資源。
     app.add_middleware(LoadShedMiddleware)
+    # WAF：特徵式注入/掃描偵測。執行序在 RequestID / TrustedProxy 之後
+    # （看得到真實使用者 IP，才能正確記 log 與自動封鎖累犯），
+    # 並在 rate_limit / CSRF / router 之前就把明顯惡意請求擋掉。
+    app.add_middleware(WAFMiddleware)
     app.add_middleware(RequestIDMiddleware)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.ALLOWED_HOSTS)
     # 信任代理必須在最外層，這樣後續 middleware（rate limit / audit / CSRF）
@@ -328,6 +335,8 @@ def create_app() -> FastAPI:
     app.include_router(people.router)
     app.include_router(passkeys.router)
     app.include_router(partner_map.router)
+    app.include_router(council_proposals.router)
+    app.include_router(judicial_petitions.router)
     app.include_router(petitions.router)
     app.include_router(positions.router)
     app.include_router(user_positions.router)

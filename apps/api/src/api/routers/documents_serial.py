@@ -331,6 +331,12 @@ async def create_serial_template(
             status_code=status.HTTP_409_CONFLICT,
             detail="相同的字號前綴組合（org_prefix + category_char）已存在於此組織",
         ) from exc
+    except ValueError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
 
 
 @serial_router.get(

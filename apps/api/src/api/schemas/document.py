@@ -35,7 +35,7 @@ from api.models.document import (
 
 class SerialTemplateCreate(BaseModel):
     """建立字號模板（需 serial:create 權限）。
-    org_prefix 由系統從 Org.prefix 自動取得，使用者只需填入分類字元（細別）。
+    org_prefix 由系統沿組織樹逐層組合 Org.prefix，使用者只需填入分類字元（細別）。
     """
 
     org_id: uuid.UUID = Field(..., description="所屬組織 ID")
