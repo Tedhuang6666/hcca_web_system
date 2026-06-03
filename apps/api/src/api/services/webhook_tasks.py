@@ -24,6 +24,7 @@ import logging
 import httpx
 
 from api.core.celery_app import celery_app
+from api.core.ssrf import UnsafeURLError, assert_safe_url
 from api.services import webhook as webhook_svc
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,21 @@ async def _deliver_one_async(delivery_id: str) -> dict:
         sub = await db.get(WebhookSubscription, delivery.subscription_id)
         if sub is None or not sub.is_active:
             return {"status": "skipped", "reason": "subscription gone or inactive"}
+
+        # 投遞當下重新驗證目標 URL（防 DNS rebinding / 建立後 DNS 被改指內網）。
+        try:
+            await assert_safe_url(sub.url)
+        except UnsafeURLError as exc:
+            await webhook_svc.mark_failed_and_schedule_retry(
+                db,
+                delivery.id,
+                response_status=None,
+                response_snippet=None,
+                error_message=f"SSRF guard 拒絕目標 URL：{exc}",
+                max_retries=0,  # 直接標 DEAD，不重試（重試也只會再被擋）
+            )
+            await db.commit()
+            return {"status": "blocked", "delivery_id": str(delivery.id), "error": str(exc)}
 
         body_bytes = webhook_svc.serialize_payload(delivery.payload)
         signature = webhook_svc.sign_payload(sub.secret, body_bytes)

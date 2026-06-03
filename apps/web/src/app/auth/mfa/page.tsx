@@ -6,16 +6,12 @@ import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { ApiError, authApi, mfaApi } from "@/lib/api";
 import { cacheCurrentUser } from "@/lib/auth-cache";
-
-function safeNext(value: string | null) {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) return "/";
-  return value;
-}
+import { safeNextPath } from "@/lib/safe-redirect";
 
 export default function MFALoginPage() {
   const searchParams = useSearchParams();
   const challenge = searchParams.get("challenge") ?? "";
-  const next = safeNext(searchParams.get("next"));
+  const next = safeNextPath(searchParams.get("next"));
   const [code, setCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
 

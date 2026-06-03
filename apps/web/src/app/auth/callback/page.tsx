@@ -4,13 +4,14 @@ import { useSearchParams } from "next/navigation";
 
 import { cacheCurrentUser } from "@/lib/auth-cache";
 import { apiUrl } from "@/lib/config";
+import { safeNextPath } from "@/lib/safe-redirect";
 
 export default function AuthCallbackPage() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
     const error = searchParams.get("error");
-    const next = searchParams.get("next") || "/";
+    const next = safeNextPath(searchParams.get("next"));
 
     async function fetchMeFromCookie(): Promise<boolean> {
       try {

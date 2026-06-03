@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 
 import { BRAND_TITLE, BRANDING } from "@/lib/branding";
 import { SOCIAL_IMAGE, SOCIAL_SITE_NAME } from "@/lib/social-metadata";
@@ -68,9 +69,12 @@ export function pageMetadata({
   };
 }
 
-export function JsonLd({ data }: { data: Record<string, unknown> }) {
+export async function JsonLd({ data }: { data: Record<string, unknown> }) {
+  // 帶上 middleware 的當次 nonce，這樣 enforce CSP 時這段 ld+json 不會被擋。
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <script
+      nonce={nonce}
       type="application/ld+json"
       dangerouslySetInnerHTML={{ __html: JSON.stringify(data).replace(/</g, "\\u003c") }}
     />

@@ -21,6 +21,7 @@ from api.core.database import get_db
 from api.core.oauth import google
 from api.core.permission_codes import PermissionCode
 from api.core.posthog import get_posthog_client
+from api.core.redirects import safe_next_path
 from api.core.security import (
     add_to_blacklist,
     create_access_token,
@@ -102,9 +103,7 @@ def _frontend_origin_for(request: Request, *, use_saved: bool = True) -> str:
 
 
 def _safe_next_path(value: str | None) -> str:
-    if not value or not value.startswith("/") or value.startswith("//"):
-        return "/"
-    return value
+    return safe_next_path(value, default="/")
 
 
 def _email_can_login(email: str, existing_user: User | None = None) -> bool:

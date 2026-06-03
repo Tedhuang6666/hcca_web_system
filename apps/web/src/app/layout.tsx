@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import { Suspense } from "react";
 import "./globals.css";
 import { Toaster } from "sonner";
@@ -41,7 +42,7 @@ export const viewport: Viewport = {
   themeColor: BRANDING.themeColor,
 };
 
-function ThemeScript() {
+function ThemeScript({ nonce }: { nonce?: string }) {
   const script = `
     (function(){
       try {
@@ -53,14 +54,16 @@ function ThemeScript() {
       } catch(e) {}
     })();
   `;
-  return <script dangerouslySetInnerHTML={{ __html: script }} />;
+  return <script nonce={nonce} dangerouslySetInnerHTML={{ __html: script }} />;
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // middleware 注入的當次 nonce；enforce CSP 時 inline script 需帶它才能執行
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html lang="zh-TW" suppressHydrationWarning data-scroll-behavior="smooth">
       <head>
-        <ThemeScript />
+        <ThemeScript nonce={nonce} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link

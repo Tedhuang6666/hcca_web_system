@@ -103,6 +103,49 @@ _ALLOWED_TYPES: frozenset[str] = frozenset(
 
 MAX_FILE_SIZE = 20 * 1024 * 1024  # 20 MB
 
+# ZIP-based（OOXML）與舊版 OLE 文件：magic 只能判斷容器格式，細分型別信任宣告值
+# （但仍受 _ALLOWED_TYPES 白名單約束）。
+_OOXML_TYPES: frozenset[str] = frozenset(
+    {
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }
+)
+_OLE_TYPES: frozenset[str] = frozenset(
+    {
+        "application/msword",
+        "application/vnd.ms-excel",
+    }
+)
+
+
+def detect_content_type(content: bytes, declared: str) -> str:
+    """以 magic byte 驗證檔案真實型別，回傳權威 content_type。
+
+    不信任前端宣告的 Content-Type（可偽造）：一個內含 HTML/腳本但宣稱 image/png
+    的檔案，magic 不符即在此被擋下。型別不被支援時拋 ValueError。
+    """
+    head = content[:16]
+    if head.startswith(b"%PDF"):
+        return "application/pdf"
+    if head.startswith(b"\x89PNG"):
+        return "image/png"
+    if head.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if head.startswith((b"GIF87a", b"GIF89a")):
+        return "image/gif"
+    if head[:4] == b"RIFF" and content[8:12] == b"WEBP":
+        return "image/webp"
+    if head.startswith((b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")):
+        if declared in _OOXML_TYPES:
+            return declared
+        raise ValueError("ZIP 檔僅接受 Office 文件（docx/xlsx）型別")
+    if head.startswith(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"):
+        if declared in _OLE_TYPES:
+            return declared
+        raise ValueError("OLE 檔僅接受 Office 文件（doc/xls）型別")
+    raise ValueError("檔案內容與允許的型別不符（magic-byte 驗證失敗）")
+
 
 def _sanitize_filename(filename: str) -> str:
     """移除文件名中 Windows 不允許的字符"""
@@ -142,6 +185,11 @@ class LocalStorageBackend(StorageBackend):
         # 偵測 MIME type
         guessed_type, _ = mimetypes.guess_type(file.filename or "")
         content_type = file.content_type or guessed_type or "application/octet-stream"
+        if content_type not in _ALLOWED_TYPES:
+            msg = f"不支援的檔案類型：{content_type}"
+            raise ValueError(msg)
+        # magic-byte 驗證：以實際內容覆寫前端宣告的型別，擋下偽裝副檔名 / Content-Type
+        content_type = detect_content_type(content, content_type)
         if content_type not in _ALLOWED_TYPES:
             msg = f"不支援的檔案類型：{content_type}"
             raise ValueError(msg)
@@ -213,11 +261,20 @@ class S3StorageBackend(StorageBackend):
             msg = "檔案超過最大限制"
             raise ValueError(msg)
 
+        guessed_type, _ = mimetypes.guess_type(file.filename or "")
+        declared = file.content_type or guessed_type or "application/octet-stream"
+        if declared not in _ALLOWED_TYPES:
+            msg = f"不支援的檔案類型：{declared}"
+            raise ValueError(msg)
+        content_type = detect_content_type(content, declared)
+        if content_type not in _ALLOWED_TYPES:
+            msg = f"不支援的檔案類型：{content_type}"
+            raise ValueError(msg)
+
         original_filename = file.filename or "file"
         sanitized = _sanitize_filename(original_filename)
         ext = Path(sanitized).suffix or ""
         key = f"{prefix}/{uuid.uuid4().hex}{ext}".lstrip("/")
-        content_type = file.content_type or "application/octet-stream"
 
         self._client.put_object(
             Bucket=self._bucket,

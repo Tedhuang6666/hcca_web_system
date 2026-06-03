@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import date
 from typing import Any
@@ -58,6 +59,32 @@ DEFAULT_SETTINGS = {
 }
 
 
+# custom_css 會被原樣注入公開首頁的 <style>，必須清洗以防 stored XSS / CSS 注入。
+# 這不是完整 CSS parser，而是針對已知的破出 / 外洩向量做白名單外的中和：
+#   - 標籤破出：</style>、<script>、<!-- -->（避免從 <style> 逃逸成 HTML/JS）
+#   - 外部載入 / 腳本執行：@import、expression()、javascript:/vbscript:、behavior、-moz-binding
+#   - url() 內的腳本協定
+# 子選擇器 > 等合法 CSS 不受影響（我們只中和特定危險 token，不一律刪 < >）。
+_CSS_DANGER_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"<\s*/?\s*(?:style|script|iframe|svg|img|object|embed|link|meta)\b[^>]*>?", re.I),
+    re.compile(r"<!--|-->"),
+    re.compile(r"@import\b[^;]*;?", re.I),
+    re.compile(r"expression\s*\(", re.I),
+    re.compile(r"(?:javascript|vbscript|behavior|-moz-binding)\s*:", re.I),
+    re.compile(r"url\(\s*['\"]?\s*(?:javascript|vbscript|data\s*:\s*text/html)[^)]*\)", re.I),
+)
+
+
+def sanitize_css(raw: str | None) -> str | None:
+    """中和 custom_css 中可導致 XSS / CSS 注入外洩的片段。"""
+    if not raw:
+        return raw
+    cleaned = raw
+    for pattern in _CSS_DANGER_PATTERNS:
+        cleaned = pattern.sub("", cleaned)
+    return cleaned
+
+
 async def get_settings(db: AsyncSession) -> PublicSiteSettings:
     result = await db.execute(select(PublicSiteSettings).order_by(PublicSiteSettings.created_at))
     settings = result.scalars().first()
@@ -72,6 +99,8 @@ async def get_settings(db: AsyncSession) -> PublicSiteSettings:
 async def update_settings(db: AsyncSession, data: PublicSiteSettingsUpdate) -> PublicSiteSettings:
     settings = await get_settings(db)
     for key, value in data.model_dump(exclude_unset=True).items():
+        if key == "custom_css":
+            value = sanitize_css(value)
         setattr(settings, key, value)
     await db.flush()
     return settings
