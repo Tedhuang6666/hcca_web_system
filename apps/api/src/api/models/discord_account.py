@@ -7,12 +7,13 @@ from datetime import UTC, datetime, time
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Time, UniqueConstraint, text
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Time, UniqueConstraint
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
 from api.models.base import TimestampMixin
+from api.models.types import JSONDict
 
 DEFAULT_DM_CATEGORIES: dict[str, bool] = {
     "document_pending": True,
@@ -177,7 +178,7 @@ class DiscordNotificationPreference(Base, TimestampMixin):
     )
     # 以 JSONB 存 {category: bool}，未列出視為 True（預設訂閱）
     preferences: Mapped[dict] = mapped_column(
-        JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
+        JSONDict, nullable=False, default=dict, server_default="{}"
     )
     # 「免打擾」時段（台北時區）。落在此區間的 DM 會被靜默捨棄並計入 metrics
     quiet_hours_start: Mapped[time | None] = mapped_column(Time, nullable=True)

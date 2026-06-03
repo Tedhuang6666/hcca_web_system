@@ -304,7 +304,7 @@
   --warning:        #c9a84c;
   --warning-dim:    #faf4e4;
   --warning-border: #e8d49c;
-  --danger:         #c7524a;
+  --danger:         #b83a30; /* WCAG AA：作為文字色於 --bg-base 上達 5.4:1，白字於按鈕上 5.7:1 */
   --danger-dim:     #fef2f2;
   --danger-border:  #f5b8b4;
   --info:           #4a72b8;
