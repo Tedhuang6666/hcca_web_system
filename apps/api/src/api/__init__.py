@@ -69,6 +69,7 @@ from api.routers import (
     email,
     exam_papers,
     feature_flags,
+    governance,
     impersonation,
     judicial_petitions,
     line_webhook,
@@ -406,6 +407,7 @@ def create_app() -> FastAPI:
     app.include_router(dashboard.router)
     app.include_router(tasks.router)
     app.include_router(work_items.router)
+    app.include_router(governance.router)
     app.include_router(line_webhook.router)
     app.include_router(ws.router)
     # Phase B1 / D2 新增

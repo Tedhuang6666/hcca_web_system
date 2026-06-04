@@ -247,6 +247,7 @@ services:
         exec python -m celery -A api.core.celery_app.celery_app beat
         --loglevel=info
         --scheduler celery.beat:PersistentScheduler
+        --schedule=/tmp/celerybeat-schedule
         --pidfile=/tmp/celerybeat.pid
     environment:
       ENVIRONMENT: production

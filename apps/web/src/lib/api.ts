@@ -83,6 +83,14 @@ import type {
   DocumentApprovalContextOut, MeetingBriefingCardOut, PetitionResolutionContextOut,
   RegulationUsageContextOut,
   WorkItemCreate, WorkItemOut, WorkItemUpdate,
+  AutomationRuleCreate, AutomationRuleOut, DecisionCreate, DecisionOut, DecisionUpdate,
+  EntityRelationCreate, EntityRelationOut, GovernanceCaseCreate, GovernanceCaseOut,
+  GovernanceCaseUpdate, GovernanceDashboardOut, GovernanceWorkflowTemplateCreate,
+  GovernanceWorkflowTemplateOut, MatterCreate, MatterListItem, MatterOut, MatterRoleAssignmentCreate,
+  MatterRoleAssignmentOut, MatterRoleAssignmentUpdate, MatterUpdate, PlanningDocumentCreate,
+  PlanningDocumentOut, PlanningDocumentRevisionCreate, PlanningDocumentRevisionOut,
+  PlanningDocumentUpdate, ProgramCreate, ProgramOut, ProgramUpdate, TimelineEventCreate,
+  TimelineEventOut,
   PendingConsentItem, PolicyConsentOut,
   PublicLinkCategoryCreate, PublicLinkCategoryOut, PublicLinkCategoryUpdate,
   PublicLinkCreate, PublicLinkOut, PublicLinkUpdate,
@@ -1401,6 +1409,72 @@ export const workflowsApi = {
     get<WorkflowTimelineOut>(`/workflows/instances/${id}/timeline`),
   createLink: (id: string, body: WorkflowLinkCreate) =>
     post<WorkflowLinkOut>(`/workflows/instances/${id}/links`, body),
+};
+
+export const governanceApi = {
+  dashboard: () => get<GovernanceDashboardOut>("/governance/dashboard"),
+  listMatters: (params?: {
+    status?: string;
+    matter_type?: string;
+    q?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const q = new URLSearchParams();
+    if (params?.status) q.set("status", params.status);
+    if (params?.matter_type) q.set("matter_type", params.matter_type);
+    if (params?.q) q.set("q", params.q);
+    if (params?.limit !== undefined) q.set("limit", String(params.limit));
+    if (params?.offset !== undefined) q.set("offset", String(params.offset));
+    const qs = q.toString();
+    return get<MatterListItem[]>(`/governance/matters${qs ? `?${qs}` : ""}`);
+  },
+  createMatter: (body: MatterCreate) => post<MatterOut>("/governance/matters", body),
+  getMatter: (id: string) => get<MatterOut>(`/governance/matters/${id}`),
+  updateMatter: (id: string, body: MatterUpdate) =>
+    patch<MatterOut>(`/governance/matters/${id}`, body),
+  createProgram: (matterId: string, body: ProgramCreate) =>
+    post<ProgramOut>(`/governance/matters/${matterId}/programs`, body),
+  updateProgram: (id: string, body: ProgramUpdate) =>
+    patch<ProgramOut>(`/governance/programs/${id}`, body),
+  createCase: (matterId: string, body: GovernanceCaseCreate) =>
+    post<GovernanceCaseOut>(`/governance/matters/${matterId}/cases`, body),
+  updateCase: (id: string, body: GovernanceCaseUpdate) =>
+    patch<GovernanceCaseOut>(`/governance/cases/${id}`, body),
+  createRelation: (matterId: string, body: EntityRelationCreate) =>
+    post<EntityRelationOut>(`/governance/matters/${matterId}/relations`, body),
+  createEvent: (matterId: string, body: TimelineEventCreate) =>
+    post<TimelineEventOut>(`/governance/matters/${matterId}/events`, body),
+  listTasks: (matterId: string, includeDone = true) =>
+    get<WorkItemOut[]>(
+      `/governance/matters/${matterId}/tasks?include_done=${String(includeDone)}`,
+    ),
+  createTask: (matterId: string, body: WorkItemCreate) =>
+    post<WorkItemOut>(`/governance/matters/${matterId}/tasks`, body),
+  createDecision: (matterId: string, body: DecisionCreate) =>
+    post<DecisionOut>(`/governance/matters/${matterId}/decisions`, body),
+  updateDecision: (id: string, body: DecisionUpdate) =>
+    patch<DecisionOut>(`/governance/decisions/${id}`, body),
+  createPlanningDocument: (matterId: string, body: PlanningDocumentCreate) =>
+    post<PlanningDocumentOut>(`/governance/matters/${matterId}/planning-documents`, body),
+  updatePlanningDocument: (id: string, body: PlanningDocumentUpdate) =>
+    patch<PlanningDocumentOut>(`/governance/planning-documents/${id}`, body),
+  createPlanningRevision: (id: string, body: PlanningDocumentRevisionCreate) =>
+    post<PlanningDocumentRevisionOut>(`/governance/planning-documents/${id}/revisions`, body),
+  createRoleAssignment: (matterId: string, body: MatterRoleAssignmentCreate) =>
+    post<MatterRoleAssignmentOut>(`/governance/matters/${matterId}/roles`, body),
+  updateRoleAssignment: (id: string, body: MatterRoleAssignmentUpdate) =>
+    patch<MatterRoleAssignmentOut>(`/governance/roles/${id}`, body),
+  listWorkflowTemplates: () =>
+    get<GovernanceWorkflowTemplateOut[]>("/governance/workflow-templates"),
+  createWorkflowTemplate: (body: GovernanceWorkflowTemplateCreate) =>
+    post<GovernanceWorkflowTemplateOut>("/governance/workflow-templates", body),
+  listAutomationRules: (matterId?: string) =>
+    get<AutomationRuleOut[]>(
+      `/governance/automation-rules${matterId ? `?matter_id=${matterId}` : ""}`,
+    ),
+  createAutomationRule: (body: AutomationRuleCreate) =>
+    post<AutomationRuleOut>("/governance/automation-rules", body),
 };
 
 export const receivablesApi = {

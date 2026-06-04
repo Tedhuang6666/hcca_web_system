@@ -3,10 +3,11 @@
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, status
-from jwt.exceptions import InvalidTokenError
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
 from sqlalchemy import select
 
+from api.core.config import settings
 from api.core.database import AsyncSessionLocal
 from api.core.security import decode_token, is_blacklisted
 from api.core.ws_manager import WSCapacityError, manager
@@ -16,6 +17,8 @@ from api.services.permission import get_user_permission_codes
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["WebSocket"])
+WS_CLOSE_AUTH_ERROR = 4001
+WS_CLOSE_FORBIDDEN = 4003
 
 # ── 認證輔助 ─────────────────────────────────────────────────────────────────
 
@@ -27,7 +30,7 @@ def _ws_token_from_websocket(websocket: WebSocket) -> str | None:
     auth = websocket.headers.get("authorization", "")
     if auth.lower().startswith("bearer "):
         return auth[7:]
-    return websocket.cookies.get("hcca_access_token")
+    return websocket.cookies.get(settings.ACCESS_TOKEN_COOKIE_NAME)
 
 
 def _client_ip(websocket: WebSocket) -> str:
@@ -42,23 +45,26 @@ async def _authenticate_ws(websocket: WebSocket) -> str | None:
     """
     token = _ws_token_from_websocket(websocket)
     if not token:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="缺少認證 Token")
+        await websocket.close(code=WS_CLOSE_AUTH_ERROR, reason="缺少認證 Token")
         return None
 
     try:
         if await is_blacklisted(token):
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Token 已登出")
+            await websocket.close(code=WS_CLOSE_AUTH_ERROR, reason="Token 已登出")
             return None
 
         payload = decode_token(token)
         if payload.get("type") != "access":
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="無效的 Token 類型")
+            await websocket.close(code=WS_CLOSE_AUTH_ERROR, reason="無效的 Token 類型")
             return None
 
         return payload.get("sub")
 
+    except ExpiredSignatureError:
+        await websocket.close(code=WS_CLOSE_AUTH_ERROR, reason="Token 已過期")
+        return None
     except InvalidTokenError:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="無效的 Token")
+        await websocket.close(code=WS_CLOSE_AUTH_ERROR, reason="無效的 Token")
         return None
 
 
@@ -130,7 +136,7 @@ async def websocket_room(
     try:
         await _assert_room_access(room, user_id)
     except Exception:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="無權加入此房間")
+        await websocket.close(code=WS_CLOSE_FORBIDDEN, reason="無權加入此房間")
         return
 
     client_ip = _client_ip(websocket)

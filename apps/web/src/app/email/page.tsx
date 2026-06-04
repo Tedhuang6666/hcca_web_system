@@ -9,6 +9,7 @@ import RichTextarea, { type RichTextareaHandle } from "@/components/ui/RichTexta
 import RecipientPicker from "@/components/email/RecipientPicker";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import { ApiError, emailApi } from "@/lib/api";
+import { uploadUrl } from "@/lib/config";
 import type {
   EmailBlock,
   EmailButton,
@@ -24,6 +25,7 @@ const EMPTY_RECIPIENTS: RecipientSelector = {
   user_ids: [],
   position_ids: [],
   org_ids: [],
+  external_emails: [],
   include_all: false,
   include_school: false,
 };
@@ -101,6 +103,7 @@ const PRESETS: {
 
 const CONFIRM_THRESHOLD = 100;
 const AUTOSAVE_KEY = "email-compose";
+const TEMPLATE_KEY = "email-templates";
 
 const BUTTON_STYLE_OPTIONS: { value: EmailButtonStyle; label: string }[] = [
   { value: "primary", label: "主要（深色）" },
@@ -122,6 +125,8 @@ const SYSTEM_VARIABLES: { token: string; label: string }[] = [
 type ComposeDraft = {
   subject: string;
   heading: string;
+  bannerImageUrl: string;
+  bannerImageAlt: string;
   body: string;
   cardRows: EmailCardRow[];
   buttons: EmailButton[];
@@ -131,12 +136,23 @@ type ComposeDraft = {
   recipientRows: RecipientRow[];
 };
 
+type TemplateContent = Omit<ComposeDraft, "recipientRows">;
+
+type SavedTemplate = TemplateContent & {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 function ComposeInner() {
   const router = useRouter();
   const draftId = useSearchParams().get("draft");
 
   const [subject, setSubject] = useState("");
   const [heading, setHeading] = useState("");
+  const [bannerImageUrl, setBannerImageUrl] = useState("");
+  const [bannerImageAlt, setBannerImageAlt] = useState("");
   const [body, setBody] = useState("");
   const [cardRows, setCardRows] = useState<EmailCardRow[]>([]);
   const [buttons, setButtons] = useState<EmailButton[]>([]);
@@ -160,6 +176,24 @@ function ComposeInner() {
   const [previewHtml, setPreviewHtml] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [savedTemplates, setSavedTemplates] = useState<SavedTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(TEMPLATE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as SavedTemplate[];
+      if (Array.isArray(parsed)) setSavedTemplates(parsed);
+    } catch {
+      setSavedTemplates([]);
+    }
+  }, []);
+
+  const persistTemplates = useCallback((rows: SavedTemplate[]) => {
+    setSavedTemplates(rows);
+    window.localStorage.setItem(TEMPLATE_KEY, JSON.stringify(rows));
+  }, []);
 
   // 載入草稿內容（不還原收件人，需重新選擇）
   useEffect(() => {
@@ -169,6 +203,8 @@ function ComposeInner() {
       .then((m) => {
         setSubject(m.subject);
         setHeading(m.heading);
+        setBannerImageUrl(m.banner_image_url ?? "");
+        setBannerImageAlt(m.banner_image_alt ?? "");
         setBody(m.body);
         setCardRows(m.card_rows);
         // 舊草稿可能只有單一 CTA，無 buttons：自動轉成一顆主要按鈕。
@@ -197,6 +233,8 @@ function ComposeInner() {
   const restoreDraft = useCallback((d: ComposeDraft) => {
     setSubject(d.subject);
     setHeading(d.heading);
+    setBannerImageUrl(d.bannerImageUrl ?? "");
+    setBannerImageAlt(d.bannerImageAlt ?? "");
     setBody(d.body);
     setCardRows(d.cardRows);
     setButtons(d.buttons ?? []);
@@ -212,6 +250,8 @@ function ComposeInner() {
     (d: ComposeDraft) =>
       !d.subject.trim() &&
       !d.heading.trim() &&
+      !d.bannerImageUrl.trim() &&
+      !d.bannerImageAlt.trim() &&
       !d.body.trim() &&
       d.cardRows.length === 0 &&
       (d.buttons?.length ?? 0) === 0 &&
@@ -226,6 +266,8 @@ function ComposeInner() {
     value: {
       subject,
       heading,
+      bannerImageUrl,
+      bannerImageAlt,
       body,
       cardRows,
       buttons,
@@ -238,6 +280,33 @@ function ComposeInner() {
     onRestore: restoreDraft,
     isEmpty: isDraftEmpty,
   });
+
+  const buildTemplateContent = useCallback(
+    (): TemplateContent => ({
+      subject,
+      heading,
+      bannerImageUrl,
+      bannerImageAlt,
+      body,
+      cardRows,
+      buttons,
+      blocks,
+      variableDefinitions,
+      previewVariables,
+    }),
+    [
+      subject,
+      heading,
+      bannerImageUrl,
+      bannerImageAlt,
+      body,
+      cardRows,
+      buttons,
+      blocks,
+      variableDefinitions,
+      previewVariables,
+    ],
+  );
 
   const buildRecipientVariables = useCallback((): EmailRecipientVariableInput[] => {
     const allowed = new Set(
@@ -261,6 +330,8 @@ function ComposeInner() {
     (): EmailComposePayload => ({
       subject: subject.trim(),
       heading: heading.trim(),
+      banner_image_url: bannerImageUrl.trim(),
+      banner_image_alt: bannerImageAlt.trim(),
       body,
       card_rows: cardRows.filter((r) => r.label.trim() && r.value.trim()),
       cta_label: "",
@@ -282,6 +353,8 @@ function ComposeInner() {
     [
       subject,
       heading,
+      bannerImageUrl,
+      bannerImageAlt,
       body,
       cardRows,
       buttons,
@@ -323,7 +396,7 @@ function ComposeInner() {
         .catch(() => setPreviewHtml(""));
     }, 600);
     return () => clearTimeout(t);
-  }, [subject, heading, body, cardRows, buttons, blocks, buildPayload]);
+  }, [subject, heading, bannerImageUrl, bannerImageAlt, body, cardRows, buttons, blocks, buildPayload]);
 
   const addRow = () => setCardRows((rows) => [...rows, { label: "", value: "" }]);
   const updateRow = (i: number, patch: Partial<EmailCardRow>) =>
@@ -363,6 +436,53 @@ function ComposeInner() {
     );
   };
 
+  const applyTemplate = (template: SavedTemplate) => {
+    setSubject(template.subject);
+    setHeading(template.heading);
+    setBannerImageUrl(template.bannerImageUrl);
+    setBannerImageAlt(template.bannerImageAlt);
+    setBody(template.body);
+    setCardRows(template.cardRows);
+    setButtons(template.buttons);
+    setBlocks(template.blocks);
+    setVariableDefinitions(template.variableDefinitions);
+    setPreviewVariables(template.previewVariables);
+    setRecipientRows([]);
+    setShowPerRecipient(false);
+    toast.success(`已套用範本：${template.name}`);
+  };
+
+  const handleApplyTemplate = (id: string) => {
+    setSelectedTemplateId(id);
+    const template = savedTemplates.find((row) => row.id === id);
+    if (template) applyTemplate(template);
+  };
+
+  const handleSaveTemplate = () => {
+    const fallbackName = subject.trim() || heading.trim() || "未命名範本";
+    const name = window.prompt("範本名稱", fallbackName)?.trim();
+    if (!name) return;
+    const now = new Date().toISOString();
+    const template: SavedTemplate = {
+      ...buildTemplateContent(),
+      id: crypto.randomUUID(),
+      name,
+      createdAt: now,
+      updatedAt: now,
+    };
+    persistTemplates([template, ...savedTemplates]);
+    setSelectedTemplateId(template.id);
+    toast.success("範本已儲存");
+  };
+
+  const handleDeleteTemplate = () => {
+    if (!selectedTemplateId) return;
+    const next = savedTemplates.filter((row) => row.id !== selectedTemplateId);
+    persistTemplates(next);
+    setSelectedTemplateId("");
+    toast.success("範本已刪除");
+  };
+
   // ── 行動按鈕（可多顆、可調樣式）────────────────────────────────────────────
   const addButton = () =>
     setButtons((prev) => [...prev, { label: "查看詳情", url: "", style: "primary" }]);
@@ -400,6 +520,19 @@ function ComposeInner() {
       toast.success("圖片已上傳");
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "圖片上傳失敗");
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+  const uploadBannerImage = async (file: File) => {
+    setUploadingImage(true);
+    try {
+      const result = await emailApi.uploadImage(file);
+      setBannerImageUrl(result.url);
+      if (!bannerImageAlt.trim()) setBannerImageAlt(result.filename);
+      toast.success("主圖已上傳");
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "主圖上傳失敗");
     } finally {
       setUploadingImage(false);
     }
@@ -581,6 +714,36 @@ function ComposeInner() {
                 ))}
               </select>
             </div>
+            <div className="space-y-2">
+              <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                我的範本
+              </label>
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+                <select
+                  className="input min-w-0"
+                  value={selectedTemplateId}
+                  onChange={(e) => handleApplyTemplate(e.target.value)}
+                >
+                  <option value="">選擇已儲存範本…</option>
+                  {savedTemplates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.name}
+                    </option>
+                  ))}
+                </select>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={handleSaveTemplate}>
+                  儲存目前內容
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={!selectedTemplateId}
+                  onClick={handleDeleteTemplate}
+                >
+                  刪除
+                </button>
+              </div>
+            </div>
             <div>
               <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
                 信件主旨 <span style={{ color: "var(--danger)" }}>*</span>
@@ -608,6 +771,45 @@ function ComposeInner() {
                 onChange={(e) => setHeading(e.target.value)}
                 placeholder="顯示於信件內容最上方的大標題"
               />
+            </div>
+            <div className="space-y-2">
+              <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                信件主圖
+              </label>
+              <div className="flex gap-2">
+                <input
+                  className="input flex-1"
+                  value={bannerImageUrl}
+                  maxLength={500}
+                  onChange={(e) => setBannerImageUrl(e.target.value)}
+                  placeholder="圖片網址，或點右側上傳"
+                />
+                <label className={`btn btn-secondary btn-sm shrink-0 ${uploadingImage ? "cursor-wait opacity-70" : "cursor-pointer"}`}>
+                  {uploadingImage ? "上傳中…" : "上傳"}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/gif,image/webp"
+                    className="hidden"
+                    disabled={uploadingImage}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void uploadBannerImage(file);
+                      e.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+              </div>
+              <input
+                className="input"
+                value={bannerImageAlt}
+                maxLength={200}
+                onChange={(e) => setBannerImageAlt(e.target.value)}
+                placeholder="圖片替代文字（選填）"
+              />
+              {bannerImageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={uploadUrl(bannerImageUrl)} alt={bannerImageAlt || "信件主圖預覽"} className="max-h-40 rounded-lg object-contain" />
+              ) : null}
             </div>
           </section>
 
@@ -842,9 +1044,9 @@ function ComposeInner() {
             ) : (
               buttons.map((btn, i) => (
                 <div key={i} className="space-y-2 rounded-lg p-2" style={{ background: "var(--bg-elevated)" }}>
-                  <div className="flex gap-2">
+                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_8rem]">
                     <input
-                      className="input flex-1"
+                      className="input min-w-0"
                       value={btn.label}
                       maxLength={40}
                       placeholder="按鈕文字，例：查看詳情"
@@ -862,17 +1064,19 @@ function ComposeInner() {
                       ))}
                     </select>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
                     <input
-                      className="input flex-1"
+                      className="input min-w-0"
                       value={btn.url}
                       maxLength={500}
                       placeholder="連結網址 https://… 或 mailto:"
                       onChange={(e) => updateButton(i, { url: e.target.value })}
                     />
-                    <button type="button" className="btn btn-ghost btn-sm" aria-label="上移" disabled={i === 0} onClick={() => moveButton(i, -1)}>↑</button>
-                    <button type="button" className="btn btn-ghost btn-sm" aria-label="下移" disabled={i === buttons.length - 1} onClick={() => moveButton(i, 1)}>↓</button>
-                    <button type="button" className="btn btn-ghost btn-sm" aria-label="移除按鈕" onClick={() => removeButton(i)}>×</button>
+                    <div className="flex gap-1">
+                      <button type="button" className="btn btn-ghost btn-sm" aria-label="上移" disabled={i === 0} onClick={() => moveButton(i, -1)}>↑</button>
+                      <button type="button" className="btn btn-ghost btn-sm" aria-label="下移" disabled={i === buttons.length - 1} onClick={() => moveButton(i, 1)}>↓</button>
+                      <button type="button" className="btn btn-ghost btn-sm" aria-label="移除按鈕" onClick={() => removeButton(i)}>×</button>
+                    </div>
                   </div>
                 </div>
               ))
@@ -948,7 +1152,7 @@ function ComposeInner() {
                       />
                       {blk.url ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={blk.url} alt={blk.alt || "圖片預覽"} className="max-h-32 rounded-lg object-contain" />
+                        <img src={uploadUrl(blk.url)} alt={blk.alt || "圖片預覽"} className="max-h-32 rounded-lg object-contain" />
                       ) : null}
                     </div>
                   )}

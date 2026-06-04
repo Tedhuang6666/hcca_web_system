@@ -27,6 +27,7 @@ export type NavPreferences = {
 export const NAV_ITEMS: NavItem[] = [
   { id: "dashboard", href: "/dashboard", iconKey: "dashboard", label: "平台首頁", end: true },
   { id: "tasks", href: "/tasks", iconKey: "tasks", label: "我的待辦" },
+  { id: "governanceHub", href: "/governance", iconKey: "governance", label: "治理中樞" },
   { id: "announcements", href: "/announcements", iconKey: "announcement", label: "校內公告" },
   { id: "documents", href: "/documents", iconKey: "documents", label: "公文系統" },
   { id: "calendar", href: "/calendar", iconKey: "calendar", label: "行事曆" },
@@ -207,7 +208,15 @@ export const NAV_DEF: NavEntry[] = [
   {
     id: "governance",
     heading: "自治核心",
-    items: byIds(["documents", "calendar", "meetings", "councilProposals", "regulations", "judicialPetitions"]),
+    items: byIds([
+      "governanceHub",
+      "documents",
+      "calendar",
+      "meetings",
+      "councilProposals",
+      "regulations",
+      "judicialPetitions",
+    ]),
   },
   {
     id: "campusServices",
@@ -300,6 +309,7 @@ export const DEFAULT_DESKTOP_ORDER = NAV_ITEMS.map((item) => item.id);
 export const DEFAULT_MOBILE_ORDER = [
   "dashboard",
   "tasks",
+  "governanceHub",
   "calendar",
   "councilProposals",
   "documents",

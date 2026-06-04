@@ -12,6 +12,9 @@
           <div style="background-color:#ffffff;border:1px solid #e5e7eb;border-radius:24px;padding:32px 30px 30px;box-shadow:0 14px 34px rgba(15,23,42,.08);">
             <div class="hcca-kicker" style="margin-bottom:10px;">Official Message</div>
             <div style="color:#111827;font-size:26px;font-weight:850;line-height:1.32;margin-bottom:22px;">{{ heading or subject }}</div>
+            {% if banner_image_url %}
+              <div style="padding:0 0 22px;text-align:center;"><img src="{{ banner_image_url }}" alt="{{ banner_image_alt }}" width="540" style="display:block;max-width:100%;height:auto;border-radius:16px;" /></div>
+            {% endif %}
             {% if card_rows %}
               <div style="margin:0 0 22px;">
                 {% for row in card_rows %}
@@ -42,12 +45,12 @@
             {% if buttons %}
               <div style="padding:24px 0 0;">
                 {% for b in buttons %}
-                  <a href="{{ b.url }}" style="display:inline-block;margin:0 10px 10px 0;font-size:15px;font-weight:800;text-decoration:none;padding:14px 28px;border-radius:12px;{% if b.style == 'secondary' %}background-color:#d6b34a;color:#111827;{% elif b.style == 'outline' %}background-color:#ffffff;color:#111827;border:1px solid #111827;{% else %}background-color:#111827;color:#ffffff;{% endif %}">{{ b.label or '查看詳情' }}</a>
+                  <a href="{{ b.url }}" style="box-sizing:border-box;display:inline-block;margin:0 10px 10px 0;max-width:100%;font-size:15px;font-weight:800;text-decoration:none;padding:14px 28px;border-radius:12px;word-break:break-word;{% if b.style == 'secondary' %}background-color:#d6b34a;color:#111827;{% elif b.style == 'outline' %}background-color:#ffffff;color:#111827;border:1px solid #111827;{% else %}background-color:#111827;color:#ffffff;{% endif %}">{{ b.label or '查看詳情' }}</a>
                 {% endfor %}
               </div>
             {% elif cta_url %}
               <div style="padding:24px 0 0;">
-                <a href="{{ cta_url }}" style="display:inline-block;background-color:#111827;color:#ffffff;font-size:15px;font-weight:800;text-decoration:none;padding:14px 28px;border-radius:12px;">{{ cta_label or '查看詳情' }}</a>
+                <a href="{{ cta_url }}" style="box-sizing:border-box;display:inline-block;max-width:100%;background-color:#111827;color:#ffffff;font-size:15px;font-weight:800;text-decoration:none;padding:14px 28px;border-radius:12px;word-break:break-word;">{{ cta_label or '查看詳情' }}</a>
               </div>
             {% endif %}
           </div>

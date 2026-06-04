@@ -296,10 +296,13 @@ services:
     <<: *api-common
     container_name: campus_celery_beat
     restart: unless-stopped
+    # --schedule 必須指到可寫的 /tmp（celerybeat volume）；預設會寫在 CWD /app，
+    # 而映像中 /app 對非 root 執行使用者唯讀 → beat 啟動即 _gdbm Permission denied 崩潰。
     command: >
       python -m celery -A api.core.celery_app.celery_app beat
       --loglevel=info
       --scheduler celery.beat:PersistentScheduler
+      --schedule=/tmp/celerybeat-schedule
       --pidfile=/tmp/celerybeat.pid
     environment:
       ENVIRONMENT: development

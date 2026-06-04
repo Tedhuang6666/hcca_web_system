@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api import app
 from api.dependencies.auth import get_current_active_user
+from api.models.email_message import EmailCampaignRecipient, EmailMessage
 from api.models.org import Org, Permission, Position, UserPosition
 from api.models.user import User
 
@@ -140,6 +141,57 @@ async def test_preview_recipients_resolves_position_members(
     body = resp.json()
     assert body["recipient_count"] == 1
     assert "測試使用者" in body["sample_names"]
+
+
+@pytest.mark.asyncio
+async def test_external_email_recipients_can_be_previewed_and_saved(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = await _seed_user(db_session, "external-sender@school.edu", ["email:send"])
+    _override_user(user)
+    monkeypatch.setattr("api.routers.email.enqueue_rendered", lambda *args, **kwargs: ["task-id"])
+
+    preview_resp = await client.post(
+        "/email/preview-recipients",
+        json={"external_emails": ["outsider@example.org", "OUTSIDER@example.org"]},
+    )
+    assert preview_resp.status_code == 200
+    assert preview_resp.json()["recipient_count"] == 1
+
+    create_resp = await client.post(
+        "/email/messages",
+        json={
+            "subject": "外部通知",
+            "action": "draft",
+            "recipients": {"external_emails": ["outsider@example.org"]},
+        },
+    )
+    assert create_resp.status_code == 201
+
+    message_id = uuid.UUID(create_resp.json()["id"])
+    message = await db_session.get(EmailMessage, message_id)
+    assert message is not None
+    assert message.recipient_spec["external_emails"] == ["outsider@example.org"]
+
+    send_resp = await client.post(
+        "/email/messages",
+        json={
+            "subject": "外部即時通知",
+            "action": "send",
+            "recipients": {"external_emails": ["outside-now@example.org"]},
+        },
+    )
+    assert send_resp.status_code == 201
+    assert send_resp.json()["status"] == "queued"
+
+    recipient = (
+        await db_session.execute(
+            select(EmailCampaignRecipient).where(
+                EmailCampaignRecipient.email == "outside-now@example.org"
+            )
+        )
+    ).scalar_one()
+    assert recipient.user_id is None
 
 
 @pytest.mark.asyncio

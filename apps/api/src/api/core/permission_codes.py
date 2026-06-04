@@ -116,6 +116,7 @@ class PermissionCode(StrEnum):
     ANNOUNCEMENT_PUBLIC_LAYOUT = "announcement:public_layout"
 
     ANALYTICS_VIEW = "analytics:view"
+    GOVERNANCE_MANAGE = "governance:manage"
 
     EMAIL_SEND = "email:send"
     EMAIL_SEND_BULK = "email:send_bulk"
@@ -724,6 +725,12 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "code": PermissionCode.ANALYTICS_VIEW,
         "label": "查看數據分析",
         "desc": "查看公文效率統計、部門排名與待辦警告",
+    },
+    {
+        "group": "治理中樞",
+        "code": PermissionCode.GOVERNANCE_MANAGE,
+        "label": "管理事情治理",
+        "desc": "建立與維護 Matter / Program / Case、任務與跨模組關聯",
     },
     {
         "group": "通知與郵件",

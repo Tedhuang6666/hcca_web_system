@@ -60,6 +60,12 @@ def render_generic_message(
         if personal
         else context.get("heading", "")
     )
+    rendered_banner_image_url = (
+        absolutize_url(_text(str(context.get("banner_image_url", ""))))
+        if context.get("banner_image_url")
+        else ""
+    )
+    rendered_banner_image_alt = _text(str(context.get("banner_image_alt", "")))
     rendered_rows = [
         {
             "label": render_personalized_text(str(row.get("label", "")), personal)
@@ -115,6 +121,8 @@ def render_generic_message(
             "preview_text": (rendered_heading or rendered_subject)[:80],
             "body_html": sanitize_html(html_body),
             "heading": rendered_heading,
+            "banner_image_url": rendered_banner_image_url,
+            "banner_image_alt": rendered_banner_image_alt,
             "card_rows": rendered_rows,
             "cta_url": rendered_cta_url,
             "cta_label": rendered_cta_label,

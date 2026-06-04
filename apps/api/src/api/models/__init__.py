@@ -76,6 +76,28 @@ from api.models.exam_paper import ExamGradeTrack, ExamPaper, ExamPaperDownload  
 
 # Feature Flag（Phase D3）
 from api.models.feature_flag import FeatureFlag  # noqa: F401
+from api.models.governance import (  # noqa: F401
+    AutomationRule,
+    AutomationRuleStatus,
+    CaseStatus,
+    Decision,
+    DecisionStatus,
+    EntityRelation,
+    GovernanceCase,
+    GovernanceEventType,
+    GovernanceWorkflowTemplate,
+    Matter,
+    MatterPriority,
+    MatterRoleAssignment,
+    MatterStatus,
+    MatterType,
+    MatterVisibility,
+    PlanningDocument,
+    PlanningDocumentRevision,
+    PlanningDocumentStatus,
+    Program,
+    TimelineEvent,
+)
 from api.models.judicial_petition import (  # noqa: F401
     JudicialPetition,
     JudicialPetitionStatus,

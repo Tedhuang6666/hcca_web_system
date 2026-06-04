@@ -11,12 +11,13 @@ import {
 } from "@/components/ui/targeting";
 import type { RecipientSelector } from "@/lib/types";
 
-type Mode = "users" | "positions" | "orgs" | "all";
+type Mode = "users" | "emails" | "positions" | "orgs" | "all";
 
 const EMPTY: RecipientSelector = {
   user_ids: [],
   position_ids: [],
   org_ids: [],
+  external_emails: [],
   include_all: false,
   include_school: false,
 };
@@ -25,6 +26,7 @@ type AllScope = "school" | "everyone";
 
 const MODES: { key: Mode; label: string }[] = [
   { key: "users", label: "個別使用者" },
+  { key: "emails", label: "外部信箱" },
   { key: "positions", label: "依職位" },
   { key: "orgs", label: "依組織" },
   { key: "all", label: "全體成員" },
@@ -39,6 +41,7 @@ export default function RecipientPicker({ onChange, disabled = false }: Recipien
   const [mode, setMode] = useState<Mode>("users");
   const [allScope, setAllScope] = useState<AllScope>("school");
   const [selectedUsers, setSelectedUsers] = useState<ComboboxOption[]>([]);
+  const [externalEmailsText, setExternalEmailsText] = useState("");
   const { results: userResults, search: searchUsers } = useUserSearch();
   const orgOptions = useOrgOptions();
   const [selectedOrgs, setSelectedOrgs] = useState<ComboboxOption[]>([]);
@@ -54,6 +57,14 @@ export default function RecipientPicker({ onChange, disabled = false }: Recipien
     let sel: RecipientSelector;
     if (mode === "users") {
       sel = { ...EMPTY, user_ids: selectedUsers.map((u) => u.value) };
+    } else if (mode === "emails") {
+      sel = {
+        ...EMPTY,
+        external_emails: externalEmailsText
+          .split(/[\s,;]+/)
+          .map((email) => email.trim())
+          .filter(Boolean),
+      };
     } else if (mode === "positions") {
       sel = { ...EMPTY, position_ids: selectedPos.map((p) => p.value) };
     } else if (mode === "orgs") {
@@ -64,7 +75,7 @@ export default function RecipientPicker({ onChange, disabled = false }: Recipien
       sel = { ...EMPTY, include_school: true };
     }
     onChangeRef.current(sel);
-  }, [mode, allScope, selectedUsers, selectedPos, selectedOrgs]);
+  }, [mode, allScope, selectedUsers, externalEmailsText, selectedPos, selectedOrgs]);
 
   return (
     <div className="space-y-3">
@@ -79,6 +90,18 @@ export default function RecipientPicker({ onChange, disabled = false }: Recipien
           disabled={disabled}
           placeholder="輸入姓名或 Email 搜尋（至少 2 字）"
           emptyText="找不到使用者"
+        />
+      )}
+
+      {mode === "emails" && (
+        <textarea
+          className="input min-h-28"
+          value={externalEmailsText}
+          onChange={(e) => setExternalEmailsText(e.target.value)}
+          disabled={disabled}
+          placeholder={
+            "輸入完整 Email，可用換行、逗號或分號分隔\nexample@gmail.com\npartner@example.org"
+          }
         />
       )}
 

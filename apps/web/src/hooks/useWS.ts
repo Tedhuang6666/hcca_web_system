@@ -95,8 +95,8 @@ export function useWS(
       if (mySession !== sessionId.current) return;
       if (e.code === 1000 || e.code === 1001) return;
 
-      // 4001/4003 = 後端因驗證失敗主動關閉；不重連，直接走 auth error。
-      if (e.code === 4001 || e.code === 4003) {
+      // 4001/4003 = 後端因驗證/授權失敗主動關閉；1008 兼容舊版 policy close。
+      if (e.code === 4001 || e.code === 4003 || e.code === 1008) {
         stableAuthError.current?.();
         return;
       }

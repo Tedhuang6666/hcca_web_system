@@ -199,6 +199,16 @@ class Settings(BaseSettings):
     # ALLOWED_ORIGINS / ALLOWED_HOSTS / 各 OAuth 回呼 / Passkey 等仍停留在 localhost 預設的欄位，
     # 不需逐一手動填寫。email 內的絕對連結（退訂、CTA、通知偏好頁）亦以此為基底。
     FRONTEND_BASE_URL: str = Field(default="http://localhost:3000")
+    # Email 客戶端載入使用者上傳檔案（/uploads/...）時需要可公開存取的 API base。
+    API_PUBLIC_BASE_URL: str = Field(default="http://localhost:8000")
+    # Email 內前端連結使用的公開 base；避免本機開發網址出現在寄出的信件中。
+    EMAIL_LINK_BASE_URL: str = Field(default="https://hcca40.hct.works")
+    # Email header 會徽圖片 URL；可填外部圖床或正式站 public 圖片的完整網址。
+    # 若填外部 host，須同步把該 host 加進 proxy.ts 與下方 SECURITY_CSP 的 img-src，
+    # 否則寄信頁預覽 iframe 會被 CSP 擋下。
+    EMAIL_BRAND_LOGO_URL: str = Field(
+        default="https://hcca.buckets.hct.works/images/hcca-emblem.png"
+    )
     # 每位使用者每日透過平台寄送 email 的「人次」上限（防濫用）
     EMAIL_DAILY_QUOTA_PER_USER: int = Field(default=500)
 
@@ -246,7 +256,7 @@ class Settings(BaseSettings):
     # 前端 HTML 頁面的 CSP 由 Next.js proxy.ts 以 per-request nonce 另行套用。
     SECURITY_CSP: str = (
         "default-src 'self'; "
-        "img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com; "
+        "img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://hcca.buckets.hct.works; "
         "style-src 'self' 'unsafe-inline'; "
         "script-src 'self'; "
         "frame-ancestors 'none'; "
@@ -437,6 +447,8 @@ class Settings(BaseSettings):
             self.PASSKEY_ORIGIN = origin
         if host and (self.PASSKEY_RP_ID in _LOCAL_HOSTS or not self.PASSKEY_RP_ID):
             self.PASSKEY_RP_ID = host
+        if _is_local_url(self.API_PUBLIC_BASE_URL):
+            self.API_PUBLIC_BASE_URL = origin
 
         return self
 

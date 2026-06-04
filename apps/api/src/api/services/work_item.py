@@ -46,6 +46,29 @@ async def list_work_items(
     return list((await db.execute(stmt)).scalars().all())
 
 
+async def list_work_items_by_source(
+    db: AsyncSession,
+    *,
+    source_type: str,
+    source_id: uuid.UUID,
+    include_done: bool = True,
+    limit: int = 100,
+) -> list[WorkItem]:
+    stmt = (
+        select(WorkItem)
+        .where(
+            WorkItem.is_active.is_(True),
+            WorkItem.source_type == source_type,
+            WorkItem.source_id == source_id,
+        )
+        .order_by(WorkItem.due_at.asc().nulls_last(), WorkItem.created_at.desc())
+        .limit(limit)
+    )
+    if not include_done:
+        stmt = stmt.where(WorkItem.status == WorkItemStatus.OPEN)
+    return list((await db.execute(stmt)).scalars().all())
+
+
 async def update_work_item(db: AsyncSession, *, item: WorkItem, data: WorkItemUpdate) -> WorkItem:
     before_status = item.status
     payload = data.model_dump(exclude_unset=True)

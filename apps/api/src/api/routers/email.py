@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -71,6 +71,7 @@ class RecipientSelector(BaseModel):
     user_ids: list[uuid.UUID] = Field(default_factory=list)
     position_ids: list[uuid.UUID] = Field(default_factory=list)
     org_ids: list[uuid.UUID] = Field(default_factory=list)
+    external_emails: list[EmailStr] = Field(default_factory=list, max_length=500)
     include_all: bool = False
     include_school: bool = False
 
@@ -117,6 +118,8 @@ class EmailComposePayload(BaseModel):
     subject: str = Field(min_length=1, max_length=255)
     heading: str = Field(default="", max_length=200)
     body: str = ""  # 富文本 HTML（渲染時以 bleach 清洗）
+    banner_image_url: str = Field(default="", max_length=500)
+    banner_image_alt: str = Field(default="", max_length=200)
     card_rows: list[CardRow] = Field(default_factory=list)
     cta_label: str = Field(default="", max_length=40)
     cta_url: str = Field(default="", max_length=500)
@@ -140,6 +143,8 @@ class EmailMessageUpdate(BaseModel):
     subject: str | None = Field(default=None, max_length=255)
     heading: str | None = Field(default=None, max_length=200)
     body: str | None = None
+    banner_image_url: str | None = Field(default=None, max_length=500)
+    banner_image_alt: str | None = Field(default=None, max_length=200)
     card_rows: list[CardRow] | None = None
     cta_label: str | None = Field(default=None, max_length=40)
     cta_url: str | None = Field(default=None, max_length=500)
@@ -178,6 +183,8 @@ class EmailMessageOut(BaseModel):
 class EmailMessageDetailOut(EmailMessageOut):
     heading: str
     body: str
+    banner_image_url: str
+    banner_image_alt: str
     card_rows: list[dict]
     cta_label: str
     cta_url: str
@@ -250,6 +257,7 @@ def _spec_from_selector(sel: RecipientSelector) -> dict:
         "user_ids": [str(x) for x in sel.user_ids],
         "position_ids": [str(x) for x in sel.position_ids],
         "org_ids": [str(x) for x in sel.org_ids],
+        "external_emails": _normalize_external_emails(sel.external_emails),
         "include_all": sel.include_all,
         "include_school": sel.include_school,
     }
@@ -257,6 +265,17 @@ def _spec_from_selector(sel: RecipientSelector) -> dict:
 
 def _is_bulk(sel: RecipientSelector) -> bool:
     return bool(sel.position_ids or sel.org_ids or sel.include_all or sel.include_school)
+
+
+def _normalize_external_emails(values: list[str]) -> list[str]:
+    emails: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        email = str(value).strip().lower()
+        if email and email not in seen:
+            seen.add(email)
+            emails.append(email)
+    return emails
 
 
 def _safe_url_or_empty(value: str) -> str:
@@ -313,6 +332,8 @@ def _build_context(payload: EmailComposePayload) -> dict:
     """把寄信內容組成範本 context（標題 / 卡片 / 內文按鈕 / 自由區塊 / 舊版 CTA）。"""
     return {
         "heading": payload.heading,
+        "banner_image_url": _safe_image_url(payload.banner_image_url),
+        "banner_image_alt": payload.banner_image_alt,
         "card_rows": [r.model_dump() for r in payload.card_rows],
         "cta_url": _safe_url_or_empty(payload.cta_url),
         "cta_label": payload.cta_label,
@@ -393,7 +414,15 @@ async def _resolve_personalized_recipients(
             )
         )
 
-    for imported in inputs:
+    external_inputs: list[dict] = [
+        {"email": email, "name": None, "variables": {}}
+        for email in _normalize_external_emails(
+            [str(x) for x in (msg.recipient_spec or {}).get("external_emails", [])]
+        )
+    ]
+    external_inputs.extend(inputs)
+
+    for imported in external_inputs:
         email = str(imported.get("email") or "").strip()
         if not email or email.lower() in seen_emails:
             continue
@@ -593,6 +622,8 @@ def _to_detail(
         **_to_out(msg, sender_name).model_dump(),
         heading=str(ctx.get("heading", "")),
         body=msg.body,
+        banner_image_url=str(ctx.get("banner_image_url", "")),
+        banner_image_alt=str(ctx.get("banner_image_alt", "")),
         card_rows=list(ctx.get("card_rows", [])),
         cta_label=str(ctx.get("cta_label", "")),
         cta_url=str(ctx.get("cta_url", "")),
@@ -649,10 +680,15 @@ async def preview_recipients(
         include_all=body.include_all,
         include_school=body.include_school,
     )
+    external_emails = [
+        email
+        for email in _normalize_external_emails([str(x) for x in body.external_emails])
+        if email not in {value.strip().lower() for value in emails}
+    ]
     return RecipientPreviewOut(
-        recipient_count=len(emails),
+        recipient_count=len(emails) + len(external_emails),
         sample_names=[u.display_name for u in users[:_SAMPLE_LIMIT]],
-        truncated=len(users) > _SAMPLE_LIMIT,
+        truncated=(len(users) + len(external_emails)) > _SAMPLE_LIMIT,
     )
 
 
@@ -790,6 +826,10 @@ async def update_message(
     ctx = dict(msg.context or {})
     if body.heading is not None:
         ctx["heading"] = body.heading
+    if body.banner_image_url is not None:
+        ctx["banner_image_url"] = _safe_image_url(body.banner_image_url)
+    if body.banner_image_alt is not None:
+        ctx["banner_image_alt"] = body.banner_image_alt
     if body.card_rows is not None:
         ctx["card_rows"] = [r.model_dump() for r in body.card_rows]
     if body.cta_url is not None:

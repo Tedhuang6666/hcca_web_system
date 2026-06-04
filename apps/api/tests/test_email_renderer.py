@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import uuid
 
+from api.core.config import settings
 from api.email.renderer import (
+    absolutize_url,
+    build_personalization_context,
     make_unsubscribe_token,
     parse_unsubscribe_token,
     render_email,
@@ -32,6 +35,8 @@ def test_render_notification_includes_content_and_no_leftover_jinja() -> None:
     assert "嶺代議字第1150000001號" in html
     assert "前往審核" in html
     assert "不再接收此類通知" in html
+    assert settings.EMAIL_BRAND_LOGO_URL in html
+    assert f"{settings.EMAIL_LINK_BASE_URL.rstrip('/')}/settings/notifications" in html
     assert "公文已送達。<br>請至系統審核。" in html
     # 不得殘留未渲染的 Jinja 標記
     assert "{{" not in html
@@ -77,6 +82,30 @@ def test_sanitize_html_keeps_allowed_formatting() -> None:
     assert "<strong>粗</strong>" in clean
     assert 'href="https://x.com"' in clean
     assert "<li>a</li>" in clean
+
+
+def test_absolutize_url_uses_api_base_for_uploads() -> None:
+    assert absolutize_url("/uploads/email/poster.png") == (
+        f"{settings.API_PUBLIC_BASE_URL.rstrip('/')}/uploads/email/poster.png"
+    )
+    assert absolutize_url("/brand/hcca-emblem.png") == (
+        f"{settings.FRONTEND_BASE_URL.rstrip('/')}/brand/hcca-emblem.png"
+    )
+
+
+def test_personalization_context_uses_email_link_base_for_unsubscribe() -> None:
+    uid = uuid.uuid4()
+    context = build_personalization_context(
+        user_id=uid,
+        name="測試",
+        email="test@example.com",
+        student_id=None,
+        custom_variables={},
+    )
+    assert str(context["unsubscribe_url"]).startswith(
+        f"{settings.EMAIL_LINK_BASE_URL.rstrip('/')}/unsubscribe?token="
+    )
+    assert context["frontend_base_url"] == settings.EMAIL_LINK_BASE_URL.rstrip("/")
 
 
 def test_unsubscribe_token_roundtrip() -> None:

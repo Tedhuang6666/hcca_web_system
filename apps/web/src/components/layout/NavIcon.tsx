@@ -61,6 +61,7 @@ const Icons: Record<string, React.ComponentType<IconProps>> = {
   analytics: BarChart3,
   partnerMap: MapPinned,
   tasks: Inbox,
+  governance: Network,
   systemDefense: Shield,
   settings: Settings,
   bell: Bell,

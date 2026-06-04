@@ -66,19 +66,23 @@ _CONTEXT_DEFAULTS: dict = {
     "heading": "",
     "body_text": "",
     "body_html": "",
+    "banner_image_url": "",
+    "banner_image_alt": "",
     "card_rows": [],
     "cta_url": "",
     "cta_label": "",
     "buttons": [],
     "blocks": [],
+    "brand_logo_url": "",
     "unsubscribe_url": "",
 }
 
 
 def absolutize_url(url: str | None) -> str:
-    """把相對路徑（如 /uploads/x.png）補上 FRONTEND_BASE_URL，供 email 內圖片載入。
+    """把相對路徑補上公開 base URL，供 email 內圖片載入。
 
-    email 客戶端無法載入相對路徑，因此上傳後的圖片網址需轉為絕對網址。
+    email 客戶端無法載入相對路徑，因此上傳後的圖片網址需轉為 API 絕對網址；
+    前端 public 靜態資源（如 /brand/...）則轉為前端絕對網址。
     已是 http/https 的網址原樣回傳；其他（含空字串）回傳空字串。
     """
     value = (url or "").strip()
@@ -86,6 +90,8 @@ def absolutize_url(url: str | None) -> str:
         return ""
     if value.startswith(("http://", "https://")):
         return value
+    if value.startswith("/uploads/"):
+        return f"{settings.API_PUBLIC_BASE_URL.rstrip('/')}{value}"
     if value.startswith("/"):
         return f"{settings.FRONTEND_BASE_URL.rstrip('/')}{value}"
     return ""
@@ -113,10 +119,16 @@ def render_email(template_name: str, context: dict) -> str:
     自動注入 app_name / frontend_base_url；context 缺漏欄位以安全預設補齊。
     """
     template = _environment().get_template(f"{template_name}.html")
+    email_link_base_url = settings.EMAIL_LINK_BASE_URL.rstrip("/")
+    render_context = {
+        **_CONTEXT_DEFAULTS,
+        "brand_logo_url": absolutize_url(settings.EMAIL_BRAND_LOGO_URL),
+        **context,
+    }
     return template.render(
         app_name=settings.APP_NAME,
-        frontend_base_url=settings.FRONTEND_BASE_URL.rstrip("/"),
-        **{**_CONTEXT_DEFAULTS, **context},
+        frontend_base_url=email_link_base_url,
+        **render_context,
     )
 
 
@@ -190,9 +202,10 @@ def build_personalization_context(
 ) -> dict[str, Any]:
     """建立系統預設佔位符與自訂佔位符合併後的 context。"""
     unsubscribe_url = ""
+    email_link_base_url = settings.EMAIL_LINK_BASE_URL.rstrip("/")
     if user_id:
         token = make_unsubscribe_token(user_id, "email")
-        unsubscribe_url = f"{settings.FRONTEND_BASE_URL.rstrip('/')}/unsubscribe?token={token}"
+        unsubscribe_url = f"{email_link_base_url}/unsubscribe?token={token}"
     return {
         **{key: "" if value is None else str(value) for key, value in custom_variables.items()},
         "user": {
@@ -202,7 +215,7 @@ def build_personalization_context(
             "student_id": student_id or "",
         },
         "unsubscribe_url": unsubscribe_url,
-        "frontend_base_url": settings.FRONTEND_BASE_URL.rstrip("/"),
+        "frontend_base_url": email_link_base_url,
     }
 
 

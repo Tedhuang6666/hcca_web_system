@@ -3033,6 +3033,348 @@ export type WorkItemUpdate = Partial<
   Pick<WorkItemOut, "title" | "description" | "assigned_to_id" | "due_at" | "status">
 >;
 
+// ── 事情治理中樞 ─────────────────────────────────────────────────────────────
+
+export type MatterStatus = "draft" | "active" | "paused" | "completed" | "archived" | "canceled";
+export type MatterPriority = "low" | "normal" | "high" | "urgent";
+export type MatterVisibility = "private" | "org" | "internal" | "public";
+export type MatterType =
+  | "activity"
+  | "policy"
+  | "regulation"
+  | "petition"
+  | "meeting"
+  | "administration"
+  | "project"
+  | "other";
+export type GovernanceCaseStatus =
+  | "draft"
+  | "todo"
+  | "in_progress"
+  | "review"
+  | "approved"
+  | "done"
+  | "archived"
+  | "canceled";
+export type DecisionStatus =
+  | "pending"
+  | "in_progress"
+  | "partial"
+  | "completed"
+  | "overdue"
+  | "canceled";
+export type PlanningDocumentStatus =
+  | "draft"
+  | "submitted"
+  | "in_review"
+  | "revision_requested"
+  | "approved"
+  | "archived";
+export type AutomationRuleStatus = "active" | "paused" | "archived";
+
+export interface ProgramOut {
+  id: string;
+  matter_id: string;
+  name: string;
+  description: string | null;
+  owner_user_id: string | null;
+  starts_at: string | null;
+  due_at: string | null;
+  status: GovernanceCaseStatus | string;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GovernanceCaseOut {
+  id: string;
+  matter_id: string;
+  program_id: string | null;
+  title: string;
+  case_type: string;
+  description: string | null;
+  owner_user_id: string | null;
+  status: GovernanceCaseStatus | string;
+  current_step: string | null;
+  due_at: string | null;
+  completed_at: string | null;
+  meta: Record<string, unknown>;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EntityRelationOut {
+  id: string;
+  matter_id: string | null;
+  case_id: string | null;
+  source_type: string;
+  source_id: string | null;
+  target_type: string;
+  target_id: string | null;
+  relation: string;
+  title: string;
+  href: string | null;
+  note: string | null;
+  meta: Record<string, unknown>;
+  created_by_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TimelineEventOut {
+  id: string;
+  matter_id: string | null;
+  case_id: string | null;
+  event_type: string;
+  title: string;
+  body: string | null;
+  actor_id: string | null;
+  actor_email: string | null;
+  payload: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface DecisionOut {
+  id: string;
+  matter_id: string;
+  case_id: string | null;
+  source_type: string | null;
+  source_id: string | null;
+  title: string;
+  content: string;
+  status: DecisionStatus | string;
+  owner_user_id: string | null;
+  due_at: string | null;
+  completed_at: string | null;
+  meta: Record<string, unknown>;
+  created_by_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PlanningDocumentRevisionOut {
+  id: string;
+  document_id: string;
+  version_number: number;
+  version_label: string;
+  content: string;
+  change_reason: string | null;
+  created_by_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PlanningDocumentOut {
+  id: string;
+  matter_id: string;
+  case_id: string | null;
+  title: string;
+  summary: string | null;
+  status: PlanningDocumentStatus | string;
+  current_version: number;
+  created_by_id: string | null;
+  approved_at: string | null;
+  meta: Record<string, unknown>;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  revisions: PlanningDocumentRevisionOut[];
+}
+
+export interface MatterRoleAssignmentOut {
+  id: string;
+  matter_id: string;
+  parent_id: string | null;
+  role_name: string;
+  unit_name: string | null;
+  user_id: string | null;
+  start_at: string | null;
+  end_at: string | null;
+  note: string | null;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GovernanceWorkflowTemplateOut {
+  id: string;
+  name: string;
+  template_type: string;
+  description: string | null;
+  version: number;
+  steps: Array<Record<string, unknown>>;
+  created_by_id: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AutomationRuleOut {
+  id: string;
+  name: string;
+  description: string | null;
+  trigger_type: string;
+  conditions: Record<string, unknown>;
+  actions: Array<Record<string, unknown>>;
+  matter_id: string | null;
+  status: AutomationRuleStatus | string;
+  created_by_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MatterListItem {
+  id: string;
+  title: string;
+  matter_type: MatterType | string;
+  description: string | null;
+  org_id: string | null;
+  owner_user_id: string | null;
+  starts_at: string | null;
+  due_at: string | null;
+  priority: MatterPriority | string;
+  visibility: MatterVisibility | string;
+  status: MatterStatus | string;
+  progress_percent: number;
+  created_by_id: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  case_count: number;
+  open_task_count: number;
+  link_count: number;
+}
+
+export interface MatterOut extends Omit<MatterListItem, "case_count" | "open_task_count" | "link_count"> {
+  meta: Record<string, unknown>;
+  programs: ProgramOut[];
+  cases: GovernanceCaseOut[];
+  links: EntityRelationOut[];
+  events: TimelineEventOut[];
+  decisions: DecisionOut[];
+  planning_documents: PlanningDocumentOut[];
+  role_assignments: MatterRoleAssignmentOut[];
+}
+
+export interface GovernanceStatsOut {
+  active_matters: number;
+  overdue_matters: number;
+  open_cases: number;
+  open_tasks: number;
+  my_tasks: number;
+  pending_decisions: number;
+  plans_in_review: number;
+}
+
+export interface GovernanceDashboardOut {
+  stats: GovernanceStatsOut;
+  matters: MatterListItem[];
+}
+
+export type MatterCreate = Pick<
+  MatterOut,
+  | "title"
+  | "matter_type"
+  | "description"
+  | "org_id"
+  | "owner_user_id"
+  | "starts_at"
+  | "due_at"
+  | "priority"
+  | "visibility"
+  | "status"
+  | "meta"
+>;
+export type MatterUpdate = Partial<MatterCreate> & { progress_percent?: number };
+export type ProgramCreate = Pick<
+  ProgramOut,
+  "name" | "description" | "owner_user_id" | "starts_at" | "due_at" | "status" | "sort_order"
+>;
+export type ProgramUpdate = Partial<ProgramCreate>;
+export type GovernanceCaseCreate = Pick<
+  GovernanceCaseOut,
+  | "program_id"
+  | "title"
+  | "case_type"
+  | "description"
+  | "owner_user_id"
+  | "status"
+  | "current_step"
+  | "due_at"
+  | "meta"
+>;
+export type GovernanceCaseUpdate = Partial<GovernanceCaseCreate>;
+export type EntityRelationCreate = Pick<
+  EntityRelationOut,
+  | "case_id"
+  | "source_type"
+  | "source_id"
+  | "target_type"
+  | "target_id"
+  | "relation"
+  | "title"
+  | "href"
+  | "note"
+  | "meta"
+>;
+export type TimelineEventCreate = Pick<
+  TimelineEventOut,
+  "case_id" | "event_type" | "title" | "body" | "payload"
+>;
+export type DecisionCreate = Pick<
+  DecisionOut,
+  | "case_id"
+  | "source_type"
+  | "source_id"
+  | "title"
+  | "content"
+  | "status"
+  | "owner_user_id"
+  | "due_at"
+  | "meta"
+>;
+export type DecisionUpdate = Partial<DecisionCreate>;
+export type PlanningDocumentCreate = Pick<
+  PlanningDocumentOut,
+  "case_id" | "title" | "summary" | "status" | "meta"
+> & {
+  version_label: string;
+  content: string;
+  change_reason?: string | null;
+};
+export type PlanningDocumentUpdate = Partial<
+  Pick<PlanningDocumentOut, "case_id" | "title" | "summary" | "status" | "meta">
+>;
+export type PlanningDocumentRevisionCreate = Pick<
+  PlanningDocumentRevisionOut,
+  "version_label" | "content" | "change_reason"
+>;
+export type MatterRoleAssignmentCreate = Pick<
+  MatterRoleAssignmentOut,
+  | "parent_id"
+  | "role_name"
+  | "unit_name"
+  | "user_id"
+  | "start_at"
+  | "end_at"
+  | "note"
+  | "sort_order"
+>;
+export type MatterRoleAssignmentUpdate = Partial<MatterRoleAssignmentCreate> & {
+  is_active?: boolean;
+};
+export type GovernanceWorkflowTemplateCreate = Pick<
+  GovernanceWorkflowTemplateOut,
+  "name" | "template_type" | "description" | "version" | "steps"
+>;
+export type AutomationRuleCreate = Pick<
+  AutomationRuleOut,
+  "name" | "description" | "trigger_type" | "conditions" | "actions" | "matter_id" | "status"
+>;
+
 // ── 公告統計 ─────────────────────────────────────────────────────────────────
 
 export interface AnnouncementStatsOut {
@@ -3115,6 +3457,8 @@ export interface RecipientSelector {
   user_ids: string[];
   position_ids: string[];
   org_ids: string[];
+  /** 手動輸入的外部完整 Email，不需是系統使用者 */
+  external_emails: string[];
   /** 全部使用者（含校外/管理員帳號） */
   include_all: boolean;
   /** 全部校內使用者（email 屬校內網域） */
@@ -3161,6 +3505,8 @@ export interface EmailComposePayload {
   subject: string;
   heading: string;
   body: string;
+  banner_image_url: string;
+  banner_image_alt: string;
   card_rows: EmailCardRow[];
   cta_label: string;
   cta_url: string;
@@ -3200,6 +3546,8 @@ export interface EmailMessageOut {
 export interface EmailMessageDetailOut extends EmailMessageOut {
   heading: string;
   body: string;
+  banner_image_url: string;
+  banner_image_alt: string;
   card_rows: EmailCardRow[];
   cta_label: string;
   cta_url: string;
