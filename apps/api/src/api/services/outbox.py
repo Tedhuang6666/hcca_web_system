@@ -159,7 +159,7 @@ def _fan_out_admin_notification(payload: dict) -> None:
     from api.models.notification import Notification
     from api.models.user import User
 
-    sync_url = settings.DATABASE_URL.replace("+asyncpg", "")
+    sync_url = str(settings.DATABASE_URL).replace("+asyncpg", "")
     engine = create_engine(sync_url)
     try:
         with Session(engine) as session:
@@ -188,7 +188,7 @@ def process_pending_outbox() -> None:
     from api.core.config import settings
 
     # 使用同步引擎（Celery task 不在 asyncio event loop）
-    sync_url = settings.DATABASE_URL.replace("+asyncpg", "")
+    sync_url = str(settings.DATABASE_URL).replace("+asyncpg", "")
     engine = create_engine(sync_url)
 
     with Session(engine) as session:

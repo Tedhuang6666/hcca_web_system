@@ -82,7 +82,9 @@ async def list_zones_for_product(
         return []
     zone_ids = [z.id for z in zones]
 
-    seat_counts: dict[uuid.UUID, dict[str, int]] = {zid: {"total": 0, "avail": 0} for zid in zone_ids}
+    seat_counts: dict[uuid.UUID, dict[str, int]] = {
+        zid: {"total": 0, "avail": 0} for zid in zone_ids
+    }
     rows = await session.execute(
         select(Seat.zone_id, Seat.status, func.count())
         .where(Seat.zone_id.in_(zone_ids))
@@ -343,16 +345,16 @@ async def get_seat_map(
 ) -> SeatMapOut:
     now = _now()
     # 清掉過期 hold，狀態才精準
-    await session.execute(delete(SeatHold).where(SeatHold.zone_id == zone.id, SeatHold.expires_at < now))
+    await session.execute(
+        delete(SeatHold).where(SeatHold.zone_id == zone.id, SeatHold.expires_at < now)
+    )
     await session.flush()
 
     holds = (
-        await session.execute(select(SeatHold).where(SeatHold.zone_id == zone.id))
-    ).scalars().all()
-    hold_by_seat = {h.seat_id: h for h in holds}
-    my_hold_expires = next(
-        (h.expires_at for h in holds if h.user_id == user.id), None
+        (await session.execute(select(SeatHold).where(SeatHold.zone_id == zone.id))).scalars().all()
     )
+    hold_by_seat = {h.seat_id: h for h in holds}
+    my_hold_expires = next((h.expires_at for h in holds if h.user_id == user.id), None)
 
     taken = set(
         (
@@ -532,10 +534,7 @@ async def _write_assignments(
     seats = (
         (
             await session.execute(
-                select(Seat)
-                .where(Seat.id.in_(seat_ids))
-                .order_by(Seat.id)
-                .with_for_update()
+                select(Seat).where(Seat.id.in_(seat_ids)).order_by(Seat.id).with_for_update()
             )
         )
         .scalars()

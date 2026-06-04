@@ -400,7 +400,13 @@ class MealOrder(Base, TimestampMixin):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
     status: Mapped[MealOrderStatus] = mapped_column(
-        Enum(MealOrderStatus, name="mealorderstatus"),
+        # values_callable 強制使用 .value（小寫 "confirmed"）而非 .name（大寫 "CONFIRMED"）；
+        # DB enum mealorderstatus 的 label 是小寫（見 add_meal_system_tables migration）。
+        Enum(
+            MealOrderStatus,
+            name="mealorderstatus",
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
         nullable=False,
         default=MealOrderStatus.PENDING,
         index=True,

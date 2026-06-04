@@ -20,8 +20,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 import httpx
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.celery_app import celery_app
 from api.services import webhook as webhook_svc
@@ -32,12 +35,31 @@ HTTP_TIMEOUT_SECONDS = 10
 USER_AGENT = "HCCA-Webhook/1.0 (+https://hcca.example/legal/security-policy)"
 
 
+@asynccontextmanager
+async def _task_session() -> AsyncIterator[AsyncSession]:
+    """每次 asyncio.run() 以新 loop 專屬 engine 開 session 並 dispose。
+
+    Celery task 每呼叫一次 asyncio.run() 就是一個新的 event loop。若沿用模組層級
+    共享的 async engine，其 pooled asyncpg 連線會綁定到上一個（已關閉的）loop，
+    再次使用時拋 "got Future attached to a different loop"。
+    """
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    from api.core.config import settings
+
+    engine = create_async_engine(str(settings.DATABASE_URL), echo=False)
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            yield session
+    finally:
+        await engine.dispose()
+
+
 async def _deliver_one_async(delivery_id: str) -> dict:
     """送出單一 delivery、處理結果。回傳 summary dict。"""
-    from api.core.database import AsyncSessionLocal
     from api.models.webhook import WebhookDelivery, WebhookSubscription
 
-    async with AsyncSessionLocal() as db:
+    async with _task_session() as db:
         import uuid as _uuid
 
         delivery = await db.get(WebhookDelivery, _uuid.UUID(delivery_id))
@@ -117,9 +139,7 @@ def deliver_webhook(delivery_id: str) -> dict:
 
 async def _process_due_async(batch_size: int) -> dict:
     """批次拉取 due deliveries、為每筆 enqueue 一個 deliver_webhook task。"""
-    from api.core.database import AsyncSessionLocal
-
-    async with AsyncSessionLocal() as db:
+    async with _task_session() as db:
         rows = await webhook_svc.list_due_deliveries(db, limit=batch_size)
         for row in rows:
             try:

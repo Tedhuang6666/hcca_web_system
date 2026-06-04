@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 def _sync_engine():
-    sync_url = settings.DATABASE_URL.replace("+asyncpg", "")
+    sync_url = str(settings.DATABASE_URL).replace("+asyncpg", "")
     return create_engine(sync_url)
 
 

@@ -48,7 +48,9 @@ class WaveInput(BaseModel):
     id: uuid.UUID | None = None
     name: str = Field(..., min_length=1, max_length=200)
     starts_at: datetime | None = None
-    audience: dict = Field(default_factory=dict, description="對象條件（targeting 結構）；空=所有人")
+    audience: dict = Field(
+        default_factory=dict, description="對象條件（targeting 結構）；空=所有人"
+    )
     sort_order: int = 0
 
 

@@ -1119,7 +1119,7 @@ def create_petition_private_channel(payload: dict[str, Any]) -> str | None:
 
     from api.core.config import settings
 
-    sync_url = settings.DATABASE_URL.replace("+asyncpg", "")
+    sync_url = str(settings.DATABASE_URL).replace("+asyncpg", "")
     engine = create_engine(sync_url)
     with Session(engine) as session:
         case_obj = session.get(PetitionCase, uuid.UUID(case_id))
@@ -1454,7 +1454,7 @@ def dispatch_user_dm(payload: dict[str, Any]) -> None:
     from sqlalchemy import select as _select
     from sqlalchemy.orm import Session
 
-    sync_url = settings.DATABASE_URL.replace("+asyncpg", "")
+    sync_url = str(settings.DATABASE_URL).replace("+asyncpg", "")
     eng = create_engine(sync_url)
     with Session(eng) as session:
         link = session.execute(

@@ -82,9 +82,7 @@ def _new_token() -> str:
     return secrets.token_urlsafe(32)
 
 
-def _vote_tally(
-    vote: MeetingVote, eligible_count: int, present_voters: int = 0
-) -> dict:
+def _vote_tally(vote: MeetingVote, eligible_count: int, present_voters: int = 0) -> dict:
     """計算表決結果，依 record_method 分流。
 
     - ACCLAMATION：無異議通過，視為全體出席表決權同意。
@@ -1449,9 +1447,7 @@ def _format_resolution(vote: MeetingVote, tally: dict) -> str:
         body = "、".join(parts)
         return f"{body}；{vote.result_label}" if vote.result_label else body
     verdict = "通過" if tally.get("passed") else "不通過"
-    return (
-        f"同意 {tally['approve']}、不同意 {tally['reject']}、棄權 {tally['abstain']}，{verdict}"
-    )
+    return f"同意 {tally['approve']}、不同意 {tally['reject']}、棄權 {tally['abstain']}，{verdict}"
 
 
 async def add_recusal(
@@ -1899,9 +1895,7 @@ def _simple_minutes_lines(meeting: Meeting, summary: dict[str, int]) -> list[str
             lines.append(f"說明：{item.description}")
         if item.notes:
             lines.append(f"討論：{item.notes}")
-        recused = [
-            (r.user.display_name if r.user else str(r.user_id)) for r in item.recusals
-        ]
+        recused = [(r.user.display_name if r.user else str(r.user_id)) for r in item.recusals]
         if recused:
             lines.append(f"（{'、'.join(recused)}委員迴避）")
         lines.append(f"決議：{item.resolution or '未做成決議'}")

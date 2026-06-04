@@ -238,13 +238,13 @@ export default function SimpleMeetingConsole({ meetingId }: { meetingId: string 
 
   async function recordNamed(record: MeetingAttendanceOut, choiceOrKey: string) {
     if (!meeting || !namedVote) return;
-    const body = useCustomOptionsFromVote(namedVote)
+    const body = voteUsesCustomOptions(namedVote)
       ? { voter_id: record.user_id, option_key: choiceOrKey }
       : { voter_id: record.user_id, choice: choiceOrKey as "approve" | "reject" | "abstain" };
     await run(() => meetingsApi.recorderBallot(meeting.id, namedVote.id, body), "已記錄");
   }
 
-  function useCustomOptionsFromVote(vote: NonNullable<typeof namedVote>) {
+  function voteUsesCustomOptions(vote: NonNullable<typeof namedVote>) {
     return Boolean(vote.options && vote.options.length);
   }
 

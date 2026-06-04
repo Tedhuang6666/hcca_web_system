@@ -328,7 +328,9 @@ class VoteUpdate(BaseModel):
 class ManualTallyRequest(BaseModel):
     """主席口頭計票：直接寫入彙總票數並關閉表決。"""
 
-    manual_tally: dict[str, int] = Field(..., description="如 {'approve':5,'reject':3} 或自訂 {'a':5}")
+    manual_tally: dict[str, int] = Field(
+        ..., description="如 {'approve':5,'reject':3} 或自訂 {'a':5}"
+    )
     result_label: str | None = Field(None, max_length=200)
 
 
