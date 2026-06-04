@@ -12,6 +12,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.core.clock import now_local
 from api.models.meal import (
     MealClassPickupCode,
     MealOrder,
@@ -44,6 +45,7 @@ from api.schemas.meal import (
     MenuScheduleCreate,
     MenuScheduleUpdate,
 )
+from api.services import receivable as receivable_svc
 from api.services import school_class as class_svc
 
 logger = logging.getLogger(__name__)
@@ -59,7 +61,7 @@ async def generate_meal_serial(session: AsyncSession) -> str:
     """
     result = await session.execute(text("SELECT nextval('meal_serial_seq')"))
     seq_val: int = result.scalar_one()
-    year = datetime.now(UTC).year
+    year = now_local().year
     return f"MEAL-{year}-{seq_val:06d}"
 
 
@@ -719,6 +721,7 @@ async def create_meal_order(
         )
     await session.flush()
     logger.info("學餐訂單建立 serial=%s user=%s total=%d", serial, user_id, total_price)
+    await receivable_svc.sync_meal_order(session, order)
     return order
 
 
@@ -746,6 +749,14 @@ async def create_platform_meal_order(
         raise ValueError("此商品已截止訂購")
     if now > pickup_slot.order_deadline:
         raise ValueError("已超過此取餐時段的訂購截止時間")
+
+    # 鎖住商品上架列，序列化同一商品的並發訂購，避免 max_quantity / 取餐時段容量超賣
+    # （與班級訂購路徑 create_meal_order 的 B4 SELECT FOR UPDATE 防超賣一致）。
+    await session.execute(
+        select(MealProductAvailability.id)
+        .where(MealProductAvailability.id == availability.id)
+        .with_for_update()
+    )
 
     total_quantity = 0
     total_price = 0
@@ -818,6 +829,7 @@ async def create_platform_meal_order(
             )
         )
     await session.flush()
+    await receivable_svc.sync_meal_order(session, order)
     return order
 
 
@@ -844,6 +856,7 @@ async def cancel_meal_order(
     order.status = MealOrderStatus.CANCELLED
     if reason:
         order.notes = f"[取消原因] {reason}" + (f"\n{order.notes}" if order.notes else "")
+    await receivable_svc.cancel_for_source(session, "meal_order", order.id)
     await session.flush()
     logger.info("學餐訂單取消 serial=%s by=%s", order.serial_number, requested_by)
     return order
@@ -881,6 +894,13 @@ async def replace_meal_order_items(
             raise ValueError("此商品已截止訂購")
         if now > pickup_slot.order_deadline:
             raise ValueError("已超過此取餐時段的訂購截止時間")
+
+        # 鎖住商品上架列，序列化並發修改/訂購，避免容量超賣（同 create_platform_meal_order）。
+        await session.execute(
+            select(MealProductAvailability.id)
+            .where(MealProductAvailability.id == availability.id)
+            .with_for_update()
+        )
 
         total_quantity = 0
         for item_req in data.items:
@@ -974,6 +994,7 @@ async def replace_meal_order_items(
     order.total_price = total_price
     order.notes = data.notes
     session.add_all(order_items)
+    await receivable_svc.sync_meal_order(session, order)
     await session.flush()
     return order
 
@@ -1010,6 +1031,7 @@ async def set_order_paid(
     else:
         order.paid_at = None
         order.paid_by_id = None
+    await receivable_svc.sync_meal_order(session, order)
     await session.flush()
     return order
 

@@ -269,6 +269,7 @@ export interface ProductOut {
   status: ProductStatus; version: number;
   series_id: string; org_id: string; created_by: string;
   sale_start: string | null; sale_end: string | null;
+  requires_seating: boolean; seating_mode: SeatingMode | null;
   created_at: string; updated_at: string;
   variant_groups: ProductVariantGroupOut[];
 }
@@ -290,6 +291,7 @@ export interface CatalogProductOut {
   stock_quantity: number; is_unlimited: boolean;
   sale_start: string | null; sale_end: string | null;
   has_variants: boolean;
+  requires_seating: boolean; seating_mode: SeatingMode | null;
 }
 export interface CatalogSeriesOut {
   id: string; name: string; image_url: string | null;
@@ -342,6 +344,72 @@ export interface OrderSummaryRow {
 export interface OrderSummaryOut {
   group_by: string; rows: OrderSummaryRow[];
   total_amount: number; paid_amount: number; unpaid_amount: number;
+}
+
+// ── 劃位 / 票券型別 ──────────────────────────────────────────────────────────
+export type SeatingMode = "at_purchase" | "scheduled" | "admin_assign";
+export type SeatStatus = "available" | "disabled" | "blocked";
+export type SeatAssignmentStatus = "active" | "released";
+/** 使用者選位畫面每個座位的即時狀態 */
+export type SeatStateKind = "available" | "disabled" | "blocked" | "held" | "mine" | "taken";
+
+export interface SeatInput {
+  id?: string | null;
+  label: string; block?: string | null; row_label?: string | null;
+  x: number; y: number;
+  seat_type: string; price_delta: number; status: SeatStatus;
+}
+export interface SeatOut {
+  id: string; zone_id: string;
+  label: string; block: string | null; row_label: string | null;
+  x: number; y: number;
+  seat_type: string; price_delta: number; status: SeatStatus;
+}
+export interface WaveInput {
+  id?: string | null;
+  name: string; starts_at: string | null;
+  audience: Record<string, unknown>; sort_order: number;
+}
+export interface WaveOut {
+  id: string; zone_id: string;
+  name: string; starts_at: string | null;
+  audience: Record<string, unknown>; sort_order: number;
+}
+export interface ZoneOut {
+  id: string; product_id: string; name: string; description: string | null;
+  starts_at: string | null; seating_opens_at: string | null;
+  hold_minutes: number; layout: Record<string, unknown>; sort_order: number;
+  seats: SeatOut[]; waves: WaveOut[];
+}
+export interface ZoneListItem {
+  id: string; product_id: string; name: string;
+  starts_at: string | null; seating_opens_at: string | null;
+  sort_order: number;
+  seat_count: number; available_count: number; assigned_count: number;
+}
+export interface SeatState {
+  id: string; label: string; block: string | null; row_label: string | null;
+  x: number; y: number; seat_type: string; price_delta: number;
+  state: SeatStateKind;
+}
+export interface SeatMapOut {
+  zone_id: string; product_id: string; name: string;
+  starts_at: string | null; layout: Record<string, unknown>;
+  hold_minutes: number; seats: SeatState[];
+  remaining_quota: number; can_select_now: boolean;
+  next_open_at: string | null; hold_expires_at: string | null;
+}
+export interface HoldOut {
+  zone_id: string; seat_ids: string[];
+  expires_at: string | null; rejected_seat_ids: string[];
+}
+export interface SeatBookingOut {
+  id: string; seat_id: string; seat_label: string | null;
+  zone_id: string; zone_name: string | null;
+  order_id: string; order_item_id: string | null;
+  user_id: string; user_name: string | null;
+  assigned_by_id: string | null;
+  status: SeatAssignmentStatus; created_at: string;
 }
 
 // ── 特約地圖型別 ──────────────────────────────────────────────────────────────
@@ -958,6 +1026,25 @@ export type MeetingStatus =
   | "archived";
 /** 會議的法案審議階段（決定議程自動帶入哪一階段的法案） */
 export type MeetingBillStage = "standing_committee" | "council";
+
+export type MeetingMode = "simple" | "full";
+
+export type MeetingVoteRecordMethod = "ballots" | "tally" | "acclamation";
+
+export interface MeetingVoteOption {
+  key: string;
+  label: string;
+}
+
+export interface MeetingRecusalOut {
+  id: string;
+  agenda_item_id: string;
+  user_id: string;
+  note: string | null;
+  created_by: string;
+  created_at: string;
+  user: MeetingUserBrief | null;
+}
 export type AgendaItemType = "manual" | "regulation" | "document" | "council_proposal";
 export type AttendanceRole = "voter" | "attendee" | "observer";
 export type AttendanceStatus = "expected" | "present" | "absent" | "leave";
@@ -978,13 +1065,19 @@ export type AttendanceSourceType =
   | "position_members"
   | "manual";
 export type MeetingArtifactType =
+  | "activity"
   | "regulation"
   | "document"
   | "survey"
   | "announcement"
   | "petition"
+  | "judicial_petition"
+  | "council_proposal"
   | "shop"
+  | "shop_order"
   | "meal"
+  | "meal_order"
+  | "meal_schedule"
   | "external"
   | "custom";
 export type MeetingMotionType = "main" | "amendment" | "procedural";
@@ -1058,6 +1151,7 @@ export interface MeetingAgendaItemOut {
   regulation: MeetingRegulationBrief | null;
   attachments: MeetingAgendaAttachmentOut[];
   artifact_links: MeetingArtifactLinkOut[];
+  recusals: MeetingRecusalOut[];
 }
 
 export interface MeetingAgendaAttachmentOut {
@@ -1135,6 +1229,8 @@ export interface MeetingVoteTallyOut {
   pass_threshold: number;
   threshold_type: VoteThresholdType;
   passed: boolean;
+  option_counts: Record<string, number>;
+  result_label: string | null;
 }
 
 export interface MeetingBallotOut {
@@ -1142,6 +1238,7 @@ export interface MeetingBallotOut {
   vote_id: string;
   voter_id: string;
   choice: BallotChoice;
+  option_key: string | null;
   cast_at: string;
   voter: MeetingUserBrief | null;
 }
@@ -1156,6 +1253,10 @@ export interface MeetingVoteOut {
   status: VoteStatus;
   pass_threshold: number;
   threshold_type: VoteThresholdType;
+  record_method: MeetingVoteRecordMethod;
+  options: MeetingVoteOption[] | null;
+  manual_tally: Record<string, number> | null;
+  result_label: string | null;
   opened_at: string | null;
   closed_at: string | null;
   result_note: string | null;
@@ -1292,7 +1393,9 @@ export interface MeetingEventOut {
 export interface MeetingListItem {
   id: string;
   org_id: string;
+  activity_id: string | null;
   title: string;
+  mode: MeetingMode;
   location: string | null;
   chair_name: string | null;
   starts_at: string | null;
@@ -1527,6 +1630,15 @@ export interface ActivityCreate {
   status?: ActivityStatus;
 }
 
+export interface ActivityLinkCreate {
+  target_type: ActivityLinkKind;
+  target_id: string;
+  title: string;
+  href: string;
+  note?: string | null;
+  meta?: Record<string, unknown>;
+}
+
 export interface ActivityConvener {
   id: string;
   activity_id: string;
@@ -1537,6 +1649,234 @@ export interface ActivityConvener {
   updated_at: string;
   user_name: string;
   user_email: string;
+}
+
+// ── 跨模組工作流 ──────────────────────────────────────────────────────────────
+
+export interface WorkflowTransitionCreate {
+  status: string;
+  note?: string | null;
+  payload?: Record<string, unknown>;
+}
+
+export interface WorkflowLinkCreate {
+  target_type: string;
+  target_id?: string | null;
+  relation?: string;
+  title: string;
+  href?: string | null;
+  note?: string | null;
+  meta?: Record<string, unknown>;
+}
+
+export interface WorkflowLinkOut {
+  id: string;
+  instance_id: string;
+  target_type: string;
+  target_id: string | null;
+  relation: string;
+  title: string;
+  href: string | null;
+  note: string | null;
+  meta: Record<string, unknown>;
+  created_by_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkflowEventOut {
+  id: string;
+  instance_id: string;
+  event_type: string;
+  from_status: string | null;
+  to_status: string | null;
+  actor_id: string | null;
+  actor_email: string | null;
+  note: string | null;
+  payload: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface WorkflowInstanceOut {
+  id: string;
+  workflow_type: string;
+  source_type: string;
+  source_id: string;
+  title: string;
+  status: string;
+  current_step: string | null;
+  org_id: string | null;
+  activity_id: string | null;
+  created_by_id: string | null;
+  completed_at: string | null;
+  is_active: boolean;
+  meta: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  links: WorkflowLinkOut[];
+}
+
+export interface WorkflowTimelineOut {
+  instance: WorkflowInstanceOut;
+  events: WorkflowEventOut[];
+  links: WorkflowLinkOut[];
+}
+
+export type ActivityLinkKind =
+  | "announcement" | "survey" | "shop_product" | "shop_order"
+  | "meal_schedule" | "meal_order" | "meeting" | "document"
+  | "regulation" | "petition" | "council_proposal" | "judicial_petition"
+  | "work_item" | "receivable" | "publication";
+
+export interface ActivityLinkOut {
+  id: string;
+  activity_id: string;
+  target_type: ActivityLinkKind;
+  target_id: string;
+  title: string;
+  href: string;
+  note: string | null;
+  meta: Record<string, unknown>;
+  created_by_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ActivityLinkSuggestion {
+  suggestion_id: string;
+  target_type: ActivityLinkKind;
+  target_id: string;
+  title: string;
+  href: string;
+  score: number;
+  reasons: string[];
+  meta: Record<string, unknown>;
+}
+
+export interface ActivityWorkspaceOut {
+  activity_id: string;
+  sections: Array<{ key: string; title: string; count: number; items: ActivityLinkOut[] }>;
+  pending_items: Array<Record<string, unknown>>;
+  checklist: Array<{ key: string; title: string; status: string; action: string }>;
+  suggestions: ActivityLinkSuggestion[];
+}
+
+export interface ActivityClosingReportOut {
+  activity_id: string;
+  linked_counts: Record<string, number>;
+  receivables: Record<string, number>;
+  tasks: Record<string, number>;
+  publications: Record<string, number>;
+  generated_at: string;
+}
+
+export type ReceivableStatus = "unpaid" | "partial" | "paid" | "refunding" | "refunded" | "canceled";
+export type ReceivableSource = "shop_order" | "meal_order" | "activity_fee" | "class_fee" | "manual";
+
+export interface ReceivableOut {
+  id: string;
+  source_type: ReceivableSource;
+  source_id: string | null;
+  activity_id: string | null;
+  org_id: string | null;
+  user_id: string | null;
+  class_id: string | null;
+  title: string;
+  amount: number;
+  paid_amount: number;
+  refunded_amount: number;
+  status: ReceivableStatus;
+  collected_by_id: string | null;
+  paid_at: string | null;
+  refunded_at: string | null;
+  due_at: string | null;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReceivableSummaryOut {
+  total_count: number;
+  total_amount: number;
+  paid_amount: number;
+  unpaid_amount: number;
+  refunded_amount: number;
+  by_status: Record<string, number>;
+}
+
+export type PublicationStatus = "draft" | "scheduled" | "sent" | "canceled";
+
+export interface PublicationCampaignOut {
+  id: string;
+  title: string;
+  body: string;
+  source_type: string | null;
+  source_id: string | null;
+  activity_id: string | null;
+  org_id: string | null;
+  audience_type: string;
+  audience_filter: Record<string, unknown>;
+  channels: string[];
+  status: PublicationStatus;
+  scheduled_at: string | null;
+  sent_at: string | null;
+  created_by_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PublicationPreviewOut {
+  title: string;
+  channels: Record<string, { title: string; body: string }>;
+  estimated_recipients: number;
+}
+
+export interface PublicationStatsOut {
+  campaign_id: string;
+  total_deliveries: number;
+  by_channel: Record<string, number>;
+  by_status: Record<string, number>;
+}
+
+export interface ContextLink {
+  title: string;
+  href: string;
+  kind: string;
+  timestamp: string | null;
+}
+
+export interface MeetingBriefingCardOut {
+  meeting_id: string;
+  my_role: string | null;
+  attendance_status: string | null;
+  agenda_items: ContextLink[];
+  related_items: ContextLink[];
+  recommended_actions: string[];
+}
+
+export interface DocumentApprovalContextOut {
+  document_id: string;
+  source_activity: ContextLink | null;
+  related_items: ContextLink[];
+  previous_comments: string[];
+  recommended_actions: string[];
+}
+
+export interface PetitionResolutionContextOut {
+  petition_id: string;
+  related_regulations: ContextLink[];
+  similar_petitions: ContextLink[];
+  related_activities: ContextLink[];
+  recommended_actions: string[];
+}
+
+export interface RegulationUsageContextOut {
+  regulation_id: string;
+  related_documents: ContextLink[];
+  related_meetings: ContextLink[];
+  related_petitions: ContextLink[];
+  related_announcements: ContextLink[];
+  pending_reviews: ContextLink[];
 }
 
 // ── 使用者 ────────────────────────────────────────────────────────────────────
@@ -2312,7 +2652,8 @@ export type CouncilProposalStatus =
   | "council_review"
   | "passed"
   | "rejected"
-  | "withdrawn";
+  | "withdrawn"
+  | "published";
 
 export interface CouncilProposalCreate {
   contact_name?: string | null;
@@ -2385,7 +2726,8 @@ export type JudicialPetitionStatus =
   | "in_review"
   | "decided"
   | "dismissed"
-  | "withdrawn";
+  | "withdrawn"
+  | "published";
 
 export interface JudicialPetitionCreate {
   petitioner_name: string;
@@ -2723,6 +3065,24 @@ export interface PendingAlertItem {
   document_title: string;
   step_order: number;
   waiting_hours: number;
+}
+
+export interface AnalyticsInsightItem {
+  id: string;
+  module: string;
+  title: string;
+  description: string;
+  severity: "info" | "warning" | "critical";
+  score: number;
+  href: string;
+  reason: string;
+  recommended_action: string;
+  created_at: string;
+}
+
+export interface AnalyticsInsightsOut {
+  items: AnalyticsInsightItem[];
+  total: number;
 }
 
 export interface AnnouncementParticipationItem {

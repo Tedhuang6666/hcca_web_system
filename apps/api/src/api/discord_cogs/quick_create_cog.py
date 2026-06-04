@@ -15,6 +15,7 @@ from discord import app_commands
 from discord.ext import commands
 from sqlalchemy import select
 
+from api.core.clock import local_today
 from api.core.database import AsyncSessionLocal
 from api.discord_cogs._autocomplete import parse_due_at
 from api.discord_cogs._helpers import has_permission, require_bound_user
@@ -35,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 
 async def _user_primary_org(db, user_id: uuid.UUID) -> uuid.UUID | None:
-    today = datetime.now(UTC).date()
+    today = local_today()
     row = await db.execute(
         select(Position.org_id)
         .join(UserPosition, UserPosition.position_id == Position.id)

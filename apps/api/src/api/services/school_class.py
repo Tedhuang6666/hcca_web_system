@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.core.clock import local_today
 from api.models.org import Org, Permission, Position, PositionCategory, UserPosition
 from api.models.person import (
     PersonAffiliation,
@@ -219,7 +220,7 @@ async def ensure_class_default_roles(
 
 async def list_class_roles(session: AsyncSession, sc: SchoolClass) -> list[dict]:
     await ensure_class_default_roles(session, sc)
-    today = date.today()
+    today = local_today()
     result = await session.execute(
         select(ClassRoleBinding)
         .options(selectinload(ClassRoleBinding.position).selectinload(Position.permissions))
@@ -541,7 +542,7 @@ async def add_membership(
         academic_year=sc.academic_year,
         source=data.source,
         status=ClassMembershipStatus.ACTIVE,
-        start_date=data.start_date or date.today(),
+        start_date=data.start_date or local_today(),
     )
     session.add(membership)
     await session.flush()
@@ -576,7 +577,7 @@ async def end_membership(
     if membership is None:
         return False
     membership.status = ClassMembershipStatus.ENDED
-    membership.end_date = end_date or date.today()
+    membership.end_date = end_date or local_today()
     await session.flush()
     return True
 
@@ -613,7 +614,7 @@ async def assign_class_role(
     up = UserPosition(
         user_id=data.user_id,
         position_id=binding.position_id,
-        start_date=data.start_date or date.today(),
+        start_date=data.start_date or local_today(),
         end_date=data.end_date,
     )
     session.add(up)
@@ -638,7 +639,7 @@ async def assign_class_role(
             council_up = UserPosition(
                 user_id=data.user_id,
                 position_id=council_position.id,
-                start_date=data.start_date or date.today(),
+                start_date=data.start_date or local_today(),
                 end_date=data.end_date,
             )
             session.add(council_up)
@@ -814,7 +815,7 @@ async def get_cadre_class_ids(session: AsyncSession, user_id: uuid.UUID) -> set[
     """回傳該使用者可代表處理班級事項的所有班級 ID。"""
     result = await session.execute(select(ClassCadre.class_id).where(ClassCadre.user_id == user_id))
     class_ids = set(result.scalars().all())
-    today = date.today()
+    today = local_today()
     role_result = await session.execute(
         select(ClassRoleBinding.class_id)
         .join(Position, Position.id == ClassRoleBinding.position_id)

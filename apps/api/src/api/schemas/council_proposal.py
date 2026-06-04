@@ -40,11 +40,14 @@ class CouncilProposalCreate(BaseModel):
         return stripped or None
 
     @model_validator(mode="after")
-    def _check_case_type_consistency(self) -> "CouncilProposalCreate":
+    def _check_case_type_consistency(self) -> CouncilProposalCreate:
         if self.case_type == CouncilProposalCaseType.REGULATION:
             if self.kind is None:
                 raise ValueError("法規案需指定子類型（制定/修正/廢止）")
-            if self.kind in {CouncilProposalKind.AMEND, CouncilProposalKind.ABOLISH} and self.regulation_id is None:
+            if (
+                self.kind in {CouncilProposalKind.AMEND, CouncilProposalKind.ABOLISH}
+                and self.regulation_id is None
+            ):
                 raise ValueError("修正案與廢止案需連結既有法規")
         else:
             # 非法規案不帶法規子類型與法規連結，避免髒資料。

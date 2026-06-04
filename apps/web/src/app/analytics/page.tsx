@@ -5,6 +5,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { analyticsApi, withFallback } from "@/lib/api";
 import type {
+  AnalyticsInsightItem,
   AnnouncementParticipationItem,
   DeptRankingItem,
   DocumentEfficiencyOut,
@@ -44,6 +45,7 @@ export default function AnalyticsPage() {
   const [efficiency, setEfficiency] = useState<DocumentEfficiencyOut | null>(null);
   const [ranking, setRanking] = useState<DeptRankingItem[]>([]);
   const [pending, setPending] = useState<PendingAlertItem[]>([]);
+  const [insights, setInsights] = useState<AnalyticsInsightItem[]>([]);
   const [announcements, setAnnouncements] = useState<AnnouncementParticipationItem[]>([]);
   const [surveys, setSurveys] = useState<SurveyParticipationItem[]>([]);
 
@@ -60,9 +62,14 @@ export default function AnalyticsPage() {
     setLoading(true);
     const failedSections: string[] = [];
     const noteFailure = (label: string) => () => failedSections.push(label);
-    const [eff, ranks, ann, survey, alerts] = await Promise.all([
+    const [eff, ranks, insightRows, ann, survey, alerts] = await Promise.all([
       withFallback(analyticsApi.documentEfficiency(filterParams), null, noteFailure("公文效率")),
       withFallback(analyticsApi.deptRanking(filterParams), [], noteFailure("部門排行")),
+      withFallback(
+        analyticsApi.insights(12).then((res) => res.items),
+        [],
+        noteFailure("治理洞察"),
+      ),
       withFallback(
         analyticsApi.announcementParticipation({ ...filterParams, limit: 8 }),
         [],
@@ -79,6 +86,7 @@ export default function AnalyticsPage() {
     ]);
     setEfficiency(eff);
     setRanking(ranks);
+    setInsights(insightRows);
     setAnnouncements(ann);
     setSurveys(survey);
     setPending(alerts);
@@ -163,6 +171,49 @@ export default function AnalyticsPage() {
             <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>{desc}</p>
           </div>
         ))}
+      </section>
+
+      <section className="card overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "1px solid var(--border)" }}>
+          <div>
+            <h2 className="text-sm font-semibold">需要注意</h2>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              依卡關、低參與與負載集中規則自動排序
+            </p>
+          </div>
+          <span className="text-xs" style={{ color: "var(--text-muted)" }}>{insights.length} 項</span>
+        </div>
+        {insights.length === 0 ? (
+          <p className="px-5 py-8 text-sm" style={{ color: "var(--text-muted)" }}>
+            目前沒有偵測到需要立即處理的異常。
+          </p>
+        ) : (
+          <ul>
+            {insights.slice(0, 6).map((item) => (
+              <li key={item.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                <Link
+                  href={item.href}
+                  className="block px-5 py-3 transition-colors"
+                  style={{ textDecoration: "none" }}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+                        {item.title}
+                      </p>
+                      <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                        {item.description}
+                      </p>
+                      <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>
+                        {item.recommended_action}
+                      </p>
+                    </div>
+                    <InsightBadge item={item} />
+                  </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
@@ -277,5 +328,20 @@ export default function AnalyticsPage() {
         </section>
       </div>
     </div>
+  );
+}
+
+function InsightBadge({ item }: { item: AnalyticsInsightItem }) {
+  const colors = {
+    critical: { color: "var(--danger)", bg: "var(--danger-dim)", border: "var(--danger-border)", label: "緊急" },
+    warning: { color: "var(--warning)", bg: "var(--warning-dim)", border: "var(--warning-border)", label: "提醒" },
+    info: { color: "var(--primary)", bg: "var(--primary-dim)", border: "var(--info-border)", label: "觀察" },
+  }[item.severity];
+  return (
+    <span
+      className="flex-shrink-0 rounded px-2 py-1 text-xs font-semibold"
+      style={{ color: colors.color, background: colors.bg, border: `1px solid ${colors.border}` }}>
+      {colors.label} {item.score}
+    </span>
   );
 }

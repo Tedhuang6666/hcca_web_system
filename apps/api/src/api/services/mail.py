@@ -132,15 +132,13 @@ async def _update_campaign_recipient_status(
             ).all()
             by_status = {str(row[0]): int(row[1]) for row in counts}
             # 仍在途中的收件人（待寄或退避重試中）→ 尚未到終態盤點時機
-            in_flight = (
-                by_status.get(EmailRecipientStatus.QUEUED, 0)
-                + by_status.get(EmailRecipientStatus.RETRYING, 0)
+            in_flight = by_status.get(EmailRecipientStatus.QUEUED, 0) + by_status.get(
+                EmailRecipientStatus.RETRYING, 0
             )
             sent = by_status.get(EmailRecipientStatus.SENT, 0)
             # FAILED 與 DEAD 皆計為終態失敗
-            failed = (
-                by_status.get(EmailRecipientStatus.FAILED, 0)
-                + by_status.get(EmailRecipientStatus.DEAD, 0)
+            failed = by_status.get(EmailRecipientStatus.FAILED, 0) + by_status.get(
+                EmailRecipientStatus.DEAD, 0
             )
             message = await session.get(EmailMessage, recipient.message_id)
             if message is not None and in_flight == 0:

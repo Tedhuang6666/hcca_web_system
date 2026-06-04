@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import date
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from api.core.cache import cache_invalidate_user_permissions
 from api.core.celery_app import celery_app
+from api.core.clock import local_today
 from api.core.config import settings
 from api.models.org import UserPosition
 
@@ -28,7 +28,7 @@ def invalidate_expired_user_caches(self) -> dict:  # type: ignore[type-arg]
 
 
 async def _invalidate_async() -> dict:
-    today = date.today()
+    today = local_today()
     engine = create_async_engine(str(settings.DATABASE_URL))
     user_ids: set[str] = set()
     try:

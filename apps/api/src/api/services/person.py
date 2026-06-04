@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.core.cache import cache_invalidate
+from api.core.clock import local_today
 from api.models.org import Position, UserPosition
 from api.models.person import (
     Person,
@@ -331,7 +332,7 @@ async def create_affiliation(
         position_id=position_id,
         role_key=data.role_key,
         title=title,
-        start_date=data.start_date or date.today(),
+        start_date=data.start_date or local_today(),
         end_date=data.end_date,
         status=PersonAffiliationStatus.ACTIVE
         if person.user_id is not None or position_id is None
@@ -352,7 +353,7 @@ async def update_affiliation(
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(affiliation, field, value)
     if affiliation.status == PersonAffiliationStatus.ENDED and affiliation.end_date is None:
-        affiliation.end_date = date.today()
+        affiliation.end_date = local_today()
     if affiliation.end_date is not None and affiliation.status == PersonAffiliationStatus.ACTIVE:
         affiliation.status = PersonAffiliationStatus.ENDED
     await db.flush()
@@ -368,7 +369,7 @@ async def end_affiliation(
     db: AsyncSession, affiliation: PersonAffiliation, *, end_date: date | None = None
 ) -> PersonAffiliation:
     affiliation.status = PersonAffiliationStatus.ENDED
-    affiliation.end_date = end_date or date.today()
+    affiliation.end_date = end_date or local_today()
     await db.flush()
     await sync_affiliation_to_rbac(db, affiliation)
     return affiliation

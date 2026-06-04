@@ -9,6 +9,7 @@ from sqlalchemy import Select, and_, desc, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.core.search import like_contains
 from api.models.partner_map import (
     PartnerBusiness,
     PartnerBusinessStatus,
@@ -215,7 +216,7 @@ async def list_map_locations(
             .where(partner_business_tags.c.tag_id.in_(set(tag_ids)))
         )
     if keyword:
-        term = f"%{keyword.strip()}%"
+        term = like_contains(keyword.strip())
         q = q.where(
             or_(
                 PartnerBusiness.name.ilike(term),

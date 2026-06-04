@@ -13,6 +13,7 @@ import httpx
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.clock import local_today
 from api.core.config import settings
 from api.core.security import redis_client
 from api.models.announcement import Announcement, AnnouncementAudience, announcement_audience_orgs
@@ -154,7 +155,7 @@ async def upsert_user_link(
 async def list_active_role_ids_for_user(
     db: AsyncSession, user_id: uuid.UUID
 ) -> dict[str, set[str]]:
-    today = datetime.now(UTC).date()
+    today = local_today()
     result = await db.execute(
         select(DiscordRoleMapping)
         .join(
@@ -186,7 +187,7 @@ async def list_active_role_ids_for_user(
 async def list_active_nickname_prefixes_for_user(
     db: AsyncSession, user_id: uuid.UUID
 ) -> dict[str, str]:
-    today = datetime.now(UTC).date()
+    today = local_today()
     result = await db.execute(
         select(DiscordNicknamePrefixRule)
         .join(

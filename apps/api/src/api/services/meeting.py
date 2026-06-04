@@ -12,6 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.core.clock import TAIPEI, local_today
 from api.models.meeting import (
     AgendaItemType,
     AttendanceRole,
@@ -20,6 +21,7 @@ from api.models.meeting import (
     BallotChoice,
     Meeting,
     MeetingAgendaItem,
+    MeetingAgendaRecusal,
     MeetingArtifactLink,
     MeetingAttendance,
     MeetingAttendanceSource,
@@ -27,6 +29,7 @@ from api.models.meeting import (
     MeetingBillStage,
     MeetingDecision,
     MeetingEvent,
+    MeetingMode,
     MeetingMotion,
     MeetingRequest,
     MeetingRequestStatus,
@@ -37,6 +40,7 @@ from api.models.meeting import (
     MeetingVote,
     SpeechQueueStatus,
     TimerStatus,
+    VoteRecordMethod,
     VoteStatus,
     VoteThresholdType,
     VoteVisibility,
@@ -61,6 +65,7 @@ from api.schemas.meeting import (
     MeetingUpdate,
     MotionCreate,
     MotionUpdate,
+    RecorderBallotCreate,
     ScreenStateUpdate,
     SpeechQueueCreate,
     SpeechQueueUpdate,
@@ -79,12 +84,70 @@ def _new_token() -> str:
 
 def _vote_tally(
     vote: MeetingVote, eligible_count: int, present_voters: int = 0
-) -> dict[str, int | bool | VoteThresholdType]:
-    approve = sum(1 for b in vote.ballots if b.choice == BallotChoice.APPROVE)
-    reject = sum(1 for b in vote.ballots if b.choice == BallotChoice.REJECT)
-    abstain = sum(1 for b in vote.ballots if b.choice == BallotChoice.ABSTAIN)
-    total = approve + reject + abstain
+) -> dict:
+    """計算表決結果，依 record_method 分流。
+
+    - ACCLAMATION：無異議通過，視為全體出席表決權同意。
+    - TALLY：取主席口頭計票彙總（manual_tally）。
+    - BALLOTS：自逐人票統計（簡易版紀錄代登或完整版議員自投皆同）。
+    自訂選項（options）時改回傳 option_counts，過/不過由 result_label 認定。
+    """
+    method = VoteRecordMethod(vote.record_method)
+    options = vote.options or None
     threshold_type = VoteThresholdType(vote.threshold_type)
+
+    # 無異議通過：不需計票
+    if method == VoteRecordMethod.ACCLAMATION:
+        return {
+            "approve": present_voters,
+            "reject": 0,
+            "abstain": 0,
+            "total": present_voters,
+            "eligible": eligible_count,
+            "pass_threshold": 0,
+            "threshold_type": threshold_type,
+            "passed": True,
+            "option_counts": {},
+            "result_label": vote.result_label or "無異議通過",
+        }
+
+    # 自訂選項：回傳各選項票數，最高票為當選；過/不過依是否已認定結論
+    if options:
+        keys = [str(opt.get("key")) for opt in options if opt.get("key")]
+        option_counts = {key: 0 for key in keys}
+        if method == VoteRecordMethod.TALLY:
+            for key in keys:
+                option_counts[key] = int((vote.manual_tally or {}).get(key, 0))
+        else:
+            for ballot in vote.ballots:
+                if ballot.option_key in option_counts:
+                    option_counts[ballot.option_key] += 1
+        total = sum(option_counts.values())
+        return {
+            "approve": 0,
+            "reject": 0,
+            "abstain": 0,
+            "total": total,
+            "eligible": eligible_count,
+            "pass_threshold": 0,
+            "threshold_type": threshold_type,
+            "passed": bool(vote.result_label),
+            "option_counts": option_counts,
+            "result_label": vote.result_label,
+        }
+
+    # 標準同意/不同意/棄權
+    if method == VoteRecordMethod.TALLY:
+        tally = vote.manual_tally or {}
+        approve = int(tally.get("approve", 0))
+        reject = int(tally.get("reject", 0))
+        abstain = int(tally.get("abstain", 0))
+    else:
+        approve = sum(1 for b in vote.ballots if b.choice == BallotChoice.APPROVE)
+        reject = sum(1 for b in vote.ballots if b.choice == BallotChoice.REJECT)
+        abstain = sum(1 for b in vote.ballots if b.choice == BallotChoice.ABSTAIN)
+    total = approve + reject + abstain
+
     if threshold_type == VoteThresholdType.CUSTOM:
         threshold = vote.pass_threshold or 0
         passed = approve >= threshold if threshold > 0 else approve > reject
@@ -106,6 +169,8 @@ def _vote_tally(
         "pass_threshold": threshold,
         "threshold_type": threshold_type,
         "passed": passed,
+        "option_counts": {},
+        "result_label": vote.result_label,
     }
 
 
@@ -116,6 +181,9 @@ async def get_meeting(session: AsyncSession, meeting_id: uuid.UUID) -> Meeting |
             selectinload(Meeting.agenda_items).selectinload(MeetingAgendaItem.regulation),
             selectinload(Meeting.agenda_items).selectinload(MeetingAgendaItem.attachments),
             selectinload(Meeting.agenda_items).selectinload(MeetingAgendaItem.artifact_links),
+            selectinload(Meeting.agenda_items)
+            .selectinload(MeetingAgendaItem.recusals)
+            .selectinload(MeetingAgendaRecusal.user),
             selectinload(Meeting.attendance_records).selectinload(MeetingAttendance.user),
             selectinload(Meeting.attendance_records).selectinload(MeetingAttendance.voting_class),
             selectinload(Meeting.attendance_records).selectinload(MeetingAttendance.proxy_for_user),
@@ -181,9 +249,14 @@ async def create_meeting(
 ) -> Meeting:
     # 未指定時，依開會組織在議事流程的角色自動偵測法案審議階段
     org = await session.get(Org, data.org_id)
+    bill_stage = data.bill_stage or (org.bill_stage if org else None)
+    # 法案審議流程天生需要完整議事（逐人表決＋門檻＋法案推進），強制完整版
+    mode = MeetingMode.FULL if bill_stage else data.mode
     meeting = Meeting(
         org_id=data.org_id,
+        activity_id=data.activity_id,
         title=data.title,
+        mode=mode,
         description=data.description,
         location=data.location,
         chair_name=data.chair_name,
@@ -194,7 +267,7 @@ async def create_meeting(
         default_pass_threshold=data.default_pass_threshold,
         default_speech_seconds=data.default_speech_seconds,
         allow_observer_requests=data.allow_observer_requests,
-        bill_stage=data.bill_stage or (org.bill_stage if org else None),
+        bill_stage=bill_stage,
         screen_token=_new_token(),
         checkin_token=_new_token(),
         created_by=created_by,
@@ -475,7 +548,7 @@ async def delete_agenda_item(
 
 async def seed_voter_roster(session: AsyncSession, meeting: Meeting) -> int:
     """用 meeting:vote 權限與有效任期建立預設表決權名冊。"""
-    today = datetime.now(UTC).date()
+    today = local_today()
     result = await session.execute(
         select(User.id)
         .join(UserPosition, UserPosition.user_id == User.id)
@@ -740,7 +813,7 @@ async def resolve_attendance_source(
 ) -> tuple[str, list[User]]:
     users: list[User] = []
     label = "手動選取"
-    today = datetime.now(UTC).date()
+    today = local_today()
     if data.source_type in {AttendanceSourceType.CLASS_CADRES, AttendanceSourceType.CLASS_MEMBERS}:
         if data.source_id is None:
             raise ValueError("請選擇班級")
@@ -931,6 +1004,8 @@ async def create_vote(session: AsyncSession, meeting: Meeting, *, data: VoteCrea
         visibility=data.visibility,
         pass_threshold=data.pass_threshold or meeting.default_pass_threshold,
         threshold_type=data.threshold_type,
+        record_method=data.record_method,
+        options=[opt.model_dump() for opt in data.options] if data.options else None,
     )
     session.add(vote)
     await session.flush()
@@ -1215,14 +1290,17 @@ async def close_vote(session: AsyncSession, vote: MeetingVote) -> MeetingVote:
     vote.status = VoteStatus.CLOSED
     vote.closed_at = datetime.now(UTC)
     await session.flush()
+    # 簡易模式逐人表決：關閉時自動把結論回寫議程案 resolution（完整模式走正式決議流程）
+    meeting = await session.get(Meeting, vote.meeting_id)
+    if meeting is not None and meeting.mode == MeetingMode.SIMPLE:
+        await _write_back_resolution(session, vote)
     return vote
 
 
-async def cast_ballot(
-    session: AsyncSession, vote: MeetingVote, *, voter_id: uuid.UUID, choice: BallotChoice
-) -> MeetingBallot:
-    if vote.status != VoteStatus.OPEN:
-        raise ValueError("表決尚未開放或已關閉")
+async def _assert_voter_eligible(
+    session: AsyncSession, vote: MeetingVote, voter_id: uuid.UUID
+) -> None:
+    """檢查投票者具表決權、已出席，且未對該議程案迴避。"""
     attendance = await session.scalar(
         select(MeetingAttendance).where(
             MeetingAttendance.meeting_id == vote.meeting_id,
@@ -1232,7 +1310,24 @@ async def cast_ballot(
         )
     )
     if attendance is None:
-        raise PermissionError("您不是本場會議可投票且已出席的成員")
+        raise PermissionError("不是本場會議可投票且已出席的成員")
+    if vote.agenda_item_id is not None:
+        recused = await session.scalar(
+            select(MeetingAgendaRecusal).where(
+                MeetingAgendaRecusal.agenda_item_id == vote.agenda_item_id,
+                MeetingAgendaRecusal.user_id == voter_id,
+            )
+        )
+        if recused is not None:
+            raise PermissionError("此委員已對本案迴避，不可表決")
+
+
+async def cast_ballot(
+    session: AsyncSession, vote: MeetingVote, *, voter_id: uuid.UUID, choice: BallotChoice
+) -> MeetingBallot:
+    if vote.status != VoteStatus.OPEN:
+        raise ValueError("表決尚未開放或已關閉")
+    await _assert_voter_eligible(session, vote, voter_id)
     existing = await session.scalar(
         select(MeetingBallot).where(
             MeetingBallot.vote_id == vote.id, MeetingBallot.voter_id == voter_id
@@ -1246,6 +1341,159 @@ async def cast_ballot(
     session.add(ballot)
     await session.flush()
     return ballot
+
+
+async def recorder_cast_ballot(
+    session: AsyncSession, vote: MeetingVote, *, data: RecorderBallotCreate
+) -> MeetingBallot:
+    """紀錄代登逐人票（簡易模式）：可重複登記以更正，不要求操作者＝投票者。"""
+    if vote.status != VoteStatus.OPEN:
+        raise ValueError("表決尚未開放或已關閉")
+    await _assert_voter_eligible(session, vote, data.voter_id)
+    existing = await session.scalar(
+        select(MeetingBallot).where(
+            MeetingBallot.vote_id == vote.id, MeetingBallot.voter_id == data.voter_id
+        )
+    )
+    if existing is not None:
+        existing.choice = data.choice
+        existing.option_key = data.option_key
+        existing.cast_at = datetime.now(UTC)
+        await session.flush()
+        return existing
+    ballot = MeetingBallot(
+        vote_id=vote.id,
+        voter_id=data.voter_id,
+        choice=data.choice,
+        option_key=data.option_key,
+        cast_at=datetime.now(UTC),
+    )
+    session.add(ballot)
+    await session.flush()
+    return ballot
+
+
+async def record_manual_tally(
+    session: AsyncSession,
+    vote: MeetingVote,
+    *,
+    manual_tally: dict[str, int],
+    result_label: str | None = None,
+) -> MeetingVote:
+    """主席口頭計票：寫入彙總票數、設為 TALLY 方式並關閉表決。"""
+    vote.record_method = VoteRecordMethod.TALLY
+    vote.manual_tally = {str(k): int(v) for k, v in manual_tally.items()}
+    if result_label:
+        vote.result_label = result_label
+    if vote.status == VoteStatus.DRAFT:
+        vote.opened_at = datetime.now(UTC)
+    vote.status = VoteStatus.CLOSED
+    vote.closed_at = datetime.now(UTC)
+    await session.flush()
+    await _write_back_resolution(session, vote)
+    return vote
+
+
+async def record_acclamation(
+    session: AsyncSession,
+    meeting: Meeting,
+    *,
+    agenda_item_id: uuid.UUID | None,
+    title: str,
+    result_label: str = "無異議通過",
+) -> MeetingVote:
+    """無異議通過：一鍵建立並關閉 ACCLAMATION 表決。"""
+    vote = MeetingVote(
+        meeting_id=meeting.id,
+        agenda_item_id=agenda_item_id,
+        title=title,
+        visibility=VoteVisibility.NAMED,
+        record_method=VoteRecordMethod.ACCLAMATION,
+        result_label=result_label,
+        status=VoteStatus.CLOSED,
+        opened_at=datetime.now(UTC),
+        closed_at=datetime.now(UTC),
+    )
+    session.add(vote)
+    await session.flush()
+    await _write_back_resolution(session, vote)
+    return vote
+
+
+async def _write_back_resolution(session: AsyncSession, vote: MeetingVote) -> None:
+    """表決關閉後把結論回寫議程案 resolution，供會議紀錄取用。"""
+    if vote.agenda_item_id is None:
+        return
+    item = await session.get(MeetingAgendaItem, vote.agenda_item_id)
+    if item is None:
+        return
+    eligible = await eligible_voter_count(session, vote.meeting_id)
+    eligible -= await recused_voter_count(session, vote.meeting_id, vote.agenda_item_id)
+    summary = await attendance_summary(session, vote.meeting_id)
+    tally = _vote_tally(vote, max(eligible, 0), summary.get("present_voters", 0))
+    item.resolution = _format_resolution(vote, tally)
+    await session.flush()
+
+
+def _format_resolution(vote: MeetingVote, tally: dict) -> str:
+    """依表決方式產生決議文字。"""
+    method = VoteRecordMethod(vote.record_method)
+    if method == VoteRecordMethod.ACCLAMATION:
+        return vote.result_label or "無異議通過"
+    if vote.options:
+        labels = {str(o.get("key")): str(o.get("label")) for o in vote.options}
+        parts = [
+            f"{labels.get(key, key)} {count} 票"
+            for key, count in tally.get("option_counts", {}).items()
+        ]
+        body = "、".join(parts)
+        return f"{body}；{vote.result_label}" if vote.result_label else body
+    verdict = "通過" if tally.get("passed") else "不通過"
+    return (
+        f"同意 {tally['approve']}、不同意 {tally['reject']}、棄權 {tally['abstain']}，{verdict}"
+    )
+
+
+async def add_recusal(
+    session: AsyncSession,
+    agenda_item: MeetingAgendaItem,
+    *,
+    user_id: uuid.UUID,
+    note: str | None,
+    created_by: uuid.UUID,
+) -> MeetingAgendaRecusal:
+    existing = await session.scalar(
+        select(MeetingAgendaRecusal).where(
+            MeetingAgendaRecusal.agenda_item_id == agenda_item.id,
+            MeetingAgendaRecusal.user_id == user_id,
+        )
+    )
+    if existing is not None:
+        existing.note = note
+        await session.flush()
+        return existing
+    recusal = MeetingAgendaRecusal(
+        agenda_item_id=agenda_item.id, user_id=user_id, note=note, created_by=created_by
+    )
+    session.add(recusal)
+    await session.flush()
+    return recusal
+
+
+async def remove_recusal(
+    session: AsyncSession, agenda_item: MeetingAgendaItem, *, user_id: uuid.UUID
+) -> bool:
+    recusal = await session.scalar(
+        select(MeetingAgendaRecusal).where(
+            MeetingAgendaRecusal.agenda_item_id == agenda_item.id,
+            MeetingAgendaRecusal.user_id == user_id,
+        )
+    )
+    if recusal is None:
+        return False
+    await session.delete(recusal)
+    await session.flush()
+    return True
 
 
 async def create_request(
@@ -1290,6 +1538,28 @@ async def eligible_voter_count(session: AsyncSession, meeting_id: uuid.UUID) -> 
     )
 
 
+async def recused_voter_count(
+    session: AsyncSession, meeting_id: uuid.UUID, agenda_item_id: uuid.UUID
+) -> int:
+    """該議程案迴避且具表決權的委員人數。"""
+    return int(
+        await session.scalar(
+            select(func.count())
+            .select_from(MeetingAgendaRecusal)
+            .join(
+                MeetingAttendance,
+                (MeetingAttendance.user_id == MeetingAgendaRecusal.user_id)
+                & (MeetingAttendance.meeting_id == meeting_id),
+            )
+            .where(
+                MeetingAgendaRecusal.agenda_item_id == agenda_item_id,
+                MeetingAttendance.is_voting_eligible == True,  # noqa: E712
+            )
+        )
+        or 0
+    )
+
+
 async def attendance_summary(session: AsyncSession, meeting_id: uuid.UUID) -> dict[str, int]:
     result = await session.execute(
         select(MeetingAttendance.status, func.count())
@@ -1310,6 +1580,10 @@ async def attendance_summary(session: AsyncSession, meeting_id: uuid.UUID) -> di
 
 async def decorate_vote(session: AsyncSession, vote: MeetingVote, *, include_ballots: bool) -> dict:
     eligible = await eligible_voter_count(session, vote.meeting_id)
+    # 逐案迴避：扣除該議程案迴避且具表決權的委員
+    if vote.agenda_item_id is not None:
+        eligible -= await recused_voter_count(session, vote.meeting_id, vote.agenda_item_id)
+    eligible = max(eligible, 0)
     summary = await attendance_summary(session, vote.meeting_id)
     ballots = vote.ballots if include_ballots or vote.visibility == VoteVisibility.NAMED else []
     return {
@@ -1322,6 +1596,10 @@ async def decorate_vote(session: AsyncSession, vote: MeetingVote, *, include_bal
         "status": vote.status,
         "pass_threshold": vote.pass_threshold,
         "threshold_type": vote.threshold_type,
+        "record_method": vote.record_method,
+        "options": vote.options,
+        "manual_tally": vote.manual_tally,
+        "result_label": vote.result_label,
         "opened_at": vote.opened_at,
         "closed_at": vote.closed_at,
         "result_note": vote.result_note,
@@ -1518,7 +1796,7 @@ async def join_payload(session: AsyncSession, meeting: Meeting, *, user_id: uuid
 
 
 async def workspace_payload(session: AsyncSession) -> dict:
-    today = datetime.now(UTC).date()
+    today = local_today()
     rows = await list_meetings(session, limit=200)
     return {
         "today": [m for m in rows if m.starts_at and m.starts_at.date() == today],
@@ -1538,9 +1816,19 @@ async def workspace_payload(session: AsyncSession) -> dict:
     }
 
 
-async def minutes_payload(session: AsyncSession, meeting: Meeting) -> dict:
-    votes = [await decorate_vote(session, vote, include_ballots=True) for vote in meeting.votes]
-    summary = await attendance_summary(session, meeting.id)
+def _fmt_local(dt: datetime | None) -> str:
+    return dt.astimezone(TAIPEI).strftime("%Y-%m-%d %H:%M") if dt else "未填"
+
+
+def _attendee_names(meeting: Meeting, statuses: set[AttendanceStatus]) -> list[str]:
+    return [
+        (record.user.display_name if record.user else str(record.user_id))
+        for record in meeting.attendance_records
+        if record.status in statuses
+    ]
+
+
+def _full_minutes_lines(meeting: Meeting, votes: list[dict], summary: dict[str, int]) -> list[str]:
     lines = [
         f"# {meeting.title}",
         "",
@@ -1578,14 +1866,56 @@ async def minutes_payload(session: AsyncSession, meeting: Meeting) -> dict:
         for item in sorted(meeting.speech_queue, key=lambda x: x.started_at or x.created_at):
             if item.status in {SpeechQueueStatus.FINISHED, SpeechQueueStatus.SKIPPED}:
                 lines.append(f"- {item.speaker_name}：{item.status}")
-    lines.append("")
-    lines.append("## 表決")
+    lines.extend(["", "## 表決"])
     for vote in votes:
         tally = vote["tally"]
         lines.append(
             f"- {vote['title']}：同意 {tally['approve']}、反對 {tally['reject']}、"
             f"棄權 {tally['abstain']}，{'通過' if tally['passed'] else '未通過'}"
         )
+    return lines
+
+
+def _simple_minutes_lines(meeting: Meeting, summary: dict[str, int]) -> list[str]:
+    present = _attendee_names(meeting, {AttendanceStatus.PRESENT})
+    leave = _attendee_names(meeting, {AttendanceStatus.LEAVE})
+    absent = _attendee_names(meeting, {AttendanceStatus.ABSENT})
+    lines = [
+        f"# {meeting.title}",
+        "",
+        f"- 開會時間：{_fmt_local(meeting.starts_at)}",
+        f"- 地點：{meeting.location or '未填'}",
+        f"- 主席：{meeting.chair_name or '未填'}",
+        f"- 出席委員（{len(present)}）：{'、'.join(present) or '無'}",
+    ]
+    if leave:
+        lines.append(f"- 請假：{'、'.join(leave)}")
+    if absent:
+        lines.append(f"- 缺席：{'、'.join(absent)}")
+    lines.extend(["", "## 討論事項"])
+    for item in sorted(meeting.agenda_items, key=lambda x: x.order_index):
+        lines.append(f"### {item.order_index + 1}. {item.title}")
+        if item.description:
+            lines.append(f"說明：{item.description}")
+        if item.notes:
+            lines.append(f"討論：{item.notes}")
+        recused = [
+            (r.user.display_name if r.user else str(r.user_id)) for r in item.recusals
+        ]
+        if recused:
+            lines.append(f"（{'、'.join(recused)}委員迴避）")
+        lines.append(f"決議：{item.resolution or '未做成決議'}")
+        lines.append("")
+    return lines
+
+
+async def minutes_payload(session: AsyncSession, meeting: Meeting) -> dict:
+    votes = [await decorate_vote(session, vote, include_ballots=True) for vote in meeting.votes]
+    summary = await attendance_summary(session, meeting.id)
+    if meeting.mode == MeetingMode.SIMPLE:
+        lines = _simple_minutes_lines(meeting, summary)
+    else:
+        lines = _full_minutes_lines(meeting, votes, summary)
     return {
         "meeting": meeting,
         "attendance_summary": summary,

@@ -41,6 +41,7 @@ from api.models.user import User
 from api.models.work_item import WorkItem, WorkItemStatus
 from api.schemas.task import TaskInboxResponse, TaskItem
 from api.services.permission import get_user_permission_codes
+from api.services.task_priority import prioritize_tasks
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +113,7 @@ async def _docs_pending_my_approval(db: AsyncSession, user: User) -> list[TaskIt
                 title=f"簽核：{d.title}",
                 subtitle=d.serial_number,
                 href=f"/documents/{d.serial_number}" if d.serial_number else "/documents",
-                due_at=None,
+                due_at=d.due_date,
                 severity="warning",
                 created_at=d.updated_at or d.created_at,
             )
@@ -535,13 +536,7 @@ async def build_task_inbox(db: AsyncSession, user: User) -> TaskInboxResponse:
     )
     items: list[TaskItem] = [it for g in groups for it in g]
 
-    # 排序：critical → warning → info；同等級內 due_at 越近越前；其餘按 created_at desc
-    def _sort_key(t: TaskItem) -> tuple:
-        sev_order = {"critical": 0, "warning": 1, "info": 2}.get(t.severity, 3)
-        due = t.due_at.timestamp() if t.due_at else float("inf")
-        return (sev_order, due, -t.created_at.timestamp())
-
-    items.sort(key=_sort_key)
+    items = prioritize_tasks(items)
 
     by_module: dict[str, int] = dict(Counter(t.module for t in items))
     return TaskInboxResponse(items=items, total=len(items), by_module=by_module)

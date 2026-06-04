@@ -76,6 +76,15 @@ class Settings(BaseSettings):
     CELERY_DLQ_REDIS_KEY: str = "celery:dead_letter:v1"
     CELERY_DLQ_MAX_ITEMS: int = Field(default=1000, ge=1)
 
+    # --- 自動錯誤報告 ---
+    ERROR_REPORT_EMAIL_ENABLED: bool = Field(default=True)
+    ERROR_REPORT_INTERVAL_SECONDS: int = Field(default=300, ge=60)
+    ERROR_REPORT_WINDOW_SECONDS: int = Field(default=900, ge=60)
+    ERROR_REPORT_MAX_ITEMS: int = Field(default=20, ge=1)
+    ERROR_REPORT_REDIS_KEY: str = "error_report:events:v1"
+    ERROR_REPORT_STATE_KEY: str = "error_report:last_sent_at:v1"
+    ERROR_REPORT_RETENTION_ITEMS: int = Field(default=1000, ge=1)
+
     # --- Cloudflare / 信任代理 ---
     # 啟用時，從 CF-Connecting-IP 取真實 client IP（僅信任 socket peer ∈ CF 官方 CIDR）
     TRUST_CLOUDFLARE_PROXY: bool = Field(default=False)

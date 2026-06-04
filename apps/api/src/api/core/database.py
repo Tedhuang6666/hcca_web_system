@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncGenerator
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.pool import NullPool
@@ -46,6 +47,18 @@ class Base(DeclarativeBase):
     """所有 ORM Model 的基礎類別"""
 
     pass
+
+
+async def advisory_xact_lock(session: AsyncSession, key: int) -> None:
+    """在當前交易期間取得 PostgreSQL advisory lock，序列化臨界區。
+
+    用途：流水號/字號配發等「讀最大值 → +1」操作，避免並發 create 撞同號
+    （會觸發 unique constraint → 500）。鎖在交易結束（commit/rollback）時自動釋放。
+
+    測試用 sqlite 無 advisory lock 且為單緒，直接略過。
+    """
+    if session.bind is not None and session.bind.dialect.name == "postgresql":
+        await session.execute(select(func.pg_advisory_xact_lock(key)))
 
 
 # --- FastAPI 依賴注入用 Session Generator ---

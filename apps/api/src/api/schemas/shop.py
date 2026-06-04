@@ -141,6 +141,10 @@ class ProductCreate(BaseModel):
     is_unlimited: bool = False
     sale_start: datetime | None = Field(None, description="開售時間")
     sale_end: datetime | None = Field(None, description="截止時間")
+    requires_seating: bool = Field(False, description="是否為需劃位票種")
+    seating_mode: str | None = Field(
+        None, description="劃位時機：at_purchase / scheduled / admin_assign"
+    )
     variant_groups: list[ProductVariantGroupCreate] = Field(default_factory=list)
 
 
@@ -154,6 +158,8 @@ class ProductUpdate(BaseModel):
     is_unlimited: bool | None = None
     sale_start: datetime | None = None
     sale_end: datetime | None = None
+    requires_seating: bool | None = None
+    seating_mode: str | None = None
 
 
 class ProductOut(BaseModel):
@@ -173,6 +179,8 @@ class ProductOut(BaseModel):
     created_by: uuid.UUID
     sale_start: datetime | None
     sale_end: datetime | None
+    requires_seating: bool = False
+    seating_mode: str | None = None
     created_at: datetime
     updated_at: datetime
     variant_groups: list[ProductVariantGroupOut] = []
@@ -192,6 +200,8 @@ class CatalogProductOut(BaseModel):
     sale_start: datetime | None = None
     sale_end: datetime | None = None
     has_variants: bool = False
+    requires_seating: bool = False
+    seating_mode: str | None = None
 
 
 class CatalogSeriesOut(BaseModel):

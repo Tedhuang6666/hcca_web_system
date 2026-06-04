@@ -12,7 +12,9 @@ from sqlalchemy import case, extract, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.core.clock import local_today, roc_year
 from api.core.config import settings
+from api.core.database import advisory_xact_lock
 from api.models.org import Org, Position, UserPosition
 from api.models.petition import (
     PetitionAttachment,
@@ -88,9 +90,14 @@ def verify_code(case: PetitionCase, code: str) -> bool:
     return hmac.compare_digest(case.verification_code_hash, expected)
 
 
+_CASE_NUMBER_LOCK_KEY = 0x7065_7463  # "petc"
+
+
 async def _next_case_number(session: AsyncSession) -> str:
-    year = datetime.now(UTC).year - 1911
+    year = roc_year()
     prefix = f"{year:03d}"
+    # 序列化並發配發，避免讀 max → +1 撞同號（unique constraint → 500）。
+    await advisory_xact_lock(session, _CASE_NUMBER_LOCK_KEY)
     result = await session.execute(
         select(PetitionCase.case_number)
         .where(PetitionCase.case_number.like(f"{prefix}%"))
@@ -555,7 +562,7 @@ async def add_attachment(
 
 
 async def _user_in_org(session: AsyncSession, user_id: uuid.UUID, org_id: uuid.UUID) -> bool:
-    today = datetime.now(UTC).date()
+    today = local_today()
     result = await session.execute(
         select(UserPosition.id)
         .join(Position, UserPosition.position_id == Position.id)

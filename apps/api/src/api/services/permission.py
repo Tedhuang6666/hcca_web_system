@@ -8,6 +8,7 @@ from datetime import date
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.clock import local_today
 from api.models.org import Org, Permission, Position, UserPosition
 
 
@@ -35,7 +36,7 @@ async def get_user_permission_codes(
     使用單一 JOIN 查詢，效能最優。有 Redis 快取支援。
     回傳 frozenset 方便快速 `in` 檢查。
     """
-    check_date = on_date or date.today()
+    check_date = on_date or local_today()
 
     # 僅在查詢今天的權限時使用快取（避免過期日期的快取複雜度）
     if on_date is None:
@@ -82,7 +83,7 @@ async def get_user_permission_codes_for_org(
 
     用於公文/法規/字號等需要「只能操作自己組織」的資源檢查。
     """
-    check_date = on_date or date.today()
+    check_date = on_date or local_today()
 
     result = await db.execute(
         select(Permission.code)
@@ -123,7 +124,7 @@ async def get_user_org_ids_with_permission(
 
     用於前端過濾「可選組織下拉」：只顯示使用者有相應操作權限的組織。
     """
-    check_date = on_date or date.today()
+    check_date = on_date or local_today()
 
     result = await db.execute(
         select(Position.org_id)
@@ -153,7 +154,7 @@ async def get_user_org_ids_with_any_permission(
     """回傳使用者在哪些組織內擁有任一指定權限碼。"""
     if not permission_codes:
         return []
-    check_date = on_date or date.today()
+    check_date = on_date or local_today()
 
     result = await db.execute(
         select(Position.org_id)
@@ -190,7 +191,7 @@ async def get_org_leader_user_id(
     if org.leader_user_id is not None:
         return org.leader_user_id
 
-    check_date = on_date or date.today()
+    check_date = on_date or local_today()
     result = await db.execute(
         select(UserPosition.user_id)
         .join(Position, UserPosition.position_id == Position.id)
@@ -221,7 +222,7 @@ async def get_user_org_ids(
     on_date: date | None = None,
 ) -> list[uuid.UUID]:
     """回傳使用者目前透過有效任期所屬的所有組織 ID（不限權限）。"""
-    check_date = on_date or date.today()
+    check_date = on_date or local_today()
 
     result = await db.execute(
         select(Position.org_id)

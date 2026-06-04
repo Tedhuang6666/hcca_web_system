@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -169,7 +170,12 @@ export default function AdminActivitiesPage() {
           {selected && (
             <div className="space-y-4">
               <p className="text-sm" style={{ color: "var(--text-secondary)" }}>{selected.description || "無說明"}</p>
-              <button className="rounded border px-3 py-1.5 text-sm" onClick={() => void archiveSelected()} disabled={selected.status === "archived"}>封存活動</button>
+              <div className="flex flex-wrap gap-2">
+                <Link className="rounded border px-3 py-1.5 text-sm" href={`/activities/${selected.id}`}>開啟工作區</Link>
+                <Link className="rounded border px-3 py-1.5 text-sm" href={`/shop/admin?activity_id=${selected.id}`}>商品 / 票券</Link>
+                <Link className="rounded border px-3 py-1.5 text-sm" href={`/shop?activity_id=${selected.id}`}>購票頁</Link>
+                <button className="rounded border px-3 py-1.5 text-sm" onClick={() => void archiveSelected()} disabled={selected.status === "archived"}>封存活動</button>
+              </div>
               <div className="border-t pt-4" style={{ borderColor: "var(--border)" }}>
                 <h3 className="mb-2 text-sm font-medium">活動總召</h3>
                 <div className="mb-3 grid grid-cols-1 gap-2 xl:grid-cols-[1fr_120px_120px_auto]">

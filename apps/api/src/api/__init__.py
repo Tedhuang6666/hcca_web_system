@@ -86,11 +86,14 @@ from api.routers import (
     positions,
     privacy,
     public_api,
+    publications,
+    receivables,
     regulations,
     reports,
     saved_filters,
     school_class,
     search,
+    seating,
     shop,
     site,
     survey,
@@ -102,6 +105,7 @@ from api.routers import (
     users,
     webhooks,
     work_items,
+    workflows,
     ws,
 )
 from api.routers._module_health import attach_module_health
@@ -366,6 +370,8 @@ def create_app() -> FastAPI:
     app.include_router(user_lifecycle.router)
     app.include_router(reports.router)
     app.include_router(activities.router)
+    app.include_router(receivables.router)
+    app.include_router(publications.router)
     app.include_router(orgs.router)
     app.include_router(people.router)
     app.include_router(passkeys.router)
@@ -386,6 +392,7 @@ def create_app() -> FastAPI:
     app.include_router(search.router)
     app.include_router(site.router)
     app.include_router(shop.router)
+    app.include_router(seating.router)
     app.include_router(school_class.router)
     app.include_router(meal.router)
     app.include_router(meetings.router)
@@ -405,6 +412,7 @@ def create_app() -> FastAPI:
     app.include_router(policies.router)
     app.include_router(api_keys.router)
     app.include_router(webhooks.router)
+    app.include_router(workflows.router)
     app.include_router(public_api.router)
     # Phase A2 / C3 / D3 新增（企業級升級第三場）
     app.include_router(metrics_endpoint.router)
@@ -517,6 +525,9 @@ def create_app() -> FastAPI:
                 path=request.url.path,
                 status_code=exc.status_code,
                 category="http",
+                request_id=getattr(request.state, "request_id", None),
+                client_ip=request.client.host if request.client else None,
+                user_agent=request.headers.get("user-agent"),
             )
             return JSONResponse(
                 {"detail": "伺服器內部錯誤", "error_id": err_id},
@@ -554,6 +565,9 @@ def create_app() -> FastAPI:
             method=request.method,
             path=request.url.path,
             status_code=500,
+            request_id=getattr(request.state, "request_id", None),
+            client_ip=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
         )
         return JSONResponse(
             {"detail": "伺服器內部錯誤", "error_id": err_id},

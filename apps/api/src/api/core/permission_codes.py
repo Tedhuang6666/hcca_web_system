@@ -92,6 +92,9 @@ class PermissionCode(StrEnum):
     SHOP_VIEW_ALL = "shop:view_all"
     FINANCE_VIEW = "finance:view"
 
+    SEATING_MANAGE = "seating:manage"
+    SEATING_ASSIGN = "seating:assign"
+
     CLASS_MANAGE = "class:manage"
     CLASS_VIEW_MEMBERS = "class:view_members"
     CLASS_MANAGE_MEMBERS = "class:manage_members"
@@ -595,6 +598,18 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "code": PermissionCode.FINANCE_VIEW,
         "label": "財務查閱",
         "desc": "查看財務報表與統計",
+    },
+    {
+        "group": "商品系統",
+        "code": PermissionCode.SEATING_MANAGE,
+        "label": "管理劃位",
+        "desc": "建立場次座位圖、設定分批開放時段與座位",
+    },
+    {
+        "group": "商品系統",
+        "code": PermissionCode.SEATING_ASSIGN,
+        "label": "代為劃位",
+        "desc": "依到場順序為已購票者指定座位（管理員代劃）",
     },
     {
         "group": "班級管理",

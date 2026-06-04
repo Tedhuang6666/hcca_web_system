@@ -20,6 +20,7 @@ from typing import Any
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.clock import local_today
 from api.models.org import UserPosition
 from api.models.user import User
 
@@ -50,7 +51,7 @@ async def _active_positions_for_user(
 
 
 async def _snapshot_user(session: AsyncSession, user: User) -> dict[str, Any]:
-    today = datetime.now(UTC).date()
+    today = local_today()
     positions = await _active_positions_for_user(session, user.id, today)
     return {
         "user_id": str(user.id),
@@ -80,7 +81,7 @@ async def freeze(session: AsyncSession, *, user_id: uuid.UUID, reason: str = "")
     user = await session.scalar(select(User).where(User.id == user_id))
     if user is None:
         raise ValueError("找不到該使用者")
-    today = datetime.now(UTC).date()
+    today = local_today()
     snapshot = await _snapshot_user(session, user)
     snapshot["reason"] = reason
 
@@ -108,7 +109,7 @@ async def archive_alumni(
     user = await session.scalar(select(User).where(User.id == user_id))
     if user is None:
         raise ValueError("找不到該使用者")
-    today = datetime.now(UTC).date()
+    today = local_today()
     snapshot = await _snapshot_user(session, user)
     snapshot["reason"] = reason
 

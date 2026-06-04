@@ -184,7 +184,7 @@ async def schedule_proposal(
     proposal = await _proposal_or_404(session, proposal_id)
     try:
         proposal = await proposal_svc.schedule_into_meeting(
-            session, proposal, meeting_id=payload.meeting_id, note=payload.note
+            session, proposal, meeting_id=payload.meeting_id, note=payload.note, actor=user
         )
     except ValueError as exc:
         raise HTTPException(
@@ -224,7 +224,7 @@ async def update_proposal_status(
     user: CurrentUser,
 ) -> CouncilProposal:
     proposal = await _proposal_or_404(session, proposal_id)
-    proposal = await proposal_svc.update_status(session, proposal, data=payload)
+    proposal = await proposal_svc.update_status(session, proposal, data=payload, actor=user)
     await audit_svc.record(
         session,
         entity_type="council_proposal",

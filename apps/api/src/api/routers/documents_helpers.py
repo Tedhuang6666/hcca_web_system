@@ -10,12 +10,12 @@ from __future__ import annotations
 import asyncio
 import uuid
 from contextlib import suppress
-from datetime import date
 
 from fastapi import HTTPException, status
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.clock import local_today
 from api.core.permission_codes import PermissionCode
 from api.core.ws_manager import manager as ws_manager
 from api.models.document import Document
@@ -70,7 +70,7 @@ async def get_user_positions_batch(
     if not user_ids:
         return {}
 
-    today = date.today()
+    today = local_today()
     result = await session.execute(
         select(UserPosition.user_id, Position.name)
         .join(Position, UserPosition.position_id == Position.id)
@@ -131,7 +131,7 @@ async def can_manage_delegation_for_org(
 async def org_ids_with_document_permissions(session: AsyncSession, user: User) -> list[uuid.UUID]:
     if user.is_superuser:
         return []
-    today = date.today()
+    today = local_today()
     result = await session.execute(
         select(Position.org_id)
         .join(UserPosition, UserPosition.position_id == Position.id)

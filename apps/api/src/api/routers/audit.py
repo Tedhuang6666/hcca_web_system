@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.clock import local_today
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
@@ -75,8 +76,8 @@ async def _get_current_org_ids(session: AsyncSession, user_id: object) -> list[s
         .join(UserPosition, UserPosition.position_id == Position.id)
         .where(
             UserPosition.user_id == user_id,
-            UserPosition.start_date <= date.today(),
-            or_(UserPosition.end_date.is_(None), UserPosition.end_date >= date.today()),
+            UserPosition.start_date <= local_today(),
+            or_(UserPosition.end_date.is_(None), UserPosition.end_date >= local_today()),
         )
         .distinct()
     )

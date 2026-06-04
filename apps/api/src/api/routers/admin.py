@@ -225,7 +225,9 @@ async def list_users(
     if active_only:
         q = q.where(User.is_active == True)  # noqa: E712
     if keyword:
-        pattern = f"%{keyword}%"
+        from api.core.search import like_contains
+
+        pattern = like_contains(keyword)
         from sqlalchemy import or_
 
         q = q.where(

@@ -27,6 +27,7 @@ class CouncilProposalStatus(StrEnum):
     PASSED = "passed"
     REJECTED = "rejected"
     WITHDRAWN = "withdrawn"
+    PUBLISHED = "published"
 
 
 class CouncilProposalCaseType(StrEnum):
@@ -77,7 +78,10 @@ class CouncilProposal(Base, TimestampMixin):
     kind: Mapped[CouncilProposalKind | None] = mapped_column(String(20), nullable=True, index=True)
     # 法規案連結既有法規（修正/廢止案必填；制定案可留空，待立法後回填）。
     regulation_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("regulations.id", ondelete="SET NULL"), nullable=True, index=True
+        UUID(as_uuid=True),
+        ForeignKey("regulations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     title: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     summary: Mapped[str] = mapped_column(Text, nullable=False)
@@ -94,7 +98,15 @@ class CouncilProposal(Base, TimestampMixin):
     )
     committee_review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     scheduled_meeting_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("meetings.id", ondelete="SET NULL"), nullable=True
+        UUID(as_uuid=True),
+        # use_alter：打破 council_proposals → meetings → meeting_agenda_items → council_proposals 循環。
+        ForeignKey(
+            "meetings.id",
+            ondelete="SET NULL",
+            name="council_proposals_scheduled_meeting_id_fkey",
+            use_alter=True,
+        ),
+        nullable=True,
     )
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

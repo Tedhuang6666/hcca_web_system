@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import {
   FileText, Landmark, Scale, MessageSquare, CheckSquare, ShoppingCart,
   Utensils, Megaphone, Inbox, AlertCircle, Clock, ChevronRight,
-  CalendarDays,
+  CalendarDays, Gauge,
 } from "lucide-react";
 import {
   documentsApi,
@@ -54,6 +54,16 @@ const SEVERITY_STYLES: Record<string, { color: string; bg: string; border: strin
   critical: { color: "var(--danger)",  bg: "var(--danger-dim)",  border: "var(--danger-border)",  label: "緊急" },
 };
 
+type QuickFilter = "all" | "critical" | "today" | "overdue" | "high";
+
+const QUICK_FILTERS: Array<{ key: QuickFilter; label: string }> = [
+  { key: "all", label: "全部" },
+  { key: "critical", label: "緊急" },
+  { key: "today", label: "今日" },
+  { key: "overdue", label: "已逾期" },
+  { key: "high", label: "高分" },
+];
+
 function formatDueAt(s?: string | null) {
   if (!s) return "";
   const d = new Date(s);
@@ -74,6 +84,7 @@ export default function TasksPage() {
   const [regCounts, setRegCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<TaskModule | "all">("all");
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
 
   useEffect(() => {
     let mounted = true;
@@ -104,9 +115,18 @@ export default function TasksPage() {
 
   const filtered = useMemo<TaskItem[]>(() => {
     if (!data) return [];
-    if (tab === "all") return data.items;
-    return data.items.filter((t) => t.module === tab);
-  }, [data, tab]);
+    const now = Date.now();
+    const tomorrow = now + 24 * 60 * 60 * 1000;
+    return data.items.filter((t) => {
+      if (tab !== "all" && t.module !== tab) return false;
+      const due = t.due_at ? new Date(t.due_at).getTime() : null;
+      if (quickFilter === "critical") return t.severity === "critical";
+      if (quickFilter === "today") return due !== null && due >= now && due <= tomorrow;
+      if (quickFilter === "overdue") return due !== null && due < now;
+      if (quickFilter === "high") return t.priority_score >= 70;
+      return true;
+    });
+  }, [data, quickFilter, tab]);
 
   const moduleTabs: Array<TaskModule | "all"> = useMemo(() => {
     const tabs: Array<TaskModule | "all"> = ["all"];
@@ -150,6 +170,36 @@ export default function TasksPage() {
         <QuickAction href="/documents/new" label="建立公文" detail="套範本、選字號、保存草稿" />
         <QuickAction href="/regulations/new" label="起草法規" detail="建立條文、送審與會議連動" />
         <QuickAction href="/meetings" label="議事與通知單" detail="確認議程後產生開會通知單" />
+      </section>
+
+      <section
+        className="rounded-lg p-3"
+        style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
+        aria-label="智慧篩選"
+      >
+        <div className="mb-2 flex items-center gap-2 text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+          <Gauge size={13} aria-hidden={true} />
+          智慧排序會依期限、流程阻塞、影響範圍與角色責任計分
+        </div>
+        <div className="flex gap-1 overflow-x-auto">
+          {QUICK_FILTERS.map((filter) => {
+            const active = quickFilter === filter.key;
+            return (
+              <button
+                key={filter.key}
+                type="button"
+                onClick={() => setQuickFilter(filter.key)}
+                className="flex-shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium"
+                style={{
+                  background: active ? "var(--primary-dim)" : "transparent",
+                  color: active ? "var(--primary)" : "var(--text-muted)",
+                  border: active ? "1px solid var(--info-border)" : "1px solid var(--border)",
+                }}>
+                {filter.label}
+              </button>
+            );
+          })}
+        </div>
       </section>
 
       {/* Tabs */}
@@ -285,6 +335,26 @@ function TaskRow({ t }: { t: TaskItem }) {
               </span>
             )}
           </div>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <span
+              className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
+              style={{ background: sev.bg, color: sev.color, border: `1px solid ${sev.border}` }}>
+              優先 {t.priority_score}
+            </span>
+            {t.priority_reasons.slice(0, 2).map((reason) => (
+              <span
+                key={reason}
+                className="rounded px-1.5 py-0.5 text-[10px]"
+                style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}>
+                {reason}
+              </span>
+            ))}
+          </div>
+          {t.recommended_action && (
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              {t.recommended_action}
+            </p>
+          )}
         </div>
         <ChevronRight size={16} aria-hidden={true} style={{ color: "var(--text-disabled)" }} />
       </Link>

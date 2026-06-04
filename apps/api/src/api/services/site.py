@@ -10,6 +10,7 @@ from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.core.clock import local_today
 from api.models.org import Position, UserPosition
 from api.models.site import (
     PublicLink,
@@ -156,7 +157,7 @@ async def list_officers(
     則套用覆寫（顯示名稱、稱謂、簡介、排序、精選），並可透過 is_visible=False 隱藏。
     尚未建立覆寫設定的幹部仍會以使用者/職位的預設值自動顯示。
     """
-    today = date.today()
+    today = local_today()
     stmt = (
         select(UserPosition)
         .join(UserPosition.user)
@@ -232,7 +233,7 @@ async def update_officer_profile(
 async def list_officer_candidates(
     db: AsyncSession, active_only: bool = True
 ) -> list[PublicOfficerCandidateOut]:
-    today = date.today()
+    today = local_today()
     existing_result = await db.execute(select(PublicOfficerProfile.user_position_id))
     existing_ids = set(existing_result.scalars().all())
     stmt = (

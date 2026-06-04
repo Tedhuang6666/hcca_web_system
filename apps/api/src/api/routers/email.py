@@ -15,6 +15,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.core.clock import local_today
 from api.core.config import settings
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
@@ -435,7 +436,7 @@ async def _check_quota(db: AsyncSession, user: User, count: int) -> None:
     """每日寄送人次配額檢查。"""
     if user.is_superuser:
         return
-    today = datetime.now(UTC).date()
+    today = local_today()
     day_start = datetime(today.year, today.month, today.day, tzinfo=UTC)
     used = await db.scalar(
         select(func.coalesce(func.sum(EmailMessage.recipient_count), 0)).where(

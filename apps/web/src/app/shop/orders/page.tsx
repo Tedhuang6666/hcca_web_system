@@ -200,9 +200,10 @@ export default function OrdersPage() {
                   onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-hover)")}
                   onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
                   <td className="px-5 py-4">
-                    <span className="text-xs font-mono" style={{ color: "var(--primary)" }}>
+                    <Link href={`/shop/orders/${order.id}`}
+                      className="text-xs font-mono hover:underline" style={{ color: "var(--primary)" }}>
                       {order.serial_number}
-                    </span>
+                    </Link>
                   </td>
                   {tab === "all" && (
                     <td className="px-5 py-4 text-xs" style={{ color: "var(--text-muted)" }}>

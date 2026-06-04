@@ -479,7 +479,13 @@ class Document(Base, TimestampMixin):
     # 此公文公布的法規（令類公文專用，其他類型為 None）
     regulation_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("regulations.id", ondelete="SET NULL"),
+        # use_alter：documents 與 regulations 互相參照（regulations.*_document_id），打破循環。
+        ForeignKey(
+            "regulations.id",
+            ondelete="SET NULL",
+            name="fk_documents_regulation_id",
+            use_alter=True,
+        ),
         nullable=True,
         index=True,
     )

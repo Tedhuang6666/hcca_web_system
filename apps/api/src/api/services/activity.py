@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.core.clock import local_today
 from api.models.activity import Activity, ActivityConvener, ActivityStatus
 from api.models.user import User
 from api.schemas.activity import (
@@ -62,7 +63,7 @@ async def list_user_convener_activities(
     active_only: bool = True,
     on_date: date | None = None,
 ) -> list[Activity]:
-    check_date = on_date or date.today()
+    check_date = on_date or local_today()
     query = (
         select(Activity)
         .join(ActivityConvener, ActivityConvener.activity_id == Activity.id)
@@ -179,7 +180,7 @@ async def is_active_convener(
     *,
     on_date: date | None = None,
 ) -> bool:
-    check_date = on_date or date.today()
+    check_date = on_date or local_today()
     result = await db.execute(
         select(ActivityConvener.id)
         .join(Activity, Activity.id == ActivityConvener.activity_id)

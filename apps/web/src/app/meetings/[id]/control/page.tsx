@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { meetingsApi } from "@/lib/api";
 import { useWS } from "@/hooks/useWS";
+import SimpleMeetingConsole from "@/components/meetings/SimpleMeetingConsole";
 import type {
   MeetingAgendaItemOut,
   MeetingOut,
@@ -203,6 +204,9 @@ export default function MeetingControlPage({ params }: { params: Promise<{ id: s
 
   if (error && !meeting) return <main className="p-6 text-sm text-red-500">{error}</main>;
   if (!meeting) return <main className="p-6 text-sm text-[var(--muted)]">載入議場控制台...</main>;
+
+  // 簡易評議模式走輕量控制台（逐案討論＋表決＋自動會議紀錄）
+  if (meeting.mode === "simple") return <SimpleMeetingConsole meetingId={meeting.id} />;
 
   return (
     <main className="grid min-h-screen gap-4 px-4 py-4 xl:grid-cols-[300px_minmax(0,1fr)_360px]">

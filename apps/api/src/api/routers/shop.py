@@ -11,6 +11,7 @@ from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.exc import StaleDataError
 
+from api.core.clock import local_today
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
@@ -895,7 +896,7 @@ async def export_orders_excel(
                 status_code=status.HTTP_403_FORBIDDEN, detail="需要權限：finance:view"
             )
     xlsx_bytes = await shop_svc.export_orders_excel(session, org_id=org_id, activity_id=activity_id)
-    filename = f"orders_{__import__('datetime').date.today()}.xlsx"
+    filename = f"orders_{local_today()}.xlsx"
     return Response(
         content=xlsx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -923,7 +924,7 @@ async def export_orders_csv(
                 status_code=status.HTTP_403_FORBIDDEN, detail="需要權限：finance:view"
             )
     csv_str = await shop_svc.export_orders_csv(session, org_id=org_id, activity_id=activity_id)
-    filename = f"orders_{__import__('datetime').date.today()}.csv"
+    filename = f"orders_{local_today()}.csv"
     return Response(
         content=csv_str.encode("utf-8-sig"),
         media_type="text/csv; charset=utf-8-sig",

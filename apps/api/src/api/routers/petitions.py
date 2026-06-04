@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.clock import local_today
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.core.posthog import get_posthog_client
@@ -28,6 +29,7 @@ from api.models.petition import (
     PetitionType,
 )
 from api.models.user import User
+from api.schemas.context import PetitionResolutionContextOut
 from api.schemas.petition import (
     PetitionAssignUpdate,
     PetitionAttachmentOut,
@@ -48,6 +50,7 @@ from api.schemas.petition import (
     PetitionTypeUpdate,
 )
 from api.services import audit as audit_svc
+from api.services import context as context_svc
 from api.services import petition as petition_svc
 from api.services.discord_bot import enqueue_petition_private_channel
 from api.services.permission import get_user_org_ids_with_permission, get_user_permission_codes
@@ -479,6 +482,19 @@ async def get_stats(session: DbDep, user: CurrentUser) -> PetitionStatsOut:
     )
 
 
+@router.get(
+    "/{case_id}/resolution-context",
+    response_model=PetitionResolutionContextOut,
+    summary="取得陳情回覆助手脈絡",
+)
+async def petition_resolution_context(
+    case_id: uuid.UUID, session: DbDep, user: CurrentUser
+) -> PetitionResolutionContextOut:
+    case_obj = await _case_or_404(session, case_id)
+    await _assert_case_access(session, case_obj, user)
+    return await context_svc.petition_resolution_context(session, case_obj.id)
+
+
 @router.get("/{case_id}", response_model=PetitionCaseOut, summary="取得陳情案件詳情")
 async def get_case(case_id: uuid.UUID, session: DbDep, user: CurrentUser) -> PetitionCaseOut:
     case_obj = await _case_or_404(session, case_id)
@@ -496,9 +512,8 @@ async def list_assignable_users(
 ) -> list[dict]:
     case_obj = await _case_or_404(session, case_id)
     await _assert_case_access(session, case_obj, user)
-    from datetime import date
 
-    today = date.today()
+    today = local_today()
     result = await session.execute(
         select(User)
         .join(UserPosition, UserPosition.user_id == User.id)

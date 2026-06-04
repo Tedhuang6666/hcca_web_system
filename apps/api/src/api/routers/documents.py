@@ -54,6 +54,7 @@ from api.routers.documents_helpers import (
 from api.routers.documents_helpers import (
     get_doc_or_404 as _get_doc_or_404,
 )
+from api.schemas.context import DocumentApprovalContextOut
 from api.schemas.document import (
     DocumentCreate,
     DocumentListItem,
@@ -64,6 +65,7 @@ from api.schemas.document import (
 )
 from api.services import activity as activity_svc
 from api.services import audit as audit_svc
+from api.services import context as context_svc
 from api.services import document as doc_svc
 from api.services.permission import (
     get_user_permission_codes,
@@ -285,6 +287,19 @@ async def list_documents(
         viewer_id=current_user.id if current_user else None,
         reveal_sensitive=can_view_all,
     )
+
+
+@router.get(
+    "/{doc_id}/approval-context",
+    response_model=DocumentApprovalContextOut,
+    summary="取得公文簽核脈絡",
+)
+async def document_approval_context(
+    doc_id: str, session: DbDep, current_user: CurrentUser
+) -> DocumentApprovalContextOut:
+    doc = await _get_doc_or_404(doc_id, session)
+    await _assert_access(session, doc, current_user)
+    return await context_svc.document_approval_context(session, doc.id)
 
 
 @router.get(

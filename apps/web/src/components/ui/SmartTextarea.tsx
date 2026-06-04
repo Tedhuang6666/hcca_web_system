@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import type { TextareaHTMLAttributes } from "react";
 
-import { insertAtCursor, writingSuggestions } from "@/lib/writingAssist";
+import { insertAtCursor, writingQualityChecks, writingSuggestions } from "@/lib/writingAssist";
 
 type Props = Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "value" | "onChange"> & {
   value: string;
@@ -15,6 +15,7 @@ export default function SmartTextarea({ value, onChange, className = "", style, 
   const [focused, setFocused] = useState(false);
   const [cursor, setCursor] = useState(0);
   const suggestions = useMemo(() => writingSuggestions(value, cursor), [cursor, value]);
+  const checks = useMemo(() => writingQualityChecks(value), [value]);
 
   const syncCursor = () => {
     const pos = ref.current?.selectionStart ?? value.length;
@@ -88,6 +89,20 @@ export default function SmartTextarea({ value, onChange, className = "", style, 
               </button>
             ))}
           </div>
+        </div>
+      )}
+      {checks.length > 0 && (
+        <div className="mt-1.5 space-y-1">
+          {checks.map((check) => (
+            <p
+              key={check.message}
+              className="text-[11px]"
+              style={{
+                color: check.severity === "warning" ? "var(--warning)" : "var(--text-muted)",
+              }}>
+              {check.message}
+            </p>
+          ))}
         </div>
       )}
     </div>

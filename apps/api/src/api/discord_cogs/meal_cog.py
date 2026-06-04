@@ -23,6 +23,7 @@ from discord.ext import commands
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
+from api.core.clock import local_today
 from api.core.database import AsyncSessionLocal
 from api.discord_cogs._helpers import reply_embed, reply_error, require_bound_user
 from api.models.meal import (
@@ -48,7 +49,7 @@ _ORDER_STATUS_LABEL = {
 
 
 async def _today_schedules(db) -> list[tuple[MenuSchedule, MealVendor]]:
-    today: date = datetime.now(UTC).date()
+    today: date = local_today()
     rows = (
         await db.execute(
             select(MenuSchedule, MealVendor)
@@ -277,7 +278,7 @@ class MealCog(commands.Cog):
             build_embed(
                 Domain.MEAL,
                 Severity.INFO,
-                title=f"今日學餐（{datetime.now(UTC).date().isoformat()}）",
+                title=f"今日學餐（{local_today().isoformat()}）",
                 body="從下方選單選商家即可一鍵下單。",
                 fields=fields,
             )
@@ -290,7 +291,7 @@ class MealCog(commands.Cog):
         if user is None:
             return
         await interaction.response.defer(ephemeral=True)
-        today = datetime.now(UTC).date()
+        today = local_today()
         async with AsyncSessionLocal() as db:
             schedules = await meal_svc.list_schedules(
                 db, date_from=today, date_to=today + timedelta(days=7), limit=40

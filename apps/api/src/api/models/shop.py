@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from api.models.activity import Activity
     from api.models.org import Org
     from api.models.school_class import SchoolClass
+    from api.models.seating import SeatAssignment, SeatingZone
     from api.models.user import User
 
 
@@ -144,6 +145,14 @@ class Product(Base, TimestampMixin):
     # 截止時間：過後不再接受新訂單，並依班級結單
     sale_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # ── 劃位（票券）擴充 ─────────────────────────────────────────────────────
+    # 是否需劃位（電影 / 演唱會等）。預設 False = 一般商品。
+    requires_seating: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    # 劃位時機：at_purchase / scheduled / admin_assign（見 SeatingMode）
+    seating_mode: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
     series_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("product_series.id", ondelete="RESTRICT"),
@@ -173,6 +182,12 @@ class Product(Base, TimestampMixin):
         order_by="ProductVariantGroup.sort_order",
     )
     order_items: Mapped[list[OrderItem]] = relationship("OrderItem", back_populates="product")
+    seating_zones: Mapped[list[SeatingZone]] = relationship(
+        "SeatingZone",
+        back_populates="product",
+        cascade="all, delete-orphan",
+        order_by="SeatingZone.sort_order",
+    )
 
 
 # ── 變體：群組（尺寸 / 顏色）→ 選項（中 / 黑）──────────────────────────────────
@@ -331,6 +346,9 @@ class Order(Base, TimestampMixin, ClassConsolidationMixin):
     )
     items: Mapped[list[OrderItem]] = relationship(
         "OrderItem", back_populates="order", cascade="all, delete-orphan"
+    )
+    seat_assignments: Mapped[list[SeatAssignment]] = relationship(
+        "SeatAssignment", back_populates="order", cascade="all, delete-orphan"
     )
 
 

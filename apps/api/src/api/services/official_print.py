@@ -11,6 +11,7 @@ from pathlib import Path
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.clock import local_today
 from api.models.document import Document
 from api.models.org import Org, Position, UserPosition
 from api.models.regulation import Regulation
@@ -222,7 +223,7 @@ async def _position_title(
     user_id: object,
     org_id: object,
 ) -> str:
-    today = dt.date.today()
+    today = local_today()
     result = await session.execute(
         select(Position.name)
         .join(UserPosition, UserPosition.position_id == Position.id)

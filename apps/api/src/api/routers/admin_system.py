@@ -27,7 +27,7 @@ from api.core import app_settings as app_settings_svc
 from api.core import recovery
 from api.core.config import settings
 from api.core.database import engine, get_db
-from api.core.error_audit import clear_errors, get_recent_errors
+from api.core.error_audit import clear_errors, find_error_by_id, get_recent_errors
 from api.core.ip_blocklist import block as ip_block
 from api.core.ip_blocklist import list_blocked as ip_list_blocked
 from api.core.ip_blocklist import unblock as ip_unblock
@@ -1082,6 +1082,9 @@ async def metrics_slow_queries(
 
 class RecentErrorItem(BaseModel):
     error_id: str
+    request_id: str | None = None
+    client_ip: str | None = None
+    user_agent: str | None = None
     category: str
     exc_type: str
     message: str
@@ -1092,6 +1095,7 @@ class RecentErrorItem(BaseModel):
     first_seen: float
     last_seen: float
     occurrences: int
+    source: str = "memory"
 
 
 class RecentErrorsResponse(BaseModel):
@@ -1104,6 +1108,15 @@ async def recent_errors(_admin: AdminUser, top: int = 50) -> RecentErrorsRespons
     """記憶體 ring buffer 中最近的 5xx／未處理例外，依 last_seen 由新到舊。重啟後清空。"""
     items = get_recent_errors(top=top)
     return RecentErrorsResponse(count=len(items), items=[RecentErrorItem(**i) for i in items])
+
+
+@router.get("/errors/{error_id}", response_model=RecentErrorItem, summary="依錯誤代碼查詢錯誤報告")
+async def error_by_id(error_id: str, _admin: AdminUser) -> RecentErrorItem:
+    """依使用者回報的 error_id 查詢該次錯誤摘要；會查 memory ring buffer 與 Redis 報告事件。"""
+    item = await find_error_by_id(error_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="找不到此錯誤代碼")
+    return RecentErrorItem(**item)
 
 
 @router.post("/errors/clear", response_model=dict, summary="清空錯誤緩衝")

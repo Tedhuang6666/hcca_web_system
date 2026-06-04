@@ -43,6 +43,7 @@ from api.schemas.dashboard import (
     LayoutHint,
 )
 from api.services.permission import get_user_permission_codes
+from api.services.task_priority import prioritize_dashboard_widgets
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +94,19 @@ def _has(perms: frozenset[str], is_admin: bool, code: str) -> bool:
     return code in perms
 
 
+def _decorate_item_priority(
+    item: DashboardWidgetItem,
+    *,
+    base_score: int,
+    reason: str,
+    action: str,
+) -> DashboardWidgetItem:
+    item.priority_score = min(base_score, 100)
+    item.priority_reasons = [reason]
+    item.recommended_action = action
+    return item
+
+
 # ── widget builders ──────────────────────────────────────────────────────────
 
 
@@ -119,11 +133,16 @@ async def _w_doc_draft(db: AsyncSession, user: User) -> DashboardWidget | None:
         .all()
     )
     items = [
-        DashboardWidgetItem(
-            title=d.title or "（未命名草稿）",
-            subtitle=d.serial_number,
-            href=f"/documents/{d.serial_number}/edit" if d.serial_number else "/documents",
-            timestamp=d.updated_at,
+        _decorate_item_priority(
+            DashboardWidgetItem(
+                title=d.title or "（未命名草稿）",
+                subtitle=d.serial_number,
+                href=f"/documents/{d.serial_number}/edit" if d.serial_number else "/documents",
+                timestamp=d.updated_at,
+            ),
+            base_score=32,
+            reason="草稿尚未送審",
+            action="補齊內容後送出簽核",
         )
         for d in rows
     ]
@@ -186,16 +205,21 @@ async def _w_doc_pending_my_approval(
 
     preview = rows[:3]
     items = [
-        DashboardWidgetItem(
-            title=d.title or "（公文）",
-            subtitle=d.serial_number,
-            href=f"/documents/{d.serial_number}" if d.serial_number else "/documents",
-            timestamp=d.updated_at,
-            badge=(
-                f"逾期 {(now - d.updated_at).days} 天"
-                if d.updated_at and d.updated_at < sla_cutoff
-                else None
+        _decorate_item_priority(
+            DashboardWidgetItem(
+                title=d.title or "（公文）",
+                subtitle=d.serial_number,
+                href=f"/documents/{d.serial_number}" if d.serial_number else "/documents",
+                timestamp=d.updated_at,
+                badge=(
+                    f"逾期 {(now - d.updated_at).days} 天"
+                    if d.updated_at and d.updated_at < sla_cutoff
+                    else None
+                ),
             ),
+            base_score=92 if d.updated_at and d.updated_at < sla_cutoff else 72,
+            reason="等待您作成簽核決定",
+            action="開啟公文完成核准或退回",
         )
         for (d, _a) in preview
     ]
@@ -263,11 +287,16 @@ async def _w_meeting_upcoming(db: AsyncSession, user: User) -> DashboardWidget |
         summary = f"{len(rows)} 場（72 小時內）"
 
     items = [
-        DashboardWidgetItem(
-            title=m.title,
-            subtitle=m.location or None,
-            href=f"/meetings/{m.id}",
-            timestamp=m.starts_at,
+        _decorate_item_priority(
+            DashboardWidgetItem(
+                title=m.title,
+                subtitle=m.location or None,
+                href=f"/meetings/{m.id}",
+                timestamp=m.starts_at,
+            ),
+            base_score=82 if minutes_to_start <= 120 else 48,
+            reason="會議時間接近",
+            action="確認議程、出席與會議資料",
         )
         for m in rows
     ]
@@ -310,12 +339,17 @@ async def _w_regulation_review(
         RegulationWorkflowStatus.COUNCIL_APPROVED: "待主席公布",
     }
     items = [
-        DashboardWidgetItem(
-            title=r.title,
-            subtitle=f"v{r.version}",
-            href=f"/regulations/{r.id}",
-            badge=label_map.get(r.workflow_status, str(r.workflow_status)),
-            timestamp=r.updated_at,
+        _decorate_item_priority(
+            DashboardWidgetItem(
+                title=r.title,
+                subtitle=f"v{r.version}",
+                href=f"/regulations/{r.id}",
+                badge=label_map.get(r.workflow_status, str(r.workflow_status)),
+                timestamp=r.updated_at,
+            ),
+            base_score=70 if r.workflow_status == RegulationWorkflowStatus.COUNCIL_APPROVED else 52,
+            reason="法規仍在審議流程中",
+            action="確認目前階段並推進下一步",
         )
         for r in rows[:5]
     ]
@@ -345,11 +379,16 @@ async def _w_regulation_publish(
     if not rows:
         return None
     items = [
-        DashboardWidgetItem(
-            title=r.title,
-            subtitle=f"v{r.version}（議會核定）",
-            href=f"/regulations/{r.id}",
-            timestamp=r.updated_at,
+        _decorate_item_priority(
+            DashboardWidgetItem(
+                title=r.title,
+                subtitle=f"v{r.version}（議會核定）",
+                href=f"/regulations/{r.id}",
+                timestamp=r.updated_at,
+            ),
+            base_score=92,
+            reason="已核定但尚未公布",
+            action="確認內容後公布",
         )
         for r in rows[:5]
     ]
@@ -388,11 +427,16 @@ async def _w_petition_assigned(
     if not rows:
         return None
     items = [
-        DashboardWidgetItem(
-            title=p.title,
-            subtitle=p.case_number,
-            href=f"/petitions/{p.case_number}",
-            timestamp=p.submitted_at,
+        _decorate_item_priority(
+            DashboardWidgetItem(
+                title=p.title,
+                subtitle=p.case_number,
+                href=f"/petitions/{p.case_number}",
+                timestamp=p.submitted_at,
+            ),
+            base_score=68 if p.status == PetitionStatus.NEEDS_INFO else 58,
+            reason="陳情案件需要承辦回應",
+            action="更新處理進度或回覆當事人",
         )
         for p in rows[:5]
     ]
@@ -418,10 +462,15 @@ async def _w_open_surveys(db: AsyncSession, user: User) -> DashboardWidget | Non
     if not rows:
         return None
     items = [
-        DashboardWidgetItem(
-            title=s.title,
-            href=f"/surveys/{s.id}",
-            timestamp=s.updated_at,
+        _decorate_item_priority(
+            DashboardWidgetItem(
+                title=s.title,
+                href=f"/surveys/{s.id}",
+                timestamp=s.updated_at,
+            ),
+            base_score=34,
+            reason="問卷開放中",
+            action="完成填答",
         )
         for s in rows
     ]
@@ -453,10 +502,15 @@ async def _w_announcements_recent(db: AsyncSession, user: User) -> DashboardWidg
     if not rows:
         return None
     items = [
-        DashboardWidgetItem(
-            title=getattr(a, "title", "(公告)"),
-            href=f"/announcements/{a.id}",
-            timestamp=a.created_at,
+        _decorate_item_priority(
+            DashboardWidgetItem(
+                title=getattr(a, "title", "(公告)"),
+                href=f"/announcements/{a.id}",
+                timestamp=a.created_at,
+            ),
+            base_score=30,
+            reason="最近一週公告",
+            action="查看公告內容",
         )
         for a in rows
     ]
@@ -506,31 +560,12 @@ async def build_dashboard(db: AsyncSession, user: User) -> DashboardResponse:
     )
     widgets = [w for w in results if w is not None]
 
-    # 角色排序：leader 優先看公布/簽核；student 優先看公告/問卷
     if hint == "student":
-        widgets.sort(
-            key=lambda w: (
-                0 if w.key in ("announcements_recent", "open_surveys", "today_meal") else 1,
-                -(w.count or 0),
-            )
-        )
+        preferred_keys = ("announcements_recent", "open_surveys", "today_meal")
     elif hint == "leader":
-        widgets.sort(
-            key=lambda w: (
-                0
-                if w.key in ("regulation_publish", "doc_pending_my_approval", "regulation_review")
-                else 1,
-                -(w.count or 0),
-            )
-        )
+        preferred_keys = ("regulation_publish", "doc_pending_my_approval", "regulation_review")
     else:
-        widgets.sort(
-            key=lambda w: (
-                0
-                if w.key in ("doc_pending_my_approval", "meeting_upcoming", "petition_assigned")
-                else 1,
-                -(w.count or 0),
-            )
-        )
+        preferred_keys = ("doc_pending_my_approval", "meeting_upcoming", "petition_assigned")
+    widgets = prioritize_dashboard_widgets(widgets, preferred_keys=preferred_keys)
 
     return DashboardResponse(widgets=widgets, layout_hint=hint)

@@ -43,6 +43,7 @@ from api.models.regulation import (
     RegulationWorkflowStatus,
 )
 from api.models.user import User
+from api.schemas.context import RegulationUsageContextOut
 from api.schemas.document import DocumentCreate
 from api.schemas.regulation import (
     AmendmentComparisonExportRequest,
@@ -68,6 +69,7 @@ from api.schemas.regulation import (
     WorkflowActionRequest,
 )
 from api.services import audit as audit_svc
+from api.services import context as context_svc
 from api.services import document as doc_svc
 from api.services import meeting as meeting_svc
 from api.services import regulation as reg_svc
@@ -234,6 +236,20 @@ async def list_regulations(
         limit=limit,
         offset=offset,
     )
+
+
+@router.get(
+    "/{reg_id}/usage-context",
+    response_model=RegulationUsageContextOut,
+    summary="取得法規使用脈絡",
+)
+async def regulation_usage_context(
+    reg_id: str, session: DbDep, user: OptionalUser
+) -> RegulationUsageContextOut:
+    reg = await _get_reg_or_404(reg_id, session)
+    if user is None and not await reg_svc.is_publicly_effective(session, reg):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此法規")
+    return await context_svc.regulation_usage_context(session, reg.id)
 
 
 @router.get(

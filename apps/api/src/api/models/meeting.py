@@ -23,15 +23,30 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
 from api.models.base import TimestampMixin
-from api.models.types import JSONDict
+from api.models.types import JSONDict, JSONList
 
 if TYPE_CHECKING:
+    from api.models.activity import Activity
     from api.models.council_proposal import CouncilProposal
     from api.models.document import Document
     from api.models.org import Org
     from api.models.regulation import Regulation
     from api.models.school_class import SchoolClass
     from api.models.user import User
+
+
+class MeetingMode(StrEnum):
+    """議事模式：簡易評議（委員會）或完整議事（議會）。
+
+    - SIMPLE：輕量評議。主席直接點名出席、逐案討論表決，表決可無異議通過／口頭計票／
+      逐人代登／自訂選項；不需報到 token、議員手機端、發言計時器。主旨在自動產生會議
+      紀錄與會中議程提示。
+    - FULL：完整議會流程。報到 token、議員手機端逐人電子投票＋門檻、發言佇列計時、
+      動議鏈、正式決議與法案推進。
+    """
+
+    SIMPLE = "simple"
+    FULL = "full"
 
 
 class MeetingStatus(StrEnum):
@@ -89,6 +104,19 @@ class VoteVisibility(StrEnum):
     ANONYMOUS = "anonymous"
 
 
+class VoteRecordMethod(StrEnum):
+    """表決計票方式。
+
+    - BALLOTS：逐人票。涵蓋完整版議員自投與簡易版紀錄代登，差別在「誰投」而非方法。
+    - TALLY：主席口頭計票，僅存彙總票數（manual_tally）。
+    - ACCLAMATION：無異議通過，不需計票。
+    """
+
+    BALLOTS = "ballots"
+    TALLY = "tally"
+    ACCLAMATION = "acclamation"
+
+
 class VoteThresholdType(StrEnum):
     SIMPLE_MAJORITY = "simple_majority"
     PRESENT_MAJORITY = "present_majority"
@@ -123,13 +151,19 @@ class AttendanceSourceType(StrEnum):
 
 
 class ArtifactLinkType(StrEnum):
+    ACTIVITY = "activity"
     REGULATION = "regulation"
     DOCUMENT = "document"
     SURVEY = "survey"
     ANNOUNCEMENT = "announcement"
     PETITION = "petition"
+    JUDICIAL_PETITION = "judicial_petition"
+    COUNCIL_PROPOSAL = "council_proposal"
     SHOP = "shop"
+    SHOP_ORDER = "shop_order"
     MEAL = "meal"
+    MEAL_ORDER = "meal_order"
+    MEAL_SCHEDULE = "meal_schedule"
     EXTERNAL = "external"
     CUSTOM = "custom"
 
@@ -198,7 +232,17 @@ class Meeting(Base, TimestampMixin):
     org_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("orgs.id", ondelete="RESTRICT"), nullable=False, index=True
     )
+    activity_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("activities.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,  # 依活動反查會議會用到，保留索引
+    )
     title: Mapped[str] = mapped_column(String(200), nullable=False)
+    # 議事模式：預設簡易評議；可隨時升級為完整議會（資料保留）
+    mode: Mapped[MeetingMode] = mapped_column(
+        String(10), nullable=False, default=MeetingMode.SIMPLE, server_default=MeetingMode.SIMPLE
+    )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     location: Mapped[str | None] = mapped_column(String(200), nullable=True)
     chair_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -226,7 +270,14 @@ class Meeting(Base, TimestampMixin):
     checkin_token: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
     current_agenda_item_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("meeting_agenda_items.id", ondelete="SET NULL"),
+        # use_alter：此 FK 與 meeting_agenda_items.meeting_id 形成循環，
+        # 改用建表後 ALTER 加入，讓 metadata 可正確排序（消除 SAWarning / 修復 dump 順序）。
+        ForeignKey(
+            "meeting_agenda_items.id",
+            ondelete="SET NULL",
+            name="fk_meetings_current_agenda_item_id",
+            use_alter=True,
+        ),
         nullable=True,
     )
     screen_focus_title: Mapped[str | None] = mapped_column(String(200), nullable=True)
@@ -248,6 +299,7 @@ class Meeting(Base, TimestampMixin):
     )
 
     org: Mapped[Org] = relationship("Org")
+    activity: Mapped[Activity | None] = relationship("Activity")
     notice_document: Mapped[Document | None] = relationship(
         "Document", foreign_keys=[notice_document_id]
     )
@@ -337,6 +389,7 @@ class MeetingAgendaItem(Base, TimestampMixin):
         UUID(as_uuid=True),
         ForeignKey("council_proposals.id", ondelete="SET NULL"),
         nullable=True,
+        index=True,  # 由提案反查議程（list_eligible_meetings / schedule_into_meeting）會用到
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     resolution: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -353,6 +406,9 @@ class MeetingAgendaItem(Base, TimestampMixin):
     )
     artifact_links: Mapped[list[MeetingArtifactLink]] = relationship(
         "MeetingArtifactLink", back_populates="agenda_item", cascade="all, delete-orphan"
+    )
+    recusals: Mapped[list[MeetingAgendaRecusal]] = relationship(
+        "MeetingAgendaRecusal", back_populates="agenda_item", cascade="all, delete-orphan"
     )
     motions: Mapped[list[MeetingMotion]] = relationship(
         "MeetingMotion", back_populates="agenda_item"
@@ -508,6 +564,39 @@ class MeetingArtifactLink(Base, TimestampMixin):
     creator: Mapped[User] = relationship("User")
 
 
+class MeetingAgendaRecusal(Base):
+    """逐案委員迴避紀錄：該議程案表決時排除此委員的表決權。"""
+
+    __tablename__ = "meeting_agenda_recusals"
+    __table_args__ = (
+        UniqueConstraint("agenda_item_id", "user_id", name="uq_meeting_agenda_recusal"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    agenda_item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("meeting_agenda_items.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+
+    agenda_item: Mapped[MeetingAgendaItem] = relationship(
+        "MeetingAgendaItem", back_populates="recusals"
+    )
+    user: Mapped[User] = relationship("User", foreign_keys=[user_id])
+    creator: Mapped[User] = relationship("User", foreign_keys=[created_by])
+
+
 class MeetingVote(Base, TimestampMixin):
     """會議表決案。"""
 
@@ -549,6 +638,19 @@ class MeetingVote(Base, TimestampMixin):
         default=VoteThresholdType.SIMPLE_MAJORITY,
         server_default=VoteThresholdType.SIMPLE_MAJORITY,
     )
+    # 計票方式：完整版預設逐人票；簡易版可口頭計票或無異議通過
+    record_method: Mapped[VoteRecordMethod] = mapped_column(
+        String(20),
+        nullable=False,
+        default=VoteRecordMethod.BALLOTS,
+        server_default=VoteRecordMethod.BALLOTS,
+    )
+    # 自訂選項（主席設定）：[{"key": "a", "label": "甲案"}, ...]；None＝標準同意/不同意/棄權
+    options: Mapped[list | None] = mapped_column(JSONList, nullable=True)
+    # 口頭計票彙總：{"approve": 5, "reject": 3, "abstain": 1} 或自訂 {"a": 5, "b": 3}
+    manual_tally: Mapped[dict | None] = mapped_column(JSONDict, nullable=True)
+    # 結論文字：「無異議通過」「照案通過」「甲案通過」
+    result_label: Mapped[str | None] = mapped_column(String(200), nullable=True)
     opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     result_note: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -586,6 +688,8 @@ class MeetingBallot(Base, TimestampMixin):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     choice: Mapped[BallotChoice] = mapped_column(String(20), nullable=False)
+    # 自訂選項時記選項 key（與 choice 並存；custom 時以 option_key 為準）
+    option_key: Mapped[str | None] = mapped_column(String(50), nullable=True)
     cast_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     vote: Mapped[MeetingVote] = relationship("MeetingVote", back_populates="ballots")

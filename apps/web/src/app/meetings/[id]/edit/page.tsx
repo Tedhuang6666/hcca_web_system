@@ -20,6 +20,7 @@ import type {
   AttendanceRole,
   AttendanceSourceType,
   MeetingBillStage,
+  MeetingMode,
   MeetingOut,
   MeetingRegulationBrief,
   OrgRead,
@@ -62,6 +63,7 @@ function fromLocalInput(local: string): string | null {
 function toUpdatePayload(form: SettingsForm) {
   return {
     title: form.title.trim(),
+    mode: form.mode,
     description: form.description.trim() || null,
     location: form.location.trim() || null,
     chair_name: form.chair_name.trim() || null,
@@ -78,6 +80,7 @@ function toUpdatePayload(form: SettingsForm) {
 
 interface SettingsForm {
   title: string;
+  mode: MeetingMode;
   description: string;
   location: string;
   chair_name: string;
@@ -94,6 +97,7 @@ interface SettingsForm {
 function toForm(m: MeetingOut): SettingsForm {
   return {
     title: m.title,
+    mode: m.mode,
     description: m.description ?? "",
     location: m.location ?? "",
     chair_name: m.chair_name ?? "",
@@ -533,6 +537,44 @@ export default function MeetingSetupPage({ params }: { params: Promise<{ id: str
               className="rounded-md border border-[var(--border)] bg-transparent px-3 py-2"
             />
           </label>
+          <div className="flex flex-col gap-1 text-sm sm:col-span-2">
+            <span className="text-[var(--muted)]">議事模式</span>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {(
+                [
+                  {
+                    value: "simple" as MeetingMode,
+                    title: "簡易評議",
+                    detail: "委員會適用。點名出席、逐案討論表決（無異議通過 / 計票 / 逐人），自動產生會議紀錄。",
+                  },
+                  {
+                    value: "full" as MeetingMode,
+                    title: "完整議事",
+                    detail: "議會適用。報到、議員手機端逐人電子表決＋門檻、發言計時、動議與法案推進。",
+                  },
+                ]
+              ).map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  disabled={!isDraft}
+                  onClick={() => setForm({ ...form, mode: opt.value })}
+                  className={`rounded-md border p-3 text-left ${
+                    form.mode === opt.value
+                      ? "border-[var(--primary)] bg-[var(--primary-dim)]"
+                      : "border-[var(--border)]"
+                  } disabled:cursor-not-allowed disabled:opacity-60`}>
+                  <span className="block font-medium">{opt.title}</span>
+                  <span className="mt-1 block text-xs text-[var(--muted)]">{opt.detail}</span>
+                </button>
+              ))}
+            </div>
+            {form.mode === "simple" && form.bill_stage && (
+              <span className="text-xs text-amber-600">
+                法案審議（{STAGE_LABEL[form.bill_stage]}）需要逐人表決與法案推進，建議改用「完整議事」。
+              </span>
+            )}
+          </div>
           <label className="flex flex-col gap-1 text-sm sm:col-span-2">
             <span className="text-[var(--muted)]">會議性質（法案審議階段）</span>
             <select
@@ -592,60 +634,64 @@ export default function MeetingSetupPage({ params }: { params: Promise<{ id: str
               className="rounded-md border border-[var(--border)] bg-transparent px-3 py-2"
             />
           </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-[var(--muted)]">預計表決權人數</span>
-            <input
-              type="number"
-              min={0}
-              value={form.expected_voters}
-              onChange={(e) => setForm({ ...form, expected_voters: Number(e.target.value) || 0 })}
-              className="rounded-md border border-[var(--border)] bg-transparent px-3 py-2"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-[var(--muted)]">法定開議人數（quorum）</span>
-            <input
-              type="number"
-              min={0}
-              value={form.quorum_count}
-              onChange={(e) => setForm({ ...form, quorum_count: Number(e.target.value) || 0 })}
-              className="rounded-md border border-[var(--border)] bg-transparent px-3 py-2"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-[var(--muted)]">預設表決通過門檻（票）</span>
-            <input
-              type="number"
-              min={0}
-              value={form.default_pass_threshold}
-              onChange={(e) =>
-                setForm({ ...form, default_pass_threshold: Number(e.target.value) || 0 })
-              }
-              className="rounded-md border border-[var(--border)] bg-transparent px-3 py-2"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-[var(--muted)]">預設發言時間（秒）</span>
-            <input
-              type="number"
-              min={10}
-              value={form.default_speech_seconds}
-              onChange={(e) =>
-                setForm({ ...form, default_speech_seconds: Number(e.target.value) || 180 })
-              }
-              className="rounded-md border border-[var(--border)] bg-transparent px-3 py-2"
-            />
-          </label>
-          <label className="flex items-center gap-2 rounded-md border border-[var(--border)] px-3 py-2 text-sm">
-            <input
-              type="checkbox"
-              checked={form.allow_observer_requests}
-              onChange={(e) =>
-                setForm({ ...form, allow_observer_requests: e.target.checked })
-              }
-            />
-            <span>允許旁聽者提出現場請求</span>
-          </label>
+          {form.mode === "full" && (
+            <>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-[var(--muted)]">預計表決權人數</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={form.expected_voters}
+                  onChange={(e) => setForm({ ...form, expected_voters: Number(e.target.value) || 0 })}
+                  className="rounded-md border border-[var(--border)] bg-transparent px-3 py-2"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-[var(--muted)]">法定開議人數（quorum）</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={form.quorum_count}
+                  onChange={(e) => setForm({ ...form, quorum_count: Number(e.target.value) || 0 })}
+                  className="rounded-md border border-[var(--border)] bg-transparent px-3 py-2"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-[var(--muted)]">預設表決通過門檻（票）</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={form.default_pass_threshold}
+                  onChange={(e) =>
+                    setForm({ ...form, default_pass_threshold: Number(e.target.value) || 0 })
+                  }
+                  className="rounded-md border border-[var(--border)] bg-transparent px-3 py-2"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-[var(--muted)]">預設發言時間（秒）</span>
+                <input
+                  type="number"
+                  min={10}
+                  value={form.default_speech_seconds}
+                  onChange={(e) =>
+                    setForm({ ...form, default_speech_seconds: Number(e.target.value) || 180 })
+                  }
+                  className="rounded-md border border-[var(--border)] bg-transparent px-3 py-2"
+                />
+              </label>
+              <label className="flex items-center gap-2 rounded-md border border-[var(--border)] px-3 py-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={form.allow_observer_requests}
+                  onChange={(e) =>
+                    setForm({ ...form, allow_observer_requests: e.target.checked })
+                  }
+                />
+                <span>允許旁聽者提出現場請求</span>
+              </label>
+            </>
+          )}
         </div>
         <button
           onClick={saveSettings}

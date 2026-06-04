@@ -11,6 +11,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.core.clock import now_local
 from api.models.shop import (
     Cart,
     CartItem,
@@ -49,6 +50,7 @@ from api.schemas.shop import (
     ProductVariantOptionCreate,
     ProductVariantOptionUpdate,
 )
+from api.services import receivable as receivable_svc
 from api.services import school_class as class_svc
 
 logger = logging.getLogger(__name__)
@@ -61,7 +63,7 @@ async def generate_order_serial(session: AsyncSession) -> str:
     """使用 PostgreSQL Sequence 原子性生成訂單字號：ORD-YYYY-NNNNNN。"""
     result = await session.execute(text("SELECT nextval('order_serial_seq')"))
     seq_val: int = result.scalar_one()
-    year = datetime.now(UTC).year
+    year = now_local().year
     return f"ORD-{year}-{seq_val:06d}"
 
 
@@ -253,6 +255,8 @@ async def create_product(
         created_by=created_by,
         sale_start=data.sale_start,
         sale_end=data.sale_end,
+        requires_seating=data.requires_seating,
+        seating_mode=data.seating_mode,
         status=ProductStatus.DRAFT,
     )
     session.add(product)
@@ -453,6 +457,8 @@ async def build_catalog_tree(
                     sale_start=p.sale_start,
                     sale_end=p.sale_end,
                     has_variants=len(p.variant_groups) > 0,
+                    requires_seating=p.requires_seating,
+                    seating_mode=p.seating_mode,
                 )
                 for p in sorted(series.products, key=lambda x: x.created_at)
                 if p.status in visible
@@ -628,6 +634,23 @@ def serialize_cart(cart: Cart) -> CartOut:
     return CartOut(id=cart.id, items=items_out, total_price=total)
 
 
+async def _assert_activity_open(session: AsyncSession, product: Product) -> None:
+    """票種掛活動時，活動結束/封存即停售（活動系統整合）。"""
+    from api.models.activity import Activity, ActivityStatus
+
+    series = getattr(product, "series", None)
+    category = getattr(series, "category", None) if series else None
+    activity_id = getattr(category, "activity_id", None) if category else None
+    if not activity_id:
+        return
+    activity = await session.get(Activity, activity_id)
+    if activity is not None and activity.status in (
+        ActivityStatus.ENDED,
+        ActivityStatus.ARCHIVED,
+    ):
+        raise ValueError(f"商品「{product.name}」所屬活動已結束，停止販售")
+
+
 def _order_activity_id(order: Order) -> uuid.UUID | None:
     for item in getattr(order, "items", []) or []:
         product = getattr(item, "product", None)
@@ -656,6 +679,17 @@ async def _create_order_from_items(
     specs: list[dict] = []
     now = datetime.now(UTC)
 
+    # 鎖住所有涉及商品列（依 id 排序避免並發死鎖），序列化庫存檢查與扣減，避免超賣。
+    # 否則兩張並發訂單可能同時通過 stock_quantity 檢查，導致庫存變負 / 超售。
+    locked_product_ids = sorted({ci.product_id for ci in cart_items})
+    if locked_product_ids:
+        await session.execute(
+            select(Product.id)
+            .where(Product.id.in_(locked_product_ids))
+            .order_by(Product.id)
+            .with_for_update()
+        )
+
     for cart_item in cart_items:
         product = await get_product(session, cart_item.product_id)
         if product is None:
@@ -666,6 +700,7 @@ async def _create_order_from_items(
             raise ValueError(f"商品「{product.name}」尚未開售")
         if product.sale_end and now > product.sale_end:
             raise ValueError(f"商品「{product.name}」已截止販售")
+        await _assert_activity_open(session, product)
 
         option_ids = [uuid.UUID(str(o["option_id"])) for o in (cart_item.selected_options or [])]
         selected = _resolve_selected_options(product, option_ids)
@@ -749,18 +784,18 @@ async def create_direct_order(
 
     orders: list[Order] = []
     for org_id, grouped_items in by_org.items():
-        orders.append(
-            await _create_order_from_items(
-                session,
-                user_id=user_id,
-                org_id=org_id,
-                class_id=class_id,
-                cart_items=grouped_items,
-                notes=data.notes,
-                assistance_scope=assistance_scope,
-                assisted_by_id=assisted_by_id,
-            )
+        order = await _create_order_from_items(
+            session,
+            user_id=user_id,
+            org_id=org_id,
+            class_id=class_id,
+            cart_items=grouped_items,
+            notes=data.notes,
+            assistance_scope=assistance_scope,
+            assisted_by_id=assisted_by_id,
         )
+        await receivable_svc.sync_shop_order(session, order)
+        orders.append(order)
     return orders
 
 
@@ -793,6 +828,7 @@ async def checkout(session: AsyncSession, user, *, notes: str | None = None) -> 
             cart_items=items,
             notes=notes,
         )
+        await receivable_svc.sync_shop_order(session, order)
         orders.append(order)
 
     cart.items.clear()
@@ -949,6 +985,7 @@ async def cancel_order(
     order.status = OrderStatus.CANCELLED
     if reason:
         order.notes = f"[取消原因] {reason}" + (f"\n{order.notes}" if order.notes else "")
+    await receivable_svc.cancel_for_source(session, "shop_order", order.id)
     await session.flush()
     logger.info("訂單取消 serial=%s by=%s", order.serial_number, requested_by)
     return order
@@ -997,6 +1034,7 @@ async def replace_order_items(
     for item in temp_result.scalars().all():
         item.order_id = order.id
     await session.delete(specs_order)
+    await receivable_svc.sync_shop_order(session, order)
     await session.flush()
     return order
 
@@ -1012,6 +1050,7 @@ async def set_order_paid(
     else:
         order.paid_at = None
         order.paid_by_id = None
+    await receivable_svc.sync_shop_order(session, order)
     await session.flush()
     logger.info("訂單繳費狀態 serial=%s is_paid=%s by=%s", order.serial_number, is_paid, actor_id)
     return order

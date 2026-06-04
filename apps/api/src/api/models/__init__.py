@@ -5,6 +5,7 @@
 # 公告系統 [P8+]
 # 稽核日誌（不可變）
 from api.models.activity import Activity, ActivityConvener, ActivityStatus  # noqa: F401
+from api.models.activity_link import ActivityLink, ActivityLinkKind  # noqa: F401
 from api.models.announcement import (  # noqa: F401
     Announcement,
     AnnouncementAudience,
@@ -107,6 +108,7 @@ from api.models.meeting import (  # noqa: F401
     Meeting,
     MeetingAgendaAttachment,
     MeetingAgendaItem,
+    MeetingAgendaRecusal,
     MeetingArtifactLink,
     MeetingAttendance,
     MeetingAttendanceSource,
@@ -115,6 +117,7 @@ from api.models.meeting import (  # noqa: F401
     MeetingDecision,
     MeetingDecisionStatus,
     MeetingEvent,
+    MeetingMode,
     MeetingMotion,
     MeetingMotionStatus,
     MeetingMotionType,
@@ -125,6 +128,7 @@ from api.models.meeting import (  # noqa: F401
     MeetingStatus,
     MeetingVote,
     ScreenReadingMode,
+    VoteRecordMethod,
     VoteStatus,
     VoteVisibility,
 )
@@ -173,6 +177,13 @@ from api.models.policy import (  # noqa: F401
     PrivacyRequestStatus,
     PrivacyRequestType,
 )
+from api.models.publication import (  # noqa: F401
+    PublicationCampaign,
+    PublicationDelivery,
+    PublicationDeliveryStatus,
+    PublicationStatus,
+)
+from api.models.receivable import Receivable, ReceivableSource, ReceivableStatus  # noqa: F401
 
 # 法規系統（含條文結構與修訂歷程）[M-20]
 from api.models.regulation import (  # noqa: F401
@@ -198,6 +209,18 @@ from api.models.school_class import (  # noqa: F401
     ClassRoleKey,
     ClassStudentRange,
     SchoolClass,
+)
+
+# 劃位 / 票券系統（校商票種延伸）
+from api.models.seating import (  # noqa: F401
+    Seat,
+    SeatAssignment,
+    SeatAssignmentStatus,
+    SeatHold,
+    SeatingMode,
+    SeatingWave,
+    SeatingZone,
+    SeatStatus,
 )
 
 # 校商訂購系統 [M-23]
@@ -234,3 +257,10 @@ from api.models.webhook import (  # noqa: F401
     WebhookSubscription,
 )
 from api.models.work_item import WorkItem, WorkItemStatus  # noqa: F401
+from api.models.workflow import (  # noqa: F401
+    WorkflowEvent,
+    WorkflowEventType,
+    WorkflowInstance,
+    WorkflowLink,
+    WorkflowSourceType,
+)

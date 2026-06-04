@@ -43,8 +43,10 @@ from api.models.meeting import (
 )
 from api.models.regulation import Regulation
 from api.models.user import User
+from api.schemas.context import MeetingBriefingCardOut
 from api.schemas.document import DocumentCreate, RecipientCreate
 from api.schemas.meeting import (
+    AcclamationRequest,
     AgendaAttachmentLinkCreate,
     AgendaAttachmentOut,
     AgendaItemCreate,
@@ -65,6 +67,7 @@ from api.schemas.meeting import (
     DecisionCreate,
     DecisionOut,
     DecisionUpdate,
+    ManualTallyRequest,
     MeetingConfirmCreate,
     MeetingCreate,
     MeetingDocumentDraftOut,
@@ -82,6 +85,8 @@ from api.schemas.meeting import (
     MotionCreate,
     MotionOut,
     MotionUpdate,
+    RecorderBallotCreate,
+    RecusalCreate,
     RegulationBrief,
     ScreenStateOut,
     ScreenStateUpdate,
@@ -94,9 +99,12 @@ from api.schemas.meeting import (
     VoteOut,
     VoteUpdate,
 )
+from api.schemas.workflow import WorkflowLinkCreate
 from api.services import audit as audit_svc
+from api.services import context as context_svc
 from api.services import document as document_svc
 from api.services import meeting as meeting_svc
+from api.services import workflow as workflow_svc
 from api.services.storage import get_storage
 
 router = APIRouter(prefix="/meetings", tags=["議事系統"])
@@ -323,6 +331,21 @@ async def create_meeting(
 @router.get("/{meeting_id}", response_model=MeetingOut, summary="取得會議詳細")
 async def get_meeting(meeting_id: uuid.UUID, session: DbDep, _: CurrentUser) -> Meeting:
     return await _meeting_or_404(session, meeting_id)
+
+
+@router.get(
+    "/{meeting_id}/briefing-card",
+    response_model=MeetingBriefingCardOut,
+    summary="取得會議前個人作戰卡",
+)
+async def meeting_briefing_card(
+    meeting_id: uuid.UUID, session: DbDep, current_user: CurrentUser
+) -> MeetingBriefingCardOut:
+    await _meeting_or_404(session, meeting_id)
+    try:
+        return await context_svc.meeting_briefing_card(session, meeting_id, current_user)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 @router.patch(
@@ -890,6 +913,58 @@ async def delete_agenda_item(
 
 
 @router.post(
+    "/{meeting_id}/agenda-items/{agenda_item_id}/recusals",
+    response_model=AgendaItemOut,
+    summary="標記委員對本案迴避（meeting:chair）",
+    dependencies=[Depends(require_permission(PermissionCode.MEETING_CHAIR))],
+)
+async def add_recusal(
+    meeting_id: uuid.UUID,
+    agenda_item_id: uuid.UUID,
+    payload: RecusalCreate,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> MeetingAgendaItem:
+    meeting = await _meeting_or_404(session, meeting_id)
+    item = await _agenda_or_404(session, meeting, agenda_item_id)
+    await meeting_svc.add_recusal(
+        session, item, user_id=payload.user_id, note=payload.note, created_by=current_user.id
+    )
+    await _record_event(
+        session,
+        meeting,
+        event_type="agenda.recusal_added",
+        actor=current_user,
+        agenda_item_id=item.id,
+        payload={"user_id": str(payload.user_id)},
+    )
+    await _broadcast_meeting(session, meeting.id, "meeting.agenda_updated")
+    refreshed = await _meeting_or_404(session, meeting.id)
+    return await _agenda_or_404(session, refreshed, agenda_item_id)
+
+
+@router.delete(
+    "/{meeting_id}/agenda-items/{agenda_item_id}/recusals/{user_id}",
+    response_model=AgendaItemOut,
+    summary="取消委員對本案的迴避（meeting:chair）",
+    dependencies=[Depends(require_permission(PermissionCode.MEETING_CHAIR))],
+)
+async def remove_recusal(
+    meeting_id: uuid.UUID,
+    agenda_item_id: uuid.UUID,
+    user_id: uuid.UUID,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> MeetingAgendaItem:
+    meeting = await _meeting_or_404(session, meeting_id)
+    item = await _agenda_or_404(session, meeting, agenda_item_id)
+    await meeting_svc.remove_recusal(session, item, user_id=user_id)
+    await _broadcast_meeting(session, meeting.id, "meeting.agenda_updated")
+    refreshed = await _meeting_or_404(session, meeting.id)
+    return await _agenda_or_404(session, refreshed, agenda_item_id)
+
+
+@router.post(
     "/{meeting_id}/agenda-items/{agenda_item_id}/advance-regulation",
     response_model=AgendaItemOut,
     summary="表決通過後依審議階段推進關聯法案（meeting:chair）",
@@ -1192,6 +1267,47 @@ async def create_decision(
     decision = await meeting_svc.create_decision(
         session, meeting, data=payload, created_by=current_user.id
     )
+    agenda_item = next(
+        (item for item in meeting.agenda_items if item.id == decision.agenda_item_id), None
+    )
+    if agenda_item and agenda_item.council_proposal_id:
+        instance = await workflow_svc.get_instance_by_source(
+            session, "council_proposal", agenda_item.council_proposal_id
+        )
+        if instance is not None:
+            next_status = None
+            if str(decision.status) == "passed":
+                next_status = "passed"
+            elif str(decision.status) == "failed":
+                next_status = "rejected"
+            if next_status:
+                await workflow_svc.transition_instance(
+                    session,
+                    instance,
+                    status=next_status,
+                    actor_id=current_user.id,
+                    actor_email=current_user.email,
+                    note=decision.content,
+                    payload={
+                        "meeting_id": str(meeting.id),
+                        "agenda_item_id": str(decision.agenda_item_id),
+                        "decision_id": str(decision.id),
+                    },
+                )
+            await workflow_svc.add_link(
+                session,
+                instance,
+                data=WorkflowLinkCreate(
+                    target_type="meeting_decision",
+                    target_id=decision.id,
+                    relation="decision",
+                    title=decision.title,
+                    href=f"/meetings/{meeting.id}",
+                    note=decision.content,
+                    meta={"status": str(decision.status)},
+                ),
+                created_by_id=current_user.id,
+            )
     await _record_event(
         session,
         meeting,
@@ -1283,6 +1399,42 @@ async def close_vote(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     decorated = await meeting_svc.decorate_vote(session, vote, include_ballots=True)
+    if vote.agenda_item_id:
+        agenda_item = next(
+            (item for item in meeting.agenda_items if item.id == vote.agenda_item_id), None
+        )
+        if agenda_item and agenda_item.council_proposal_id:
+            instance = await workflow_svc.get_instance_by_source(
+                session, "council_proposal", agenda_item.council_proposal_id
+            )
+            if instance is not None:
+                await workflow_svc.transition_instance(
+                    session,
+                    instance,
+                    status="council_review",
+                    actor_id=current_user.id,
+                    actor_email=current_user.email,
+                    note="會議表決已關閉，等待正式決議",
+                    payload={
+                        "meeting_id": str(meeting.id),
+                        "agenda_item_id": str(vote.agenda_item_id),
+                        "vote_id": str(vote.id),
+                        "tally": decorated["tally"],
+                    },
+                )
+                await workflow_svc.add_link(
+                    session,
+                    instance,
+                    data=WorkflowLinkCreate(
+                        target_type="meeting_vote",
+                        target_id=vote.id,
+                        relation="vote",
+                        title=vote.title,
+                        href=f"/meetings/{meeting.id}",
+                        meta={"tally": decorated["tally"]},
+                    ),
+                    created_by_id=current_user.id,
+                )
     await _record_event(
         session,
         meeting,
@@ -1333,6 +1485,97 @@ async def cast_ballot(
     )
     await _broadcast_meeting(session, meeting.id, "meeting.ballot_cast")
     return ballot
+
+
+@router.post(
+    "/{meeting_id}/votes/{vote_id}/recorder-ballot",
+    response_model=BallotOut,
+    summary="紀錄代登逐人票（簡易模式，meeting:chair）",
+    dependencies=[Depends(require_permission(PermissionCode.MEETING_CHAIR))],
+)
+async def recorder_cast_ballot(
+    meeting_id: uuid.UUID,
+    vote_id: uuid.UUID,
+    payload: RecorderBallotCreate,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> object:
+    meeting = await _meeting_or_404(session, meeting_id)
+    vote = await _vote_or_404(session, meeting, vote_id)
+    try:
+        ballot = await meeting_svc.recorder_cast_ballot(session, vote, data=payload)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    await _broadcast_meeting(session, meeting.id, "meeting.ballot_cast")
+    return ballot
+
+
+@router.post(
+    "/{meeting_id}/votes/{vote_id}/tally",
+    response_model=VoteOut,
+    summary="主席口頭計票並關閉表決（簡易模式，meeting:chair）",
+    dependencies=[Depends(require_permission(PermissionCode.MEETING_CHAIR))],
+)
+async def record_vote_tally(
+    meeting_id: uuid.UUID,
+    vote_id: uuid.UUID,
+    payload: ManualTallyRequest,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> dict:
+    meeting = await _meeting_or_404(session, meeting_id)
+    vote = await _vote_or_404(session, meeting, vote_id)
+    vote = await meeting_svc.record_manual_tally(
+        session, vote, manual_tally=payload.manual_tally, result_label=payload.result_label
+    )
+    decorated = await meeting_svc.decorate_vote(session, vote, include_ballots=True)
+    await _record_event(
+        session,
+        meeting,
+        event_type="vote.tally_recorded",
+        actor=current_user,
+        agenda_item_id=vote.agenda_item_id,
+        payload={"vote_id": str(vote.id), "tally": decorated["tally"]},
+    )
+    await _broadcast_meeting(session, meeting.id, "meeting.vote_closed")
+    return decorated
+
+
+@router.post(
+    "/{meeting_id}/agenda-items/{agenda_item_id}/acclamation",
+    response_model=VoteOut,
+    summary="無異議通過（簡易模式，meeting:chair）",
+    dependencies=[Depends(require_permission(PermissionCode.MEETING_CHAIR))],
+)
+async def record_acclamation(
+    meeting_id: uuid.UUID,
+    agenda_item_id: uuid.UUID,
+    payload: AcclamationRequest,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> dict:
+    meeting = await _meeting_or_404(session, meeting_id)
+    item = await _agenda_or_404(session, meeting, agenda_item_id)
+    vote = await meeting_svc.record_acclamation(
+        session,
+        meeting,
+        agenda_item_id=item.id,
+        title=payload.title or item.title,
+        result_label=payload.result_label,
+    )
+    decorated = await meeting_svc.decorate_vote(session, vote, include_ballots=False)
+    await _record_event(
+        session,
+        meeting,
+        event_type="vote.acclamation",
+        actor=current_user,
+        agenda_item_id=item.id,
+        payload={"vote_id": str(vote.id), "result_label": payload.result_label},
+    )
+    await _broadcast_meeting(session, meeting.id, "meeting.vote_closed")
+    return decorated
 
 
 @router.post(

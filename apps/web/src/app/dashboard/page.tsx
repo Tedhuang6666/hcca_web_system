@@ -90,6 +90,21 @@ function WidgetCard({ w }: { w: DashboardWidget }) {
                 {w.summary}
               </p>
             )}
+            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              <span
+                className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
+                style={{ color: sev.color, background: sev.bg, border: `1px solid ${sev.border}` }}>
+                優先 {w.priority_score}
+              </span>
+              {w.priority_reasons.slice(0, 1).map((reason) => (
+                <span
+                  key={reason}
+                  className="rounded px-1.5 py-0.5 text-[10px]"
+                  style={{ color: "var(--text-secondary)", background: "var(--bg-hover)" }}>
+                  {reason}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
         {w.count !== null && w.count !== undefined && (
@@ -135,6 +150,11 @@ function WidgetCard({ w }: { w: DashboardWidget }) {
                         </span>
                       )}
                     </div>
+                    {it.recommended_action && (
+                      <p className="mt-1 truncate text-[11px]" style={{ color: "var(--text-muted)" }}>
+                        {it.recommended_action}
+                      </p>
+                    )}
                   </div>
                   <ChevronRight size={14} aria-hidden={true}
                     style={{ color: "var(--text-disabled)" }} />

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 WidgetKey = Literal[
     "doc_draft",
@@ -34,6 +34,9 @@ class DashboardWidgetItem(BaseModel):
     href: str | None = None
     timestamp: datetime | None = None
     badge: str | None = None
+    priority_score: int = 0
+    priority_reasons: list[str] = Field(default_factory=list)
+    recommended_action: str | None = None
 
 
 class DashboardWidget(BaseModel):
@@ -48,7 +51,10 @@ class DashboardWidget(BaseModel):
     href: str | None = None
     severity: Severity = "info"
     wide: bool = False
-    items: list[DashboardWidgetItem] = []
+    items: list[DashboardWidgetItem] = Field(default_factory=list)
+    priority_score: int = 0
+    priority_reasons: list[str] = Field(default_factory=list)
+    recommended_action: str | None = None
 
 
 class DashboardResponse(BaseModel):

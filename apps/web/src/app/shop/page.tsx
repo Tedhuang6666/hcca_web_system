@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -271,18 +272,19 @@ export default function ShopPage() {
   const [openProduct, setOpenProduct] = useState<string | null>(null);
   const [cartCount, setCartCount] = useState(0);
   const [selectedCategoryId, setSelectedCategoryId] = usePersistedState<string | null>("hcca:pref:shop:category:v1", null);
+  const activityId = useSearchParams().get("activity_id") || undefined;
 
   const loadCatalog = useCallback(() => {
     setLoading(true);
     shopApi
-      .catalog()
+      .catalog(undefined, activityId)
       .then((data) => {
         setCatalog(data);
         setSelectedCategoryId((current) => current ?? data[0]?.id ?? null);
       })
       .catch((e) => toast.error(e instanceof ApiError ? e.message : "載入失敗"))
       .finally(() => setLoading(false));
-  }, [setSelectedCategoryId]);
+  }, [setSelectedCategoryId, activityId]);
 
   const loadCart = useCallback(() => {
     shopApi

@@ -11,6 +11,7 @@ from datetime import date
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.clock import local_today
 from api.core.config import settings
 from api.models.org import Position, UserPosition
 from api.models.user import User
@@ -21,7 +22,7 @@ async def get_users_by_position(
     db: AsyncSession, position_id: uuid.UUID, on_date: date | None = None
 ) -> list[User]:
     """查某職位在指定日期仍在任的所有 active 使用者。"""
-    check_date = on_date or date.today()
+    check_date = on_date or local_today()
     result = await db.execute(
         select(User)
         .join(UserPosition, UserPosition.user_id == User.id)
@@ -39,7 +40,7 @@ async def get_members_by_org(
     db: AsyncSession, org_id: uuid.UUID, on_date: date | None = None
 ) -> list[User]:
     """查某組織所有職位在指定日期仍在任的所有 active 使用者。"""
-    check_date = on_date or date.today()
+    check_date = on_date or local_today()
     result = await db.execute(
         select(User)
         .join(UserPosition, UserPosition.user_id == User.id)

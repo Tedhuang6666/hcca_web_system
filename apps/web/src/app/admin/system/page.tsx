@@ -16,6 +16,7 @@ import {
   RefreshCcw,
   RotateCcw,
   Save,
+  Search,
   Shield,
   ShieldCheck,
   SlidersHorizontal,
@@ -1197,7 +1198,17 @@ function ErrorRow({ item }: { item: RecentErrorItem }) {
           <div className="mt-1.5 font-mono text-xs text-[var(--text-secondary)]">
             <span className="text-[var(--text-muted)]">{item.method}</span> {item.path}
             <span className="ml-2 text-[var(--text-muted)]">id={item.error_id}</span>
+            {item.request_id && (
+              <span className="ml-2 text-[var(--text-muted)]">request={item.request_id}</span>
+            )}
           </div>
+          {(item.client_ip || item.user_agent || item.source) && (
+            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--text-muted)]">
+              {item.client_ip && <span>IP：{item.client_ip}</span>}
+              {item.source && <span>來源：{item.source === "redis" ? "報告事件" : "即時緩衝"}</span>}
+              {item.user_agent && <span className="break-all">UA：{item.user_agent}</span>}
+            </div>
+          )}
           {item.message && (
             <div className="mt-1 break-words text-sm text-[var(--text-primary)]">{item.message}</div>
           )}
@@ -1221,6 +1232,9 @@ function ErrorRow({ item }: { item: RecentErrorItem }) {
 function RecentErrorsPanel() {
   const [items, setItems] = useState<RecentErrorItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [lookupCode, setLookupCode] = useState("");
+  const [lookupResult, setLookupResult] = useState<RecentErrorItem | null>(null);
+  const [lookupLoading, setLookupLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1246,6 +1260,25 @@ function RecentErrorsPanel() {
       setItems([]);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "清空失敗");
+    }
+  };
+
+  const lookup = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const code = lookupCode.trim();
+    if (!code) {
+      toast.warning("請輸入錯誤代碼");
+      return;
+    }
+    setLookupLoading(true);
+    try {
+      const item = await systemApi.errorById(code);
+      setLookupResult(item);
+    } catch (e) {
+      setLookupResult(null);
+      toast.error(e instanceof ApiError ? e.message : "查詢失敗");
+    } finally {
+      setLookupLoading(false);
     }
   };
 
@@ -1275,6 +1308,32 @@ function RecentErrorsPanel() {
         <span className="mx-1 text-[var(--warning)]">金＝快取/逾時</span>
         <span className="mx-1 text-[var(--text-muted)]">灰＝主動拋出的 5xx</span>
       </p>
+      <form
+        onSubmit={lookup}
+        className="mb-3 flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] p-3 sm:flex-row sm:items-center"
+      >
+        <label className="text-xs font-medium text-[var(--text-secondary)]" htmlFor="error-code-lookup">
+          錯誤代碼查詢
+        </label>
+        <input
+          id="error-code-lookup"
+          value={lookupCode}
+          onChange={(event) => setLookupCode(event.target.value)}
+          placeholder="貼上使用者回報的錯誤代碼"
+          className="min-w-0 flex-1 rounded-md border border-[var(--border)] bg-[var(--bg-input)] px-3 py-2 font-mono text-sm text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
+        />
+        <button type="submit" disabled={lookupLoading} className="btn btn-primary text-xs">
+          <Search size={13} aria-hidden /> {lookupLoading ? "查詢中…" : "查詢報告"}
+        </button>
+      </form>
+      {lookupResult && (
+        <div className="mb-3">
+          <div className="mb-1 text-xs font-medium text-[var(--text-secondary)]">
+            查詢結果：{lookupResult.error_id}
+          </div>
+          <ErrorRow item={lookupResult} />
+        </div>
+      )}
       {items.length === 0 ? (
         <p className="py-6 text-center text-sm text-[var(--text-muted)]">
           {loading ? "載入中…" : "目前沒有錯誤紀錄 🎉"}

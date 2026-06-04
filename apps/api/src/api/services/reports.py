@@ -20,6 +20,8 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.clock import local_today
+
 logger = logging.getLogger(__name__)
 
 
@@ -91,7 +93,7 @@ async def _r_expired_active_positions(session: AsyncSession) -> list[dict[str, A
     from api.models.org import Org, Position, UserPosition
     from api.models.user import User
 
-    today = datetime.now(UTC).date()
+    today = local_today()
     stmt = (
         select(
             UserPosition.id,
@@ -217,7 +219,7 @@ async def _r_inactive_users_no_positions(session: AsyncSession) -> list[dict[str
     from api.models.org import UserPosition
     from api.models.user import User
 
-    today = datetime.now(UTC).date()
+    today = local_today()
     # 找出 today 仍有效任期的 user_id
     active_user_ids = select(UserPosition.user_id).where(
         UserPosition.start_date <= today,
@@ -269,7 +271,7 @@ async def _r_orgs_position_summary(session: AsyncSession) -> list[dict[str, Any]
     """各組織職位數 / 現任人數摘要。"""
     from api.models.org import Org, Position, UserPosition
 
-    today = datetime.now(UTC).date()
+    today = local_today()
     stmt = (
         select(
             Org.id,

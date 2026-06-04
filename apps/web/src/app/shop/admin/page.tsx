@@ -278,6 +278,8 @@ function ProductFormModal({
   const [stock, setStock] = useState(String(initial?.stock_quantity ?? 0));
   const [unlimited, setUnlimited] = useState(initial?.is_unlimited ?? false);
   const [saleEnd, setSaleEnd] = useState(toLocalInput(initial?.sale_end ?? null));
+  const [requiresSeating, setRequiresSeating] = useState(initial?.requires_seating ?? false);
+  const [seatingMode, setSeatingMode] = useState<string>(initial?.seating_mode ?? "at_purchase");
   const [busy, setBusy] = useState(false);
 
   return (
@@ -309,6 +311,31 @@ function ProductFormModal({
         <Field label="商品圖片">
           <ImageField value={imageUrl} onChange={setImageUrl} />
         </Field>
+        <div className="rounded-lg p-3 space-y-2" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+          <label className="flex items-center gap-2 text-xs" style={{ color: "var(--text-secondary)" }}>
+            <input type="checkbox" checked={requiresSeating} onChange={(e) => setRequiresSeating(e.target.checked)} />
+            此為需劃位票種（電影 / 演唱會等）
+          </label>
+          {requiresSeating && (
+            <>
+              <Field label="劃位時機">
+                <select value={seatingMode} onChange={(e) => setSeatingMode(e.target.value)} className="input w-full">
+                  <option value="at_purchase">購買即劃位</option>
+                  <option value="scheduled">指定時間開放後自助劃位</option>
+                  <option value="admin_assign">管理員依到場順序代為劃位</option>
+                </select>
+              </Field>
+              {editing && (
+                <Link href={`/shop/admin/seating/${initial!.id}`} className="btn btn-ghost text-xs">
+                  → 管理場次與座位圖
+                </Link>
+              )}
+              {!editing && (
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>儲存後即可在商品上「管理場次與座位圖」。</p>
+              )}
+            </>
+          )}
+        </div>
         <p className="text-xs" style={{ color: "var(--text-muted)" }}>
           {editing ? "尺寸 / 顏色等變體於商品詳情頁管理。" : "建立後可於商品詳情頁新增尺寸 / 顏色等變體。"}
         </p>
@@ -325,6 +352,8 @@ function ProductFormModal({
                 stock_quantity: Number(stock) || 0,
                 is_unlimited: unlimited,
                 sale_end: saleEnd ? new Date(saleEnd).toISOString() : null,
+                requires_seating: requiresSeating,
+                seating_mode: requiresSeating ? seatingMode : null,
               };
               if (editing) await shopApi.updateProduct(initial!.id, body);
               else await shopApi.createProduct({ ...body, series_id: seriesId });

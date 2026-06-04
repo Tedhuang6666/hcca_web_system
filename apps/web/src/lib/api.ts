@@ -6,6 +6,7 @@ import type {
   ProductOut, OrderOut, OrderListItem, CartOut, OrderSummaryOut,
   ProductCategoryOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut,
   CatalogCategoryOut,
+  ZoneOut, ZoneListItem, SeatInput, WaveInput, SeatMapOut, HoldOut, SeatBookingOut,
   SchoolClassOut, SchoolClassListItem, SchoolClassBulkActionKind, SchoolClassBulkActionOut,
   SchoolClassBulkCreate, SchoolClassBulkCreateOut,
   ClassMemberOut, ClassStudentRangeOut, ClassCadreOut, ClassManualMemberOut,
@@ -23,6 +24,7 @@ import type {
   MeetingMotionOut, MeetingDecisionOut,
   MeetingAgendaAttachmentOut, MeetingAgendaItemOut, MeetingAttendanceOut, MeetingVoteOut, MeetingBallotOut,
   MeetingRequestOut, MeetingBillStage, MeetingRegulationBrief,
+  MeetingMode, MeetingVoteRecordMethod, MeetingVoteOption,
   AgendaItemType, AttendanceRole, AttendanceStatus, VoteVisibility, VoteThresholdType, BallotChoice,
   MeetingRequestStatus, MeetingRequestType, AttendanceSourceType, MeetingArtifactType,
   MeetingMotionType, MeetingMotionStatus, MeetingDecisionStatus, MeetingScreenReadingMode,
@@ -59,7 +61,7 @@ import type {
   DiscordOrgChannelMappingIn, DiscordOrgChannelMappingOut,
   DiscordRoleMappingIn, DiscordRoleMappingOut,
   DocumentEfficiencyOut, DeptRankingItem, PendingAlertItem, AnnouncementParticipationItem,
-  SurveyParticipationItem,
+  SurveyParticipationItem, AnalyticsInsightsOut,
   EmailCampaignRecipientOut,
   EmailComposePayload, EmailMessageCreate, EmailMessageOut, EmailMessageDetailOut,
   RecipientSelector, RecipientPreviewOut, EmailPosition, UploadedImageOut,
@@ -72,6 +74,14 @@ import type {
   ExamGradeTrack, ExamPaperDownloadOut, ExamPaperListItem, ExamPaperOut, ExamPaperUpdate,
   ExamTraceInspectOut,
   Activity, ActivityConvener, ActivityCreate,
+  WorkflowInstanceOut, WorkflowLinkCreate, WorkflowLinkOut, WorkflowTimelineOut,
+  WorkflowTransitionCreate,
+  ActivityClosingReportOut, ActivityLinkCreate, ActivityLinkOut, ActivityLinkSuggestion,
+  ActivityWorkspaceOut,
+  ReceivableOut, ReceivableSummaryOut, ReceivableSource,
+  PublicationCampaignOut, PublicationPreviewOut, PublicationStatsOut,
+  DocumentApprovalContextOut, MeetingBriefingCardOut, PetitionResolutionContextOut,
+  RegulationUsageContextOut,
   WorkItemCreate, WorkItemOut, WorkItemUpdate,
   PendingConsentItem, PolicyConsentOut,
   PublicLinkCategoryCreate, PublicLinkCategoryOut, PublicLinkCategoryUpdate,
@@ -88,7 +98,12 @@ const BASE = API_BASE;
 // ── 核心 fetch 包裝 ────────────────────────────────────────────────────────────
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string, public requestId?: string | null) {
+  constructor(
+    public status: number,
+    message: string,
+    public requestId?: string | null,
+    public errorId?: string | null,
+  ) {
     super(message);
   }
 }
@@ -143,20 +158,47 @@ function formatErrorDetail(detail: unknown, fallback: string): string {
   return String(detail);
 }
 
-async function errorMessageFromResponse(res: Response): Promise<string> {
+interface ResponseErrorDetail {
+  message: string;
+  requestId: string | null;
+  errorId: string | null;
+}
+
+async function errorDetailFromResponse(res: Response): Promise<ResponseErrorDetail> {
   let detail: unknown = res.statusText;
+  let errorId: string | null = null;
   try {
     const payload: unknown = await res.json();
     if (payload && typeof payload === "object") {
-      const record = payload as { detail?: unknown; errors?: unknown };
+      const record = payload as { detail?: unknown; error_id?: unknown; errors?: unknown };
       detail = record.errors ?? record.detail ?? payload;
+      errorId = typeof record.error_id === "string" ? record.error_id : null;
     } else {
       detail = payload;
     }
   } catch {
     // ignore non-JSON error bodies
   }
-  return formatErrorDetail(detail, res.statusText || "請求失敗");
+  const message = formatErrorDetail(detail, res.statusText || "請求失敗");
+  const requestId = res.headers.get("X-Request-ID");
+  const codes = [
+    errorId ? `錯誤代碼 ${errorId}` : null,
+    requestId ? `請求代碼 ${requestId}` : null,
+  ].filter(Boolean);
+  return {
+    message: codes.length > 0 ? `${message}（${codes.join("，")}）` : message,
+    requestId,
+    errorId,
+  };
+}
+
+async function errorMessageFromResponse(res: Response): Promise<string> {
+  return (await errorDetailFromResponse(res)).message;
+}
+
+async function apiErrorFromResponse(res: Response): Promise<ApiError> {
+  const detail = await errorDetailFromResponse(res);
+  return new ApiError(res.status, detail.message, detail.requestId, detail.errorId);
 }
 
 export async function silentRefresh(): Promise<boolean> {
@@ -296,11 +338,7 @@ async function request<T>(
         if (retry.status === 204) return undefined as T;
         return retry.json();
       }
-      throw new ApiError(
-        retry.status,
-        await errorMessageFromResponse(retry),
-        retry.headers.get("X-Request-ID"),
-      );
+      throw await apiErrorFromResponse(retry);
     }
     // refresh 失敗：
     // - 若本地「看起來已登入」（有 user_id），視為 session 過期 → 清除並導回登入
@@ -359,11 +397,7 @@ async function request<T>(
     if (res.status === 412 && typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("hcca:policy-consent-required"));
     }
-    throw new ApiError(
-      res.status,
-      await errorMessageFromResponse(res),
-      res.headers.get("X-Request-ID"),
-    );
+    throw await apiErrorFromResponse(res);
   }
   if (res.status === 204) return undefined as T;
   return res.json();
@@ -654,6 +688,41 @@ export const shopApi = {
     if (!res.ok) throw new ApiError(res.status, await errorMessageFromResponse(res));
     return res.json();
   },
+};
+
+// ── 劃位 / 票券 ────────────────────────────────────────────────────────────────
+
+export const seatingApi = {
+  // 管理：場次與座位圖
+  listZones: (productId: string) => get<ZoneListItem[]>(`/seating/products/${productId}/zones`),
+  getZone: (zoneId: string) => get<ZoneOut>(`/seating/zones/${zoneId}`),
+  createZone: (body: {
+    product_id: string; name: string; description?: string | null;
+    starts_at?: string | null; seating_opens_at?: string | null;
+    hold_minutes?: number; layout?: Record<string, unknown>; sort_order?: number;
+  }) => post<ZoneOut>("/seating/zones", body),
+  updateZone: (zoneId: string, body: Record<string, unknown>) =>
+    patch<ZoneOut>(`/seating/zones/${zoneId}`, body),
+  deleteZone: (zoneId: string) => del<void>(`/seating/zones/${zoneId}`),
+  saveSeats: (zoneId: string, body: { layout?: Record<string, unknown>; seats: SeatInput[] }) =>
+    request<ZoneOut>(`/seating/zones/${zoneId}/seats`, { method: "PUT", body: JSON.stringify(body) }),
+  saveWaves: (zoneId: string, body: { waves: WaveInput[] }) =>
+    request<ZoneOut>(`/seating/zones/${zoneId}/waves`, { method: "PUT", body: JSON.stringify(body) }),
+  zoneAssignments: (zoneId: string) => get<SeatBookingOut[]>(`/seating/zones/${zoneId}/assignments`),
+  releaseAssignment: (assignmentId: string) => del<void>(`/seating/assignments/${assignmentId}`),
+  adminAssign: (body: { order_id: string; seat_ids: string[] }) =>
+    post<SeatBookingOut[]>("/seating/assign", body),
+
+  // 使用者自助選位
+  seatMap: (zoneId: string, orderId?: string) =>
+    get<SeatMapOut>(`/seating/zones/${zoneId}/map${orderId ? `?order_id=${orderId}` : ""}`),
+  hold: (zoneId: string, seatIds: string[]) =>
+    post<HoldOut>(`/seating/zones/${zoneId}/hold`, { seat_ids: seatIds }),
+  releaseHold: (zoneId: string) => del<void>(`/seating/zones/${zoneId}/hold`),
+  select: (body: { order_id: string; seat_ids: string[] }) =>
+    post<SeatBookingOut[]>("/seating/select", body),
+  orderAssignments: (orderId: string) =>
+    get<SeatBookingOut[]>(`/seating/orders/${orderId}/assignments`),
 };
 
 // ── 特約地圖 ──────────────────────────────────────────────────────────────────
@@ -1279,6 +1348,21 @@ export const activitiesApi = {
   mine: (activeOnly = true) =>
     get<Activity[]>(`/activities/mine?active_only=${String(activeOnly)}`),
   get: (id: string) => get<Activity>(`/activities/${id}`),
+  workspace: (id: string) => get<ActivityWorkspaceOut>(`/activities/${id}/workspace`),
+  links: (id: string) => get<ActivityLinkOut[]>(`/activities/${id}/links`),
+  createLink: (id: string, body: ActivityLinkCreate) =>
+    post<ActivityLinkOut>(`/activities/${id}/links`, body),
+  deleteLink: (activityId: string, linkId: string) =>
+    del<void>(`/activities/${activityId}/links/${linkId}`),
+  linkSuggestions: (id: string, limit = 20) =>
+    get<ActivityLinkSuggestion[]>(`/activities/${id}/link-suggestions?limit=${limit}`),
+  acceptSuggestion: (id: string, suggestionId: string) =>
+    post<ActivityLinkOut>(
+      `/activities/${id}/link-suggestions/${encodeURIComponent(suggestionId)}/accept`,
+      {},
+    ),
+  closingReport: (id: string) =>
+    get<ActivityClosingReportOut>(`/activities/${id}/closing-report`),
   create: (body: ActivityCreate) => post<Activity>("/activities", body),
   update: (id: string, body: Partial<ActivityCreate> & { is_active?: boolean }) =>
     patch<Activity>(`/activities/${id}`, body),
@@ -1289,6 +1373,106 @@ export const activitiesApi = {
   updateConvener: (id: string, body: { start_date?: string; end_date?: string | null }) =>
     patch<ActivityConvener>(`/activities/conveners/${id}`, body),
   removeConvener: (id: string) => del<void>(`/activities/conveners/${id}`),
+};
+
+// ── 跨模組工作流 ──────────────────────────────────────────────────────────────
+
+export const workflowsApi = {
+  list: (params?: {
+    workflow_type?: string;
+    status?: string;
+    activity_id?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const q = new URLSearchParams();
+    if (params?.workflow_type) q.set("workflow_type", params.workflow_type);
+    if (params?.status) q.set("status", params.status);
+    if (params?.activity_id) q.set("activity_id", params.activity_id);
+    if (params?.limit !== undefined) q.set("limit", String(params.limit));
+    if (params?.offset !== undefined) q.set("offset", String(params.offset));
+    const qs = q.toString();
+    return get<WorkflowInstanceOut[]>(`/workflows/instances${qs ? `?${qs}` : ""}`);
+  },
+  get: (id: string) => get<WorkflowInstanceOut>(`/workflows/instances/${id}`),
+  transition: (id: string, body: WorkflowTransitionCreate) =>
+    post<WorkflowInstanceOut>(`/workflows/instances/${id}/transition`, body),
+  timeline: (id: string) =>
+    get<WorkflowTimelineOut>(`/workflows/instances/${id}/timeline`),
+  createLink: (id: string, body: WorkflowLinkCreate) =>
+    post<WorkflowLinkOut>(`/workflows/instances/${id}/links`, body),
+};
+
+export const receivablesApi = {
+  list: (params?: {
+    activity_id?: string; class_id?: string; user_id?: string; status?: string; limit?: number;
+  }) => {
+    const q = new URLSearchParams();
+    if (params?.activity_id) q.set("activity_id", params.activity_id);
+    if (params?.class_id) q.set("class_id", params.class_id);
+    if (params?.user_id) q.set("user_id", params.user_id);
+    if (params?.status) q.set("status", params.status);
+    if (params?.limit) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return get<ReceivableOut[]>(`/receivables${qs ? `?${qs}` : ""}`);
+  },
+  summary: (params?: { activity_id?: string; class_id?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.activity_id) q.set("activity_id", params.activity_id);
+    if (params?.class_id) q.set("class_id", params.class_id);
+    const qs = q.toString();
+    return get<ReceivableSummaryOut>(`/receivables/summary${qs ? `?${qs}` : ""}`);
+  },
+  create: (body: {
+    source_type?: ReceivableSource; source_id?: string | null; activity_id?: string | null;
+    org_id?: string | null; user_id?: string | null; class_id?: string | null;
+    title: string; amount: number; due_at?: string | null; note?: string | null;
+  }) => post<ReceivableOut>("/receivables", body),
+  update: (id: string, body: Partial<ReceivableOut>) =>
+    patch<ReceivableOut>(`/receivables/${id}`, body),
+  markPaid: (id: string, body: { paid_amount?: number | null; note?: string | null } = {}) =>
+    post<ReceivableOut>(`/receivables/${id}/mark-paid`, body),
+  refund: (id: string, body: { refunded_amount?: number | null; note?: string | null } = {}) =>
+    post<ReceivableOut>(`/receivables/${id}/refund`, body),
+  exportUrl: (params?: { activity_id?: string; class_id?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.activity_id) q.set("activity_id", params.activity_id);
+    if (params?.class_id) q.set("class_id", params.class_id);
+    const qs = q.toString();
+    return `${BASE}/receivables/export.csv${qs ? `?${qs}` : ""}`;
+  },
+};
+
+export const publicationsApi = {
+  list: (params?: { activity_id?: string; status?: string; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.activity_id) q.set("activity_id", params.activity_id);
+    if (params?.status) q.set("status", params.status);
+    if (params?.limit) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return get<PublicationCampaignOut[]>(`/publications${qs ? `?${qs}` : ""}`);
+  },
+  get: (id: string) => get<PublicationCampaignOut>(`/publications/${id}`),
+  create: (body: {
+    title: string; body: string; source_type?: string | null; source_id?: string | null;
+    activity_id?: string | null; org_id?: string | null; audience_type?: string;
+    audience_filter?: Record<string, unknown>; channels: string[]; scheduled_at?: string | null;
+  }) => post<PublicationCampaignOut>("/publications", body),
+  update: (id: string, body: Partial<PublicationCampaignOut>) =>
+    patch<PublicationCampaignOut>(`/publications/${id}`, body),
+  preview: (id: string) => post<PublicationPreviewOut>(`/publications/${id}/preview`, {}),
+  send: (id: string) => post<PublicationCampaignOut>(`/publications/${id}/send`, {}),
+  stats: (id: string) => get<PublicationStatsOut>(`/publications/${id}/stats`),
+};
+
+export const contextApi = {
+  meetingBriefing: (id: string) => get<MeetingBriefingCardOut>(`/meetings/${id}/briefing-card`),
+  documentApproval: (id: string) =>
+    get<DocumentApprovalContextOut>(`/documents/${id}/approval-context`),
+  petitionResolution: (id: string) =>
+    get<PetitionResolutionContextOut>(`/petitions/${id}/resolution-context`),
+  regulationUsage: (id: string) =>
+    get<RegulationUsageContextOut>(`/regulations/${id}/usage-context`),
 };
 
 // ── 管理員 ────────────────────────────────────────────────────────────────────
@@ -2116,6 +2300,8 @@ export const analyticsApi = {
   },
   pendingAlerts: (threshold_hours = 48) =>
     get<PendingAlertItem[]>(`/analytics/documents/pending-alerts?threshold_hours=${threshold_hours}`),
+  insights: (limit = 20) =>
+    get<AnalyticsInsightsOut>(`/analytics/insights?limit=${limit}`),
   announcementParticipation: (params?: {
     org_id?: string; date_from?: string; date_to?: string; limit?: number
   }) => {
@@ -2160,6 +2346,8 @@ export const meetingsApi = {
   create: (body: {
     title: string;
     org_id: string;
+    mode?: MeetingMode;
+    activity_id?: string | null;
     description?: string | null;
     location?: string | null;
     chair_name?: string | null;
@@ -2174,6 +2362,8 @@ export const meetingsApi = {
   }) => post<MeetingOut>("/meetings", body),
   update: (id: string, body: Partial<{
     title: string;
+    mode: MeetingMode;
+    activity_id: string | null;
     description: string | null;
     location: string | null;
     chair_name: string | null;
@@ -2322,6 +2512,8 @@ export const meetingsApi = {
     visibility?: VoteVisibility;
     pass_threshold?: number;
     threshold_type?: VoteThresholdType;
+    record_method?: MeetingVoteRecordMethod;
+    options?: MeetingVoteOption[] | null;
   }) => post<MeetingVoteOut>(`/meetings/${id}/votes`, body),
   updateVote: (id: string, voteId: string, body: Partial<{
     title: string;
@@ -2329,6 +2521,8 @@ export const meetingsApi = {
     visibility: VoteVisibility;
     pass_threshold: number;
     threshold_type: VoteThresholdType;
+    record_method: MeetingVoteRecordMethod;
+    options: MeetingVoteOption[] | null;
     result_note: string | null;
   }>) => patch<MeetingVoteOut>(`/meetings/${id}/votes/${voteId}`, body),
   createMotion: (id: string, body: {
@@ -2371,6 +2565,24 @@ export const meetingsApi = {
     post<MeetingVoteOut>(`/meetings/${id}/votes/${voteId}/close`),
   castBallot: (id: string, voteId: string, choice: BallotChoice) =>
     post<MeetingBallotOut>(`/meetings/${id}/votes/${voteId}/ballot`, { choice }),
+  // ── 簡易評議模式 ──────────────────────────────────────────────────────────
+  recorderBallot: (id: string, voteId: string, body: {
+    voter_id: string;
+    choice?: BallotChoice;
+    option_key?: string | null;
+  }) => post<MeetingBallotOut>(`/meetings/${id}/votes/${voteId}/recorder-ballot`, body),
+  recordTally: (id: string, voteId: string, body: {
+    manual_tally: Record<string, number>;
+    result_label?: string | null;
+  }) => post<MeetingVoteOut>(`/meetings/${id}/votes/${voteId}/tally`, body),
+  acclamation: (id: string, agendaItemId: string, body?: {
+    title?: string | null;
+    result_label?: string;
+  }) => post<MeetingVoteOut>(`/meetings/${id}/agenda-items/${agendaItemId}/acclamation`, body ?? {}),
+  addRecusal: (id: string, agendaItemId: string, body: { user_id: string; note?: string | null }) =>
+    post<MeetingAgendaItemOut>(`/meetings/${id}/agenda-items/${agendaItemId}/recusals`, body),
+  removeRecusal: (id: string, agendaItemId: string, userId: string) =>
+    del<MeetingAgendaItemOut>(`/meetings/${id}/agenda-items/${agendaItemId}/recusals/${userId}`),
   createRequest: (id: string, body: {
     request_type: MeetingRequestType;
     agenda_item_id?: string | null;
@@ -2558,6 +2770,9 @@ export interface DashboardWidgetItem {
   href: string | null;
   timestamp: string | null;
   badge: string | null;
+  priority_score: number;
+  priority_reasons: string[];
+  recommended_action: string | null;
 }
 
 export interface DashboardWidget {
@@ -2569,6 +2784,9 @@ export interface DashboardWidget {
   severity: DashboardSeverity;
   wide: boolean;
   items: DashboardWidgetItem[];
+  priority_score: number;
+  priority_reasons: string[];
+  recommended_action: string | null;
 }
 
 export interface DashboardResponse {
@@ -2601,6 +2819,9 @@ export interface TaskItem {
   due_at: string | null;
   severity: TaskSeverity;
   created_at: string;
+  priority_score: number;
+  priority_reasons: string[];
+  recommended_action: string | null;
 }
 
 export interface TaskInboxResponse {
@@ -2898,6 +3119,9 @@ export type ErrorCategory = "db" | "redis" | "timeout" | "http" | "unhandled";
 
 export interface RecentErrorItem {
   error_id: string;
+  request_id?: string | null;
+  client_ip?: string | null;
+  user_agent?: string | null;
   category: ErrorCategory;
   exc_type: string;
   message: string;
@@ -2908,6 +3132,7 @@ export interface RecentErrorItem {
   first_seen: number;
   last_seen: number;
   occurrences: number;
+  source?: string;
 }
 
 export interface RecentErrorsResponse {
@@ -3011,6 +3236,8 @@ export const systemApi = {
     }>(`/admin/system/metrics/slow-queries?top=${top}`),
   recentErrors: (top = 50) =>
     get<RecentErrorsResponse>(`/admin/system/errors?top=${top}`),
+  errorById: (errorId: string) =>
+    get<RecentErrorItem>(`/admin/system/errors/${encodeURIComponent(errorId)}`),
   clearErrors: () => post<{ cleared: number }>("/admin/system/errors/clear", {}),
   clearCache: () =>
     post<{ ok: boolean; cleared: number; patterns: string[] }>(
@@ -3182,7 +3409,7 @@ export interface TerminationOut {
   new_end_date: string;
 }
 
-export interface AssignmentOut {
+export interface SeatAssignmentOut {
   user_id: string;
   user_email: string | null;
   position_id: string;
@@ -3196,7 +3423,7 @@ export interface AssignmentOut {
 export interface DryRunOut {
   new_term_start: string;
   terminations: TerminationOut[];
-  new_assignments: AssignmentOut[];
+  new_assignments: SeatAssignmentOut[];
   warnings: string[];
   summary: Record<string, number>;
 }

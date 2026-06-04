@@ -111,3 +111,43 @@ def notify_class_cadres_on_deadline(self) -> dict:  # noqa: ANN001
     except Exception as exc:
         logger.error("[Celery Beat] 班級結單通知失敗: %s", exc)
         raise self.retry(exc=exc, countdown=120) from exc
+
+
+@celery_app.task(
+    name="api.services.shop_tasks.cleanup_expired_seat_holds",
+    bind=True,
+    max_retries=3,
+)
+def cleanup_expired_seat_holds(self) -> dict:  # noqa: ANN001
+    """Celery Beat 定時任務：清除過期的劃位暫時保留鎖（SeatHold）。
+
+    每分鐘執行；保留鎖過期後座位即釋放回可選狀態。選位畫面查詢時亦會即時
+    濾掉過期 hold，此任務只是把垃圾列清掉、避免無限累積。
+    """
+
+    async def _run() -> int:
+        from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+
+        from api.core.config import settings
+        from api.services import seating as seating_svc
+
+        engine = create_async_engine(str(settings.DATABASE_URL), echo=False)
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            try:
+                removed = await seating_svc.cleanup_expired_holds(session)
+                await session.commit()
+                return removed
+            except Exception:
+                await session.rollback()
+                raise
+            finally:
+                await engine.dispose()
+
+    try:
+        count = asyncio.run(_run())
+        if count:
+            logger.info("[Celery Beat] 清除過期劃位保留鎖 %d 筆", count)
+        return {"removed": count}
+    except Exception as exc:
+        logger.error("[Celery Beat] 清除過期劃位保留鎖失敗: %s", exc)
+        raise self.retry(exc=exc, countdown=60) from exc

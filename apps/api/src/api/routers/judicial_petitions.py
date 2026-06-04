@@ -144,7 +144,7 @@ async def update_judicial_petition_status(
     user: CurrentUser,
 ) -> JudicialPetition:
     petition = await _petition_or_404(session, petition_id)
-    petition = await judicial_svc.update_status(session, petition, data=payload)
+    petition = await judicial_svc.update_status(session, petition, data=payload, actor=user)
     await audit_svc.record(
         session,
         entity_type="judicial_petition",

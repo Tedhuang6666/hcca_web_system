@@ -14,6 +14,7 @@ from discord import app_commands
 from discord.ext import commands
 from sqlalchemy import select
 
+from api.core.clock import local_today
 from api.core.database import AsyncSessionLocal
 from api.discord_cogs._helpers import require_bound_user
 from api.models.calendar import CalendarEvent, CalendarEventParticipant
@@ -42,9 +43,8 @@ _TAB_LABEL = {
 
 
 async def _user_positions(db, user_id: uuid.UUID) -> list[str]:
-    from datetime import UTC, datetime
 
-    today = datetime.now(UTC).date()
+    today = local_today()
     rows = await db.execute(
         select(Position.name)
         .join(UserPosition, UserPosition.position_id == Position.id)

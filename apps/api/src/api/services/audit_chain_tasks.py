@@ -17,6 +17,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import desc, func, select
 
 from api.core.celery_app import celery_app
+from api.core.clock import local_today
 from api.core.config import settings
 from api.models.audit_anchor import AuditLogAnchor
 from api.models.audit_log import AuditLog
@@ -29,7 +30,7 @@ async def _compute_anchor_async() -> dict:
     """計算昨日的 anchor 並寫入。"""
     from api.core.database import AsyncSessionLocal
 
-    today = datetime.now(UTC).date()
+    today = local_today()
     yesterday = today - timedelta(days=1)
     start = datetime.combine(yesterday, datetime.min.time(), tzinfo=UTC)
     end = datetime.combine(today, datetime.min.time(), tzinfo=UTC)

@@ -58,6 +58,20 @@ export const NAV_ITEMS: NavItem[] = [
     perm: "activity:manage",
   },
   {
+    id: "receivables",
+    href: "/finance/receivables",
+    iconKey: "shopOrders",
+    label: "收款對帳",
+    perm: "finance:view",
+  },
+  {
+    id: "publications",
+    href: "/publications",
+    iconKey: "announcement",
+    label: "發布中心",
+    perm: "announcement:create",
+  },
+  {
     id: "permissions",
     href: "/admin/permissions",
     iconKey: "permissions",
@@ -210,7 +224,15 @@ export const NAV_DEF: NavEntry[] = [
     heading: "營運管理",
     collapsible: true,
     defaultCollapsed: true,
-    items: byIds(["analytics", "orgs", "activitiesAdmin", "peopleAdmin", "email"]),
+    items: byIds([
+      "analytics",
+      "orgs",
+      "activitiesAdmin",
+      "receivables",
+      "publications",
+      "peopleAdmin",
+      "email",
+    ]),
   },
   {
     id: "serviceBackoffice",

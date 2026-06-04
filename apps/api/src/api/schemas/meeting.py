@@ -17,6 +17,7 @@ from api.models.meeting import (
     BallotChoice,
     MeetingBillStage,
     MeetingDecisionStatus,
+    MeetingMode,
     MeetingMotionStatus,
     MeetingMotionType,
     MeetingRequestStatus,
@@ -25,6 +26,7 @@ from api.models.meeting import (
     ScreenReadingMode,
     SpeechQueueStatus,
     TimerStatus,
+    VoteRecordMethod,
     VoteStatus,
     VoteThresholdType,
     VoteVisibility,
@@ -71,6 +73,8 @@ class SchoolClassBrief(BaseModel):
 class MeetingCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     org_id: uuid.UUID
+    mode: MeetingMode = MeetingMode.SIMPLE
+    activity_id: uuid.UUID | None = None
     description: str | None = None
     location: str | None = Field(None, max_length=200)
     chair_name: str | None = Field(None, max_length=100)
@@ -86,6 +90,8 @@ class MeetingCreate(BaseModel):
 
 class MeetingUpdate(BaseModel):
     title: str | None = Field(None, min_length=1, max_length=200)
+    mode: MeetingMode | None = None
+    activity_id: uuid.UUID | None = None
     description: str | None = None
     location: str | None = Field(None, max_length=200)
     chair_name: str | None = Field(None, max_length=100)
@@ -180,6 +186,23 @@ class ArtifactLinkOut(BaseModel):
     updated_at: datetime
 
 
+class RecusalCreate(BaseModel):
+    user_id: uuid.UUID
+    note: str | None = Field(None, max_length=500)
+
+
+class RecusalOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    agenda_item_id: uuid.UUID
+    user_id: uuid.UUID
+    note: str | None
+    created_by: uuid.UUID
+    created_at: datetime
+    user: UserBrief | None = None
+
+
 class AgendaItemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -199,6 +222,7 @@ class AgendaItemOut(BaseModel):
     regulation: RegulationBrief | None = None
     attachments: list[AgendaAttachmentOut] = []
     artifact_links: list[ArtifactLinkOut] = []
+    recusals: list[RecusalOut] = []
 
 
 class AttendanceCreate(BaseModel):
@@ -274,6 +298,11 @@ class AttendanceSourcePreviewOut(BaseModel):
     count: int
 
 
+class VoteOption(BaseModel):
+    key: str = Field(..., min_length=1, max_length=50)
+    label: str = Field(..., min_length=1, max_length=100)
+
+
 class VoteCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     description: str | None = None
@@ -281,6 +310,8 @@ class VoteCreate(BaseModel):
     visibility: VoteVisibility = VoteVisibility.NAMED
     pass_threshold: int = Field(0, ge=0)
     threshold_type: VoteThresholdType = VoteThresholdType.SIMPLE_MAJORITY
+    record_method: VoteRecordMethod = VoteRecordMethod.BALLOTS
+    options: list[VoteOption] | None = None
 
 
 class VoteUpdate(BaseModel):
@@ -289,7 +320,31 @@ class VoteUpdate(BaseModel):
     visibility: VoteVisibility | None = None
     pass_threshold: int | None = Field(None, ge=0)
     threshold_type: VoteThresholdType | None = None
+    record_method: VoteRecordMethod | None = None
+    options: list[VoteOption] | None = None
     result_note: str | None = None
+
+
+class ManualTallyRequest(BaseModel):
+    """主席口頭計票：直接寫入彙總票數並關閉表決。"""
+
+    manual_tally: dict[str, int] = Field(..., description="如 {'approve':5,'reject':3} 或自訂 {'a':5}")
+    result_label: str | None = Field(None, max_length=200)
+
+
+class AcclamationRequest(BaseModel):
+    """無異議通過：一鍵建立並關閉表決。"""
+
+    title: str | None = Field(None, min_length=1, max_length=200)
+    result_label: str = Field("無異議通過", min_length=1, max_length=200)
+
+
+class RecorderBallotCreate(BaseModel):
+    """紀錄代登逐人票。"""
+
+    voter_id: uuid.UUID
+    choice: BallotChoice = BallotChoice.APPROVE
+    option_key: str | None = Field(None, max_length=50)
 
 
 class BallotCreate(BaseModel):
@@ -400,6 +455,7 @@ class BallotOut(BaseModel):
     vote_id: uuid.UUID
     voter_id: uuid.UUID
     choice: BallotChoice
+    option_key: str | None = None
     cast_at: datetime
     voter: UserBrief | None = None
 
@@ -413,6 +469,9 @@ class VoteTallyOut(BaseModel):
     pass_threshold: int
     threshold_type: VoteThresholdType = VoteThresholdType.SIMPLE_MAJORITY
     passed: bool
+    # 自訂選項計數：{"a": 5, "b": 3}（無自訂選項時為空）
+    option_counts: dict[str, int] = {}
+    result_label: str | None = None
 
 
 class VoteOut(BaseModel):
@@ -427,6 +486,10 @@ class VoteOut(BaseModel):
     status: VoteStatus
     pass_threshold: int
     threshold_type: VoteThresholdType
+    record_method: VoteRecordMethod
+    options: list[VoteOption] | None = None
+    manual_tally: dict[str, int] | None = None
+    result_label: str | None = None
     opened_at: datetime | None
     closed_at: datetime | None
     result_note: str | None
@@ -460,7 +523,9 @@ class MeetingListItem(BaseModel):
 
     id: uuid.UUID
     org_id: uuid.UUID
+    activity_id: uuid.UUID | None = None
     title: str
+    mode: MeetingMode
     location: str | None
     chair_name: str | None
     starts_at: datetime | None

@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from starlette.concurrency import run_in_threadpool
 
+from api.core.clock import local_today
 from api.core.config import settings
 from api.core.database import AsyncSessionLocal
 from api.core.security import redis_client
@@ -348,7 +349,7 @@ async def _handle_text_command(*, line_user_id: str, user_text: str) -> str:
 
 
 async def _line_meal_options(db: AsyncSession) -> list[dict[str, Any]]:
-    today = datetime.now(UTC).date()
+    today = local_today()
     date_to = today + timedelta(days=7)
     now = datetime.now(UTC)
     options: list[dict[str, Any]] = []

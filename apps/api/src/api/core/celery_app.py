@@ -112,6 +112,7 @@ celery_app.conf.include = list(celery_app.conf.include or []) + [
     "api.services.webhook_tasks",
     "api.services.document_reminder_tasks",
     "api.services.watchdog_tasks",
+    "api.services.error_report_tasks",
     "api.services.discord_reminders",
 ]
 
@@ -147,6 +148,11 @@ celery_app.conf.beat_schedule = {
     "notify-class-cadres-on-deadline-every-5min": {
         "task": "api.services.shop_tasks.notify_class_cadres_on_deadline",
         "schedule": 300.0,
+    },
+    # 每 60 秒清除過期的劃位暫時保留鎖
+    "cleanup-expired-seat-holds-every-60s": {
+        "task": "api.services.shop_tasks.cleanup_expired_seat_holds",
+        "schedule": 60.0,
     },
     # 每 60 秒檢查即將開始的會議並推播開會提醒
     "send-meeting-start-reminders-every-60s": {
@@ -217,14 +223,20 @@ celery_app.conf.beat_schedule = {
         "task": "api.services.watchdog_tasks.run_watchdog",
         "schedule": 600.0,
     },
-    # Discord 個人摘要 DM（每日 08:00 / 週日 20:00 台北）
-    "discord-daily-digest-at-0am-utc": {
-        "task": "api.services.discord_reminders.send_daily_digest",
-        "schedule": crontab(hour="0", minute="0"),  # 台北 08:00 = UTC 00:00
+    # 自動錯誤報告：聚合 API 5xx、Celery DLQ、DB/Redis/queue 狀態後寄給 OWNER_EMAILS
+    "owner-error-report": {
+        "task": "api.services.error_report_tasks.send_owner_error_report",
+        "schedule": float(settings.ERROR_REPORT_INTERVAL_SECONDS),
     },
-    "discord-weekly-digest-sunday-12-utc": {
+    # Discord 個人摘要 DM（每日 08:00 / 週日 20:00 台北）
+    # 注意：celery timezone 已設為 Asia/Taipei，crontab 的 hour 直接是台北時間，勿再手動偏移 UTC。
+    "discord-daily-digest-at-8am-taipei": {
+        "task": "api.services.discord_reminders.send_daily_digest",
+        "schedule": crontab(hour="8", minute="0"),  # 台北 08:00
+    },
+    "discord-weekly-digest-sunday-8pm-taipei": {
         "task": "api.services.discord_reminders.send_weekly_digest",
-        "schedule": crontab(hour="12", minute="0", day_of_week="0"),  # 台北週日 20:00
+        "schedule": crontab(hour="20", minute="0", day_of_week="0"),  # 台北週日 20:00
     },
     # Discord 行事曆 T-1h / T-24h 個人提醒掃描
     "discord-reminder-sweep-every-15min": {
@@ -236,6 +248,7 @@ celery_app.conf.beat_schedule = {
 # Lifecycle 任務路由到 backup queue（同樣是低頻、可長跑、不阻塞線上請求）
 celery_app.conf.task_routes["api.services.data_lifecycle_tasks.*"] = {"queue": "backup"}
 celery_app.conf.task_routes["api.services.watchdog_tasks.*"] = {"queue": "backup"}
+celery_app.conf.task_routes["api.services.error_report_tasks.*"] = {"queue": "email"}
 
 
 def _task_payload(sender, **kwargs) -> dict:

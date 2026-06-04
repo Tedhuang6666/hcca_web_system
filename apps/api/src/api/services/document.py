@@ -11,6 +11,8 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.core.clock import local_today, now_local
+from api.core.search import like_contains
 from api.models.document import (
     ApprovalStepStatus,
     DelegateSource,
@@ -87,8 +89,8 @@ async def generate_serial_from_template(
     使用 SELECT ... FOR UPDATE 確保高並發安全。
     若跨年且 reset_on_new_year=True，自動重置流水號。
     """
-    now = datetime.now(UTC)
-    # 計算當前年份（ROC = CE - 1911）
+    now = now_local()
+    # 計算當前年份（ROC = CE - 1911），以台北時間為準避免跨年夜凌晨拿到前一年字號
     current_year = now.year - 1911 if template.year_mode == YearMode.ROC else now.year
 
     # 原子性取得並更新 counter（SELECT FOR UPDATE 鎖定列）
@@ -170,7 +172,7 @@ async def create_serial_template(
     """
     prefix = await build_org_serial_prefix(session, data.org_id)
 
-    now = datetime.now(UTC)
+    now = now_local()
     current_year = now.year - 1911 if data.year_mode == YearMode.ROC else now.year
 
     template = DocumentSerialTemplate(
@@ -404,7 +406,7 @@ async def list_document_templates(
     if active_only:
         q = q.where(DocumentTemplate.is_active.is_(True))
     if keyword:
-        pattern = f"%{keyword}%"
+        pattern = like_contains(keyword)
         q = q.where(
             or_(
                 DocumentTemplate.name.ilike(pattern),
@@ -688,7 +690,7 @@ async def user_has_full_document_access(
         if recipient_result.scalar_one_or_none() is not None:
             return True
 
-    today = date.today()
+    today = local_today()
     result = await session.execute(
         select(UserPosition.id)
         .join(Position, UserPosition.position_id == Position.id)
@@ -743,7 +745,7 @@ async def _build_visibility_filter(
         .join(UserPosition, UserPosition.position_id == Position.id)
         .where(
             UserPosition.user_id == viewer_id,
-            *active_tenure_filter(date.today()),
+            *active_tenure_filter(local_today()),
         )
         .distinct()
     )
@@ -888,7 +890,7 @@ async def list_documents(
         # issued_at 為主；未發文的公文不納入此條件
         q = q.where((func.extract("year", Document.issued_at) - 1911) == roc_year)
     if handler_keyword:
-        pattern = f"%{handler_keyword}%"
+        pattern = like_contains(handler_keyword)
         q = q.where(
             or_(
                 Document.handler_name.ilike(pattern),
@@ -899,13 +901,13 @@ async def list_documents(
     if recipient_keyword:
         from api.models.document import DocumentRecipient
 
-        pattern = f"%{recipient_keyword}%"
+        pattern = like_contains(recipient_keyword)
         q = q.join(DocumentRecipient, DocumentRecipient.document_id == Document.id).where(
             DocumentRecipient.name.ilike(pattern)
         )
         q = q.distinct(Document.id)
     if keyword:
-        pattern = f"%{keyword}%"
+        pattern = like_contains(keyword)
         q = q.where(
             or_(
                 Document.serial_number.ilike(pattern),
@@ -1168,12 +1170,11 @@ async def suggest_approvers(
     依發文組織，回傳擁有 document:approve 權限且任期有效的使用者清單。
     供前端在送審面板自動預帶建議審核人。
     """
-    from datetime import date
 
     from api.models.org import Permission, Position, UserPosition
     from api.models.user import User as UserModel
 
-    today = date.today()
+    today = local_today()
     result = await session.execute(
         select(UserModel)
         .join(UserPosition, UserModel.id == UserPosition.user_id)
@@ -1194,6 +1195,18 @@ async def suggest_approvers(
 # ── 狀態機：核准 ───────────────────────────────────────────────────────────────
 
 
+async def _lock_document(session: AsyncSession, doc: Document) -> None:
+    """對公文列加 FOR UPDATE 並重新整理狀態，序列化並發的狀態機操作。
+
+    避免兩位審核人（或同一人重複點擊）同時通過 `status == PENDING` 檢查，
+    造成重複核准、current_step 多跳。鎖在交易結束時釋放。
+    測試用 sqlite 無真正列鎖但為單緒，refresh 仍確保讀到最新狀態。
+    """
+    if session.bind is not None and session.bind.dialect.name == "postgresql":
+        await session.execute(select(Document.id).where(Document.id == doc.id).with_for_update())
+    await session.refresh(doc)
+
+
 async def approve_step(
     session: AsyncSession,
     doc: Document,
@@ -1205,6 +1218,7 @@ async def approve_step(
     核准當前步驟。若為最後一關，文件狀態改為 APPROVED；
     否則將下一關卡設為 PENDING。
     """
+    await _lock_document(session, doc)
     if doc.status != DocumentStatus.PENDING:
         msg = f"公文 {doc.serial_number} 非待審核狀態"
         raise ValueError(msg)
@@ -1255,6 +1269,7 @@ async def reject_step(
     comment: str,
 ) -> Document:
     """退件：將文件改為 REJECTED，所有後續步驟設為 SKIPPED"""
+    await _lock_document(session, doc)
     if doc.status != DocumentStatus.PENDING:
         msg = f"公文 {doc.serial_number} 非待審核狀態"
         raise ValueError(msg)
@@ -1305,6 +1320,7 @@ async def reject_to_previous_step(
 
     規格依據：「退件機制：審核者可退回至承辦人，或退回至上一關核稿人」
     """
+    await _lock_document(session, doc)
     if doc.status != DocumentStatus.PENDING:
         msg = f"公文 {doc.serial_number} 非待審核狀態"
         raise ValueError(msg)

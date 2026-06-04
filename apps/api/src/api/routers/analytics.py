@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
-from typing import Annotated
+from datetime import UTC, datetime, timedelta
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
@@ -15,9 +15,12 @@ from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.permissions import require_any, require_permission
 from api.models.announcement import Announcement, AnnouncementRead
-from api.models.document import Document, DocumentApproval
+from api.models.document import ApprovalStepStatus, Document, DocumentApproval
 from api.models.org import Org
+from api.models.petition import PetitionCase, PetitionStatus
+from api.models.regulation import Regulation, RegulationWorkflowStatus
 from api.models.survey import Survey, SurveyResponse, SurveyStatus
+from api.models.user import User
 
 router = APIRouter(prefix="/analytics", tags=["數據分析"])
 
@@ -60,6 +63,27 @@ class SurveyParticipationItem(BaseModel):
     response_count: int
     status: str
     created_at: datetime
+
+
+InsightSeverity = Literal["info", "warning", "critical"]
+
+
+class InsightItem(BaseModel):
+    id: str
+    module: str
+    title: str
+    description: str
+    severity: InsightSeverity
+    score: int
+    href: str
+    reason: str
+    recommended_action: str
+    created_at: datetime
+
+
+class AnalyticsInsightsOut(BaseModel):
+    items: list[InsightItem]
+    total: int
 
 
 # ── 公文效率統計 ───────────────────────────────────────────────────────────────
@@ -202,6 +226,213 @@ async def pending_alerts(
         )
         for row in rows
     ]
+
+
+@router.get(
+    "/insights",
+    response_model=AnalyticsInsightsOut,
+    summary="治理異常洞察與優先處理建議",
+)
+async def governance_insights(
+    db: DbDep,
+    _: Annotated[
+        object, Depends(require_any(PermissionCode.ANALYTICS_VIEW, PermissionCode.ADMIN_ALL))
+    ],
+    limit: int = Query(20, ge=1, le=50),
+) -> AnalyticsInsightsOut:
+    now = datetime.now(UTC)
+    items: list[InsightItem] = []
+
+    pending_wait_expr = func.extract("epoch", func.now() - DocumentApproval.created_at)
+    pending_rows = (
+        await db.execute(
+            select(
+                DocumentApproval.id,
+                DocumentApproval.document_id,
+                Document.title,
+                Document.serial_number,
+                DocumentApproval.step_order,
+                pending_wait_expr.label("waiting_seconds"),
+            )
+            .join(Document, Document.id == DocumentApproval.document_id)
+            .where(DocumentApproval.status == ApprovalStepStatus.PENDING)
+            .where(pending_wait_expr > 48 * 3600)
+            .order_by(pending_wait_expr.desc())
+            .limit(8)
+        )
+    ).all()
+    for row in pending_rows:
+        waiting_hours = float(row.waiting_seconds or 0) / 3600
+        severity: InsightSeverity = "critical" if waiting_hours >= 96 else "warning"
+        items.append(
+            InsightItem(
+                id=f"document-bottleneck:{row.id}",
+                module="document",
+                title=f"公文簽核可能卡關：{row.title}",
+                description=f"第 {row.step_order} 關已等待 {waiting_hours:.1f} 小時。",
+                severity=severity,
+                score=95 if severity == "critical" else 78,
+                href=f"/documents/{row.serial_number or row.document_id}",
+                reason="待簽核時間超過 48 小時",
+                recommended_action="聯繫簽核人或指派代理人推進流程",
+                created_at=now,
+            )
+        )
+
+    workload_count_expr = func.count(DocumentApproval.id)
+    workload_rows = (
+        await db.execute(
+            select(
+                DocumentApproval.approver_id,
+                User.display_name,
+                User.email,
+                workload_count_expr.label("pending_count"),
+            )
+            .join(User, User.id == DocumentApproval.approver_id)
+            .where(DocumentApproval.status == ApprovalStepStatus.PENDING)
+            .group_by(DocumentApproval.approver_id, User.display_name, User.email)
+            .having(workload_count_expr >= 6)
+            .order_by(workload_count_expr.desc())
+            .limit(5)
+        )
+    ).all()
+    for row in workload_rows:
+        name = row.display_name or row.email or str(row.approver_id)
+        count = int(row.pending_count or 0)
+        items.append(
+            InsightItem(
+                id=f"document-workload:{row.approver_id}",
+                module="document",
+                title=f"簽核負載集中：{name}",
+                description=f"目前有 {count} 件公文等待同一人處理。",
+                severity="warning",
+                score=min(70 + count * 2, 92),
+                href="/analytics",
+                reason="同一簽核人待辦量偏高",
+                recommended_action="檢查是否需要代理、分流或提醒",
+                created_at=now,
+            )
+        )
+
+    delayed_regs = (
+        await db.execute(
+            select(Regulation)
+            .where(Regulation.workflow_status == RegulationWorkflowStatus.COUNCIL_APPROVED)
+            .where(Regulation.updated_at < now - timedelta(hours=72))
+            .order_by(Regulation.updated_at.asc())
+            .limit(5)
+        )
+    ).scalars()
+    for reg in delayed_regs:
+        items.append(
+            InsightItem(
+                id=f"regulation-publish-delay:{reg.id}",
+                module="regulation",
+                title=f"法規公布延遲：{reg.title}",
+                description="已議會核定超過 72 小時，尚未完成主席公布。",
+                severity="critical",
+                score=94,
+                href=f"/regulations/{reg.id}",
+                reason="核定後長時間未公布",
+                recommended_action="確認公布令與法規版本後完成公布",
+                created_at=now,
+            )
+        )
+
+    stale_petitions = (
+        await db.execute(
+            select(PetitionCase)
+            .where(PetitionCase.status == PetitionStatus.NEEDS_INFO)
+            .where(PetitionCase.updated_at < now - timedelta(hours=72))
+            .order_by(PetitionCase.updated_at.asc())
+            .limit(5)
+        )
+    ).scalars()
+    for petition in stale_petitions:
+        items.append(
+            InsightItem(
+                id=f"petition-needs-info:{petition.id}",
+                module="petition",
+                title=f"陳情補件追蹤：{petition.title}",
+                description="案件停在補充資料狀態超過 72 小時。",
+                severity="warning",
+                score=72,
+                href=f"/petitions/{petition.case_number}",
+                reason="補件狀態停留過久",
+                recommended_action="提醒當事人補件，或更新承辦狀態",
+                created_at=now,
+            )
+        )
+
+    low_read_announcements = (
+        await db.execute(
+            select(
+                Announcement.id,
+                Announcement.title,
+                Announcement.published_at,
+                func.count(AnnouncementRead.id).label("reader_count"),
+            )
+            .outerjoin(AnnouncementRead, AnnouncementRead.announcement_id == Announcement.id)
+            .where(Announcement.is_published == True)  # noqa: E712
+            .where(Announcement.published_at.is_not(None))
+            .where(Announcement.published_at < now - timedelta(hours=24))
+            .group_by(Announcement.id, Announcement.title, Announcement.published_at)
+            .having(func.count(AnnouncementRead.id) <= 2)
+            .order_by(Announcement.published_at.desc())
+            .limit(5)
+        )
+    ).all()
+    for ann in low_read_announcements:
+        items.append(
+            InsightItem(
+                id=f"announcement-low-read:{ann.id}",
+                module="announcement",
+                title=f"公告閱讀偏低：{ann.title}",
+                description=f"發布超過 24 小時，目前僅 {ann.reader_count} 次閱讀。",
+                severity="info",
+                score=52,
+                href=f"/announcements/{ann.id}",
+                reason="發布後閱讀數偏低",
+                recommended_action="檢查受眾、置頂或補發通知",
+                created_at=now,
+            )
+        )
+
+    low_response_surveys = (
+        await db.execute(
+            select(
+                Survey.id,
+                Survey.title,
+                Survey.created_at,
+                func.count(SurveyResponse.id).label("response_count"),
+            )
+            .outerjoin(SurveyResponse, SurveyResponse.survey_id == Survey.id)
+            .where(Survey.status == SurveyStatus.OPEN)
+            .where(Survey.created_at < now - timedelta(hours=48))
+            .group_by(Survey.id, Survey.title, Survey.created_at)
+            .having(func.count(SurveyResponse.id) <= 3)
+            .order_by(Survey.created_at.asc())
+            .limit(5)
+        )
+    ).all()
+    for survey in low_response_surveys:
+        items.append(
+            InsightItem(
+                id=f"survey-low-response:{survey.id}",
+                module="survey",
+                title=f"問卷回應偏低：{survey.title}",
+                description=f"開放超過 48 小時，目前僅 {survey.response_count} 份回應。",
+                severity="info",
+                score=50,
+                href=f"/surveys/{survey.id}",
+                reason="開放後回應數偏低",
+                recommended_action="調整公告位置或補發提醒",
+                created_at=now,
+            )
+        )
+
+    items.sort(key=lambda item: (-item.score, item.module, item.title))
+    return AnalyticsInsightsOut(items=items[:limit], total=len(items))
 
 
 # ── 公告參與率統計 ─────────────────────────────────────────────────────────────

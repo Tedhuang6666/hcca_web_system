@@ -9,6 +9,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.core.clock import local_today
 from api.models.document import Document
 from api.models.org import Org, Permission, Position, UserPosition
 from api.models.regulation import Regulation
@@ -52,7 +53,7 @@ async def _user_has_active_position_in_org(
     user_id: uuid.UUID,
     org_id: uuid.UUID,
 ) -> bool:
-    today = date.today()
+    today = local_today()
     result = await db.execute(
         select(UserPosition.id)
         .join(Position, UserPosition.position_id == Position.id)
@@ -275,7 +276,7 @@ async def get_active_positions_by_date(
     db: AsyncSession, user_id: uuid.UUID, on_date: date | None = None
 ) -> list[UserPosition]:
     """取得指定日期（預設今天）仍在任的職位記錄"""
-    check_date = on_date or date.today()
+    check_date = on_date or local_today()
     result = await db.execute(
         select(UserPosition)
         .where(

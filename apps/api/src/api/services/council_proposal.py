@@ -9,6 +9,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.core.clock import roc_year
+from api.core.database import advisory_xact_lock
 from api.models.council_proposal import (
     CouncilProposal,
     CouncilProposalCaseType,
@@ -17,14 +19,21 @@ from api.models.council_proposal import (
 from api.models.meeting import Meeting, MeetingAgendaItem, MeetingStatus
 from api.models.user import User
 from api.schemas.council_proposal import CouncilProposalCreate, CouncilProposalStatusUpdate
+from api.schemas.workflow import WorkflowLinkCreate
+from api.services import workflow as workflow_svc
 
 # 議程仍可編輯（可帶入提案）的會議狀態
 _SCHEDULABLE_MEETING_STATUSES = {MeetingStatus.DRAFT, MeetingStatus.CONFIRMED}
 
 
+# advisory lock key（任取穩定常數，與其他臨界區不同即可）
+_SERIAL_LOCK_KEY = 0x6363_7072  # "ccpr"
+
+
 async def _next_serial_number(session: AsyncSession) -> str:
-    year = datetime.now(UTC).year - 1911
+    year = roc_year()
     prefix = f"議提{year:03d}"
+    await advisory_xact_lock(session, _SERIAL_LOCK_KEY)
     result = await session.execute(
         select(CouncilProposal.serial_number)
         .where(CouncilProposal.serial_number.like(f"{prefix}%"))
@@ -49,6 +58,21 @@ async def create(
     )
     session.add(proposal)
     await session.flush()
+    await workflow_svc.ensure_instance(
+        session,
+        workflow_type="council_proposal",
+        source_type="council_proposal",
+        source_id=proposal.id,
+        title=proposal.title,
+        status=str(proposal.status),
+        created_by_id=submitter.id if submitter else None,
+        actor_email=submitter.email if submitter else None,
+        meta={
+            "serial_number": proposal.serial_number,
+            "case_type": str(proposal.case_type),
+            "summary": proposal.summary,
+        },
+    )
     # 重新載入以 eager-load regulation，供序列化 regulation_title 使用。
     return await get(session, proposal.id) or proposal
 
@@ -94,6 +118,7 @@ async def update_status(
     proposal: CouncilProposal,
     *,
     data: CouncilProposalStatusUpdate,
+    actor: User | None = None,
 ) -> CouncilProposal:
     proposal.status = data.status
     if data.committee_review_note is not None:
@@ -107,15 +132,29 @@ async def update_status(
         CouncilProposalStatus.PASSED,
         CouncilProposalStatus.REJECTED,
         CouncilProposalStatus.WITHDRAWN,
+        CouncilProposalStatus.PUBLISHED,
     }:
         proposal.decided_at = proposal.decided_at or now
+    await workflow_svc.transition_by_source(
+        session,
+        source_type="council_proposal",
+        source_id=proposal.id,
+        status=str(data.status),
+        title=proposal.title,
+        actor_id=actor.id if actor else None,
+        actor_email=actor.email if actor else None,
+        note=data.committee_review_note,
+        payload={
+            "scheduled_meeting_id": str(data.scheduled_meeting_id)
+            if data.scheduled_meeting_id
+            else None
+        },
+    )
     await session.flush()
     return proposal
 
 
-async def list_eligible_meetings(
-    session: AsyncSession, proposal: CouncilProposal
-) -> list[dict]:
+async def list_eligible_meetings(session: AsyncSession, proposal: CouncilProposal) -> list[dict]:
     """列出可把提案排入議程的會議（議程仍可編輯者），標記是否已排入。"""
     stmt = (
         select(Meeting)
@@ -155,6 +194,7 @@ async def schedule_into_meeting(
     *,
     meeting_id: uuid.UUID,
     note: str | None = None,
+    actor: User | None = None,
 ) -> CouncilProposal:
     """常委會審查通過後，把提案直接排入指定會議（大會）議程。"""
     from api.services import meeting as meeting_svc
@@ -171,13 +211,54 @@ async def schedule_into_meeting(
             MeetingAgendaItem.council_proposal_id == proposal.id,
         )
     )
+    agenda_item = None
     if already is None:
-        await meeting_svc.create_agenda_item_for_council_proposal(
+        agenda_item = await meeting_svc.create_agenda_item_for_council_proposal(
             session, meeting, council_proposal_id=proposal.id, note=note
         )
+    else:
+        agenda_item = await session.get(MeetingAgendaItem, already)
 
     proposal.scheduled_meeting_id = meeting.id
     proposal.scheduled_at = proposal.scheduled_at or datetime.now(UTC)
     proposal.status = CouncilProposalStatus.SCHEDULED
+    instance = await workflow_svc.transition_by_source(
+        session,
+        source_type="council_proposal",
+        source_id=proposal.id,
+        status=str(CouncilProposalStatus.SCHEDULED),
+        title=proposal.title,
+        actor_id=actor.id if actor else None,
+        actor_email=actor.email if actor else None,
+        note=note,
+        payload={"scheduled_meeting_id": str(meeting.id)},
+    )
+    await workflow_svc.add_link(
+        session,
+        instance,
+        data=WorkflowLinkCreate(
+            target_type="meeting",
+            target_id=meeting.id,
+            relation="scheduled_in",
+            title=meeting.title,
+            href=f"/meetings/{meeting.id}",
+            note=note,
+        ),
+        created_by_id=actor.id if actor else None,
+    )
+    if agenda_item is not None:
+        await workflow_svc.add_link(
+            session,
+            instance,
+            data=WorkflowLinkCreate(
+                target_type="meeting_agenda_item",
+                target_id=agenda_item.id,
+                relation="agenda_item",
+                title=agenda_item.title,
+                href=f"/meetings/{meeting.id}",
+                note=agenda_item.notes,
+            ),
+            created_by_id=actor.id if actor else None,
+        )
     await session.flush()
     return proposal
