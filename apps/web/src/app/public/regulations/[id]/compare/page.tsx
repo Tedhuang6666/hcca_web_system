@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -90,16 +89,9 @@ export default function PublicRegulationComparePage() {
 
   if (loading) return <div className="py-16 text-center text-sm" style={{ color: "var(--text-muted)" }}>載入中…</div>;
   if (!reg) return <div className="py-16 text-center text-sm" style={{ color: "var(--danger)" }}>找不到此法規或尚未公開</div>;
-  const publicHref = `/public/regulations/${encodeURIComponent(reg.title)}`;
 
   return (
     <div className="space-y-5">
-      <div className="text-xs" style={{ color: "var(--text-muted)" }}>
-        <Link href={publicHref} className="hover:underline" style={{ color: "var(--text-muted)" }}>
-          ← 返回法規
-        </Link>
-      </div>
-
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>

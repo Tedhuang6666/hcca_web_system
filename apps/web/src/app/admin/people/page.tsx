@@ -21,6 +21,7 @@ import {
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
+import MobileBackToList from "@/components/ui/MobileBackToList";
 import { adminApi, ApiError, classApi, orgsApi, peopleApi, withFallback } from "@/lib/api";
 import type {
   AdminUserDetail,
@@ -148,6 +149,9 @@ export default function PeopleAdminPage() {
   const allowed = isAdmin || can("admin:all") || can("admin:users") || can("class:manage") || can("org:manage_members");
   const [people, setPeople] = useState<PersonListItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // 手機版 master-detail：選取後切到詳情、未選顯示列表（桌機 xl 以上恆並排）。
+  // 不能直接用 selectedId，因為列表載入會自動選第一筆，會害手機一進來就停在詳情。
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const [detail, setDetail] = useState<PersonDetailOut | null>(null);
   const [classes, setClasses] = useState<SchoolClassListItem[]>([]);
   const [orgs, setOrgs] = useState<OrgRead[]>([]);
@@ -282,7 +286,7 @@ export default function PeopleAdminPage() {
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-[24rem_1fr]">
-        <Panel className="flex min-h-[420px] flex-col overflow-hidden">
+        <Panel className={`min-h-[420px] flex-col overflow-hidden ${mobileDetailOpen ? "hidden xl:flex" : "flex"}`}>
           <div className="space-y-3 p-3" style={{ borderBottom: "1px solid var(--border)" }}>
             <div className="flex items-center gap-2 rounded-md px-3 py-2" style={{ border: "1px solid var(--border)" }}>
               <Search size={15} style={{ color: "var(--text-muted)" }} />
@@ -321,7 +325,7 @@ export default function PeopleAdminPage() {
                 <button
                   key={person.id}
                   type="button"
-                  onClick={() => setSelectedId(person.id)}
+                  onClick={() => { setSelectedId(person.id); setMobileDetailOpen(true); }}
                   className="w-full cursor-pointer px-4 py-3 text-left transition-colors"
                   style={{
                     borderBottom: "1px solid var(--border)",
@@ -355,7 +359,10 @@ export default function PeopleAdminPage() {
           </div>
         </Panel>
 
-        <Panel className="min-h-[560px] overflow-hidden">
+        <Panel className={`min-h-[560px] overflow-hidden ${mobileDetailOpen ? "block" : "hidden xl:block"}`}>
+          <div className="xl:hidden p-3" style={{ borderBottom: "1px solid var(--border)" }}>
+            <MobileBackToList onBack={() => setMobileDetailOpen(false)} label="返回人員列表" />
+          </div>
           {detailLoading ? (
             <div className="p-8 text-sm" style={{ color: "var(--text-muted)" }}>載入人員詳情...</div>
           ) : detail ? (

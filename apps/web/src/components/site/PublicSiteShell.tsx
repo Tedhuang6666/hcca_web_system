@@ -1,12 +1,44 @@
 "use client";
 
 import Link from "next/link";
-import { LogIn, Menu, Moon, Sun, X } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { ArrowLeft, LogIn, Menu, Moon, Sun, X } from "lucide-react";
 import { useState } from "react";
 
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { BRANDING } from "@/lib/branding";
 import type { PublicSitePageOut, PublicSiteSettingsOut } from "@/lib/types";
+
+/** 已知父層路徑 → 返回鈕文案。未列出者依前綴給通用文案。 */
+const PUBLIC_BACK_LABELS: Record<string, string> = {
+  "/public": "返回公開資料庫",
+  "/public/documents": "返回公開公文",
+  "/public/regulations": "返回公開法規",
+  "/news": "返回最新公告",
+};
+
+/**
+ * 依 pathname 推算公開站的「返回上一層」目標。
+ * 公開站不渲染系統 Topbar（無全域返回鈕），故深層頁的返回鈕一律由此集中提供。
+ * - /news/<id>            → /news
+ * - /public/... 之下任一層 → 去掉最後一段的父路徑
+ * 頂層導覽頁（/、/about、/public、/pages/<slug> 等）回傳 null，不顯示返回鈕。
+ */
+function getPublicBack(pathname: string): { href: string; label: string } | null {
+  let parent: string | null = null;
+  if (/^\/news\/[^/]+$/.test(pathname)) {
+    parent = "/news";
+  } else if (pathname.startsWith("/public/")) {
+    parent = "/" + pathname.split("/").filter(Boolean).slice(0, -1).join("/");
+  }
+  if (!parent) return null;
+
+  const label =
+    PUBLIC_BACK_LABELS[parent] ??
+    (parent.startsWith("/public/regulations") ? "返回法規" :
+     parent.startsWith("/public/documents") ? "返回公文" : "返回上一頁");
+  return { href: parent, label };
+}
 
 const BASE_NAV = [
   { href: "/", label: "首頁" },
@@ -28,6 +60,8 @@ export default function PublicSiteShell({
 }) {
   const [open, setOpen] = useState(false);
   const { theme, toggleTheme } = useTheme();
+  const pathname = usePathname();
+  const back = getPublicBack(pathname);
   const nav = [
     ...BASE_NAV,
     ...navPages.map((page) => ({
@@ -132,7 +166,17 @@ export default function PublicSiteShell({
           </nav>
         )}
       </header>
-      <main id="main-content">{children}</main>
+      <main id="main-content">
+        {back && (
+          <div className="mx-auto max-w-6xl px-4 pt-5 sm:px-6">
+            <Link href={back.href} className="public-back-link">
+              <ArrowLeft size={16} aria-hidden />
+              {back.label}
+            </Link>
+          </div>
+        )}
+        {children}
+      </main>
       <footer className="public-footer">
         <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-8 text-sm sm:px-6 md:flex-row md:items-center md:justify-between">
           <p>{BRANDING.orgName}</p>

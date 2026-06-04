@@ -46,9 +46,15 @@ type DocumentOut = {
 };
 
 async function fetchDoc(idOrSerial: string): Promise<DocumentOut | null> {
-  const res = await fetch(serverApiUrl(`/documents/${idOrSerial}`), { next: { revalidate: 60 } });
-  if (!res.ok) return null;
-  return res.json();
+  // 後端不可用時 fetch 會 throw；在此吞掉以退化為 shell 內的「找不到」狀態
+  // （含返回鈕），而非冒泡到全域錯誤頁、連返回鈕都消失。
+  try {
+    const res = await fetch(serverApiUrl(`/documents/${idOrSerial}`), { next: { revalidate: 60 } });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
 }
 
 export async function generateMetadata(

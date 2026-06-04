@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { ensurePermissionCatalog, PermCheckboxes } from "@/components/admin/PermissionCatalog";
 import Modal from "@/components/ui/Modal";
+import MobileBackToList from "@/components/ui/MobileBackToList";
 import { adminApi, ApiError, classApi, orgsApi, withFallback } from "@/lib/api";
 import type { OrgRead } from "@/lib/api";
 import type {
@@ -253,12 +254,12 @@ export default function PermissionsAdminPage() {
               users={users}
               selectedOrgId={selectedOrg?.id ?? null}
               selectedPositionId={selectedPosition?.id ?? null}
-              onSelectOrg={(id) => { setDetail({ type: "org", id }); setSidebarOpen(false); }}
+              onSelectOrg={(id) => { selectDetail({ type: "org", id }); setSidebarOpen(false); }}
               onSelectPosition={(id) => { selectDetail({ type: "position", id }); setSidebarOpen(false); }}
             />
           </aside>
 
-          <section className="w-full lg:w-[410px] xl:w-[470px] flex-shrink-0 overflow-hidden flex flex-col" style={{ borderRight: "1px solid var(--border)" }}>
+          <section className={`w-full lg:w-[410px] xl:w-[470px] flex-shrink-0 overflow-hidden flex-col ${mobileDetailOpen ? "hidden lg:flex" : "flex"}`} style={{ borderRight: "1px solid var(--border)" }}>
             <div className="p-3 space-y-3 flex-shrink-0" style={{ borderBottom: "1px solid var(--border)" }}>
               <div className="grid grid-cols-3 gap-1 rounded-xl p-1" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
                 {[
@@ -294,7 +295,13 @@ export default function PermissionsAdminPage() {
             />
           </section>
 
-          <section className="hidden lg:flex flex-1 min-w-0 overflow-y-auto">
+          <section className={`${mobileDetailOpen ? "flex" : "hidden"} lg:flex flex-1 min-w-0 flex-col overflow-y-auto`}>
+            <div
+              className="lg:hidden sticky top-0 z-10 flex-shrink-0 p-3"
+              style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-surface)" }}
+            >
+              <MobileBackToList onBack={() => setMobileDetailOpen(false)} label="返回清單" />
+            </div>
             <DetailPanel
               detail={detail}
               orgs={orgs}
@@ -316,27 +323,6 @@ export default function PermissionsAdminPage() {
 
       {showNewOrg && <OrgCreateModal orgs={activeOrgs} onClose={() => setShowNewOrg(false)} onDone={() => { setShowNewOrg(false); load(); }} />}
       {showWizard && <OnboardingWizard users={users} positions={activePositions} orgs={activeOrgs} permCodes={permCodes} onClose={() => setShowWizard(false)} onDone={() => { setShowWizard(false); load(); }} />}
-      {!loading && mobileDetailOpen && detail && (
-        <div className="lg:hidden">
-          <Modal title="管理詳情" onClose={() => setMobileDetailOpen(false)}>
-            <DetailPanel
-              detail={detail}
-              orgs={orgs}
-              users={users}
-              positions={positions}
-              classes={classes}
-              permCodes={permCodes}
-              selectedOrg={selectedOrg}
-              selectedPosition={selectedPosition}
-              selectedUser={selectedUser}
-              onRefresh={load}
-              onSelect={selectDetail}
-              onConfirm={setConfirmState}
-              metrics={{ orphanPositions, noPermPositions, riskyUsers, expiringAssignments }}
-            />
-          </Modal>
-        </div>
-      )}
       {confirmState && (
         <Modal title={confirmState.title} onClose={() => setConfirmState(null)}>
           <p className="text-sm leading-6" style={{ color: "var(--text-secondary)" }}>{confirmState.body}</p>

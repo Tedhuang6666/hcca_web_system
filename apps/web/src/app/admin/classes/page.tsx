@@ -19,6 +19,7 @@ import {
 import { toast } from "sonner";
 import { ApiError, classApi, usersApi } from "@/lib/api";
 import { usePermissions } from "@/hooks/usePermissions";
+import MobileBackToList from "@/components/ui/MobileBackToList";
 import type {
   ClassMemberOut,
   ClassMembershipOut,
@@ -943,6 +944,8 @@ export default function ClassesAdminPage() {
   const allowed = can("class:manage");
   const [classes, setClasses] = useState<SchoolClassListItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // 手機版 master-detail：選班級後切到工作台、未選顯示清單（桌機 xl 以上恆並排）。
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -1018,19 +1021,22 @@ export default function ClassesAdminPage() {
       </header>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[360px_1fr]">
-        <aside className="space-y-4">
+        <aside className={`space-y-4 ${mobileDetailOpen ? "hidden xl:block" : ""}`}>
           <CreateClassPanel onCreated={loadClasses} />
           <ClassList
             classes={classes}
             selectedId={selectedId}
             selectedIds={selectedClassIds}
-            onSelect={setSelectedId}
+            onSelect={(id) => { setSelectedId(id); setMobileDetailOpen(true); }}
             onSelectionChange={setSelectedClassIds}
             onBulkAction={runBulkAction}
             bulkBusy={bulkBusy}
           />
         </aside>
-        <main>
+        <main className={mobileDetailOpen ? "" : "hidden xl:block"}>
+          <div className="xl:hidden mb-3">
+            <MobileBackToList onBack={() => setMobileDetailOpen(false)} label="返回班級清單" />
+          </div>
           {selectedId ? (
             <ClassWorkspace
               key={selectedId}

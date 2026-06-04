@@ -604,6 +604,28 @@
   color: var(--public-accent);
 }
 
+/* 公開站深層頁返回鈕：公開站無系統 Topbar，返回鈕由 PublicSiteShell 集中提供 */
+.public-back-link {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: -0.5rem;
+  border-radius: 8px;
+  padding: 0 0.6rem;
+  color: var(--public-secondary);
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background var(--transition), color var(--transition);
+}
+
+.public-back-link:hover,
+.public-back-link:focus-visible {
+  background: var(--public-accent-soft);
+  color: var(--public-accent);
+}
+
 .public-header-actions {
   display: flex;
   flex: 0 0 auto;

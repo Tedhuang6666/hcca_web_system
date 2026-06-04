@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -32,7 +31,6 @@ export default function PublicNewsDetailPage() {
   return (
     <PublicSiteShell navPages={bundle?.nav_pages ?? []} settings={bundle?.settings}>
       <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
-        <Link href="/news" className="btn btn-ghost mb-6">返回公告列表</Link>
         {loading ? (
           <div className="card p-10 text-center text-sm text-[var(--text-muted)]">載入中...</div>
         ) : !item ? (
