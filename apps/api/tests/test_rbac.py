@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import timedelta
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.clock import local_today
 from api.models.org import Org, Permission, Position, UserPosition
 from api.models.user import User
 from api.services.permission import get_user_permission_codes, user_has_permission
@@ -33,7 +34,7 @@ async def _seed_data(
     perm = Permission(position_id=position.id, code="document:approve")
     db.add(perm)
 
-    today = date.today()
+    today = local_today()  # 與 RBAC 引擎同一時鐘（Asia/Taipei），避免 UTC 換日造成邊界 flaky
     up = UserPosition(
         user_id=user.id,
         position_id=position.id,

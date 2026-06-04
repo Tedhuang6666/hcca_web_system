@@ -205,26 +205,31 @@ def send_email(
         delay = EMAIL_RETRY_BACKOFF[min(self.request.retries, len(EMAIL_RETRY_BACKOFF) - 1)]
         next_retry_at = None if exhausted else datetime.now(UTC) + timedelta(seconds=delay)
 
-        if email_recipient_id is not None:
-            asyncio.run(
-                _update_campaign_recipient_status(
-                    email_recipient_id,
-                    EmailRecipientStatus.DEAD if exhausted else EmailRecipientStatus.RETRYING,
-                    error_detail=err,
-                    attempt_count=attempt,
-                    next_retry_at=next_retry_at,
+        # 狀態回寫採 best-effort：DB 暫時不可用時不可吃掉下方的 self.retry，
+        # 否則 task 會直接 crash 而不重試，郵件永遠卡在「寄送中」。
+        try:
+            if email_recipient_id is not None:
+                asyncio.run(
+                    _update_campaign_recipient_status(
+                        email_recipient_id,
+                        EmailRecipientStatus.DEAD if exhausted else EmailRecipientStatus.RETRYING,
+                        error_detail=err,
+                        attempt_count=attempt,
+                        next_retry_at=next_retry_at,
+                    )
                 )
-            )
-        else:
-            asyncio.run(
-                _update_email_message_status(
-                    email_message_id,
-                    EmailStatus.DEAD if exhausted else EmailStatus.RETRYING,
-                    error_detail=err,
-                    attempt_count=attempt,
-                    next_retry_at=next_retry_at,
+            else:
+                asyncio.run(
+                    _update_email_message_status(
+                        email_message_id,
+                        EmailStatus.DEAD if exhausted else EmailStatus.RETRYING,
+                        error_detail=err,
+                        attempt_count=attempt,
+                        next_retry_at=next_retry_at,
+                    )
                 )
-            )
+        except Exception:
+            logger.exception("更新郵件狀態失敗（不影響重試）to=%s", to)
 
         if exhausted:
             # 進入 dead-letter：raise self.retry 會丟出 MaxRetriesExceededError，

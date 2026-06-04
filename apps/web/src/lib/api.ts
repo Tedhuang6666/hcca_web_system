@@ -3214,6 +3214,24 @@ export interface RecentErrorsResponse {
   items: RecentErrorItem[];
 }
 
+export interface DeadLetterItem {
+  timestamp?: string | null;
+  status?: string | null;
+  task?: string | null;
+  task_id?: string | null;
+  queue?: string | null;
+  retries?: number | null;
+  exception_type?: string | null;
+  exception?: string | null;
+  args?: string[];
+  kwargs?: Record<string, string>;
+}
+
+export interface DeadLetterResponse {
+  key: string;
+  items: DeadLetterItem[];
+}
+
 export interface DbUpgradeResult {
   ok: boolean;
   error?: string;
@@ -3313,6 +3331,10 @@ export const systemApi = {
   errorById: (errorId: string) =>
     get<RecentErrorItem>(`/admin/system/errors/${encodeURIComponent(errorId)}`),
   clearErrors: () => post<{ cleared: number }>("/admin/system/errors/clear", {}),
+  deadLetters: (limit = 50) =>
+    get<DeadLetterResponse>(`/admin/system/dead-letters?limit=${limit}`),
+  clearDeadLetters: () =>
+    del<{ cleared: boolean; key: string }>("/admin/system/dead-letters"),
   clearCache: () =>
     post<{ ok: boolean; cleared: number; patterns: string[] }>(
       "/admin/system/recovery/clear-cache",

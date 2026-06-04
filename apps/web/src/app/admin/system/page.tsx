@@ -31,6 +31,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import {
   ApiError,
   systemApi,
+  type DeadLetterItem,
   type DefenseRule,
   type DefenseRuleType,
   type DefenseSummary,
@@ -873,6 +874,7 @@ export default function SystemDefensePage() {
       <section className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[0.8fr_1.2fr]">
         <RecoveryToolsPanel onChanged={refresh} />
         <RecentErrorsPanel />
+        <DeadLetterPanel />
       </section>
     </main>
   );
@@ -1342,6 +1344,112 @@ function RecentErrorsPanel() {
         <div className="space-y-2">
           {items.map((item) => (
             <ErrorRow key={`${item.error_id}-${item.first_seen}`} item={item} />
+          ))}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function DeadLetterRow({ item }: { item: DeadLetterItem }) {
+  const when = item.timestamp ? new Date(item.timestamp).toLocaleString() : "—";
+  return (
+    <div className="overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--bg-surface)]">
+      <div className="flex">
+        <div className="w-1 shrink-0 bg-[var(--danger)]" />
+        <div className="min-w-0 flex-1 p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-sm font-semibold text-[var(--text-primary)]">
+              {item.task ?? "（未知 task）"}
+            </span>
+            {item.queue && (
+              <span className="rounded bg-[var(--bg-hover)] px-1.5 py-0.5 font-mono text-xs text-[var(--text-secondary)]">
+                {item.queue}
+              </span>
+            )}
+            {typeof item.retries === "number" && item.retries > 0 && (
+              <span className="rounded bg-[var(--bg-hover)] px-1.5 py-0.5 text-xs text-[var(--text-secondary)]">
+                retry ×{item.retries}
+              </span>
+            )}
+            <span className="ml-auto text-xs text-[var(--text-muted)]">{when}</span>
+          </div>
+          {item.task_id && (
+            <div className="mt-1.5 font-mono text-xs text-[var(--text-muted)]">id={item.task_id}</div>
+          )}
+          <div className="mt-1 break-words text-sm text-[var(--text-primary)]">
+            <span className="font-mono font-medium text-[var(--danger)]">{item.exception_type}</span>
+            {item.exception ? `: ${item.exception}` : ""}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeadLetterPanel() {
+  const [items, setItems] = useState<DeadLetterItem[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await systemApi.deadLetters(50);
+      setItems(data.items);
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "載入 Celery 失敗紀錄失敗");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const clear = async () => {
+    if (!window.confirm("清空 Celery dead-letter 佇列？")) return;
+    try {
+      await systemApi.clearDeadLetters();
+      toast.success("已清空 Celery dead-letter");
+      setItems([]);
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "清空失敗");
+    }
+  };
+
+  return (
+    <Panel
+      title="Celery 背景任務失敗 (Dead Letter)"
+      icon={<AlertTriangle size={18} aria-hidden />}
+      action={
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={load} disabled={loading} className="btn btn-ghost text-xs">
+            <RefreshCcw size={12} aria-hidden /> 重新整理
+          </button>
+          <button
+            type="button"
+            onClick={clear}
+            disabled={items.length === 0}
+            className="btn-sm btn-danger-ghost"
+          >
+            <Trash2 size={12} aria-hidden /> 清空
+          </button>
+        </div>
+      }
+    >
+      <p className="mb-3 text-xs text-[var(--text-muted)]">
+        背景排程／worker 任務失敗時寫入 Redis（與自動錯誤報告 email 同一來源）。API 5xx
+        不會出現在這裡，背景任務失敗也不會出現在上方「近期伺服器錯誤」——兩者來源不同，請一併檢視。
+      </p>
+      {items.length === 0 ? (
+        <p className="py-6 text-center text-sm text-[var(--text-muted)]">
+          {loading ? "載入中…" : "目前沒有 Celery 失敗紀錄 🎉"}
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {items.map((item, idx) => (
+            <DeadLetterRow key={`${item.task_id ?? "dl"}-${item.timestamp ?? idx}`} item={item} />
           ))}
         </div>
       )}
