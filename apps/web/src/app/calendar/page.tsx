@@ -16,6 +16,7 @@ import {
   Users,
 } from "lucide-react";
 import { ApiError, calendarApi, orgsApi, usersApi } from "@/lib/api";
+import { orgDisplayName } from "@/lib/orgs";
 import Drawer from "@/components/ui/Drawer";
 import Modal from "@/components/ui/Modal";
 import {
@@ -272,7 +273,7 @@ export default function CalendarPage() {
           className="rounded-md border border-[var(--border)] bg-transparent px-3 py-2 text-sm">
           <option value="">全部組織</option>
           {orgs.map((org) => (
-            <option key={org.id} value={org.id}>{org.name}</option>
+            <option key={org.id} value={org.id}>{orgDisplayName(org, orgs)}</option>
           ))}
         </select>
         <select
@@ -620,7 +621,7 @@ function EventEditor({
         <div className="grid gap-3 sm:grid-cols-2">
           <Select label="組織" value={orgId} onChange={setOrgId}>
             <option value="">選擇組織</option>
-            {orgs.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
+            {orgs.map((org) => <option key={org.id} value={org.id}>{orgDisplayName(org, orgs)}</option>)}
           </Select>
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-[var(--muted)]">時間</span>
@@ -834,7 +835,7 @@ function EventDrawer({
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Select label="組織" value={orgId} onChange={setOrgId}>
                     <option value="">未指定</option>
-                    {orgs.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
+                    {orgs.map((org) => <option key={org.id} value={org.id}>{orgDisplayName(org, orgs)}</option>)}
                   </Select>
                   <Select
                     label="可見度"

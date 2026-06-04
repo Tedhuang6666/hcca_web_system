@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { ApiError, orgsApi, petitionsApi } from "@/lib/api";
 import type { PetitionCaseListItem, PetitionCaseOut, PetitionStatsOut, PetitionStatus } from "@/lib/types";
 import { PetitionStatusBadge } from "@/components/ui/StatusBadge";
+import { orgDisplayName } from "@/lib/orgs";
 import { usePermissions } from "@/hooks/usePermissions";
 
 type QueueKey = "all" | "pending" | "mine" | "active" | "needs_info" | "done";
@@ -50,7 +51,7 @@ export default function PetitionManagePage() {
   const [status, setStatus] = useState<PetitionStatus | "">("");
   const [keyword, setKeyword] = useState("");
   const [users, setUsers] = useState<{ id: string; display_name: string; email: string }[]>([]);
-  const [orgs, setOrgs] = useState<{ id: string; name: string }[]>([]);
+  const [orgs, setOrgs] = useState<{ id: string; name: string; parent_id?: string | null }[]>([]);
   const [activeAction, setActiveAction] = useState<ActionKey>("assign");
   const [assignee, setAssignee] = useState("");
   const [targetOrg, setTargetOrg] = useState("");
@@ -364,7 +365,7 @@ export default function PetitionManagePage() {
                   </div>
                   <select className="input w-full" value={targetOrg} onChange={(e) => setTargetOrg(e.target.value)}>
                     <option value="">選擇目標機關</option>
-                    {orgs.filter((o) => o.id !== selected.current_org_id).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                    {orgs.filter((o) => o.id !== selected.current_org_id).map((o) => <option key={o.id} value={o.id}>{orgDisplayName(o, orgs)}</option>)}
                   </select>
                   <textarea className="input w-full min-h-28" value={publicText} onChange={(e) => setPublicText(e.target.value)} placeholder="轉派理由（會寫入公開處理事件）" />
                   <button className="btn btn-primary" disabled={!targetOrg || !publicText.trim() || busy} onClick={() => run("transfer")}>確認跨機關轉派</button>

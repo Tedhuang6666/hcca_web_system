@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { CalendarDays, Plus, Radio, ScreenShare, Settings } from "lucide-react";
 import { meetingsApi, orgsApi } from "@/lib/api";
 import type { MeetingListItem, MeetingWorkspaceOut, OrgRead } from "@/lib/types";
+import { orgDisplayName } from "@/lib/orgs";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import { usePersistedState } from "@/hooks/usePersistedState";
 
@@ -120,7 +121,7 @@ export default function MeetingsPage() {
             <option value="">選擇組織</option>
             {orgs.map((org) => (
               <option key={org.id} value={org.id}>
-                {org.name}
+                {orgDisplayName(org, orgs)}
               </option>
             ))}
           </select>

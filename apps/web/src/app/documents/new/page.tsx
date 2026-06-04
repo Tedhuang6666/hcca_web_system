@@ -9,6 +9,7 @@ import type {
   DocumentVisibility, RecipientType, SerialTemplateOut,
 } from "@/lib/types";
 import type { OrgRead } from "@/lib/api";
+import { orgDisplayName } from "@/lib/orgs";
 import GongwenEditor from "@/components/ui/GongwenEditor";
 import SmartTextarea from "@/components/ui/SmartTextarea";
 import Toggle from "@/components/ui/Toggle";
@@ -520,7 +521,7 @@ export default function NewDocumentPage() {
                     ? { ...selectStyle, border: "1px solid var(--danger)" }
                     : selectStyle}>
                   <option value="">選擇組織…</option>
-                  {orgs.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                  {orgs.map(o => <option key={o.id} value={o.id}>{orgDisplayName(o, orgs)}</option>)}
                 </select>
                 {showErr("org") && (
                   <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>{fieldError.org}</p>

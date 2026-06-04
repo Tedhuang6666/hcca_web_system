@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertCircle, BookOpen, CheckCircle2, FileText, Hand, MessageSquare, Shield } from "lucide-react";
 import { meetingsApi } from "@/lib/api";
+import { unlockMeetings } from "@/lib/navigation";
 import { useWS } from "@/hooks/useWS";
 import type { BallotChoice, MeetingJoinOut, MeetingRequestType, MeetingScreenOut } from "@/lib/types";
 
@@ -35,6 +36,8 @@ export default function MeetingJoinPage({ params }: { params: Promise<{ token: s
     try {
       setPayload(await meetingsApi.join(token));
       setError("");
+      // 掃描現場簽到連結即視為與會者，於本機解鎖議事系統入口。
+      unlockMeetings();
     } catch (err) {
       setError(err instanceof Error ? err.message : "載入會議入口失敗");
     }

@@ -26,6 +26,7 @@ from api.models.base import TimestampMixin
 from api.models.types import JSONDict
 
 if TYPE_CHECKING:
+    from api.models.council_proposal import CouncilProposal
     from api.models.document import Document
     from api.models.org import Org
     from api.models.regulation import Regulation
@@ -61,6 +62,7 @@ class AgendaItemType(StrEnum):
     MANUAL = "manual"
     REGULATION = "regulation"
     DOCUMENT = "document"
+    PROPOSAL = "council_proposal"  # 議會提案（法規/財政/罷免/彈劾/人事/決議建議案）
 
 
 class AttendanceRole(StrEnum):
@@ -331,6 +333,11 @@ class MeetingAgendaItem(Base, TimestampMixin):
     document_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("documents.id", ondelete="SET NULL"), nullable=True
     )
+    council_proposal_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("council_proposals.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     resolution: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -339,6 +346,7 @@ class MeetingAgendaItem(Base, TimestampMixin):
     )
     regulation: Mapped[Regulation | None] = relationship("Regulation")
     document: Mapped[Document | None] = relationship("Document")
+    council_proposal: Mapped[CouncilProposal | None] = relationship("CouncilProposal")
     votes: Mapped[list[MeetingVote]] = relationship("MeetingVote", back_populates="agenda_item")
     attachments: Mapped[list[MeetingAgendaAttachment]] = relationship(
         "MeetingAgendaAttachment", back_populates="agenda_item", cascade="all, delete-orphan"

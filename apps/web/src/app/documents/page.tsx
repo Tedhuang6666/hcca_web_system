@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { documentsApi, orgsApi, savedFiltersApi, usersApi, ApiError, withFallback } from "@/lib/api";
 import type { OrgRead, UserSummary } from "@/lib/api";
 import type { Activity, BatchDocumentOperationOut, DocumentListItem, DocumentStatus, SavedFilterOut } from "@/lib/types";
+import { orgDisplayName } from "@/lib/orgs";
 import { DocumentStatusBadge, UrgencyBadge } from "@/components/ui/StatusBadge";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
@@ -120,7 +121,6 @@ export default function DocumentListPage() {
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [batchBusy, setBatchBusy] = useState(false);
   const [delegateQuery, setDelegateQuery] = useState("");
@@ -140,7 +140,6 @@ export default function DocumentListPage() {
   useEffect(() => {
     setNow(Date.now());
     const userId = typeof window !== "undefined" ? localStorage.getItem("user_id") : null;
-    setIsLoggedIn(!!userId);
 
     const loadInitialData = async () => {
       const [orgsRes, savedFiltersRes] = await Promise.all([
@@ -507,7 +506,7 @@ export default function DocumentListPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-          {isLoggedIn && (
+          {can("document:approve") && (
             <Link href="/documents/delegations" className="btn btn-ghost">
               簽核代理
             </Link>
@@ -816,7 +815,7 @@ export default function DocumentListPage() {
                     className="text-xs px-2 py-1.5 rounded-lg outline-none"
                     style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
                     <option value="">全部組織</option>
-                    {orgs.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                    {orgs.map(o => <option key={o.id} value={o.id}>{orgDisplayName(o, orgs)}</option>)}
                   </select>
                 </div>
               )}

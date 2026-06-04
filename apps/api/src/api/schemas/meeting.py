@@ -114,6 +114,7 @@ class AgendaItemCreate(BaseModel):
     order_index: int = Field(0, ge=0)
     regulation_id: uuid.UUID | None = None
     document_id: uuid.UUID | None = None
+    council_proposal_id: uuid.UUID | None = None
     notes: str | None = None
     resolution: str | None = None
 
@@ -125,6 +126,7 @@ class AgendaItemUpdate(BaseModel):
     order_index: int | None = Field(None, ge=0)
     regulation_id: uuid.UUID | None = None
     document_id: uuid.UUID | None = None
+    council_proposal_id: uuid.UUID | None = None
     notes: str | None = None
     resolution: str | None = None
 
@@ -189,6 +191,7 @@ class AgendaItemOut(BaseModel):
     order_index: int
     regulation_id: uuid.UUID | None
     document_id: uuid.UUID | None
+    council_proposal_id: uuid.UUID | None
     notes: str | None
     resolution: str | None
     created_at: datetime

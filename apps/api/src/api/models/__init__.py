@@ -31,6 +31,7 @@ from api.models.calendar import (  # noqa: F401
 )
 from api.models.council_proposal import (  # noqa: F401
     CouncilProposal,
+    CouncilProposalCaseType,
     CouncilProposalKind,
     CouncilProposalStatus,
 )

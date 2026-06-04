@@ -7,6 +7,7 @@ import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { ApiError, documentsApi, orgsApi, usersApi, withFallback } from "@/lib/api";
 import type { OrgRead, UserSummary } from "@/lib/api";
 import type { DocumentApprovalDelegationOut, UserPositionRead } from "@/lib/types";
+import { orgDisplayName } from "@/lib/orgs";
 
 function toInputValue(date: string | null) {
   if (!date) return "";
@@ -193,7 +194,7 @@ export default function DocumentDelegationsPage() {
             >
               <option value="">請選擇組織</option>
               {myOrgOptions.map((org) => (
-                <option key={org.id} value={org.id}>{org.name}</option>
+                <option key={org.id} value={org.id}>{orgDisplayName(org, orgs)}</option>
               ))}
             </select>
           </div>

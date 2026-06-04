@@ -958,7 +958,7 @@ export type MeetingStatus =
   | "archived";
 /** 會議的法案審議階段（決定議程自動帶入哪一階段的法案） */
 export type MeetingBillStage = "standing_committee" | "council";
-export type AgendaItemType = "manual" | "regulation" | "document";
+export type AgendaItemType = "manual" | "regulation" | "document" | "council_proposal";
 export type AttendanceRole = "voter" | "attendee" | "observer";
 export type AttendanceStatus = "expected" | "present" | "absent" | "leave";
 export type VoteStatus = "draft" | "open" | "closed";
@@ -1050,6 +1050,7 @@ export interface MeetingAgendaItemOut {
   order_index: number;
   regulation_id: string | null;
   document_id: string | null;
+  council_proposal_id: string | null;
   notes: string | null;
   resolution: string | null;
   created_at: string;
@@ -2296,6 +2297,14 @@ export interface PetitionStatsOut {
 
 export type CouncilProposalKind = RegulationAmendmentType;
 
+export type CouncilProposalCaseType =
+  | "regulation"
+  | "finance"
+  | "recall"
+  | "impeachment"
+  | "personnel"
+  | "resolution";
+
 export type CouncilProposalStatus =
   | "submitted"
   | "committee_review"
@@ -2310,7 +2319,9 @@ export interface CouncilProposalCreate {
   contact_email: string;
   proposer_name: string;
   co_sponsors?: string | null;
-  kind: CouncilProposalKind;
+  case_type: CouncilProposalCaseType;
+  kind?: CouncilProposalKind | null;
+  regulation_id?: string | null;
   title: string;
   summary: string;
   legal_basis?: string | null;
@@ -2324,7 +2335,10 @@ export interface CouncilProposalListItem {
   serial_number: string;
   submitter_id: string | null;
   proposer_name: string;
-  kind: CouncilProposalKind;
+  case_type: CouncilProposalCaseType;
+  kind: CouncilProposalKind | null;
+  regulation_id: string | null;
+  regulation_title: string | null;
   title: string;
   summary: string;
   status: CouncilProposalStatus;
@@ -2344,6 +2358,15 @@ export interface CouncilProposalOut extends CouncilProposalListItem {
   expected_effect: string | null;
   committee_review_note: string | null;
   scheduled_meeting_id: string | null;
+}
+
+export interface CouncilProposalEligibleMeeting {
+  id: string;
+  title: string;
+  status: string;
+  bill_stage: string | null;
+  starts_at: string | null;
+  already_scheduled: boolean;
 }
 
 // ── 評議委員會訴訟 ───────────────────────────────────────────────────────

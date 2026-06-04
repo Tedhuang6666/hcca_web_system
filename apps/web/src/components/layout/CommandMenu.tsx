@@ -6,17 +6,34 @@ import { Command } from "cmdk";
 import { Clock, FileText, Gavel, Megaphone, Search, Settings, Users } from "lucide-react";
 import { searchApi } from "@/lib/api";
 import type { SearchResultOut } from "@/lib/types";
+import { isMeetingsUnlocked } from "@/lib/navigation";
 import { useRecentItems } from "@/hooks/useRecentItems";
 
 const STATIC_ACTIONS = [
   { label: "公文列表", href: "/documents", icon: FileText },
   { label: "法規資料庫", href: "/regulations", icon: Gavel },
-  { label: "會議系統", href: "/meetings", icon: Users },
   { label: "公告中心", href: "/announcements", icon: Megaphone },
   { label: "介面設定", href: "/settings/navigation", icon: Settings },
   { label: "通知設定", href: "/settings/notifications", icon: Settings },
   { label: "安全設定", href: "/settings/security", icon: Settings },
 ];
+
+// 議事系統：與側邊欄一致，僅會議管理者/管理員或已掃描簽到連結解鎖者可見。
+const MEETINGS_ACTION = { label: "會議系統", href: "/meetings", icon: Users };
+
+function canSeeMeetings(): boolean {
+  if (typeof window === "undefined") return false;
+  if (isMeetingsUnlocked()) return true;
+  if (localStorage.getItem("is_superuser") === "true" || localStorage.getItem("is_owner") === "true") {
+    return true;
+  }
+  try {
+    const perms: string[] = JSON.parse(localStorage.getItem("permissions") || "[]");
+    return perms.includes("admin:all") || perms.some((p) => p.startsWith("meeting:"));
+  } catch {
+    return false;
+  }
+}
 
 function kindLabel(kind: string) {
   return {
@@ -35,6 +52,11 @@ export default function CommandMenu() {
   const [results, setResults] = useState<SearchResultOut[]>([]);
   const recents = useRecentItems(6);
   const showRecents = query.trim().length === 0 && recents.length > 0;
+  const [meetingsVisible, setMeetingsVisible] = useState(false);
+
+  useEffect(() => {
+    setMeetingsVisible(canSeeMeetings());
+  }, [open]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -59,10 +81,13 @@ export default function CommandMenu() {
   }, [open, query]);
 
   const filteredActions = useMemo(() => {
+    const actions = meetingsVisible
+      ? [STATIC_ACTIONS[0], STATIC_ACTIONS[1], MEETINGS_ACTION, ...STATIC_ACTIONS.slice(2)]
+      : STATIC_ACTIONS;
     const q = query.trim().toLowerCase();
-    if (!q) return STATIC_ACTIONS;
-    return STATIC_ACTIONS.filter((item) => item.label.toLowerCase().includes(q));
-  }, [query]);
+    if (!q) return actions;
+    return actions.filter((item) => item.label.toLowerCase().includes(q));
+  }, [query, meetingsVisible]);
 
   const go = (href: string) => {
     setOpen(false);

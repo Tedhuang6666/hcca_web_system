@@ -305,6 +305,26 @@ export const DEFAULT_NAV_PREFERENCES: NavPreferences = {
 
 export const NAV_PREF_EVENT = "hcca:navigation-preferences-changed";
 
+/**
+ * 議事系統解鎖旗標：一般使用者預設看不到「議事系統」入口，
+ * 只有掃描會議現場的簽到連結（/meetings/join/[token]）後才會在本機解鎖；
+ * 會議管理者（meeting:* 權限）與管理員則一律可見，不需解鎖。
+ */
+export const MEETINGS_UNLOCK_KEY = "hcca:meetings:unlocked";
+
+export function isMeetingsUnlocked(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(MEETINGS_UNLOCK_KEY) === "1";
+}
+
+export function unlockMeetings() {
+  if (typeof window === "undefined") return;
+  if (window.localStorage.getItem(MEETINGS_UNLOCK_KEY) === "1") return;
+  window.localStorage.setItem(MEETINGS_UNLOCK_KEY, "1");
+  // 沿用 NAV_PREF_EVENT 讓側邊欄即時重算可見項目。
+  window.dispatchEvent(new Event(NAV_PREF_EVENT));
+}
+
 function byIds(ids: string[]) {
   return ids.map((id) => NAV_ITEMS_BY_ID[id]).filter(Boolean);
 }

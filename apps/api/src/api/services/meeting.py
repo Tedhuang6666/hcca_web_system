@@ -343,11 +343,6 @@ async def confirm_meeting(
         raise ValueError("確認議程前請先設定開會時間")
     if not meeting.location or not meeting.location.strip():
         raise ValueError("確認議程前請先設定開會地點")
-    invalid_items = [
-        item.title for item in meeting.agenda_items if not _agenda_item_has_packet(item)
-    ]
-    if invalid_items:
-        raise ValueError(f"下列議程缺少對應法規或詳情檔案：{'、'.join(invalid_items[:5])}")
 
     notice = await _create_notice_document(
         session,
@@ -386,21 +381,6 @@ async def confirm_meeting(
         logger.warning("send meeting_invited notifications failed", exc_info=True)
 
     return meeting
-
-
-def _agenda_item_has_packet(item: MeetingAgendaItem) -> bool:
-    if item.item_type == AgendaItemType.REGULATION:
-        return item.regulation_id is not None
-    if item.item_type == AgendaItemType.DOCUMENT:
-        return item.document_id is not None
-    return bool(
-        item.description
-        or item.notes
-        or item.regulation_id
-        or item.document_id
-        or item.attachments
-        or item.artifact_links
-    )
 
 
 # ── 法案審議階段對應 ─────────────────────────────────────────────────────────
@@ -712,6 +692,35 @@ async def create_agenda_item_for_regulation(
         item_type=AgendaItemType.REGULATION,
         order_index=int(max_order or -1) + 1,
         regulation_id=reg.id,
+        notes=note,
+    )
+    return await create_agenda_item(session, meeting, data=data)
+
+
+async def create_agenda_item_for_council_proposal(
+    session: AsyncSession,
+    meeting: Meeting,
+    *,
+    council_proposal_id: uuid.UUID,
+    note: str | None = None,
+) -> MeetingAgendaItem:
+    """把議會提案排入會議議程末端，回傳建立的議程項目。"""
+    from api.models.council_proposal import CouncilProposal
+
+    proposal = await session.get(CouncilProposal, council_proposal_id)
+    if proposal is None:
+        raise ValueError("找不到此議會提案")
+    max_order = await session.scalar(
+        select(func.coalesce(func.max(MeetingAgendaItem.order_index), -1)).where(
+            MeetingAgendaItem.meeting_id == meeting.id
+        )
+    )
+    data = AgendaItemCreate(
+        title=f"審議：{proposal.title}",
+        description=proposal.summary,
+        item_type=AgendaItemType.PROPOSAL,
+        order_index=int(max_order or -1) + 1,
+        council_proposal_id=proposal.id,
         notes=note,
     )
     return await create_agenda_item(session, meeting, data=data)

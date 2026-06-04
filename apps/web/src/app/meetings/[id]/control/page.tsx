@@ -89,6 +89,7 @@ export default function MeetingControlPage({ params }: { params: Promise<{ id: s
   const [thresholdType, setThresholdType] = useState<VoteThresholdType>("simple_majority");
   const [customThreshold, setCustomThreshold] = useState(0);
   const [speakerName, setSpeakerName] = useState("");
+  const [screenAgendaId, setScreenAgendaId] = useState("");
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -163,9 +164,14 @@ export default function MeetingControlPage({ params }: { params: Promise<{ id: s
   const pendingRequests = meeting?.requests.filter((item) => item.status === "pending") ?? [];
   const remaining = timerRemaining(activeSpeech, now);
 
+  const screenTarget = useMemo(
+    () => agenda.find((item) => item.id === screenAgendaId) ?? current,
+    [agenda, screenAgendaId, current],
+  );
+
   async function pushScene(mode: MeetingScreenReadingMode, item?: MeetingAgendaItemOut | null) {
     if (!meeting) return;
-    const target = item ?? current;
+    const target = item ?? screenTarget ?? current;
     const scenePayload = {
       agenda_item_id: target?.id ?? meeting.current_agenda_item_id,
       reading_mode: mode,
@@ -300,6 +306,20 @@ export default function MeetingControlPage({ params }: { params: Promise<{ id: s
               {screen?.screen_state?.reading_mode ?? "未設定"}
             </span>
           </div>
+          <label className="mb-3 flex flex-col gap-1 text-sm sm:flex-row sm:items-center sm:gap-2">
+            <span className="shrink-0 text-xs font-medium text-[var(--muted)]">推送議程</span>
+            <select
+              value={screenAgendaId}
+              onChange={(event) => setScreenAgendaId(event.target.value)}
+              className="min-w-0 flex-1 rounded-md border border-[var(--border)] bg-transparent px-3 py-2 text-sm">
+              <option value="">跟隨目前議程{current ? `（第 ${current.order_index + 1} 案）` : ""}</option>
+              {agenda.map((item) => (
+                <option key={item.id} value={item.id}>
+                  第 {item.order_index + 1} 案 · {item.title}
+                </option>
+              ))}
+            </select>
+          </label>
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7">
             {SCENES.map(({ mode, label, icon: Icon }) => (
               <button

@@ -44,7 +44,7 @@ import type {
   MFASetupOut, MFAStatusOut,
   PetitionCaseListItem, PetitionCaseOut, PetitionCreate, PetitionCreatedOut,
   PetitionStatsOut, PetitionStatus, PetitionTypeOut,
-  CouncilProposalCreate, CouncilProposalListItem, CouncilProposalOut, CouncilProposalStatus,
+  CouncilProposalCaseType, CouncilProposalCreate, CouncilProposalEligibleMeeting, CouncilProposalListItem, CouncilProposalOut, CouncilProposalStatus,
   JudicialPetitionCreate, JudicialPetitionListItem, JudicialPetitionOut, JudicialPetitionStatus,
   NotificationPreferences,
   PasskeyCredentialOut,
@@ -1905,18 +1905,25 @@ export const petitionsApi = {
 
 // ── 議會提案 ───────────────────────────────────────────────────────────────
 
+function councilProposalQuery(params?: {
+  status?: CouncilProposalStatus;
+  case_type?: CouncilProposalCaseType;
+}): string {
+  const sp = new URLSearchParams();
+  if (params?.status) sp.set("status", params.status);
+  if (params?.case_type) sp.set("case_type", params.case_type);
+  const qs = sp.toString();
+  return qs ? `?${qs}` : "";
+}
+
 export const councilProposalsApi = {
   create: (body: CouncilProposalCreate) => post<CouncilProposalOut>("/council-proposals", body),
-  my: (params?: { status?: CouncilProposalStatus }) => {
-    const qs = params?.status
-      ? `?${new URLSearchParams({ status: params.status }).toString()}`
-      : "";
+  my: (params?: { status?: CouncilProposalStatus; case_type?: CouncilProposalCaseType }) => {
+    const qs = councilProposalQuery(params);
     return get<CouncilProposalListItem[]>(`/council-proposals/my${qs}`);
   },
-  list: (params?: { status?: CouncilProposalStatus }) => {
-    const qs = params?.status
-      ? `?${new URLSearchParams({ status: params.status }).toString()}`
-      : "";
+  list: (params?: { status?: CouncilProposalStatus; case_type?: CouncilProposalCaseType }) => {
+    const qs = councilProposalQuery(params);
     return get<CouncilProposalListItem[]>(`/council-proposals${qs}`);
   },
   get: (id: string) => get<CouncilProposalOut>(`/council-proposals/${id}`),
@@ -1928,6 +1935,10 @@ export const councilProposalsApi = {
       scheduled_meeting_id?: string | null;
     },
   ) => patch<CouncilProposalOut>(`/council-proposals/${id}/status`, body),
+  eligibleMeetings: (id: string) =>
+    get<CouncilProposalEligibleMeeting[]>(`/council-proposals/${id}/eligible-meetings`),
+  schedule: (id: string, body: { meeting_id: string; note?: string | null }) =>
+    post<CouncilProposalOut>(`/council-proposals/${id}/schedule`, body),
 };
 
 // ── 評議委員會訴訟 ───────────────────────────────────────────────────────

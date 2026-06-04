@@ -4,10 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ApiError, orgsApi, petitionsApi, withFallback } from "@/lib/api";
 import type { PetitionTypeOut } from "@/lib/types";
+import { orgDisplayName } from "@/lib/orgs";
 
 export default function PetitionTypesAdminPage() {
   const [types, setTypes] = useState<PetitionTypeOut[]>([]);
-  const [orgs, setOrgs] = useState<{ id: string; name: string }[]>([]);
+  const [orgs, setOrgs] = useState<{ id: string; name: string; parent_id?: string | null }[]>([]);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [orgId, setOrgId] = useState("");
@@ -77,7 +78,7 @@ export default function PetitionTypesAdminPage() {
         <label className="block">
           <span className="text-sm font-medium">負責機關</span>
           <select className="input w-full mt-1" value={orgId} onChange={(e) => setOrgId(e.target.value)} required>
-            {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+            {orgs.map((o) => <option key={o.id} value={o.id}>{orgDisplayName(o, orgs)}</option>)}
           </select>
         </label>
         <label className="block">
@@ -101,7 +102,7 @@ export default function PetitionTypesAdminPage() {
                   {type.is_active ? "停用" : "啟用"}
                 </button>
                 <select className="input" value={type.responsible_org_id} onChange={(e) => update(type.id, { responsible_org_id: e.target.value })}>
-                  {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                  {orgs.map((o) => <option key={o.id} value={o.id}>{orgDisplayName(o, orgs)}</option>)}
                 </select>
               </div>
             </div>

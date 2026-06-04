@@ -12,7 +12,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.document import Document
-from api.models.org import Position, UserPosition
+from api.models.org import Org, Position, UserPosition
 from api.models.regulation import Regulation
 from api.models.user import User
 
@@ -98,11 +98,47 @@ def _enum_value(value: object) -> str:
     return str(getattr(value, "value", value) or "")
 
 
-def _full_org_name(doc: Document | Regulation) -> str:
-    raw = getattr(doc, "issuer_full_name", None) or (doc.org.name if doc.org else "")
-    name = str(raw or "").strip()
-    if not name:
+async def _full_org_name(session: AsyncSession, doc: Document | Regulation) -> str:
+    """組出發文機關全銜。
+
+    優先使用公文上明確填寫的 ``issuer_full_name``；否則沿 org 的上級機關鏈
+    （adjacency list）由最上層往下串接，例如「班級聯合自治會」＋「學生議會
+    常務委員會」→「班級聯合自治會 學生議會常務委員會」，最後補上學校全銜前綴，
+    得到「國立新竹高級中學班級聯合自治會 學生議會常務委員會」。
+    """
+    explicit = getattr(doc, "issuer_full_name", None)
+    if explicit and str(explicit).strip():
+        explicit = str(explicit).strip()
+        if explicit.startswith(_SCHOOL_FULL_NAME):
+            return explicit
+        return f"{_SCHOOL_FULL_NAME}{explicit}"
+
+    org = getattr(doc, "org", None)
+    if org is None:
         return ""
+
+    # 由 leaf 往上收集機關名稱，再反轉為「上級 → 下級」順序
+    segments: list[str] = []
+    seen: set[object] = set()
+    current: Org | None = org
+    while current is not None:
+        org_id = getattr(current, "id", None)
+        if org_id is not None and org_id in seen:
+            break
+        if org_id is not None:
+            seen.add(org_id)
+        seg = (getattr(current, "name", "") or "").strip()
+        if seg:
+            segments.append(seg)
+        parent_id = getattr(current, "parent_id", None)
+        if parent_id is None:
+            break
+        current = await session.get(Org, parent_id)
+    if not segments:
+        return ""
+    segments.reverse()
+
+    name = " ".join(segments)
     if name.startswith(_SCHOOL_FULL_NAME):
         return name
     return f"{_SCHOOL_FULL_NAME}{name}"
@@ -419,7 +455,7 @@ async def render_document_print_html(
     is_meeting = cat == "meeting_notice"
     is_decree = cat == "decree"
     is_record = cat == "record"
-    issuer = _esc(_full_org_name(doc))
+    issuer = _esc(await _full_org_name(session, doc))
     category_label = {
         "letter": "函",
         "decree": "令",

@@ -8,6 +8,7 @@ import LawTreeEditor, { inferParentIdByPrevious } from "@/components/regulations
 import SmartTextarea from "@/components/ui/SmartTextarea";
 import { ApiError, orgsApi, regulationsApi, regulationHref, type OrgRead } from "@/lib/api";
 import type { ArticleType, RegulationArticleOut, RegulationCategory } from "@/lib/types";
+import { orgDisplayName } from "@/lib/orgs";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 
 const CATEGORIES: [RegulationCategory, string][] = [
@@ -214,7 +215,7 @@ export default function NewRegulationPage() {
                 style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)", color: "var(--text-primary)" }}
               >
                 <option value="">選擇組織</option>
-                {orgs.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                {orgs.map(o => <option key={o.id} value={o.id}>{orgDisplayName(o, orgs)}</option>)}
               </select>
             </div>
             <div>

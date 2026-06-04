@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { adminApi, ApiError, discordApi, orgsApi } from "@/lib/api";
+import { orgDisplayName } from "@/lib/orgs";
 import type {
   DiscordGuildConfigIn,
   DiscordGuildConfigOut,
@@ -77,7 +78,7 @@ export default function DiscordAdminPage() {
   const [busy, setBusy] = useState(false);
 
   const orgName = useMemo(
-    () => Object.fromEntries(orgs.map((org) => [org.id, org.name])),
+    () => Object.fromEntries(orgs.map((org) => [org.id, orgDisplayName(org, orgs)])),
     [orgs],
   );
   const positionName = useMemo(
@@ -621,7 +622,7 @@ export default function DiscordAdminPage() {
               >
                 <option value="">選擇組織</option>
                 {orgs.map((org) => (
-                  <option key={org.id} value={org.id}>{org.name}</option>
+                  <option key={org.id} value={org.id}>{orgDisplayName(org, orgs)}</option>
                 ))}
               </select>
             )}
@@ -745,7 +746,7 @@ export default function DiscordAdminPage() {
               >
                 <option value="">選擇組織</option>
                 {orgs.map((org) => (
-                  <option key={org.id} value={org.id}>{org.name}</option>
+                  <option key={org.id} value={org.id}>{orgDisplayName(org, orgs)}</option>
                 ))}
               </select>
             )}
@@ -849,7 +850,7 @@ export default function DiscordAdminPage() {
             >
               <option value="">選擇機關</option>
               {orgs.map((org) => (
-                <option key={org.id} value={org.id}>{org.name}</option>
+                <option key={org.id} value={org.id}>{orgDisplayName(org, orgs)}</option>
               ))}
             </select>
           </label>

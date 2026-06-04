@@ -12,6 +12,7 @@ import NavIcon from "./NavIcon";
 import {
   filterNavItems,
   hasSavedNavPreferences,
+  isMeetingsUnlocked,
   isSection,
   NAV_DEF,
   NAV_DEF_LOGGED_OUT,
@@ -87,6 +88,7 @@ export default function Sidebar() {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [desktopPrefs, setDesktopPrefs] = useState(() => readNavPreferences());
   const [hasCustomNav, setHasCustomNav] = useState(false);
+  const [meetingsUnlocked, setMeetingsUnlocked] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -96,6 +98,7 @@ export default function Sidebar() {
     setUserEmail(localStorage.getItem("user_email") ?? "");
     setUserAvatar(localStorage.getItem("user_avatar"));
     setHasCustomNav(hasSavedNavPreferences());
+    setMeetingsUnlocked(isMeetingsUnlocked());
 
     const persisted = readCollapsed();
     if (persisted.size === 0) {
@@ -114,6 +117,7 @@ export default function Sidebar() {
     const syncPrefs = () => {
       setDesktopPrefs(readNavPreferences());
       setHasCustomNav(hasSavedNavPreferences());
+      setMeetingsUnlocked(isMeetingsUnlocked());
     };
     window.addEventListener(NAV_PREF_EVENT, syncPrefs);
     window.addEventListener("storage", syncPrefs);
@@ -146,6 +150,9 @@ export default function Sidebar() {
 
   const itemVisible = (item: NavItem): boolean => {
     if (item.id === "systemDefense" && !isAdmin) return false;
+    // 議事系統：會議管理者（meeting:*）與管理員一律可見；
+    // 一般使用者需掃描現場簽到連結解鎖後才顯示。
+    if (item.id === "meetings") return meetingsUnlocked || hasPrefix("meeting:");
     return filterNavItems([item], can, hasPrefix).length > 0;
   };
 
@@ -173,7 +180,7 @@ export default function Sidebar() {
       }).filter(Boolean) as NavEntry[];
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [desktopPrefs, hasCustomNav, hydrated, isLoggedIn, isAdmin, permissions],
+    [desktopPrefs, hasCustomNav, hydrated, isLoggedIn, isAdmin, permissions, meetingsUnlocked],
   );
 
   const initials = userName.charAt(0).toUpperCase();

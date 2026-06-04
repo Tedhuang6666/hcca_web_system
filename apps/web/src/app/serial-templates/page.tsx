@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { serialTemplatesApi, orgsApi, ApiError } from "@/lib/api";
 import type { OrgRead } from "@/lib/api";
 import type { SerialTemplateOut } from "@/lib/types";
+import { orgDisplayName } from "@/lib/orgs";
 import { usePermissions } from "@/hooks/usePermissions";
 
 type YearMode = "roc" | "ce";
@@ -196,7 +197,7 @@ export default function SerialTemplatesPage() {
                   border: `1px solid ${showFErr("org_id") ? "var(--danger)" : "var(--border)"}`,
                 }}>
                 <option value="">選擇組織…</option>
-                {orgs.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                {orgs.map(o => <option key={o.id} value={o.id}>{orgDisplayName(o, orgs)}</option>)}
               </select>
               {showFErr("org_id") && (
                 <p className="text-[10px] mt-1" style={{ color: "var(--danger)" }} role="alert">請選擇組織</p>
