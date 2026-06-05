@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { ApiError, petitionsApi } from "@/lib/api";
 import type { PetitionCaseOut } from "@/lib/types";
 import { PetitionStatusBadge } from "@/components/ui/StatusBadge";
+import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 
 function fmt(iso: string | null) {
   if (!iso) return "未設定";
@@ -70,7 +71,16 @@ export default function PetitionDetailPage() {
           <h1 className="text-xl font-semibold mt-1" style={{ color: "var(--text-primary)" }}>{item.title}</h1>
           <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>{item.current_org_name} · {item.type_name}</p>
         </div>
-        <PetitionStatusBadge status={item.status} />
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <GovernanceLinkPanel
+            entityType="petition"
+            entityId={item.id}
+            title={`${item.case_number} ${item.title}`}
+            href={`/petitions/${item.id}`}
+            compact
+          />
+          <PetitionStatusBadge status={item.status} />
+        </div>
       </div>
 
       <section className="card p-5 space-y-4">

@@ -124,6 +124,13 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
     <PermissionProvider can={can}>
       <ConfirmProvider>
       <div className="flex h-screen overflow-hidden" style={{ background: "var(--bg-base)" }}>
+        <a
+          href="#main-content"
+          className="fixed left-3 top-3 z-[200] -translate-y-20 rounded-md px-3 py-2 text-sm font-medium transition-transform focus:translate-y-0"
+          style={{ background: "var(--primary)", color: "#fff" }}
+        >
+          跳至主要內容
+        </a>
         {/* 行動版側邊欄遮罩 */}
         {sidebarOpen && (
           <div

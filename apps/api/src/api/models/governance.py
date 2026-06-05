@@ -111,7 +111,11 @@ class Matter(Base, TimestampMixin):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     title: Mapped[str] = mapped_column(String(240), nullable=False, index=True)
     matter_type: Mapped[str] = mapped_column(
-        String(40), nullable=False, default=MatterType.PROJECT, index=True
+        # 不另建單欄索引：複合索引 ix_matters_type_status 的前導欄已涵蓋 matter_type 查詢，
+        # 多掛 index=True 只會造成冗餘索引＋alembic autogenerate 漂移（ix_matters_matter_type）。
+        String(40),
+        nullable=False,
+        default=MatterType.PROJECT,
     )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     org_id: Mapped[uuid.UUID | None] = mapped_column(

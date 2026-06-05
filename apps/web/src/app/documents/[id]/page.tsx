@@ -16,6 +16,7 @@ import { usePersistedZoom } from "@/hooks/usePersistedZoom";
 import { useWS } from "@/hooks/useWS";
 import { apiUrl } from "@/lib/config";
 import { recordRecent } from "@/lib/recents";
+import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 
 function toROCDate(dateStr: string) {
   const d = new Date(dateStr);
@@ -387,6 +388,13 @@ export default function DocumentDetailPage() {
         </div>
 
         <div className="flex w-full flex-wrap justify-start gap-2 sm:w-auto sm:flex-shrink-0 sm:justify-end">
+          <GovernanceLinkPanel
+            entityType="document"
+            entityId={doc.id}
+            title={doc.serial_number ? `${doc.serial_number} ${doc.title}` : doc.title}
+            href={`/documents/${doc.id}`}
+            compact
+          />
           {/* 縮放控制 */}
           <div className="flex items-center gap-0.5 rounded-lg overflow-hidden"
             style={{ border: "1px solid rgba(148,163,184,0.2)" }}>

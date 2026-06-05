@@ -10,6 +10,7 @@ import { recordRecent } from "@/lib/recents";
 import AnnouncementMarkdown from "@/components/announcements/AnnouncementMarkdown";
 import { usePermissions } from "@/hooks/usePermissions";
 import { API_BASE } from "@/lib/config";
+import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 
 const AUDIENCE_LABEL: Record<string, string> = {
   all: "全體",
@@ -60,11 +61,20 @@ export default function AnnouncementDetailPageClient({
     <article className="mx-auto max-w-3xl space-y-5">
       <div className="flex items-center justify-between gap-3">
         <Link href="/announcements" className="btn btn-ghost">返回公告檢視</Link>
-        {canManage && (
-          <Link href={`/announcements/${item.id}/edit`} className="btn btn-secondary">
-            編輯公告
-          </Link>
-        )}
+        <div className="flex flex-wrap justify-end gap-2">
+          <GovernanceLinkPanel
+            entityType="announcement"
+            entityId={item.id}
+            title={item.title}
+            href={`/announcements/${item.id}`}
+            compact
+          />
+          {canManage && (
+            <Link href={`/announcements/${item.id}/edit`} className="btn btn-secondary">
+              編輯公告
+            </Link>
+          )}
+        </div>
       </div>
 
       <header className="space-y-3">

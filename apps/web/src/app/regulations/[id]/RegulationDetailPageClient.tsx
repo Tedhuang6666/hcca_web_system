@@ -44,6 +44,7 @@ import { ApiError, documentsApi, regulationsApi, regulationHref } from "@/lib/ap
 import { apiUrl } from "@/lib/config";
 import { formatGeneratedHistoryRows, splitLegislativeHistory } from "@/lib/regulationHistory";
 import { recordRecent } from "@/lib/recents";
+import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 import {
   LINKABLE_ARTICLE_TYPES,
   decodeRouteSegment,
@@ -574,6 +575,13 @@ export default function RegulationDetailPageClient() {
 
               {/* 工具列 */}
               <div className="no-print flex w-full flex-wrap items-center justify-start gap-2 lg:w-auto lg:flex-shrink-0 lg:justify-end">
+                <GovernanceLinkPanel
+                  entityType="regulation"
+                  entityId={reg.id}
+                  title={reg.title}
+                  href={currentRegHref}
+                  compact
+                />
                 {/* 縮放 */}
                 <div className="flex items-center gap-1 rounded-lg overflow-hidden"
                   style={{ border: "1px solid var(--border)" }}>

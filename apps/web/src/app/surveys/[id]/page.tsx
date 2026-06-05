@@ -27,6 +27,7 @@ import { uploadUrl } from "@/lib/config";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import { recordRecent } from "@/lib/recents";
+import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 
 const DISPLAY_TYPES = new Set(["section_text", "page_break", "image", "video"]);
 
@@ -980,6 +981,13 @@ export default function SurveyDetailPage() {
         </div>
         {/* 操作列 */}
         <div className="flex gap-2 flex-wrap sm:flex-shrink-0">
+          <GovernanceLinkPanel
+            entityType="survey"
+            entityId={survey.id}
+            title={survey.title}
+            href={`/surveys/${survey.id}`}
+            compact
+          />
           <button
             onClick={() => setShareOpen(true)}
             className="btn btn-ghost text-xs"

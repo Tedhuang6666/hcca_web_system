@@ -3,13 +3,36 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Command } from "cmdk";
-import { Clock, FileText, Gavel, Megaphone, Search, Settings, Users } from "lucide-react";
+import {
+  CalendarDays,
+  CheckSquare,
+  Clock,
+  FilePlus2,
+  FileText,
+  FolderKanban,
+  Gavel,
+  Megaphone,
+  Search,
+  Settings,
+  Users,
+} from "lucide-react";
 import { searchApi } from "@/lib/api";
 import type { SearchResultOut } from "@/lib/types";
 import { isMeetingsUnlocked } from "@/lib/navigation";
 import { useRecentItems } from "@/hooks/useRecentItems";
 
-const STATIC_ACTIONS = [
+type CommandAction = {
+  label: string;
+  href: string;
+  icon: typeof Search;
+  keywords?: string;
+};
+
+const STATIC_ACTIONS: CommandAction[] = [
+  { label: "治理中樞", href: "/governance", icon: FolderKanban, keywords: "事情 matter 專案 案件" },
+  { label: "建立事情", href: "/governance#quick-create", icon: FilePlus2, keywords: "新增 matter 專案 活動" },
+  { label: "我的待辦", href: "/tasks", icon: CheckSquare, keywords: "任務 工作 task" },
+  { label: "行政行事曆", href: "/calendar", icon: CalendarDays, keywords: "日期 期限 日程" },
   { label: "公文列表", href: "/documents", icon: FileText },
   { label: "法規資料庫", href: "/regulations", icon: Gavel },
   { label: "公告中心", href: "/announcements", icon: Megaphone },
@@ -18,8 +41,10 @@ const STATIC_ACTIONS = [
   { label: "安全設定", href: "/settings/security", icon: Settings },
 ];
 
+export const OPEN_COMMAND_MENU_EVENT = "hcca:open-command-menu";
+
 // 議事系統：與側邊欄一致，僅會議管理者/管理員或已掃描簽到連結解鎖者可見。
-const MEETINGS_ACTION = { label: "會議系統", href: "/meetings", icon: Users };
+const MEETINGS_ACTION: CommandAction = { label: "會議系統", href: "/meetings", icon: Users };
 
 function canSeeMeetings(): boolean {
   if (typeof window === "undefined") return false;
@@ -65,8 +90,13 @@ export default function CommandMenu() {
         setOpen((value) => !value);
       }
     };
+    const openMenu = () => setOpen(true);
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener(OPEN_COMMAND_MENU_EVENT, openMenu);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener(OPEN_COMMAND_MENU_EVENT, openMenu);
+    };
   }, []);
 
   useEffect(() => {
@@ -86,7 +116,11 @@ export default function CommandMenu() {
       : STATIC_ACTIONS;
     const q = query.trim().toLowerCase();
     if (!q) return actions;
-    return actions.filter((item) => item.label.toLowerCase().includes(q));
+    return actions.filter(
+      (item) =>
+        item.label.toLowerCase().includes(q) ||
+        item.keywords?.toLowerCase().includes(q),
+    );
   }, [query, meetingsVisible]);
 
   const go = (href: string) => {
@@ -121,7 +155,7 @@ export default function CommandMenu() {
             autoFocus
             value={query}
             onValueChange={setQuery}
-            placeholder="搜尋公文、法規、會議、公告或功能"
+            placeholder="搜尋事情、公文、法規、會議或直接執行操作"
             className="h-12 flex-1 bg-transparent text-sm outline-none"
             style={{ color: "var(--text-primary)" }}
           />
@@ -156,7 +190,7 @@ export default function CommandMenu() {
           )}
 
           {filteredActions.length > 0 && (
-            <Command.Group heading="功能">
+            <Command.Group heading="快速前往">
               {filteredActions.map((item) => {
                 const Icon = item.icon;
                 return (

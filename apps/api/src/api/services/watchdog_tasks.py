@@ -13,14 +13,37 @@ from __future__ import annotations
 import asyncio
 import logging
 import shutil
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.celery_app import celery_app
 from api.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def _task_session() -> AsyncIterator[AsyncSession]:
+    """每次 asyncio.run() 以新 loop 專屬 engine 開 session 並 dispose。
+
+    watchdog 由 Celery worker 同步 task 內的 asyncio.run() 驅動，每次都是新的
+    event loop。若沿用模組層級共享的 AsyncSessionLocal，其 pooled asyncpg 連線會
+    綁定到上一個（已關閉的）loop，再次使用時拋 "Event loop is closed" /
+    "got Future attached to a different loop"。故每次開新 engine 並用後即 dispose。
+    """
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    engine = create_async_engine(str(settings.DATABASE_URL), echo=False)
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            yield session
+    finally:
+        await engine.dispose()
 
 # 門檻
 _DISK_WARN_PCT = 80.0
@@ -84,53 +107,13 @@ async def _set_flag(key: str, fired: bool) -> None:
         logger.debug("set flag failed key=%s", key, exc_info=True)
 
 
-def _emit_alert_sync(*, title: str, body: str) -> None:
-    """同步 helper：寫 outbox event → Discord 告警頻道。"""
-    if not settings.MODULE_ALERT_DISCORD_CHANNEL_ID:
-        return
-
-    async def _go() -> None:
-        from api.core.database import AsyncSessionLocal
-        from api.services import outbox
-
-        async with AsyncSessionLocal() as session:
-            try:
-                await outbox.emit(
-                    session,
-                    event_type="discord.channel_alert",
-                    payload={
-                        "channel_id": settings.MODULE_ALERT_DISCORD_CHANNEL_ID,
-                        "title": title,
-                        "body": body,
-                    },
-                )
-                await session.commit()
-            except Exception:
-                logger.exception("emit watchdog alert failed")
-                await session.rollback()
-
-    try:
-        # 已在外層 asyncio.run 中，直接 await 而非再 run
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            asyncio.create_task(_go())
-        else:
-            asyncio.run(_go())
-    except RuntimeError:
-        # 沒有 running loop，建一個
-        asyncio.run(_go())
-    except Exception:
-        logger.exception("watchdog alert wrapper failed")
-
-
 async def _emit_alert(title: str, body: str) -> None:
     """async 版本：已在 _run 內，可直接 await。"""
     if not settings.MODULE_ALERT_DISCORD_CHANNEL_ID:
         return
-    from api.core.database import AsyncSessionLocal
     from api.services import outbox
 
-    async with AsyncSessionLocal() as session:
+    async with _task_session() as session:
         try:
             await outbox.emit(
                 session,
@@ -253,11 +236,10 @@ async def _check_outbox_dead() -> dict[str, Any]:
     """outbox dead letter 累積過多 → 告警。"""
     from sqlalchemy import func, select
 
-    from api.core.database import AsyncSessionLocal
     from api.models.outbox import OutboxEvent, OutboxStatus
 
     try:
-        async with AsyncSessionLocal() as session:
+        async with _task_session() as session:
             count = int(
                 (
                     await session.execute(

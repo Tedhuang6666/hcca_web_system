@@ -20,6 +20,7 @@ import {
 import { meetingsApi } from "@/lib/api";
 import type { MeetingMinutesOut, MeetingOut } from "@/lib/types";
 import { recordRecent } from "@/lib/recents";
+import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 
 const WORKFLOW_LABEL: Record<string, string> = {
   draft: "草稿",
@@ -161,6 +162,13 @@ export default function MeetingDetailPageClient({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <GovernanceLinkPanel
+            entityType="meeting"
+            entityId={meeting.id}
+            title={meeting.title}
+            href={`/meetings/${meeting.id}`}
+            compact
+          />
           {isDraft && (
             <Link
               href={`/meetings/${meeting.id}/edit`}

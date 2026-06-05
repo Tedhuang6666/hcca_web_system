@@ -14,6 +14,8 @@ import { useLowDataMode } from "@/hooks/useLowDataMode";
 import { useInboxCounts } from "@/hooks/useInboxCounts";
 import { getBreadcrumbs, getCompactCrumbs, getPageTitle } from "@/lib/breadcrumb";
 import type { Crumb } from "@/lib/breadcrumb";
+import GovernanceSwitcher from "./GovernanceSwitcher";
+import { OPEN_COMMAND_MENU_EVENT } from "./CommandMenu";
 
 interface TopbarProps {
   onMenuClick?: () => void;
@@ -236,15 +238,29 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
 
       {/* 右側：搜尋 + 通知 + 主題 + 使用者 */}
       <div className="flex items-center gap-1.5">
+        {isLoggedIn && <GovernanceSwitcher />}
         {isLoggedIn && (
-          <Link
-            href="/search"
-            className="topbar-icon-btn"
-            aria-label="全域搜尋"
-            title="全域搜尋"
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event(OPEN_COMMAND_MENU_EVENT))}
+            className="flex h-9 items-center gap-2 rounded-md px-2.5 transition-colors"
+            style={{
+              background: "var(--bg-hover)",
+              color: "var(--text-secondary)",
+              border: "1px solid var(--border)",
+            }}
+            aria-label="搜尋或執行操作"
+            title="搜尋或執行操作（Ctrl K）"
           >
             <Search size={15} aria-hidden={true} />
-          </Link>
+            <span className="hidden xl:inline text-xs">搜尋或操作</span>
+            <kbd
+              className="hidden 2xl:inline rounded px-1.5 py-0.5 text-[10px]"
+              style={{ background: "var(--bg-surface)", color: "var(--text-muted)", border: "1px solid var(--border)" }}
+            >
+              Ctrl K
+            </kbd>
+          </button>
         )}
         {isLoggedIn && (
         <div className="relative" ref={bellRef}>

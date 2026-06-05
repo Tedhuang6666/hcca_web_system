@@ -1,7 +1,7 @@
 """公文自動催辦 Celery 任務。Phase C1。
 
 每日 08:00 跑：
-  1. 找出 status IN (submitted, in_approval) 且 due_date < now 的公文
+  1. 找出 status = pending（待審核 / 簽核中）且 due_date < now 的公文
   2. 依 reminder_count 採不同行動：
         0 → 寄信給目前簽核人 + 站內通知
         1 → 加 cc 直屬主管
@@ -65,14 +65,7 @@ async def _process_overdue_async() -> dict:
         # 找待簽且過期的公文
         doc_stmt = (
             select(Document)
-            .where(
-                Document.status.in_(
-                    [
-                        DocumentStatus.SUBMITTED.value,
-                        DocumentStatus.IN_APPROVAL.value,
-                    ]
-                )
-            )
+            .where(Document.status == DocumentStatus.PENDING.value)
             .where(Document.due_date.is_not(None))
             .where(Document.due_date < now)
             .order_by(Document.due_date)
