@@ -199,6 +199,7 @@ export const NAV_ITEMS_BY_ID: Record<string, NavItem> = Object.fromEntries(
 
 export const NAV_DEF: NavEntry[] = [
   NAV_ITEMS[0],
+  NAV_ITEMS[2],
   NAV_ITEMS[1],
   {
     id: "news",
@@ -209,7 +210,6 @@ export const NAV_DEF: NavEntry[] = [
     id: "governance",
     heading: "自治核心",
     items: byIds([
-      "governanceHub",
       "documents",
       "calendar",
       "meetings",

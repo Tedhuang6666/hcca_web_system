@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import {
   CheckSquare,
   Clock,
+  FileText,
   ExternalLink,
   FilePlus2,
   FolderKanban,
@@ -47,6 +48,19 @@ const STATUS_LABEL: Record<string, string> = {
   completed: "完成",
   archived: "歸檔",
   canceled: "取消",
+};
+
+const MODULE_LABEL: Record<string, string> = {
+  document: "公文",
+  announcement: "公告",
+  meeting: "會議",
+  vote: "投票",
+  survey: "問卷",
+  event: "活動",
+  ticket: "售票",
+  regulation: "法規",
+  petition: "陳情",
+  external: "外部資源",
 };
 
 function formatDate(value?: string | null) {
@@ -106,6 +120,10 @@ export default function GovernanceMatterPage() {
 
   const openTasks = useMemo(() => tasks.filter((task) => task.status === "open"), [tasks]);
   const completedTasks = useMemo(() => tasks.filter((task) => task.status === "done"), [tasks]);
+  const linkedModules = useMemo(() => {
+    const linked = new Set(matter?.links.map((link) => link.target_type) ?? []);
+    return Object.entries(MODULE_LABEL).map(([key, label]) => ({ key, label, linked: linked.has(key) }));
+  }, [matter]);
 
   const addCase = (event: FormEvent) => {
     event.preventDefault();
@@ -415,6 +433,70 @@ export default function GovernanceMatterPage() {
         </div>
       </header>
 
+      <section className="grid gap-3 lg:grid-cols-[1fr_360px]">
+        <div className="rounded-lg p-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 className="flex items-center gap-2 text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+              <Workflow size={17} aria-hidden={true} style={{ color: "var(--primary)" }} />
+              行政生命週期
+            </h2>
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+              {matter.progress_percent}% 完成
+            </span>
+          </div>
+          <LifecycleRail matter={matter} openTasks={openTasks.length} automationRules={automationRules.length} />
+        </div>
+
+        <div className="rounded-lg p-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+          <h2 className="mb-3 flex items-center gap-2 text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+            <FileText size={17} aria-hidden={true} style={{ color: "var(--primary)" }} />
+            模組覆蓋
+          </h2>
+          <div className="grid grid-cols-2 gap-2">
+            {linkedModules.map((module) => (
+              <div
+                key={module.key}
+                className="rounded-md px-3 py-2 text-xs"
+                style={{
+                  background: module.linked ? "var(--primary-dim)" : "var(--bg-hover)",
+                  color: module.linked ? "var(--primary)" : "var(--text-muted)",
+                  border: `1px solid ${module.linked ? "var(--info-border)" : "var(--border)"}`,
+                }}
+              >
+                {module.label}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <nav className="flex gap-2 overflow-x-auto pb-1" aria-label="事情頁快速導覽">
+        {[
+          ["#cases", "案件看板"],
+          ["#links", "關聯資源"],
+          ["#decisions", "決議追蹤"],
+          ["#plans", "企劃版本"],
+          ["#tasks", "任務"],
+          ["#timeline", "時間軸"],
+          ["#roles", "組織"],
+          ["#automation", "自動化"],
+        ].map(([href, label]) => (
+          <a
+            key={href}
+            href={href}
+            className="flex-shrink-0 rounded-md px-3 py-2 text-xs font-medium"
+            style={{
+              background: "var(--bg-surface)",
+              color: "var(--text-secondary)",
+              border: "1px solid var(--border)",
+              textDecoration: "none",
+            }}
+          >
+            {label}
+          </a>
+        ))}
+      </nav>
+
       <section className="grid gap-3 lg:grid-cols-4" aria-label="快速新增">
         <QuickForm icon={FilePlus2} title="新增案件" onSubmit={addCase}>
           <input value={caseTitle} onChange={(event) => setCaseTitle(event.target.value)} className="input w-full" placeholder="案件標題" />
@@ -434,7 +516,7 @@ export default function GovernanceMatterPage() {
 
       <section className="grid gap-5 xl:grid-cols-[1.5fr_1fr]">
         <div className="space-y-5">
-          <Panel icon={FolderKanban} title="案件看板">
+          <Panel id="cases" icon={FolderKanban} title="案件看板">
             <div className="grid gap-3 md:grid-cols-4">
               {CASE_COLUMNS.map((column) => {
                 const rows = matter.cases.filter((item) => item.status === column.key);
@@ -456,14 +538,14 @@ export default function GovernanceMatterPage() {
             </div>
           </Panel>
 
-          <Panel icon={GitBranch} title="關聯資源">
+          <Panel id="links" icon={GitBranch} title="關聯資源">
             <div className="grid gap-2 md:grid-cols-2">
               {matter.links.map((link) => <RelationCard key={link.id} link={link} />)}
               {matter.links.length === 0 && <EmptyInline label="尚未建立關聯資源" />}
             </div>
           </Panel>
 
-          <Panel icon={ScrollText} title="決議追蹤">
+          <Panel id="decisions" icon={ScrollText} title="決議追蹤">
             <form onSubmit={addDecision} className="mb-3 grid gap-2 md:grid-cols-[1fr_1.4fr_auto]">
               <input value={decisionTitle} onChange={(event) => setDecisionTitle(event.target.value)} className="input" placeholder="決議標題" />
               <input value={decisionContent} onChange={(event) => setDecisionContent(event.target.value)} className="input" placeholder="決議內容" />
@@ -483,7 +565,7 @@ export default function GovernanceMatterPage() {
             </div>
           </Panel>
 
-          <Panel icon={FilePlus2} title="企劃書與版本">
+          <Panel id="plans" icon={FilePlus2} title="企劃書與版本">
             <form onSubmit={addPlanningDocument} className="mb-3 grid gap-2 md:grid-cols-[1fr_1.4fr_auto]">
               <input value={planTitle} onChange={(event) => setPlanTitle(event.target.value)} className="input" placeholder="企劃書名稱" />
               <input value={planContent} onChange={(event) => setPlanContent(event.target.value)} className="input" placeholder="草稿內容摘要" />
@@ -505,7 +587,7 @@ export default function GovernanceMatterPage() {
         </div>
 
         <div className="space-y-5">
-          <Panel icon={CheckSquare} title="任務">
+          <Panel id="tasks" icon={CheckSquare} title="任務">
             <div className="space-y-2">
               {openTasks.map((task) => <TaskRow key={task.id} task={task} />)}
               {openTasks.length === 0 && <EmptyInline label="沒有開放任務" />}
@@ -518,7 +600,7 @@ export default function GovernanceMatterPage() {
             </div>
           </Panel>
 
-          <Panel icon={Clock} title="行政時間軸">
+          <Panel id="timeline" icon={Clock} title="行政時間軸">
             <div className="space-y-3">
               {[...matter.events]
                 .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
@@ -527,7 +609,7 @@ export default function GovernanceMatterPage() {
             </div>
           </Panel>
 
-          <Panel icon={UserRoundCog} title="人員與組織架構">
+          <Panel id="roles" icon={UserRoundCog} title="人員與組織架構">
             <form onSubmit={addRoleAssignment} className="mb-3 grid gap-2">
               <input value={roleName} onChange={(event) => setRoleName(event.target.value)} className="input" placeholder="職務，例如：總召、場務組長" />
               <input value={unitName} onChange={(event) => setUnitName(event.target.value)} className="input" placeholder="組別，可留空" />
@@ -546,7 +628,7 @@ export default function GovernanceMatterPage() {
             </div>
           </Panel>
 
-          <Panel icon={Workflow} title="流程模板">
+          <Panel id="workflow" icon={Workflow} title="流程模板">
             <form onSubmit={addWorkflowTemplate} className="mb-3 grid gap-2">
               <input value={templateName} onChange={(event) => setTemplateName(event.target.value)} className="input" placeholder="模板名稱，例如：活動流程" />
               <button type="submit" className="btn btn-secondary"><Plus size={13} aria-hidden={true} />新增模板</button>
@@ -562,7 +644,7 @@ export default function GovernanceMatterPage() {
             </div>
           </Panel>
 
-          <Panel icon={Zap} title="自動化規則">
+          <Panel id="automation" icon={Zap} title="自動化規則">
             <form onSubmit={addAutomationRule} className="mb-3 grid gap-2">
               <input value={automationName} onChange={(event) => setAutomationName(event.target.value)} className="input" placeholder="規則名稱，例如：活動結束後建立問卷" />
               <button type="submit" className="btn btn-secondary"><Plus size={13} aria-hidden={true} />新增規則</button>
@@ -588,6 +670,58 @@ function TopStat({ label, value }: { label: string; value: string }) {
     <div className="rounded-lg px-3 py-2" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
       <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>{label}</p>
       <p className="mt-1 truncate text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{value}</p>
+    </div>
+  );
+}
+
+function LifecycleRail({
+  matter,
+  openTasks,
+  automationRules,
+}: {
+  matter: MatterOut;
+  openTasks: number;
+  automationRules: number;
+}) {
+  const steps = [
+    { label: "提出", done: true, detail: "Matter 已建立" },
+    { label: "拆案", done: matter.cases.length > 0, detail: `${matter.cases.length} 案件` },
+    { label: "審議", done: matter.decisions.length > 0 || matter.planning_documents.length > 0, detail: `${matter.decisions.length} 決議` },
+    { label: "執行", done: openTasks > 0 || matter.progress_percent > 0, detail: `${openTasks} 開放任務` },
+    { label: "整合", done: matter.links.length > 0, detail: `${matter.links.length} 關聯` },
+    { label: "自動化", done: automationRules > 0, detail: `${automationRules} 規則` },
+    { label: "歸檔", done: matter.status === "completed" || matter.status === "archived", detail: STATUS_LABEL[matter.status] ?? matter.status },
+  ];
+
+  return (
+    <div className="grid gap-2 md:grid-cols-7">
+      {steps.map((step, index) => (
+        <div
+          key={step.label}
+          className="relative rounded-md p-3"
+          style={{
+            background: step.done ? "var(--primary-dim)" : "var(--bg-hover)",
+            border: `1px solid ${step.done ? "var(--info-border)" : "var(--border)"}`,
+          }}
+        >
+          <div
+            className="mb-2 flex h-7 w-7 items-center justify-center rounded-md text-xs font-semibold"
+            style={{
+              background: step.done ? "var(--primary)" : "var(--bg-surface)",
+              color: step.done ? "white" : "var(--text-muted)",
+              border: `1px solid ${step.done ? "var(--primary)" : "var(--border)"}`,
+            }}
+          >
+            {index + 1}
+          </div>
+          <p className="text-sm font-semibold" style={{ color: step.done ? "var(--primary)" : "var(--text-primary)" }}>
+            {step.label}
+          </p>
+          <p className="mt-1 truncate text-[11px]" style={{ color: "var(--text-muted)" }}>
+            {step.detail}
+          </p>
+        </div>
+      ))}
     </div>
   );
 }
@@ -619,16 +753,18 @@ function QuickForm({
 }
 
 function Panel({
+  id,
   icon: Icon,
   title,
   children,
 }: {
+  id?: string;
   icon: React.ComponentType<{ size: number; "aria-hidden": boolean; style?: CSSProperties }>;
   title: string;
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-lg p-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+    <section id={id} className="scroll-mt-24 rounded-lg p-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
       <h2 className="mb-3 flex items-center gap-2 text-base font-semibold" style={{ color: "var(--text-primary)" }}>
         <Icon size={17} aria-hidden={true} style={{ color: "var(--primary)" }} />
         {title}

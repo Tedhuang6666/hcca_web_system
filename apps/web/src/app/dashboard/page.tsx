@@ -5,13 +5,20 @@ import { toast } from "sonner";
 import {
   FileText, ListChecks, Landmark, Scale, Megaphone, MessageSquare,
   CheckSquare, ChevronRight, Plus, Loader2, Sparkles, Clock,
+  FolderKanban, GitBranch, ScrollText, Workflow,
 } from "lucide-react";
-import { dashboardApi, type DashboardResponse, type DashboardWidget } from "@/lib/api";
+import {
+  dashboardApi,
+  governanceApi,
+  type DashboardResponse,
+  type DashboardWidget,
+} from "@/lib/api";
+import type { GovernanceDashboardOut } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useRecentItems } from "@/hooks/useRecentItems";
 import OnboardingHint from "@/components/ui/OnboardingHint";
 
-type IconProps = { size: number; "aria-hidden": boolean };
+type IconProps = { size: number; "aria-hidden": boolean; style?: React.CSSProperties };
 function FallbackWidgetIcon(p: IconProps) { return <FileText {...p} />; }
 
 const WIDGET_ICONS: Record<string, React.ComponentType<IconProps>> = {
@@ -217,6 +224,7 @@ export default function DashboardPage() {
   const [userName, setUserName] = useState("");
   const [greeting, setGreeting] = useState("歡迎回來");
   const [data, setData] = useState<DashboardResponse | null>(null);
+  const [governance, setGovernance] = useState<GovernanceDashboardOut | null>(null);
   const [loading, setLoading] = useState(true);
   const { can } = usePermissions();
   const recents = useRecentItems(6);
@@ -240,6 +248,11 @@ export default function DashboardPage() {
         console.error(e);
       })
       .finally(() => setLoading(false));
+    governanceApi.dashboard()
+      .then((res) => setGovernance(res))
+      .catch((e) => {
+        console.error(e);
+      });
   }, []);
 
   const widgets = data?.widgets ?? [];
@@ -289,6 +302,8 @@ export default function DashboardPage() {
         )}
       </div>
 
+      <GovernanceHubPanel data={governance} />
+
       {/* 最近開啟：個人化捷徑，少翻選單 */}
       {recents.length > 0 && (
         <div className="flex items-center gap-2 overflow-x-auto pb-1 -mb-1">
@@ -336,6 +351,131 @@ export default function DashboardPage() {
           載入儀表板…
         </p>
       )}
+    </div>
+  );
+}
+
+function GovernanceHubPanel({ data }: { data: GovernanceDashboardOut | null }) {
+  const stats = data?.stats;
+  const matters = data?.matters ?? [];
+  return (
+    <section
+      className="rounded-lg overflow-hidden"
+      style={{
+        background: "var(--bg-surface)",
+        border: "1px solid var(--border)",
+        boxShadow: "var(--shadow-sm)",
+      }}
+      aria-labelledby="governance-hub-title"
+    >
+      <div
+        className="grid gap-0 lg:grid-cols-[1.2fr_1fr]"
+        style={{ borderBottom: "1px solid var(--border)" }}
+      >
+        <div className="p-5">
+          <div className="flex items-center gap-2">
+            <div
+              className="flex h-9 w-9 items-center justify-center rounded-lg"
+              style={{
+                background: "var(--primary-dim)",
+                color: "var(--primary)",
+                border: "1px solid var(--info-border)",
+              }}
+              aria-hidden="true"
+            >
+              <FolderKanban size={17} aria-hidden={true} />
+            </div>
+            <div>
+              <h2 id="governance-hub-title" className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+                治理中樞 2.0
+              </h2>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                從事情進入，追蹤案件、決議、企劃書、任務與歸檔脈絡
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <GovernanceMetric icon={FolderKanban} label="進行中事情" value={stats?.active_matters ?? 0} />
+            <GovernanceMetric icon={GitBranch} label="開放案件" value={stats?.open_cases ?? 0} />
+            <GovernanceMetric icon={ScrollText} label="待執行決議" value={stats?.pending_decisions ?? 0} />
+            <GovernanceMetric icon={Workflow} label="送審企劃" value={stats?.plans_in_review ?? 0} />
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link href="/governance" className="btn btn-primary">
+              進入治理中樞
+              <ChevronRight size={13} aria-hidden={true} />
+            </Link>
+            <Link href="/governance" className="btn btn-secondary">
+              建立事情
+              <Plus size={13} aria-hidden={true} />
+            </Link>
+          </div>
+        </div>
+        <div className="p-5" style={{ background: "var(--bg-hover)" }}>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+              最近治理事項
+            </h3>
+            <Link href="/governance" className="text-xs font-medium" style={{ color: "var(--primary)", textDecoration: "none" }}>
+              全部
+            </Link>
+          </div>
+          <div className="space-y-2">
+            {matters.slice(0, 4).map((matter) => (
+              <Link
+                key={matter.id}
+                href={`/governance/${matter.id}`}
+                className="flex items-center justify-between gap-3 rounded-md px-3 py-2 transition-colors"
+                style={{
+                  background: "var(--bg-surface)",
+                  border: "1px solid var(--border)",
+                  textDecoration: "none",
+                }}
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+                    {matter.title}
+                  </span>
+                  <span className="mt-0.5 block truncate text-xs" style={{ color: "var(--text-muted)" }}>
+                    {matter.case_count} 案件 · {matter.open_task_count} 任務 · {matter.progress_percent}%
+                  </span>
+                </span>
+                <ChevronRight size={14} aria-hidden={true} style={{ color: "var(--text-disabled)" }} />
+              </Link>
+            ))}
+            {matters.length === 0 && (
+              <div
+                className="rounded-md px-3 py-6 text-center text-xs"
+                style={{ background: "var(--bg-surface)", color: "var(--text-muted)", border: "1px solid var(--border)" }}
+              >
+                尚未建立事情。從治理中樞建立第一個 Matter。
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function GovernanceMetric({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: React.ComponentType<IconProps>;
+  label: string;
+  value: number;
+}) {
+  return (
+    <div className="rounded-md p-3" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>{label}</span>
+        <Icon size={13} aria-hidden={true} style={{ color: "var(--primary)" }} />
+      </div>
+      <p className="mt-2 text-xl font-semibold leading-none" style={{ color: "var(--text-primary)" }}>
+        {value}
+      </p>
     </div>
   );
 }
