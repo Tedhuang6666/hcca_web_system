@@ -114,9 +114,7 @@ def _count_user_summary(
         .where(Meeting.starts_at >= since)
         .where(Meeting.starts_at < until)
         .where(
-            Meeting.status.in_(
-                [MeetingStatus.DRAFT, MeetingStatus.CONFIRMED, MeetingStatus.ACTIVE]
-            )
+            Meeting.status.in_([MeetingStatus.DRAFT, MeetingStatus.CONFIRMED, MeetingStatus.ACTIVE])
         )
     ).all()
     # TODO: 公文 / 學餐 / 問卷的個人化過濾留 Phase 2 dashboard 上線後串接 task_inbox。

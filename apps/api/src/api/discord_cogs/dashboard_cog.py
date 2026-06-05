@@ -69,9 +69,7 @@ async def _gather_dashboard(db, user: User) -> dict:
         .where(Meeting.starts_at >= now)
         .where(Meeting.starts_at <= horizon)
         .where(
-            Meeting.status.in_(
-                [MeetingStatus.DRAFT, MeetingStatus.CONFIRMED, MeetingStatus.ACTIVE]
-            )
+            Meeting.status.in_([MeetingStatus.DRAFT, MeetingStatus.CONFIRMED, MeetingStatus.ACTIVE])
         )
         .order_by(Meeting.starts_at)
         .limit(25)
