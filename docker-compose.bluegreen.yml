@@ -158,16 +158,11 @@ services:
       --concurrency=${CELERY_WORKER_CONCURRENCY:-4}
       --queues=celery,default,documents,email,meal,backup,recovery
       -n worker-blue@%h
+    # 不設 healthcheck：`inspect ping` 每 30s 起重量級 python 行程、等 broker 回覆，
+    # 忙時 ping 卡住會堆積吃光 CPU；且 Docker 判 unhealthy 自動重啟反而打掉忙碌 worker。
+    # 存活交給 restart: unless-stopped。
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "python -m celery -A api.core.celery_app.celery_app inspect ping -d worker-blue@$$HOSTNAME -t 5 >/dev/null",
-        ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+      disable: true
 
   celery-worker-green:
     <<: *worker-service
@@ -177,16 +172,9 @@ services:
       --concurrency=${CELERY_WORKER_CONCURRENCY:-4}
       --queues=celery,default,documents,email,meal,backup,recovery
       -n worker-green@%h
+    # 同 worker-blue：不設 healthcheck，避免 inspect ping 堆積與 unhealthy 自動重啟。
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "python -m celery -A api.core.celery_app.celery_app inspect ping -d worker-green@$$HOSTNAME -t 5 >/dev/null",
-        ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+      disable: true
 
   celery-beat:
     <<: *worker-service
@@ -210,12 +198,10 @@ services:
     volumes:
       - uploads:/app/uploads
       - celerybeat:/tmp
+    # beat 不設 healthcheck：pidfile 存在不代表排程仍在運作，且判 unhealthy 自動重啟
+    # 反而易與 PID 1 殘留 pidfile 互相作用觸發重啟迴圈。存活交給 restart: unless-stopped。
     healthcheck:
-      test: ["CMD-SHELL", "test -f /dev/shm/celerybeat.pid && kill -0 \"$$(cat /dev/shm/celerybeat.pid)\""]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
+      disable: true
 
   proxy:
     image: caddy:2-alpine

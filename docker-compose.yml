@@ -216,16 +216,11 @@ services:
       DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
       REDIS_URL: redis://redis:6379/0
+    # 不設 healthcheck：`inspect ping` 每 30s 起重量級 python 行程、等 broker 回覆，
+    # 忙時 ping 卡住會堆積吃光 CPU；且 Docker 判 unhealthy 自動重啟反而打掉忙碌 worker。
+    # 存活交給 restart: unless-stopped。
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "python -m celery -A api.core.celery_app.celery_app inspect ping -d core@$$HOSTNAME -t 5 >/dev/null",
-        ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+      disable: true
 
   # ── Celery Worker（email queue：信件 + 摘要） ─────────────────
   celery-worker-email:
@@ -248,16 +243,9 @@ services:
       DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
       REDIS_URL: redis://redis:6379/0
+    # 同 worker：不設 healthcheck，避免 inspect ping 堆積與 unhealthy 自動重啟。
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "python -m celery -A api.core.celery_app.celery_app inspect ping -d email@$$HOSTNAME -t 5 >/dev/null",
-        ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+      disable: true
 
   # ── Celery Worker（util queue：學餐 / 備份 / 模組恢復） ───────
   celery-worker-util:
@@ -280,16 +268,9 @@ services:
       DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
       REDIS_URL: redis://redis:6379/0
+    # 同 worker：不設 healthcheck，避免 inspect ping 堆積與 unhealthy 自動重啟。
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "python -m celery -A api.core.celery_app.celery_app inspect ping -d util@$$HOSTNAME -t 5 >/dev/null",
-        ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+      disable: true
 
   # ── Celery Beat（定時排程） ───────────────────────────────────
   celery-beat:
@@ -323,12 +304,10 @@ services:
       REDIS_URL: redis://redis:6379/0
     volumes:
       - celerybeat:/tmp  # 持久化 beat schedule 狀態
+    # beat 不設 healthcheck：pidfile 存在不代表排程仍在運作，且判 unhealthy 自動重啟
+    # 反而易與 PID 1 殘留 pidfile 互相作用觸發重啟迴圈。存活交給 restart: unless-stopped。
     healthcheck:
-      test: ["CMD-SHELL", "test -f /dev/shm/celerybeat.pid && kill -0 \"$$(cat /dev/shm/celerybeat.pid)\""]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
+      disable: true
 
   # ── Discord Bot Worker ───────────────────────────────────────
   discord-bot:

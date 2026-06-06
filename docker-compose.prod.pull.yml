@@ -143,16 +143,12 @@ services:
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
       REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
       DB_BACKUP_DIR: ${DB_BACKUP_DIR:-/app/backups}
-    # healthcheck 不用 `celery inspect ping`：它每次起新 Python、import 整個 app，
-    # 還要等 Redis broadcast 回覆（-t 5）。solo worker 忙時 ping 等不到回覆 →
-    # 卡住的 python 行程每 30s 疊一個，堆積把整台 CPU 吃光（還連帶拖慢 API）。
-    # 改成輕量 import 檢查：驗證 app/celery 設定能載入即可，立刻結束、不連 broker。
+    # 不設 healthcheck：先前用 `celery inspect ping` 會每 30s 起重量級 python 行程
+    # 堆積吃光 CPU；改成 `python -c 'import api.core.celery_app'` 雖輕量，但 import
+    # 整個 app 仍非零成本，且 Docker 一旦判 unhealthy 會自動重啟，反而把忙碌的 worker
+    # 打掉重練。worker 活著與否交由 restart: unless-stopped 與 mem_limit 守，不再 healthcheck。
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import api.core.celery_app'"]
-      interval: 60s
-      timeout: 15s
-      retries: 3
-      start_period: 60s
+      disable: true
 
   # 寄信專責 worker：只吃 email queue、concurrency=1，與背景任務隔離。
   # 獨立 "email" profile：需要寄信時才開
@@ -184,13 +180,9 @@ services:
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
       REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
       DB_BACKUP_DIR: ${DB_BACKUP_DIR:-/app/backups}
-    # 同 worker：避免 inspect ping 起重量級 python 行程堆積；改輕量 import 檢查。
+    # 同 worker：不設 healthcheck，避免 Docker 判 unhealthy 自動重啟把忙碌 worker 打掉。
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import api.core.celery_app'"]
-      interval: 60s
-      timeout: 15s
-      retries: 3
-      start_period: 60s
+      disable: true
 
   celery-beat:
     <<: *api-common
@@ -233,12 +225,10 @@ services:
     volumes:
       - uploads:/app/uploads
       - celerybeat:/tmp
+    # beat 不設 healthcheck：pidfile 存在不代表排程仍在運作，且判 unhealthy 自動重啟
+    # 反而易與 PID 1 殘留 pidfile 互相作用觸發重啟迴圈。存活交給 restart: unless-stopped。
     healthcheck:
-      test: ["CMD-SHELL", "test -f /dev/shm/celerybeat.pid || test -f /tmp/celerybeat.pid"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
+      disable: true
 
   web:
     image: ghcr.io/tedhuang6666/hcca_web_system-web:latest
