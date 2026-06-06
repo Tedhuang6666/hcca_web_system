@@ -217,6 +217,7 @@ function ComposeInner() {
   const [count, setCount] = useState<number | null>(null);
   const [sampleNames, setSampleNames] = useState<string[]>([]);
   const [previewHtml, setPreviewHtml] = useState("");
+  const [previewError, setPreviewError] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [savedTemplates, setSavedTemplates] = useState<SavedTemplate[]>([]);
@@ -526,13 +527,20 @@ function ComposeInner() {
   useEffect(() => {
     if (!subject.trim()) {
       setPreviewHtml("");
+      setPreviewError("");
       return;
     }
     const t = setTimeout(() => {
       emailApi
         .preview(buildPayload())
-        .then((r) => setPreviewHtml(r.html))
-        .catch(() => setPreviewHtml(""));
+        .then((r) => {
+          setPreviewHtml(r.html);
+          setPreviewError("");
+        })
+        .catch((error) => {
+          setPreviewHtml("");
+          setPreviewError(error instanceof ApiError ? error.message : "預覽產生失敗");
+        });
     }, 600);
     return () => clearTimeout(t);
   }, [subject, heading, bannerImageUrl, bannerImageAlt, body, cardRows, buttons, blocks, buildPayload]);
@@ -2007,7 +2015,7 @@ function ComposeInner() {
                 className="flex h-[520px] items-center justify-center text-sm"
                 style={{ color: "var(--text-muted)" }}
               >
-                填寫主旨後即可預覽
+                {previewError || "填寫主旨後即可預覽"}
               </div>
             )}
           </section>

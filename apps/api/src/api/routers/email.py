@@ -920,16 +920,6 @@ async def preview_email(body: EmailComposePayload, user: EmailUser) -> EmailPrev
     )
     preview_name = str(preview_row.name or "").strip() if preview_row else ""
     preview_email_address = str(preview_row.email or "").strip() if preview_row else ""
-    try:
-        validate_required_variables(
-            definitions,
-            custom,
-            recipient_label=preview_name or preview_email_address or user.display_name,
-        )
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
-        ) from exc
     personal = build_personalization_context(
         user_id=preview_row.user_id if preview_row else user.id,
         name=preview_name or user.display_name,

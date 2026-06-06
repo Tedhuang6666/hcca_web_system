@@ -197,7 +197,8 @@ export default function RegulationsPage() {
             <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
           <input type="search" value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="搜尋法規名稱…" className="input pl-11 w-full min-w-0" aria-label="搜尋法規" />
+            placeholder="搜尋法規名稱…" className="input w-full min-w-0"
+            style={{ paddingLeft: "2.75rem" }} aria-label="搜尋法規" />
         </div>
         <div className="flex w-full flex-wrap gap-1.5" role="group" aria-label="法規分類篩選">
           {CATEGORIES.map(({ key, label }) => {

@@ -129,3 +129,17 @@ async def get_current_active_user(
             detail="帳號已停用",
         )
     return current_user
+
+
+async def get_current_school_member(
+    current_user: User = Depends(get_current_active_user),
+) -> User:
+    """確保當前使用者具校內成員身分。"""
+    normalized = current_user.email.strip().lower()
+    domain = normalized.rsplit("@", maxsplit=1)[-1] if "@" in normalized else ""
+    if current_user.student_id or domain in settings.LOGIN_ALLOWED_EMAIL_DOMAINS:
+        return current_user
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="僅限校內成員使用",
+    )

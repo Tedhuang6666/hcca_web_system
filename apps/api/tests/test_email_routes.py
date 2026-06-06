@@ -279,6 +279,37 @@ async def test_compose_preview_can_switch_to_specific_recipient(
 
 
 @pytest.mark.asyncio
+async def test_compose_preview_allows_incomplete_rows_and_applies_branding(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    sender = await _seed_user(db_session, "branding-preview@school.edu", ["email:send"])
+    _override_user(sender)
+
+    response = await client.post(
+        "/email/preview",
+        json={
+            "subject": "錄取通知",
+            "body": "錄取部門：{{ 錄取部門 }}",
+            "preview_text": "竹嶺班聯40屆幹部正式錄取名單",
+            "accent_color": "#2563eb",
+            "background_color": "#f1f5f9",
+            "content_background_color": "#ffffff",
+            "footer_text": "資訊部 敬上",
+            "variable_definitions": [
+                {"key": "錄取部門", "label": "錄取部門", "required": True}
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    html = response.json()["html"]
+    assert "竹嶺班聯40屆幹部正式錄取名單" in html
+    assert "color:#2563eb" in html
+    assert "background-color:#f1f5f9" in html
+    assert "資訊部 敬上" in html
+
+
+@pytest.mark.asyncio
 async def test_resolve_recipients_include_school_filters_by_domain(
     db_session: AsyncSession,
 ) -> None:

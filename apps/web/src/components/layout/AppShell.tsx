@@ -67,7 +67,6 @@ function requiresAuth(pathname: string): boolean {
   if (pathname === "/petitions") return false;
   if (pathname === "/petitions/new") return false;
   if (pathname === "/council-proposals") return false;
-  if (pathname === "/judicial-petitions") return false;
   if (pathname === "/partner-map") return false;
   return true;
 }

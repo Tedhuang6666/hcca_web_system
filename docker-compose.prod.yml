@@ -86,9 +86,13 @@ services:
       timeout: 5s
       retries: 5
 
+  # migrate 改放 "migrate" profile：預設 up 不會啟動，避免每次重啟 worker/api 或
+  # autoheal 拉起容器時都重跑一次 migration。部署有新 schema 時手動跑一次：
+  #   docker compose --env-file .env.production -f docker-compose.prod.yml --profile migrate run --rm migrate
   migrate:
     <<: *api-common
     restart: "no"
+    profiles: ["migrate"]
     command: python -m alembic -c /app/alembic.ini upgrade head
 
   api:
@@ -116,9 +120,6 @@ services:
       GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
       GUNICORN_KEEPALIVE: ${GUNICORN_KEEPALIVE:-5}
       GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-60}
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
     healthcheck:
       test:
         [
@@ -144,12 +145,17 @@ services:
     cpus: ${CELERY_WORKER_CPUS:-1.5}
     labels:
       autoheal: "true"
+    # worker pool 用 solo：prefork(billiard) 在此環境會多行程失控吃滿 CPU
+    # （concurrency=1 仍飆到 600%+）。solo 在主行程內單工執行，正式站小流量最穩。
+    # 注意：solo 無子行程，故不用 --max-tasks-per-child（prefork 專屬，solo 會忽略）；
+    # 記憶體改由上方 mem_limit 守。prefetch=1 避免一次抓多筆訊息卡在主迴圈。
     command: >
       python -m celery -A api.core.celery_app.celery_app worker
       --loglevel=info
+      --pool=solo
       --concurrency=${CELERY_WORKER_CONCURRENCY:-1}
-      --max-tasks-per-child=${CELERY_MAX_TASKS_PER_CHILD:-200}
-      --queues=default,meal,documents,backup,recovery,celery
+      --prefetch-multiplier=1
+      --queues=default,email,meal,documents,backup,recovery
     environment:
       ENVIRONMENT: production
       DEBUG: "false"
@@ -164,9 +170,6 @@ services:
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
       REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
       DB_BACKUP_DIR: ${DB_BACKUP_DIR:-/app/backups}
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
     healthcheck:
       test:
         [
@@ -175,8 +178,10 @@ services:
         ]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 30s
+      # solo pool 跑長任務（backup/recovery）時主迴圈被佔住、無法回應 ping，
+      # 放寬 retries/start_period 避免備份途中被 autoheal 誤殺重啟。
+      retries: 6
+      start_period: 60s
 
   # 寄信專責 worker：只吃 email queue、concurrency=1，與背景任務隔離。
   # 獨立 "email" profile：需要寄信時才開（建議常駐）
@@ -211,9 +216,6 @@ services:
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
       REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
       DB_BACKUP_DIR: ${DB_BACKUP_DIR:-/app/backups}
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
     healthcheck:
       test:
         [
@@ -266,9 +268,6 @@ services:
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
       REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
       DB_BACKUP_DIR: ${DB_BACKUP_DIR:-/app/backups}
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
     volumes:
       - uploads:/app/uploads
       - celerybeat:/tmp

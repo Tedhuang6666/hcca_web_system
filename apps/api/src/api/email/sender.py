@@ -127,9 +127,18 @@ def render_generic_message(
         "generic",
         {
             "subject": rendered_subject,
-            "preview_text": (rendered_heading or rendered_subject)[:80],
+            "preview_text": _text(
+                str(context.get("preview_text") or rendered_heading or rendered_subject)
+            )[:200],
             "body_html": sanitize_html(html_body),
             "heading": rendered_heading,
+            "accent_color": str(context.get("accent_color") or "#111827"),
+            "background_color": str(context.get("background_color") or "#eef2f7"),
+            "content_background_color": str(
+                context.get("content_background_color") or "#ffffff"
+            ),
+            "footer_text": _text(str(context.get("footer_text") or "")),
+            "show_system_footer": bool(context.get("show_system_footer", True)),
             "banner_image_url": rendered_banner_image_url,
             "banner_image_alt": rendered_banner_image_alt,
             "card_rows": rendered_rows,
