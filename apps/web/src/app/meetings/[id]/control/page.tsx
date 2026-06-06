@@ -209,8 +209,8 @@ export default function MeetingControlPage({ params }: { params: Promise<{ id: s
   if (meeting.mode === "simple") return <SimpleMeetingConsole meetingId={meeting.id} />;
 
   return (
-    <main className="grid min-h-screen gap-4 px-4 py-4 xl:grid-cols-[300px_minmax(0,1fr)_360px]">
-      <aside className="grid content-start gap-4">
+    <main className="grid min-h-screen gap-4 px-4 py-4 xl:grid-cols-[280px_minmax(0,1fr)] 2xl:grid-cols-[280px_minmax(0,1fr)_320px]">
+      <aside className="grid min-w-0 content-start gap-4">
         <section className="rounded-lg border border-[var(--border)] p-4">
           <p className="text-xs font-medium text-[var(--muted)]">議場控制台</p>
           <h1 className="mt-1 text-xl font-semibold tracking-normal">{meeting.title}</h1>
@@ -265,7 +265,7 @@ export default function MeetingControlPage({ params }: { params: Promise<{ id: s
         </section>
       </aside>
 
-      <section className="grid content-start gap-4">
+      <section className="grid min-w-0 content-start gap-4">
         {error && <p className="rounded-md border border-red-500/40 p-3 text-sm text-red-500">{error}</p>}
         {notice && <p className="rounded-md border border-emerald-500/40 p-3 text-sm text-emerald-500">{notice}</p>}
 
@@ -324,7 +324,7 @@ export default function MeetingControlPage({ params }: { params: Promise<{ id: s
               ))}
             </select>
           </label>
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4 2xl:grid-cols-7">
             {SCENES.map(({ mode, label, icon: Icon }) => (
               <button
                 key={mode}
@@ -438,7 +438,7 @@ export default function MeetingControlPage({ params }: { params: Promise<{ id: s
         </section>
       </section>
 
-      <aside className="grid content-start gap-4">
+      <aside className="grid min-w-0 content-start gap-4 xl:col-span-2 xl:grid-cols-3 2xl:col-span-1 2xl:grid-cols-1">
         <section className="rounded-lg border border-[var(--border)] p-4">
           <h2 className="mb-3 text-base font-semibold">發言 Queue</h2>
           <div className="mb-3 grid grid-cols-[1fr_auto] gap-2">

@@ -134,9 +134,7 @@ def render_generic_message(
             "heading": rendered_heading,
             "accent_color": str(context.get("accent_color") or "#111827"),
             "background_color": str(context.get("background_color") or "#eef2f7"),
-            "content_background_color": str(
-                context.get("content_background_color") or "#ffffff"
-            ),
+            "content_background_color": str(context.get("content_background_color") or "#ffffff"),
             "footer_text": _text(str(context.get("footer_text") or "")),
             "show_system_footer": bool(context.get("show_system_footer", True)),
             "banner_image_url": rendered_banner_image_url,

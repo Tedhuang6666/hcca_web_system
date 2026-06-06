@@ -1244,6 +1244,7 @@ async def list_messages(
     template_id: uuid.UUID | None = Query(None),
     date_from: datetime | None = Query(None),
     date_to: datetime | None = Query(None),
+    mine: bool = Query(False, description="僅顯示目前帳號建立的郵件"),
 ) -> list[EmailMessageOut]:
     codes = await get_user_permission_codes(db, user.id)
     can_view_all = (
@@ -1256,7 +1257,7 @@ async def list_messages(
         .options(selectinload(EmailMessage.sender))
         .order_by(EmailMessage.created_at.desc())
     )
-    if not can_view_all:
+    if mine or not can_view_all:
         stmt = stmt.where(EmailMessage.sender_id == user.id)
     if status_filter:
         stmt = stmt.where(EmailMessage.status == status_filter)

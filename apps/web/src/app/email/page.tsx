@@ -224,6 +224,7 @@ function ComposeInner() {
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [platformTemplates, setPlatformTemplates] = useState<EmailTemplateOut[]>([]);
   const [recentMessages, setRecentMessages] = useState<EmailMessageOut[]>([]);
+  const [draftMessages, setDraftMessages] = useState<EmailMessageOut[]>([]);
   const [recentMessageId, setRecentMessageId] = useState("");
   const [recipientLists, setRecipientLists] = useState<EmailRecipientListOut[]>([]);
   const [platformTemplateId, setPlatformTemplateId] = useState("");
@@ -240,11 +241,13 @@ function ComposeInner() {
       emailApi.listTemplates(),
       emailApi.listRecipientLists(),
       emailApi.listMessages({ limit: 30 }),
+      emailApi.listMessages({ status: "draft", limit: 100, mine: true }),
     ])
-      .then(([templates, lists, messages]) => {
+      .then(([templates, lists, messages, drafts]) => {
         setPlatformTemplates(templates);
         setRecipientLists(lists);
         setRecentMessages(messages);
+        setDraftMessages(drafts);
       })
       .catch((e) =>
         toast.error(e instanceof ApiError ? e.message : "載入郵件資源失敗"),
@@ -271,8 +274,9 @@ function ComposeInner() {
     window.localStorage.setItem(TEMPLATE_KEY, JSON.stringify(rows));
   }, []);
 
-  // 載入草稿內容（不還原收件人，需重新選擇）
+  // 載入帳號同步草稿並完整還原內容與收件資料。
   useEffect(() => {
+    setActiveDraftId(draftId);
     if (!draftId) return;
     emailApi
       .getMessage(draftId)
@@ -1025,6 +1029,10 @@ function ComposeInner() {
         setActiveDraftId(saved.id);
         router.replace(`/email?draft=${saved.id}`);
       }
+      setDraftMessages((drafts) => [
+        saved,
+        ...drafts.filter((draft) => draft.id !== saved.id),
+      ]);
       clearDraft();
       toast.success(activeDraftId ? "草稿已更新並同步" : "草稿已永久儲存並同步");
     } catch (e) {
@@ -1209,6 +1217,30 @@ function ComposeInner() {
                   </option>
                 ))}
               </select>
+            </div>
+            <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--primary)" }}>
+              <label className="block text-xs font-semibold" style={{ color: "var(--primary)" }}>
+                我的草稿
+              </label>
+              <select
+                className="input"
+                value={activeDraftId ?? ""}
+                onChange={(event) => {
+                  const id = event.target.value;
+                  if (id) router.push(`/email?draft=${id}`);
+                }}
+              >
+                <option value="">選擇永久儲存的草稿繼續編輯…</option>
+                {draftMessages.map((draft) => (
+                  <option key={draft.id} value={draft.id}>
+                    {draft.subject || "未命名草稿"} · 更新於{" "}
+                    {new Date(draft.updated_at).toLocaleString("zh-TW")}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                草稿依帳號同步，選擇後會載入原本的內容與收件資料。
+              </p>
             </div>
             <div className="space-y-2">
               <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>

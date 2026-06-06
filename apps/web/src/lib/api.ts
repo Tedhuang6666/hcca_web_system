@@ -2858,7 +2858,7 @@ export const emailApi = {
   listMessages: (params?: {
     status?: string; limit?: number; offset?: number; q?: string;
     sender_id?: string; org_id?: string; template_id?: string;
-    date_from?: string; date_to?: string;
+    date_from?: string; date_to?: string; mine?: boolean;
   }) => {
     const q = new URLSearchParams();
     if (params?.status) q.set("status", params.status);
@@ -2870,6 +2870,7 @@ export const emailApi = {
     if (params?.template_id) q.set("template_id", params.template_id);
     if (params?.date_from) q.set("date_from", params.date_from);
     if (params?.date_to) q.set("date_to", params.date_to);
+    if (params?.mine) q.set("mine", "true");
     return get<EmailMessageOut[]>(`/email/messages${q.size ? `?${q}` : ""}`);
   },
   getMessage: (id: string) => get<EmailMessageDetailOut>(`/email/messages/${id}`),
