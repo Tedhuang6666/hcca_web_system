@@ -244,7 +244,6 @@ const RichTextarea = forwardRef<RichTextareaHandle, RichTextareaProps>(function 
         style={{ background: "var(--bg-elevated)", borderBottom: "1px solid var(--border)" }}
         role="toolbar"
         aria-label="文字格式工具列"
-        onMouseDown={e => e.preventDefault()}   // 防止工具列點擊搶走 editor focus
       >
         {TOOLBAR.map((item, i) => {
           if (item === "divider") {
@@ -261,7 +260,10 @@ const RichTextarea = forwardRef<RichTextareaHandle, RichTextareaProps>(function 
               title={item.title}
               aria-label={item.title}
               aria-pressed={active}
-              onMouseDown={() => editor && item.action(editor)}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                if (editor) item.action(editor);
+              }}
               className="w-7 h-7 rounded flex items-center justify-center text-xs transition-colors"
               style={active
                 ? { color: "var(--primary)", background: "var(--primary-dim)" }

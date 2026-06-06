@@ -298,12 +298,19 @@ services:
     restart: unless-stopped
     # --schedule 必須指到可寫的 /tmp（celerybeat volume）；預設會寫在 CWD /app，
     # 而映像中 /app 對非 root 執行使用者唯讀 → beat 啟動即 _gdbm Permission denied 崩潰。
-    command: >
-      python -m celery -A api.core.celery_app.celery_app beat
-      --loglevel=info
-      --scheduler celery.beat:PersistentScheduler
-      --schedule=/tmp/celerybeat-schedule
-      --pidfile=/tmp/celerybeat.pid
+    # pidfile 則放非持久化的 /dev/shm：beat 以 PID 1 執行會把「1」寫進 pidfile，若放在
+    # 持久化 volume，重啟後 celery 讀到舊「1」→ 誤判「已在執行（pid: 1）」卡重啟迴圈。
+    # 啟動先 rm 掉新舊兩處殘留 pidfile 作保險；exec 讓 celery 接手 PID 1。
+    command:
+      - sh
+      - -c
+      - >
+        rm -f /dev/shm/celerybeat.pid /tmp/celerybeat.pid &&
+        exec python -m celery -A api.core.celery_app.celery_app beat
+        --loglevel=INFO
+        --scheduler celery.beat:PersistentScheduler
+        --schedule=/tmp/celerybeat-schedule
+        --pidfile=/dev/shm/celerybeat.pid
     environment:
       ENVIRONMENT: development
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
@@ -317,7 +324,7 @@ services:
     volumes:
       - celerybeat:/tmp  # 持久化 beat schedule 狀態
     healthcheck:
-      test: ["CMD-SHELL", "test -f /tmp/celerybeat.pid && kill -0 \"$$(cat /tmp/celerybeat.pid)\""]
+      test: ["CMD-SHELL", "test -f /dev/shm/celerybeat.pid && kill -0 \"$$(cat /dev/shm/celerybeat.pid)\""]
       interval: 30s
       timeout: 5s
       retries: 3

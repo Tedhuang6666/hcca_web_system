@@ -176,6 +176,7 @@ function ComposeInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const draftId = searchParams.get("draft");
+  const [activeDraftId, setActiveDraftId] = useState<string | null>(draftId);
   const requestedTemplateId = searchParams.get("template");
   const requestedListId = searchParams.get("list");
 
@@ -209,6 +210,7 @@ function ComposeInner() {
   const subjectRef = useRef<HTMLInputElement>(null);
   const headingRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<RichTextareaHandle>(null);
+  const recipientTableBottomRef = useRef<HTMLDivElement>(null);
   const lastFocusRef = useRef<"subject" | "heading" | "body">("body");
   const [scheduledAt, setScheduledAt] = useState("");
 
@@ -226,6 +228,7 @@ function ComposeInner() {
   const [platformTemplateId, setPlatformTemplateId] = useState("");
   const [recipientListId, setRecipientListId] = useState("");
   const [attachments, setAttachments] = useState<EmailAttachmentOut[]>([]);
+  const [retainedAttachmentIds, setRetainedAttachmentIds] = useState<string[]>([]);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [trackOpens, setTrackOpens] = useState(true);
   const [trackClicks, setTrackClicks] = useState(true);
@@ -294,6 +297,8 @@ function ComposeInner() {
           setButtons([]);
         }
         setBlocks(m.blocks ?? []);
+        setRecipients(m.recipient_spec ?? EMPTY_RECIPIENTS);
+        setRetainedAttachmentIds(m.attachment_ids ?? []);
         setVariableDefinitions(m.variable_definitions);
         const rows = (m.recipient_variables ?? []).map((r) => ({
           email: r.email ?? "",
@@ -464,7 +469,9 @@ function ComposeInner() {
       recipient_variables: buildRecipientVariables(),
       template_id: platformTemplateId || null,
       recipient_list_id: recipientListId || null,
-      attachment_ids: attachments.map((item) => item.id),
+      attachment_ids: Array.from(
+        new Set([...retainedAttachmentIds, ...attachments.map((item) => item.id)]),
+      ),
       track_opens: trackOpens,
       track_clicks: trackClicks,
     }),
@@ -491,6 +498,7 @@ function ComposeInner() {
       platformTemplateId,
       recipientListId,
       attachments,
+      retainedAttachmentIds,
       trackOpens,
       trackClicks,
       buildRecipientVariables,
@@ -767,6 +775,7 @@ function ComposeInner() {
     try {
       await emailApi.revokeAttachment(attachment.id);
       setAttachments((rows) => rows.filter((item) => item.id !== attachment.id));
+      setRetainedAttachmentIds((ids) => ids.filter((id) => id !== attachment.id));
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "移除附件失敗");
     }
@@ -856,8 +865,15 @@ function ComposeInner() {
   };
 
   // ── 逐收件人不同內容（表格編輯）──────────────────────────────────────────────
-  const addRecipientRow = () =>
+  const addRecipientRow = () => {
     setRecipientRows((prev) => [...prev, { email: "", name: "", variables: {} }]);
+    requestAnimationFrame(() => {
+      recipientTableBottomRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
+    });
+  };
   const updateRecipientRow = (i: number, patch: Partial<RecipientRow>) =>
     setRecipientRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
   const updateRecipientVar = (i: number, key: string, value: string) =>
@@ -888,41 +904,51 @@ function ComposeInner() {
     const nameIndex = headers.findIndex((header) =>
       ["姓名", "用戶姓名", "name"].includes(header.toLowerCase()),
     );
-    if (emailIndex < 0) {
-      toast.error("第一列必須包含「電子郵件」欄位");
+    if (emailIndex < 0 && nameIndex < 0) {
+      toast.error("第一列至少需要包含「電子郵件」或「姓名」欄位");
       return;
     }
 
-    const customColumns = headers
+    const pastedCustomColumns = headers
       .map((header, index) => ({ index, key: normalizeVariableKey(header) }))
       .filter(({ index, key }) => index !== emailIndex && index !== nameIndex && key);
-    const keys = customColumns.map(({ key }) => key);
+    const keys = pastedCustomColumns.map(({ key }) => key);
     if (new Set(keys).size !== keys.length) {
       toast.error("欄位名稱不可重複");
       return;
     }
 
-    setVariableDefinitions(
-      customColumns.map(({ key }) => ({
+    const existingKeys = new Set(variableDefinitions.map((definition) => definition.key));
+    const newDefinitions = pastedCustomColumns
+      .filter(({ key }) => !existingKeys.has(key))
+      .map(({ key }) => ({
         key,
         label: key,
-        required: true,
+        required: false,
         default_value: "",
-      })),
-    );
-    setRecipientRows(
-      cells.slice(1).map((row) => ({
-        email: row[emailIndex] ?? "",
+      }));
+    setVariableDefinitions((definitions) => [...definitions, ...newDefinitions]);
+
+    const importedRows = cells.slice(1).map((row) => ({
+        email: emailIndex >= 0 ? (row[emailIndex] ?? "") : "",
         name: nameIndex >= 0 ? (row[nameIndex] ?? "") : "",
         variables: Object.fromEntries(
-          customColumns.map(({ index, key }) => [key, row[index] ?? ""]),
+          pastedCustomColumns.map(({ index, key }) => [key, row[index] ?? ""]),
         ),
-      })),
-    );
+      }));
+    setRecipientRows((rows) => {
+      const meaningfulRows = rows.filter(
+        (row) =>
+          row.email.trim() ||
+          row.name.trim() ||
+          Object.values(row.variables).some((value) => value.trim()),
+      );
+      return [...meaningfulRows, ...importedRows];
+    });
     setPreviewRecipientIndex(0);
     setPasteTableText("");
     setPasteTableOpen(false);
-    toast.success(`已匯入 ${cells.length - 1} 列資料`);
+    toast.success(`已追加 ${importedRows.length} 列資料`);
   };
 
   const importedRecipientCount = new Set(
@@ -977,13 +1003,22 @@ function ComposeInner() {
   };
 
   const handleSaveDraft = async () => {
-    if (!validate(false)) return;
     setBusy(true);
     try {
-      await emailApi.createMessage({ ...buildPayload(), action: "draft" });
+      const payload = buildPayload();
+      const draftPayload = {
+        ...payload,
+        subject: payload.subject || "未命名草稿",
+      };
+      const saved = activeDraftId
+        ? await emailApi.updateMessage(activeDraftId, draftPayload)
+        : await emailApi.createMessage({ ...draftPayload, action: "draft" });
+      if (!activeDraftId) {
+        setActiveDraftId(saved.id);
+        router.replace(`/email?draft=${saved.id}`);
+      }
       clearDraft();
-      toast.success("草稿已儲存");
-      router.push("/email/logs");
+      toast.success(activeDraftId ? "草稿已更新並同步" : "草稿已永久儲存並同步");
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "儲存草稿失敗");
     } finally {
@@ -1041,11 +1076,16 @@ function ComposeInner() {
     setConfirmOpen(false);
     setBusy(true);
     try {
-      await emailApi.createMessage({
-        ...buildPayload(),
-        action: "send",
-        idempotency_key: crypto.randomUUID(),
-      });
+      if (activeDraftId) {
+        await emailApi.updateMessage(activeDraftId, buildPayload());
+        await emailApi.sendMessage(activeDraftId);
+      } else {
+        await emailApi.createMessage({
+          ...buildPayload(),
+          action: "send",
+          idempotency_key: crypto.randomUUID(),
+        });
+      }
       clearDraft();
       toast.success("信件已排入寄送佇列");
       router.push("/email/logs");
@@ -1097,9 +1137,9 @@ function ComposeInner() {
             <Link href="/email/logs" className="btn btn-ghost btn-sm">寄信紀錄</Link>
           </div>
         </div>
-        {draftId && (
+        {activeDraftId && (
           <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-            已載入草稿內容；收件人請重新選擇。
+            正在編輯雲端草稿；儲存後會依帳號同步，可在其他裝置繼續編輯。
           </p>
         )}
       </header>
@@ -1138,7 +1178,7 @@ function ComposeInner() {
 
       <div className={`grid gap-5 ${currentStep >= 3 ? "lg:grid-cols-2" : ""}`}>
         {/* ── 編輯區 ─────────────────────────────────────────── */}
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <section className={`card space-y-3 p-4 ${currentStep === 1 ? "" : "hidden"}`}>
             <div>
               <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
@@ -1264,6 +1304,43 @@ function ComposeInner() {
                 placeholder="顯示於信件內容最上方的大標題"
               />
             </div>
+            <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                先點選主旨或主標題中的插入位置，再點選欄位。
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {SYSTEM_VARIABLES.map((variable) => (
+                  <button
+                    key={variable.token}
+                    type="button"
+                    className="rounded-full px-2.5 py-1 text-xs"
+                    style={{
+                      background: "var(--primary-dim)",
+                      color: "var(--primary)",
+                      border: "1px solid var(--border)",
+                    }}
+                    onClick={() => insertVariable(variable.token)}
+                  >
+                    + {variable.label}
+                  </button>
+                ))}
+                {definedVariables.map((variable) => (
+                  <button
+                    key={variable.key}
+                    type="button"
+                    className="rounded-full px-2.5 py-1 text-xs"
+                    style={{
+                      background: "var(--bg-elevated)",
+                      color: "var(--text-secondary)",
+                      border: "1px solid var(--border)",
+                    }}
+                    onClick={() => insertVariable(`{{ ${variable.key} }}`)}
+                  >
+                    + {variable.label || variable.key}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="space-y-2">
               <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
                 信件主圖
@@ -1347,9 +1424,127 @@ function ComposeInner() {
           </section>
 
           <section className={`card space-y-2 p-4 ${currentStep === 3 ? "" : "hidden"}`}>
-            <h2 className="text-sm font-semibold">內文</h2>
+            <div>
+              <h2 className="text-sm font-semibold">內文</h2>
+              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                點選下方欄位即可插入目前游標位置。
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {SYSTEM_VARIABLES.map((variable) => (
+                <button
+                  key={variable.token}
+                  type="button"
+                  className="rounded-full px-2.5 py-1 text-xs"
+                  style={{
+                    background: "var(--primary-dim)",
+                    color: "var(--primary)",
+                    border: "1px solid var(--border)",
+                  }}
+                  onClick={() => insertVariable(variable.token)}
+                >
+                  + {variable.label}
+                </button>
+              ))}
+              {definedVariables.map((variable) => (
+                <button
+                  key={variable.key}
+                  type="button"
+                  className="rounded-full px-2.5 py-1 text-xs"
+                  style={{
+                    background: "var(--bg-elevated)",
+                    color: "var(--text-secondary)",
+                    border: "1px solid var(--border)",
+                  }}
+                  onClick={() => insertVariable(`{{ ${variable.key} }}`)}
+                >
+                  + {variable.label || variable.key}
+                </button>
+              ))}
+            </div>
             <div onFocus={() => (lastFocusRef.current = "body")}>
               <RichTextarea ref={bodyRef} value={body} onChange={setBody} placeholder="撰寫信件內文…" />
+            </div>
+            <div className="space-y-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-xs font-semibold">在內文後加入內容</h3>
+                  <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
+                    適合插入獨立圖片、補充段落或視覺分隔線。
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => addBlock("text")}>
+                    + 補充文字
+                  </button>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => addBlock("image")}>
+                    + 圖片
+                  </button>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => addBlock("divider")}>
+                    + 分隔線
+                  </button>
+                </div>
+              </div>
+              {blocks.map((block, index) => (
+                <div
+                  key={index}
+                  className="space-y-2 rounded-lg border p-2"
+                  style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
+                      {block.type === "text" ? "補充文字" : block.type === "image" ? "圖片" : "分隔線"}
+                    </span>
+                    <div className="flex gap-1">
+                      <button type="button" className="btn btn-ghost btn-sm" disabled={index === 0} onClick={() => moveBlock(index, -1)}>↑</button>
+                      <button type="button" className="btn btn-ghost btn-sm" disabled={index === blocks.length - 1} onClick={() => moveBlock(index, 1)}>↓</button>
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => removeBlock(index)}>×</button>
+                    </div>
+                  </div>
+                  {block.type === "text" && (
+                    <textarea
+                      className="input min-h-20"
+                      value={block.md ?? ""}
+                      placeholder="補充段落，支援 Markdown"
+                      onChange={(event) => updateBlock(index, { md: event.target.value })}
+                    />
+                  )}
+                  {block.type === "image" && (
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <input
+                          className="input min-w-0 flex-1"
+                          value={block.url ?? ""}
+                          placeholder="圖片網址，或使用右側上傳"
+                          onChange={(event) => updateBlock(index, { url: event.target.value })}
+                        />
+                        <label className="btn btn-secondary btn-sm cursor-pointer">
+                          上傳
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/gif,image/webp"
+                            className="hidden"
+                            onChange={(event) => {
+                              const file = event.target.files?.[0];
+                              if (file) void uploadBlockImage(index, file);
+                              event.currentTarget.value = "";
+                            }}
+                          />
+                        </label>
+                      </div>
+                      <input
+                        className="input"
+                        value={block.alt ?? ""}
+                        placeholder="圖片替代文字"
+                        onChange={(event) => updateBlock(index, { alt: event.target.value })}
+                      />
+                    </div>
+                  )}
+                  {block.type === "divider" && (
+                    <div className="border-t" style={{ borderColor: "var(--border-strong)" }} />
+                  )}
+                </div>
+              ))}
             </div>
           </section>
 
@@ -1420,41 +1615,6 @@ function ComposeInner() {
           </details>
 
           <section className={`card space-y-3 p-4 ${currentStep === 2 ? "" : "hidden"}`}>
-            <div>
-              <h2 className="text-sm font-semibold">個人化變數</h2>
-              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                先把游標點進「主旨／主標題／內文」，再點下方標籤即可插入；寄出時會自動換成每位收件人的實際內容。
-              </p>
-            </div>
-
-            {/* 可插入的變數標籤 */}
-            <div className="flex flex-wrap gap-1.5">
-              {SYSTEM_VARIABLES.map((v) => (
-                <button
-                  key={v.token}
-                  type="button"
-                  onClick={() => insertVariable(v.token)}
-                  className="rounded-full px-2.5 py-1 text-xs"
-                  style={{ background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border)" }}
-                  title={`插入 ${v.token}`}
-                >
-                  + {v.label}
-                </button>
-              ))}
-              {definedVariables.map((v) => (
-                <button
-                  key={v.key}
-                  type="button"
-                  onClick={() => insertVariable(`{{ ${v.key} }}`)}
-                  className="rounded-full px-2.5 py-1 text-xs"
-                  style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}
-                  title={`插入 {{ ${v.key} }}`}
-                >
-                  + {v.label || v.key}
-                </button>
-              ))}
-            </div>
-
             <div className="space-y-2 rounded-lg p-3" style={{ background: "var(--bg-elevated)" }}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
@@ -1476,15 +1636,12 @@ function ComposeInner() {
                   <button type="button" className="btn btn-ghost btn-sm" onClick={addVariableDefinition}>
                     + 新增欄位
                   </button>
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={addRecipientRow}>
-                    + 新增資料列
-                  </button>
                 </div>
               </div>
               {pasteTableOpen && (
                 <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
                   <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                    可直接從 Excel／Google 試算表複製，第一列會作為欄位名稱。
+                    可只貼姓名與電子郵件，也可包含部分自訂欄位；資料會追加在現有表格後方。
                   </p>
                   <textarea
                     className="input min-h-28 font-mono text-xs"
@@ -1502,8 +1659,8 @@ function ComposeInner() {
                   </div>
                 </div>
               )}
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-max border-separate border-spacing-1">
+              <div className="max-w-full overflow-x-auto overscroll-x-contain rounded-lg border" style={{ borderColor: "var(--border)" }}>
+                <table className="w-max min-w-full border-separate border-spacing-1">
                   <thead>
                     <tr className="text-left text-xs" style={{ color: "var(--text-muted)" }}>
                       <th className="min-w-56 px-1">
@@ -1519,7 +1676,7 @@ function ComposeInner() {
                         </code>
                       </th>
                       {variableDefinitions.map((variable, i) => (
-                        <th key={`${i}-${variable.key}`} className="min-w-52 px-1">
+                        <th key={i} className="min-w-52 px-1">
                           <div className="flex items-center gap-1">
                             <input
                               className="input min-w-36 py-1 text-xs"
@@ -1610,6 +1767,11 @@ function ComposeInner() {
                   有 {invalidRecipientRows.length} 列電子郵件格式錯誤，已以紅框標示。
                 </p>
               )}
+              <div ref={recipientTableBottomRef} className="flex justify-center border-t pt-3" style={{ borderColor: "var(--border)" }}>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={addRecipientRow}>
+                  + 新增資料列
+                </button>
+              </div>
             </div>
           </section>
 
@@ -1666,7 +1828,7 @@ function ComposeInner() {
             )}
           </section>
 
-          <section className={`card space-y-3 p-4 ${currentStep === 3 ? "" : "hidden"}`}>
+          <section className="hidden">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-sm font-semibold">內容區塊（選填）</h2>
               <div className="flex gap-1.5">
@@ -1809,7 +1971,7 @@ function ComposeInner() {
         </div>
 
         {/* ── 預覽與動作 ─────────────────────────────────────── */}
-        <div className={`space-y-4 ${currentStep >= 3 ? "" : "hidden"}`}>
+        <div className={`min-w-0 space-y-4 ${currentStep >= 3 ? "" : "hidden"}`}>
           <section className="card overflow-hidden p-0">
             <div
               className="flex flex-wrap items-center justify-between gap-2 px-4 py-2"
@@ -1916,7 +2078,7 @@ function ComposeInner() {
                 disabled={busy}
                 onClick={handleSaveDraft}
               >
-                儲存草稿
+                永久儲存草稿
               </button>
               {currentStep === 5 && <button
                 type="button"

@@ -89,3 +89,7 @@ test.env
 
 # Windows 下載標記殘留檔（NTFS ADS）
 *:Zone.Identifier
+
+.playwright-mcp/
+screenshots/
+nuclei-*.txt

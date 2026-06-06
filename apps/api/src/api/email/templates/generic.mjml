@@ -44,13 +44,13 @@
               {% endif %}
             {% endfor %}
             {% if buttons %}
-              <div style="padding:24px 0 0;">
+              <div style="padding:24px 0 0;text-align:center;">
                 {% for b in buttons %}
                   <a href="{{ b.url }}" style="box-sizing:border-box;display:inline-block;margin:0 10px 10px 0;max-width:100%;font-size:15px;font-weight:800;text-decoration:none;padding:14px 28px;border-radius:12px;word-break:break-word;{% if b.style == 'secondary' %}background-color:#d6b34a;color:#111827;{% elif b.style == 'outline' %}background-color:#ffffff;color:{{ accent_color }};border:1px solid {{ accent_color }};{% else %}background-color:{{ accent_color }};color:#ffffff;{% endif %}">{{ b.label or '查看詳情' }}</a>
                 {% endfor %}
               </div>
             {% elif cta_url %}
-              <div style="padding:24px 0 0;">
+              <div style="padding:24px 0 0;text-align:center;">
                 <a href="{{ cta_url }}" style="box-sizing:border-box;display:inline-block;max-width:100%;background-color:{{ accent_color }};color:#ffffff;font-size:15px;font-weight:800;text-decoration:none;padding:14px 28px;border-radius:12px;word-break:break-word;">{{ cta_label or '查看詳情' }}</a>
               </div>
             {% endif %}
