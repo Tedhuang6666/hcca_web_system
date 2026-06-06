@@ -425,7 +425,7 @@ class Document(Base, TimestampMixin):
     )  # 限辦日期
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    # 自動催辦（Phase C1）：每次催辦遞增、用以判斷升級時機
+    # 每次自動催辦後遞增，用以判斷升級時機。
     reminder_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )
@@ -604,7 +604,7 @@ class DocumentApproval(Base, TimestampMixin):
         Boolean, nullable=False, default=False
     )  # 是否以代理身份操作
 
-    # 並簽 / 會辦（Phase C1）
+    # 並簽 / 會辦
     # 同 document 內共用同 parallel_group 的多筆 row 視為一組會辦
     # approval_mode: "any" = 任一通過該組推進；"all" = 全簽才推進
     parallel_group: Mapped[int | None] = mapped_column(Integer, nullable=True)

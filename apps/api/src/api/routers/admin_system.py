@@ -54,6 +54,7 @@ from api.core.module_health import (
     get_trip_meta,
     module_5xx_count,
     module_severity_breakdown,
+    recent_trip_events,
 )
 from api.core.module_recovery import attempt_recovery, probe_module
 from api.core.modules import MODULES
@@ -745,7 +746,7 @@ async def module_trip_history(module_id: str, _admin: AdminUser) -> ModuleTripHi
         max_severity=str(meta["max_severity"]),
         recent_5xx_count=module_5xx_count(module_id),
         severity_breakdown=breakdown,
-        recent_events=[],  # 未來：可從 audit_log 撈 module-trip 事件
+        recent_events=[ModuleTripHistoryItem.model_validate(item) for item in recent_trip_events(module_id)],
     )
 
 

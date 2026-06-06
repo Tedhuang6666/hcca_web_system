@@ -149,7 +149,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
-    # 開發模式可 override CMD 為：uvicorn api:app --reload --host 0.0.0.0 --port 8000
+    # 開發模式可 override CMD 為：uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 
   # ── FastAPI Admin 通道（管理員優先 / Load Shed 關閉） ─────────
   # 與 api 共用 image 與 DB/Redis，但綁不同 port、worker 數較少、永遠不 shed。

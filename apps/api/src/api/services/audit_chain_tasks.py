@@ -1,4 +1,4 @@
-"""稽核日誌雜湊鏈相關 Celery tasks。Phase B2 / ADR-004。
+"""稽核日誌雜湊鏈相關 Celery tasks（ADR-004）。
 
 排程（建議加入 celery_app.conf.beat_schedule）：
 - 每日 00:05  compute_daily_audit_anchor   產生當日 anchor
@@ -75,7 +75,7 @@ async def _compute_anchor_async() -> dict:
         await db.commit()
         await db.refresh(anchor)
 
-        # S3 上傳（A3 wire 完成後啟用）
+        # 設定遠端儲存時同步上傳 anchor。
         s3_status = "skipped"
         if settings.BACKUP_S3_BUCKET:
             try:

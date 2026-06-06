@@ -138,9 +138,7 @@ export function PolicyConsentBanner({
     }
   }, [allChecked, items, submitting]);
 
-  // 只有「真的有待同意的政策」時才顯示彈窗。
-  // 早期版本在 loading 期間也會 render，導致每次切換頁面、重新查 pending 時
-  // 都會閃一次彈窗（即使使用者早已同意）。改為僅依 items 是否非空判斷。
+  // 載入期間維持關閉，避免尚未確認待同意項目時短暫顯示彈窗。
   if (items.length === 0) return null;
 
   return (

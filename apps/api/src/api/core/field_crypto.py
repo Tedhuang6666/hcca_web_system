@@ -1,4 +1,4 @@
-"""欄位級加密 helper（Fernet + MultiFernet）。對應 ADR-006、Phase B3。
+"""欄位級加密 helper（Fernet + MultiFernet），對應 ADR-006。
 
 設計考量：
 - 透明：service 層用 hybrid_property 包，呼叫端不感知加解密

@@ -1,4 +1,4 @@
-"""問卷系統測試 - schema 序列化修復、回應計數、圖片題型與試算表匯出。"""
+"""問卷系統的 schema 序列化、回應計數、圖片題型與試算表匯出測試。"""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.models.org import Org
 from api.models.survey import (
     QuestionType,
     Survey,
@@ -16,7 +17,6 @@ from api.models.survey import (
     SurveyResponse,
     SurveyStatus,
 )
-from api.models.org import Org
 from api.models.user import User
 from api.schemas.survey import (
     SurveyCreate,
@@ -51,7 +51,7 @@ async def _make_draft_survey(db: AsyncSession) -> Survey:
     )
 
 
-# ── schema 序列化修復（核心 bug） ─────────────────────────────────────────────
+# ── Schema 序列化 ────────────────────────────────────────────────────────────
 
 
 async def test_question_out_parses_options_via_typeadapter(db_session: AsyncSession) -> None:

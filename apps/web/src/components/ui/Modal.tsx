@@ -3,27 +3,24 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
-type ModalSize = "sm" | "md" | "lg" | "xl" | "full";
+type ModalSize = "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "full";
 
 interface ModalProps {
   title: string;
   onClose: () => void;
   children: ReactNode;
-  /** 標準尺寸（會自動對應 max-width）。優先於 maxWidthClassName。 */
   size?: ModalSize;
-  /** 行動裝置（<640px）自動全屏（預設 true）。 */
   mobileFullscreen?: boolean;
-  /** 底部 sticky 動作列。 */
   footer?: ReactNode;
-  /** @deprecated 使用 size 取代。為了不破壞既有 callers 而保留。 */
-  maxWidthClassName?: string;
 }
 
 const SIZE_CLASS: Record<ModalSize, string> = {
   sm: "max-w-sm",
   md: "max-w-md",
   lg: "max-w-lg",
-  xl: "max-w-2xl",
+  xl: "max-w-xl",
+  "2xl": "max-w-2xl",
+  "3xl": "max-w-3xl",
   full: "max-w-full",
 };
 
@@ -34,7 +31,6 @@ export default function Modal({
   size,
   mobileFullscreen = true,
   footer,
-  maxWidthClassName,
 }: ModalProps) {
   const [mounted, setMounted] = useState(false);
 
@@ -47,7 +43,6 @@ export default function Modal({
     };
   }, []);
 
-  // ESC 鍵關閉
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", handler);
@@ -56,9 +51,8 @@ export default function Modal({
 
   if (!mounted) return null;
 
-  const widthClass = size ? SIZE_CLASS[size] : (maxWidthClassName ?? "max-w-lg");
+  const widthClass = SIZE_CLASS[size ?? "lg"];
 
-  // 行動裝置全屏：sm: 之下用 100% / 100vh
   const mobileClass = mobileFullscreen
     ? "h-full max-h-full sm:my-auto sm:h-auto sm:max-h-[calc(100vh-2rem)]"
     : "my-auto max-h-[calc(100vh-2rem)]";

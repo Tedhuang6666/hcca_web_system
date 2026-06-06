@@ -159,7 +159,7 @@ class ConnectionManager:
     # 多 worker / 多節點環境下，本機 dict 只看得到自己的連線。
     # broadcast_to_room / broadcast_all 預設經 Redis pub/sub 重新分發，讓所有
     # worker 都有機會把訊息傳給自己持有的連線。WS_PUBSUB_BACKEND=memory 時
-    # （單 worker 開發 / 測試）走原本的 local-only 路徑。
+    # 僅廣播至目前 worker，供單 worker 開發與測試使用。
 
     async def broadcast_to_room(self, room: str, message: dict) -> None:
         """廣播給指定房間：經 Redis 跨 worker；無 broker 時退回本機。"""

@@ -1,4 +1,4 @@
-"""稽核日誌雜湊鏈 service 測試（Phase B2 / ADR-004）。"""
+"""稽核日誌雜湊鏈 service 測試（ADR-004）。"""
 
 from __future__ import annotations
 

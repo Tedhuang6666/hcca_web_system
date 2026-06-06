@@ -5,7 +5,9 @@
 
 ## 一、專案一句話總結
 
-這是一個服務學生代表大會的校園數位治理平台（HCCA），包含公文簽核、法規維護、購票、學餐訂購與問卷等功能，後端使用 FastAPI + PostgreSQL，前端使用 Next.js 16 + React 19。
+這是一個服務學生代表大會的校園數位治理平台（HCCA），整合公文、法規、會議、
+議案、公告、陳情、購票、學餐、問卷、選舉、通知與治理稽核；後端使用
+FastAPI + PostgreSQL，前端使用 Next.js 16 + React 19。
 
 ---
 
@@ -16,9 +18,11 @@
 | 後端 API | Python 3.12 + FastAPI + SQLAlchemy 2.0 async |
 | 資料庫 | PostgreSQL 16 + Alembic 遷移 |
 | 快取/佇列 | Redis 7 + Celery 5 |
+| 搜尋 | Meilisearch |
 | 前端 | Next.js 16 App Router + React 19 + TypeScript（Node.js >= 20.9） |
 | 樣式 | Tailwind CSS 4 |
 | 套件管理 | uv Workspaces（後端）/ npm（前端） |
+| 可觀測性 | Sentry + PostHog + Prometheus + Grafana |
 
 ---
 
@@ -29,21 +33,25 @@
 ```
 apps/api/src/api/
 ├── routers/        ← HTTP 端點（唯一的路由層，含權限注入）
-│   ├── documents.py        公文 CRUD + 簽核流程
+│   ├── documents.py / documents_approve.py / documents_attachments.py
+│   │                        公文 CRUD、簽核、附件
 │   ├── regulations.py      法規 + 版本管理
-│   ├── admin.py            管理員 / RBAC 設定
+│   ├── admin.py / admin_system.py  RBAC、系統設定與健康管理
 │   ├── meetings.py         會議系統（議程、出席、決議）
+│   ├── council_proposals.py / judicial_petitions.py / elections.py
+│   │                        議案、司法陳情與選舉
 │   ├── school_class.py     班級系統（班級、班級訂購）
 │   ├── shop.py             購票 + 商品目錄
 │   ├── meal.py             學餐訂購
 │   ├── survey.py           問卷
-│   ├── email.py            站內 Email 發送 / 收件人
+│   ├── email.py / email_platform.py  Email 發送、收件人與平台管理
 │   ├── petitions.py        陳情系統
 │   ├── announcements.py / notifications.py
 │   ├── orgs.py / positions.py / user_positions.py
 │   ├── audit.py / analytics.py / saved_filters.py
-│   ├── auth.py / users.py / mfa.py
-│   └── ws.py / line_webhook.py
+│   ├── auth.py / users.py / mfa.py / passkeys.py / impersonation.py
+│   ├── api_keys.py / webhooks.py / public_api.py / feature_flags.py
+│   └── ws.py / line_webhook.py / discord.py / metrics_endpoint.py
 ├── services/       ← 業務邏輯（Router 呼叫 Service，單向依賴）
 │   ├── document.py         簽核狀態機核心
 │   ├── regulation.py       法規版本狀態機
@@ -56,15 +64,19 @@ apps/api/src/api/
 │   ├── survey.py / announcement.py / petition.py
 │   ├── email_tasks.py / recipient.py / notification_pref.py
 │   ├── outbox.py / outbox_tasks.py 通知 outbox 模式
-│   ├── audit.py / mfa.py / official_print.py
-│   └── org.py / mail.py / line_bot.py / storage.py
+│   ├── audit.py / audit_chain.py / backup_tasks.py / recovery_tasks.py
+│   ├── api_key.py / webhook.py / feature_flag.py / policy.py
+│   ├── discord_bot.py / discord_reminders.py / line_bot.py
+│   └── org.py / mail.py / storage.py / search.py
 ├── email/          ← Email 模板渲染（renderer.py, sender.py, templates/）
 ├── models/         ← SQLAlchemy ORM（只定義結構，無業務邏輯）
 │   ├── document.py / regulation.py / org.py / user.py
 │   ├── meeting.py / school_class.py / shop.py / meal.py
 │   ├── survey.py / announcement.py / petition.py
 │   ├── email_message.py / notification.py / outbox.py
-│   ├── audit_log.py / saved_filter.py
+│   ├── audit_log.py / audit_anchor.py / backup_record.py / saved_filter.py
+│   ├── api_key.py / webhook.py / feature_flag.py / policy.py
+│   ├── passkey.py / user_identity.py / discord_account.py
 │   └── base.py / types.py（TimestampMixin、共用欄位型別）
 ├── schemas/        ← Pydantic Create/Update/Out/ListItem（按模組分檔）
 └── dependencies/   ← auth.py, permissions.py（require_permission 在此）
@@ -99,7 +111,7 @@ apps/web/src/
 ### 無須深入閱讀（靜態 / 工具性）
 
 ```
-apps/api/alembic/versions/   ← 63 個遷移檔，僅在建立新 migration 時參考最新一個
+apps/api/alembic/versions/   ← 歷史遷移（目前約 117 個），只在建立 migration 時參考
 apps/api/src/api/email/node_modules/  ← Email 模板工具鏈依賴（compiled/ 為產出）
 apps/web/public/             ← 靜態資源（圖片、icon）
 .git/ .venv/ .ruff_cache/    ← 工具快取
@@ -128,11 +140,13 @@ docs/HANDOFF_CHECKLIST.md     ← 交接檢查清單與驗證指令
 
 ### 目前開發階段
 
-所有 9 個 P0–P8 階段均已完成。目前為**維護與優化期**，常見任務：
+初始 P0–P8 功能藍圖均已完成。目前為**維護、治理強化與生產化階段**，常見任務：
 - 修改現有 router / service 邏輯
 - 前端頁面 UI 調整（components/、app/ 下頁面）
 - 新增 API 欄位（models → schemas → service → router 的固定流程）
 - 修正 Alembic migration
+- 維護 API key、Webhook、功能旗標、政策同意與稽核鏈
+- 強化備份、可觀測性、模組健康與自動恢復
 
 ### 最常修改的檔案（依頻率排序）
 
@@ -154,6 +168,7 @@ uv run --project apps/api pytest apps/api/tests -v --asyncio-mode=auto
 
 cd apps/web
 npm run lint
+npm run type-check
 npm run build  # 需 Node.js >= 20.9
 npm audit --audit-level=moderate --omit=dev
 ```
@@ -215,7 +230,7 @@ shop:manage / finance:view / admin:all / doc.issue
 
 | 項目 | 原因 | 建議處理 |
 |------|------|---------|
-| `apps/api/alembic/versions/*.py`（63 個） | 歷史遷移，查詢當前 schema 看 models/ 即可 | 排除或只保留最新 3 個 |
+| `apps/api/alembic/versions/*.py` | 歷史遷移，查詢當前 schema 看 models/ 即可 | 排除或按需讀最新檔案 |
 | `uv.lock` | 依賴鎖定檔，無業務邏輯 | 完全排除 |
 | `apps/web/package-lock.json` | 同上 | 完全排除 |
 | `apps/web/next-env.d.ts` | Next.js 自動生成 | 完全排除 |
@@ -228,4 +243,4 @@ shop:manage / finance:view / admin:all / doc.issue
 
 ---
 
-*最後更新：2026-05-19 | 維護整理*
+*最後更新：2026-06-07 | 維護整理*

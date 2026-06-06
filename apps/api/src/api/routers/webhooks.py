@@ -1,4 +1,4 @@
-"""Webhook 訂閱管理路由。Phase D2。
+"""Webhook 訂閱管理路由。
 
 管理員（webhook:admin）：
     GET    /webhooks                 列所有

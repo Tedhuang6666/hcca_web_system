@@ -1,4 +1,4 @@
-"""電子郵件路由測試 — happy path / 401 / 403 / 404 / 批次權限（Phase 3）"""
+"""電子郵件路由的成功、驗證失敗、權限與批次操作測試。"""
 
 from __future__ import annotations
 
@@ -10,8 +10,8 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api import app
 from api.dependencies.auth import get_current_active_user
+from api.main import app
 from api.models.email_message import EmailCampaignRecipient, EmailMessage
 from api.models.org import Org, Permission, Position, UserPosition
 from api.models.user import User
@@ -59,9 +59,7 @@ def _override_user(user: User) -> None:
 
 
 @pytest.mark.asyncio
-async def test_create_draft_message_succeeds(
-    client: AsyncClient, db_session: AsyncSession
-) -> None:
+async def test_create_draft_message_succeeds(client: AsyncClient, db_session: AsyncSession) -> None:
     user = await _seed_user(db_session, "sender@school.edu", ["email:send"])
     _override_user(user)
 
@@ -217,9 +215,7 @@ async def test_recipient_table_overrides_name_and_uses_chinese_placeholder(
             "body": "您已錄取 {{ 錄取部門 }}。",
             "action": "send",
             "recipients": {"user_ids": [str(recipient_user.id)]},
-            "variable_definitions": [
-                {"key": "錄取部門", "label": "錄取部門", "required": True}
-            ],
+            "variable_definitions": [{"key": "錄取部門", "label": "錄取部門", "required": True}],
             "recipient_variables": [
                 {
                     "email": recipient_user.email,
@@ -262,9 +258,7 @@ async def test_compose_preview_can_switch_to_specific_recipient(
         json={
             "subject": "{{ user.name }} 的通知",
             "body": "錄取部門：{{ 錄取部門 }}",
-            "variable_definitions": [
-                {"key": "錄取部門", "label": "錄取部門", "required": True}
-            ],
+            "variable_definitions": [{"key": "錄取部門", "label": "錄取部門", "required": True}],
             "preview_recipient": {
                 "email": "specific@example.org",
                 "name": "特定使用者",
@@ -295,9 +289,7 @@ async def test_compose_preview_allows_incomplete_rows_and_applies_branding(
             "background_color": "#f1f5f9",
             "content_background_color": "#ffffff",
             "footer_text": "資訊部 敬上",
-            "variable_definitions": [
-                {"key": "錄取部門", "label": "錄取部門", "required": True}
-            ],
+            "variable_definitions": [{"key": "錄取部門", "label": "錄取部門", "required": True}],
         },
     )
 

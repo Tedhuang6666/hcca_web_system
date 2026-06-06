@@ -68,8 +68,5 @@ def attach_module_health(
         include_in_schema=False,
         name=route_name,
     )
-    # add_api_route 會把路由 append 到尾端，但業務 router 多半已有貪婪的
-    # `/{id}` 動態路由（如 GET /petitions/{case_id}），會搶先匹配
-    # `/__module_health__` 並因 UUID 驗證失敗回 422/401 → 健康探測永遠拿不到 200，
-    # 半開探測式自動恢復因此失效。把健康路由移到最前面，確保靜態路徑優先匹配。
+    # 健康檢查必須排在 `/{id}` 等動態路由之前，避免被當成業務識別碼解析。
     router.routes.insert(0, router.routes.pop())

@@ -1,4 +1,4 @@
-"""欄位加密 helper 單元測試（Phase B3 / ADR-006）。"""
+"""欄位加密 helper 單元測試（ADR-006）。"""
 
 from __future__ import annotations
 

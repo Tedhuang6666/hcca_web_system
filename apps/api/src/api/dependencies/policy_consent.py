@@ -1,4 +1,4 @@
-"""政策同意 dependency。Phase B1 / ADR-003。
+"""政策同意 dependency（ADR-003）。
 
 掛在需要「使用者必須同意當前政策才能繼續」的端點上：
 

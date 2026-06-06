@@ -117,8 +117,7 @@ def _count_user_summary(
             Meeting.status.in_([MeetingStatus.DRAFT, MeetingStatus.CONFIRMED, MeetingStatus.ACTIVE])
         )
     ).all()
-    # TODO: 公文 / 學餐 / 問卷的個人化過濾留 Phase 2 dashboard 上線後串接 task_inbox。
-    # 目前先給出 0，避免錯誤統計；之後在此填入真實查詢。
+    # 摘要目前僅計算會議；其他類別回傳 0，避免以未個人化的資料誤導使用者。
     return {
         "pending_meetings": len(pending_meetings),
         "closing_meals": 0,

@@ -7,7 +7,8 @@
 ## 一、專案願景與規則
 
 **系統名稱**：校園自治整合平台（HCCA Campus Self-Governance Platform）
-**定位**：服務學生代表大會的數位治理工具，實現公文管理、法規維護、購票、餐訂與問卷的全平台整合。
+**定位**：服務學生代表大會的數位治理工具，整合公文、法規、會議、議案、
+公告、陳情、購票、學餐、問卷、選舉、通知與治理稽核。
 **協作定位**：協助維護校園自治平台（HCCA），並維持既有架構與程式風格一致。
 **行為規則：**
 1. 每次任務優先閱讀 PROJECT_CONTEXT.md，而非掃描所有原始碼。
@@ -23,9 +24,9 @@
 | 階段 | 狀態 | 核心功能 |
 |------|------|----------|
 | P0 基礎建設 | ✅ 完成 | uv Workspaces、Docker、CI/CD |
-| P1 身份驗證 | ✅ 完成 | Google OAuth2、JWT 雙 Token、Redis 黑名單 |
+| P1 身份驗證 | ✅ 完成 | Google OAuth/OIDC、JWT 雙 Token、MFA、Passkey |
 | P2 組織與權限 | ✅ 完成 | 組織樹、職位、RBAC 時間任期 |
-| P3 共用服務 | ✅ 完成 | Celery、Email、WebSocket、LINE Bot |
+| P3 共用服務 | ✅ 完成 | Celery、Email、WebSocket、LINE/Discord Bot |
 | P4 公文與法規 | ✅ 完成 | 簽核狀態機、字號生成、法規條文系統 |
 | P5 購票系統 | ✅ 完成 | 樂觀鎖訂單、Pandas 報表 |
 | P6 學餐系統 | ✅ 完成 | Celery Beat 定時結單、供應商/菜單/訂單管理 |
@@ -54,6 +55,8 @@
 | 套件管理 | uv Workspaces | monorepo |
 | Lint/Format | Ruff | 行長 100 字符 |
 | 測試 | pytest + pytest-asyncio | asyncio_mode=auto |
+| 搜尋 | Meilisearch | 全站索引 |
+| 可觀測性 | Sentry + PostHog + Prometheus | 錯誤、產品與系統指標 |
 
 ### 前端（`apps/web/`）
 
@@ -139,7 +142,7 @@ bash dev.sh
 # 單獨啟動 API
 docker compose up db redis -d
 uv run --project apps/api alembic upgrade head
-uv run --project apps/api uvicorn api:app --reload --port 8000
+uv run --project apps/api uvicorn api.main:app --reload --port 8000
 
 # 建立資料庫 migration（修改 models/ 後必做）
 uv run --project apps/api alembic revision --autogenerate -m "簡短描述變更"
@@ -150,7 +153,7 @@ uv run --project apps/api pytest apps/api/tests -v --asyncio-mode=auto
 
 # Lint 與格式化
 uv run --project apps/api ruff check apps/api/src libs/shared/src
-uv run --project apps/api ruff format apps/api/src libs/shared/src
+uv run --project apps/api ruff format --check apps/api/src libs/shared/src apps/api/tests
 
 # 安裝/更新依賴
 uv add <package> --project apps/api
@@ -158,6 +161,8 @@ uv sync
 
 # 前端開發（在 apps/web/）
 npm run dev    # Next.js dev server（port 3000）
+npm run lint
+npm run type-check
 npm run build  # 生產建置
 ```
 
@@ -291,4 +296,4 @@ uv run --project apps/api alembic upgrade head
 
 ---
 
-*最後更新：2026-04-18 | 作者：Ted Huang*
+*最後更新：2026-06-07 | 作者：Ted Huang*

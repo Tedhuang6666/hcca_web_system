@@ -1301,7 +1301,7 @@ function OnboardingWizard({
     }
   };
   return (
-    <Modal title="新人上任 Wizard" onClose={onClose} maxWidthClassName="max-w-3xl">
+    <Modal title="新人上任 Wizard" onClose={onClose} size="3xl">
       <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-4">
         <div className="space-y-2">
           {[

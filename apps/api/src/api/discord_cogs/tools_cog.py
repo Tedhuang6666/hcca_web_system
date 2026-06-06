@@ -325,7 +325,7 @@ class ToolsCog(commands.Cog):
             await interaction.response.send_message(poll=poll)
             return
 
-        # 後備：reaction 計票（舊版 discord.py）
+        # 無法使用原生投票時退回 reaction 計票。
         fields = [
             {"name": f"{_POLL_NUMBER_EMOJIS[i]} {opt[:200]}", "value": "—", "inline": False}
             for i, opt in enumerate(opts)

@@ -147,13 +147,10 @@ class PermissionCode(StrEnum):
 
     SITE_MANAGE = "site:manage"
 
-    # Phase B1 / D2（企業級升級路線圖、ADR-003 / ADR-005 / Phase D2）
     POLICY_ADMIN = "policy:admin"
     API_KEY_ADMIN = "api_key:admin"
     WEBHOOK_ADMIN = "webhook:admin"
-    # Phase C3 客服工具
     ADMIN_IMPERSONATE = "admin:impersonate"
-    # Phase D3 Feature flags
     FEATURE_FLAG_ADMIN = "feature_flag:admin"
 
 
@@ -866,12 +863,12 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "label": "管理公開網站",
         "desc": "管理官網首頁、公開頁面、平台連結與公開幹部顯示設定",
     },
-    # ── 企業級升級（Phase B1 / D2 / C3 / D3）──────────────────────────
+    # ── 平台治理 ──────────────────────────────────────────────────────
     {
         "group": "企業級治理",
         "code": PermissionCode.POLICY_ADMIN,
         "label": "政策版本管理",
-        "desc": "建立 / 編輯 / 啟用隱私政策、ToS、無障礙等公開政策版本（ADR-003）",
+        "desc": "建立 / 編輯 / 啟用隱私政策、ToS、無障礙等公開政策版本",
     },
     {
         "group": "企業級治理",

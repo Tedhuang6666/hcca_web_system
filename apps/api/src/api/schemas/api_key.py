@@ -1,4 +1,4 @@
-"""ApiKey schemas。Phase D2。"""
+"""ApiKey schemas。"""
 
 from __future__ import annotations
 

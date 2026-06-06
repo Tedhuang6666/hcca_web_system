@@ -130,7 +130,7 @@ function EntityModal({
   const label = kind === "category" ? "主題" : "系列";
 
   return (
-    <Modal title={`${editing ? "編輯" : "新增"}${label}`} onClose={onClose} maxWidthClassName="max-w-md">
+    <Modal title={`${editing ? "編輯" : "新增"}${label}`} onClose={onClose} size="md">
       <div className="space-y-3">
         <Field label="名稱">
           <input value={name} onChange={(e) => setName(e.target.value)} className="input w-full"
@@ -212,7 +212,7 @@ function NewSeriesModal({
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   return (
-    <Modal title="新增系列" onClose={onClose} maxWidthClassName="max-w-md">
+    <Modal title="新增系列" onClose={onClose} size="md">
       <div className="space-y-3">
         <Field label="名稱">
           <input value={name} onChange={(e) => setName(e.target.value)} className="input w-full" placeholder="如：衣服系列" />
@@ -283,7 +283,7 @@ function ProductFormModal({
   const [busy, setBusy] = useState(false);
 
   return (
-    <Modal title={`${editing ? "編輯" : "新增"}商品`} onClose={onClose} maxWidthClassName="max-w-md">
+    <Modal title={`${editing ? "編輯" : "新增"}商品`} onClose={onClose} size="md">
       <div className="space-y-3">
         <Field label="商品名稱">
           <input value={name} onChange={(e) => setName(e.target.value)} className="input w-full" />
@@ -392,7 +392,7 @@ function OptionModal({
   const [imageUrl, setImageUrl] = useState<string | null>(initial?.image_url ?? null);
   const [busy, setBusy] = useState(false);
   return (
-    <Modal title={`${editing ? "編輯" : "新增"}選項`} onClose={onClose} maxWidthClassName="max-w-sm">
+    <Modal title={`${editing ? "編輯" : "新增"}選項`} onClose={onClose} size="sm">
       <div className="space-y-3">
         <Field label="選項值">
           <input value={value} onChange={(e) => setValue(e.target.value)} className="input w-full"
@@ -529,7 +529,7 @@ function VariantGroupModal({
   };
 
   return (
-    <Modal title={`${editing ? "編輯" : "新增"}變體群組`} onClose={onClose} maxWidthClassName="max-w-md">
+    <Modal title={`${editing ? "編輯" : "新增"}變體群組`} onClose={onClose} size="md">
       <div className="space-y-3">
         <Field label="群組名稱">
           <input value={name} onChange={(e) => setName(e.target.value)} className="input w-full" placeholder="如：顏色、尺寸" />
@@ -625,7 +625,7 @@ function SmartOptionsModal({
   };
 
   return (
-    <Modal title={`智慧新增選項：${target.name}`} onClose={onClose} maxWidthClassName="max-w-lg">
+    <Modal title={`智慧新增選項：${target.name}`} onClose={onClose} size="lg">
       <div className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="從其他群組複製">
@@ -1449,7 +1449,7 @@ export default function ShopAdminPage() {
           <Modal
             title={product ? "商品詳情" : series ? "系列詳情" : "主題詳情"}
             onClose={() => setMobileDetailOpen(false)}
-            maxWidthClassName="max-w-2xl"
+            size="2xl"
           >
             {detailContent}
           </Modal>

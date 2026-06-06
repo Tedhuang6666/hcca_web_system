@@ -56,10 +56,6 @@ def _dispatch(event: OutboxEvent) -> None:
             f"【退件】公文 {payload.get('serial', '')} 被退件",
             f"<p>退件原因：{payload.get('comment', '（未填）')}</p>",
         )
-    elif etype == "regulation.published":
-        pass  # 未來：通知訂閱者
-    elif etype == "order.created":
-        pass  # 未來：購票確認信
     elif etype == "line.push":
         from api.services.line_bot import push_text_message
 

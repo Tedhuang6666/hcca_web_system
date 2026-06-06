@@ -1,4 +1,4 @@
-"""Webhook service 核心邏輯測試（HMAC + backoff）。Phase D2。"""
+"""Webhook service 核心邏輯測試（HMAC + backoff）。"""
 
 from __future__ import annotations
 

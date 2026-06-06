@@ -54,10 +54,10 @@ def check_meal_no_shows(self) -> dict:  # noqa: ANN001
     """
     Celery Beat 定時任務：偵測未取餐訂單並分兩階段處理。
 
-    Phase 1 — 結單後 1 小時，訂單仍為 confirmed：
+    首次處理 — 結單後 1 小時，訂單仍為 confirmed：
         → 寄提醒 Email 給使用者，設 reminder_sent_at
 
-    Phase 2 — 結單後 4 小時，已發提醒仍未取：
+    後續處理 — 結單後 4 小時，已發提醒仍未取：
         → 標記 is_no_show=True，寄通知給管理員信箱
 
     預設每 30 分鐘執行一次（在 celery_app.py beat_schedule 中設定）。

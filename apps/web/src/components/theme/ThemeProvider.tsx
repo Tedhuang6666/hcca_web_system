@@ -6,8 +6,7 @@
  * 設計：
  * - 三態：auto / light / dark
  * - auto 模式跟系統 prefers-color-scheme
- * - 已登入使用者偏好之後同步到 server (User.ui_theme)；
- *   未登入 / 未同步前用 localStorage 保留
+ * - 使用 localStorage 保留使用者偏好
  * - 不依賴第三方套件（next-themes），保持 bundle 小
  *
  * 用法：
@@ -97,7 +96,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     if (typeof window !== "undefined") {
       window.localStorage.setItem(STORAGE_KEY, next);
     }
-    // TODO: 同步到 server `/me/preferences` PATCH { ui_theme }
   }, []);
 
   const value = useMemo(

@@ -72,7 +72,7 @@ Start-PortGuardian 3000
 
 # 啟動後端
 Write-Host "[API] 正在彈出後端視窗..." -ForegroundColor Gray
-Start-Process cmd -ArgumentList "/k title BACKEND-API && uv run --project `"$PSScriptRoot\apps\api`" python -m uvicorn api:app --host 0.0.0.0 --port 8000 --reload --reload-dir src --app-dir src" -WorkingDirectory "$PSScriptRoot\apps\api"
+Start-Process cmd -ArgumentList "/k title BACKEND-API && uv run --project `"$PSScriptRoot\apps\api`" python -m uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir src --app-dir src" -WorkingDirectory "$PSScriptRoot\apps\api"
 
 # 啟動前端
 Write-Host "[WEB] 正在彈出前端視窗..." -ForegroundColor Gray

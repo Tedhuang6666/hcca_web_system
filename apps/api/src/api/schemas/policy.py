@@ -1,4 +1,4 @@
-"""政策（隱私 / ToS / 無障礙 / Cookie / Security）schemas。Phase B1 / ADR-003。"""
+"""政策（隱私 / ToS / 無障礙 / Cookie / Security）schemas（ADR-003）。"""
 
 from __future__ import annotations
 

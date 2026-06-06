@@ -32,6 +32,10 @@ _lock = Lock()
 _events: dict[str, deque[tuple[float, str]]] = defaultdict(deque)
 # per-worker 節流：跳閘後在 cooldown 內不重複寫 Redis。
 _tripped_until: dict[str, float] = {}
+# 最近跳閘結果供管理介面顯示；每個模組保留最近 20 筆。
+_trip_history: dict[str, deque[dict[str, float | str | int | bool]]] = defaultdict(
+    lambda: deque(maxlen=20)
+)
 
 # 錯誤嚴重度
 SEV_CRITICAL = "CRITICAL"
@@ -236,6 +240,12 @@ async def get_trip_meta(module_id: str) -> dict[str, int | str]:
     return {"trip_count": count, "max_severity": sev}
 
 
+def recent_trip_events(module_id: str) -> list[dict[str, float | str | int | bool]]:
+    """回傳目前 worker 記錄的最近跳閘事件，最新事件在前。"""
+    with _lock:
+        return list(reversed(_trip_history.get(module_id, ())))
+
+
 async def maybe_trip_module(module_id: str) -> None:
     """超過門檻時自動將模組設為 auto 維護（帶 cooldown TTL）。
 
@@ -316,6 +326,17 @@ async def _notify_and_broadcast(
     module_id: str, *, escalated: bool, severity: str, count: int, cooldown_s: int
 ) -> None:
     """跳閘通知：WebSocket 即時 + outbox 分派 Discord/Email/UI 通知。"""
+    with _lock:
+        _trip_history[module_id].append(
+            {
+                "timestamp": time.time(),
+                "severity": severity,
+                "trip_count": count,
+                "cooldown_s": cooldown_s,
+                "escalated": escalated,
+            }
+        )
+
     try:
         from api.core.ws_manager import manager as ws_manager
 

@@ -1,4 +1,4 @@
-"""Prometheus metrics middleware + /metrics endpoint。Phase A2 / ADR-001。
+"""Prometheus metrics middleware + /metrics endpoint（ADR-001）。
 
 設計：
 - prometheus_client 為 optional 依賴；未安裝時 metrics_enabled = False、

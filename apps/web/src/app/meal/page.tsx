@@ -109,7 +109,7 @@ function OrderModal({
   }
 
   return (
-    <Modal onClose={success ? onDone : onClose} title={success ? "訂餐成功" : "確認訂餐"} maxWidthClassName="max-w-xl">
+    <Modal onClose={success ? onDone : onClose} title={success ? "訂餐成功" : "確認訂餐"} size="xl">
       {success ? (
         <div className="grid gap-5 text-center">
           <div>

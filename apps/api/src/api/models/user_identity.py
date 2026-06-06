@@ -1,9 +1,9 @@
-"""使用者外部身份綁定。對應 ADR-005、Phase D1。
+"""使用者外部身份綁定，對應 ADR-005。
 
 一個 User 可綁定多個 UserIdentity（學校信箱 OIDC、個人 Gmail、未來政府數位身份）。
 任一 identity 可用於登入，登入後都導到同一個 User。
 
-Provider 名稱對應 api.services.auth.providers 下 module name。
+Provider 名稱由實際登入整合定義。
 external_id：provider 端的不可變 ID（Google sub、SAML NameID、OIDC sub）。
 """
 

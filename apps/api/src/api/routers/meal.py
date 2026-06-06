@@ -306,7 +306,7 @@ async def assign_vendor_manager(
     try:
         manager = await meal_svc.assign_vendor_manager(session, vendor, payload.email)
     except ValueError as e:
-        # B3: 統一回傳 400 避免 email 枚舉攻擊（不洩漏 email 是否存在）
+        # 統一回傳 400，避免洩漏 email 是否存在。
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="操作失敗，請確認 Email 是否正確",
@@ -637,7 +637,7 @@ async def get_schedule_item_stats(
 async def get_schedule_pickup_list(
     schedule_id: uuid.UUID, session: DbDep, current_user: MealManagerUser
 ) -> list[dict]:
-    # B1: IDOR 防護 — 確認排程所屬商家的組織與操作者一致
+    # 確認排程所屬商家的組織與操作者一致，防止跨組織存取。
     schedule = await _schedule_or_404(schedule_id, session)
     if not current_user.is_superuser:
         vendor = await _vendor_or_404(schedule.vendor_id, session)
@@ -776,7 +776,7 @@ async def create_meal_order(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     except RuntimeError as e:
-        # B5: pickup_code 碰撞耗盡（極低機率）
+        # 取餐碼碰撞重試耗盡時拒絕建立訂單。
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="系統繁忙，請稍後再試",
@@ -1112,7 +1112,7 @@ async def confirm_meal_order(
     order_id: uuid.UUID, session: DbDep, current_user: MealManagerUser
 ) -> MealOrder:
     order = await _order_or_404(order_id, session)
-    # B2: IDOR 防護 — 確認訂單所屬商家的組織與操作者一致
+    # 確認訂單所屬商家的組織與操作者一致，防止跨組織存取。
     if not current_user.is_superuser:
         vendor = await _vendor_or_404(order.vendor_id, session)
         user_org_ids = await _get_user_org_ids(session, current_user.id)
@@ -1145,7 +1145,7 @@ async def complete_meal_order(
     order_id: uuid.UUID, session: DbDep, current_user: MealManagerUser
 ) -> MealOrder:
     order = await _order_or_404(order_id, session)
-    # B2: IDOR 防護 — 確認訂單所屬商家的組織與操作者一致
+    # 確認訂單所屬商家的組織與操作者一致，防止跨組織存取。
     if not current_user.is_superuser:
         vendor = await _vendor_or_404(order.vendor_id, session)
         user_org_ids = await _get_user_org_ids(session, current_user.id)

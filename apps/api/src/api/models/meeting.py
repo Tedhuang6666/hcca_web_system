@@ -270,8 +270,7 @@ class Meeting(Base, TimestampMixin):
     checkin_token: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
     current_agenda_item_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        # use_alter：此 FK 與 meeting_agenda_items.meeting_id 形成循環，
-        # 改用建表後 ALTER 加入，讓 metadata 可正確排序（消除 SAWarning / 修復 dump 順序）。
+        # 此 FK 與 meeting_agenda_items.meeting_id 形成循環，需在建表後加入。
         ForeignKey(
             "meeting_agenda_items.id",
             ondelete="SET NULL",

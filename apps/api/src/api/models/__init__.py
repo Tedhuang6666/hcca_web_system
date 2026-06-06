@@ -2,7 +2,7 @@
 
 # 基礎
 # 公文系統（含字號模板、受文者、審核步驟等）[M-17, M-18]
-# 公告系統 [P8+]
+# 公告系統
 # 稽核日誌（不可變）
 from api.models.activity import Activity, ActivityConvener, ActivityStatus  # noqa: F401
 from api.models.activity_link import ActivityLink, ActivityLinkKind  # noqa: F401
@@ -93,7 +93,7 @@ from api.models.email_message import (  # noqa: F401
 )
 from api.models.exam_paper import ExamGradeTrack, ExamPaper, ExamPaperDownload  # noqa: F401
 
-# Feature Flag（Phase D3）
+# Feature Flag
 from api.models.feature_flag import FeatureFlag  # noqa: F401
 from api.models.governance import (  # noqa: F401
     AutomationRule,
@@ -209,7 +209,7 @@ from api.models.petition import (  # noqa: F401
     PetitionType,
 )
 
-# 政策版本與同意紀錄（Phase B1 / ADR-003）
+# 政策版本與同意紀錄
 from api.models.policy import (  # noqa: F401
     PolicyConsent,
     PolicyDocument,
@@ -287,11 +287,11 @@ from api.models.site import (  # noqa: F401
 )
 from api.models.user import User  # noqa: F401
 
-# 外部身份綁定（Phase D1 / ADR-005）
+# 外部身份綁定
 from api.models.user_identity import UserIdentity  # noqa: F401
 from api.models.web_push import WebPushSubscription  # noqa: F401
 
-# Webhook 訂閱與投遞紀錄（Phase D2）
+# Webhook 訂閱與投遞紀錄
 from api.models.webhook import (  # noqa: F401
     DeliveryStatus,
     WebhookDelivery,

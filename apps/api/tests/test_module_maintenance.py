@@ -8,7 +8,7 @@ import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api import app
+from api.main import app
 from api.core import maintenance as maint
 from api.core import module_health
 from api.core.config import settings
@@ -30,6 +30,7 @@ async def _clean_module_state():
     maint.clear_cache()
     module_health._events.clear()
     module_health._tripped_until.clear()
+    module_health._trip_history.clear()
 
 
 def _override_user(user: User) -> None:
@@ -148,6 +149,15 @@ async def test_module_circuit_trips_after_threshold_5xx() -> None:
     assert state is not None
     assert state["on"] is True
     assert state["source"] == "auto"
+    assert module_health.recent_trip_events(mod) == [
+        {
+            "timestamp": module_health.recent_trip_events(mod)[0]["timestamp"],
+            "severity": "NORMAL",
+            "trip_count": 1,
+            "cooldown_s": settings.MODULE_CIRCUIT_COOLDOWN_BASE_SECONDS,
+            "escalated": False,
+        }
+    ]
 
 
 async def test_restart_module_clears_maintenance_and_resets_window(

@@ -1,4 +1,4 @@
-"""Feature Flag 業務邏輯 + 評估。Phase D3。
+"""Feature Flag 業務邏輯與評估。
 
 評估順序（任一通過即啟用）：
 1. is_globally_enabled = True

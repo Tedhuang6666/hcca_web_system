@@ -1,4 +1,4 @@
-"""Public API（外部讀取 / 開放資料）。Phase D2。
+"""Public API（外部讀取 / 開放資料）。
 
 對應 ADR-005 規劃：第三方系統可用 ApiKey 拉取公開資料。
 

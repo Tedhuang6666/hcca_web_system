@@ -1,4 +1,4 @@
-"""公文自動催辦 Celery 任務。Phase C1。
+"""公文自動催辦 Celery 任務。
 
 每日 08:00 跑：
   1. 找出 status = pending（待審核 / 簽核中）且 due_date < now 的公文

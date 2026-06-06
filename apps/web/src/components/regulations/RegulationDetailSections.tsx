@@ -404,11 +404,7 @@ export function ArticleRow({
   onClearHighlight,
 }: {
   article: RegulationArticleOut;
-  /** 已棄用：保留相容，元件內未使用。 */
-  index?: number;
   displayLabel: string;
-  /** 已棄用：原本控制摺疊預覽，新元件直接根據 hidden 隱藏。 */
-  collapsed?: boolean;
   hidden?: boolean;
   chapterCollapsed?: boolean;
   onToggleChapter?: (() => void) | null;

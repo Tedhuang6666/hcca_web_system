@@ -1,4 +1,4 @@
-"""對外 API Key model。對應 Phase D2。
+"""對外 API Key model。
 
 設計：
 - 明文 key 只在建立時回傳一次（之後看不到，忘了只能 revoke 重發）

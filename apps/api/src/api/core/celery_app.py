@@ -13,6 +13,11 @@ from celery.signals import setup_logging, task_failure, task_retry, task_success
 from kombu import Queue
 from redis import Redis
 
+# 載入所有 ORM model，確保 SQLAlchemy mapper 在 worker/beat 啟動時就完整設定。
+# （api package 的 __init__ 已淨空、不再載入 web app；少了它，worker 不會自動載入
+# 全部 model，含跨 model relationship 的 task 查詢會出 mapper 設定錯誤。）
+# 只載入 models —— 不碰 FastAPI / router / middleware，維持 worker import 輕量。
+import api.models  # noqa: E402,F401
 from api.core.config import settings
 from api.core.structured_logging import configure_logging
 
@@ -69,8 +74,7 @@ celery_app.conf.update(
         "socket_timeout": settings.REDIS_SOCKET_TIMEOUT,
         "socket_connect_timeout": settings.REDIS_SOCKET_TIMEOUT,
     },
-    # Celery 5.3+：原本 broker_connection_retry 同時管「啟動時」與「執行期」重試；
-    # 6.0 起拆成兩個設定，未明示就會印 CPendingDeprecationWarning 洗 log。
+    # Celery 6 將啟動與執行期的 broker 重試拆成不同設定。
     broker_connection_retry_on_startup=True,
     # --- Result 保留時間 ---
     result_expires=3600,  # 結果保留 1 小時
@@ -131,7 +135,7 @@ celery_app.conf.beat_schedule = {
     "check-meal-no-shows-every-30min": {
         "task": "api.services.meal_tasks.check_meal_no_shows",
         "schedule": 1800.0,
-        # B7: 此任務可能遍歷大量訂單，獨立設定較長的 soft limit
+        # 此任務可能遍歷大量訂單，需使用較長的 soft limit。
         "options": {"soft_time_limit": 300, "time_limit": 360},
     },
     # 每日巡檢法規與公布令一致性（24 小時）
@@ -196,7 +200,7 @@ celery_app.conf.beat_schedule = {
         "task": "api.services.data_lifecycle_tasks.run_safe_purges",
         "schedule": crontab(hour="4", minute="0", day_of_week="1"),
     },
-    # 每日 00:05 產生昨日 audit log anchor（Phase B2 / ADR-004）
+    # 每日 00:05 產生昨日 audit log anchor。
     "audit-anchor-daily-at-0005": {
         "task": "api.services.audit_chain_tasks.compute_daily_audit_anchor",
         "schedule": crontab(hour="0", minute="5"),
@@ -207,12 +211,12 @@ celery_app.conf.beat_schedule = {
         "schedule": crontab(hour="3", minute="0", day_of_week="6"),
         "kwargs": {"days": 7},
     },
-    # 每 30 秒派發 due 的 webhook 投遞（Phase D2）
+    # 每 30 秒派發到期的 webhook。
     "dispatch-webhook-deliveries-every-30s": {
         "task": "api.services.webhook_tasks.process_webhook_deliveries",
         "schedule": 30.0,
     },
-    # 每日 08:00 公文逾期自動催辦 + 升級（Phase C1）
+    # 每日 08:00 執行公文逾期催辦與升級。
     "send-document-reminders-daily-at-8am": {
         "task": "api.services.document_reminder_tasks.send_document_reminders",
         "schedule": crontab(hour="8", minute="0"),

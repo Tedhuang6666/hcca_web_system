@@ -1,4 +1,4 @@
-"""Admin Impersonation。Phase C3 / [docs/iso27001/E-access-control.md]。
+"""Admin Impersonation，參見 docs/iso27001/E-access-control.md。
 
 行為：
 - 管理員（持 admin:impersonate）可申請以另一 user 身分檢視

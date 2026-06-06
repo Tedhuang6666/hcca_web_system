@@ -156,7 +156,7 @@ def require_org_permission(
 
 class AdminMFAChecker:
     """
-    強制管理員必須啟用 MFA 才能進入後台。對應 Phase A4。
+    強制管理員必須啟用 MFA 才能進入後台。
 
     使用方式（path operation decorator 層）：
         @router.get(

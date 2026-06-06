@@ -1,4 +1,4 @@
-"""Feature Flag model。Phase D3。
+"""Feature Flag model。
 
 DB 後端的簡單灰度開關。對應路線圖 D3「自架 Unleash / GrowthBook」的縮減版：
 不引第三方、只夠 HCCA 規模用。

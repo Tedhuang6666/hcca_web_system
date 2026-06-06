@@ -472,7 +472,7 @@ async def emit_announcement_notice(db: AsyncSession, ann: Announcement) -> None:
         )
 
 
-# ── Phase 1：個人 DM 與額外 domain 推播 ────────────────────────────────────────
+# ── 個人 DM 與額外 domain 推播 ────────────────────────────────────────────────
 
 
 async def emit_user_dm(

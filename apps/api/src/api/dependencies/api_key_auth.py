@@ -1,4 +1,4 @@
-"""ApiKey 認證 dependency。Phase D2。
+"""ApiKey 認證 dependency。
 
 用於 Public API 路由：
 

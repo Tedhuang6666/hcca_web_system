@@ -1,4 +1,4 @@
-"""Outbound Webhook 訂閱與投遞紀錄。對應 Phase D2。
+"""Outbound Webhook 訂閱與投遞紀錄。
 
 設計：
 - WebhookSubscription：訂閱者（owner_user_id）告訴系統「這些事件請打到這個 URL」

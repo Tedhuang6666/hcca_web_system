@@ -1,4 +1,4 @@
-"""Feature Flag 路由。Phase D3。
+"""Feature Flag 路由。
 
 已登入使用者：
     GET /feature-flags/me/{key}       查單一 flag 是否啟用

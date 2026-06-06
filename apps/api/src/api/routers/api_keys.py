@@ -1,4 +1,4 @@
-"""ApiKey 管理路由。Phase D2。
+"""ApiKey 管理路由。
 
 管理員（permission: api_key:admin）：
     GET    /api-keys                    列所有 key（不含明文）

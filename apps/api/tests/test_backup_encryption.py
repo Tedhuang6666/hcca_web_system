@@ -1,4 +1,4 @@
-"""備份加密 + sha256 校驗 helper 測試（Phase A3）。"""
+"""備份加密與 sha256 校驗 helper 測試。"""
 
 from __future__ import annotations
 

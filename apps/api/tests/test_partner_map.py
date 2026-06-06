@@ -8,7 +8,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api import app
+from api.main import app
 from api.dependencies.auth import get_current_active_user, get_optional_user
 from api.models.partner_map import (
     PartnerBusiness,

@@ -1,4 +1,4 @@
-"""政策文件與同意紀錄。對應 ADR-003、Phase B1。
+"""政策文件與同意紀錄，對應 ADR-003。
 
 PolicyDocument 是「我們的隱私政策 / ToS / 無障礙聲明 / Cookie 政策」的版本化容器：
 - 同 kind 同時只能一個 is_active=True（DB partial unique index 強制）

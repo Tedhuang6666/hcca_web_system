@@ -1,4 +1,4 @@
-"""Email 範本渲染與富文本清洗單元測試（Phase 1）"""
+"""Email 範本渲染與富文本清洗單元測試。"""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Webhook 投遞 Celery worker。Phase D2。
+"""Webhook 投遞 Celery worker。
 
 兩個 task：
 1. process_webhook_deliveries（每 30 秒）— 拉取 due 的 delivery 並逐一送出
@@ -13,7 +13,6 @@
 - 失敗：mark_failed_and_schedule_retry（exponential backoff）
 - 達 max_retries：標 DEAD（會出現在 deliveries 列表給 admin）
 
-對應路線圖：Phase D2 「Webhook 投遞 Celery task」。
 """
 
 from __future__ import annotations

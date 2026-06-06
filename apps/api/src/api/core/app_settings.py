@@ -220,7 +220,6 @@ def write_env_changes(changes: Mapping[str, str], *, keep_backups: int = 5) -> l
         shutil.copy2(path, backup)
         _prune_backups(path, keep_backups)
 
-    # 就地替換
     remaining = dict(changes)
     new_lines: list[str] = []
     for line in existing_lines:

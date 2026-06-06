@@ -157,7 +157,6 @@ class PermissionCatalogItem(BaseModel):
 
 async def _enrich_user(db: AsyncSession, user: User) -> UserDetail:
     """組裝 UserDetail（含職位 + 有效權限碼）"""
-    # 載入 UserPosition → Position → Permission
     result = await db.execute(
         select(UserPosition)
         .options(
@@ -268,7 +267,6 @@ async def pre_register_user(
             )
         email = f"g0{body.student_id.strip()}@{SCHOOL_EMAIL_DOMAIN}"
 
-    # 檢查 email 或學號是否已存在
     cond = User.email == email
     if body.student_id:
         cond = cond | (User.student_id == body.student_id)

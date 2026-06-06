@@ -708,7 +708,7 @@ export default function AuditLogsPage() {
         <Modal
           title={selectedLog.summary || `${entityLabel(selectedLog.entity_type)}操作紀錄`}
           onClose={() => setSelectedLog(null)}
-          maxWidthClassName="max-w-2xl"
+          size="2xl"
         >
           <div className="space-y-4">
             <div>

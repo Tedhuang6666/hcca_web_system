@@ -1,4 +1,4 @@
-"""備份檔案 GPG 加密 + sha256 校驗 helper。對應 Phase A3。
+"""備份檔案 GPG 加密與 sha256 校驗 helper。
 
 不取代既有 [apps/api/src/api/services/backup_tasks.py] 的 pg_dump 與上傳邏輯，
 而是補強：

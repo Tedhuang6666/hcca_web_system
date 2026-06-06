@@ -324,7 +324,7 @@ _kill_port 8000 "FastAPI" || exit 1
 
 # 2.3 清理孤兒 uvicorn / next-server / next dev / celery worker / discord_worker
 # Celery 重點：殘留 worker 會跟新 worker 共用 -n nodename，造成 DuplicateNodenameWarning。
-ORPHAN_PATTERN="uvicorn[[:space:]]+api:app|next-server|next[[:space:]]+dev|celery.*worker|api\\.discord_worker"
+ORPHAN_PATTERN="uvicorn[[:space:]]+api(\\.main)?:app|next-server|next[[:space:]]+dev|celery.*worker|api\\.discord_worker"
 ORPHAN=$(pgrep -f "$ORPHAN_PATTERN" 2>/dev/null || true)
 if [[ -n "$ORPHAN" ]]; then
     warn "終止孤兒行程：$(echo $ORPHAN | tr '\n' ' ')"
@@ -633,7 +633,7 @@ step "7/8 啟動 FastAPI（port 8000）"
     # 中環境變數會壓過 .env），這裡強制覆寫，避免 console 變成 JSON 大水缸。
     # 想要 json log 請手動跑 `LOG_FORMAT=json uv run ...`。
     export LOG_FORMAT=text
-    exec uv run --project "${REPO_ROOT}/apps/api" python -m uvicorn api:app \
+    exec uv run --project "${REPO_ROOT}/apps/api" python -m uvicorn api.main:app \
         --host 0.0.0.0 \
         --port 8000 \
         --reload \

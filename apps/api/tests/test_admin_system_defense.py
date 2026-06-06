@@ -8,7 +8,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api import app
+from api.main import app
 from api.core.defense import default_rate_limit_config, publish_rules, set_rate_limit_config
 from api.core.ip_blocklist import clear_cache as clear_ip_block_cache
 from api.core.rate_limit import _memory_buckets

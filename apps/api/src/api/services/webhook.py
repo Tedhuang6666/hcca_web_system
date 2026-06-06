@@ -1,4 +1,4 @@
-"""Webhook 訂閱與投遞業務邏輯。Phase D2。
+"""Webhook 訂閱與投遞業務邏輯。
 
 實作層次：
 - subscription CRUD + secret 一次性產生

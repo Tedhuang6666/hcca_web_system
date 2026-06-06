@@ -328,7 +328,7 @@ class Settings(BaseSettings):
     )
     DB_BACKUP_RETENTION_DAYS: int = Field(default=7)
 
-    # --- 異地備份（Phase A3）---
+    # --- 異地備份 ---
     # 對應 docs/DR_OBJECTIVES.md。設定後備份檔會 gpg 加密 + 上傳到指定異地 bucket。
     BACKUP_GPG_PASSPHRASE: str = Field(
         default="",
@@ -351,23 +351,7 @@ class Settings(BaseSettings):
         description="上傳前計算 sha256 並寫入 BackupRecord，還原時驗證",
     )
 
-    # --- OIDC provider（Phase D1 / ADR-005）---
-    # 對接學校 OIDC IdP 時設定。未設則 OIDCProvider.enabled=False。
-    OIDC_DISCOVERY_URL: str = Field(
-        default="",
-        description="OIDC issuer 的 /.well-known/openid-configuration URL",
-    )
-    OIDC_CLIENT_ID: str = Field(default="")
-    OIDC_CLIENT_SECRET: str = Field(default="")
-    OIDC_REDIRECT_URI: str = Field(default="http://localhost:8000/auth/oidc/callback")
-
-    # --- SAML provider（Phase D1 / ADR-005）---
-    SAML_METADATA_URL: str = Field(
-        default="",
-        description="IdP metadata XML URL；未設則 SAMLProvider.enabled=False",
-    )
-
-    # --- 欄位級加密（Phase B3、ADR-006）---
+    # --- 欄位級加密 ---
     # 用於敏感欄位（MFA secret、API key 明文 mirror、第三方 token）。
     # 支援多 key（new first、舊 key 允許解密）以平滑輪替。
     # 格式：comma-separated Fernet base64 keys，例如：
@@ -483,8 +467,6 @@ class Settings(BaseSettings):
             self.GOOGLE_REDIRECT_URI = f"{origin}/auth/google/callback"
         if _is_local_url(self.DISCORD_REDIRECT_URI):
             self.DISCORD_REDIRECT_URI = f"{origin}/discord/callback"
-        if _is_local_url(self.OIDC_REDIRECT_URI):
-            self.OIDC_REDIRECT_URI = f"{origin}/auth/oidc/callback"
         if _is_local_url(self.PASSKEY_ORIGIN):
             self.PASSKEY_ORIGIN = origin
         if host and (self.PASSKEY_RP_ID in _LOCAL_HOSTS or not self.PASSKEY_RP_ID):

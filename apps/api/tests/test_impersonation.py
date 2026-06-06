@@ -1,4 +1,4 @@
-"""Admin impersonation token + guard 測試。Phase C3。"""
+"""Admin impersonation token + guard 測試。"""
 
 from __future__ import annotations
 

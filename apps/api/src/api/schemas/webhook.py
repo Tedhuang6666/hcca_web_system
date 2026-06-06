@@ -1,4 +1,4 @@
-"""Webhook schemas。Phase D2。"""
+"""Webhook schemas。"""
 
 from __future__ import annotations
 

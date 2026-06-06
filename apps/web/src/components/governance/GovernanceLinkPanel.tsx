@@ -60,10 +60,8 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 /**
- * 模組詳情頁的「納入治理」面板。與舊版相比：
- * - 進場即反向查詢這筆資源已被哪些事情納入，並持久顯示（重新整理不會消失）。
- * - 已納入的事情可直接前往，或解除關聯。
- * - 連動後端 EntityRelation 真實 (target_type, target_id)，是治理匯流的入口。
+ * 模組詳情頁的「納入治理」面板。
+ * 顯示目前的 EntityRelation 關聯，並提供前往及解除關聯操作。
  */
 export default function GovernanceLinkPanel({
   entityType,

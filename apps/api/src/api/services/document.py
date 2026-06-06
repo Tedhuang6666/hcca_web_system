@@ -1285,7 +1285,6 @@ async def reject_step(
     current_approval.decided_at = now
     current_approval.is_acting = is_acting
 
-    # 後續步驟全部跳過
     result = await session.execute(
         select(DocumentApproval).where(
             DocumentApproval.document_id == doc.id,
@@ -1383,14 +1382,12 @@ async def upsert_recipients(
     if doc.status != DocumentStatus.DRAFT:
         raise ValueError("只有草稿狀態的公文可以修改受文者")
 
-    # 刪除舊有
     old_result = await session.execute(
         select(DocumentRecipient).where(DocumentRecipient.document_id == doc.id)
     )
     for old in old_result.scalars().all():
         await session.delete(old)
 
-    # 新增
     new_recipients: list[DocumentRecipient] = []
     for r in recipients:
         rec = DocumentRecipient(
@@ -1442,7 +1439,6 @@ async def recall_document(
         msg = "第一關審核人已開始審核，無法撤回"
         raise ValueError(msg)
 
-    # 刪除所有審核步驟
     all_steps_result = await session.execute(
         select(DocumentApproval).where(DocumentApproval.document_id == doc.id)
     )

@@ -97,7 +97,6 @@ async def get_current_user(
     except InvalidTokenError as e:
         raise _CREDENTIALS_EXCEPTION from e
 
-    # 驗證 Token 類型
     if payload.get("type") != "access":
         raise _CREDENTIALS_EXCEPTION
 

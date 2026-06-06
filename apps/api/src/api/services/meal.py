@@ -652,7 +652,7 @@ async def create_meal_order(
     order_items: list[dict] = []
 
     for item_req in data.items:
-        # B4: 使用 SELECT FOR UPDATE 鎖住品項列，防止並發超賣
+        # 使用 SELECT FOR UPDATE 鎖住品項列，防止並發超賣。
         item_result = await session.execute(
             select(MenuItem).where(MenuItem.id == item_req.menu_item_id).with_for_update()
         )
@@ -751,7 +751,7 @@ async def create_platform_meal_order(
         raise ValueError("已超過此取餐時段的訂購截止時間")
 
     # 鎖住商品上架列，序列化同一商品的並發訂購，避免 max_quantity / 取餐時段容量超賣
-    # （與班級訂購路徑 create_meal_order 的 B4 SELECT FOR UPDATE 防超賣一致）。
+    # 與班級訂購路徑相同，使用 SELECT FOR UPDATE 防止超賣。
     await session.execute(
         select(MealProductAvailability.id)
         .where(MealProductAvailability.id == availability.id)
@@ -1322,8 +1322,8 @@ async def export_meal_orders_csv(
 async def check_and_handle_no_shows(session: AsyncSession) -> dict:
     """
     未取餐處理（供 Celery Beat 每小時呼叫）：
-    - Phase 1：結單後 1 小時，訂單仍為 confirmed 且未發提醒 → 寄信給使用者，設 reminder_sent_at
-    - Phase 2：結單後 4 小時，訂單仍為 confirmed 且已發提醒 → 標記 is_no_show=True，寄信給管理員
+    - 結單後 1 小時，訂單仍為 confirmed 且未發提醒：寄信給使用者並設定 reminder_sent_at
+    - 結單後 4 小時，訂單仍為 confirmed 且已發提醒：標記 is_no_show=True 並通知管理員
     """
     from sqlalchemy.orm import selectinload as _sil
 
@@ -1358,12 +1358,12 @@ async def check_and_handle_no_shows(session: AsyncSession) -> dict:
         vendor_name = order.schedule.vendor.name if order.schedule.vendor else "商家"
         schedule_date = str(order.schedule.date)
 
-        # Phase 2：已發提醒，且超過 4 小時 → 標記 no_show
+        # 已提醒且逾期超過 4 小時的訂單標記為未取餐。
         if order.reminder_sent_at is not None and deadline <= no_show_threshold:
             order.is_no_show = True
             marked_no_show += 1
             logger.info("標記未取餐 serial=%s user=%s", order.serial_number, order.user_id)
-            # B6: 通知管理員（email 失敗不阻斷狀態更新）
+            # 通知失敗不得阻斷訂單狀態更新。
             from api.core.config import settings
 
             if settings.MAIL_FROM:
@@ -1394,7 +1394,7 @@ async def check_and_handle_no_shows(session: AsyncSession) -> dict:
                         mail_err,
                     )
 
-        # Phase 1：尚未發提醒 → 發提醒給使用者
+        # 尚未提醒的訂單寄送取餐通知。
         elif order.reminder_sent_at is None and user_email:
             order.reminder_sent_at = now
             reminded += 1

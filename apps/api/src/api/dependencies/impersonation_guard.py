@@ -1,4 +1,4 @@
-"""Impersonation read-only guard。Phase C3。
+"""Impersonation read-only guard。
 
 對所有 unsafe HTTP method（POST/PATCH/PUT/DELETE）在 router 層注入此 dependency，
 當 request token 為 impersonation token 時 raise 403。

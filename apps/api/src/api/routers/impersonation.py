@@ -1,4 +1,4 @@
-"""Admin Impersonation 路由。Phase C3。
+"""Admin Impersonation 路由。
 
 端點：
     POST /admin/impersonate/{target_user_id}    啟動（回傳短效 token）

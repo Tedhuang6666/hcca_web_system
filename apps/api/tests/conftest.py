@@ -7,7 +7,7 @@ import os
 
 # 測試用 HTTP client 以 base_url="http://test" 發送請求；
 # 確保 TrustedHostMiddleware 不會在使用者本機 .env 限縮 ALLOWED_HOSTS 時
-# 把所有測試 status 變 400 Invalid host header。必須在 `from api import app` 之前設定。
+# 把所有測試 status 變 400 Invalid host header。必須在 `from api.main import app` 之前設定。
 os.environ.setdefault(
     "ALLOWED_HOSTS",
     '["localhost","127.0.0.1","api","test","testserver"]',
@@ -32,7 +32,7 @@ from sqlalchemy.ext.asyncio import (  # noqa: E402
     create_async_engine,
 )
 
-from api import app  # noqa: E402
+from api.main import app  # noqa: E402
 from api.core.database import Base, get_db  # noqa: E402
 
 

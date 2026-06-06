@@ -23,7 +23,6 @@ import {
   type Draft,
 } from "@/components/regulations/AmendmentDraftParts";
 import {
-  ARTICLE_IS_STRUCTURAL,
   ArticleRow,
   DiffModal,
   PROSE,
@@ -981,7 +980,6 @@ export default function RegulationDetailPageClient() {
                             key={article.id}
                             article={article}
                             displayLabel={displayLabel}
-                            collapsed={hiddenByChapter && !ARTICLE_IS_STRUCTURAL[article.article_type]}
                             hidden={hiddenByChapter}
                             chapterCollapsed={Boolean(article.article_type === "chapter" && chapterCollapsedMap[article.id])}
                             shareUrl={articleShareUrls[article.id]}

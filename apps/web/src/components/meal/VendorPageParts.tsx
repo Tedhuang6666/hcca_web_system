@@ -297,11 +297,9 @@ export function PickupTab({
     setActionLoading(true);
     try {
       await onCompleteOrder(orderId);
-      // 更新 lookup 結果
       if (lookupResult?.id === orderId) {
         setLookupResult(r => r ? { ...r, status: "completed" } : r);
       }
-      // 更新 pickup list
       setPickupList(list => list.map(item =>
         item.order_id === orderId ? { ...item, status: "completed" } : item
       ));
@@ -346,7 +344,7 @@ export function PickupTab({
               onChange={e => {
                 const v = e.target.value.replace(/\D/g, "").slice(0, 5);
                 setSerial(v);
-                // U9: 滿 5 碼自動查詢
+                // 取餐碼輸入完整後自動查詢。
                 if (v.length === 5) handleLookup(v);
               }}
               onKeyDown={e => e.key === "Enter" && handleLookup()}

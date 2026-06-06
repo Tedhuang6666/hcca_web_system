@@ -7,7 +7,7 @@
 - /meal_cancel 取消未結單的訂單
 
 設計：
-- 一鍵下單走 service.create_meal_order 的「schedule_id + menu_item_id、數量 1」舊版路徑。
+- 一鍵下單使用 service.create_meal_order 的單品參數格式。
 - 多品項 / 多數量 / 取餐時段 / 付款等複雜情境一律給「在網頁完成」深連結（create_open_url），
   避免在 Discord 重寫整套學餐邏輯。所有商業規則仍由 services.meal 把關。
 """

@@ -1,4 +1,4 @@
-"""AuditLog 雜湊鏈 + 每日 anchor 模型。對應 ADR-004、Phase B2。
+"""AuditLog 雜湊鏈與每日 anchor 模型，對應 ADR-004。
 
 本檔僅新增 AuditLogAnchor model。對 AuditLog 本身的 prev_hash / self_hash
 欄位擴充見 [apps/api/src/api/models/audit_log.py]（單獨 migration）。

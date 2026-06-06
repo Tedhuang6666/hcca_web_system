@@ -67,4 +67,4 @@ EXPOSE 8000
 
 # 生產：Gunicorn + UvicornWorker（多 worker 充分利用多核）
 # 開發：CMD 可被 docker-compose override 為 uvicorn --reload
-CMD ["python", "-m", "gunicorn.app.wsgiapp", "api:app", "--config", "/app/gunicorn.conf.py"]
+CMD ["python", "-m", "gunicorn.app.wsgiapp", "api.main:app", "--config", "/app/gunicorn.conf.py"]

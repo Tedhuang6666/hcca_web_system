@@ -166,7 +166,7 @@ def backup_database(self) -> dict:  # type: ignore[type-arg]
             )
             raise
 
-    # Phase A3：可選 GPG 加密 + sha256 + BackupRecord 寫入
+    # 可選用 GPG 加密，並寫入 sha256 與 BackupRecord。
     final_path = target
     encrypted = False
     sha256_hex: str | None = None

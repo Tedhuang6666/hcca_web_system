@@ -199,7 +199,7 @@ async def _w_doc_pending_my_approval(
     if count == 0:
         return None
 
-    # S10.4 SLA 預警：偵測逾期（updated_at > 3 天）的公文
+    # SLA 預警：偵測超過 3 天未更新的公文。
     sla_cutoff = now - timedelta(days=3)
     overdue = sum(1 for (d, _a) in rows if d.updated_at and d.updated_at < sla_cutoff)
 
@@ -266,7 +266,7 @@ async def _w_meeting_upcoming(db: AsyncSession, user: User) -> DashboardWidget |
     if not rows:
         return None
 
-    # S10.1 時間感知：依「最早一場會議距離現在多久」調整 severity 與標題
+    # 依最早一場會議的剩餘時間調整 severity 與標題。
     soonest = min(m.starts_at for m in rows if m.starts_at is not None)
     minutes_to_start = (soonest - now).total_seconds() / 60
     if minutes_to_start <= 30:

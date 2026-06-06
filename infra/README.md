@@ -1,6 +1,6 @@
 # infra/
 
-對應企業級路線圖 Phase A1-A2 部署基礎設施。
+正式環境的 reverse proxy、監控與 dashboard provisioning。
 
 | 子目錄 | 內容 | 對應 ADR |
 |---|---|---|
@@ -11,14 +11,14 @@
 ## 套用方式
 
 ```bash
-# Production：
+# Production
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
-# Production blue-green（零停機部署）：
+# Production blue-green（零停機部署）
 docker compose --env-file .env.production -f docker-compose.bluegreen.yml up -d db redis proxy
 bash scripts/zero-downtime-deploy.sh blue
 
-# Dev 維持原樣：
+# Development
 bash dev.sh
 ```
 
@@ -38,7 +38,7 @@ bash dev.sh
 | PgBouncer | （內網） | no |
 | Redis | （內網） | no |
 
-## TODO（Phase A 期間補）
+## 待完成
 
 - [ ] Caddy + Origin TLS（Cloudflare Origin Certificate）
 - [ ] Prometheus rule files（SLO 違反告警）

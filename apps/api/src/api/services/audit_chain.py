@@ -1,4 +1,4 @@
-"""稽核日誌雜湊鏈 helper。對應 ADR-004、Phase B2。
+"""稽核日誌雜湊鏈 helper，對應 ADR-004。
 
 提供：
 - compute_self_hash(): 計算單一 AuditLog row 的 self_hash

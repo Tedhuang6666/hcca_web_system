@@ -74,14 +74,10 @@ from api.services.permission import (
 )
 
 router = APIRouter(prefix="/documents", tags=["公文系統"])
-# template_router / serial_router 由 documents_serial.py 提供（透過檔案底部 re-export 帶入）
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
 OptionalUser = Annotated[User | None, Depends(get_optional_user)]
-
-
-# 輔助函式（取公文 / 存取守衛 / 批次回應 / WS 廣播）已搬到 documents_helpers.py。
 
 
 # ── 統計 ──────────────────────────────────────────────────────────────────────
@@ -405,10 +401,6 @@ async def delete_document(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
 
 
-# 簽核 workflow / 批次 / 代理授權 / 直接發文 端點已搬移至
-# [documents_approve.py](apps/api/src/api/routers/documents_approve.py)。
-
-
 @router.get(
     "/{doc_id}/suggest-approvers",
     summary="建議審核人（依公文組織，擁有 document:approve 權限的現任成員）",
@@ -424,10 +416,6 @@ async def suggest_approvers(
     await _assert_access(session, doc, current_user)
     users = await doc_svc.suggest_approvers(session, doc.org_id)
     return [{"id": str(u.id), "display_name": u.display_name, "email": u.email} for u in users]
-
-
-# 附件管理端點（list / upload / link / delete / rename / download / preview）
-# 已搬移至 [documents_attachments.py](apps/api/src/api/routers/documents_attachments.py)。
 
 
 # ── 受文者管理 ────────────────────────────────────────────────────────────────
@@ -580,17 +568,7 @@ async def print_document(
     )
 
 
-# 公文範本庫 (template_router) 與字號模板 (serial_router) 已搬移至
-# [documents_serial.py](apps/api/src/api/routers/documents_serial.py)。
-#
-# 簽核 workflow / 批次 / 代理授權 / 直接發文 已搬移至
-# [documents_approve.py](apps/api/src/api/routers/documents_approve.py)。
-#
-# 附件 / 上傳 / 下載 / 預覽 已搬移至
-# [documents_attachments.py](apps/api/src/api/routers/documents_attachments.py)。
-#
-# 以下 re-export 保留歷史 import 路徑（例如測試直接 `from api.routers.documents
-# import batch_approve_documents`），避免重構破壞既有測試與外部呼叫。
+# 維持 api.routers.documents 的公開匯入介面。
 from api.routers.documents_approve import (  # noqa: E402, F401
     approve_document,
     archive_document,

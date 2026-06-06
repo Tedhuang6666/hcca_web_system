@@ -2170,7 +2170,7 @@ function ComposeInner() {
       </div>
 
       {confirmOpen && (
-        <Modal title="確認大量寄送" onClose={() => setConfirmOpen(false)} maxWidthClassName="max-w-md">
+        <Modal title="確認大量寄送" onClose={() => setConfirmOpen(false)} size="md">
           <p className="text-sm" style={{ color: "var(--text-primary)" }}>
             這封信將寄送給 <strong>{preflightResult?.unique_count ?? estimatedRecipientCount}</strong> 位收件人，
             共 {preflightResult?.estimated_batches ?? 1} 批，確定要立即送出嗎？
