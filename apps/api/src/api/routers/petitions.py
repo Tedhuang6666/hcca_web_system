@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import os
 import uuid
 from typing import Annotated
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -813,14 +812,18 @@ async def upload_attachment(
     return out
 
 
-@router.get("/{case_id}/attachments/{attachment_id}/download", summary="下載陳情附件")
+@router.get(
+    "/{case_id}/attachments/{attachment_id}/download",
+    summary="下載陳情附件",
+    response_model=None,
+)
 async def download_attachment(
     case_id: uuid.UUID,
     attachment_id: uuid.UUID,
     session: DbDep,
     user: OptionalUser,
     verification_code: str | None = Query(None),
-) -> FileResponse:
+) -> FileResponse | RedirectResponse:
     case_obj = await _case_or_404(session, case_id)
     include_internal = False
     if user is not None:
@@ -845,14 +848,25 @@ async def download_attachment(
         att.visibility == PetitionAttachmentVisibility.INTERNAL and not include_internal
     ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此附件")
+    # 依儲存後端提供附件：本機後端直接 serve，遠端後端重導向至 presigned URL。
+    # 勿把後端類型（uploads/ 路徑）寫死在路由層 —— 檔案缺失或走 S3 時 FileResponse
+    # 會丟 FileNotFoundError（unhandled 500），算進 /petitions 5xx 導致斷路器跳閘。
+    storage = get_storage()
     filename = att.display_name or att.filename
     encoded_filename = quote(filename.encode("utf-8"))
-    return FileResponse(
-        path=os.path.join("uploads", att.storage_key),
-        filename=filename,
-        media_type=att.content_type,
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"},
-    )
+    media_type = att.content_type or "application/octet-stream"
+    local = storage.local_path(att.storage_key)
+    if local is not None:
+        if not local.exists():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="附件檔案不存在")
+        return FileResponse(
+            path=str(local),
+            filename=filename,
+            media_type=media_type,
+            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"},
+        )
+    url = await storage.get_url(att.storage_key, disposition="attachment", download_name=filename)
+    return RedirectResponse(url=url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
 
 
 @router.get(

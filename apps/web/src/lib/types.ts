@@ -3636,7 +3636,13 @@ export interface EmailBlock {
 export interface EmailComposePayload {
   subject: string;
   heading: string;
+  preview_text: string;
   body: string;
+  accent_color: string;
+  background_color: string;
+  content_background_color: string;
+  footer_text: string;
+  show_system_footer: boolean;
   banner_image_url: string;
   banner_image_alt: string;
   card_rows: EmailCardRow[];
@@ -3689,6 +3695,12 @@ export interface EmailMessageOut {
 
 export interface EmailMessageDetailOut extends EmailMessageOut {
   heading: string;
+  preview_text: string;
+  accent_color: string;
+  background_color: string;
+  content_background_color: string;
+  footer_text: string;
+  show_system_footer: boolean;
   body: string;
   banner_image_url: string;
   banner_image_alt: string;

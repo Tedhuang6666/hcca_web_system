@@ -9,8 +9,9 @@
     <mj-section background-color="#eef2f7" padding="24px 18px 28px">
       <mj-column>
         <mj-text padding="0">
-          <div style="background-color:#ffffff;border:1px solid #e5e7eb;border-radius:24px;padding:32px 30px 30px;box-shadow:0 14px 34px rgba(15,23,42,.08);">
-            <div class="hcca-kicker" style="margin-bottom:10px;">Official Message</div>
+          <div style="background-color:{{ background_color }};padding:10px;border-radius:28px;">
+          <div style="background-color:{{ content_background_color }};border:1px solid #e5e7eb;border-radius:24px;padding:32px 30px 30px;box-shadow:0 14px 34px rgba(15,23,42,.08);">
+            <div class="hcca-kicker" style="margin-bottom:10px;color:{{ accent_color }};">Official Message</div>
             <div style="color:#111827;font-size:26px;font-weight:850;line-height:1.32;margin-bottom:22px;">{{ heading or subject }}</div>
             {% if banner_image_url %}
               <div style="padding:0 0 22px;text-align:center;"><img src="{{ banner_image_url }}" alt="{{ banner_image_alt }}" width="540" style="display:block;max-width:100%;height:auto;border-radius:16px;" /></div>
@@ -45,18 +46,26 @@
             {% if buttons %}
               <div style="padding:24px 0 0;">
                 {% for b in buttons %}
-                  <a href="{{ b.url }}" style="box-sizing:border-box;display:inline-block;margin:0 10px 10px 0;max-width:100%;font-size:15px;font-weight:800;text-decoration:none;padding:14px 28px;border-radius:12px;word-break:break-word;{% if b.style == 'secondary' %}background-color:#d6b34a;color:#111827;{% elif b.style == 'outline' %}background-color:#ffffff;color:#111827;border:1px solid #111827;{% else %}background-color:#111827;color:#ffffff;{% endif %}">{{ b.label or '查看詳情' }}</a>
+                  <a href="{{ b.url }}" style="box-sizing:border-box;display:inline-block;margin:0 10px 10px 0;max-width:100%;font-size:15px;font-weight:800;text-decoration:none;padding:14px 28px;border-radius:12px;word-break:break-word;{% if b.style == 'secondary' %}background-color:#d6b34a;color:#111827;{% elif b.style == 'outline' %}background-color:#ffffff;color:{{ accent_color }};border:1px solid {{ accent_color }};{% else %}background-color:{{ accent_color }};color:#ffffff;{% endif %}">{{ b.label or '查看詳情' }}</a>
                 {% endfor %}
               </div>
             {% elif cta_url %}
               <div style="padding:24px 0 0;">
-                <a href="{{ cta_url }}" style="box-sizing:border-box;display:inline-block;max-width:100%;background-color:#111827;color:#ffffff;font-size:15px;font-weight:800;text-decoration:none;padding:14px 28px;border-radius:12px;word-break:break-word;">{{ cta_label or '查看詳情' }}</a>
+                <a href="{{ cta_url }}" style="box-sizing:border-box;display:inline-block;max-width:100%;background-color:{{ accent_color }};color:#ffffff;font-size:15px;font-weight:800;text-decoration:none;padding:14px 28px;border-radius:12px;word-break:break-word;">{{ cta_label or '查看詳情' }}</a>
               </div>
             {% endif %}
+          </div>
           </div>
         </mj-text>
       </mj-column>
     </mj-section>
+    {% if footer_text %}
+      <mj-section background-color="#eef2f7" padding="4px 32px 18px">
+        <mj-column>
+          <mj-text align="center" font-size="13px" color="#64748b" line-height="1.7" padding="0">{{ footer_text | nl2br }}</mj-text>
+        </mj-column>
+      </mj-section>
+    {% endif %}
     <mj-include path="./_footer.mjml" />
   </mj-body>
 </mjml>

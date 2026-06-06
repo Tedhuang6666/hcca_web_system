@@ -17,6 +17,7 @@ import type {
   EmailCardRow,
   EmailComposePayload,
   EmailAttachmentOut,
+  EmailMessageOut,
   EmailPreflightOut,
   EmailRecipientListOut,
   EmailRecipientVariableInput,
@@ -115,20 +116,42 @@ const BUTTON_STYLE_OPTIONS: { value: EmailButtonStyle; label: string }[] = [
   { value: "outline", label: "外框" },
 ];
 
+const COMPOSE_STEPS = [
+  { number: 1, label: "選擇起點", description: "空白、範本或過去郵件" },
+  { number: 2, label: "收件資料", description: "建立名單與個人化欄位" },
+  { number: 3, label: "郵件內容", description: "編輯並即時預覽" },
+  { number: 4, label: "寄送檢查", description: "預檢與抽樣測試" },
+  { number: 5, label: "確認寄送", description: "立即或預約寄送" },
+] as const;
+
 /** 逐收件人指定不同內容的一列（表格編輯，取代手寫 JSON） */
 type RecipientRow = { email: string; name: string; variables: Record<string, string> };
 
 /** 系統內建可用變數（一律可插入） */
 const SYSTEM_VARIABLES: { token: string; label: string }[] = [
-  { token: "{{ user.name }}", label: "收件人姓名" },
-  { token: "{{ user.email }}", label: "收件人 Email" },
+  { token: "{{ 姓名 }}", label: "姓名" },
+  { token: "{{ 電子郵件 }}", label: "電子郵件" },
   { token: "{{ unsubscribe_url }}", label: "退訂連結" },
 ];
+
+const normalizeVariableKey = (rawName: string) =>
+  rawName
+    .trimStart()
+    .replace(/\s+/g, "_")
+    .replace(/[^\p{L}\p{N}_]/gu, "")
+    .replace(/^\p{N}+/u, "")
+    .slice(0, 64);
 
 /** 自動暫存的草稿內容（不含收件人） */
 type ComposeDraft = {
   subject: string;
   heading: string;
+  previewText: string;
+  accentColor: string;
+  backgroundColor: string;
+  contentBackgroundColor: string;
+  footerText: string;
+  showSystemFooter: boolean;
   bannerImageUrl: string;
   bannerImageAlt: string;
   body: string;
@@ -157,7 +180,14 @@ function ComposeInner() {
   const requestedListId = searchParams.get("list");
 
   const [subject, setSubject] = useState("");
+  const [currentStep, setCurrentStep] = useState(1);
   const [heading, setHeading] = useState("");
+  const [previewText, setPreviewText] = useState("");
+  const [accentColor, setAccentColor] = useState("#111827");
+  const [backgroundColor, setBackgroundColor] = useState("#eef2f7");
+  const [contentBackgroundColor, setContentBackgroundColor] = useState("#ffffff");
+  const [footerText, setFooterText] = useState("");
+  const [showSystemFooter, setShowSystemFooter] = useState(true);
   const [bannerImageUrl, setBannerImageUrl] = useState("");
   const [bannerImageAlt, setBannerImageAlt] = useState("");
   const [body, setBody] = useState("");
@@ -167,7 +197,11 @@ function ComposeInner() {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [variableDefinitions, setVariableDefinitions] = useState<EmailVariableDefinition[]>([]);
   const [previewVariables, setPreviewVariables] = useState<Record<string, string>>({});
-  const [recipientRows, setRecipientRows] = useState<RecipientRow[]>([]);
+  const [recipientRows, setRecipientRows] = useState<RecipientRow[]>([
+    { email: "", name: "", variables: {} },
+  ]);
+  const [pasteTableOpen, setPasteTableOpen] = useState(false);
+  const [pasteTableText, setPasteTableText] = useState("");
   const [previewRecipientIndex, setPreviewRecipientIndex] = useState(0);
   const [recipients, setRecipients] = useState<RecipientSelector>(EMPTY_RECIPIENTS);
 
@@ -186,6 +220,8 @@ function ComposeInner() {
   const [savedTemplates, setSavedTemplates] = useState<SavedTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [platformTemplates, setPlatformTemplates] = useState<EmailTemplateOut[]>([]);
+  const [recentMessages, setRecentMessages] = useState<EmailMessageOut[]>([]);
+  const [recentMessageId, setRecentMessageId] = useState("");
   const [recipientLists, setRecipientLists] = useState<EmailRecipientListOut[]>([]);
   const [platformTemplateId, setPlatformTemplateId] = useState("");
   const [recipientListId, setRecipientListId] = useState("");
@@ -196,10 +232,15 @@ function ComposeInner() {
   const [preflightResult, setPreflightResult] = useState<EmailPreflightOut | null>(null);
 
   const loadPlatformResources = useCallback(() => {
-    Promise.all([emailApi.listTemplates(), emailApi.listRecipientLists()])
-      .then(([templates, lists]) => {
+    Promise.all([
+      emailApi.listTemplates(),
+      emailApi.listRecipientLists(),
+      emailApi.listMessages({ limit: 30 }),
+    ])
+      .then(([templates, lists, messages]) => {
         setPlatformTemplates(templates);
         setRecipientLists(lists);
+        setRecentMessages(messages);
       })
       .catch((e) =>
         toast.error(e instanceof ApiError ? e.message : "載入郵件資源失敗"),
@@ -234,6 +275,12 @@ function ComposeInner() {
       .then((m) => {
         setSubject(m.subject);
         setHeading(m.heading);
+        setPreviewText(m.preview_text ?? "");
+        setAccentColor(m.accent_color ?? "#111827");
+        setBackgroundColor(m.background_color ?? "#eef2f7");
+        setContentBackgroundColor(m.content_background_color ?? "#ffffff");
+        setFooterText(m.footer_text ?? "");
+        setShowSystemFooter(m.show_system_footer ?? true);
         setBannerImageUrl(m.banner_image_url ?? "");
         setBannerImageAlt(m.banner_image_alt ?? "");
         setBody(m.body);
@@ -263,6 +310,12 @@ function ComposeInner() {
   const restoreDraft = useCallback((d: ComposeDraft) => {
     setSubject(d.subject);
     setHeading(d.heading);
+    setPreviewText(d.previewText ?? "");
+    setAccentColor(d.accentColor ?? "#111827");
+    setBackgroundColor(d.backgroundColor ?? "#eef2f7");
+    setContentBackgroundColor(d.contentBackgroundColor ?? "#ffffff");
+    setFooterText(d.footerText ?? "");
+    setShowSystemFooter(d.showSystemFooter ?? true);
     setBannerImageUrl(d.bannerImageUrl ?? "");
     setBannerImageAlt(d.bannerImageAlt ?? "");
     setBody(d.body);
@@ -295,6 +348,12 @@ function ComposeInner() {
     value: {
       subject,
       heading,
+      previewText,
+      accentColor,
+      backgroundColor,
+      contentBackgroundColor,
+      footerText,
+      showSystemFooter,
       bannerImageUrl,
       bannerImageAlt,
       body,
@@ -314,6 +373,12 @@ function ComposeInner() {
     (): TemplateContent => ({
       subject,
       heading,
+      previewText,
+      accentColor,
+      backgroundColor,
+      contentBackgroundColor,
+      footerText,
+      showSystemFooter,
       bannerImageUrl,
       bannerImageAlt,
       body,
@@ -326,6 +391,12 @@ function ComposeInner() {
     [
       subject,
       heading,
+      previewText,
+      accentColor,
+      backgroundColor,
+      contentBackgroundColor,
+      footerText,
+      showSystemFooter,
       bannerImageUrl,
       bannerImageAlt,
       body,
@@ -356,6 +427,12 @@ function ComposeInner() {
     (): EmailComposePayload => ({
       subject: subject.trim(),
       heading: heading.trim(),
+      preview_text: previewText.trim(),
+      accent_color: accentColor,
+      background_color: backgroundColor,
+      content_background_color: contentBackgroundColor,
+      footer_text: footerText.trim(),
+      show_system_footer: showSystemFooter,
       banner_image_url: bannerImageUrl.trim(),
       banner_image_alt: bannerImageAlt.trim(),
       body,
@@ -394,6 +471,12 @@ function ComposeInner() {
     [
       subject,
       heading,
+      previewText,
+      accentColor,
+      backgroundColor,
+      contentBackgroundColor,
+      footerText,
+      showSystemFooter,
       bannerImageUrl,
       bannerImageAlt,
       body,
@@ -459,12 +542,7 @@ function ComposeInner() {
     ]);
   const updateVariableName = (i: number, rawName: string) => {
     const oldKey = variableDefinitions[i]?.key ?? "";
-    const key = rawName
-      .trimStart()
-      .replace(/\s+/g, "_")
-      .replace(/[^\p{L}\p{N}_]/gu, "")
-      .replace(/^\p{N}+/u, "")
-      .slice(0, 64);
+    const key = normalizeVariableKey(rawName);
     setVariableDefinitions((rows) =>
       rows.map((row, idx) => (idx === i ? { ...row, key, label: key } : row)),
     );
@@ -521,6 +599,12 @@ function ComposeInner() {
   const applyTemplate = (template: SavedTemplate) => {
     setSubject(template.subject);
     setHeading(template.heading);
+    setPreviewText(template.previewText ?? "");
+    setAccentColor(template.accentColor ?? "#111827");
+    setBackgroundColor(template.backgroundColor ?? "#eef2f7");
+    setContentBackgroundColor(template.contentBackgroundColor ?? "#ffffff");
+    setFooterText(template.footerText ?? "");
+    setShowSystemFooter(template.showSystemFooter ?? true);
     setBannerImageUrl(template.bannerImageUrl);
     setBannerImageAlt(template.bannerImageAlt);
     setBody(template.body);
@@ -571,6 +655,12 @@ function ComposeInner() {
     const content = template.content;
     setSubject(content.subject ?? "");
     setHeading(content.heading ?? "");
+    setPreviewText(content.preview_text ?? "");
+    setAccentColor(content.accent_color ?? "#111827");
+    setBackgroundColor(content.background_color ?? "#eef2f7");
+    setContentBackgroundColor(content.content_background_color ?? "#ffffff");
+    setFooterText(content.footer_text ?? "");
+    setShowSystemFooter(content.show_system_footer ?? true);
     setBannerImageUrl(content.banner_image_url ?? "");
     setBannerImageAlt(content.banner_image_alt ?? "");
     setBody(content.body ?? "");
@@ -581,6 +671,35 @@ function ComposeInner() {
     setTrackOpens(content.track_opens ?? true);
     setTrackClicks(content.track_clicks ?? true);
     toast.success(`已套用平台範本：${template.name}`);
+  };
+
+  const applyRecentMessage = async (id: string) => {
+    setRecentMessageId(id);
+    if (!id) return;
+    try {
+      const message = await emailApi.getMessage(id);
+      setSubject(message.subject);
+      setHeading(message.heading);
+      setPreviewText(message.preview_text ?? "");
+      setAccentColor(message.accent_color ?? "#111827");
+      setBackgroundColor(message.background_color ?? "#eef2f7");
+      setContentBackgroundColor(message.content_background_color ?? "#ffffff");
+      setFooterText(message.footer_text ?? "");
+      setShowSystemFooter(message.show_system_footer ?? true);
+      setBannerImageUrl(message.banner_image_url ?? "");
+      setBannerImageAlt(message.banner_image_alt ?? "");
+      setBody(message.body);
+      setCardRows(message.card_rows ?? []);
+      setButtons(message.buttons ?? []);
+      setBlocks(message.blocks ?? []);
+      setVariableDefinitions(message.variable_definitions ?? []);
+      setPreviewVariables(message.default_variables ?? {});
+      setTrackOpens(message.track_opens);
+      setTrackClicks(message.track_clicks);
+      toast.success("已套用過去郵件格式，未帶入舊收件人");
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "載入過去郵件失敗");
+    }
   };
 
   const savePlatformTemplate = async () => {
@@ -750,10 +869,73 @@ function ComposeInner() {
   const removeRecipientRow = (i: number) =>
     setRecipientRows((prev) => prev.filter((_, idx) => idx !== i));
 
+  const importPastedTable = () => {
+    const lines = pasteTableText
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (lines.length < 2) {
+      toast.error("請貼上欄位名稱與至少一列資料");
+      return;
+    }
+
+    const delimiter = lines[0].includes("\t") ? "\t" : ",";
+    const cells = lines.map((line) => line.split(delimiter).map((cell) => cell.trim()));
+    const headers = cells[0];
+    const emailIndex = headers.findIndex((header) =>
+      ["電子郵件", "email", "e-mail"].includes(header.toLowerCase()),
+    );
+    const nameIndex = headers.findIndex((header) =>
+      ["姓名", "用戶姓名", "name"].includes(header.toLowerCase()),
+    );
+    if (emailIndex < 0) {
+      toast.error("第一列必須包含「電子郵件」欄位");
+      return;
+    }
+
+    const customColumns = headers
+      .map((header, index) => ({ index, key: normalizeVariableKey(header) }))
+      .filter(({ index, key }) => index !== emailIndex && index !== nameIndex && key);
+    const keys = customColumns.map(({ key }) => key);
+    if (new Set(keys).size !== keys.length) {
+      toast.error("欄位名稱不可重複");
+      return;
+    }
+
+    setVariableDefinitions(
+      customColumns.map(({ key }) => ({
+        key,
+        label: key,
+        required: true,
+        default_value: "",
+      })),
+    );
+    setRecipientRows(
+      cells.slice(1).map((row) => ({
+        email: row[emailIndex] ?? "",
+        name: nameIndex >= 0 ? (row[nameIndex] ?? "") : "",
+        variables: Object.fromEntries(
+          customColumns.map(({ index, key }) => [key, row[index] ?? ""]),
+        ),
+      })),
+    );
+    setPreviewRecipientIndex(0);
+    setPasteTableText("");
+    setPasteTableOpen(false);
+    toast.success(`已匯入 ${cells.length - 1} 列資料`);
+  };
+
   const importedRecipientCount = new Set(
     recipientRows.map((row) => row.email.trim().toLowerCase()).filter(Boolean),
   ).size;
   const estimatedRecipientCount = (count ?? 0) + importedRecipientCount;
+  const invalidRecipientRows = recipientRows
+    .map((row, index) => ({ row, index }))
+    .filter(
+      ({ row }) =>
+        row.email.trim() &&
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email.trim()),
+    );
 
   const validate = (needRecipients: boolean): boolean => {
     if (!subject.trim()) {
@@ -767,6 +949,10 @@ function ComposeInner() {
     const keys = variableDefinitions.map((variable) => variable.key.trim());
     if (new Set(keys).size !== keys.length) {
       toast.error("表格欄位名稱不可重複");
+      return false;
+    }
+    if (invalidRecipientRows.length > 0) {
+      toast.error(`有 ${invalidRecipientRows.length} 列電子郵件格式錯誤`);
       return false;
     }
     const importedRecipients = buildRecipientVariables();
@@ -883,6 +1069,19 @@ function ComposeInner() {
     void doSend();
   };
 
+  const goToNextStep = async () => {
+    if (currentStep === 2 && !validate(true)) return;
+    if (currentStep === 3 && !validate(false)) return;
+    if (currentStep === 4) {
+      setBusy(true);
+      const result = await runPreflight();
+      setBusy(false);
+      if (!result) return;
+    }
+    setCurrentStep((step) => Math.min(5, step + 1));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   return (
     <div className="mx-auto max-w-6xl space-y-5">
       <header className="flex flex-col gap-1">
@@ -905,10 +1104,42 @@ function ComposeInner() {
         )}
       </header>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <nav className="card overflow-x-auto p-2" aria-label="寄信步驟">
+        <ol className="grid min-w-[760px] grid-cols-5 gap-1">
+          {COMPOSE_STEPS.map((step) => {
+            const active = currentStep === step.number;
+            const completed = currentStep > step.number;
+            return (
+              <li key={step.number}>
+                <button
+                  type="button"
+                  className="w-full rounded-lg px-3 py-2 text-left transition-colors"
+                  disabled={step.number > currentStep + 1}
+                  style={{
+                    background: active ? "var(--primary-dim)" : "transparent",
+                    color: active ? "var(--primary)" : "var(--text-secondary)",
+                    border: `1px solid ${active ? "var(--primary)" : "transparent"}`,
+                    opacity: step.number > currentStep + 1 ? 0.45 : 1,
+                  }}
+                  onClick={() => setCurrentStep(step.number)}
+                >
+                  <span className="block text-xs font-semibold">
+                    {completed ? "完成" : `步驟 ${step.number}`} · {step.label}
+                  </span>
+                  <span className="mt-0.5 block text-[11px]" style={{ color: "var(--text-muted)" }}>
+                    {step.description}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+      </nav>
+
+      <div className={`grid gap-5 ${currentStep >= 3 ? "lg:grid-cols-2" : ""}`}>
         {/* ── 編輯區 ─────────────────────────────────────────── */}
         <div className="space-y-4">
-          <section className="card space-y-3 p-4">
+          <section className={`card space-y-3 p-4 ${currentStep === 1 ? "" : "hidden"}`}>
             <div>
               <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
                 情境預設
@@ -954,6 +1185,26 @@ function ComposeInner() {
                   另存平台範本
                 </button>
               </div>
+            </div>
+            <div className="space-y-2">
+              <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                套用過去郵件格式
+              </label>
+              <select
+                className="input"
+                value={recentMessageId}
+                onChange={(event) => void applyRecentMessage(event.target.value)}
+              >
+                <option value="">選擇以前寄發或儲存的郵件…</option>
+                {recentMessages.map((message) => (
+                  <option key={message.id} value={message.id}>
+                    {message.subject} · {new Date(message.created_at).toLocaleDateString("zh-TW")}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                只套用信件內容、版型與欄位，不會帶入舊收件人。
+              </p>
             </div>
             <div className="space-y-2">
               <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
@@ -1054,7 +1305,7 @@ function ComposeInner() {
             </div>
           </section>
 
-          <section className="card space-y-2 p-4">
+          <section className={`card space-y-2 p-4 ${currentStep === 3 ? "" : "hidden"}`}>
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold">重點卡片</h2>
               <button type="button" className="btn btn-ghost btn-sm" onClick={addRow}>
@@ -1095,14 +1346,80 @@ function ComposeInner() {
             )}
           </section>
 
-          <section className="card space-y-2 p-4">
+          <section className={`card space-y-2 p-4 ${currentStep === 3 ? "" : "hidden"}`}>
             <h2 className="text-sm font-semibold">內文</h2>
             <div onFocus={() => (lastFocusRef.current = "body")}>
               <RichTextarea ref={bodyRef} value={body} onChange={setBody} placeholder="撰寫信件內文…" />
             </div>
           </section>
 
-          <section className="card space-y-3 p-4">
+          <details className={`card p-4 ${currentStep === 3 ? "" : "hidden"}`}>
+            <summary className="cursor-pointer text-sm font-semibold">
+              進階外觀與品牌設定
+            </summary>
+            <div className="mt-4 space-y-4">
+              <div>
+                <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                  收件匣預覽文字
+                </label>
+                <input
+                  className="input"
+                  value={previewText}
+                  maxLength={200}
+                  onChange={(event) => setPreviewText(event.target.value)}
+                  placeholder="顯示在主旨旁的摘要文字"
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                {[
+                  ["品牌主色", accentColor, setAccentColor],
+                  ["郵件背景", backgroundColor, setBackgroundColor],
+                  ["內容背景", contentBackgroundColor, setContentBackgroundColor],
+                ].map(([label, value, setter]) => (
+                  <label key={String(label)} className="text-xs">
+                    <span className="mb-1 block" style={{ color: "var(--text-muted)" }}>{String(label)}</span>
+                    <span className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        className="h-10 w-12 cursor-pointer rounded border p-1"
+                        style={{ borderColor: "var(--border)" }}
+                        value={String(value)}
+                        onChange={(event) => (setter as (value: string) => void)(event.target.value)}
+                      />
+                      <input
+                        className="input min-w-0 font-mono text-xs"
+                        value={String(value)}
+                        maxLength={7}
+                        onChange={(event) => (setter as (value: string) => void)(event.target.value)}
+                      />
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                  自訂頁尾文字
+                </label>
+                <textarea
+                  className="input min-h-20"
+                  value={footerText}
+                  maxLength={500}
+                  onChange={(event) => setFooterText(event.target.value)}
+                  placeholder="例如：資訊部 敬上"
+                />
+              </div>
+              <label className="flex items-center gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  checked={showSystemFooter}
+                  onChange={(event) => setShowSystemFooter(event.target.checked)}
+                />
+                顯示系統名稱、退訂連結與通知偏好頁尾
+              </label>
+            </div>
+          </details>
+
+          <section className={`card space-y-3 p-4 ${currentStep === 2 ? "" : "hidden"}`}>
             <div>
               <h2 className="text-sm font-semibold">個人化變數</h2>
               <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
@@ -1139,64 +1456,91 @@ function ComposeInner() {
             </div>
 
             <div className="space-y-2 rounded-lg p-3" style={{ background: "var(--bg-elevated)" }}>
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>
-                  表格欄位
-                </span>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={addVariableDefinition}>
-                  + 新增欄位
-                </button>
-              </div>
-              {variableDefinitions.length === 0 ? (
-                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                  電子郵件與用戶姓名是固定欄位。可再新增「錄取部門」等欄位，並直接使用同名佔位符。
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {variableDefinitions.map((row, i) => (
-                    <div key={i} className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
-                      <input
-                        className="input"
-                        value={row.key}
-                        maxLength={64}
-                        placeholder="欄位名稱，例如：錄取部門"
-                        onChange={(e) => updateVariableName(i, e.target.value)}
-                      />
-                      <code className="flex items-center rounded-lg px-3 text-xs" style={{ background: "var(--bg-surface)", color: "var(--text-secondary)" }}>
-                        {row.key ? `{{ ${row.key} }}` : "輸入欄位名稱後產生佔位符"}
-                      </code>
-                      <button type="button" className="btn btn-ghost btn-sm" aria-label="移除變數" onClick={() => removeVariable(i)}>
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-2 rounded-lg p-3" style={{ background: "var(--bg-elevated)" }}>
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <span className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>
                     收件人資料表
                   </span>
                   <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                    每一列寄送一封信；欄位值會套用到該列收件人的同名佔位符。
+                    直接編輯表頭與資料。每個表頭都會自動成為同名佔位符。
                   </p>
                 </div>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={addRecipientRow}>
-                  + 新增資料列
-                </button>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setPasteTableOpen((open) => !open)}
+                  >
+                    貼上表格
+                  </button>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={addVariableDefinition}>
+                    + 新增欄位
+                  </button>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={addRecipientRow}>
+                    + 新增資料列
+                  </button>
+                </div>
               </div>
+              {pasteTableOpen && (
+                <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
+                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                    可直接從 Excel／Google 試算表複製，第一列會作為欄位名稱。
+                  </p>
+                  <textarea
+                    className="input min-h-28 font-mono text-xs"
+                    value={pasteTableText}
+                    onChange={(event) => setPasteTableText(event.target.value)}
+                    placeholder={"電子郵件\t姓名\t錄取部門\t錄取部門數\nted981026@gmail.com\t黃丞廷\t資訊部\t1"}
+                  />
+                  <div className="flex justify-end gap-2">
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPasteTableOpen(false)}>
+                      取消
+                    </button>
+                    <button type="button" className="btn btn-primary btn-sm" onClick={importPastedTable}>
+                      匯入表格
+                    </button>
+                  </div>
+                </div>
+              )}
               <div className="overflow-x-auto">
                 <table className="w-full min-w-max border-separate border-spacing-1">
                   <thead>
                     <tr className="text-left text-xs" style={{ color: "var(--text-muted)" }}>
-                      <th className="min-w-56 px-1">電子郵件</th>
-                      <th className="min-w-36 px-1">用戶姓名</th>
-                      {definedVariables.map((variable) => (
-                        <th key={variable.key} className="min-w-40 px-1">
-                          {variable.key}
+                      <th className="min-w-56 px-1">
+                        電子郵件
+                        <code className="ml-2 font-normal" style={{ color: "var(--primary)" }}>
+                          {"{{ 電子郵件 }}"}
+                        </code>
+                      </th>
+                      <th className="min-w-40 px-1">
+                        姓名
+                        <code className="ml-2 font-normal" style={{ color: "var(--primary)" }}>
+                          {"{{ 姓名 }}"}
+                        </code>
+                      </th>
+                      {variableDefinitions.map((variable, i) => (
+                        <th key={`${i}-${variable.key}`} className="min-w-52 px-1">
+                          <div className="flex items-center gap-1">
+                            <input
+                              className="input min-w-36 py-1 text-xs"
+                              value={variable.key}
+                              maxLength={64}
+                              placeholder="欄位名稱"
+                              aria-label={`第 ${i + 1} 個自訂欄位名稱`}
+                              onChange={(event) => updateVariableName(i, event.target.value)}
+                            />
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              aria-label={`移除欄位 ${variable.key || i + 1}`}
+                              onClick={() => removeVariable(i)}
+                            >
+                              ×
+                            </button>
+                          </div>
+                          <code className="mt-1 block font-normal" style={{ color: "var(--primary)" }}>
+                            {variable.key ? `{{ ${variable.key} }}` : "輸入名稱後自動產生"}
+                          </code>
                         </th>
                       ))}
                       <th className="w-10" />
@@ -1211,6 +1555,13 @@ function ComposeInner() {
                             type="email"
                             value={row.email}
                             placeholder="user@example.com"
+                            style={{
+                              borderColor:
+                                row.email.trim() &&
+                                !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email.trim())
+                                  ? "var(--danger)"
+                                  : undefined,
+                            }}
                             onChange={(e) => updateRecipientRow(i, { email: e.target.value })}
                           />
                         </td>
@@ -1222,8 +1573,8 @@ function ComposeInner() {
                             onChange={(e) => updateRecipientRow(i, { name: e.target.value })}
                           />
                         </td>
-                        {definedVariables.map((variable) => (
-                          <td key={variable.key}>
+                        {variableDefinitions.map((variable, variableIndex) => (
+                          <td key={`${variableIndex}-${variable.key}`}>
                             <input
                               className="input min-w-40"
                               value={row.variables[variable.key] ?? ""}
@@ -1254,10 +1605,15 @@ function ComposeInner() {
                   尚無資料，請新增第一列。
                 </p>
               )}
+              {invalidRecipientRows.length > 0 && (
+                <p className="text-xs" style={{ color: "var(--danger)" }}>
+                  有 {invalidRecipientRows.length} 列電子郵件格式錯誤，已以紅框標示。
+                </p>
+              )}
             </div>
           </section>
 
-          <section className="card space-y-3 p-4">
+          <section className={`card space-y-3 p-4 ${currentStep === 3 ? "" : "hidden"}`}>
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold">行動按鈕（選填，可多顆）</h2>
               <button type="button" className="btn btn-ghost btn-sm" onClick={addButton}>
@@ -1310,7 +1666,7 @@ function ComposeInner() {
             )}
           </section>
 
-          <section className="card space-y-3 p-4">
+          <section className={`card space-y-3 p-4 ${currentStep === 3 ? "" : "hidden"}`}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-sm font-semibold">內容區塊（選填）</h2>
               <div className="flex gap-1.5">
@@ -1391,7 +1747,7 @@ function ComposeInner() {
             )}
           </section>
 
-          <section className="card space-y-2 p-4">
+          <section className={`card space-y-2 p-4 ${currentStep === 2 ? "" : "hidden"}`}>
             <h2 className="text-sm font-semibold">收件對象</h2>
             <select
               className="input"
@@ -1416,7 +1772,7 @@ function ComposeInner() {
             </p>
           </section>
 
-          <section className="card space-y-3 p-4">
+          <section className={`card space-y-3 p-4 ${currentStep === 3 ? "" : "hidden"}`}>
             <div className="flex items-center justify-between gap-2">
               <div>
                 <h2 className="text-sm font-semibold">附件</h2>
@@ -1453,7 +1809,7 @@ function ComposeInner() {
         </div>
 
         {/* ── 預覽與動作 ─────────────────────────────────────── */}
-        <div className="space-y-4">
+        <div className={`space-y-4 ${currentStep >= 3 ? "" : "hidden"}`}>
           <section className="card overflow-hidden p-0">
             <div
               className="flex flex-wrap items-center justify-between gap-2 px-4 py-2"
@@ -1494,7 +1850,7 @@ function ComposeInner() {
             )}
           </section>
 
-          <section className="card space-y-3 p-4">
+          <section className={`card space-y-3 p-4 ${currentStep >= 4 ? "" : "hidden"}`}>
             <div className="grid gap-2 sm:grid-cols-2">
               <label className="flex items-center gap-2 text-xs">
                 <input type="checkbox" checked={trackOpens} onChange={(e) => setTrackOpens(e.target.checked)} />
@@ -1515,7 +1871,7 @@ function ComposeInner() {
                 {preflightResult.missing_variables.length > 0 && <p style={{ color: "var(--danger)" }}>缺少必要欄位：{preflightResult.missing_variables.length}</p>}
               </div>
             )}
-            <div>
+            {currentStep === 5 && <div>
               <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
                 預約寄送時間（選填）
               </label>
@@ -1525,17 +1881,17 @@ function ComposeInner() {
                 value={scheduledAt}
                 onChange={(e) => setScheduledAt(e.target.value)}
               />
-            </div>
+            </div>}
             <div className="flex flex-wrap gap-2">
-              <button
+              {currentStep === 4 && <button
                 type="button"
                 className="btn btn-ghost btn-sm"
                 disabled={busy}
                 onClick={handleTest}
               >
                 測試寄給我
-              </button>
-              <button
+              </button>}
+              {currentStep === 4 && <button
                 type="button"
                 className="btn btn-ghost btn-sm"
                 disabled={busy}
@@ -1553,7 +1909,7 @@ function ComposeInner() {
                 }}
               >
                 抽樣測試
-              </button>
+              </button>}
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
@@ -1562,22 +1918,22 @@ function ComposeInner() {
               >
                 儲存草稿
               </button>
-              <button
+              {currentStep === 5 && <button
                 type="button"
                 className="btn btn-secondary btn-sm"
                 disabled={busy || !scheduledAt}
                 onClick={handleSchedule}
               >
                 預約寄送
-              </button>
-              <button
+              </button>}
+              {currentStep === 5 && <button
                 type="button"
                 className="btn btn-primary btn-sm"
                 disabled={busy}
                 onClick={handleSend}
               >
                 立即寄送
-              </button>
+              </button>}
             </div>
             {lastSavedAt && (
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>
@@ -1586,6 +1942,29 @@ function ComposeInner() {
             )}
           </section>
         </div>
+      </div>
+
+      <div className="sticky bottom-3 z-20 flex items-center justify-between rounded-xl border p-3 shadow-lg backdrop-blur" style={{ background: "color-mix(in srgb, var(--bg-surface) 92%, transparent)", borderColor: "var(--border)" }}>
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          disabled={currentStep === 1 || busy}
+          onClick={() => setCurrentStep((step) => Math.max(1, step - 1))}
+        >
+          上一步
+        </button>
+        <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+          {COMPOSE_STEPS[currentStep - 1].label}
+        </span>
+        {currentStep < 5 ? (
+          <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => void goToNextStep()}>
+            {currentStep === 4 ? "完成檢查" : "下一步"}
+          </button>
+        ) : (
+          <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+            請在上方確認寄送方式
+          </span>
+        )}
       </div>
 
       {confirmOpen && (

@@ -108,6 +108,8 @@ def test_personalization_context_uses_email_link_base_for_unsubscribe() -> None:
         f"{settings.EMAIL_LINK_BASE_URL.rstrip('/')}/unsubscribe?token="
     )
     assert context["frontend_base_url"] == settings.EMAIL_LINK_BASE_URL.rstrip("/")
+    assert context["姓名"] == "測試"
+    assert context["電子郵件"] == "test@example.com"
 
 
 def test_chinese_variable_name_can_be_validated_and_rendered() -> None:
@@ -119,6 +121,28 @@ def test_chinese_variable_name_can_be_validated_and_rendered() -> None:
     assert render_personalized_text("您已錄取 {{ 錄取部門 }}", {"錄取部門": "活動部"}) == (
         "您已錄取 活動部"
     )
+
+
+def test_generic_email_supports_custom_branding() -> None:
+    html = render_email(
+        "generic",
+        {
+            "subject": "錄取通知",
+            "heading": "恭喜錄取",
+            "body_html": "<p>歡迎加入</p>",
+            "accent_color": "#2563eb",
+            "background_color": "#f1f5f9",
+            "content_background_color": "#ffffff",
+            "footer_text": "資訊部 敬上",
+            "show_system_footer": False,
+        },
+    )
+
+    assert "background-color:#2563eb" not in html
+    assert "color:#2563eb" in html
+    assert "background-color:#f1f5f9" in html
+    assert "資訊部 敬上" in html
+    assert "通知偏好設定" not in html
 
 
 def test_unsubscribe_token_roundtrip() -> None:

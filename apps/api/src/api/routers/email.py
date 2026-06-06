@@ -123,7 +123,13 @@ class EmailComposePayload(BaseModel):
 
     subject: str = Field(min_length=1, max_length=255)
     heading: str = Field(default="", max_length=200)
+    preview_text: str = Field(default="", max_length=200)
     body: str = ""  # 富文本 HTML（渲染時以 bleach 清洗）
+    accent_color: str = Field(default="#111827", pattern=r"^#[0-9A-Fa-f]{6}$")
+    background_color: str = Field(default="#eef2f7", pattern=r"^#[0-9A-Fa-f]{6}$")
+    content_background_color: str = Field(default="#ffffff", pattern=r"^#[0-9A-Fa-f]{6}$")
+    footer_text: str = Field(default="", max_length=500)
+    show_system_footer: bool = True
     banner_image_url: str = Field(default="", max_length=500)
     banner_image_alt: str = Field(default="", max_length=200)
     card_rows: list[CardRow] = Field(default_factory=list)
@@ -156,7 +162,15 @@ class EmailMessageUpdate(BaseModel):
 
     subject: str | None = Field(default=None, max_length=255)
     heading: str | None = Field(default=None, max_length=200)
+    preview_text: str | None = Field(default=None, max_length=200)
     body: str | None = None
+    accent_color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
+    background_color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
+    content_background_color: str | None = Field(
+        default=None, pattern=r"^#[0-9A-Fa-f]{6}$"
+    )
+    footer_text: str | None = Field(default=None, max_length=500)
+    show_system_footer: bool | None = None
     banner_image_url: str | None = Field(default=None, max_length=500)
     banner_image_alt: str | None = Field(default=None, max_length=200)
     card_rows: list[CardRow] | None = None
@@ -206,6 +220,12 @@ class EmailMessageOut(BaseModel):
 
 class EmailMessageDetailOut(EmailMessageOut):
     heading: str
+    preview_text: str
+    accent_color: str
+    background_color: str
+    content_background_color: str
+    footer_text: str
+    show_system_footer: bool
     body: str
     banner_image_url: str
     banner_image_alt: str
@@ -377,6 +397,12 @@ def _build_context(payload: EmailComposePayload) -> dict:
     """把寄信內容組成範本 context（標題 / 卡片 / 內文按鈕 / 自由區塊 / 舊版 CTA）。"""
     return {
         "heading": payload.heading,
+        "preview_text": payload.preview_text,
+        "accent_color": payload.accent_color,
+        "background_color": payload.background_color,
+        "content_background_color": payload.content_background_color,
+        "footer_text": payload.footer_text,
+        "show_system_footer": payload.show_system_footer,
         "banner_image_url": _safe_image_url(payload.banner_image_url),
         "banner_image_alt": payload.banner_image_alt,
         "card_rows": [r.model_dump() for r in payload.card_rows],
@@ -787,6 +813,12 @@ def _to_detail(
     return EmailMessageDetailOut(
         **_to_out(msg, sender_name).model_dump(),
         heading=str(ctx.get("heading", "")),
+        preview_text=str(ctx.get("preview_text", "")),
+        accent_color=str(ctx.get("accent_color", "#111827")),
+        background_color=str(ctx.get("background_color", "#eef2f7")),
+        content_background_color=str(ctx.get("content_background_color", "#ffffff")),
+        footer_text=str(ctx.get("footer_text", "")),
+        show_system_footer=bool(ctx.get("show_system_footer", True)),
         body=msg.body,
         banner_image_url=str(ctx.get("banner_image_url", "")),
         banner_image_alt=str(ctx.get("banner_image_alt", "")),
@@ -1079,6 +1111,17 @@ async def update_message(
     ctx = dict(msg.context or {})
     if body.heading is not None:
         ctx["heading"] = body.heading
+    for key in (
+        "preview_text",
+        "accent_color",
+        "background_color",
+        "content_background_color",
+        "footer_text",
+        "show_system_footer",
+    ):
+        value = getattr(body, key)
+        if value is not None:
+            ctx[key] = value
     if body.banner_image_url is not None:
         ctx["banner_image_url"] = _safe_image_url(body.banner_image_url)
     if body.banner_image_alt is not None:

@@ -245,7 +245,7 @@
                   <tbody>
                     <tr>
                       <td align="center" style="font-size:0px;padding:0;word-break:break-word;">
-                        <div style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans TC', 'Microsoft JhengHei', Helvetica, Arial, sans-serif;font-size:12px;line-height:1.8;text-align:center;color:#94a3b8;">本信由「{{ app_name }}」系統自動發送，請勿直接回覆。<br> {% if unsubscribe_url %}<a href="{{ unsubscribe_url }}" style="color:#94a3b8;text-decoration:underline;">不再接收此類通知</a><span style="color:#cbd5e1;"> · </span>{% endif %}<a href="{{ frontend_base_url }}/settings/notifications" style="color:#94a3b8;text-decoration:underline;">通知偏好設定</a></div>
+                        <div style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans TC', 'Microsoft JhengHei', Helvetica, Arial, sans-serif;font-size:12px;line-height:1.8;text-align:center;color:#94a3b8;">{% if show_system_footer %} 本信由「{{ app_name }}」系統自動發送，請勿直接回覆。<br> {% if unsubscribe_url %}<a href="{{ unsubscribe_url }}" style="color:#94a3b8;text-decoration:underline;">不再接收此類通知</a><span style="color:#cbd5e1;"> · </span>{% endif %}<a href="{{ frontend_base_url }}/settings/notifications" style="color:#94a3b8;text-decoration:underline;">通知偏好設定</a> {% endif %}</div>
                       </td>
                     </tr>
                   </tbody>

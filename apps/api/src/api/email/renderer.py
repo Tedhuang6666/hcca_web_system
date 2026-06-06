@@ -63,6 +63,11 @@ _UNSUBSCRIBE_SALT = "hcca-email-unsubscribe"
 _CONTEXT_DEFAULTS: dict = {
     "subject": "",
     "preview_text": "",
+    "accent_color": "#111827",
+    "background_color": "#eef2f7",
+    "content_background_color": "#ffffff",
+    "footer_text": "",
+    "show_system_footer": True,
     "heading": "",
     "body_text": "",
     "body_html": "",
@@ -208,6 +213,8 @@ def build_personalization_context(
         unsubscribe_url = f"{email_link_base_url}/unsubscribe?token={token}"
     return {
         **{key: "" if value is None else str(value) for key, value in custom_variables.items()},
+        "姓名": name or "",
+        "電子郵件": email,
         "user": {
             "id": str(user_id) if user_id else "",
             "name": name or "",

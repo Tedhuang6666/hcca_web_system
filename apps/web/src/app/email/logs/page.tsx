@@ -23,6 +23,12 @@ function detailToPreviewPayload(d: EmailMessageDetailOut): EmailComposePayload {
   return {
     subject: d.subject,
     heading: d.heading,
+    preview_text: d.preview_text,
+    accent_color: d.accent_color,
+    background_color: d.background_color,
+    content_background_color: d.content_background_color,
+    footer_text: d.footer_text,
+    show_system_footer: d.show_system_footer,
     body: d.body,
     banner_image_url: d.banner_image_url,
     banner_image_alt: d.banner_image_alt,
