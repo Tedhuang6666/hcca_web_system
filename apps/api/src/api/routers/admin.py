@@ -426,6 +426,21 @@ async def update_user(
         "is_superuser": user.is_superuser,
     }
     is_owner = user.email.lower() in settings.OWNER_EMAILS
+    # 職責分離：is_superuser 是比 admin:all 更高的層級（繞過全部 RBAC 與 owner 以外的保護），
+    # 故唯有操作者本身為 superuser 時，才允許變更他人的 is_superuser，或修改既有 superuser 帳號。
+    # 否則持 admin:all 的非 superuser 可對自己送 is_superuser=true 自我提權，
+    # 或停用／降權合法 superuser 造成接管。
+    if not admin_user.is_superuser:
+        if body.is_superuser is not None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="僅超級管理員可變更超級管理員身分",
+            )
+        if user.is_superuser:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="僅超級管理員可修改其他超級管理員帳號",
+            )
     if is_owner and body.is_active is False:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

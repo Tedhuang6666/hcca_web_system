@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import PublicSiteShell from "@/components/site/PublicSiteShell";
 import MarkdownBlock from "@/components/site/MarkdownBlock";
 import { siteApi } from "@/lib/api";
+import { sanitizeCustomCss } from "@/lib/sanitize";
 import type { PublicSiteBundleOut } from "@/lib/types";
 
 export default function PublicHomePage() {
@@ -23,7 +24,9 @@ export default function PublicHomePage() {
 
   return (
     <PublicSiteShell navPages={data?.nav_pages ?? []} settings={settings}>
-      {settings?.custom_css && <style dangerouslySetInnerHTML={{ __html: settings.custom_css }} />}
+      {settings?.custom_css && (
+        <style dangerouslySetInnerHTML={{ __html: sanitizeCustomCss(settings.custom_css) }} />
+      )}
       <section className="public-hero">
         <div className="public-hero-inner">
           <div className="public-hero-copy">

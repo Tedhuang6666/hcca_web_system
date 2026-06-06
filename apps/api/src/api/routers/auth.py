@@ -209,15 +209,13 @@ async def _upsert_google_user(
                 status_code=status.HTTP_403_FORBIDDEN, detail="此 IP 不被授權為管理員"
             )
 
-        if settings.REQUIRE_2FA_FOR_SUPERUSER:
-            logger.info(
-                "Superuser login requires 2FA verification",
-                extra={"email": email, "ip": client_ip},
-            )
-            is_superuser = True
-        else:
-            is_superuser = True
-            logger.info("Superuser login successful", extra={"email": email, "ip": client_ip})
+        is_superuser = True
+        logger.info("Superuser login successful", extra={"email": email, "ip": client_ip})
+        # 注意：REQUIRE_2FA_FOR_SUPERUSER 不在登入處強制——登入仍須發 token，否則尚未
+        # 設定 MFA 的超管會被鎖在 /mfa/setup 之外（雞生蛋問題）。真正的 MFA 強制由後台
+        # 路由的 require_admin_mfa dependency 負責：mfa_enabled=False 的超管存取 admin
+        # 資源時會被 403 並導向設定頁。先前此處的 if/else 兩個分支都只是 is_superuser=
+        # True、給人「已對超管強制 2FA」的錯覺，已移除以免誤導維護者。
 
     if user is None:
         user = User(

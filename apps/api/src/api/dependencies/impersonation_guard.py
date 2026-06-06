@@ -21,7 +21,10 @@ from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.responses import JSONResponse, Response
 
+from api.core.config import settings
 from api.core.database import get_db
 from api.dependencies.auth import get_current_active_user
 from api.models.user import User
@@ -41,8 +44,7 @@ def _extract_token(request: Request) -> str | None:
     parts = auth.split(" ", 1)
     if len(parts) == 2 and parts[0].lower() == "bearer":
         return parts[1].strip() or None
-    cookie_name = "hcca_access_token"
-    return request.cookies.get(cookie_name)
+    return request.cookies.get(settings.ACCESS_TOKEN_COOKIE_NAME)
 
 
 async def block_impersonation_write(
@@ -84,4 +86,34 @@ async def block_impersonation_write(
     )
 
 
-__all__ = ["block_impersonation_write"]
+class ImpersonationReadOnlyMiddleware(BaseHTTPMiddleware):
+    """全域強制 impersonation 唯讀。
+
+    `block_impersonation_write` 是 router 層 dependency，需逐路由掛載，極易漏掛而
+    形同未啟用。改以 middleware 全域生效：任何寫入方法只要帶的是 impersonation
+    token（純 JWT 解碼即可判斷，不需 DB），即回 403。只會「增加」403、不會放寬任何
+    既有授權，故掛上絕對安全。audit log 仍由 router 層 dependency 負責（best effort）。
+    """
+
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
+        if request.method not in WRITE_METHODS:
+            return await call_next(request)
+        if any(request.url.path.startswith(p) for p in ALLOWED_PATHS_DURING_IMPERSONATION):
+            return await call_next(request)
+
+        token = _extract_token(request)
+        if token and impersonation_svc.parse_impersonation_token(token) is not None:
+            logger.info(
+                "impersonation write blocked: %s %s", request.method, request.url.path
+            )
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={"detail": "impersonation 模式為唯讀，不允許寫入操作"},
+                headers={"X-Impersonation-Readonly": "true"},
+            )
+        return await call_next(request)
+
+
+__all__ = ["ImpersonationReadOnlyMiddleware", "block_impersonation_write"]
