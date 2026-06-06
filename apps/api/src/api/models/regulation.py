@@ -7,7 +7,17 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Enum,
+    FetchedValue,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import TSVECTOR, UUID
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -190,8 +200,11 @@ class Regulation(Base, TimestampMixin):
         nullable=True,
         index=True,
     )
-    # 全文搜尋向量（由 trigger 自動更新）
-    search_vector: Mapped[str | None] = mapped_column(TSVECTOR(), nullable=True)
+    # 全文搜尋向量（由 trigger 自動更新，DB 端維護，ORM 唯讀）。
+    # FetchedValue：INSERT/UPDATE 不帶值，交給 DB；與 documents/announcements 一致。
+    search_vector: Mapped[str | None] = mapped_column(
+        TSVECTOR(), FetchedValue(), nullable=True
+    )
 
     org: Mapped[Org] = relationship("Org")
     published_document: Mapped[Document | None] = relationship(

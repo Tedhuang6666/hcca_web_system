@@ -28,14 +28,14 @@ logger = logging.getLogger(__name__)
 
 async def _compute_anchor_async() -> dict:
     """計算昨日的 anchor 並寫入。"""
-    from api.core.database import AsyncSessionLocal
+    from api.core.database import task_session
 
     today = local_today()
     yesterday = today - timedelta(days=1)
     start = datetime.combine(yesterday, datetime.min.time(), tzinfo=UTC)
     end = datetime.combine(today, datetime.min.time(), tzinfo=UTC)
 
-    async with AsyncSessionLocal() as db:
+    async with task_session() as db:
         # 是否已有
         exist = await db.execute(
             select(AuditLogAnchor).where(AuditLogAnchor.anchor_date == yesterday)
@@ -116,10 +116,10 @@ def compute_daily_audit_anchor() -> dict:
 
 async def _verify_chain_async(days: int) -> dict:
     """重算最近 N 天的 hash chain、回報異常數。"""
-    from api.core.database import AsyncSessionLocal
+    from api.core.database import task_session
 
     since = datetime.now(UTC) - timedelta(days=days)
-    async with AsyncSessionLocal() as db:
+    async with task_session() as db:
         issues = await audit_chain.verify_integrity_range(db, since=since)
         # 同時更新 anchor 的 integrity_verified_at
         if not issues:

@@ -333,6 +333,8 @@ async def publish_announcement(
         summary=f"發布公告「{ann.title}」",
     )
     await emit_announcement_notice(db, ann)
+    # 治理匯流：公告發布經 audit_svc.record()（action="announcement.publish"）統一橋接，
+    # 不再於此手寫 ingest。
     return _enrich(ann)
 
 

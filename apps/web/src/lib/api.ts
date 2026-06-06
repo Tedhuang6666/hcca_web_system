@@ -63,6 +63,8 @@ import type {
   DocumentEfficiencyOut, DeptRankingItem, PendingAlertItem, AnnouncementParticipationItem,
   SurveyParticipationItem, AnalyticsInsightsOut,
   EmailCampaignRecipientOut,
+  EmailAnalyticsOut, EmailAttachmentOut, EmailPreflightOut,
+  EmailRecipientListOut, EmailTemplateOut,
   EmailComposePayload, EmailMessageCreate, EmailMessageOut, EmailMessageDetailOut,
   RecipientSelector, RecipientPreviewOut, EmailPosition, UploadedImageOut,
   PartnerBusinessCreate, PartnerBusinessListItem, PartnerBusinessOut, PartnerBusinessUpdate,
@@ -83,7 +85,8 @@ import type {
   DocumentApprovalContextOut, MeetingBriefingCardOut, PetitionResolutionContextOut,
   RegulationUsageContextOut,
   WorkItemCreate, WorkItemOut, WorkItemUpdate,
-  AutomationRuleCreate, AutomationRuleOut, DecisionCreate, DecisionOut, DecisionUpdate,
+  AutomationRuleCreate, AutomationRuleOut, AutomationRuleUpdate, AutomationMeta,
+  MatterLinkRef, MatterSpawnKind, MatterSpawnResult, DecisionCreate, DecisionOut, DecisionUpdate,
   EntityRelationCreate, EntityRelationOut, GovernanceCaseCreate, GovernanceCaseOut,
   GovernanceCaseUpdate, GovernanceDashboardOut, GovernanceWorkflowTemplateCreate,
   GovernanceWorkflowTemplateOut, MatterCreate, MatterListItem, MatterOut, MatterRoleAssignmentCreate,
@@ -98,6 +101,8 @@ import type {
   PublicOfficerProfileCreate, PublicOfficerProfileOut, PublicOfficerProfileUpdate,
   PublicSiteBundleOut, PublicSitePageCreate, PublicSitePageOut, PublicSitePageUpdate,
   PublicSiteSettingsOut, PublicSiteSettingsUpdate,
+  ElectionOut, ElectionListItem, ElectionLiveSummary, ElectionStatus, BallotBoxStatus,
+  VoteEventOut, VoteEventKind,
 } from "./types";
 import { API_BASE, apiUrl } from "./config";
 
@@ -416,6 +421,42 @@ const post = <T>(p: string, body?: unknown) => request<T>(p, { method: "POST", b
 const patch = <T>(p: string, body: unknown) => request<T>(p, { method: "PATCH", body: JSON.stringify(body) });
 const put = <T>(p: string, body: unknown) => request<T>(p, { method: "PUT", body: JSON.stringify(body) });
 const del = <T>(p: string) => request<T>(p, { method: "DELETE" });
+
+export const electionsApi = {
+  list: () => get<ElectionListItem[]>("/elections"),
+  get: (id: string) => get<ElectionOut>(`/elections/${pathSegment(id)}`),
+  create: (body: {
+    title: string;
+    description?: string;
+    is_public?: boolean;
+    candidates: { name: string; number: number; color: string; sort_order?: number }[];
+    ballot_boxes: {
+      name: string;
+      expected_total_votes?: number | null;
+      sort_order?: number;
+    }[];
+  }) => post<ElectionOut>("/elections", body),
+  updateStatus: (id: string, status: ElectionStatus) =>
+    post<ElectionOut>(`/elections/${pathSegment(id)}/status`, { status }),
+  updateBallotBoxStatus: (id: string, boxId: string, status: BallotBoxStatus) =>
+    post(`/elections/${pathSegment(id)}/ballot-boxes/${boxId}/status`, { status }),
+  addEvent: (
+    id: string,
+    body: {
+      ballot_box_id: string;
+      candidate_id?: string | null;
+      kind: VoteEventKind;
+      delta: number;
+      reason?: string;
+    },
+  ) => post<VoteEventOut>(`/elections/${pathSegment(id)}/events`, body),
+  reverseEvent: (id: string, eventId: string) =>
+    post<VoteEventOut>(`/elections/${pathSegment(id)}/events/${eventId}/reverse`),
+  events: (id: string, limit = 100) =>
+    get<VoteEventOut[]>(`/elections/${pathSegment(id)}/events?limit=${limit}`),
+  live: (id: string) =>
+    get<ElectionLiveSummary>(`/elections/public/${pathSegment(id)}/live`),
+};
 
 // ── 公文 ──────────────────────────────────────────────────────────────────────
 
@@ -1443,6 +1484,13 @@ export const governanceApi = {
     patch<GovernanceCaseOut>(`/governance/cases/${id}`, body),
   createRelation: (matterId: string, body: EntityRelationCreate) =>
     post<EntityRelationOut>(`/governance/matters/${matterId}/relations`, body),
+  deleteRelation: (relationId: string) => del<void>(`/governance/relations/${relationId}`),
+  linksForTarget: (targetType: string, targetId: string) =>
+    get<MatterLinkRef[]>(
+      `/governance/links?target_type=${encodeURIComponent(targetType)}&target_id=${targetId}`,
+    ),
+  spawn: (matterId: string, body: { kind: MatterSpawnKind; title: string; org_id?: string | null }) =>
+    post<MatterSpawnResult>(`/governance/matters/${matterId}/spawn`, body),
   createEvent: (matterId: string, body: TimelineEventCreate) =>
     post<TimelineEventOut>(`/governance/matters/${matterId}/events`, body),
   listTasks: (matterId: string, includeDone = true) =>
@@ -1475,6 +1523,9 @@ export const governanceApi = {
     ),
   createAutomationRule: (body: AutomationRuleCreate) =>
     post<AutomationRuleOut>("/governance/automation-rules", body),
+  updateAutomationRule: (id: string, body: AutomationRuleUpdate) =>
+    patch<AutomationRuleOut>(`/governance/automation-rules/${id}`, body),
+  automationMeta: () => get<AutomationMeta>("/governance/automation-meta"),
 };
 
 export const receivablesApi = {
@@ -2785,6 +2836,16 @@ export const emailApi = {
     post<{ html: string }>("/email/preview", body),
   test: (body: EmailComposePayload) =>
     post<{ status: string; sent_to: string }>("/email/test", body),
+  testSample: (
+    body: EmailComposePayload & { recipient_indexes: number[]; test_emails: string[] },
+  ) => post<{ status: string; queued: number; sent_to: string[] }>("/email/test-sample", body),
+  preflight: (body: {
+    recipient_spec: RecipientSelector;
+    variable_definitions: EmailComposePayload["variable_definitions"];
+    default_variables?: Record<string, string>;
+    recipient_variables?: EmailComposePayload["recipient_variables"];
+    attachment_ids?: string[];
+  }) => post<EmailPreflightOut>("/email/preflight", body),
   createMessage: (body: EmailMessageCreate) =>
     post<EmailMessageOut>("/email/messages", body),
   updateMessage: (
@@ -2794,11 +2855,21 @@ export const emailApi = {
   sendMessage: (id: string) => post<EmailMessageOut>(`/email/messages/${id}/send`),
   resendMessage: (id: string) => post<EmailMessageOut>(`/email/messages/${id}/resend`),
   deleteMessage: (id: string) => del<void>(`/email/messages/${id}`),
-  listMessages: (params?: { status?: string; limit?: number; offset?: number }) => {
+  listMessages: (params?: {
+    status?: string; limit?: number; offset?: number; q?: string;
+    sender_id?: string; org_id?: string; template_id?: string;
+    date_from?: string; date_to?: string;
+  }) => {
     const q = new URLSearchParams();
     if (params?.status) q.set("status", params.status);
     if (params?.limit) q.set("limit", String(params.limit));
     if (params?.offset) q.set("offset", String(params.offset));
+    if (params?.q) q.set("q", params.q);
+    if (params?.sender_id) q.set("sender_id", params.sender_id);
+    if (params?.org_id) q.set("org_id", params.org_id);
+    if (params?.template_id) q.set("template_id", params.template_id);
+    if (params?.date_from) q.set("date_from", params.date_from);
+    if (params?.date_to) q.set("date_to", params.date_to);
     return get<EmailMessageOut[]>(`/email/messages${q.size ? `?${q}` : ""}`);
   },
   getMessage: (id: string) => get<EmailMessageDetailOut>(`/email/messages/${id}`),
@@ -2830,6 +2901,61 @@ export const emailApi = {
       `/email/messages/${id}/recipients${q.size ? `?${q}` : ""}`,
     );
   },
+  previewMessageRecipient: (messageId: string, recipientId: string) =>
+    get<{ html: string }>(
+      `/email/messages/${messageId}/recipients/${recipientId}/preview`,
+    ),
+  listTemplates: () => get<EmailTemplateOut[]>("/email/templates"),
+  createTemplate: (body: {
+    name: string;
+    description?: string;
+    visibility: "private" | "org";
+    org_id?: string | null;
+    content: Partial<EmailComposePayload>;
+    variable_definitions: EmailComposePayload["variable_definitions"];
+    is_favorite?: boolean;
+  }) => post<EmailTemplateOut>("/email/templates", body),
+  updateTemplate: (id: string, body: Partial<EmailTemplateOut>) =>
+    patch<EmailTemplateOut>(`/email/templates/${id}`, body),
+  deleteTemplate: (id: string) => del<void>(`/email/templates/${id}`),
+  listRecipientLists: () => get<EmailRecipientListOut[]>("/email/recipient-lists"),
+  createRecipientList: (body: {
+    name: string;
+    description?: string;
+    visibility: "private" | "org";
+    org_id?: string | null;
+    recipient_spec: RecipientSelector;
+    variable_definitions: EmailComposePayload["variable_definitions"];
+    members: EmailComposePayload["recipient_variables"];
+  }) => post<EmailRecipientListOut>("/email/recipient-lists", body),
+  updateRecipientList: (id: string, body: Partial<EmailRecipientListOut>) =>
+    patch<EmailRecipientListOut>(`/email/recipient-lists/${id}`, body),
+  deleteRecipientList: (id: string) => del<void>(`/email/recipient-lists/${id}`),
+  uploadAttachment: async (file: File, templateId?: string): Promise<EmailAttachmentOut> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const q = templateId ? `?template_id=${encodeURIComponent(templateId)}` : "";
+    const doFetch = () =>
+      fetch(`${BASE}/email/attachments${q}`, {
+        method: "POST",
+        credentials: "include",
+        headers: csrfHeaders("POST"),
+        body: fd,
+      });
+    let res = await doFetch();
+    if (res.status === 401) {
+      const ok = await silentRefresh();
+      if (ok) res = await doFetch();
+    }
+    if (!res.ok) throw new ApiError(res.status, await errorMessageFromResponse(res));
+    return res.json();
+  },
+  revokeAttachment: (id: string) => del<void>(`/email/attachments/${id}`),
+  getAnalytics: (id: string) => get<EmailAnalyticsOut>(`/email/messages/${id}/analytics`),
+  cloneMessage: (id: string, audience: "all" | "unopened" | "undelivered") =>
+    post<{ id: string }>(`/email/messages/${id}/clone?audience=${audience}`),
+  exportUrl: (id: string, format: "csv" | "xlsx") =>
+    `${BASE}/email/messages/${id}/export?format=${format}`,
   orgPositions: (orgId: string) => get<EmailPosition[]>(`/orgs/${orgId}/positions`),
 };
 

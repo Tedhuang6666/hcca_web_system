@@ -27,6 +27,7 @@ const BARE_PATHS = [
   "/maintenance",
   "/profile/complete",
   "/public",
+  "/live",
   "/unsubscribe",
 ];
 

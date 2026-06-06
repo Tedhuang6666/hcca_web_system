@@ -195,6 +195,90 @@ async def test_external_email_recipients_can_be_previewed_and_saved(
 
 
 @pytest.mark.asyncio
+async def test_recipient_table_overrides_name_and_uses_chinese_placeholder(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sender = await _seed_user(db_session, "table-sender@school.edu", ["email:send"])
+    recipient_user = User(
+        email="accepted@school.edu",
+        display_name="帳號原姓名",
+        is_active=True,
+        is_verified=True,
+    )
+    db_session.add(recipient_user)
+    await db_session.flush()
+    _override_user(sender)
+    monkeypatch.setattr("api.routers.email.enqueue_rendered", lambda *args, **kwargs: ["task-id"])
+
+    response = await client.post(
+        "/email/messages",
+        json={
+            "subject": "{{ user.name }} 錄取通知",
+            "body": "您已錄取 {{ 錄取部門 }}。",
+            "action": "send",
+            "recipients": {"user_ids": [str(recipient_user.id)]},
+            "variable_definitions": [
+                {"key": "錄取部門", "label": "錄取部門", "required": True}
+            ],
+            "recipient_variables": [
+                {
+                    "email": recipient_user.email,
+                    "name": "表格姓名",
+                    "variables": {"錄取部門": "活動部"},
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 201
+    message_id = response.json()["id"]
+    recipient = (
+        await db_session.execute(
+            select(EmailCampaignRecipient).where(
+                EmailCampaignRecipient.email == recipient_user.email
+            )
+        )
+    ).scalar_one()
+    assert recipient.name == "表格姓名"
+    assert recipient.variables == {"錄取部門": "活動部"}
+
+    preview_response = await client.get(
+        f"/email/messages/{message_id}/recipients/{recipient.id}/preview"
+    )
+    assert preview_response.status_code == 200
+    assert "表格姓名 錄取通知" in preview_response.json()["html"]
+    assert "您已錄取 活動部。" in preview_response.json()["html"]
+
+
+@pytest.mark.asyncio
+async def test_compose_preview_can_switch_to_specific_recipient(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    sender = await _seed_user(db_session, "preview-sender@school.edu", ["email:send"])
+    _override_user(sender)
+
+    response = await client.post(
+        "/email/preview",
+        json={
+            "subject": "{{ user.name }} 的通知",
+            "body": "錄取部門：{{ 錄取部門 }}",
+            "variable_definitions": [
+                {"key": "錄取部門", "label": "錄取部門", "required": True}
+            ],
+            "preview_recipient": {
+                "email": "specific@example.org",
+                "name": "特定使用者",
+                "variables": {"錄取部門": "公關部"},
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    assert "特定使用者 的通知" in response.json()["html"]
+    assert "錄取部門：公關部" in response.json()["html"]
+
+
+@pytest.mark.asyncio
 async def test_resolve_recipients_include_school_filters_by_domain(
     db_session: AsyncSession,
 ) -> None:

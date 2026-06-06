@@ -95,6 +95,7 @@ async def create_activity(payload: ActivityCreate, db: DbDep, user: CurrentUser)
         meta=payload.model_dump(mode="json"),
         summary=f"建立活動「{activity.name}」",
     )
+    # 治理匯流：活動建立經 audit_svc.record()（action="activity.create"）統一橋接。
     return activity
 
 

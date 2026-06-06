@@ -7,6 +7,7 @@ import { orgsApi, adminApi, ApiError, withFallback } from "@/lib/api";
 import { apiUrl } from "@/lib/config";
 import type { OrgRead } from "@/lib/api";
 import type { OrgWithPositions, AdminUserDetail } from "@/lib/types";
+import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 
 interface PositionBasic {
   id: string;
@@ -128,13 +129,22 @@ export default function OrgDetailPage() {
             {positions.length} 個職位 · {orgMembers.length} 位成員
           </p>
         </div>
-        {isAdmin && (
-          <Link href="/admin/permissions"
-            className="text-xs px-3 py-1.5 rounded-lg flex-shrink-0 transition-colors"
-            style={{ color: "var(--primary)", border: "1px solid var(--border-strong)" }}>
-            管理權限
-          </Link>
-        )}
+        <div className="flex flex-shrink-0 items-center gap-2">
+          <GovernanceLinkPanel
+            entityType="org"
+            entityId={org.id}
+            title={org.name}
+            href={`/orgs/${org.id}`}
+            compact
+          />
+          {isAdmin && (
+            <Link href="/admin/permissions"
+              className="text-xs px-3 py-1.5 rounded-lg flex-shrink-0 transition-colors"
+              style={{ color: "var(--primary)", border: "1px solid var(--border-strong)" }}>
+              管理權限
+            </Link>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">

@@ -33,11 +33,11 @@ def run_safe_purges(self) -> dict:  # type: ignore[type-arg]
 
 
 async def _run() -> dict:
-    from api.core.database import AsyncSessionLocal
+    from api.core.database import task_session
     from api.services import data_lifecycle as svc
 
     results: list[dict] = []
-    async with AsyncSessionLocal() as session:
+    async with task_session() as session:
         for rule in svc.RULES:
             if rule.danger_level != "safe":
                 continue

@@ -17,6 +17,7 @@ from api.models.user import User
 from api.schemas.governance import (
     AutomationRuleCreate,
     AutomationRuleOut,
+    AutomationRuleUpdate,
     DecisionCreate,
     DecisionOut,
     DecisionUpdate,
@@ -29,11 +30,14 @@ from api.schemas.governance import (
     GovernanceWorkflowTemplateCreate,
     GovernanceWorkflowTemplateOut,
     MatterCreate,
+    MatterLinkRefOut,
     MatterListItem,
     MatterOut,
     MatterRoleAssignmentCreate,
     MatterRoleAssignmentOut,
     MatterRoleAssignmentUpdate,
+    MatterSpawnIn,
+    MatterSpawnOut,
     MatterUpdate,
     PlanningDocumentCreate,
     PlanningDocumentOut,
@@ -47,8 +51,12 @@ from api.schemas.governance import (
     TimelineEventOut,
 )
 from api.schemas.work_item import WorkItemCreate, WorkItemOut
+from api.services import announcement as announcement_svc
 from api.services import audit as audit_svc
 from api.services import governance as governance_svc
+from api.services import governance_ingest
+from api.services import meeting as meeting_svc
+from api.services import survey as survey_svc
 from api.services import work_item as work_item_svc
 
 router = APIRouter(prefix="/governance", tags=["事情治理中樞"])
@@ -249,6 +257,126 @@ async def create_relation(
     matter = await _matter_or_404(db, matter_id)
     relation = await governance_svc.create_relation(db, matter=matter, data=body, user=user)
     return EntityRelationOut.model_validate(relation)
+
+
+@router.get(
+    "/links",
+    response_model=list[MatterLinkRefOut],
+    summary="反向查詢：某模組資源被哪些事情納入",
+)
+async def list_links_for_target(
+    db: DbDep,
+    _: CurrentUser,
+    target_type: str = Query(..., min_length=1, max_length=50),
+    target_id: uuid.UUID = Query(...),
+) -> list[MatterLinkRefOut]:
+    rows = await governance_svc.list_relations_for_target(
+        db, target_type=target_type, target_id=target_id
+    )
+    return [
+        MatterLinkRefOut(
+            relation_id=relation.id,
+            matter_id=matter.id,
+            matter_title=matter.title,
+            matter_status=str(matter.status),
+            matter_progress=matter.progress_percent,
+            relation=relation.relation,
+            case_id=relation.case_id,
+        )
+        for relation, matter in rows
+    ]
+
+
+@router.delete(
+    "/relations/{relation_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="移除關聯",
+    dependencies=[GovernanceManagerDep],
+)
+async def delete_relation(relation_id: uuid.UUID, db: DbDep, user: CurrentUser) -> None:
+    relation = await governance_svc.get_relation(db, relation_id)
+    if relation is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="關聯不存在")
+    await governance_svc.delete_relation(db, relation=relation, user=user)
+
+
+@router.post(
+    "/matters/{matter_id}/spawn",
+    response_model=MatterSpawnOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="從事情建立並連動模組artifact（指揮中心）",
+    dependencies=[GovernanceManagerDep],
+)
+async def spawn_artifact(
+    matter_id: uuid.UUID,
+    body: MatterSpawnIn,
+    db: DbDep,
+    user: CurrentUser,
+) -> MatterSpawnOut:
+    """在事情頁一鍵建立公告草稿／問卷／會議／任務，並自動回填 EntityRelation。
+
+    讓 Matter 不只是觀察者，而是指揮中心：產出的 artifact 一出生就連動本事情，
+    後續其生命週期事件（經 audit 橋接）會自動回流到事情時間軸。
+    """
+    from api.schemas.announcement import AnnouncementCreate
+    from api.schemas.meeting import MeetingCreate
+    from api.schemas.survey import SurveyCreate
+
+    matter = await _matter_or_404(db, matter_id)
+    org_id = body.org_id or matter.org_id
+    title = body.title.strip()
+
+    if body.kind == "task":
+        item = await governance_svc.create_matter_task(
+            db, matter=matter, data=WorkItemCreate(title=title), user=user
+        )
+        # 任務以 source_type=matter 連動，已顯示於任務面板，無需額外 EntityRelation。
+        return MatterSpawnOut(kind="task", id=item.id, title=title, href="/tasks")
+
+    if body.kind == "announcement":
+        artifact = await announcement_svc.create(
+            db, author=user, body=AnnouncementCreate(title=title, content={}, org_id=org_id)
+        )
+        target_type, href = "announcement", f"/announcements/{artifact.id}"
+    elif body.kind == "survey":
+        if org_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="建立問卷需先為事情設定負責組織",
+            )
+        artifact = await survey_svc.create_survey(
+            db, data=SurveyCreate(title=title, org_id=org_id), created_by=user.id
+        )
+        target_type, href = "survey", f"/surveys/{artifact.id}"
+    elif body.kind == "meeting":
+        if org_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="建立會議需先為事情設定負責組織",
+            )
+        artifact = await meeting_svc.create_meeting(
+            db, data=MeetingCreate(title=title, org_id=org_id), created_by=user.id
+        )
+        target_type, href = "meeting", f"/meetings/{artifact.id}"
+    else:  # pragma: no cover - schema 已限制 kind
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不支援的建立類型")
+
+    await governance_svc.create_relation(
+        db,
+        matter=matter,
+        data=EntityRelationCreate(
+            source_type="matter",
+            source_id=matter.id,
+            target_type=target_type,
+            target_id=artifact.id,
+            relation="includes",
+            title=title,
+            href=href,
+            meta={"spawned_from_matter": True},
+        ),
+        user=user,
+    )
+    return MatterSpawnOut(kind=body.kind, id=artifact.id, title=title, href=href)
 
 
 @router.post(
@@ -489,6 +617,18 @@ async def list_automation_rules(
     return await governance_svc.list_automation_rules(db, matter_id=matter_id)
 
 
+@router.get(
+    "/automation-meta",
+    summary="自動化規則編輯器選項（觸發/動作/實體型別）",
+)
+async def get_automation_meta(_: CurrentUser) -> dict:
+    return {
+        "trigger_types": governance_ingest.TRIGGER_TYPES,
+        "action_types": governance_ingest.ACTION_TYPES,
+        "entity_types": governance_ingest.ENTITY_LABEL,
+    }
+
+
 @router.post(
     "/automation-rules",
     response_model=AutomationRuleOut,
@@ -503,3 +643,22 @@ async def create_automation_rule(
 ) -> AutomationRuleOut:
     rule = await governance_svc.create_automation_rule(db, data=body, user=user)
     return AutomationRuleOut.model_validate(rule)
+
+
+@router.patch(
+    "/automation-rules/{rule_id}",
+    response_model=AutomationRuleOut,
+    summary="更新自動化規則（含啟用／暫停）",
+    dependencies=[GovernanceManagerDep],
+)
+async def update_automation_rule(
+    rule_id: uuid.UUID,
+    body: AutomationRuleUpdate,
+    db: DbDep,
+    user: CurrentUser,
+) -> AutomationRuleOut:
+    rule = await governance_svc.get_automation_rule(db, rule_id)
+    if rule is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="自動化規則不存在")
+    updated = await governance_svc.update_automation_rule(db, rule=rule, data=body, user=user)
+    return AutomationRuleOut.model_validate(updated)

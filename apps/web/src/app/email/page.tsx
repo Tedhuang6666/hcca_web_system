@@ -16,7 +16,11 @@ import type {
   EmailButtonStyle,
   EmailCardRow,
   EmailComposePayload,
+  EmailAttachmentOut,
+  EmailPreflightOut,
+  EmailRecipientListOut,
   EmailRecipientVariableInput,
+  EmailTemplateOut,
   EmailVariableDefinition,
   RecipientSelector,
 } from "@/lib/types";
@@ -147,7 +151,10 @@ type SavedTemplate = TemplateContent & {
 
 function ComposeInner() {
   const router = useRouter();
-  const draftId = useSearchParams().get("draft");
+  const searchParams = useSearchParams();
+  const draftId = searchParams.get("draft");
+  const requestedTemplateId = searchParams.get("template");
+  const requestedListId = searchParams.get("list");
 
   const [subject, setSubject] = useState("");
   const [heading, setHeading] = useState("");
@@ -161,7 +168,7 @@ function ComposeInner() {
   const [variableDefinitions, setVariableDefinitions] = useState<EmailVariableDefinition[]>([]);
   const [previewVariables, setPreviewVariables] = useState<Record<string, string>>({});
   const [recipientRows, setRecipientRows] = useState<RecipientRow[]>([]);
-  const [showPerRecipient, setShowPerRecipient] = useState(false);
+  const [previewRecipientIndex, setPreviewRecipientIndex] = useState(0);
   const [recipients, setRecipients] = useState<RecipientSelector>(EMPTY_RECIPIENTS);
 
   // 「插入變數」用：記住最後聚焦的文字欄位，將 {{ key }} 插入游標處
@@ -178,6 +185,30 @@ function ComposeInner() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [savedTemplates, setSavedTemplates] = useState<SavedTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [platformTemplates, setPlatformTemplates] = useState<EmailTemplateOut[]>([]);
+  const [recipientLists, setRecipientLists] = useState<EmailRecipientListOut[]>([]);
+  const [platformTemplateId, setPlatformTemplateId] = useState("");
+  const [recipientListId, setRecipientListId] = useState("");
+  const [attachments, setAttachments] = useState<EmailAttachmentOut[]>([]);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [trackOpens, setTrackOpens] = useState(true);
+  const [trackClicks, setTrackClicks] = useState(true);
+  const [preflightResult, setPreflightResult] = useState<EmailPreflightOut | null>(null);
+
+  const loadPlatformResources = useCallback(() => {
+    Promise.all([emailApi.listTemplates(), emailApi.listRecipientLists()])
+      .then(([templates, lists]) => {
+        setPlatformTemplates(templates);
+        setRecipientLists(lists);
+      })
+      .catch((e) =>
+        toast.error(e instanceof ApiError ? e.message : "載入郵件資源失敗"),
+      );
+  }, []);
+
+  useEffect(() => {
+    loadPlatformResources();
+  }, [loadPlatformResources]);
 
   useEffect(() => {
     try {
@@ -223,7 +254,6 @@ function ComposeInner() {
           variables: { ...(r.variables ?? {}) },
         }));
         setRecipientRows(rows);
-        setShowPerRecipient(rows.length > 0);
       })
       .catch((e) => toast.error(e instanceof ApiError ? e.message : "載入草稿失敗"));
   }, [draftId]);
@@ -242,7 +272,6 @@ function ComposeInner() {
     setVariableDefinitions(d.variableDefinitions);
     setPreviewVariables(d.previewVariables);
     setRecipientRows(d.recipientRows ?? []);
-    setShowPerRecipient((d.recipientRows?.length ?? 0) > 0);
     toast.info("已還原上次未送出的內容");
   }, []);
 
@@ -312,9 +341,6 @@ function ComposeInner() {
     const allowed = new Set(
       variableDefinitions.map((v) => v.key.trim()).filter(Boolean),
     );
-    // 沒有任何自訂變數時，逐收件人表格在 UI 也是隱藏的；
-    // 不送出殘留列，避免無意間多塞收件人。
-    if (allowed.size === 0) return [];
     return recipientRows
       .filter((r) => r.email.trim())
       .map((r) => ({
@@ -347,8 +373,23 @@ function ComposeInner() {
       ),
       recipients,
       variable_definitions: variableDefinitions.filter((v) => v.key.trim()),
-      preview_variables: previewVariables,
+      preview_variables: {
+        ...previewVariables,
+        ...(recipientRows[previewRecipientIndex]?.variables ?? {}),
+      },
+      preview_recipient: recipientRows[previewRecipientIndex]
+        ? {
+            email: recipientRows[previewRecipientIndex].email,
+            name: recipientRows[previewRecipientIndex].name,
+            variables: recipientRows[previewRecipientIndex].variables,
+          }
+        : null,
       recipient_variables: buildRecipientVariables(),
+      template_id: platformTemplateId || null,
+      recipient_list_id: recipientListId || null,
+      attachment_ids: attachments.map((item) => item.id),
+      track_opens: trackOpens,
+      track_clicks: trackClicks,
     }),
     [
       subject,
@@ -362,6 +403,13 @@ function ComposeInner() {
       recipients,
       variableDefinitions,
       previewVariables,
+      recipientRows,
+      previewRecipientIndex,
+      platformTemplateId,
+      recipientListId,
+      attachments,
+      trackOpens,
+      trackClicks,
       buildRecipientVariables,
     ],
   );
@@ -407,12 +455,39 @@ function ComposeInner() {
   const addVariable = () =>
     setVariableDefinitions((rows) => [
       ...rows,
-      { key: "", label: "", required: false, default_value: "" },
+      { key: "", label: "", required: true, default_value: "" },
     ]);
-  const updateVariable = (i: number, patch: Partial<EmailVariableDefinition>) =>
+  const updateVariableName = (i: number, rawName: string) => {
+    const oldKey = variableDefinitions[i]?.key ?? "";
+    const key = rawName
+      .trimStart()
+      .replace(/\s+/g, "_")
+      .replace(/[^\p{L}\p{N}_]/gu, "")
+      .replace(/^\p{N}+/u, "")
+      .slice(0, 64);
     setVariableDefinitions((rows) =>
-      rows.map((row, idx) => (idx === i ? { ...row, ...patch } : row)),
+      rows.map((row, idx) => (idx === i ? { ...row, key, label: key } : row)),
     );
+    if (oldKey === key) return;
+    setPreviewVariables((vars) => {
+      const next = { ...vars };
+      if (oldKey && oldKey in next) {
+        next[key] = next[oldKey];
+        delete next[oldKey];
+      }
+      return next;
+    });
+    setRecipientRows((rows) =>
+      rows.map((row) => {
+        const variables = { ...row.variables };
+        if (oldKey && oldKey in variables) {
+          variables[key] = variables[oldKey];
+          delete variables[oldKey];
+        }
+        return { ...row, variables };
+      }),
+    );
+  };
   const removeVariable = (i: number) => {
     const key = variableDefinitions[i]?.key;
     setVariableDefinitions((rows) => rows.filter((_, idx) => idx !== i));
@@ -422,6 +497,13 @@ function ComposeInner() {
         delete next[key];
         return next;
       });
+      setRecipientRows((rows) =>
+        rows.map((row) => {
+          const variables = { ...row.variables };
+          delete variables[key];
+          return { ...row, variables };
+        }),
+      );
     }
   };
 
@@ -448,7 +530,6 @@ function ComposeInner() {
     setVariableDefinitions(template.variableDefinitions);
     setPreviewVariables(template.previewVariables);
     setRecipientRows([]);
-    setShowPerRecipient(false);
     toast.success(`已套用範本：${template.name}`);
   };
 
@@ -481,6 +562,95 @@ function ComposeInner() {
     persistTemplates(next);
     setSelectedTemplateId("");
     toast.success("範本已刪除");
+  };
+
+  const applyPlatformTemplate = (id: string) => {
+    setPlatformTemplateId(id);
+    const template = platformTemplates.find((item) => item.id === id);
+    if (!template) return;
+    const content = template.content;
+    setSubject(content.subject ?? "");
+    setHeading(content.heading ?? "");
+    setBannerImageUrl(content.banner_image_url ?? "");
+    setBannerImageAlt(content.banner_image_alt ?? "");
+    setBody(content.body ?? "");
+    setCardRows(content.card_rows ?? []);
+    setButtons(content.buttons ?? []);
+    setBlocks(content.blocks ?? []);
+    setVariableDefinitions(template.variable_definitions ?? []);
+    setTrackOpens(content.track_opens ?? true);
+    setTrackClicks(content.track_clicks ?? true);
+    toast.success(`已套用平台範本：${template.name}`);
+  };
+
+  const savePlatformTemplate = async () => {
+    const name = window.prompt("平台範本名稱", subject || heading || "未命名範本")?.trim();
+    if (!name) return;
+    try {
+      const template = await emailApi.createTemplate({
+        name,
+        visibility: "private",
+        content: buildPayload(),
+        variable_definitions: variableDefinitions,
+      });
+      setPlatformTemplates((rows) => [template, ...rows]);
+      setPlatformTemplateId(template.id);
+      toast.success("平台範本已儲存");
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "儲存平台範本失敗");
+    }
+  };
+
+  const applyRecipientList = (id: string) => {
+    setRecipientListId(id);
+    const list = recipientLists.find((item) => item.id === id);
+    if (!list) return;
+    setVariableDefinitions(list.variable_definitions ?? []);
+    setRecipientRows(
+      list.members.map((member) => ({
+        email: member.email,
+        name: member.name ?? "",
+        variables: { ...member.variables },
+      })),
+    );
+    toast.success(`已套用收件名單：${list.name}`);
+  };
+
+  useEffect(() => {
+    if (requestedTemplateId && platformTemplates.length > 0 && !platformTemplateId) {
+      applyPlatformTemplate(requestedTemplateId);
+    }
+    if (requestedListId && recipientLists.length > 0 && !recipientListId) {
+      applyRecipientList(requestedListId);
+    }
+    // 套用 URL 指定資源只需在資源首次載入時執行。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedTemplateId, requestedListId, platformTemplates, recipientLists]);
+
+  const uploadAttachment = async (file: File) => {
+    setUploadingAttachment(true);
+    try {
+      const attachment = await emailApi.uploadAttachment(file, platformTemplateId || undefined);
+      setAttachments((rows) => [...rows, attachment]);
+      toast.success(
+        attachment.delivery_mode === "attachment"
+          ? "附件已加入郵件"
+          : "檔案較大，將以安全下載連結寄送",
+      );
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "附件上傳失敗");
+    } finally {
+      setUploadingAttachment(false);
+    }
+  };
+
+  const removeAttachment = async (attachment: EmailAttachmentOut) => {
+    try {
+      await emailApi.revokeAttachment(attachment.id);
+      setAttachments((rows) => rows.filter((item) => item.id !== attachment.id));
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "移除附件失敗");
+    }
   };
 
   // ── 行動按鈕（可多顆、可調樣式）────────────────────────────────────────────
@@ -564,7 +734,6 @@ function ComposeInner() {
 
   const addVariableDefinition = () => {
     addVariable();
-    if (recipientRows.length > 0) setShowPerRecipient(true);
   };
 
   // ── 逐收件人不同內容（表格編輯）──────────────────────────────────────────────
@@ -581,9 +750,23 @@ function ComposeInner() {
   const removeRecipientRow = (i: number) =>
     setRecipientRows((prev) => prev.filter((_, idx) => idx !== i));
 
+  const importedRecipientCount = new Set(
+    recipientRows.map((row) => row.email.trim().toLowerCase()).filter(Boolean),
+  ).size;
+  const estimatedRecipientCount = (count ?? 0) + importedRecipientCount;
+
   const validate = (needRecipients: boolean): boolean => {
     if (!subject.trim()) {
       toast.error("請填寫信件主旨");
+      return false;
+    }
+    if (variableDefinitions.some((variable) => !variable.key.trim())) {
+      toast.error("請填寫所有表格欄位名稱，或移除空白欄位");
+      return false;
+    }
+    const keys = variableDefinitions.map((variable) => variable.key.trim());
+    if (new Set(keys).size !== keys.length) {
+      toast.error("表格欄位名稱不可重複");
       return false;
     }
     const importedRecipients = buildRecipientVariables();
@@ -622,6 +805,28 @@ function ComposeInner() {
     }
   };
 
+  const runPreflight = async (): Promise<EmailPreflightOut | null> => {
+    try {
+      const payload = buildPayload();
+      const result = await emailApi.preflight({
+        recipient_spec: recipients,
+        variable_definitions: payload.variable_definitions,
+        default_variables: payload.default_variables,
+        recipient_variables: payload.recipient_variables,
+        attachment_ids: payload.attachment_ids,
+      });
+      setPreflightResult(result);
+      if (!result.valid) {
+        toast.error("寄送預檢未通過，請先修正收件資料或附件");
+        return null;
+      }
+      return result;
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "寄送預檢失敗");
+      return null;
+    }
+  };
+
   const handleSchedule = async () => {
     if (!validate(true)) return;
     if (!scheduledAt) {
@@ -630,6 +835,7 @@ function ComposeInner() {
     }
     setBusy(true);
     try {
+      if (!(await runPreflight())) return;
       await emailApi.createMessage({
         ...buildPayload(),
         action: "schedule",
@@ -649,7 +855,11 @@ function ComposeInner() {
     setConfirmOpen(false);
     setBusy(true);
     try {
-      await emailApi.createMessage({ ...buildPayload(), action: "send" });
+      await emailApi.createMessage({
+        ...buildPayload(),
+        action: "send",
+        idempotency_key: crypto.randomUUID(),
+      });
       clearDraft();
       toast.success("信件已排入寄送佇列");
       router.push("/email/logs");
@@ -660,9 +870,13 @@ function ComposeInner() {
     }
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!validate(true)) return;
-    if ((count ?? 0) > CONFIRM_THRESHOLD) {
+    setBusy(true);
+    const result = await runPreflight();
+    setBusy(false);
+    if (!result) return;
+    if (result.unique_count > CONFIRM_THRESHOLD) {
       setConfirmOpen(true);
       return;
     }
@@ -677,9 +891,12 @@ function ComposeInner() {
         </p>
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-xl font-semibold">寄送電子郵件</h1>
-          <Link href="/email/logs" className="btn btn-ghost btn-sm">
-            寄信紀錄
-          </Link>
+          <div className="flex flex-wrap gap-1">
+            <Link href="/email/templates" className="btn btn-ghost btn-sm">範本</Link>
+            <Link href="/email/lists" className="btn btn-ghost btn-sm">名單</Link>
+            <Link href="/email/analytics" className="btn btn-ghost btn-sm">分析</Link>
+            <Link href="/email/logs" className="btn btn-ghost btn-sm">寄信紀錄</Link>
+          </div>
         </div>
         {draftId && (
           <p className="text-xs" style={{ color: "var(--text-muted)" }}>
@@ -716,7 +933,31 @@ function ComposeInner() {
             </div>
             <div className="space-y-2">
               <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
-                我的範本
+                平台範本
+              </label>
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                <select
+                  className="input min-w-0"
+                  value={platformTemplateId}
+                  onChange={(e) => applyPlatformTemplate(e.target.value)}
+                >
+                  <option value="">選擇私人或組織共享範本…</option>
+                  {platformTemplates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.is_favorite ? "★ " : ""}
+                      {template.name}
+                      {template.visibility === "org" ? "（組織）" : ""}
+                    </option>
+                  ))}
+                </select>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={savePlatformTemplate}>
+                  另存平台範本
+                </button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                舊版瀏覽器範本
               </label>
               <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
                 <select
@@ -897,137 +1138,123 @@ function ComposeInner() {
               ))}
             </div>
 
-            {/* 自訂變數定義 */}
             <div className="space-y-2 rounded-lg p-3" style={{ background: "var(--bg-elevated)" }}>
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>
-                  自訂變數
+                  表格欄位
                 </span>
                 <button type="button" className="btn btn-ghost btn-sm" onClick={addVariableDefinition}>
-                  + 新增自訂變數
+                  + 新增欄位
                 </button>
               </div>
               {variableDefinitions.length === 0 ? (
                 <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                  需要每位收件人不同的內容（例如面試時間、座號）時，在此新增一個自訂變數。
+                  電子郵件與用戶姓名是固定欄位。可再新增「錄取部門」等欄位，並直接使用同名佔位符。
                 </p>
               ) : (
-                <>
-                  <div className="hidden gap-2 px-1 text-[11px] md:grid md:grid-cols-[1.3fr_1.3fr_1.4fr_auto_auto]" style={{ color: "var(--text-muted)" }}>
-                    <span>名稱（顯示用）</span>
-                    <span>代號（英數，插入用）</span>
-                    <span>預設 / 預覽值</span>
-                    <span>必填</span>
-                    <span />
-                  </div>
+                <div className="space-y-2">
                   {variableDefinitions.map((row, i) => (
-                    <div key={i} className="grid gap-2 md:grid-cols-[1.3fr_1.3fr_1.4fr_auto_auto]">
+                    <div key={i} className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
                       <input
                         className="input"
-                        value={row.label}
-                        maxLength={80}
-                        placeholder="例：面試時間"
-                        onChange={(e) => updateVariable(i, { label: e.target.value })}
-                      />
-                      <input
-                        className="input font-mono text-xs"
                         value={row.key}
                         maxLength={64}
-                        placeholder="interview_time"
-                        onChange={(e) =>
-                          updateVariable(i, {
-                            key: e.target.value.replace(/[^A-Za-z0-9_]/g, ""),
-                          })
-                        }
+                        placeholder="欄位名稱，例如：錄取部門"
+                        onChange={(e) => updateVariableName(i, e.target.value)}
                       />
-                      <input
-                        className="input"
-                        value={previewVariables[row.key] ?? row.default_value}
-                        maxLength={500}
-                        placeholder="預設值（未逐一指定時使用）"
-                        onChange={(e) => {
-                          updateVariable(i, { default_value: e.target.value });
-                          if (row.key) {
-                            setPreviewVariables((vars) => ({ ...vars, [row.key]: e.target.value }));
-                          }
-                        }}
-                      />
-                      <label className="flex items-center gap-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                        <input
-                          type="checkbox"
-                          checked={row.required}
-                          onChange={(e) => updateVariable(i, { required: e.target.checked })}
-                        />
-                        必填
-                      </label>
+                      <code className="flex items-center rounded-lg px-3 text-xs" style={{ background: "var(--bg-surface)", color: "var(--text-secondary)" }}>
+                        {row.key ? `{{ ${row.key} }}` : "輸入欄位名稱後產生佔位符"}
+                      </code>
                       <button type="button" className="btn btn-ghost btn-sm" aria-label="移除變數" onClick={() => removeVariable(i)}>
                         ×
                       </button>
                     </div>
                   ))}
-                </>
+                </div>
               )}
             </div>
 
-            {/* 逐收件人不同內容（取代手寫 JSON） */}
-            {definedVariables.length > 0 && (
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  className="text-xs font-medium underline"
-                  style={{ color: "var(--primary)" }}
-                  onClick={() => setShowPerRecipient((v) => !v)}
-                >
-                  {showPerRecipient ? "▾ " : "▸ "}進階：為不同收件人填入不同內容（選填）
+            <div className="space-y-2 rounded-lg p-3" style={{ background: "var(--bg-elevated)" }}>
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <span className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>
+                    收件人資料表
+                  </span>
+                  <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                    每一列寄送一封信；欄位值會套用到該列收件人的同名佔位符。
+                  </p>
+                </div>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={addRecipientRow}>
+                  + 新增資料列
                 </button>
-                {showPerRecipient && (
-                  <div className="space-y-2 rounded-lg p-3" style={{ background: "var(--bg-elevated)" }}>
-                    <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                      在此指定特定 Email 的變數值；未列出的收件人會用上方的「預設值」。
-                    </p>
-                    <div className="space-y-2">
-                      {recipientRows.map((row, i) => (
-                        <div key={i} className="space-y-1.5 rounded-lg p-2" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
-                          <div className="flex gap-2">
-                            <input
-                              className="input flex-[2]"
-                              value={row.email}
-                              placeholder="收件人 Email"
-                              onChange={(e) => updateRecipientRow(i, { email: e.target.value })}
-                            />
-                            <input
-                              className="input flex-1"
-                              value={row.name}
-                              placeholder="姓名（選填）"
-                              onChange={(e) => updateRecipientRow(i, { name: e.target.value })}
-                            />
-                            <button type="button" className="btn btn-ghost btn-sm" aria-label="移除此收件人" onClick={() => removeRecipientRow(i)}>
-                              ×
-                            </button>
-                          </div>
-                          <div className="grid gap-2 sm:grid-cols-2">
-                            {definedVariables.map((v) => (
-                              <label key={v.key} className="text-xs" style={{ color: "var(--text-muted)" }}>
-                                {v.label || v.key}
-                                <input
-                                  className="input mt-0.5"
-                                  value={row.variables[v.key] ?? ""}
-                                  placeholder={previewVariables[v.key] ?? v.default_value ?? ""}
-                                  onChange={(e) => updateRecipientVar(i, v.key, e.target.value)}
-                                />
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <button type="button" className="btn btn-ghost btn-sm" onClick={addRecipientRow}>
-                      + 新增一位收件人
-                    </button>
-                  </div>
-                )}
               </div>
-            )}
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-max border-separate border-spacing-1">
+                  <thead>
+                    <tr className="text-left text-xs" style={{ color: "var(--text-muted)" }}>
+                      <th className="min-w-56 px-1">電子郵件</th>
+                      <th className="min-w-36 px-1">用戶姓名</th>
+                      {definedVariables.map((variable) => (
+                        <th key={variable.key} className="min-w-40 px-1">
+                          {variable.key}
+                        </th>
+                      ))}
+                      <th className="w-10" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recipientRows.map((row, i) => (
+                      <tr key={i}>
+                        <td>
+                          <input
+                            className="input min-w-56"
+                            type="email"
+                            value={row.email}
+                            placeholder="user@example.com"
+                            onChange={(e) => updateRecipientRow(i, { email: e.target.value })}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            className="input min-w-36"
+                            value={row.name}
+                            placeholder="王小明"
+                            onChange={(e) => updateRecipientRow(i, { name: e.target.value })}
+                          />
+                        </td>
+                        {definedVariables.map((variable) => (
+                          <td key={variable.key}>
+                            <input
+                              className="input min-w-40"
+                              value={row.variables[variable.key] ?? ""}
+                              placeholder={variable.key}
+                              onChange={(e) =>
+                                updateRecipientVar(i, variable.key, e.target.value)
+                              }
+                            />
+                          </td>
+                        ))}
+                        <td>
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            aria-label="移除此資料列"
+                            onClick={() => removeRecipientRow(i)}
+                          >
+                            ×
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {recipientRows.length === 0 && (
+                <p className="py-3 text-center text-xs" style={{ color: "var(--text-muted)" }}>
+                  尚無資料，請新增第一列。
+                </p>
+              )}
+            </div>
           </section>
 
           <section className="card space-y-3 p-4">
@@ -1166,13 +1393,62 @@ function ComposeInner() {
 
           <section className="card space-y-2 p-4">
             <h2 className="text-sm font-semibold">收件對象</h2>
+            <select
+              className="input"
+              value={recipientListId}
+              onChange={(e) => applyRecipientList(e.target.value)}
+            >
+              <option value="">套用已儲存名單（選填）…</option>
+              {recipientLists.map((list) => (
+                <option key={list.id} value={list.id}>
+                  {list.name}（{list.members.length} 人）
+                </option>
+              ))}
+            </select>
             <RecipientPicker onChange={setRecipients} disabled={busy} />
             <p className="text-xs" style={{ color: "var(--text-muted)" }}>
               {count === null
-                ? "尚未選擇收件人"
-                : `預計寄送 ${count} 人`}
+                ? importedRecipientCount > 0
+                  ? `已從表格匯入 ${importedRecipientCount} 人`
+                  : "尚未選擇收件人"
+                : `預計寄送約 ${estimatedRecipientCount} 人`}
               {sampleNames.length > 0 && `（${sampleNames.join("、")}${count && count > sampleNames.length ? " …" : ""}）`}
             </p>
+          </section>
+
+          <section className="card space-y-3 p-4">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-semibold">附件</h2>
+                <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                  小檔直接附加；較大檔案自動改為限時安全下載連結。
+                </p>
+              </div>
+              <label className={`btn btn-secondary btn-sm ${uploadingAttachment ? "cursor-wait opacity-70" : "cursor-pointer"}`}>
+                {uploadingAttachment ? "上傳中…" : "+ 上傳附件"}
+                <input
+                  type="file"
+                  className="hidden"
+                  disabled={uploadingAttachment}
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,image/png,image/jpeg,image/webp"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) void uploadAttachment(file);
+                    e.currentTarget.value = "";
+                  }}
+                />
+              </label>
+            </div>
+            {attachments.map((attachment) => (
+              <div key={attachment.id} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs" style={{ borderColor: "var(--border)" }}>
+                <span className="min-w-0 flex-1 truncate">{attachment.filename}</span>
+                <span style={{ color: "var(--text-muted)" }}>
+                  {(attachment.file_size / 1024 / 1024).toFixed(2)} MB ·
+                  {attachment.delivery_mode === "attachment" ? " 實體附件" : " 安全連結"}
+                </span>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => void removeAttachment(attachment)}>移除</button>
+              </div>
+            ))}
           </section>
         </div>
 
@@ -1180,10 +1456,25 @@ function ComposeInner() {
         <div className="space-y-4">
           <section className="card overflow-hidden p-0">
             <div
-              className="px-4 py-2 text-sm font-semibold"
+              className="flex flex-wrap items-center justify-between gap-2 px-4 py-2"
               style={{ borderBottom: "1px solid var(--border)" }}
             >
-              信件預覽
+              <span className="text-sm font-semibold">信件預覽</span>
+              {recipientRows.length > 0 && (
+                <select
+                  className="input max-w-64 py-1 text-xs"
+                  value={Math.min(previewRecipientIndex, recipientRows.length - 1)}
+                  onChange={(e) => setPreviewRecipientIndex(Number(e.target.value))}
+                  aria-label="選擇預覽收件人"
+                >
+                  {recipientRows.map((row, index) => (
+                    <option key={`${row.email}-${index}`} value={index}>
+                      {row.name || row.email || `第 ${index + 1} 列`}
+                      {row.name && row.email ? `（${row.email}）` : ""}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
             {previewHtml ? (
               <iframe
@@ -1204,6 +1495,26 @@ function ComposeInner() {
           </section>
 
           <section className="card space-y-3 p-4">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <label className="flex items-center gap-2 text-xs">
+                <input type="checkbox" checked={trackOpens} onChange={(e) => setTrackOpens(e.target.checked)} />
+                追蹤開信率（估計值）
+              </label>
+              <label className="flex items-center gap-2 text-xs">
+                <input type="checkbox" checked={trackClicks} onChange={(e) => setTrackClicks(e.target.checked)} />
+                追蹤連結點擊
+              </label>
+            </div>
+            {preflightResult && (
+              <div className="rounded-lg border p-3 text-xs" style={{ borderColor: preflightResult.valid ? "var(--success)" : "var(--danger)" }}>
+                <p className="font-semibold">
+                  預檢{preflightResult.valid ? "通過" : "未通過"} · 去重後 {preflightResult.unique_count} 人 · 預計 {preflightResult.estimated_batches} 批
+                </p>
+                {preflightResult.duplicate_emails.length > 0 && <p>重複地址：{preflightResult.duplicate_emails.length}</p>}
+                {preflightResult.suppressed_emails.length > 0 && <p>已排除退訂／退信：{preflightResult.suppressed_emails.length}</p>}
+                {preflightResult.missing_variables.length > 0 && <p style={{ color: "var(--danger)" }}>缺少必要欄位：{preflightResult.missing_variables.length}</p>}
+              </div>
+            )}
             <div>
               <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
                 預約寄送時間（選填）
@@ -1223,6 +1534,25 @@ function ComposeInner() {
                 onClick={handleTest}
               >
                 測試寄給我
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                disabled={busy}
+                onClick={async () => {
+                  try {
+                    const result = await emailApi.testSample({
+                      ...buildPayload(),
+                      recipient_indexes: recipientRows.slice(0, 3).map((_, index) => index),
+                      test_emails: [],
+                    });
+                    toast.success(`已排入 ${result.queued} 封抽樣測試信`);
+                  } catch (e) {
+                    toast.error(e instanceof ApiError ? e.message : "抽樣測試失敗");
+                  }
+                }}
+              >
+                抽樣測試
               </button>
               <button
                 type="button"
@@ -1261,7 +1591,11 @@ function ComposeInner() {
       {confirmOpen && (
         <Modal title="確認大量寄送" onClose={() => setConfirmOpen(false)} maxWidthClassName="max-w-md">
           <p className="text-sm" style={{ color: "var(--text-primary)" }}>
-            這封信將寄送給 <strong>{count}</strong> 位收件人，確定要立即送出嗎？
+            這封信將寄送給 <strong>{preflightResult?.unique_count ?? estimatedRecipientCount}</strong> 位收件人，
+            共 {preflightResult?.estimated_batches ?? 1} 批，確定要立即送出嗎？
+          </p>
+          <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+            開信追蹤：{trackOpens ? "開啟" : "關閉"} · 點擊追蹤：{trackClicks ? "開啟" : "關閉"} · 附件 {attachments.length} 個
           </p>
           <div className="mt-5 flex justify-end gap-2">
             <button className="btn btn-ghost btn-sm" onClick={() => setConfirmOpen(false)}>

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -11,7 +12,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -27,10 +28,15 @@ from api.email.renderer import (
 )
 from api.email.sender import enqueue_rendered, render_generic_message, render_generic_subject
 from api.models.email_message import (
+    EmailAttachment,
+    EmailAttachmentMode,
     EmailCampaignRecipient,
     EmailMessage,
+    EmailRecipientListMember,
     EmailRecipientStatus,
     EmailStatus,
+    EmailSuppression,
+    EmailTemplate,
 )
 from api.models.user import User
 from api.services import audit as audit_svc
@@ -130,6 +136,14 @@ class EmailComposePayload(BaseModel):
     default_variables: dict[str, str] = Field(default_factory=dict)
     recipient_variables: list[EmailRecipientVariableInput] = Field(default_factory=list)
     preview_variables: dict[str, str] = Field(default_factory=dict)
+    preview_recipient: EmailRecipientVariableInput | None = None
+    org_id: uuid.UUID | None = None
+    template_id: uuid.UUID | None = None
+    recipient_list_id: uuid.UUID | None = None
+    attachment_ids: list[uuid.UUID] = Field(default_factory=list, max_length=20)
+    track_opens: bool = True
+    track_clicks: bool = True
+    idempotency_key: str | None = Field(default=None, max_length=100)
 
 
 class EmailMessageCreate(EmailComposePayload):
@@ -155,6 +169,12 @@ class EmailMessageUpdate(BaseModel):
     default_variables: dict[str, str] | None = None
     recipient_variables: list[EmailRecipientVariableInput] | None = None
     scheduled_at: datetime | None = None
+    org_id: uuid.UUID | None = None
+    template_id: uuid.UUID | None = None
+    recipient_list_id: uuid.UUID | None = None
+    attachment_ids: list[uuid.UUID] | None = Field(default=None, max_length=20)
+    track_opens: bool | None = None
+    track_clicks: bool | None = None
 
 
 class RecipientPreviewOut(BaseModel):
@@ -178,6 +198,10 @@ class EmailMessageOut(BaseModel):
     scheduled_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    org_id: uuid.UUID | None
+    template_id: uuid.UUID | None
+    track_opens: bool
+    track_clicks: bool
 
 
 class EmailMessageDetailOut(EmailMessageOut):
@@ -198,6 +222,7 @@ class EmailMessageDetailOut(EmailMessageOut):
     recipient_status_counts: dict[str, int]
     recent_errors: list[str]
     error_detail: str | None
+    attachment_ids: list[uuid.UUID]
 
 
 class EmailCampaignRecipientOut(BaseModel):
@@ -214,6 +239,15 @@ class EmailCampaignRecipientOut(BaseModel):
     provider_id: str | None
     sent_at: datetime | None
     error_detail: str | None
+    attempt_count: int
+    next_retry_at: datetime | None
+    delivered_at: datetime | None
+    first_opened_at: datetime | None
+    last_opened_at: datetime | None
+    first_clicked_at: datetime | None
+    last_clicked_at: datetime | None
+    bounced_at: datetime | None
+    complained_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
@@ -221,6 +255,17 @@ class EmailCampaignRecipientOut(BaseModel):
 class TestSendOut(BaseModel):
     status: str
     sent_to: str
+
+
+class SampleTestSendOut(BaseModel):
+    status: str
+    queued: int
+    sent_to: list[str]
+
+
+class EmailSampleTestPayload(EmailComposePayload):
+    recipient_indexes: list[int] = Field(default_factory=list, max_length=10)
+    test_emails: list[EmailStr] = Field(default_factory=list, max_length=10)
 
 
 class UploadedImageOut(BaseModel):
@@ -381,6 +426,28 @@ async def _resolve_personalized_recipients(
     definitions = list(msg.variable_definitions or [])
     defaults = {str(k): str(v) for k, v in (msg.default_variables or {}).items()}
     inputs = list(msg.recipient_variables or [])
+    recipient_list_id = (msg.recipient_spec or {}).get("recipient_list_id")
+    if recipient_list_id:
+        list_rows = (
+            (
+                await db.execute(
+                    select(EmailRecipientListMember).where(
+                        EmailRecipientListMember.list_id == uuid.UUID(str(recipient_list_id))
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        inputs.extend(
+            {
+                "user_id": str(item.user_id) if item.user_id else None,
+                "email": item.email,
+                "name": item.name,
+                "variables": dict(item.variables or {}),
+            }
+            for item in list_rows
+        )
     by_user_id = {str(row.get("user_id")): row for row in inputs if row.get("user_id")}
     by_email = {
         str(row.get("email", "")).strip().lower(): row
@@ -392,10 +459,11 @@ async def _resolve_personalized_recipients(
     seen_emails: set[str] = set()
     for user_obj, email in zip(users, emails, strict=False):
         imported = by_user_id.get(str(user_obj.id)) or by_email.get(email.strip().lower()) or {}
+        imported_name = str(imported.get("name") or "").strip()
         custom = _merged_custom_variables(
             definitions, defaults, dict(imported.get("variables") or {})
         )
-        label = user_obj.display_name or email
+        label = imported_name or user_obj.display_name or email
         try:
             validate_required_variables(definitions, custom, recipient_label=label)
         except ValueError as exc:
@@ -408,7 +476,7 @@ async def _resolve_personalized_recipients(
             PersonalizedRecipient(
                 user_id=user_obj.id,
                 email=email,
-                name=user_obj.display_name,
+                name=imported_name or user_obj.display_name,
                 student_id=user_obj.student_id,
                 variables=custom,
             )
@@ -446,6 +514,20 @@ async def _resolve_personalized_recipients(
                 variables=custom,
             )
         )
+    if rows:
+        suppressed = set(
+            (
+                await db.execute(
+                    select(EmailSuppression.email).where(
+                        EmailSuppression.is_active.is_(True),
+                        EmailSuppression.email.in_([row.email.lower() for row in rows]),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        rows = [row for row in rows if row.email.lower() not in suppressed]
     return rows
 
 
@@ -489,6 +571,13 @@ def _apply_compose(msg: EmailMessage, payload: EmailComposePayload) -> None:
     msg.template = "generic"
     msg.context = _build_context(payload)
     msg.recipient_spec = _spec_from_selector(payload.recipients)
+    if payload.recipient_list_id:
+        msg.recipient_spec["recipient_list_id"] = str(payload.recipient_list_id)
+    msg.org_id = payload.org_id
+    msg.template_id = payload.template_id
+    msg.track_opens = payload.track_opens
+    msg.track_clicks = payload.track_clicks
+    msg.idempotency_key = payload.idempotency_key
     msg.variable_definitions = definitions
     msg.default_variables = {
         k: str(v)
@@ -508,6 +597,39 @@ def _apply_compose(msg: EmailMessage, payload: EmailComposePayload) -> None:
         }
         for row in payload.recipient_variables
     ]
+
+
+async def _render_attachments(
+    attachments: list[EmailAttachment],
+) -> tuple[list[dict[str, str]], list[dict]]:
+    resend_attachments: list[dict[str, str]] = []
+    link_blocks: list[dict] = []
+    storage = get_storage()
+    for attachment in attachments:
+        if attachment.revoked_at or (
+            attachment.expires_at and attachment.expires_at <= datetime.now(UTC)
+        ):
+            continue
+        if attachment.delivery_mode == EmailAttachmentMode.ATTACHMENT:
+            path = storage.local_path(attachment.storage_key)
+            if path and path.exists():
+                resend_attachments.append(
+                    {
+                        "filename": attachment.filename,
+                        "content": base64.b64encode(path.read_bytes()).decode(),
+                    }
+                )
+                continue
+        url = await storage.get_url(
+            attachment.storage_key,
+            expires=settings.EMAIL_ATTACHMENT_LINK_EXPIRES_SECONDS,
+            disposition="attachment",
+            download_name=attachment.filename,
+        )
+        link_blocks.append(
+            {"type": "text", "md": f"[下載附件：{attachment.filename}]({url})"}
+        )
+    return resend_attachments, link_blocks
 
 
 async def _send_now(db: AsyncSession, user: User, msg: EmailMessage) -> None:
@@ -540,15 +662,38 @@ async def _send_now(db: AsyncSession, user: User, msg: EmailMessage) -> None:
     msg.scheduled_at = None
     msg.error_detail = None
     await db.flush()
-    task_ids: list[str] = []
-    for row, recipient in zip(rows, recipient_models, strict=True):
-        personal = _make_personalization_context(row)
-        subject = render_generic_subject(msg.subject, personal)
-        html = render_generic_message(msg.subject, msg.body, msg.context or {}, personal)
-        task_ids.extend(
-            enqueue_rendered([row.email], subject, html, str(msg.id), str(recipient.id))
+    attachments = (
+        (
+            await db.execute(
+                select(EmailAttachment).where(EmailAttachment.message_id == msg.id)
+            )
         )
-        recipient.celery_task_id = task_ids[-1] if task_ids else None
+        .scalars()
+        .all()
+    )
+    resend_attachments, link_blocks = await _render_attachments(list(attachments))
+    render_context = dict(msg.context or {})
+    render_context["blocks"] = [*list(render_context.get("blocks", [])), *link_blocks]
+    task_ids: list[str] = []
+    batch_size = max(1, settings.EMAIL_SEND_BATCH_SIZE)
+    for start in range(0, len(rows), batch_size):
+        batch_rows = rows[start : start + batch_size]
+        batch_models = recipient_models[start : start + batch_size]
+        for row, recipient in zip(batch_rows, batch_models, strict=True):
+            personal = _make_personalization_context(row)
+            subject = render_generic_subject(msg.subject, personal)
+            html = render_generic_message(msg.subject, msg.body, render_context, personal)
+            task_ids.extend(
+                enqueue_rendered(
+                    [row.email],
+                    subject,
+                    html,
+                    str(msg.id),
+                    str(recipient.id),
+                    resend_attachments or None,
+                )
+            )
+            recipient.celery_task_id = task_ids[-1] if task_ids else None
     msg.celery_task_id = task_ids[0] if task_ids else None
 
 
@@ -572,6 +717,18 @@ async def _requeue_unsent(db: AsyncSession, msg: EmailMessage) -> int:
     )
     if not rows:
         return 0
+    attachments = (
+        (
+            await db.execute(
+                select(EmailAttachment).where(EmailAttachment.message_id == msg.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    resend_attachments, link_blocks = await _render_attachments(list(attachments))
+    render_context = dict(msg.context or {})
+    render_context["blocks"] = [*list(render_context.get("blocks", [])), *link_blocks]
     for recipient in rows:
         personal = build_personalization_context(
             user_id=recipient.user_id,
@@ -581,11 +738,16 @@ async def _requeue_unsent(db: AsyncSession, msg: EmailMessage) -> int:
             custom_variables=dict(recipient.variables or {}),
         )
         subject = render_generic_subject(msg.subject, personal)
-        html = render_generic_message(msg.subject, msg.body, msg.context or {}, personal)
+        html = render_generic_message(msg.subject, msg.body, render_context, personal)
         recipient.status = EmailRecipientStatus.QUEUED
         recipient.error_detail = None
         task_ids = enqueue_rendered(
-            [recipient.email], subject, html, str(msg.id), str(recipient.id)
+            [recipient.email],
+            subject,
+            html,
+            str(msg.id),
+            str(recipient.id),
+            resend_attachments or None,
         )
         recipient.celery_task_id = task_ids[0] if task_ids else None
     msg.status = EmailStatus.QUEUED
@@ -606,6 +768,10 @@ def _to_out(msg: EmailMessage, sender_name: str | None) -> EmailMessageOut:
         scheduled_at=msg.scheduled_at,
         created_at=msg.created_at,
         updated_at=msg.updated_at,
+        org_id=msg.org_id,
+        template_id=msg.template_id,
+        track_opens=msg.track_opens,
+        track_clicks=msg.track_clicks,
     )
 
 
@@ -637,6 +803,7 @@ def _to_detail(
         recipient_status_counts=recipient_status_counts or {},
         recent_errors=recent_errors or [],
         error_detail=msg.error_detail,
+        attachment_ids=[item.id for item in msg.attachments],
     )
 
 
@@ -725,18 +892,29 @@ async def upload_email_image(
 @router.post("/preview", response_model=EmailPreviewOut, summary="渲染品牌信件預覽 HTML")
 async def preview_email(body: EmailComposePayload, user: EmailUser) -> EmailPreviewOut:
     definitions = _normalize_definitions(body.variable_definitions)
-    custom = _merged_custom_variables(definitions, body.default_variables, body.preview_variables)
+    preview_row = body.preview_recipient
+    custom = _merged_custom_variables(
+        definitions,
+        body.default_variables,
+        preview_row.variables if preview_row else body.preview_variables,
+    )
+    preview_name = str(preview_row.name or "").strip() if preview_row else ""
+    preview_email_address = str(preview_row.email or "").strip() if preview_row else ""
     try:
-        validate_required_variables(definitions, custom, recipient_label=user.display_name)
+        validate_required_variables(
+            definitions,
+            custom,
+            recipient_label=preview_name or preview_email_address or user.display_name,
+        )
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
         ) from exc
     personal = build_personalization_context(
-        user_id=user.id,
-        name=user.display_name,
-        email=user.email,
-        student_id=user.student_id,
+        user_id=preview_row.user_id if preview_row else user.id,
+        name=preview_name or user.display_name,
+        email=preview_email_address or user.email,
+        student_id=user.student_id if not preview_row else None,
         custom_variables=custom,
     )
     html = render_generic_message(body.subject, body.body, _build_context(body), personal)
@@ -771,6 +949,61 @@ async def test_send(body: EmailComposePayload, user: EmailUser) -> TestSendOut:
 
 
 @router.post(
+    "/test-sample",
+    response_model=SampleTestSendOut,
+    summary="抽樣測試寄送：以選定資料列渲染後寄至測試信箱",
+)
+async def test_send_sample(
+    body: EmailSampleTestPayload, user: EmailUser
+) -> SampleTestSendOut:
+    destinations = [str(value) for value in body.test_emails] or [user.email]
+    if not destinations or not destinations[0]:
+        raise HTTPException(status_code=422, detail="沒有可用的測試收件信箱")
+    definitions = _normalize_definitions(body.variable_definitions)
+    indexes = body.recipient_indexes or list(range(min(3, len(body.recipient_variables))))
+    selected = [
+        body.recipient_variables[index]
+        for index in indexes
+        if 0 <= index < len(body.recipient_variables)
+    ]
+    if not selected:
+        selected = [
+            EmailRecipientVariableInput(
+                user_id=user.id,
+                email=user.email,
+                name=user.display_name,
+                variables=body.preview_variables,
+            )
+        ]
+    queued = 0
+    for index, row in enumerate(selected):
+        custom = _merged_custom_variables(
+            definitions, body.default_variables, row.variables
+        )
+        try:
+            validate_required_variables(
+                definitions,
+                custom,
+                recipient_label=row.name or row.email or f"第 {index + 1} 列",
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        personal = build_personalization_context(
+            user_id=row.user_id,
+            name=row.name,
+            email=row.email or user.email,
+            student_id=None,
+            custom_variables=custom,
+        )
+        subject = render_generic_subject(body.subject, personal)
+        html = render_generic_message(body.subject, body.body, _build_context(body), personal)
+        for destination in destinations:
+            enqueue_rendered([destination], f"[抽樣 {index + 1}] {subject}", html)
+            queued += 1
+    return SampleTestSendOut(status="queued", queued=queued, sent_to=destinations)
+
+
+@router.post(
     "/messages",
     response_model=EmailMessageOut,
     status_code=status.HTTP_201_CREATED,
@@ -778,8 +1011,28 @@ async def test_send(body: EmailComposePayload, user: EmailUser) -> TestSendOut:
 )
 async def create_message(body: EmailMessageCreate, db: DbDep, user: EmailUser) -> EmailMessageOut:
     await _ensure_can_send(db, user, body.recipients)
+    if body.idempotency_key:
+        existing = await db.scalar(
+            select(EmailMessage).where(EmailMessage.idempotency_key == body.idempotency_key)
+        )
+        if existing is not None:
+            return _to_out(existing, user.display_name)
     msg = EmailMessage(sender_id=user.id)
     _apply_compose(msg, body)
+    db.add(msg)
+    await db.flush()
+    if body.attachment_ids:
+        await db.execute(
+            EmailAttachment.__table__.update()
+            .where(
+                EmailAttachment.id.in_(body.attachment_ids),
+                EmailAttachment.uploaded_by_id == user.id,
+                EmailAttachment.message_id.is_(None),
+            )
+            .values(message_id=msg.id)
+        )
+        await db.flush()
+        await db.refresh(msg, attribute_names=["attachments"])
 
     if body.action == "draft":
         msg.status = EmailStatus.DRAFT
@@ -796,12 +1049,12 @@ async def create_message(body: EmailMessageCreate, db: DbDep, user: EmailUser) -
         msg.status = EmailStatus.SCHEDULED
         msg.scheduled_at = scheduled
     else:  # send
-        db.add(msg)
-        await db.flush()
         await _send_now(db, user, msg)
 
-    if msg not in db:
-        db.add(msg)
+    if msg.template_id:
+        template = await db.get(EmailTemplate, msg.template_id)
+        if template:
+            template.last_used_at = datetime.now(UTC)
     await db.flush()
     await _audit(db, user, msg, body.action)
     await db.refresh(msg)
@@ -861,6 +1114,34 @@ async def update_message(
             }
             for row in body.recipient_variables
         ]
+    if body.recipient_list_id is not None:
+        msg.recipient_spec = {
+            **(msg.recipient_spec or {}),
+            "recipient_list_id": str(body.recipient_list_id),
+        }
+    if body.org_id is not None:
+        msg.org_id = body.org_id
+    if body.template_id is not None:
+        msg.template_id = body.template_id
+    if body.track_opens is not None:
+        msg.track_opens = body.track_opens
+    if body.track_clicks is not None:
+        msg.track_clicks = body.track_clicks
+    if body.attachment_ids is not None:
+        await db.execute(
+            EmailAttachment.__table__.update()
+            .where(EmailAttachment.message_id == msg.id)
+            .values(message_id=None)
+        )
+        if body.attachment_ids:
+            await db.execute(
+                EmailAttachment.__table__.update()
+                .where(
+                    EmailAttachment.id.in_(body.attachment_ids),
+                    EmailAttachment.uploaded_by_id == user.id,
+                )
+                .values(message_id=msg.id)
+            )
     if body.scheduled_at is not None:
         scheduled = _to_utc(body.scheduled_at)
         if msg.status == EmailStatus.SCHEDULED and scheduled <= datetime.now(UTC):
@@ -940,6 +1221,12 @@ async def list_messages(
     status_filter: str | None = Query(None, alias="status", description="依狀態過濾"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
+    q: str | None = Query(None, max_length=100),
+    sender_id: uuid.UUID | None = Query(None),
+    org_id: uuid.UUID | None = Query(None),
+    template_id: uuid.UUID | None = Query(None),
+    date_from: datetime | None = Query(None),
+    date_to: datetime | None = Query(None),
 ) -> list[EmailMessageOut]:
     codes = await get_user_permission_codes(db, user.id)
     can_view_all = (
@@ -956,6 +1243,25 @@ async def list_messages(
         stmt = stmt.where(EmailMessage.sender_id == user.id)
     if status_filter:
         stmt = stmt.where(EmailMessage.status == status_filter)
+    if q:
+        pattern = f"%{q.strip()}%"
+        stmt = stmt.where(
+            or_(
+                EmailMessage.subject.ilike(pattern),
+                EmailMessage.sender.has(User.display_name.ilike(pattern)),
+                EmailMessage.sender.has(User.email.ilike(pattern)),
+            )
+        )
+    if sender_id:
+        stmt = stmt.where(EmailMessage.sender_id == sender_id)
+    if org_id:
+        stmt = stmt.where(EmailMessage.org_id == org_id)
+    if template_id:
+        stmt = stmt.where(EmailMessage.template_id == template_id)
+    if date_from:
+        stmt = stmt.where(EmailMessage.created_at >= _to_utc(date_from))
+    if date_to:
+        stmt = stmt.where(EmailMessage.created_at <= _to_utc(date_to))
     stmt = stmt.limit(limit).offset(offset)
     rows = (await db.execute(stmt)).scalars().all()
     return [_to_out(m, m.sender.display_name if m.sender else None) for m in rows]
@@ -965,7 +1271,7 @@ async def list_messages(
 async def get_message(message_id: uuid.UUID, db: DbDep, user: EmailUser) -> EmailMessageDetailOut:
     stmt = (
         select(EmailMessage)
-        .options(selectinload(EmailMessage.sender))
+        .options(selectinload(EmailMessage.sender), selectinload(EmailMessage.attachments))
         .where(EmailMessage.id == message_id)
     )
     msg = (await db.execute(stmt)).scalar_one_or_none()
@@ -1000,7 +1306,7 @@ async def get_message(message_id: uuid.UUID, db: DbDep, user: EmailUser) -> Emai
     return _to_detail(
         msg,
         msg.sender.display_name if msg.sender else None,
-        can_view_emails=can_view_all,
+        can_view_emails=can_view_all or msg.sender_id == user.id,
         recipient_status_counts={str(row[0]): int(row[1]) for row in status_rows},
         recent_errors=[f"{email}: {err}" for email, err in recent_errors if err],
     )
@@ -1043,3 +1349,39 @@ async def list_message_recipients(
         .all()
     )
     return [EmailCampaignRecipientOut.model_validate(row, from_attributes=True) for row in rows]
+
+
+@router.get(
+    "/messages/{message_id}/recipients/{recipient_id}/preview",
+    response_model=EmailPreviewOut,
+    summary="預覽特定收件人實際收到的個人化郵件",
+)
+async def preview_message_recipient(
+    message_id: uuid.UUID,
+    recipient_id: uuid.UUID,
+    db: DbDep,
+    user: EmailUser,
+) -> EmailPreviewOut:
+    msg = await db.get(EmailMessage, message_id)
+    if msg is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="郵件不存在")
+    codes = await get_user_permission_codes(db, user.id)
+    can_view_all = (
+        user.is_superuser
+        or PermissionCode.EMAIL_VIEW_LOGS in codes
+        or PermissionCode.ADMIN_ALL in codes
+    )
+    if msg.sender_id != user.id and not can_view_all:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無法檢視他人的郵件")
+    recipient = await db.get(EmailCampaignRecipient, recipient_id)
+    if recipient is None or recipient.message_id != message_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="收件人紀錄不存在")
+    personal = build_personalization_context(
+        user_id=recipient.user_id,
+        name=recipient.name,
+        email=recipient.email,
+        student_id=None,
+        custom_variables=dict(recipient.variables or {}),
+    )
+    html = render_generic_message(msg.subject, msg.body, msg.context or {}, personal)
+    return EmailPreviewOut(html=html)

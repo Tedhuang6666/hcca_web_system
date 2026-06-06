@@ -52,32 +52,14 @@ function NavLink({ item, pathname, down }: { item: NavItem; pathname: string; do
   const active = item.end
     ? pathname === item.href
     : pathname === item.href || pathname.startsWith(item.href + "/");
-  const isGovernanceHub = item.id === "governanceHub";
 
   return (
     <Link
       href={item.href}
-      className={`sidebar-nav-item ${isGovernanceHub ? "min-h-12" : ""}`}
-      style={
-        isGovernanceHub
-          ? {
-              background: active ? "var(--sidebar-active)" : "rgba(201,168,76,0.07)",
-              border: "1px solid rgba(201,168,76,0.2)",
-            }
-          : undefined
-      }
+      className="sidebar-nav-item"
       aria-current={active ? "page" : undefined}>
       <span className="flex-shrink-0"><NavIcon iconKey={item.iconKey} size={15} /></span>
-      {isGovernanceHub ? (
-        <span className="min-w-0 flex-1">
-          <span className="block truncate font-semibold">{item.label}</span>
-          <span className="mt-0.5 block truncate text-[10px]" style={{ color: "var(--sidebar-section-label)" }}>
-            事情、案件與流程
-          </span>
-        </span>
-      ) : (
-        <span className="flex-1 truncate">{item.label}</span>
-      )}
+      <span className="flex-1 truncate">{item.label}</span>
       {down && (
         <span
           className="ml-1 flex-shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium"

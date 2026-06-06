@@ -260,6 +260,8 @@ async def create_petition(
         summary=f"建立陳情案件 {case_obj.case_number}",
     )
     await enqueue_petition_private_channel(session, case_obj)
+    # 治理匯流：陳情建立經 audit_svc.record() 統一橋接進治理中樞（governance_events 登錄表），
+    # 不再於此手寫 ingest，避免雙重時間軸。
 
     _ph = get_posthog_client()
     if _ph:

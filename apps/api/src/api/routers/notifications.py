@@ -19,6 +19,7 @@ from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_permission
 from api.email.renderer import make_unsubscribe_token, parse_unsubscribe_token
 from api.email.sender import send_branded_email
+from api.models.email_message import EmailSuppression
 from api.models.notification import Notification
 from api.models.user import User
 from api.models.web_push import WebPushSubscription
@@ -429,6 +430,23 @@ async def unsubscribe_via_token(body: UnsubscribeRequest, db: DbDep) -> dict[str
     if ntype in prefs:
         prefs[ntype]["email"] = False
     user.notification_preferences = prefs
+    if ntype == "email" and user.email:
+        normalized_email = user.email.strip().lower()
+        suppression = await db.scalar(
+            select(EmailSuppression).where(EmailSuppression.email == normalized_email)
+        )
+        if suppression is None:
+            suppression = EmailSuppression(
+                email=normalized_email,
+                reason="unsubscribe",
+                source="unsubscribe_link",
+                suppressed_at=datetime.now(UTC),
+            )
+            db.add(suppression)
+        else:
+            suppression.is_active = True
+            suppression.reason = "unsubscribe"
+            suppression.suppressed_at = datetime.now(UTC)
     await db.flush()
     return {
         "status": "ok",

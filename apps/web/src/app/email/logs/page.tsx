@@ -5,14 +5,18 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { ApiError, emailApi } from "@/lib/api";
 import type {
+  EmailAnalyticsOut,
+  EmailCampaignRecipientOut,
   EmailComposePayload,
   EmailMessageDetailOut,
   EmailMessageOut,
   EmailStatus,
+  EmailTemplateOut,
 } from "@/lib/types";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import SmartEmptyState from "@/components/ui/SmartEmptyState";
 import Modal from "@/components/ui/Modal";
+import { useOrgOptions } from "@/components/ui/targeting";
 
 /** 從訊息詳情重建預覽用 payload，呼叫 /email/preview 取得與實寄一致的品牌 HTML。 */
 function detailToPreviewPayload(d: EmailMessageDetailOut): EmailComposePayload {
@@ -32,6 +36,7 @@ function detailToPreviewPayload(d: EmailMessageDetailOut): EmailComposePayload {
     default_variables: d.default_variables,
     recipient_variables: d.recipient_variables,
     preview_variables: d.default_variables,
+    preview_recipient: null,
   };
 }
 
@@ -42,6 +47,8 @@ const TABS: { key: string; label: string }[] = [
   { key: "queued", label: "寄送中" },
   { key: "sent", label: "已寄送" },
   { key: "failed", label: "失敗" },
+  { key: "retrying", label: "重試中" },
+  { key: "dead", label: "停止重試" },
   { key: "partial", label: "部分失敗" },
 ];
 
@@ -51,8 +58,21 @@ const STATUS_META: Record<EmailStatus, { label: string; color: string }> = {
   queued: { label: "寄送中", color: "var(--primary)" },
   sent: { label: "已寄送", color: "var(--success)" },
   failed: { label: "失敗", color: "var(--danger)" },
+  retrying: { label: "重試中", color: "var(--warning)" },
+  dead: { label: "停止重試", color: "var(--danger)" },
   partial: { label: "部分失敗", color: "var(--warning)" },
   cancelled: { label: "已取消", color: "var(--text-muted)" },
+};
+
+const RECIPIENT_STATUS_META: Record<
+  EmailCampaignRecipientOut["status"],
+  { label: string; color: string }
+> = {
+  queued: { label: "等待寄送", color: "var(--primary)" },
+  sent: { label: "寄送成功", color: "var(--success)" },
+  failed: { label: "寄送失敗", color: "var(--danger)" },
+  retrying: { label: "等待重試", color: "var(--warning)" },
+  dead: { label: "停止重試", color: "var(--danger)" },
 };
 
 function fmt(iso: string | null): string {
@@ -61,9 +81,20 @@ function fmt(iso: string | null): string {
 }
 
 export default function EmailLogsPage() {
+  const orgOptions = useOrgOptions();
   const [tab, setTab] = useState("");
+  const [query, setQuery] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [orgId, setOrgId] = useState("");
+  const [templateId, setTemplateId] = useState("");
+  const [templates, setTemplates] = useState<EmailTemplateOut[]>([]);
   const [rows, setRows] = useState<EmailMessageOut[]>([]);
   const [detail, setDetail] = useState<EmailMessageDetailOut | null>(null);
+  const [detailRecipients, setDetailRecipients] = useState<EmailCampaignRecipientOut[]>([]);
+  const [previewRecipientId, setPreviewRecipientId] = useState<string | null>(null);
+  const [recipientStatusFilter, setRecipientStatusFilter] = useState("");
+  const [detailAnalytics, setDetailAnalytics] = useState<EmailAnalyticsOut | null>(null);
   const [detailHtml, setDetailHtml] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -71,15 +102,27 @@ export default function EmailLogsPage() {
   const load = useCallback(() => {
     setLoading(true);
     emailApi
-      .listMessages({ status: tab || undefined, limit: 100 })
+      .listMessages({
+        status: tab || undefined,
+        q: query.trim() || undefined,
+        org_id: orgId || undefined,
+        template_id: templateId || undefined,
+        date_from: dateFrom ? new Date(`${dateFrom}T00:00:00`).toISOString() : undefined,
+        date_to: dateTo ? new Date(`${dateTo}T23:59:59`).toISOString() : undefined,
+        limit: 100,
+      })
       .then(setRows)
       .catch((e) => toast.error(e instanceof ApiError ? e.message : "載入失敗"))
       .finally(() => setLoading(false));
-  }, [tab]);
+  }, [tab, query, dateFrom, dateTo, orgId, templateId]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    emailApi.listTemplates().then(setTemplates).catch(() => undefined);
+  }, []);
 
   const sendDraft = async (id: string) => {
     setBusyId(id);
@@ -99,7 +142,14 @@ export default function EmailLogsPage() {
     try {
       await emailApi.resendMessage(id);
       toast.success("已將未送達的收件人重新排入寄送佇列");
-      if (detail?.id === id) setDetail(await emailApi.getMessage(id));
+      if (detail?.id === id) {
+        const [nextDetail, recipients] = await Promise.all([
+          emailApi.getMessage(id),
+          emailApi.listMessageRecipients(id, { limit: 1000 }),
+        ]);
+        setDetail(nextDetail);
+        setDetailRecipients(recipients);
+      }
       load();
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "重新寄送失敗");
@@ -111,15 +161,29 @@ export default function EmailLogsPage() {
   const showDetail = async (id: string) => {
     setBusyId(id);
     try {
-      const d = await emailApi.getMessage(id);
+      const [d, recipients, analytics] = await Promise.all([
+        emailApi.getMessage(id),
+        emailApi.listMessageRecipients(id, { limit: 1000 }),
+        emailApi.getAnalytics(id),
+      ]);
       setDetail(d);
-      // 內文預覽：用詳情重建 payload 取得品牌 HTML（與實際寄出一致）。
-      // 必填變數缺值等情形預覽端點會 422，靜默退回不顯示，不擋詳情。
+      setDetailRecipients(recipients);
+      setDetailAnalytics(analytics);
+      setRecipientStatusFilter("");
       setDetailHtml(null);
-      emailApi
-        .preview(detailToPreviewPayload(d))
-        .then((r) => setDetailHtml(r.html))
-        .catch(() => setDetailHtml(""));
+      if (recipients[0]) {
+        setPreviewRecipientId(recipients[0].id);
+        emailApi
+          .previewMessageRecipient(id, recipients[0].id)
+          .then((r) => setDetailHtml(r.html))
+          .catch(() => setDetailHtml(""));
+      } else {
+        setPreviewRecipientId(null);
+        emailApi
+          .preview(detailToPreviewPayload(d))
+          .then((r) => setDetailHtml(r.html))
+          .catch(() => setDetailHtml(""));
+      }
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "載入詳情失敗");
     } finally {
@@ -129,7 +193,24 @@ export default function EmailLogsPage() {
 
   const closeDetail = () => {
     setDetail(null);
+    setDetailRecipients([]);
+    setPreviewRecipientId(null);
+    setDetailAnalytics(null);
+    setRecipientStatusFilter("");
     setDetailHtml(null);
+  };
+
+  const previewRecipient = async (recipient: EmailCampaignRecipientOut) => {
+    if (!detail) return;
+    setPreviewRecipientId(recipient.id);
+    setDetailHtml(null);
+    try {
+      const result = await emailApi.previewMessageRecipient(detail.id, recipient.id);
+      setDetailHtml(result.html);
+    } catch (e) {
+      setDetailHtml("");
+      toast.error(e instanceof ApiError ? e.message : "載入收件人預覽失敗");
+    }
   };
 
   const removeMessage = async (id: string, scheduled: boolean) => {
@@ -177,6 +258,21 @@ export default function EmailLogsPage() {
           </button>
         ))}
       </div>
+
+      <section className="card grid gap-2 p-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_10rem_10rem_12rem_12rem_auto]">
+        <input className="input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜尋郵件主旨" />
+        <input className="input" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} aria-label="開始日期" />
+        <input className="input" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} aria-label="結束日期" />
+        <select className="input" value={orgId} onChange={(e) => setOrgId(e.target.value)}>
+          <option value="">全部組織</option>
+          {orgOptions.map((org) => <option key={org.value} value={org.value}>{org.label}</option>)}
+        </select>
+        <select className="input" value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
+          <option value="">全部範本</option>
+          {templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
+        </select>
+        <button className="btn btn-ghost btn-sm" onClick={() => { setQuery(""); setDateFrom(""); setDateTo(""); setOrgId(""); setTemplateId(""); }}>清除</button>
+      </section>
 
       <section className="card overflow-hidden">
         {loading ? (
@@ -252,7 +348,9 @@ export default function EmailLogsPage() {
                         取消預約
                       </button>
                     )}
-                    {(m.status === "queued" || m.status === "failed" || m.status === "partial") && (
+                    {(["queued", "failed", "retrying", "dead", "partial"] as EmailStatus[]).includes(
+                      m.status,
+                    ) && (
                       <button
                         className="btn btn-secondary btn-sm"
                         disabled={busyId === m.id}
@@ -277,7 +375,9 @@ export default function EmailLogsPage() {
           size="xl"
           footer={
             <>
-              {(detail.status === "queued" || detail.status === "failed" || detail.status === "partial") && (
+              {(["queued", "failed", "retrying", "dead", "partial"] as EmailStatus[]).includes(
+                detail.status,
+              ) && (
                 <button
                   className="btn btn-secondary btn-sm"
                   disabled={busyId === detail.id}
@@ -306,16 +406,32 @@ export default function EmailLogsPage() {
               </p>
             )}
 
-            <div className="grid gap-2 sm:grid-cols-3">
-              {(["queued", "sent", "failed"] as const).map((key) => (
+            <div className="grid gap-2 sm:grid-cols-5">
+              {(["queued", "sent", "failed", "retrying", "dead"] as const).map((key) => (
                 <div key={key} className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--border)" }}>
                   <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                    {STATUS_META[key].label}
+                    {RECIPIENT_STATUS_META[key].label}
                   </p>
                   <p className="mt-1 text-lg font-semibold">{detail.recipient_status_counts[key] ?? 0}</p>
                 </div>
               ))}
             </div>
+
+            {detailAnalytics && (
+              <div className="grid gap-2 sm:grid-cols-4">
+                {[
+                  ["投遞率", detailAnalytics.delivery_rate],
+                  ["退信率", detailAnalytics.bounce_rate],
+                  ["開信率（估計）", detailAnalytics.open_rate_estimated],
+                  ["點擊率", detailAnalytics.click_rate],
+                ].map(([label, value]) => (
+                  <div key={String(label)} className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--border)" }}>
+                    <p className="text-xs" style={{ color: "var(--text-muted)" }}>{label}</p>
+                    <p className="mt-1 text-lg font-semibold">{(Number(value) * 100).toFixed(1)}%</p>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {detail.error_detail && (
               <p className="rounded-lg px-3 py-2 text-sm" style={{ background: "var(--danger-soft)", color: "var(--danger)" }}>
@@ -336,35 +452,91 @@ export default function EmailLogsPage() {
               </div>
             )}
 
-            {/* 收件人清單 */}
             <div>
-              <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
-                收件人{detail.resolved_emails.length > 0 ? `（${detail.resolved_emails.length}）` : ""}
-              </p>
-              {detail.resolved_emails.length > 0 ? (
-                <div
-                  className="mt-2 max-h-40 overflow-y-auto rounded-lg border p-2 text-xs"
-                  style={{ borderColor: "var(--border)", color: "var(--text-secondary)" }}
-                >
-                  <ul className="space-y-0.5">
-                    {detail.resolved_emails.map((addr) => (
-                      <li key={addr} className="truncate font-mono">{addr}</li>
-                    ))}
-                  </ul>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
+                  收件人寄送明細（{detailRecipients.length}）
+                </p>
+                <div className="flex gap-2">
+                  <select className="input py-1 text-xs" value={recipientStatusFilter} onChange={(e) => setRecipientStatusFilter(e.target.value)}>
+                    <option value="">全部狀態</option>
+                    {Object.entries(RECIPIENT_STATUS_META).map(([key, meta]) => <option key={key} value={key}>{meta.label}</option>)}
+                  </select>
+                  <a className="btn btn-ghost btn-sm" href={emailApi.exportUrl(detail.id, "csv")}>CSV</a>
+                  <a className="btn btn-ghost btn-sm" href={emailApi.exportUrl(detail.id, "xlsx")}>XLSX</a>
+                </div>
+              </div>
+              {detailRecipients.length > 0 ? (
+                <div className="mt-2 max-h-72 overflow-auto rounded-lg border" style={{ borderColor: "var(--border)" }}>
+                  <table className="w-full min-w-[760px] text-xs">
+                    <thead className="sticky top-0" style={{ background: "var(--bg-elevated)" }}>
+                      <tr className="text-left" style={{ color: "var(--text-muted)" }}>
+                        <th className="px-3 py-2">收件人</th>
+                        <th className="px-3 py-2">狀態</th>
+                        <th className="px-3 py-2">嘗試</th>
+                        <th className="px-3 py-2">時間／錯誤</th>
+                        <th className="px-3 py-2" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detailRecipients
+                        .filter((recipient) => !recipientStatusFilter || recipient.status === recipientStatusFilter)
+                        .map((recipient) => {
+                        const statusMeta = RECIPIENT_STATUS_META[recipient.status];
+                        return (
+                          <tr key={recipient.id} style={{ borderTop: "1px solid var(--border)" }}>
+                            <td className="px-3 py-2">
+                              <p className="font-medium">{recipient.name || "—"}</p>
+                              <p className="font-mono" style={{ color: "var(--text-muted)" }}>
+                                {recipient.email}
+                              </p>
+                            </td>
+                            <td className="px-3 py-2 font-semibold" style={{ color: statusMeta.color }}>
+                              {statusMeta.label}
+                            </td>
+                            <td className="px-3 py-2">{recipient.attempt_count}</td>
+                            <td className="max-w-72 px-3 py-2">
+                              {recipient.error_detail ? (
+                                <span style={{ color: "var(--danger)" }}>{recipient.error_detail}</span>
+                              ) : recipient.sent_at ? (
+                                fmt(recipient.sent_at)
+                              ) : recipient.next_retry_at ? (
+                                `下次重試：${fmt(recipient.next_retry_at)}`
+                              ) : (
+                                "—"
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              <button
+                                type="button"
+                                className={previewRecipientId === recipient.id ? "btn btn-secondary btn-sm" : "btn btn-ghost btn-sm"}
+                                onClick={() => previewRecipient(recipient)}
+                              >
+                                預覽
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               ) : (
                 <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
                   {detail.status === "draft" || detail.status === "scheduled"
                     ? "寄出時才會解析實際收件名單。"
-                    : "無收件人明細（或你沒有檢視收件人 Email 的權限）。"}
+                    : "目前沒有收件人寄送快照。"}
                 </p>
               )}
             </div>
 
-            {/* 信件內容預覽 */}
             <div>
               <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
-                信件內容
+                {previewRecipientId
+                  ? `個人化郵件預覽：${
+                      detailRecipients.find((row) => row.id === previewRecipientId)?.email ?? ""
+                    }`
+                  : "信件內容"}
               </p>
               <div
                 className="mt-2 overflow-hidden rounded-lg border"

@@ -53,7 +53,7 @@ async def _emit_event(db, *, event_type: str, payload: dict) -> None:
 
 async def _process_overdue_async() -> dict:
     """主邏輯：掃描 overdue 公文 + 採取催辦行動。"""
-    from api.core.database import AsyncSessionLocal
+    from api.core.database import task_session
 
     now = datetime.now(UTC)
     sent = 0
@@ -61,7 +61,7 @@ async def _process_overdue_async() -> dict:
     admin_escalated = 0
     examined = 0
 
-    async with AsyncSessionLocal() as db:
+    async with task_session() as db:
         # 找待簽且過期的公文
         doc_stmt = (
             select(Document)

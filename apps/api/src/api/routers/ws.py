@@ -20,6 +20,34 @@ router = APIRouter(tags=["WebSocket"])
 WS_CLOSE_AUTH_ERROR = 4001
 WS_CLOSE_FORBIDDEN = 4003
 
+
+@router.websocket("/ws/public/elections/{election_id}")
+async def public_election_websocket(websocket: WebSocket, election_id: uuid.UUID) -> None:
+    """公開唯讀開票推播；客戶端只能回覆心跳，不可廣播訊息。"""
+    room = f"election:{election_id}"
+    async with AsyncSessionLocal() as db:
+        from api.models.election import Election
+
+        election = await db.scalar(
+            select(Election).where(Election.id == election_id, Election.is_public.is_(True))
+        )
+    if election is None:
+        await websocket.close(code=4004, reason="找不到此公開選舉")
+        return
+    try:
+        await manager.connect(websocket, room, _client_ip(websocket))
+    except WSCapacityError as exc:
+        await websocket.close(code=1013, reason=exc.reason)
+        return
+    try:
+        while True:
+            raw = await websocket.receive_json()
+            if raw.get("type") == "pong":
+                manager.notify_pong(websocket)
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, room)
+
+
 # ── 認證輔助 ─────────────────────────────────────────────────────────────────
 
 

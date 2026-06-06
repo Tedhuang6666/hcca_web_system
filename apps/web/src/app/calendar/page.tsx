@@ -9,14 +9,13 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
-  FolderKanban,
   Plus,
   Rows3,
   Search,
   Trash2,
   Users,
 } from "lucide-react";
-import { ApiError, calendarApi, governanceApi, orgsApi, usersApi } from "@/lib/api";
+import { ApiError, calendarApi, orgsApi, usersApi } from "@/lib/api";
 import { orgDisplayName } from "@/lib/orgs";
 import Drawer from "@/components/ui/Drawer";
 import Modal from "@/components/ui/Modal";
@@ -32,7 +31,6 @@ import type {
   CalendarEventOut,
   CalendarEventType,
   CalendarVisibility,
-  MatterListItem,
   OrgRead,
 } from "@/lib/types";
 
@@ -123,7 +121,6 @@ export default function CalendarPage() {
   const [cursor, setCursor] = useState(() => new Date());
   const [view, setView] = useState<ViewMode>("month");
   const [events, setEvents] = useState<CalendarEventListItem[]>([]);
-  const [matters, setMatters] = useState<MatterListItem[]>([]);
   const [orgs, setOrgs] = useState<OrgRead[]>([]);
   const [holidays, setHolidays] = useState<Map<string, TaiwanCalendarDay>>(new Map());
   const [loading, setLoading] = useState(true);
@@ -132,7 +129,6 @@ export default function CalendarPage() {
   const [orgId, setOrgId] = useState("");
   const [type, setType] = useState<CalendarEventType | "">("");
   const [visibility, setVisibility] = useState<CalendarVisibility | "">("");
-  const [showGovernance, setShowGovernance] = useState(true);
   const [createFor, setCreateFor] = useState<Date | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -153,25 +149,15 @@ export default function CalendarPage() {
     setLoading(true);
     setError("");
     try {
-      const [next, governanceMatters] = await Promise.all([
-        calendarApi.list({
-          start: start.toISOString(),
-          end: end.toISOString(),
-          mine,
-          org_id: orgId || undefined,
-          type: type || undefined,
-          visibility: visibility || undefined,
-        }),
-        governanceApi.listMatters({ status: "active", limit: 100 }).catch(() => []),
-      ]);
+      const next = await calendarApi.list({
+        start: start.toISOString(),
+        end: end.toISOString(),
+        mine,
+        org_id: orgId || undefined,
+        type: type || undefined,
+        visibility: visibility || undefined,
+      });
       setEvents(next);
-      setMatters(
-        governanceMatters.filter((matter) => {
-          if (!matter.due_at) return false;
-          const due = new Date(matter.due_at).getTime();
-          return due >= start.getTime() && due <= end.getTime();
-        }),
-      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "載入行事曆失敗");
     } finally {
@@ -212,19 +198,6 @@ export default function CalendarPage() {
     return map;
   }, [events]);
 
-  const mattersByDay = useMemo(() => {
-    const map = new Map<string, MatterListItem[]>();
-    if (!showGovernance) return map;
-    for (const matter of matters) {
-      if (!matter.due_at) continue;
-      const key = ymd(new Date(matter.due_at));
-      const arr = map.get(key);
-      if (arr) arr.push(matter);
-      else map.set(key, [matter]);
-    }
-    return map;
-  }, [matters, showGovernance]);
-
   const label = view === "week"
     ? `${start.getMonth() + 1}/${start.getDate()} - ${end.getMonth() + 1}/${end.getDate()}`
     : `${cursor.getFullYear()} 年 ${cursor.getMonth() + 1} 月`;
@@ -240,9 +213,6 @@ export default function CalendarPage() {
 
   const listEvents = [...events].sort(
     (a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime(),
-  );
-  const listMatters = [...matters].sort(
-    (a, b) => new Date(a.due_at ?? 0).getTime() - new Date(b.due_at ?? 0).getTime(),
   );
 
   return (
@@ -332,20 +302,6 @@ export default function CalendarPage() {
           <Users size={16} aria-hidden="true" />
           我的
         </button>
-        <button
-          onClick={() => setShowGovernance((value) => !value)}
-          className="inline-flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm"
-          style={{
-            borderColor: showGovernance ? "var(--info-border)" : "var(--border)",
-            background: showGovernance ? "var(--primary-dim)" : "transparent",
-            color: showGovernance ? "var(--primary)" : "var(--text-secondary)",
-          }}
-          aria-pressed={showGovernance}
-        >
-          <FolderKanban size={16} aria-hidden={true} />
-          治理期限
-          {matters.length > 0 && <span className="font-semibold">{matters.length}</span>}
-        </button>
       </div>
 
       {error && <p className="mb-3 text-sm text-red-500">{error}</p>}
@@ -353,8 +309,6 @@ export default function CalendarPage() {
 
       {view === "list" ? (
         <div className="divide-y divide-[var(--border)] rounded-md border border-[var(--border)]">
-          {showGovernance &&
-            listMatters.map((matter) => <MatterDeadlineRow key={matter.id} matter={matter} />)}
           {listEvents.map((event) => (
             <EventRow key={event.id} event={event} onOpen={() => setSelectedId(event.id)} />
           ))}
@@ -366,7 +320,6 @@ export default function CalendarPage() {
             cursor={cursor}
             view={view}
             byDay={byDay}
-            mattersByDay={mattersByDay}
             holidays={holidays}
             onCreate={setCreateFor}
             onOpen={setSelectedId}
@@ -384,7 +337,6 @@ export default function CalendarPage() {
             {cells.map((day, index) => {
               const key = ymd(day);
               const dayEvents = byDay.get(key) ?? [];
-              const dayMatters = mattersByDay.get(key) ?? [];
               const { day: holiday, isRestDay, isMakeupWorkday } =
                 getTaiwanCalendarStatus(day, holidays);
               const inMonth = view === "week" || day.getMonth() === cursor.getMonth();
@@ -429,12 +381,9 @@ export default function CalendarPage() {
                         <span className="break-words">{event.title}</span>
                       </button>
                     ))}
-                    {dayMatters.slice(0, Math.max(0, 5 - dayEvents.length)).map((matter) => (
-                      <MatterDeadlineLink key={matter.id} matter={matter} />
-                    ))}
-                    {dayEvents.length + dayMatters.length > 5 && (
+                    {dayEvents.length > 5 && (
                       <span className="px-1 text-[10px] text-[var(--muted)]">
-                        +{dayEvents.length + dayMatters.length - 5}
+                        +{dayEvents.length - 5}
                       </span>
                     )}
                   </div>
@@ -445,7 +394,7 @@ export default function CalendarPage() {
         </>
       )}
 
-      {!loading && events.length === 0 && (!showGovernance || matters.length === 0) && (
+      {!loading && events.length === 0 && (
         <p className="mt-4 text-center text-sm text-[var(--muted)]">此範圍沒有行程。</p>
       )}
 
@@ -502,61 +451,11 @@ function EventRow({ event, onOpen }: { event: CalendarEventListItem; onOpen: () 
   );
 }
 
-function MatterDeadlineRow({ matter }: { matter: MatterListItem }) {
-  return (
-    <Link
-      href={`/governance/${matter.id}`}
-      className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors"
-      style={{ textDecoration: "none" }}
-    >
-      <span
-        className="flex h-7 w-7 items-center justify-center rounded-md"
-        style={{
-          background: "var(--primary-dim)",
-          color: "var(--primary)",
-          border: "1px solid var(--info-border)",
-        }}
-      >
-        <FolderKanban size={14} aria-hidden={true} />
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-          {matter.title}
-        </p>
-        <p className="truncate text-xs" style={{ color: "var(--text-muted)" }}>
-          {new Date(matter.due_at ?? "").toLocaleDateString("zh-TW")} · 治理事項期限 · {matter.progress_percent}%
-        </p>
-      </div>
-      <ChevronRight size={16} aria-hidden={true} style={{ color: "var(--text-disabled)" }} />
-    </Link>
-  );
-}
-
-function MatterDeadlineLink({ matter }: { matter: MatterListItem }) {
-  return (
-    <Link
-      href={`/governance/${matter.id}`}
-      onClick={(event) => event.stopPropagation()}
-      className="block rounded border px-1.5 py-1 text-left text-[11px] leading-tight"
-      style={{
-        background: "var(--primary-dim)",
-        color: "var(--primary)",
-        borderColor: "var(--info-border)",
-        textDecoration: "none",
-      }}
-    >
-      <FolderKanban size={10} className="mr-1 inline" aria-hidden={true} />
-      <span className="break-words font-medium">{matter.title}</span>
-    </Link>
-  );
-}
-
 function MobileCalendarGrid({
   cells,
   cursor,
   view,
   byDay,
-  mattersByDay,
   holidays,
   onCreate,
   onOpen,
@@ -565,7 +464,6 @@ function MobileCalendarGrid({
   cursor: Date;
   view: Exclude<ViewMode, "list">;
   byDay: Map<string, CalendarEventListItem[]>;
-  mattersByDay: Map<string, MatterListItem[]>;
   holidays: Map<string, TaiwanCalendarDay>;
   onCreate: (date: Date) => void;
   onOpen: (id: string) => void;
@@ -586,7 +484,6 @@ function MobileCalendarGrid({
         const dayEvents = [...(byDay.get(key) ?? [])].sort(
           (a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime(),
         );
-        const dayMatters = mattersByDay.get(key) ?? [];
         const { day: holiday, isRestDay, isMakeupWorkday } =
           getTaiwanCalendarStatus(day, holidays);
         const inMonth = view === "week" || day.getMonth() === cursor.getMonth();
@@ -638,26 +535,9 @@ function MobileCalendarGrid({
                   </button>
                 </span>
               ))}
-              {dayEvents.length < 2 &&
-                dayMatters.slice(0, 2 - dayEvents.length).map((matter) => (
-                  <Link
-                    key={matter.id}
-                    href={`/governance/${matter.id}`}
-                    onClick={(event) => event.stopPropagation()}
-                    className="block w-full truncate rounded-sm border px-1 py-0.5 text-[10px] leading-tight"
-                    style={{
-                      background: "var(--primary-dim)",
-                      color: "var(--primary)",
-                      borderColor: "var(--info-border)",
-                      textDecoration: "none",
-                    }}
-                  >
-                    {matter.title}
-                  </Link>
-                ))}
-              {dayEvents.length + dayMatters.length > 2 && (
+              {dayEvents.length > 2 && (
                 <span className="truncate px-0.5 text-[9px] text-[var(--muted)]">
-                  +{dayEvents.length + dayMatters.length - 2}
+                  +{dayEvents.length - 2}
                 </span>
               )}
             </span>

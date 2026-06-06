@@ -6,17 +6,20 @@ import { useParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   CheckSquare,
+  ChevronDown,
   Clock,
-  FileText,
   ExternalLink,
   FilePlus2,
   FolderKanban,
   GitBranch,
-  Link2,
   Loader2,
-  MessageSquarePlus,
+  Megaphone,
+  Pause,
+  Play,
   Plus,
   ScrollText,
+  Sparkles,
+  Trash2,
   UserRoundCog,
   Workflow,
   Zap,
@@ -25,6 +28,7 @@ import type { CSSProperties } from "react";
 import { governanceApi } from "@/lib/api";
 import type {
   EntityRelationOut,
+  AutomationMeta,
   AutomationRuleOut,
   GovernanceCaseOut,
   GovernanceCaseStatus,
@@ -50,17 +54,40 @@ const STATUS_LABEL: Record<string, string> = {
   canceled: "取消",
 };
 
-const MODULE_LABEL: Record<string, string> = {
+const TARGET_LABEL: Record<string, string> = {
+  matter: "事情",
+  case: "案件",
   document: "公文",
-  announcement: "公告",
   meeting: "會議",
-  vote: "投票",
+  meeting_decision: "會議決議",
+  announcement: "公告",
   survey: "問卷",
-  event: "活動",
-  ticket: "售票",
+  activity: "活動",
   regulation: "法規",
   petition: "陳情",
-  external: "外部資源",
+  vote: "投票",
+  ticket: "售票",
+  external: "外部連結",
+};
+
+// 決議來源標記：區分「手動新增」「會議決議自動匯入」「自動化規則產生」。
+const DECISION_SOURCE_LABEL: Record<string, string> = {
+  meeting_decision: "來自會議決議",
+};
+
+const DECISION_STATUS_LABEL: Record<string, string> = {
+  pending: "待執行",
+  in_progress: "執行中",
+  partial: "部分完成",
+  completed: "完成",
+  overdue: "逾期",
+  canceled: "取消",
+};
+
+const AUTOMATION_STATUS_LABEL: Record<string, string> = {
+  active: "啟用中",
+  paused: "已暫停",
+  archived: "已歸檔",
 };
 
 function formatDate(value?: string | null) {
@@ -75,6 +102,8 @@ export default function GovernanceMatterPage() {
   const [matter, setMatter] = useState<MatterOut | null>(null);
   const [tasks, setTasks] = useState<WorkItemOut[]>([]);
   const [automationRules, setAutomationRules] = useState<AutomationRuleOut[]>([]);
+  const [automationMeta, setAutomationMeta] = useState<AutomationMeta | null>(null);
+  const [automationTrigger, setAutomationTrigger] = useState("meeting.decision_created");
   const [templates, setTemplates] = useState<GovernanceWorkflowTemplateOut[]>([]);
   const [loading, setLoading] = useState(true);
   const [caseTitle, setCaseTitle] = useState("");
@@ -90,6 +119,8 @@ export default function GovernanceMatterPage() {
   const [unitName, setUnitName] = useState("");
   const [automationName, setAutomationName] = useState("");
   const [templateName, setTemplateName] = useState("");
+  const [spawnTitle, setSpawnTitle] = useState("");
+  const [spawning, setSpawning] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const load = () => {
@@ -99,12 +130,14 @@ export default function GovernanceMatterPage() {
       governanceApi.listTasks(matterId),
       governanceApi.listAutomationRules(matterId),
       governanceApi.listWorkflowTemplates(),
+      governanceApi.automationMeta().catch(() => null),
     ])
-      .then(([matterRes, taskRes, automationRes, templateRes]) => {
+      .then(([matterRes, taskRes, automationRes, templateRes, metaRes]) => {
         setMatter(matterRes);
         setTasks(taskRes);
         setAutomationRules(automationRes);
         setTemplates(templateRes);
+        setAutomationMeta(metaRes);
       })
       .catch((error) => {
         toast.error("無法載入事情中心");
@@ -120,10 +153,6 @@ export default function GovernanceMatterPage() {
 
   const openTasks = useMemo(() => tasks.filter((task) => task.status === "open"), [tasks]);
   const completedTasks = useMemo(() => tasks.filter((task) => task.status === "done"), [tasks]);
-  const linkedModules = useMemo(() => {
-    const linked = new Set(matter?.links.map((link) => link.target_type) ?? []);
-    return Object.entries(MODULE_LABEL).map(([key, label]) => ({ key, label, linked: linked.has(key) }));
-  }, [matter]);
 
   const addCase = (event: FormEvent) => {
     event.preventDefault();
@@ -329,9 +358,9 @@ export default function GovernanceMatterPage() {
       .createAutomationRule({
         name: automationName.trim(),
         description: null,
-        trigger_type: "manual",
+        trigger_type: automationTrigger,
         conditions: {},
-        actions: [{ type: "create_task", title: "待設定動作" }],
+        actions: [{ type: "create_task", title: `處理：${automationName.trim()}` }],
         matter_id: matterId,
         status: "active",
       })
@@ -374,6 +403,55 @@ export default function GovernanceMatterPage() {
         console.error(error);
       })
       .finally(() => setSaving(false));
+  };
+
+  const toggleRule = (rule: AutomationRuleOut) => {
+    const next = rule.status === "active" ? "paused" : "active";
+    governanceApi
+      .updateAutomationRule(rule.id, { status: next })
+      .then((updated) => {
+        setAutomationRules((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+        toast.success(next === "active" ? "規則已啟用" : "規則已暫停");
+      })
+      .catch((error) => {
+        toast.error("更新規則狀態失敗");
+        console.error(error);
+      });
+  };
+
+  const unlinkRelation = (relation: EntityRelationOut) => {
+    governanceApi
+      .deleteRelation(relation.id)
+      .then(() => {
+        setMatter((prev) =>
+          prev ? { ...prev, links: prev.links.filter((l) => l.id !== relation.id) } : prev,
+        );
+        toast.success("已解除關聯");
+      })
+      .catch((error) => {
+        toast.error("解除關聯失敗");
+        console.error(error);
+      });
+  };
+
+  const spawn = (kind: "task" | "announcement" | "survey" | "meeting") => {
+    const title = spawnTitle.trim() || matter?.title;
+    if (!title) return;
+    setSpawning(kind);
+    governanceApi
+      .spawn(matterId, { kind, title })
+      .then((result) => {
+        setSpawnTitle("");
+        toast.success(`已建立並連動：${result.title}`, {
+          action: { label: "前往", onClick: () => window.open(result.href, "_blank") },
+        });
+        load();
+      })
+      .catch((error) => {
+        toast.error(error?.message || "建立失敗（會議／問卷需先設定事情的負責組織）");
+        console.error(error);
+      })
+      .finally(() => setSpawning(null));
   };
 
   const updateCaseStatus = (item: GovernanceCaseOut, status: GovernanceCaseStatus) => {
@@ -433,90 +511,45 @@ export default function GovernanceMatterPage() {
         </div>
       </header>
 
-      <section className="grid gap-3 lg:grid-cols-[1fr_360px]">
-        <div className="rounded-lg p-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <h2 className="flex items-center gap-2 text-base font-semibold" style={{ color: "var(--text-primary)" }}>
-              <Workflow size={17} aria-hidden={true} style={{ color: "var(--primary)" }} />
-              行政生命週期
-            </h2>
-            <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-              {matter.progress_percent}% 完成
-            </span>
-          </div>
-          <LifecycleRail matter={matter} openTasks={openTasks.length} automationRules={automationRules.length} />
-        </div>
+      {saving && <span className="sr-only">儲存中</span>}
 
-        <div className="rounded-lg p-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
-          <h2 className="mb-3 flex items-center gap-2 text-base font-semibold" style={{ color: "var(--text-primary)" }}>
-            <FileText size={17} aria-hidden={true} style={{ color: "var(--primary)" }} />
-            模組覆蓋
+      <section
+        className="rounded-lg p-4"
+        style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
+        aria-label="從事情建立並連動"
+      >
+        <div className="mb-3 flex items-center gap-2">
+          <Sparkles size={16} aria-hidden={true} style={{ color: "var(--primary)" }} />
+          <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+            從這件事情建立並連動
           </h2>
-          <div className="grid grid-cols-2 gap-2">
-            {linkedModules.map((module) => (
-              <div
-                key={module.key}
-                className="rounded-md px-3 py-2 text-xs"
-                style={{
-                  background: module.linked ? "var(--primary-dim)" : "var(--bg-hover)",
-                  color: module.linked ? "var(--primary)" : "var(--text-muted)",
-                  border: `1px solid ${module.linked ? "var(--info-border)" : "var(--border)"}`,
-                }}
-              >
-                {module.label}
-              </div>
-            ))}
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <input
+            value={spawnTitle}
+            onChange={(event) => setSpawnTitle(event.target.value)}
+            className="input min-w-0 flex-1"
+            placeholder={`名稱（留空則用「${matter.title}」）`}
+          />
+          <div className="flex flex-wrap gap-2">
+            <SpawnButton icon={CheckSquare} label="任務" busy={spawning === "task"} onClick={() => spawn("task")} />
+            <SpawnButton icon={Megaphone} label="公告草稿" busy={spawning === "announcement"} onClick={() => spawn("announcement")} />
+            <SpawnButton icon={FilePlus2} label="問卷" busy={spawning === "survey"} onClick={() => spawn("survey")} />
+            <SpawnButton icon={Workflow} label="會議" busy={spawning === "meeting"} onClick={() => spawn("meeting")} />
           </div>
         </div>
-      </section>
-
-      <nav className="flex gap-2 overflow-x-auto pb-1" aria-label="事情頁快速導覽">
-        {[
-          ["#cases", "案件看板"],
-          ["#links", "關聯資源"],
-          ["#decisions", "決議追蹤"],
-          ["#plans", "企劃版本"],
-          ["#tasks", "任務"],
-          ["#timeline", "時間軸"],
-          ["#roles", "組織"],
-          ["#automation", "自動化"],
-        ].map(([href, label]) => (
-          <a
-            key={href}
-            href={href}
-            className="flex-shrink-0 rounded-md px-3 py-2 text-xs font-medium"
-            style={{
-              background: "var(--bg-surface)",
-              color: "var(--text-secondary)",
-              border: "1px solid var(--border)",
-              textDecoration: "none",
-            }}
-          >
-            {label}
-          </a>
-        ))}
-      </nav>
-
-      <section className="grid gap-3 lg:grid-cols-4" aria-label="快速新增">
-        <QuickForm icon={FilePlus2} title="新增案件" onSubmit={addCase}>
-          <input value={caseTitle} onChange={(event) => setCaseTitle(event.target.value)} className="input w-full" placeholder="案件標題" />
-        </QuickForm>
-        <QuickForm icon={CheckSquare} title="新增任務" onSubmit={addTask}>
-          <input value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} className="input w-full" placeholder="任務標題" />
-        </QuickForm>
-        <QuickForm icon={Link2} title="新增關聯" onSubmit={addLink}>
-          <input value={linkTitle} onChange={(event) => setLinkTitle(event.target.value)} className="input w-full" placeholder="資源名稱" />
-          <input value={linkHref} onChange={(event) => setLinkHref(event.target.value)} className="input w-full" placeholder="連結網址，可留空" />
-        </QuickForm>
-        <QuickForm icon={MessageSquarePlus} title="新增紀錄" onSubmit={addNote}>
-          <textarea value={note} onChange={(event) => setNote(event.target.value)} className="input min-h-[74px] w-full resize-none" placeholder="寫下進度、決議或待確認事項" />
-        </QuickForm>
-        {saving && <span className="sr-only">儲存中</span>}
+        <p className="mt-2 text-[11px]" style={{ color: "var(--text-disabled)" }}>
+          建立的項目會自動連動本事情，其後續生命週期（核准／發布／決議…）會自動回流到下方時間軸。
+        </p>
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[1.5fr_1fr]">
         <div className="space-y-5">
-          <Panel id="cases" icon={FolderKanban} title="案件看板">
+          <Panel id="cases" icon={FolderKanban} title="案件看板" defaultOpen>
+            <form onSubmit={addCase} className="mb-3 flex gap-2">
+              <input value={caseTitle} onChange={(event) => setCaseTitle(event.target.value)} className="input min-w-0 flex-1" placeholder="新增案件" />
+              <button type="submit" className="btn btn-secondary"><Plus size={13} aria-hidden={true} />新增</button>
+            </form>
             <div className="grid gap-3 md:grid-cols-4">
               {CASE_COLUMNS.map((column) => {
                 const rows = matter.cases.filter((item) => item.status === column.key);
@@ -539,8 +572,15 @@ export default function GovernanceMatterPage() {
           </Panel>
 
           <Panel id="links" icon={GitBranch} title="關聯資源">
+            <form onSubmit={addLink} className="mb-3 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+              <input value={linkTitle} onChange={(event) => setLinkTitle(event.target.value)} className="input" placeholder="資源名稱" />
+              <input value={linkHref} onChange={(event) => setLinkHref(event.target.value)} className="input" placeholder="連結網址，可留空" />
+              <button type="submit" className="btn btn-secondary"><Plus size={13} aria-hidden={true} />新增</button>
+            </form>
             <div className="grid gap-2 md:grid-cols-2">
-              {matter.links.map((link) => <RelationCard key={link.id} link={link} />)}
+              {matter.links.map((link) => (
+                <RelationCard key={link.id} link={link} onUnlink={unlinkRelation} />
+              ))}
               {matter.links.length === 0 && <EmptyInline label="尚未建立關聯資源" />}
             </div>
           </Panel>
@@ -552,15 +592,31 @@ export default function GovernanceMatterPage() {
               <button type="submit" className="btn btn-secondary"><Plus size={13} aria-hidden={true} />新增決議</button>
             </form>
             <div className="grid gap-2 md:grid-cols-2">
-              {matter.decisions.map((decision) => (
-                <article key={decision.id} className="rounded-md p-3" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{decision.title}</p>
-                    <span className="rounded px-1.5 py-0.5 text-[10px]" style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>{decision.status}</span>
-                  </div>
-                  <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>{decision.content}</p>
-                </article>
-              ))}
+              {matter.decisions.map((decision) => {
+                const sourceLabel = decision.source_type
+                  ? DECISION_SOURCE_LABEL[decision.source_type]
+                  : null;
+                return (
+                  <article key={decision.id} className="rounded-md p-3" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{decision.title}</p>
+                      <span className="flex-shrink-0 rounded px-1.5 py-0.5 text-[10px]" style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
+                        {DECISION_STATUS_LABEL[decision.status] ?? decision.status}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>{decision.content}</p>
+                    {sourceLabel && (
+                      <span
+                        className="mt-2 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px]"
+                        style={{ background: "var(--bg-surface)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}
+                      >
+                        <Zap size={9} aria-hidden={true} />
+                        {sourceLabel}
+                      </span>
+                    )}
+                  </article>
+                );
+              })}
               {matter.decisions.length === 0 && <EmptyInline label="尚無決議" />}
             </div>
           </Panel>
@@ -587,7 +643,11 @@ export default function GovernanceMatterPage() {
         </div>
 
         <div className="space-y-5">
-          <Panel id="tasks" icon={CheckSquare} title="任務">
+          <Panel id="tasks" icon={CheckSquare} title="任務" defaultOpen>
+            <form onSubmit={addTask} className="mb-3 flex gap-2">
+              <input value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} className="input min-w-0 flex-1" placeholder="新增任務" />
+              <button type="submit" className="btn btn-secondary"><Plus size={13} aria-hidden={true} />新增</button>
+            </form>
             <div className="space-y-2">
               {openTasks.map((task) => <TaskRow key={task.id} task={task} />)}
               {openTasks.length === 0 && <EmptyInline label="沒有開放任務" />}
@@ -600,7 +660,11 @@ export default function GovernanceMatterPage() {
             </div>
           </Panel>
 
-          <Panel id="timeline" icon={Clock} title="行政時間軸">
+          <Panel id="timeline" icon={Clock} title="行政時間軸" defaultOpen>
+            <form onSubmit={addNote} className="mb-3 flex gap-2">
+              <input value={note} onChange={(event) => setNote(event.target.value)} className="input min-w-0 flex-1" placeholder="新增進度紀錄" />
+              <button type="submit" className="btn btn-secondary"><Plus size={13} aria-hidden={true} />新增</button>
+            </form>
             <div className="space-y-3">
               {[...matter.events]
                 .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
@@ -647,14 +711,34 @@ export default function GovernanceMatterPage() {
           <Panel id="automation" icon={Zap} title="自動化規則">
             <form onSubmit={addAutomationRule} className="mb-3 grid gap-2">
               <input value={automationName} onChange={(event) => setAutomationName(event.target.value)} className="input" placeholder="規則名稱，例如：活動結束後建立問卷" />
+              <label className="space-y-1">
+                <span className="text-xs" style={{ color: "var(--text-muted)" }}>觸發時機</span>
+                <select
+                  value={automationTrigger}
+                  onChange={(event) => setAutomationTrigger(event.target.value)}
+                  className="input w-full"
+                >
+                  {Object.entries(automationMeta?.trigger_types ?? { "meeting.decision_created": "會議產生決議" }).map(
+                    ([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ),
+                  )}
+                </select>
+              </label>
+              <p className="text-[11px]" style={{ color: "var(--text-disabled)" }}>
+                新規則預設動作為「建立任務」並立即啟用；可於後端調整動作內容。
+              </p>
               <button type="submit" className="btn btn-secondary"><Plus size={13} aria-hidden={true} />新增規則</button>
             </form>
             <div className="space-y-2">
               {automationRules.map((rule) => (
-                <div key={rule.id} className="rounded-md p-3" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
-                  <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{rule.name}</p>
-                  <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{rule.trigger_type} · {rule.actions.length} 動作 · {rule.status}</p>
-                </div>
+                <AutomationRuleRow
+                  key={rule.id}
+                  rule={rule}
+                  meta={automationMeta}
+                  scoped={rule.matter_id === matterId}
+                  onToggle={toggleRule}
+                />
               ))}
               {automationRules.length === 0 && <EmptyInline label="尚未建立自動化規則" />}
             </div>
@@ -662,6 +746,25 @@ export default function GovernanceMatterPage() {
         </div>
       </section>
     </div>
+  );
+}
+
+function SpawnButton({
+  icon: Icon,
+  label,
+  busy,
+  onClick,
+}: {
+  icon: React.ComponentType<{ size: number; "aria-hidden": boolean }>;
+  label: string;
+  busy: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button type="button" className="btn btn-secondary text-xs" onClick={onClick} disabled={busy}>
+      {busy ? <Loader2 size={13} className="animate-spin" aria-hidden={true} /> : <Icon size={13} aria-hidden={true} />}
+      {label}
+    </button>
   );
 }
 
@@ -674,103 +777,43 @@ function TopStat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function LifecycleRail({
-  matter,
-  openTasks,
-  automationRules,
-}: {
-  matter: MatterOut;
-  openTasks: number;
-  automationRules: number;
-}) {
-  const steps = [
-    { label: "提出", done: true, detail: "Matter 已建立" },
-    { label: "拆案", done: matter.cases.length > 0, detail: `${matter.cases.length} 案件` },
-    { label: "審議", done: matter.decisions.length > 0 || matter.planning_documents.length > 0, detail: `${matter.decisions.length} 決議` },
-    { label: "執行", done: openTasks > 0 || matter.progress_percent > 0, detail: `${openTasks} 開放任務` },
-    { label: "整合", done: matter.links.length > 0, detail: `${matter.links.length} 關聯` },
-    { label: "自動化", done: automationRules > 0, detail: `${automationRules} 規則` },
-    { label: "歸檔", done: matter.status === "completed" || matter.status === "archived", detail: STATUS_LABEL[matter.status] ?? matter.status },
-  ];
-
-  return (
-    <div className="grid gap-2 md:grid-cols-7">
-      {steps.map((step, index) => (
-        <div
-          key={step.label}
-          className="relative rounded-md p-3"
-          style={{
-            background: step.done ? "var(--primary-dim)" : "var(--bg-hover)",
-            border: `1px solid ${step.done ? "var(--info-border)" : "var(--border)"}`,
-          }}
-        >
-          <div
-            className="mb-2 flex h-7 w-7 items-center justify-center rounded-md text-xs font-semibold"
-            style={{
-              background: step.done ? "var(--primary)" : "var(--bg-surface)",
-              color: step.done ? "white" : "var(--text-muted)",
-              border: `1px solid ${step.done ? "var(--primary)" : "var(--border)"}`,
-            }}
-          >
-            {index + 1}
-          </div>
-          <p className="text-sm font-semibold" style={{ color: step.done ? "var(--primary)" : "var(--text-primary)" }}>
-            {step.label}
-          </p>
-          <p className="mt-1 truncate text-[11px]" style={{ color: "var(--text-muted)" }}>
-            {step.detail}
-          </p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function QuickForm({
-  icon: Icon,
-  title,
-  children,
-  onSubmit,
-}: {
-  icon: React.ComponentType<{ size: number; "aria-hidden": boolean; style?: CSSProperties }>;
-  title: string;
-  children: React.ReactNode;
-  onSubmit: (event: FormEvent) => void;
-}) {
-  return (
-    <form onSubmit={onSubmit} className="rounded-lg p-3" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
-      <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-        <Icon size={15} aria-hidden={true} style={{ color: "var(--primary)" }} />
-        {title}
-      </h2>
-      <div className="space-y-2">{children}</div>
-      <button type="submit" className="btn btn-secondary mt-2 w-full">
-        <Plus size={13} aria-hidden={true} />
-        新增
-      </button>
-    </form>
-  );
-}
-
 function Panel({
   id,
   icon: Icon,
   title,
   children,
+  defaultOpen = false,
 }: {
   id?: string;
   icon: React.ComponentType<{ size: number; "aria-hidden": boolean; style?: CSSProperties }>;
   title: string;
   children: React.ReactNode;
+  defaultOpen?: boolean;
 }) {
   return (
-    <section id={id} className="scroll-mt-24 rounded-lg p-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
-      <h2 className="mb-3 flex items-center gap-2 text-base font-semibold" style={{ color: "var(--text-primary)" }}>
-        <Icon size={17} aria-hidden={true} style={{ color: "var(--primary)" }} />
+    <details
+      id={id}
+      open={defaultOpen}
+      className="group scroll-mt-24 overflow-hidden rounded-lg"
+      style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
+    >
+      <summary
+        className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-semibold"
+        style={{ color: "var(--text-primary)" }}
+      >
+        <Icon size={16} aria-hidden={true} style={{ color: "var(--primary)" }} />
         {title}
-      </h2>
-      {children}
-    </section>
+        <ChevronDown
+          size={14}
+          className="ml-auto transition-transform group-open:rotate-180"
+          aria-hidden={true}
+          style={{ color: "var(--text-muted)" }}
+        />
+      </summary>
+      <div className="px-4 pb-4 pt-1" style={{ borderTop: "1px solid var(--border)" }}>
+        {children}
+      </div>
+    </details>
   );
 }
 
@@ -798,21 +841,94 @@ function CaseCard({
   );
 }
 
-function RelationCard({ link }: { link: EntityRelationOut }) {
-  const content = (
-    <div className="rounded-md p-3 transition-colors" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{link.title}</p>
-          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{link.target_type} · {link.relation}</p>
-        </div>
-        {link.href && <ExternalLink size={14} aria-hidden={true} style={{ color: "var(--primary)" }} />}
+function RelationCard({
+  link,
+  onUnlink,
+}: {
+  link: EntityRelationOut;
+  onUnlink: (link: EntityRelationOut) => void;
+}) {
+  const targetLabel = TARGET_LABEL[link.target_type] ?? link.target_type;
+  const inner = (
+    <>
+      <div className="min-w-0">
+        <p className="truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{link.title}</p>
+        <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+          {targetLabel}
+          {link.href ? " · 可前往" : ""}
+        </p>
       </div>
+      {link.href && <ExternalLink size={14} aria-hidden={true} style={{ color: "var(--primary)" }} />}
+    </>
+  );
+  return (
+    <div
+      className="flex items-center gap-2 rounded-md p-3 transition-colors"
+      style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}
+    >
+      {link.href ? (
+        <Link href={link.href} className="flex min-w-0 flex-1 items-start justify-between gap-2" style={{ textDecoration: "none" }}>
+          {inner}
+        </Link>
+      ) : (
+        <div className="flex min-w-0 flex-1 items-start justify-between gap-2">{inner}</div>
+      )}
+      <button
+        type="button"
+        onClick={() => onUnlink(link)}
+        className="topbar-icon-btn flex-shrink-0"
+        aria-label={`解除關聯：${link.title}`}
+        title="解除關聯"
+      >
+        <Trash2 size={13} aria-hidden={true} style={{ color: "var(--text-muted)" }} />
+      </button>
     </div>
   );
-  return link.href ? (
-    <Link href={link.href} style={{ textDecoration: "none" }}>{content}</Link>
-  ) : content;
+}
+
+function AutomationRuleRow({
+  rule,
+  meta,
+  scoped,
+  onToggle,
+}: {
+  rule: AutomationRuleOut;
+  meta: AutomationMeta | null;
+  scoped: boolean;
+  onToggle: (rule: AutomationRuleOut) => void;
+}) {
+  const triggerLabel = meta?.trigger_types?.[rule.trigger_type] ?? rule.trigger_type;
+  const active = rule.status === "active";
+  return (
+    <div className="rounded-md p-3" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{rule.name}</p>
+          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            觸發：{triggerLabel} · {rule.actions.length} 個動作{scoped ? "" : " · 全域"}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onToggle(rule)}
+          className="flex flex-shrink-0 items-center gap-1 rounded px-2 py-1 text-[11px] font-medium"
+          style={{
+            background: active ? "var(--success-dim, var(--primary-dim))" : "var(--bg-surface)",
+            color: active ? "var(--success, var(--primary))" : "var(--text-muted)",
+            border: "1px solid var(--border)",
+          }}
+          aria-label={active ? "暫停規則" : "啟用規則"}
+        >
+          {active ? <Pause size={11} aria-hidden={true} /> : <Play size={11} aria-hidden={true} />}
+          {AUTOMATION_STATUS_LABEL[rule.status] ?? rule.status}
+        </button>
+      </div>
+      <p className="mt-2 text-[10px]" style={{ color: "var(--text-disabled)" }}>
+        已觸發 {rule.trigger_count} 次
+        {rule.last_triggered_at ? ` · 最近 ${formatDate(rule.last_triggered_at)}` : " · 尚未觸發"}
+      </p>
+    </div>
+  );
 }
 
 function TaskRow({ task, muted = false }: { task: WorkItemOut; muted?: boolean }) {

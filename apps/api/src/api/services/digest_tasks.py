@@ -17,7 +17,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 
 from api.core.celery_app import celery_app
-from api.core.database import AsyncSessionLocal
+from api.core.database import task_session
 from api.models.notification import Notification
 from api.models.user import User
 from api.services.mail import enqueue_email
@@ -79,7 +79,7 @@ async def _process_digest(frequency: str, window_hours: int) -> dict[str, int]:
     sent = 0
     skipped = 0
 
-    async with AsyncSessionLocal() as session:
+    async with task_session() as session:
         users_result = await session.execute(select(User).where(User.is_active.is_(True)))
         users = users_result.scalars().all()
         for user in users:

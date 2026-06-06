@@ -1,6 +1,7 @@
 """SQLAlchemy 2.0 非同步資料庫設定"""
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, AsyncIterator
+from contextlib import asynccontextmanager
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -40,6 +41,34 @@ AsyncSessionLocal = async_sessionmaker(
     autocommit=False,
     autoflush=False,
 )
+
+
+@asynccontextmanager
+async def task_session() -> AsyncIterator[AsyncSession]:
+    """Celery 同步 task 內 `asyncio.run()` 專用的 DB session。
+
+    每次 `asyncio.run()` 都是新的 event loop。沿用模組層級的 `AsyncSessionLocal`
+    （非 PgBouncer 時是持久 QueuePool）會讓 pooled asyncpg 連線綁在已關閉的舊 loop，
+    再次使用時拋 `Event loop is closed` / `got Future attached to a different loop`
+    （watchdog 已實際發生）。故這裡每次都建專屬 NullPool engine，結束即 dispose，
+    語義與 `AsyncSessionLocal` 一致（expire_on_commit/autoflush/autocommit 皆 False）。
+
+    新增需在 Celery worker 內跑 async DB 的 task 時，一律用本函式，勿直接用
+    `AsyncSessionLocal`。
+    """
+    engine = create_async_engine(str(settings.DATABASE_URL), poolclass=NullPool)
+    factory = async_sessionmaker(
+        engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autoflush=False,
+        autocommit=False,
+    )
+    try:
+        async with factory() as session:
+            yield session
+    finally:
+        await engine.dispose()
 
 
 # --- ORM 基礎類別 ---

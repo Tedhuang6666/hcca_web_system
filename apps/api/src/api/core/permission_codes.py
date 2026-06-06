@@ -117,10 +117,12 @@ class PermissionCode(StrEnum):
 
     ANALYTICS_VIEW = "analytics:view"
     GOVERNANCE_MANAGE = "governance:manage"
+    ELECTION_MANAGE = "election:manage"
 
     EMAIL_SEND = "email:send"
     EMAIL_SEND_BULK = "email:send_bulk"
     EMAIL_VIEW_LOGS = "email:view_logs"
+    EMAIL_TEMPLATE_MANAGE = "email:template_manage"
 
     EXAM_MANAGE = "exam:manage"
     EXAM_DOWNLOAD = "exam:download"
@@ -733,6 +735,12 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "desc": "建立與維護 Matter / Program / Case、任務與跨模組關聯",
     },
     {
+        "group": "即時開票",
+        "code": PermissionCode.ELECTION_MANAGE,
+        "label": "管理即時開票",
+        "desc": "建立選舉、控制票匭狀態、記票、更正與鎖定結果",
+    },
+    {
         "group": "通知與郵件",
         "code": PermissionCode.EMAIL_SEND,
         "label": "寄送 Email（個別）",
@@ -749,6 +757,12 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "code": PermissionCode.EMAIL_VIEW_LOGS,
         "label": "查看寄信紀錄",
         "desc": "查看所有寄信稽核紀錄與實際收件清單",
+    },
+    {
+        "group": "通知與郵件",
+        "code": PermissionCode.EMAIL_TEMPLATE_MANAGE,
+        "label": "管理組織郵件範本",
+        "desc": "建立、修改與停用所屬組織共享的郵件範本與名單",
     },
     {
         "group": "段考題庫",

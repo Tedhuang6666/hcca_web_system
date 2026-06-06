@@ -12,6 +12,7 @@ from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
+    FetchedValue,
     ForeignKey,
     Index,
     String,
@@ -133,8 +134,12 @@ class Announcement(Base, TimestampMixin):
         server_default=AnnouncementAudience.ALL.value,
     )
 
-    # 全文搜尋向量（PostgreSQL GENERATED column，由 migration 維護，ORM 唯讀，勿賦值）
-    search_vector: Mapped[str | None] = mapped_column(TSVECTOR(), nullable=True)
+    # 全文搜尋向量（PostgreSQL GENERATED ALWAYS column，由 migration 維護，ORM 唯讀）。
+    # FetchedValue 告訴 SQLAlchemy 此欄由 DB 端產生，INSERT/UPDATE 不可帶值，否則
+    # asyncpg 會丟 GeneratedAlwaysError: cannot insert a non-DEFAULT value。
+    search_vector: Mapped[str | None] = mapped_column(
+        TSVECTOR(), FetchedValue(), nullable=True
+    )
 
     org: Mapped[Org | None] = relationship("Org")
     activity: Mapped[Activity | None] = relationship("Activity")

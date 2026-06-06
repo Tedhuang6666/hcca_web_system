@@ -28,10 +28,10 @@ def _emit_backup_alert_sync(title: str, body: str) -> None:
         return
 
     async def _go() -> None:
-        from api.core.database import AsyncSessionLocal
+        from api.core.database import task_session
         from api.services import outbox
 
-        async with AsyncSessionLocal() as session:
+        async with task_session() as session:
             try:
                 await outbox.emit(
                     session,
@@ -220,10 +220,10 @@ def _write_backup_record_sync(
     """寫入 BackupRecord 紀錄；失敗不阻斷主任務。"""
 
     async def _go() -> None:
-        from api.core.database import AsyncSessionLocal
+        from api.core.database import task_session
         from api.models.backup_record import BackupRecord, BackupStatus
 
-        async with AsyncSessionLocal() as session:
+        async with task_session() as session:
             try:
                 now = datetime.now(UTC)
                 row = BackupRecord(

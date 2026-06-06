@@ -66,11 +66,30 @@ from api.models.document import (  # noqa: F401
     RecipientType,
     YearMode,
 )
+from api.models.election import (  # noqa: F401
+    BallotBox,
+    BallotBoxStatus,
+    Candidate,
+    Election,
+    ElectionStatus,
+    VoteEvent,
+    VoteEventKind,
+)
 from api.models.email_message import (  # noqa: F401
+    EmailAttachment,
+    EmailAttachmentMode,
     EmailCampaignRecipient,
+    EmailEventType,
     EmailMessage,
+    EmailRecipientEvent,
+    EmailRecipientList,
+    EmailRecipientListMember,
     EmailRecipientStatus,
+    EmailResourceVisibility,
     EmailStatus,
+    EmailSuppression,
+    EmailTemplate,
+    EmailTemplateVersion,
 )
 from api.models.exam_paper import ExamGradeTrack, ExamPaper, ExamPaperDownload  # noqa: F401
 

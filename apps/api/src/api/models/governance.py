@@ -542,6 +542,12 @@ class AutomationRule(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(
         String(30), nullable=False, default=AutomationRuleStatus.ACTIVE, index=True
     )
+    last_triggered_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    trigger_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

@@ -40,6 +40,7 @@ async def _send_via_resend(
     subject: str,
     body: str,
     subtype: str = "html",
+    attachments: list[dict[str, str]] | None = None,
 ) -> str | None:
     if not settings.RESEND_API_KEY:
         raise RuntimeError("RESEND_API_KEY 未設定，無法寄送 Email")
@@ -53,6 +54,8 @@ async def _send_via_resend(
         payload["text"] = body
     else:
         payload["html"] = body
+    if attachments:
+        payload["attachments"] = attachments
 
     async with httpx.AsyncClient(timeout=20) as client:
         response = await client.post(
@@ -170,6 +173,7 @@ def send_email(
     subtype: str = "html",
     email_message_id: str | None = None,
     email_recipient_id: str | None = None,
+    attachments: list[dict[str, str]] | None = None,
 ) -> dict[str, object]:
     """
     Celery 背景郵件發送任務。
@@ -181,7 +185,7 @@ def send_email(
     attempt = self.request.retries + 1  # 本次嘗試（1-based）
 
     try:
-        message_id = asyncio.run(_send_via_resend(to, subject, body, subtype))
+        message_id = asyncio.run(_send_via_resend(to, subject, body, subtype, attachments))
         if email_recipient_id is not None:
             asyncio.run(
                 _update_campaign_recipient_status(
@@ -252,6 +256,7 @@ def enqueue_email(
     subtype: str = "html",
     email_message_id: str | None = None,
     email_recipient_id: str | None = None,
+    attachments: list[dict[str, str]] | None = None,
 ) -> str:
     """
     將郵件發送任務推入 Celery 佇列，立即回傳 task_id。
@@ -266,8 +271,19 @@ def enqueue_email(
         Celery task_id 字串
     """
     recipients = [to] if isinstance(to, str) else to
-    if email_message_id is None and email_recipient_id is None:
+    if email_message_id is None and email_recipient_id is None and attachments is None:
         result = send_email.delay(recipients, subject, body, subtype)
+    elif email_message_id is None and email_recipient_id is None:
+        result = send_email.delay(recipients, subject, body, subtype, None, None, attachments)
+    elif attachments is None:
+        result = send_email.delay(
+            recipients,
+            subject,
+            body,
+            subtype,
+            email_message_id,
+            email_recipient_id,
+        )
     else:
         result = send_email.delay(
             recipients,
@@ -276,6 +292,7 @@ def enqueue_email(
             subtype,
             email_message_id,
             email_recipient_id,
+            attachments,
         )
     logger.info("郵件任務已排入佇列 task_id=%s", result.id)
     return result.id
@@ -286,9 +303,10 @@ async def send_email_now(
     subject: str,
     body: str,
     subtype: str = "html",
+    attachments: list[dict[str, str]] | None = None,
 ) -> None:
     """
     直接非同步發送郵件（不透過 Celery，適用於測試或緊急通知）。
     """
     recipients = [to] if isinstance(to, str) else to
-    await _send_via_resend(recipients, subject, body, subtype)
+    await _send_via_resend(recipients, subject, body, subtype, attachments)

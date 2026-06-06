@@ -17,10 +17,19 @@ def enqueue_rendered(
     html: str,
     email_message_id: str | None = None,
     email_recipient_id: str | None = None,
+    attachments: list[dict[str, str]] | None = None,
 ) -> list[str]:
     """對每位收件人各寄一封「已渲染好」的 HTML email，回傳 Celery task_id 清單。"""
     return [
-        enqueue_email(addr, subject, html, "html", email_message_id, email_recipient_id)
+        enqueue_email(
+            addr,
+            subject,
+            html,
+            "html",
+            email_message_id,
+            email_recipient_id,
+            attachments,
+        )
         for addr in to
         if addr
     ]

@@ -50,12 +50,12 @@ async def _rotate_model_async(
     if not is_configured():
         return {"status": "skipped", "reason": "FIELD_ENCRYPTION_KEYS not set"}
 
-    from api.core.database import AsyncSessionLocal
+    from api.core.database import task_session
 
     rotated = 0
     examined = 0
 
-    async with AsyncSessionLocal() as db:
+    async with task_session() as db:
         col = getattr(model_class, enc_attr)
         stmt = (
             select(model_class).where(col.is_not(None)).order_by(model_class.id).limit(batch_size)

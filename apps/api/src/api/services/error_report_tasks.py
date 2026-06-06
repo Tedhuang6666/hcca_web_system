@@ -17,6 +17,8 @@ from typing import Any
 
 from redis import Redis
 from sqlalchemy import func, select, text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from api.core.celery_app import celery_app
 from api.core.config import settings
@@ -62,7 +64,16 @@ async def _run() -> dict[str, Any]:
         if not events and not dlq:
             return {"ok": True, "sent": False, "reason": "no_new_errors"}
 
-        diagnostics = await _collect_diagnostics(client)
+        # 為本次 asyncio.run 建立專屬 engine（NullPool）。Celery worker 每次
+        # asyncio.run 都是新 event loop，沿用全域 AsyncSessionLocal 的持久連線池
+        # 會在第一個 DB 操作丟 RuntimeError（連線綁在前一個 loop），導致報告誤報
+        # 「DB 異常 RuntimeError」。與其他 celery async task 一致：自建 + dispose。
+        engine = create_async_engine(str(settings.DATABASE_URL), poolclass=NullPool)
+        session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        try:
+            diagnostics = await _collect_diagnostics(client, session_factory)
+        finally:
+            await engine.dispose()
         subject = _subject(events, dlq)
         body = _render_html_report(
             events=events,
@@ -138,20 +149,20 @@ def _read_recent_dlq(client: Redis, last_sent: float) -> list[dict[str, Any]]:
     return items
 
 
-async def _collect_diagnostics(client: Redis) -> dict[str, Any]:
+async def _collect_diagnostics(
+    client: Redis, session_factory: async_sessionmaker[AsyncSession]
+) -> dict[str, Any]:
     return {
-        "db": await _check_db(),
+        "db": await _check_db(session_factory),
         "redis": _check_redis(client),
         "queues": _queue_depths(client),
-        "outbox_dead": await _outbox_dead_count(),
+        "outbox_dead": await _outbox_dead_count(session_factory),
     }
 
 
-async def _check_db() -> dict[str, Any]:
-    from api.core.database import AsyncSessionLocal
-
+async def _check_db(session_factory: async_sessionmaker[AsyncSession]) -> dict[str, Any]:
     try:
-        async with AsyncSessionLocal() as session:
+        async with session_factory() as session:
             await session.execute(text("SELECT 1"))
         return {"ok": True}
     except Exception as exc:
@@ -181,12 +192,13 @@ def _queue_depths(client: Redis) -> list[dict[str, Any]]:
     return depths
 
 
-async def _outbox_dead_count() -> dict[str, Any]:
-    from api.core.database import AsyncSessionLocal
+async def _outbox_dead_count(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> dict[str, Any]:
     from api.models.outbox import OutboxEvent, OutboxStatus
 
     try:
-        async with AsyncSessionLocal() as session:
+        async with session_factory() as session:
             count = int(
                 (
                     await session.execute(

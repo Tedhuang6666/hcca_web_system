@@ -211,6 +211,10 @@ class Settings(BaseSettings):
     )
     # 每位使用者每日透過平台寄送 email 的「人次」上限（防濫用）
     EMAIL_DAILY_QUOTA_PER_USER: int = Field(default=500)
+    EMAIL_ATTACHMENT_INLINE_MAX_BYTES: int = Field(default=8 * 1024 * 1024)
+    EMAIL_ATTACHMENT_LINK_EXPIRES_SECONDS: int = Field(default=7 * 24 * 3600)
+    EMAIL_SEND_BATCH_SIZE: int = Field(default=100)
+    RESEND_WEBHOOK_SECRET: str = Field(default="")
 
     # --- 超級管理員 ---
     OWNER_EMAILS: list[str] = Field(

@@ -12,6 +12,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     Enum,
+    FetchedValue,
     ForeignKey,
     Index,
     Integer,
@@ -428,8 +429,11 @@ class Document(Base, TimestampMixin):
     reminder_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )
-    # 全文搜尋向量（PostgreSQL GENERATED column，由 migration 維護，ORM 唯讀，勿賦值）
-    search_vector: Mapped[str | None] = mapped_column(TSVECTOR(), nullable=True)
+    # 全文搜尋向量（PostgreSQL GENERATED ALWAYS column，由 migration 維護，ORM 唯讀）。
+    # FetchedValue：DB 端產生，INSERT/UPDATE 不可帶值，否則 GeneratedAlwaysError。
+    search_vector: Mapped[str | None] = mapped_column(
+        TSVECTOR(), FetchedValue(), nullable=True
+    )
     last_reminded_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

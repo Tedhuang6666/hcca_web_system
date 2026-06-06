@@ -199,19 +199,16 @@ export const NAV_ITEMS_BY_ID: Record<string, NavItem> = Object.fromEntries(
 
 export const NAV_DEF: NavEntry[] = [
   NAV_ITEMS[0],
-  NAV_ITEMS[2],
-  NAV_ITEMS[1],
   {
-    id: "news",
-    heading: "最新資訊",
-    items: byIds(["announcements"]),
+    id: "workspace",
+    heading: "工作台",
+    items: byIds(["governanceHub", "tasks", "calendar"]),
   },
   {
     id: "governance",
     heading: "自治核心",
     items: byIds([
       "documents",
-      "calendar",
       "meetings",
       "councilProposals",
       "regulations",
@@ -219,9 +216,14 @@ export const NAV_DEF: NavEntry[] = [
     ]),
   },
   {
+    id: "information",
+    heading: "資訊與參與",
+    items: byIds(["announcements", "surveys", "petitions"]),
+  },
+  {
     id: "campusServices",
     heading: "校園服務",
-    items: byIds(["meal", "shop", "partnerMap", "surveys", "petitions", "examPapers"]),
+    items: byIds(["meal", "shop", "partnerMap", "examPapers"]),
   },
   {
     id: "classWork",

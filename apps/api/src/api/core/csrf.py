@@ -47,6 +47,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             "/auth/google/one-tap",
             "/auth/refresh",
             "/line/webhook",
+            "/email/resend/webhook",
             # 退訂端點以簽章 token 保護，免登入且無 CSRF cookie，故豁免
             "/notifications/unsubscribe",
         ]

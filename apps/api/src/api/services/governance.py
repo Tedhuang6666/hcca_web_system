@@ -31,6 +31,7 @@ from api.models.user import User
 from api.models.work_item import WorkItem, WorkItemStatus
 from api.schemas.governance import (
     AutomationRuleCreate,
+    AutomationRuleUpdate,
     DecisionCreate,
     DecisionUpdate,
     EntityRelationCreate,
@@ -303,25 +304,66 @@ async def create_relation(
     return relation
 
 
+async def list_relations_for_target(
+    db: AsyncSession, *, target_type: str, target_id: uuid.UUID
+) -> list[tuple[EntityRelation, Matter]]:
+    """反向查詢：某模組資源被哪些事情納入（供詳情頁顯示「屬於哪件事情」）。"""
+    rows = await db.execute(
+        select(EntityRelation, Matter)
+        .join(Matter, EntityRelation.matter_id == Matter.id)
+        .where(
+            EntityRelation.target_type == target_type,
+            EntityRelation.target_id == target_id,
+            Matter.is_active.is_(True),
+        )
+        .order_by(Matter.updated_at.desc())
+    )
+    return [(relation, matter) for relation, matter in rows.all()]
+
+
+async def get_relation(db: AsyncSession, relation_id: uuid.UUID) -> EntityRelation | None:
+    return await db.get(EntityRelation, relation_id)
+
+
+async def delete_relation(db: AsyncSession, *, relation: EntityRelation, user: User) -> None:
+    matter_id = relation.matter_id
+    title = relation.title
+    await db.delete(relation)
+    await db.flush()
+    if matter_id is not None:
+        await record_event(
+            db,
+            matter_id=matter_id,
+            event_type=GovernanceEventType.UPDATED,
+            title=f"移除關聯：{title}",
+            actor=user,
+        )
+
+
 async def record_event(
     db: AsyncSession,
     *,
     matter_id: uuid.UUID | None,
     event_type: str,
     title: str,
-    actor: User | None,
+    actor: User | None = None,
+    actor_id: uuid.UUID | None = None,
+    actor_email: str | None = None,
     case_id: uuid.UUID | None = None,
     body: str | None = None,
     payload: dict | None = None,
 ) -> TimelineEvent:
+    # actor（User 物件）優先；audit 橋接只有 id/email 字串時走 actor_id/actor_email。
+    resolved_actor_id = actor.id if actor else actor_id
+    resolved_actor_email = actor.email if actor else actor_email
     event = TimelineEvent(
         matter_id=matter_id,
         case_id=case_id,
         event_type=str(event_type),
         title=title,
         body=body,
-        actor_id=actor.id if actor else None,
-        actor_email=actor.email if actor else None,
+        actor_id=resolved_actor_id,
+        actor_email=resolved_actor_email,
         payload=payload or {},
         created_at=datetime.now(UTC),
     )
@@ -581,6 +623,20 @@ async def list_automation_rules(
         )
     result = await db.execute(stmt)
     return list(result.scalars().all())
+
+
+async def get_automation_rule(db: AsyncSession, rule_id: uuid.UUID) -> AutomationRule | None:
+    return await db.get(AutomationRule, rule_id)
+
+
+async def update_automation_rule(
+    db: AsyncSession, *, rule: AutomationRule, data: AutomationRuleUpdate, user: User
+) -> AutomationRule:
+    payload = data.model_dump(exclude_unset=True)
+    for key, value in payload.items():
+        setattr(rule, key, value)
+    await db.flush()
+    return rule
 
 
 async def dashboard(db: AsyncSession, *, user: User) -> dict:

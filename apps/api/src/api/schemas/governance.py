@@ -203,6 +203,16 @@ class AutomationRuleCreate(BaseModel):
     status: AutomationRuleStatus = AutomationRuleStatus.ACTIVE
 
 
+class AutomationRuleUpdate(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=160)
+    description: str | None = Field(None, max_length=10000)
+    trigger_type: str | None = Field(None, min_length=1, max_length=80)
+    conditions: dict | None = None
+    actions: list[dict] | None = None
+    matter_id: uuid.UUID | None = None
+    status: AutomationRuleStatus | None = None
+
+
 class ProgramOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -372,9 +382,38 @@ class AutomationRuleOut(BaseModel):
     actions: list
     matter_id: uuid.UUID | None
     status: str
+    last_triggered_at: datetime | None = None
+    trigger_count: int = 0
     created_by_id: uuid.UUID | None
     created_at: datetime
     updated_at: datetime
+
+
+class MatterSpawnIn(BaseModel):
+    """從事情主動建立並連動模組artifact（指揮中心）。"""
+
+    kind: str = Field(..., pattern="^(task|announcement|survey|meeting)$")
+    title: str = Field(..., min_length=1, max_length=200)
+    org_id: uuid.UUID | None = None
+
+
+class MatterSpawnOut(BaseModel):
+    kind: str
+    id: uuid.UUID
+    title: str
+    href: str
+
+
+class MatterLinkRefOut(BaseModel):
+    """反向查詢結果：某模組資源被納入的事情摘要。"""
+
+    relation_id: uuid.UUID
+    matter_id: uuid.UUID
+    matter_title: str
+    matter_status: str
+    matter_progress: int
+    relation: str
+    case_id: uuid.UUID | None = None
 
 
 class MatterListItem(BaseModel):

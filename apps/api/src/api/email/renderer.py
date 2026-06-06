@@ -54,7 +54,7 @@ _ALLOWED_TAGS = [
 ]
 _ALLOWED_ATTRS = {"a": ["href", "title"]}
 _ALLOWED_PROTOCOLS = ["http", "https", "mailto"]
-_VARIABLE_KEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
+_VARIABLE_KEY_RE = re.compile(r"^[^\W\d]\w{0,63}$", re.UNICODE)
 _RESERVED_VARIABLE_KEYS = {"user", "app", "unsubscribe_url", "frontend_base_url"}
 
 _UNSUBSCRIBE_SALT = "hcca-email-unsubscribe"

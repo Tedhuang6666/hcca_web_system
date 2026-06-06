@@ -11,7 +11,9 @@ from api.email.renderer import (
     make_unsubscribe_token,
     parse_unsubscribe_token,
     render_email,
+    render_personalized_text,
     sanitize_html,
+    validate_variable_definitions,
 )
 
 
@@ -106,6 +108,17 @@ def test_personalization_context_uses_email_link_base_for_unsubscribe() -> None:
         f"{settings.EMAIL_LINK_BASE_URL.rstrip('/')}/unsubscribe?token="
     )
     assert context["frontend_base_url"] == settings.EMAIL_LINK_BASE_URL.rstrip("/")
+
+
+def test_chinese_variable_name_can_be_validated_and_rendered() -> None:
+    definitions = validate_variable_definitions(
+        [{"key": "錄取部門", "label": "錄取部門", "required": True}]
+    )
+
+    assert definitions[0]["key"] == "錄取部門"
+    assert render_personalized_text("您已錄取 {{ 錄取部門 }}", {"錄取部門": "活動部"}) == (
+        "您已錄取 活動部"
+    )
 
 
 def test_unsubscribe_token_roundtrip() -> None:

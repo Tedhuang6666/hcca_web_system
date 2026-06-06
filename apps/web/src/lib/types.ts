@@ -1,6 +1,102 @@
 // ── 公文系統型別 ──────────────────────────────────────────────────────────────
 
 export type DocumentStatus = "draft" | "pending" | "approved" | "rejected" | "archived";
+
+export type ElectionStatus = "draft" | "live" | "paused" | "closed";
+export type BallotBoxStatus = "pending" | "counting" | "paused" | "locked";
+export type VoteEventKind = "candidate" | "invalid";
+
+export interface ElectionCandidate {
+  id: string;
+  election_id: string;
+  name: string;
+  number: number;
+  color: string;
+  sort_order: number;
+  is_active: boolean;
+}
+
+export interface ElectionBallotBox {
+  id: string;
+  election_id: string;
+  name: string;
+  status: BallotBoxStatus;
+  expected_total_votes: number | null;
+  sort_order: number;
+}
+
+export interface ElectionOut {
+  id: string;
+  title: string;
+  description: string | null;
+  status: ElectionStatus;
+  is_public: boolean;
+  created_by_id: string;
+  candidates: ElectionCandidate[];
+  ballot_boxes: ElectionBallotBox[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ElectionListItem {
+  id: string;
+  title: string;
+  status: ElectionStatus;
+  is_public: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VoteEventOut {
+  id: string;
+  election_id: string;
+  ballot_box_id: string;
+  ballot_box_name: string;
+  candidate_id: string | null;
+  candidate_name: string | null;
+  kind: VoteEventKind;
+  delta: number;
+  reason: string;
+  operator_id: string;
+  operator_name: string;
+  reverses_event_id: string | null;
+  created_at: string;
+}
+
+export interface CandidateTally {
+  candidate_id: string;
+  name: string;
+  number: number;
+  color: string;
+  votes: number;
+  percentage: number;
+}
+
+export interface BallotBoxTally {
+  ballot_box_id: string;
+  name: string;
+  status: BallotBoxStatus;
+  counted_votes: number;
+  invalid_votes: number;
+  expected_total_votes: number | null;
+  progress_percentage: number | null;
+}
+
+export interface ElectionLiveSummary {
+  election_id: string;
+  title: string;
+  status: ElectionStatus;
+  total_votes: number;
+  valid_votes: number;
+  invalid_votes: number;
+  expected_total_votes: number | null;
+  progress_percentage: number | null;
+  leader_candidate_id: string | null;
+  current_ballot_boxes: string[];
+  candidates: CandidateTally[];
+  ballot_boxes: BallotBoxTally[];
+  last_updated_at: string;
+}
 /** 速別：普通件 / 速件 / 最速件 */
 export type DocumentUrgency = "normal" | "priority" | "express";
 export type DocumentClassification = "normal" | "confidential" | "secret";
@@ -3221,9 +3317,43 @@ export interface AutomationRuleOut {
   actions: Array<Record<string, unknown>>;
   matter_id: string | null;
   status: AutomationRuleStatus | string;
+  last_triggered_at: string | null;
+  trigger_count: number;
   created_by_id: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export type AutomationRuleUpdate = Partial<
+  Pick<AutomationRuleOut, "name" | "description" | "trigger_type" | "conditions" | "actions" | "matter_id" | "status">
+>;
+
+export type MatterSpawnKind = "task" | "announcement" | "survey" | "meeting";
+
+/** 從事情主動建立並連動的artifact回傳。 */
+export interface MatterSpawnResult {
+  kind: MatterSpawnKind;
+  id: string;
+  title: string;
+  href: string;
+}
+
+/** 反向查詢：某模組資源被哪些事情納入。 */
+export interface MatterLinkRef {
+  relation_id: string;
+  matter_id: string;
+  matter_title: string;
+  matter_status: string;
+  matter_progress: number;
+  relation: string;
+  case_id: string | null;
+}
+
+/** 自動化規則編輯器選項（後端 /governance/automation-meta）。 */
+export interface AutomationMeta {
+  trigger_types: Record<string, string>;
+  action_types: Record<string, string>;
+  entity_types: Record<string, string>;
 }
 
 export interface MatterListItem {
@@ -3450,6 +3580,8 @@ export type EmailStatus =
   | "queued"
   | "sent"
   | "failed"
+  | "retrying"
+  | "dead"
   | "partial"
   | "cancelled";
 
@@ -3517,6 +3649,14 @@ export interface EmailComposePayload {
   default_variables?: Record<string, string>;
   recipient_variables?: EmailRecipientVariableInput[];
   preview_variables?: Record<string, string>;
+  preview_recipient?: EmailRecipientVariableInput | null;
+  org_id?: string | null;
+  template_id?: string | null;
+  recipient_list_id?: string | null;
+  attachment_ids?: string[];
+  track_opens?: boolean;
+  track_clicks?: boolean;
+  idempotency_key?: string | null;
 }
 
 export interface EmailMessageCreate extends EmailComposePayload {
@@ -3541,6 +3681,10 @@ export interface EmailMessageOut {
   scheduled_at: string | null;
   created_at: string;
   updated_at: string;
+  org_id: string | null;
+  template_id: string | null;
+  track_opens: boolean;
+  track_clicks: boolean;
 }
 
 export interface EmailMessageDetailOut extends EmailMessageOut {
@@ -3561,6 +3705,7 @@ export interface EmailMessageDetailOut extends EmailMessageOut {
   recipient_status_counts: Record<string, number>;
   recent_errors: string[];
   error_detail: string | null;
+  attachment_ids: string[];
 }
 
 export interface EmailCampaignRecipientOut {
@@ -3570,13 +3715,108 @@ export interface EmailCampaignRecipientOut {
   email: string;
   name: string | null;
   variables: Record<string, string>;
-  status: "queued" | "sent" | "failed";
+  status: "queued" | "sent" | "failed" | "retrying" | "dead";
   celery_task_id: string | null;
   provider_id: string | null;
   sent_at: string | null;
   error_detail: string | null;
+  attempt_count: number;
+  next_retry_at: string | null;
+  delivered_at: string | null;
+  first_opened_at: string | null;
+  last_opened_at: string | null;
+  first_clicked_at: string | null;
+  last_clicked_at: string | null;
+  bounced_at: string | null;
+  complained_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export type EmailResourceVisibility = "private" | "org";
+
+export interface EmailTemplateOut {
+  id: string;
+  owner_id: string;
+  org_id: string | null;
+  visibility: EmailResourceVisibility;
+  name: string;
+  description: string;
+  content: Partial<EmailComposePayload>;
+  variable_definitions: EmailVariableDefinition[];
+  is_favorite: boolean;
+  is_active: boolean;
+  current_version: number;
+  last_used_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EmailRecipientListMemberOut {
+  id: string;
+  user_id: string | null;
+  email: string;
+  name: string | null;
+  variables: Record<string, string>;
+}
+
+export interface EmailRecipientListOut {
+  id: string;
+  owner_id: string;
+  org_id: string | null;
+  visibility: EmailResourceVisibility;
+  name: string;
+  description: string;
+  recipient_spec: Partial<RecipientSelector>;
+  variable_definitions: EmailVariableDefinition[];
+  is_active: boolean;
+  members: EmailRecipientListMemberOut[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EmailAttachmentOut {
+  id: string;
+  message_id: string | null;
+  template_id: string | null;
+  filename: string;
+  content_type: string;
+  file_size: number;
+  delivery_mode: "attachment" | "link";
+  expires_at: string | null;
+  revoked_at: string | null;
+  created_at: string;
+}
+
+export interface EmailPreflightOut {
+  valid: boolean;
+  resolved_count: number;
+  unique_count: number;
+  duplicate_emails: string[];
+  invalid_emails: string[];
+  suppressed_emails: string[];
+  missing_names: string[];
+  missing_variables: string[];
+  attachment_total_bytes: number;
+  attachment_warnings: string[];
+  quota_remaining: number | null;
+  estimated_batches: number;
+}
+
+export interface EmailAnalyticsOut {
+  message_id: string;
+  recipients: number;
+  delivered: number;
+  bounced: number;
+  complained: number;
+  opened: number;
+  clicked: number;
+  delivery_rate: number;
+  bounce_rate: number;
+  open_rate_estimated: number;
+  click_rate: number;
+  unopened_emails: string[];
+  top_links: { url: string; clicks: number }[];
 }
 
 /** 職位精簡資訊（收件人選擇器用） */

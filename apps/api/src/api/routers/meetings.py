@@ -103,6 +103,7 @@ from api.schemas.workflow import WorkflowLinkCreate
 from api.services import audit as audit_svc
 from api.services import context as context_svc
 from api.services import document as document_svc
+from api.services import governance_ingest
 from api.services import meeting as meeting_svc
 from api.services import workflow as workflow_svc
 from api.services.storage import get_storage
@@ -1322,6 +1323,26 @@ async def create_decision(
         },
     )
     await _broadcast_meeting(session, meeting.id, "meeting.decision_created")
+    # 治理匯流：若此會議已被納入某些事情，決議自動長進該事情的決議追蹤與時間軸，
+    # 並觸發符合的自動化規則。fail-soft，絕不影響決議建立本身。
+    await governance_ingest.safe_ingest(
+        session,
+        event_type="meeting.decision_created",
+        actor_id=current_user.id,
+        actor_email=current_user.email,
+        source_type="meeting",
+        source_id=meeting.id,
+        title=decision.title,
+        href=f"/meetings/{meeting.id}",
+        summary=decision.content,
+        payload={
+            "decision_id": str(decision.id),
+            "meeting_id": str(meeting.id),
+            "title": decision.title,
+            "content": decision.content,
+            "status": str(decision.status),
+        },
+    )
     return decision
 
 

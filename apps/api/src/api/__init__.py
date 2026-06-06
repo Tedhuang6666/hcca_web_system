@@ -66,7 +66,9 @@ from api.routers import (
     documents,
     documents_approve,
     documents_attachments,
+    elections,
     email,
+    email_platform,
     exam_papers,
     feature_flags,
     governance,
@@ -402,6 +404,8 @@ def create_app() -> FastAPI:
     app.include_router(survey.router)
     app.include_router(notifications.router)
     app.include_router(email.router)
+    app.include_router(email_platform.router)
+    app.include_router(elections.router)
     app.include_router(exam_papers.router)
     app.include_router(analytics.router)
     app.include_router(dashboard.router)

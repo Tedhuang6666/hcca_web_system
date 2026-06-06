@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { activitiesApi, receivablesApi } from "@/lib/api";
 import type { Activity, ActivityWorkspaceOut, ReceivableOut } from "@/lib/types";
+import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 
 const STATUS_LABEL: Record<string, string> = {
   done: "完成",
@@ -77,7 +78,16 @@ export default function ActivityWorkspacePage() {
             {activity?.description || "集中查看這個活動牽涉的公告、會議、訂單、收款與任務。"}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {activity && (
+            <GovernanceLinkPanel
+              entityType="activity"
+              entityId={activity.id}
+              title={activity.name}
+              href={`/activities/${activity.id}`}
+              compact
+            />
+          )}
           <Link className="btn btn-ghost" href={`/finance/receivables?activity_id=${activityId}`}>收款對帳</Link>
           <Link className="btn btn-primary" href={`/publications/new?activity_id=${activityId}`}>建立發布</Link>
         </div>
