@@ -166,9 +166,7 @@ class EmailMessageUpdate(BaseModel):
     body: str | None = None
     accent_color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
     background_color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
-    content_background_color: str | None = Field(
-        default=None, pattern=r"^#[0-9A-Fa-f]{6}$"
-    )
+    content_background_color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
     footer_text: str | None = Field(default=None, max_length=500)
     show_system_footer: bool | None = None
     banner_image_url: str | None = Field(default=None, max_length=500)
@@ -652,9 +650,7 @@ async def _render_attachments(
             disposition="attachment",
             download_name=attachment.filename,
         )
-        link_blocks.append(
-            {"type": "text", "md": f"[下載附件：{attachment.filename}]({url})"}
-        )
+        link_blocks.append({"type": "text", "md": f"[下載附件：{attachment.filename}]({url})"})
     return resend_attachments, link_blocks
 
 
@@ -689,11 +685,7 @@ async def _send_now(db: AsyncSession, user: User, msg: EmailMessage) -> None:
     msg.error_detail = None
     await db.flush()
     attachments = (
-        (
-            await db.execute(
-                select(EmailAttachment).where(EmailAttachment.message_id == msg.id)
-            )
-        )
+        (await db.execute(select(EmailAttachment).where(EmailAttachment.message_id == msg.id)))
         .scalars()
         .all()
     )
@@ -744,11 +736,7 @@ async def _requeue_unsent(db: AsyncSession, msg: EmailMessage) -> int:
     if not rows:
         return 0
     attachments = (
-        (
-            await db.execute(
-                select(EmailAttachment).where(EmailAttachment.message_id == msg.id)
-            )
-        )
+        (await db.execute(select(EmailAttachment).where(EmailAttachment.message_id == msg.id)))
         .scalars()
         .all()
     )
@@ -985,9 +973,7 @@ async def test_send(body: EmailComposePayload, user: EmailUser) -> TestSendOut:
     response_model=SampleTestSendOut,
     summary="抽樣測試寄送：以選定資料列渲染後寄至測試信箱",
 )
-async def test_send_sample(
-    body: EmailSampleTestPayload, user: EmailUser
-) -> SampleTestSendOut:
+async def test_send_sample(body: EmailSampleTestPayload, user: EmailUser) -> SampleTestSendOut:
     destinations = [str(value) for value in body.test_emails] or [user.email]
     if not destinations or not destinations[0]:
         raise HTTPException(status_code=422, detail="沒有可用的測試收件信箱")
@@ -1009,9 +995,7 @@ async def test_send_sample(
         ]
     queued = 0
     for index, row in enumerate(selected):
-        custom = _merged_custom_variables(
-            definitions, body.default_variables, row.variables
-        )
+        custom = _merged_custom_variables(definitions, body.default_variables, row.variables)
         try:
             validate_required_variables(
                 definitions,

@@ -431,9 +431,7 @@ class Document(Base, TimestampMixin):
     )
     # 全文搜尋向量（PostgreSQL GENERATED ALWAYS column，由 migration 維護，ORM 唯讀）。
     # FetchedValue：DB 端產生，INSERT/UPDATE 不可帶值，否則 GeneratedAlwaysError。
-    search_vector: Mapped[str | None] = mapped_column(
-        TSVECTOR(), FetchedValue(), nullable=True
-    )
+    search_vector: Mapped[str | None] = mapped_column(TSVECTOR(), FetchedValue(), nullable=True)
     last_reminded_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

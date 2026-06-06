@@ -174,7 +174,9 @@ class EmailCampaignRecipient(Base, TimestampMixin):
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     first_opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    first_clicked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    first_clicked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     last_clicked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     bounced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     complained_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -230,9 +232,7 @@ class EmailTemplate(Base, TimestampMixin):
 
 class EmailTemplateVersion(Base, TimestampMixin):
     __tablename__ = "email_template_versions"
-    __table_args__ = (
-        UniqueConstraint("template_id", "version", name="uq_email_template_version"),
-    )
+    __table_args__ = (UniqueConstraint("template_id", "version", name="uq_email_template_version"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     template_id: Mapped[uuid.UUID] = mapped_column(
@@ -286,9 +286,7 @@ class EmailRecipientList(Base, TimestampMixin):
 
 class EmailRecipientListMember(Base, TimestampMixin):
     __tablename__ = "email_recipient_list_members"
-    __table_args__ = (
-        UniqueConstraint("list_id", "email", name="uq_email_recipient_list_email"),
-    )
+    __table_args__ = (UniqueConstraint("list_id", "email", name="uq_email_recipient_list_email"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     list_id: Mapped[uuid.UUID] = mapped_column(

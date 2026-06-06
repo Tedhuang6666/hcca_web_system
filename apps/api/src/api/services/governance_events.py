@@ -96,9 +96,7 @@ GOVERNANCE_EVENT_MAP: dict[tuple[str, str], EventSpec] = {
     # ── 學餐 ───────────────────────────────────────────────
     ("meal_order", "meal.order_create"): EventSpec("order.created", "meal_order", "訂單成立"),
     ("meal_order", "meal.order_confirm"): EventSpec("order.confirmed", "meal_order", "訂單確認"),
-    ("meal_order", "meal.order_complete"): EventSpec(
-        "order.completed", "meal_order", "訂單完成"
-    ),
+    ("meal_order", "meal.order_complete"): EventSpec("order.completed", "meal_order", "訂單完成"),
     ("meal_schedule", "meal.schedule_close"): EventSpec(
         "meal.schedule_closed", "meal_schedule", "學餐結單"
     ),
@@ -109,9 +107,7 @@ GOVERNANCE_EVENT_MAP: dict[tuple[str, str], EventSpec] = {
         "calendar.event_created", "calendar_event", "行事曆建立"
     ),
     ("exam_paper", "exam_paper.create"): EventSpec("exam.paper_created", "exam_paper", "試卷上傳"),
-    ("receivable", "receivable.mark_paid"): EventSpec(
-        "receivable.paid", "receivable", "收款入帳"
-    ),
+    ("receivable", "receivable.mark_paid"): EventSpec("receivable.paid", "receivable", "收款入帳"),
 }
 
 

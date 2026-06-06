@@ -202,9 +202,7 @@ class Regulation(Base, TimestampMixin):
     )
     # 全文搜尋向量（由 trigger 自動更新，DB 端維護，ORM 唯讀）。
     # FetchedValue：INSERT/UPDATE 不帶值，交給 DB；與 documents/announcements 一致。
-    search_vector: Mapped[str | None] = mapped_column(
-        TSVECTOR(), FetchedValue(), nullable=True
-    )
+    search_vector: Mapped[str | None] = mapped_column(TSVECTOR(), FetchedValue(), nullable=True)
 
     org: Mapped[Org] = relationship("Org")
     published_document: Mapped[Document | None] = relationship(

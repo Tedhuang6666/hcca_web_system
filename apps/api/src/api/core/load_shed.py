@@ -36,6 +36,7 @@ from api.core.maintenance import (
 from api.core.metrics import get_db_pool_stats
 from api.core.modules import match_module
 from api.core.security import decode_token
+from api.core.trust import request_is_trusted
 
 logger = logging.getLogger(__name__)
 
@@ -167,12 +168,16 @@ class LoadShedMiddleware:
             await self.app(scope, receive, send)
             return
 
-        # 1. IP 黑名單
-        if await is_blocked(ip):
+        # 自己人白名單 IP / 有效掃描 token：豁免黑名單與後續鎖定 / 維護 / load shed
+        trusted = request_is_trusted(scope)
+
+        # 1. IP 黑名單（信任來源豁免；is_blocked 對白名單 IP 已回 False，
+        #    此處的 not trusted 主要讓「非白名單 IP + 有效掃描 token」也能穿過）
+        if not trusted and await is_blocked(ip):
             await self._respond_blocked(scope, send)
             return
 
-        can_bypass = _can_bypass_protection(scope)
+        can_bypass = trusted or _can_bypass_protection(scope)
         lockdown_reason = await endpoint_lockdown_reason(path)
         if lockdown_reason and not can_bypass:
             await self._respond_lockdown(scope, send, lockdown_reason)

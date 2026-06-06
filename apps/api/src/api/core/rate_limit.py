@@ -13,6 +13,7 @@ from starlette.responses import JSONResponse, Response
 
 from api.core.defense import get_rate_limit_config
 from api.core.security import redis_client
+from api.core.trust import request_is_trusted
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +95,11 @@ class SimpleRateLimitMiddleware:
 
         request = Request(scope, receive=receive)
         if request.url.path in {"/health", "/live", "/ready"}:
+            await self.app(scope, receive, send)
+            return
+
+        # 自己人白名單 IP / 有效掃描 token → 不限流
+        if request_is_trusted(scope):
             await self.app(scope, receive, send)
             return
 

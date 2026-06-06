@@ -73,10 +73,7 @@ async def _can_manage_org(db: AsyncSession, user: User, org_id: uuid.UUID | None
     if org_id is None:
         return False
     codes = await get_user_permission_codes_for_org(db, user.id, org_id)
-    return (
-        PermissionCode.EMAIL_TEMPLATE_MANAGE in codes
-        or PermissionCode.ADMIN_ALL in codes
-    )
+    return PermissionCode.EMAIL_TEMPLATE_MANAGE in codes or PermissionCode.ADMIN_ALL in codes
 
 
 async def _get_template(db: AsyncSession, template_id: uuid.UUID) -> EmailTemplate:
@@ -261,9 +258,7 @@ async def upload_attachment(
 
 
 @router.delete("/attachments/{attachment_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def revoke_attachment(
-    attachment_id: uuid.UUID, db: DbDep, user: EmailUser
-) -> None:
+async def revoke_attachment(attachment_id: uuid.UUID, db: DbDep, user: EmailUser) -> None:
     row = await db.get(EmailAttachment, attachment_id)
     if row is None:
         raise HTTPException(status_code=404, detail="附件不存在")
@@ -285,9 +280,7 @@ async def download_attachment(
 
 
 @router.post("/preflight", response_model=EmailPreflightOut)
-async def preflight(
-    body: EmailPreflightInput, db: DbDep, user: EmailUser
-) -> EmailPreflightOut:
+async def preflight(body: EmailPreflightInput, db: DbDep, user: EmailUser) -> EmailPreflightOut:
     return await platform_svc.run_preflight(db, user, body)
 
 
@@ -307,9 +300,7 @@ async def _check_message_view(db: AsyncSession, user: User, message_id: uuid.UUI
 
 
 @router.get("/messages/{message_id}/analytics", response_model=EmailAnalyticsOut)
-async def message_analytics(
-    message_id: uuid.UUID, db: DbDep, user: EmailUser
-) -> EmailAnalyticsOut:
+async def message_analytics(message_id: uuid.UUID, db: DbDep, user: EmailUser) -> EmailAnalyticsOut:
     await _check_message_view(db, user, message_id)
     return EmailAnalyticsOut(**await platform_svc.get_analytics(db, message_id))
 
@@ -353,9 +344,7 @@ async def clone_message(
     if audience == "unopened":
         recipients = [row for row in recipients if row.first_opened_at is None]
     elif audience == "undelivered":
-        recipients = [
-            row for row in recipients if row.delivered_at is None and row.sent_at is None
-        ]
+        recipients = [row for row in recipients if row.delivered_at is None and row.sent_at is None]
     draft = EmailMessage(
         sender_id=user.id,
         org_id=source.org_id,

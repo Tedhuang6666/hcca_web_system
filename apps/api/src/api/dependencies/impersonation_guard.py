@@ -95,9 +95,7 @@ class ImpersonationReadOnlyMiddleware(BaseHTTPMiddleware):
     既有授權，故掛上絕對安全。audit log 仍由 router 層 dependency 負責（best effort）。
     """
 
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         if request.method not in WRITE_METHODS:
             return await call_next(request)
         if any(request.url.path.startswith(p) for p in ALLOWED_PATHS_DURING_IMPERSONATION):
@@ -105,9 +103,7 @@ class ImpersonationReadOnlyMiddleware(BaseHTTPMiddleware):
 
         token = _extract_token(request)
         if token and impersonation_svc.parse_impersonation_token(token) is not None:
-            logger.info(
-                "impersonation write blocked: %s %s", request.method, request.url.path
-            )
+            logger.info("impersonation write blocked: %s %s", request.method, request.url.path)
             return JSONResponse(
                 status_code=status.HTTP_403_FORBIDDEN,
                 content={"detail": "impersonation 模式為唯讀，不允許寫入操作"},

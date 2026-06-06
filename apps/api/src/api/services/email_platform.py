@@ -153,9 +153,7 @@ async def list_recipient_lists(
     return list((await db.execute(stmt)).scalars().unique().all())
 
 
-async def _replace_list_members(
-    db: AsyncSession, list_id: uuid.UUID, members: list
-) -> None:
+async def _replace_list_members(db: AsyncSession, list_id: uuid.UUID, members: list) -> None:
     await db.execute(
         delete(EmailRecipientListMember).where(EmailRecipientListMember.list_id == list_id)
     )
@@ -300,13 +298,14 @@ async def run_preflight(
     used = await db.scalar(
         select(func.coalesce(func.sum(EmailMessage.recipient_count), 0)).where(
             EmailMessage.sender_id == sender.id,
-            EmailMessage.created_at >= datetime.now(UTC).replace(
-                hour=0, minute=0, second=0, microsecond=0
-            ),
+            EmailMessage.created_at
+            >= datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0),
         )
     )
-    remaining = None if sender.is_superuser else max(
-        0, settings.EMAIL_DAILY_QUOTA_PER_USER - int(used or 0)
+    remaining = (
+        None
+        if sender.is_superuser
+        else max(0, settings.EMAIL_DAILY_QUOTA_PER_USER - int(used or 0))
     )
     unique_allowed = len(set(unique) - suppressed)
     return EmailPreflightOut(
@@ -409,7 +408,10 @@ async def export_recipients(db: AsyncSession, message_id: uuid.UUID, fmt: str) -
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
             pd.DataFrame(data).to_excel(writer, index=False, sheet_name="寄送明細")
-        return output.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        return (
+            output.getvalue(),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
     output_text = io.StringIO()
     writer = csv.DictWriter(output_text, fieldnames=list(data[0].keys()) if data else ["email"])
     writer.writeheader()
@@ -443,16 +445,12 @@ async def process_resend_event(db: AsyncSession, payload: dict) -> bool:
     if not event_id or not provider_id:
         return False
     exists = await db.scalar(
-        select(EmailRecipientEvent.id).where(
-            EmailRecipientEvent.provider_event_id == event_id
-        )
+        select(EmailRecipientEvent.id).where(EmailRecipientEvent.provider_event_id == event_id)
     )
     if exists:
         return False
     recipient = await db.scalar(
-        select(EmailCampaignRecipient).where(
-            EmailCampaignRecipient.provider_id == provider_id
-        )
+        select(EmailCampaignRecipient).where(EmailCampaignRecipient.provider_id == provider_id)
     )
     if recipient is None:
         return False
@@ -505,9 +503,7 @@ async def process_resend_event(db: AsyncSession, payload: dict) -> bool:
             )
         else:
             suppression.is_active = True
-            suppression.reason = (
-                "bounce" if event_type == EmailEventType.BOUNCED else "complaint"
-            )
+            suppression.reason = "bounce" if event_type == EmailEventType.BOUNCED else "complaint"
             suppression.suppressed_at = event_at
     await db.flush()
     return True

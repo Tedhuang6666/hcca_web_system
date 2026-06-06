@@ -30,6 +30,7 @@ from starlette.types import Receive, Scope, Send
 from api.core.config import settings
 from api.core.ip_blocklist import block as ip_block
 from api.core.security import redis_client
+from api.core.trust import has_scan_bypass_token, is_trusted_ip
 
 logger = logging.getLogger(__name__)
 
@@ -176,6 +177,11 @@ class WAFMiddleware:
             await self.app(scope, receive, send)
             return
 
+        # 帶有效掃描 token → 完全放行（供自家弱掃；rate limit / 黑名單同步繞過）
+        if has_scan_bypass_token(scope):
+            await self.app(scope, receive, send)
+            return
+
         path = scope.get("path", "")
         if path in _EXEMPT_PATHS or any(path.startswith(p) for p in _EXEMPT_PREFIXES):
             await self.app(scope, receive, send)
@@ -240,6 +246,9 @@ class WAFMiddleware:
     async def _record_offender(self, ip: str) -> None:
         """命中高信心規則 → 累犯計數；超閾值自動封鎖 IP。Best-effort，不阻塞。"""
         if not settings.WAF_AUTOBLOCK_ENABLED or ip in ("", "unknown"):
+            return
+        # 自己人白名單 IP 不計入累犯、不自動封鎖（單次特徵仍會 400，但不會被鎖在門外）
+        if is_trusted_ip(ip):
             return
         key = f"waf:offender:{ip}"
         try:

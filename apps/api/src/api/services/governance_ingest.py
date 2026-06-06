@@ -167,9 +167,7 @@ async def _materialize_for_matter(
         source_id = payload.get("decision_id")
         if source_id:
             source_uuid = uuid.UUID(str(source_id))
-            if not await _has_decision_for_source(
-                db, matter_id, "meeting_decision", source_uuid
-            ):
+            if not await _has_decision_for_source(db, matter_id, "meeting_decision", source_uuid):
                 decision = Decision(
                     matter_id=matter_id,
                     source_type="meeting_decision",
@@ -303,9 +301,7 @@ async def _exec_action(
             content=_render(action.get("content"), context) or context.get("title") or "—",
             status=DecisionStatus.PENDING,
             source_type=context.get("source_type"),
-            source_id=(
-                uuid.UUID(str(context["source_id"])) if context.get("source_id") else None
-            ),
+            source_id=(uuid.UUID(str(context["source_id"])) if context.get("source_id") else None),
             created_by_id=actor_id,
             meta={"origin": "automation"},
         )

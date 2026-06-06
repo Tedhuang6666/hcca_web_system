@@ -244,6 +244,13 @@ class Settings(BaseSettings):
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_REQUESTS: int = 120
     RATE_LIMIT_WINDOW_SECONDS: int = 60
+    # 自己人 IP 白名單（逗號分隔字串或 JSON array，支援 CIDR，例如 1.2.3.4,127.0.0.1,10.0.0.0/8）。
+    # 命中者豁免 rate limit 與 IP 黑名單（含 WAF autoblock 後的封鎖），避免管理者 / CI /
+    # 家用固定 IP 被自家防護鎖在門外。仍受 WAF 單次特徵攔截，但不會被 autoblock 計數。
+    RATE_LIMIT_TRUSTED_IPS: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+        description="逗號分隔的信任 IP / CIDR；豁免 rate limit 與 IP 黑名單",
+    )
 
     # --- Idempotency ---
     IDEMPOTENCY_ENABLED: bool = True
@@ -284,6 +291,13 @@ class Settings(BaseSettings):
     WAF_AUTOBLOCK_TTL_SECONDS: int = Field(default=3600, ge=60)
     # 整條 URL（path + query）長度上限，防超長 URL 灌爆 / 規避。
     WAF_MAX_URL_LENGTH: int = Field(default=8192, ge=256)
+    # 主動弱掃繞過 token：請求帶 `X-Security-Scan: <token>` 時完全繞過 WAF / rate limit /
+    # IP 黑名單，供 Nuclei 等掃描器對自家站台施測。須夠長（>= 16 字元）；未設定 / 過短時
+    # header 一律無效（避免空 token 漏洞）。比對採 constant-time。
+    SECURITY_SCAN_BYPASS_TOKEN: str = Field(
+        default="",
+        description="X-Security-Scan header 的繞過 token；空字串或少於 16 字元代表停用",
+    )
 
     # --- LINE Bot 設定 ---
     LINE_CHANNEL_SECRET: str = Field(default="")
@@ -419,6 +433,30 @@ class Settings(BaseSettings):
         if isinstance(value, list):
             return [str(item).strip() for item in value if str(item).strip()]
         raise ValueError("FIELD_ENCRYPTION_KEYS 必須是 JSON array 或逗號分隔字串")
+
+    @field_validator("RATE_LIMIT_TRUSTED_IPS", mode="before")
+    @classmethod
+    def parse_trusted_ips(cls, value: object) -> list[str]:
+        if value is None or value == "":
+            return []
+        if isinstance(value, str):
+            raw = value.strip()
+            if not raw:
+                return []
+            if raw.startswith("["):
+                import json
+
+                try:
+                    parsed = json.loads(raw)
+                except json.JSONDecodeError:
+                    parsed = [item.strip() for item in raw.strip("[]").split(",") if item.strip()]
+                if not isinstance(parsed, list):
+                    raise ValueError("RATE_LIMIT_TRUSTED_IPS 必須是 JSON array 或逗號分隔字串")
+                return [str(item).strip() for item in parsed if str(item).strip()]
+            return [item.strip() for item in raw.split(",") if item.strip()]
+        if isinstance(value, list):
+            return [str(item).strip() for item in value if str(item).strip()]
+        raise ValueError("RATE_LIMIT_TRUSTED_IPS 必須是 JSON array 或逗號分隔字串")
 
     @model_validator(mode="after")
     def derive_public_urls(self) -> "Settings":

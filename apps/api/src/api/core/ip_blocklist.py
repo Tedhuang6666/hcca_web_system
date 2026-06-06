@@ -17,6 +17,7 @@ from redis.exceptions import RedisError
 
 from api.core.defense import is_ip_allowed, is_ip_blocked
 from api.core.security import redis_client
+from api.core.trust import is_trusted_ip
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ _cache_lock = asyncio.Lock()
 
 async def is_blocked(ip: str) -> bool:
     """檢查 IP 是否在黑名單；用本地快取攤平 Redis 壓力。"""
-    if await is_ip_allowed(ip):
+    if is_trusted_ip(ip) or await is_ip_allowed(ip):
         _cache[ip] = (time.monotonic() + _LOCAL_CACHE_TTL, False)
         return False
 
