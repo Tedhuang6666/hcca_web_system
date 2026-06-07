@@ -34,6 +34,15 @@ fi
 step "docker compose pull（拉最新映像）"
 "${compose[@]}" "${profiles[@]}" pull
 
+# 套用資料庫 migration（alembic upgrade head）必須在起 api/web 前先跑，否則新映像會對
+# 舊 schema 查詢而整路由 500（例：column elections.slug does not exist）。
+# migrate 在 migrate profile，預設 up 不啟動；其 depends_on db: service_healthy，
+# 故 run 會自動把 db 拉起並等健康後才執行。SKIP_MIGRATE=1 可在確定無 schema 變動時略過。
+if [[ "${SKIP_MIGRATE:-0}" != "1" ]]; then
+  step "套用資料庫 migration（alembic upgrade head）"
+  "${compose[@]}" --profile migrate run --rm migrate
+fi
+
 step "啟動服務（--remove-orphans 清掉已退出 profile 的孤兒容器）"
 "${compose[@]}" "${profiles[@]}" up -d --remove-orphans
 
