@@ -14,7 +14,6 @@ from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_permission
 from api.models.election import BallotBox, Election
 from api.models.user import User
-from api.services.storage import get_storage
 from api.schemas.election import (
     BallotBoxOut,
     BallotBoxStatusUpdate,
@@ -28,6 +27,7 @@ from api.schemas.election import (
     VoteEventOut,
 )
 from api.services import election as election_svc
+from api.services.storage import get_storage
 
 router = APIRouter(prefix="/elections", tags=["即時開票"])
 DbDep = Annotated[AsyncSession, Depends(get_db)]

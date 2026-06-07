@@ -1263,7 +1263,9 @@
 
 .public-section-kicker {
   margin-bottom: 0.5rem;
-  color: var(--public-accent);
+  /* 文字用可讀的主文字色（兩套主題皆過 AA）；金色僅保留在 ::before 短線當裝飾，
+     避免金色小字落在淺色面板上對比不足。*/
+  color: var(--public-text);
   font-size: 0.78rem;
   font-weight: 850;
   letter-spacing: 0.08em;
