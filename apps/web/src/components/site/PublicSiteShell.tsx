@@ -4,29 +4,25 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   ArrowLeft,
-  BookOpenText,
   ChevronDown,
-  FileSearch,
-  Landmark,
-  Link2,
-  ListChecks,
   LogIn,
-  MapPinned,
-  Megaphone,
   Menu,
-  MessageSquareText,
   Moon,
-  Radio,
-  Scale,
   Sun,
-  UsersRound,
   X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import BrandEmblem from "@/components/brand/BrandEmblem";
+import LiveElectionBanner from "@/components/site/LiveElectionBanner";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { BRANDING } from "@/lib/branding";
+import {
+  PUBLIC_NAV_GROUP_META,
+  type PublicNavGroupId,
+  groupResolvedNav,
+  resolvePublicNav,
+} from "@/lib/publicNav";
 import type { PublicSitePageOut, PublicSiteSettingsOut } from "@/lib/types";
 
 /** 已知父層路徑 → 返回鈕文案。未列出者依前綴給通用文案。 */
@@ -37,6 +33,9 @@ const PUBLIC_BACK_LABELS: Record<string, string> = {
   "/public/regulations": "返回公開法規",
   "/news": "返回最新公告",
 };
+
+/** 收進「所有公開服務」選單的群組順序（primary 在頂列，不在此列）。 */
+const MENU_GROUP_ORDER: PublicNavGroupId[] = ["info", "data", "participation"];
 
 /**
  * 依 pathname 推算公開站的「返回上一層」目標。
@@ -61,44 +60,6 @@ function getPublicBack(pathname: string): { href: string; label: string } | null
   return { href: parent, label };
 }
 
-const BASE_NAV = [
-  { href: "/", label: "首頁" },
-  { href: "/about", label: "關於班聯會" },
-  { href: "/news", label: "最新公告" },
-];
-
-const PUBLIC_NAV_GROUPS = [
-  {
-    label: "資訊與組織",
-    items: [
-      { href: "/news", label: "最新公告", description: "公開消息與重要通知", icon: Megaphone },
-      { href: "/officers", label: "班聯會幹部", description: "當屆幹部與公開資料", icon: UsersRound },
-      { href: "/about", label: "關於班聯會", description: "任務、沿革與公共角色", icon: Landmark },
-      { href: "/links", label: "平台連結", description: "常用服務與外部連結", icon: Link2 },
-    ],
-  },
-  {
-    label: "公開資料",
-    items: [
-      { href: "/public", label: "公開資料庫", description: "所有公開資料與參與入口", icon: BookOpenText },
-      { href: "/public/regulations", label: "法規查詢", description: "現行條文、沿革與版本", icon: Scale },
-      { href: "/public/documents", label: "公文查詢", description: "公開公文、字號與附件", icon: FileSearch },
-      { href: "/public/elections", label: "即時開票", description: "公開選舉票數與進度", icon: Radio },
-      { href: "/partner-map", label: "特約地圖", description: "合作店家與學生優惠", icon: MapPinned },
-      { href: "/surveys", label: "公開問卷", description: "參與目前開放的校園調查", icon: ListChecks },
-    ],
-  },
-  {
-    label: "公共參與",
-    items: [
-      { href: "/council-proposals", label: "議會提案", description: "學生代表大會提案資訊", icon: Landmark },
-      { href: "/petitions/new", label: "提出陳情", description: "反映校園問題與建議", icon: MessageSquareText },
-      { href: "/petitions", label: "陳情中心", description: "查看陳情說明與案件入口", icon: MessageSquareText },
-      { href: "/judicial-petitions", label: "評議聲請", description: "提出審查與爭議事項", icon: Scale },
-    ],
-  },
-];
-
 export default function PublicSiteShell({
   children,
   navPages = [],
@@ -113,13 +74,48 @@ export default function PublicSiteShell({
   const { theme, toggleTheme } = useTheme();
   const pathname = usePathname();
   const back = getPublicBack(pathname);
-  const nav = [
-    ...BASE_NAV,
+  const menuRef = useRef<HTMLDetailsElement>(null);
+  const headerRef = useRef<HTMLElement>(null);
+
+  // 換頁時收合所有導覽（手機抽屜 + 桌面 mega-menu）。
+  useEffect(() => {
+    setOpen(false);
+    if (menuRef.current) menuRef.current.open = false;
+  }, [pathname]);
+
+  // 點導覽列以外的任何地方就收合：桌面 mega-menu（原生 <details> 不會自動關）與手機抽屜。
+  useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      const dropdown = menuRef.current;
+      if (dropdown?.open && !dropdown.contains(target)) {
+        dropdown.open = false;
+      }
+      if (headerRef.current && !headerRef.current.contains(target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, []);
+
+  // 內建導覽項目（單一來源）+ 後台覆寫（theme_config.nav），primary 上頂列、其餘進選單。
+  const groups = groupResolvedNav(
+    resolvePublicNav(settings?.theme_config as Record<string, unknown> | undefined),
+  );
+  const topLevel = [
+    { key: "__home", href: "/", label: "首頁" },
+    ...groups.primary.map((item) => ({ key: item.key, href: item.href, label: item.label })),
     ...navPages.map((page) => ({
+      key: `page-${page.slug}`,
       href: `/pages/${page.slug}`,
       label: page.nav_label || page.title,
     })),
   ];
+  const menuGroups = MENU_GROUP_ORDER
+    .map((id) => ({ id, meta: PUBLIC_NAV_GROUP_META[id], items: groups[id] }))
+    .filter((group) => group.items.length > 0);
+
   const systemHref = isLoggedIn ? "/dashboard" : "/login?next=%2Fdashboard";
   const systemLabel = isLoggedIn ? "管理系統" : "登入管理";
 
@@ -142,7 +138,8 @@ export default function PublicSiteShell({
           onClick={() => setOpen(false)}
         />
       )}
-      <header className="public-header">
+      <header className="public-header" ref={headerRef}>
+        <LiveElectionBanner />
         <div className="public-header-inner">
           <Link href="/" className="public-brand" onClick={() => setOpen(false)}>
             <span className="public-brand-mark" aria-hidden={!settings?.site_logo_url}>
@@ -165,45 +162,63 @@ export default function PublicSiteShell({
             </span>
           </Link>
           <nav className="public-desktop-nav" aria-label="公開網站導覽">
-            {nav.map((item) => (
+            {topLevel.map((item) => (
               <Link
-                key={item.href}
+                key={item.key}
                 href={item.href}
                 className="public-nav-link">
                 {item.label}
               </Link>
             ))}
-            <details className="public-nav-dropdown">
-              <summary className="public-nav-link cursor-pointer list-none">
-                所有公開服務
-                <ChevronDown size={15} aria-hidden />
-              </summary>
-              <div className="public-nav-dropdown-panel">
-                {PUBLIC_NAV_GROUPS.map((group) => (
-                  <section key={group.label}>
-                    <p className="public-nav-dropdown-label">{group.label}</p>
-                    <div className="grid gap-1">
-                      {group.items.map((item) => {
-                        const Icon = item.icon;
-                        return (
-                          <Link key={item.href} href={item.href} className="public-nav-dropdown-link">
-                            <span className="public-nav-dropdown-icon">
-                              <Icon size={17} aria-hidden />
-                            </span>
-                            <span>
-                              <span className="block text-sm font-semibold">{item.label}</span>
-                              <span className="mt-0.5 block text-xs text-[var(--public-muted)]">
-                                {item.description}
+            {menuGroups.length > 0 && (
+              <details
+                className="public-nav-dropdown"
+                ref={menuRef}
+                onToggle={(event) => {
+                  if ((event.currentTarget as HTMLDetailsElement).open) setOpen(false);
+                }}
+              >
+                <summary className="public-nav-link cursor-pointer list-none">
+                  所有公開服務
+                  <ChevronDown size={15} aria-hidden />
+                </summary>
+                <div className="public-nav-dropdown-panel">
+                  {menuGroups.map((group) => (
+                    <section key={group.id}>
+                      <p className="public-nav-dropdown-label">
+                        <span>{group.meta.label}</span>
+                        {group.meta.hint && (
+                          <span className="public-nav-dropdown-hint">{group.meta.hint}</span>
+                        )}
+                      </p>
+                      <div className="grid gap-0.5">
+                        {group.items.map((item) => {
+                          const Icon = item.icon;
+                          return (
+                            <Link key={item.key} href={item.href} className="public-nav-dropdown-link">
+                              <span className="public-nav-dropdown-icon">
+                                <Icon size={17} aria-hidden />
                               </span>
-                            </span>
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  </section>
-                ))}
-              </div>
-            </details>
+                              <span className="min-w-0">
+                                <span className="flex items-center gap-1.5">
+                                  <span className="text-sm font-semibold">{item.label}</span>
+                                  {item.guestUsable && !group.meta.hint && (
+                                    <span className="public-nav-badge">免登入</span>
+                                  )}
+                                </span>
+                                <span className="mt-0.5 block text-xs text-[var(--public-muted)]">
+                                  {item.description}
+                                </span>
+                              </span>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              </details>
+            )}
           </nav>
           <div className="public-header-actions">
             <button
@@ -220,7 +235,10 @@ export default function PublicSiteShell({
             <button
               type="button"
               className="public-menu-button"
-              onClick={() => setOpen((value) => !value)}
+              onClick={() => {
+                if (menuRef.current) menuRef.current.open = false;
+                setOpen((value) => !value);
+              }}
               aria-expanded={open}
               aria-controls="public-mobile-nav"
               aria-label={open ? "關閉導覽" : "開啟導覽"}>
@@ -233,35 +251,50 @@ export default function PublicSiteShell({
             id="public-mobile-nav"
             className="public-mobile-nav"
             aria-label="公開網站行動導覽">
-            <div className="mb-3 px-1 text-xs font-semibold uppercase text-[var(--public-muted)]">
-              HCCA Navigation
-            </div>
-            <div className="grid gap-5">
-              {nav.map((item) => (
+            <div className="grid gap-2">
+              {topLevel.map((item) => (
                 <Link
-                  key={item.href}
+                  key={item.key}
                   href={item.href}
                   onClick={() => setOpen(false)}
                   className="public-mobile-link">
                   {item.label}
                 </Link>
               ))}
-              {PUBLIC_NAV_GROUPS.map((group) => (
-                <section key={group.label}>
-                  <p className="mb-2 px-1 text-xs font-semibold text-[var(--public-muted)]">
-                    {group.label}
+            </div>
+            <div className="mt-4 grid gap-4">
+              {menuGroups.map((group) => (
+                <section key={group.id}>
+                  <p className="public-mobile-group-label">
+                    <span>{group.meta.label}</span>
+                    {group.meta.hint && (
+                      <span className="public-nav-dropdown-hint">{group.meta.hint}</span>
+                    )}
                   </p>
                   <div className="grid gap-2 sm:grid-cols-2">
-                    {group.items.map((item) => (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        onClick={() => setOpen(false)}
-                        className="public-mobile-link"
-                      >
-                        {item.label}
-                      </Link>
-                    ))}
+                    {group.items.map((item) => {
+                      const Icon = item.icon;
+                      return (
+                        <Link
+                          key={item.key}
+                          href={item.href}
+                          onClick={() => setOpen(false)}
+                          className="public-mobile-service-link"
+                        >
+                          <span className="public-nav-dropdown-icon">
+                            <Icon size={16} aria-hidden />
+                          </span>
+                          <span className="min-w-0">
+                            <span className="flex items-center gap-1.5">
+                              <span className="truncate text-sm font-semibold">{item.label}</span>
+                              {item.guestUsable && !group.meta.hint && (
+                                <span className="public-nav-badge">免登入</span>
+                              )}
+                            </span>
+                          </span>
+                        </Link>
+                      );
+                    })}
                   </div>
                 </section>
               ))}
