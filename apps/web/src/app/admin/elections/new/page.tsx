@@ -46,7 +46,7 @@ export default function NewElectionPage() {
       <div>
         <h1 className="text-2xl font-bold">建立選舉</h1>
         <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-          開始開票後，候選人與票匭結構將固定
+          開始開票後，候選人／組合與票匭結構將固定
         </p>
       </div>
       <section className="card p-6 space-y-4">
@@ -61,15 +61,20 @@ export default function NewElectionPage() {
       </section>
       <section className="card p-6 space-y-4">
         <div className="flex justify-between">
-          <h2 className="font-semibold">候選人／選項</h2>
+          <div>
+            <h2 className="font-semibold">候選人／候選組合／選項</h2>
+            <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
+              聯合參選時，可在同一欄填寫完整組合與職位
+            </p>
+          </div>
           <button type="button" className="btn btn-secondary" onClick={() => setCandidates([...candidates, { name: "", number: candidates.length + 1, color: "#7c3aed" }])}>
-            新增候選人
+            新增候選人／組合
           </button>
         </div>
         {candidates.map((candidate, index) => (
           <div key={index} className="grid grid-cols-[80px_1fr_70px] gap-3">
             <input type="number" min={1} className="input" value={candidate.number} onChange={(e) => setCandidates(candidates.map((item, i) => i === index ? { ...item, number: Number(e.target.value) } : item))} />
-            <input required className="input" placeholder="候選人名稱" value={candidate.name} onChange={(e) => setCandidates(candidates.map((item, i) => i === index ? { ...item, name: e.target.value } : item))} />
+            <input required className="input" placeholder="例：王小明（主席）＋李小華（副主席）" value={candidate.name} onChange={(e) => setCandidates(candidates.map((item, i) => i === index ? { ...item, name: e.target.value } : item))} />
             <input type="color" className="input h-10 p-1" value={candidate.color} onChange={(e) => setCandidates(candidates.map((item, i) => i === index ? { ...item, color: e.target.value } : item))} />
           </div>
         ))}
