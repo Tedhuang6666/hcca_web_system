@@ -173,9 +173,7 @@ async def test_manual_member_can_be_added_and_promoted_to_cadre(
     sc = await _make_class(db_session, start="11501", end="11510")
     user = await _make_user(db_session, student_id=None)
 
-    await class_svc.add_manual_member(
-        db_session, sc, data=ClassManualMemberCreate(user_id=user.id)
-    )
+    await class_svc.add_manual_member(db_session, sc, data=ClassManualMemberCreate(user_id=user.id))
     await class_svc.add_cadre(db_session, sc, user_id=user.id)
 
     members = await class_svc.list_class_members(

@@ -5,7 +5,7 @@
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from api.core.ip_blocklist import block as ip_block
 from api.core.security import redis_client
@@ -18,7 +18,7 @@ _AUTO_BLOCK_TTL_SECONDS = 3600
 async def record_login(user_id: str, ip: str, user_agent: str | None = None) -> None:
     """記錄用戶登入"""
     key = f"login:{user_id}"
-    value = f"{ip}|{user_agent or 'unknown'}|{datetime.utcnow().isoformat()}"
+    value = f"{ip}|{user_agent or 'unknown'}|{datetime.now(UTC).isoformat()}"
     await redis_client.set(key, value, ex=30 * 24 * 3600)  # 保留 30 天
 
 
@@ -44,7 +44,9 @@ async def check_suspicious_login(user_id: str, current_ip: str) -> tuple[bool, s
 
         # 同一用戶在短時間內（< 30 分鐘）從不同地點登入 → 可疑
         last_time = datetime.fromisoformat(last_time_str)
-        time_diff = datetime.utcnow() - last_time
+        if last_time.tzinfo is None:
+            last_time = last_time.replace(tzinfo=UTC)
+        time_diff = datetime.now(UTC) - last_time
         if time_diff < timedelta(minutes=30):
             reason = f"短時間內 IP 改變：{last_ip} → {current_ip}（{time_diff.total_seconds() / 60:.0f} 分鐘）"
             return True, reason

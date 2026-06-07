@@ -36,8 +36,8 @@ from api.main import app  # noqa: E402
 from api.core.database import Base, get_db  # noqa: E402
 
 
-@pytest.fixture(autouse=True)
-def _isolate_redis_client_per_test():
+@pytest_asyncio.fixture(autouse=True)
+async def _isolate_redis_client_per_test():
     """每個 test 前替換 redis_client 的 connection_pool。
 
     `redis_client` 是 module-level singleton，aioredis 的 connection 在首次 await
@@ -63,7 +63,7 @@ def _isolate_redis_client_per_test():
         yield
     finally:
         with contextlib.suppress(Exception):
-            fresh_pool.disconnect(inuse_connections=True)
+            await fresh_pool.disconnect(inuse_connections=True)
         _security.redis_client.connection_pool = old_pool
 
 

@@ -12,7 +12,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import time
 
@@ -195,58 +194,49 @@ async def _dispatch_all_channels(
     body: str,
     severity: str,
 ) -> None:
-    """同時寫三條 outbox event；用 gather 增加吞吐但不阻塞單一失敗。"""
+    """依序寫入各通知通道，避免同一 AsyncSession 並行 flush。"""
     from api.services import outbox
 
-    coros = []
     # 1. Discord 頻道告警
     channel_id = settings.MODULE_ALERT_DISCORD_CHANNEL_ID
     if channel_id:
-        coros.append(
-            outbox.emit(
-                session,
-                event_type="discord.channel_alert",
-                payload={
-                    "channel_id": channel_id,
-                    "title": title,
-                    "body": body,
-                    "severity": severity,
-                    "module_id": module_id,
-                },
-            )
+        await outbox.emit(
+            session,
+            event_type="discord.channel_alert",
+            payload={
+                "channel_id": channel_id,
+                "title": title,
+                "body": body,
+                "severity": severity,
+                "module_id": module_id,
+            },
         )
     # 2. Email 給 SUPERUSER_EMAILS
     if settings.SUPERUSER_EMAILS:
         for addr in settings.SUPERUSER_EMAILS:
-            coros.append(
-                outbox.emit(
-                    session,
-                    event_type="email.send",
-                    payload={
-                        "to": addr,
-                        "subject": title,
-                        "body": body,
-                        "module_id": module_id,
-                        "severity": severity,
-                    },
-                )
+            await outbox.emit(
+                session,
+                event_type="email.send",
+                payload={
+                    "to": addr,
+                    "subject": title,
+                    "body": body,
+                    "module_id": module_id,
+                    "severity": severity,
+                },
             )
     # 3. admin UI 通知中心
-    coros.append(
-        outbox.emit(
-            session,
-            event_type="admin.notification",
-            payload={
-                "title": title,
-                "body": body,
-                "module_id": module_id,
-                "severity": severity,
-                "category": "module_circuit",
-            },
-        )
+    await outbox.emit(
+        session,
+        event_type="admin.notification",
+        payload={
+            "title": title,
+            "body": body,
+            "module_id": module_id,
+            "severity": severity,
+            "category": "module_circuit",
+        },
     )
-    if coros:
-        await asyncio.gather(*coros, return_exceptions=True)
 
 
 async def _emit_recovered_notification(module_id: str) -> None:

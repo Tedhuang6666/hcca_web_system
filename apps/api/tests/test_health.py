@@ -3,7 +3,7 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-import api
+from api import main as api_main
 from api.main import app
 
 
@@ -30,7 +30,9 @@ async def test_liveness_check() -> None:
 
 
 @pytest.mark.asyncio
-async def test_readiness_check_returns_503_when_dependency_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_readiness_check_returns_503_when_dependency_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """測試 /ready 會在 DB 或 Redis 不可用時回報 degraded。"""
 
     async def db_ok() -> tuple[bool, str | None]:
@@ -39,8 +41,8 @@ async def test_readiness_check_returns_503_when_dependency_fails(monkeypatch: py
     async def redis_failed() -> tuple[bool, str | None]:
         return False, "ConnectionError"
 
-    monkeypatch.setattr(api, "_check_database", db_ok)
-    monkeypatch.setattr(api, "_check_redis", redis_failed)
+    monkeypatch.setattr(api_main, "_check_database", db_ok)
+    monkeypatch.setattr(api_main, "_check_redis", redis_failed)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/ready")

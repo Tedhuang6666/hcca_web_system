@@ -39,6 +39,7 @@ def test_in_quiet_hours_simple_window_inside():
     with patch("api.services.discord_bot.datetime") as mock_dt:
         from datetime import UTC as real_utc
         from datetime import datetime as real_datetime
+
         mock_dt.now.return_value = real_datetime(2026, 6, 1, 12, 0, tzinfo=real_utc)
         # 模擬 datetime.now(ZoneInfo("Asia/Taipei")).time() = 20:00 → 不在 09:00-18:00
         # 為避免複雜化，這裡直接用 simple window 並僅驗證邊界邏輯

@@ -131,7 +131,7 @@ celery_app.conf.beat_schedule = {
         "task": "api.services.meal_tasks.auto_close_meal_schedules",
         "schedule": 300.0,
     },
-    # 每 30 分鐘檢查未取餐（Phase1: 1h後寄提醒, Phase2: 4h後標記 no_show）
+    # 每 30 分鐘檢查未取餐：結單 1 小時後提醒，4 小時後標記 no_show。
     "check-meal-no-shows-every-30min": {
         "task": "api.services.meal_tasks.check_meal_no_shows",
         "schedule": 1800.0,

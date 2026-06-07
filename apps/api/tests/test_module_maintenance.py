@@ -21,16 +21,22 @@ from api.models.user import User
 
 @pytest_asyncio.fixture(autouse=True)
 async def _clean_module_state():
-    """每個 test 後清掉所有模組維護 / 重置旗標與 per-worker 計數，避免跨 test 污染。"""
+    """每個 test 前後清掉模組狀態，避免 Redis 與 per-worker 計數跨執行污染。"""
+
+    async def clear() -> None:
+        for mid in MODULE_IDS:
+            await maint.clear_module_maintenance(mid)
+            await module_health.clear_trip_count(mid)
+            with contextlib.suppress(Exception):
+                await redis_client.delete(maint.MODULE_RESET_PREFIX + mid)
+        maint.clear_cache()
+        module_health._events.clear()
+        module_health._tripped_until.clear()
+        module_health._trip_history.clear()
+
+    await clear()
     yield
-    for mid in MODULE_IDS:
-        await maint.clear_module_maintenance(mid)
-        with contextlib.suppress(Exception):
-            await redis_client.delete(maint.MODULE_RESET_PREFIX + mid)
-    maint.clear_cache()
-    module_health._events.clear()
-    module_health._tripped_until.clear()
-    module_health._trip_history.clear()
+    await clear()
 
 
 def _override_user(user: User) -> None:
@@ -149,15 +155,12 @@ async def test_module_circuit_trips_after_threshold_5xx() -> None:
     assert state is not None
     assert state["on"] is True
     assert state["source"] == "auto"
-    assert module_health.recent_trip_events(mod) == [
-        {
-            "timestamp": module_health.recent_trip_events(mod)[0]["timestamp"],
-            "severity": "NORMAL",
-            "trip_count": 1,
-            "cooldown_s": settings.MODULE_CIRCUIT_COOLDOWN_BASE_SECONDS,
-            "escalated": False,
-        }
-    ]
+    events = module_health.recent_trip_events(mod)
+    assert len(events) == 1
+    assert events[0]["severity"] == "NORMAL"
+    assert events[0]["trip_count"] == 1
+    assert events[0]["cooldown_s"] == settings.MODULE_CIRCUIT_COOLDOWN_BASE_SECONDS
+    assert events[0]["escalated"] is False
 
 
 async def test_restart_module_clears_maintenance_and_resets_window(

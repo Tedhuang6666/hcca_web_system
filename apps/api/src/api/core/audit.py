@@ -2,7 +2,7 @@
 
 import logging
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -63,7 +63,7 @@ class SecurityAuditMiddleware(BaseHTTPMiddleware):
         log_fn(
             "Security audit: sensitive operation",
             extra={
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "method": request.method,
                 "path": request.url.path,
                 "user_id": user_id,
