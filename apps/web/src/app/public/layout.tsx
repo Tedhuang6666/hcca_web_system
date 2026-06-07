@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 
 import PublicSiteShell from "@/components/site/PublicSiteShell";
 import { serverApiUrl } from "@/lib/config";
+
+export const dynamic = "force-dynamic";
 import type { PublicSiteBundleOut } from "@/lib/types";
 
 async function fetchPublicSite(): Promise<PublicSiteBundleOut | null> {
