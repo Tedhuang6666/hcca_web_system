@@ -1,26 +1,68 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Database, ExternalLink, Landmark, Megaphone, UsersRound } from "lucide-react";
+import {
+  ArrowRight,
+  BellRing,
+  Database,
+  ExternalLink,
+  FileClock,
+  Landmark,
+  Megaphone,
+  Radio,
+  UsersRound,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 
 import BrandEmblem from "@/components/brand/BrandEmblem";
 import PublicSiteShell from "@/components/site/PublicSiteShell";
 import MarkdownBlock from "@/components/site/MarkdownBlock";
-import { siteApi } from "@/lib/api";
+import { announcementsApi, siteApi } from "@/lib/api";
+import { apiUrl } from "@/lib/config";
 import { sanitizeCustomCss } from "@/lib/sanitize";
-import type { PublicSiteBundleOut } from "@/lib/types";
+import type { AnnouncementListItem, PublicSiteBundleOut } from "@/lib/types";
+
+type PublicElection = {
+  id: string;
+  title: string;
+  status: "live" | "paused" | "closed";
+  updated_at: string;
+};
 
 export default function PublicHomePage() {
   const [data, setData] = useState<PublicSiteBundleOut | null>(null);
+  const [announcements, setAnnouncements] = useState<AnnouncementListItem[]>([]);
+  const [elections, setElections] = useState<PublicElection[]>([]);
 
   useEffect(() => {
-    siteApi.public().then(setData).catch(() => setData(null));
+    Promise.all([
+      siteApi.public(),
+      announcementsApi.list({ limit: 4 }),
+      fetch(apiUrl("/elections/public"), { credentials: "include" }).then((response) =>
+        response.ok ? response.json() as Promise<PublicElection[]> : [],
+      ),
+    ])
+      .then(([bundle, nextAnnouncements, nextElections]) => {
+        setData(bundle);
+        setAnnouncements(nextAnnouncements);
+        setElections(nextElections);
+      })
+      .catch(() => {
+        setData(null);
+        setAnnouncements([]);
+        setElections([]);
+      });
   }, []);
 
   const settings = data?.settings;
   const links = data?.links.slice(0, 4) ?? [];
   const officers = data?.featured_officers ?? [];
+  const activeElection = elections.find((election) => election.status === "live")
+    ?? elections.find((election) => election.status === "paused");
+  const latestAnnouncements = announcements.slice(0, 2);
+  const recentlyUpdatedPages = [...(data?.nav_pages ?? [])]
+    .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+    .slice(0, 2);
   const emblemAlt = settings?.site_logo_alt || `${settings?.site_title ?? "班聯會"}會徽`;
 
   return (
@@ -63,6 +105,90 @@ export default function PublicHomePage() {
           </div>
         </div>
       </section>
+
+      {(activeElection || latestAnnouncements.length > 0 || recentlyUpdatedPages.length > 0) && (
+        <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6" aria-labelledby="public-now-title">
+          <div className="mb-5 flex items-end justify-between gap-4">
+            <div>
+              <p className="public-section-kicker">Now & New</p>
+              <h2 id="public-now-title" className="mt-2 text-2xl font-semibold sm:text-3xl">
+                現在發生中
+              </h2>
+            </div>
+            <Link href="/news" className="public-text-link">查看全部公告</Link>
+          </div>
+
+          <div className={`grid gap-4 ${activeElection ? "lg:grid-cols-[1.15fr_0.85fr]" : ""}`}>
+            {activeElection && (
+              <Link
+                href={`/live/elections/${activeElection.id}`}
+                className="group overflow-hidden rounded-2xl bg-[#173654] p-6 text-[#f8f3e5] shadow-lg shadow-slate-950/10 transition-colors hover:bg-[#1d4265] sm:p-8"
+              >
+                <div className="flex items-center justify-between gap-4">
+                  <span className="inline-flex min-h-9 items-center gap-2 rounded-full bg-emerald-400/10 px-3 text-xs font-semibold text-emerald-300">
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" aria-hidden />
+                    {activeElection.status === "live" ? "即時開票中" : "開票暫停"}
+                  </span>
+                  <Radio size={22} className="text-[#e8c970]" aria-hidden />
+                </div>
+                <h3 className="mt-8 font-serif text-2xl font-semibold leading-snug sm:text-3xl">
+                  {activeElection.title}
+                </h3>
+                <p className="mt-3 max-w-xl text-sm leading-7 text-[#cdd8e0]">
+                  查看候選人得票、整體開票率與各票匭進度，頁面會自動同步現場紀錄。
+                </p>
+                <span className="mt-7 inline-flex items-center gap-2 text-sm font-semibold text-[#e8c970]">
+                  前往即時開票
+                  <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" aria-hidden />
+                </span>
+              </Link>
+            )}
+
+            <div className="rounded-2xl border border-[var(--public-border)] bg-[var(--public-surface)] p-5 sm:p-6">
+              <div className="flex items-center gap-2">
+                <BellRing size={18} className="text-[var(--public-accent)]" aria-hidden />
+                <h3 className="font-semibold">最新消息</h3>
+              </div>
+              <div className="mt-4 divide-y divide-[var(--public-border)]">
+                {latestAnnouncements.map((item) => (
+                  <Link
+                    key={item.id}
+                    href={`/news/${item.id}`}
+                    className="group flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold group-hover:text-[var(--public-accent)]">
+                        {item.title}
+                      </span>
+                      <time className="mt-1 block text-xs text-[var(--public-muted)]">
+                        {new Date(item.published_at ?? item.created_at).toLocaleDateString("zh-TW")}
+                      </time>
+                    </span>
+                    <ArrowRight size={15} className="mt-1 shrink-0 text-[var(--public-muted)]" aria-hidden />
+                  </Link>
+                ))}
+                {recentlyUpdatedPages.map((page) => (
+                  <Link
+                    key={page.id}
+                    href={`/pages/${page.slug}`}
+                    className="group flex items-start gap-3 py-3 first:pt-0 last:pb-0"
+                  >
+                    <FileClock size={17} className="mt-0.5 shrink-0 text-[var(--public-accent)]" aria-hidden />
+                    <span>
+                      <span className="block text-sm font-semibold group-hover:text-[var(--public-accent)]">
+                        {page.title}
+                      </span>
+                      <span className="mt-1 block text-xs text-[var(--public-muted)]">
+                        公開頁面最近更新
+                      </span>
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="public-quick-grid" aria-label="公開網站主要入口">
         {[

@@ -1,15 +1,25 @@
 "use client";
 
+import Link from "next/link";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  CircleAlert,
+  PauseCircle,
+  Radio,
+  RefreshCw,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import BrandEmblem from "@/components/brand/BrandEmblem";
 import { electionsApi } from "@/lib/api";
 import { wsBase } from "@/lib/config";
 import type { ElectionLiveSummary } from "@/lib/types";
 
-const statusText = {
-  draft: "尚未開始",
-  live: "開票進行中",
-  paused: "暫停開票",
-  closed: "開票完成",
+const statusInfo = {
+  draft: { label: "尚未開始", icon: CircleAlert, tone: "text-slate-300 bg-white/8" },
+  live: { label: "開票進行中", icon: Radio, tone: "text-emerald-300 bg-emerald-400/10" },
+  paused: { label: "暫停開票", icon: PauseCircle, tone: "text-amber-300 bg-amber-400/10" },
+  closed: { label: "開票完成", icon: CheckCircle2, tone: "text-sky-300 bg-sky-400/10" },
 };
 
 export default function LiveElectionBoard({
@@ -57,90 +67,180 @@ export default function LiveElectionBoard({
 
   if (!summary) {
     return (
-      <div className="min-h-screen grid place-items-center bg-slate-950 text-white">
-        正在載入開票資料…
+      <div className="grid min-h-screen place-items-center bg-[#0d1f31] px-6 text-[#f8f3e5]">
+        <div className="text-center">
+          <RefreshCw className="mx-auto animate-spin text-[#e8c970]" size={28} aria-hidden />
+          <p className="mt-4 text-sm text-[#cdd8e0]">正在載入開票資料...</p>
+        </div>
       </div>
     );
   }
 
   const sortedCandidates = [...summary.candidates].sort((a, b) => b.votes - a.votes);
+  const state = statusInfo[summary.status];
+  const StatusIcon = state.icon;
+  const totalBallotBoxes = summary.ballot_boxes.length;
+  const completedBallotBoxes = summary.ballot_boxes.filter((box) => box.status === "locked").length;
+
   return (
     <main
-      className={`min-h-screen bg-slate-950 text-white ${
-        vertical ? "w-full max-w-[1080px] mx-auto" : ""
+      className={`min-h-screen bg-[#0d1f31] text-[#f8f3e5] ${
+        vertical ? "mx-auto w-full max-w-[1080px]" : ""
       }`}
     >
-      <div className={vertical ? "min-h-screen px-14 py-16 flex flex-col" : "p-8 lg:p-12"}>
-        <header className="flex items-start justify-between gap-6 border-b border-white/15 pb-7">
-          <div>
-            <p className="text-cyan-300 font-semibold tracking-[0.22em] uppercase">
-              HCCA Election Live
-            </p>
-            <h1 className={`${vertical ? "text-5xl" : "text-4xl lg:text-6xl"} font-bold mt-3`}>
-              {summary.title}
-            </h1>
+      <div
+        className={
+          vertical
+            ? "flex min-h-screen flex-col px-10 py-12 sm:px-14 sm:py-16"
+            : "mx-auto max-w-[1480px] px-4 py-5 sm:px-7 sm:py-8 lg:px-10 lg:py-10"
+        }
+      >
+        <nav className="mb-6 flex items-center justify-between gap-4">
+          <Link
+            href="/public/elections"
+            className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-white/15 px-3 text-sm font-medium text-[#cdd8e0] transition-colors hover:bg-white/8 hover:text-white"
+          >
+            <ArrowLeft size={16} aria-hidden />
+            所有開票場次
+          </Link>
+          <div className="flex items-center gap-2 text-xs text-[#91a5b5]">
+            <BrandEmblem size={30} priority />
+            <span className="hidden sm:inline">HCCA 即時開票</span>
           </div>
-          <div className="text-right">
-            <div className="flex items-center justify-end gap-2 text-sm text-slate-300">
-              <span className={`h-2.5 w-2.5 rounded-full ${connected ? "bg-emerald-400" : "bg-amber-400"}`} />
-              {connected ? "即時連線" : "重新連線中"}
+        </nav>
+
+        <header className="rounded-2xl border border-white/10 bg-[#173654] p-5 shadow-2xl shadow-black/20 sm:p-7 lg:p-8">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#e8c970]">
+                HCCA Election Live
+              </p>
+              <h1 className={`${vertical ? "text-5xl" : "text-3xl sm:text-4xl lg:text-5xl"} mt-3 font-semibold leading-tight`}>
+                {summary.title}
+              </h1>
+              <p className="mt-3 text-sm leading-6 text-[#aebeca]">
+                票數由現場開票事件即時計算，頁面會自動更新。
+              </p>
             </div>
-            <p className="mt-2 font-semibold text-lg">{statusText[summary.status]}</p>
+            <div className="flex flex-wrap items-center gap-3 lg:justify-end">
+              <span className={`inline-flex min-h-10 items-center gap-2 rounded-full px-4 text-sm font-semibold ${state.tone}`}>
+                <StatusIcon size={16} aria-hidden />
+                {state.label}
+              </span>
+              <span className="inline-flex min-h-10 items-center gap-2 rounded-full bg-white/8 px-4 text-sm text-[#cdd8e0]">
+                <span
+                  className={`h-2.5 w-2.5 rounded-full ${connected ? "bg-emerald-400" : "bg-amber-400"}`}
+                  aria-hidden
+                />
+                {connected ? "即時連線" : "重新連線中"}
+              </span>
+            </div>
           </div>
+          {summary.progress_percentage !== null && (
+            <div className="mt-7">
+              <div className="flex items-center justify-between gap-4 text-sm">
+                <span className="text-[#aebeca]">整體開票率</span>
+                <strong className="text-lg tabular-nums text-[#e8c970]">
+                  {summary.progress_percentage.toFixed(1)}%
+                </strong>
+              </div>
+              <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full bg-[#e8c970] transition-[width] duration-500"
+                  style={{ width: `${Math.min(summary.progress_percentage, 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
         </header>
 
-        <section className={`${vertical ? "mt-12 space-y-6" : "mt-10 grid lg:grid-cols-[1.7fr_1fr] gap-8"}`}>
-          <div className="space-y-5">
+        <section className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[
+            { label: "已開票", value: summary.total_votes.toLocaleString("zh-TW") },
+            { label: "有效票", value: summary.valid_votes.toLocaleString("zh-TW") },
+            { label: "廢票", value: summary.invalid_votes.toLocaleString("zh-TW") },
+            { label: "完成票匭", value: `${completedBallotBoxes} / ${totalBallotBoxes}` },
+          ].map((item) => (
+            <div key={item.label} className="rounded-xl border border-white/10 bg-white/[0.045] p-4 sm:p-5">
+              <p className="text-xs text-[#91a5b5]">{item.label}</p>
+              <p className="mt-2 text-2xl font-semibold tabular-nums sm:text-3xl">{item.value}</p>
+            </div>
+          ))}
+        </section>
+
+        <section
+          className={
+            vertical
+              ? "mt-8 flex flex-1 flex-col gap-6"
+              : "mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.7fr)]"
+          }
+        >
+          <div className="space-y-3">
+            <div className="mb-4 flex items-end justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold tracking-[0.16em] text-[#e8c970]">RESULTS</p>
+                <h2 className="mt-1 text-xl font-semibold">候選人得票</h2>
+              </div>
+              <p className="text-xs text-[#91a5b5]">依目前票數排序</p>
+            </div>
             {sortedCandidates.map((candidate, index) => {
               const leader = candidate.candidate_id === summary.leader_candidate_id;
+              const barWidth = summary.valid_votes > 0 ? candidate.percentage : 0;
               return (
                 <article
                   key={candidate.candidate_id}
-                  className={`rounded-3xl border p-6 ${leader ? "border-cyan-300 bg-cyan-300/10" : "border-white/15 bg-white/5"}`}
+                  className={`overflow-hidden rounded-2xl border p-4 sm:p-5 ${
+                    leader
+                      ? "border-[#e8c970]/60 bg-[#e8c970]/[0.08]"
+                      : "border-white/10 bg-white/[0.045]"
+                  }`}
                 >
-                  <div className="flex items-center gap-5">
+                  <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-4 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
                     <div
-                      className="h-14 w-14 rounded-2xl grid place-items-center font-bold text-xl"
-                      style={{ background: candidate.color }}
+                      className="grid h-12 w-12 place-items-center rounded-xl text-lg font-bold text-white shadow-lg sm:h-14 sm:w-14"
+                      style={{ backgroundColor: candidate.color }}
+                      aria-label={`${candidate.number} 號`}
                     >
                       {candidate.number}
                     </div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
                         <div>
                           {candidate.members.length > 0 ? candidate.members.map((member) => (
                             <p key={member.id} className="flex flex-wrap items-baseline gap-2">
-                              <span className="text-sm text-slate-400">
+                              <span className="text-xs font-medium text-[#91a5b5] sm:text-sm">
                                 {member.position}
                               </span>
-                              <span className={`${vertical ? "text-3xl" : "text-2xl"} font-bold`}>
+                              <span className={`${vertical ? "text-3xl" : "text-lg sm:text-2xl"} font-semibold`}>
                                 {member.name}
                               </span>
                             </p>
                           )) : (
-                            <h2 className={`${vertical ? "text-3xl" : "text-2xl"} font-bold`}>
+                            <h3 className={`${vertical ? "text-3xl" : "text-lg sm:text-2xl"} truncate font-semibold`}>
                               {candidate.name}
-                            </h2>
+                            </h3>
                           )}
                         </div>
-                        {leader && index === 0 && (
-                          <span className="rounded-full bg-cyan-300 px-3 py-1 text-sm font-bold text-slate-950">
-                            領先
+                        {leader && index === 0 && summary.status !== "closed" && (
+                          <span className="rounded-full bg-[#e8c970] px-2.5 py-1 text-[11px] font-bold text-[#173654]">
+                            目前領先
                           </span>
                         )}
                       </div>
-                      <div className="mt-3 h-3 overflow-hidden rounded-full bg-white/10">
+                      <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-white/10">
                         <div
-                          className="h-full rounded-full transition-all duration-500"
-                          style={{ width: `${candidate.percentage}%`, background: candidate.color }}
+                          className="h-full rounded-full transition-[width] duration-500"
+                          style={{ width: `${barWidth}%`, backgroundColor: candidate.color }}
                         />
                       </div>
                     </div>
-                    <div className="text-right min-w-32">
-                      <p className={`${vertical ? "text-5xl" : "text-4xl"} font-black tabular-nums`}>
-                        {candidate.votes}
+                    <div className="col-span-2 flex items-baseline justify-end gap-2 sm:col-span-1 sm:block sm:min-w-32 sm:text-right">
+                      <p className={`${vertical ? "text-5xl" : "text-3xl sm:text-4xl"} font-semibold tabular-nums`}>
+                        {candidate.votes.toLocaleString("zh-TW")}
                       </p>
-                      <p className="text-lg text-slate-300">{candidate.percentage.toFixed(1)}%</p>
+                      <p className="text-sm tabular-nums text-[#aebeca] sm:mt-1 sm:text-base">
+                        {candidate.percentage.toFixed(1)}%
+                      </p>
                     </div>
                   </div>
                 </article>
@@ -148,48 +248,52 @@ export default function LiveElectionBoard({
             })}
           </div>
 
-          <aside className={`${vertical ? "mt-auto pt-12" : ""} space-y-5`}>
-            <div className="rounded-3xl bg-white/5 border border-white/15 p-6">
-              <p className="text-slate-400">目前開票票匭</p>
-              <p className="mt-2 text-2xl font-bold">
-                {summary.current_ballot_boxes.join("、") || "無"}
+          <aside className={`${vertical ? "mt-auto" : ""} space-y-4`}>
+            <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-5">
+              <p className="text-xs font-semibold tracking-[0.16em] text-[#e8c970]">BALLOT BOXES</p>
+              <h2 className="mt-1 text-lg font-semibold">票匭進度</h2>
+              <div className="mt-4 space-y-3">
+                {summary.ballot_boxes.map((box) => (
+                  <div key={box.ballot_box_id} className="rounded-xl bg-black/10 p-3.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="truncate text-sm font-medium">{box.name}</p>
+                      <span className="shrink-0 text-xs tabular-nums text-[#aebeca]">
+                        {box.counted_votes.toLocaleString("zh-TW")}
+                        {box.expected_total_votes !== null && ` / ${box.expected_total_votes.toLocaleString("zh-TW")}`}
+                      </span>
+                    </div>
+                    {box.progress_percentage !== null && (
+                      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
+                        <div
+                          className="h-full rounded-full bg-[#e8c970]"
+                          style={{ width: `${Math.min(box.progress_percentage, 100)}%` }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-5">
+              <p className="text-xs text-[#91a5b5]">目前開票票匭</p>
+              <p className="mt-2 text-base font-semibold leading-7">
+                {summary.current_ballot_boxes.join("、") || "目前沒有票匭正在開票"}
               </p>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="rounded-3xl bg-white/5 border border-white/15 p-6">
-                <p className="text-slate-400">已開票</p>
-                <p className="mt-2 text-3xl font-black tabular-nums">
-                  {summary.total_votes}
-                  {summary.expected_total_votes !== null && (
-                    <span className="text-lg text-slate-400"> / {summary.expected_total_votes}</span>
-                  )}
+              {summary.expected_total_votes !== null && (
+                <p className="mt-3 text-xs text-[#91a5b5]">
+                  預計總票數 {summary.expected_total_votes.toLocaleString("zh-TW")}
                 </p>
-              </div>
-              <div className="rounded-3xl bg-white/5 border border-white/15 p-6">
-                <p className="text-slate-400">廢票</p>
-                <p className="mt-2 text-3xl font-black tabular-nums">{summary.invalid_votes}</p>
-              </div>
+              )}
             </div>
-            {summary.progress_percentage !== null && (
-              <div className="rounded-3xl bg-white/5 border border-white/15 p-6">
-                <div className="flex justify-between">
-                  <span className="text-slate-400">整體開票率</span>
-                  <strong>{summary.progress_percentage.toFixed(1)}%</strong>
-                </div>
-                <div className="mt-3 h-4 rounded-full bg-white/10 overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-cyan-300 transition-all"
-                    style={{ width: `${Math.min(summary.progress_percentage, 100)}%` }}
-                  />
-                </div>
-              </div>
-            )}
           </aside>
         </section>
 
-        <footer className={`${vertical ? "mt-10" : "mt-8"} flex justify-between text-sm text-slate-400`}>
-          <span>資料由開票事件紀錄即時計算</span>
-          <span>最後更新 {new Date(summary.last_updated_at).toLocaleTimeString("zh-TW")}</span>
+        <footer className={`${vertical ? "mt-10" : "mt-6"} flex flex-col gap-2 border-t border-white/10 pt-5 text-xs text-[#91a5b5] sm:flex-row sm:items-center sm:justify-between`}>
+          <span>公開數據僅呈現已登錄的開票事件</span>
+          <span>
+            最後更新 {new Date(summary.last_updated_at).toLocaleString("zh-TW")}
+          </span>
         </footer>
       </div>
     </main>

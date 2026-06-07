@@ -59,6 +59,11 @@ async def list_elections(session: DbDep) -> list[Election]:
     return await election_svc.list_elections(session)
 
 
+@router.get("/public", response_model=list[ElectionListItem])
+async def list_public_elections(session: DbDep) -> list[Election]:
+    return await election_svc.list_public_elections(session)
+
+
 @router.post(
     "",
     response_model=ElectionOut,

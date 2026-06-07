@@ -72,6 +72,41 @@ async def test_create_election_preserves_candidate_member_order(
     assert [member.name for member in summary.candidates[0].members] == ["王小明", "李小華"]
 
 
+async def test_list_public_elections_excludes_drafts_and_private_elections(
+    db_session: AsyncSession,
+) -> None:
+    user = User(
+        id=uuid.uuid4(),
+        email="public-election-list@example.com",
+        display_name="公開選舉測試",
+        is_active=True,
+    )
+    db_session.add(user)
+    await db_session.commit()
+
+    async def create(title: str, *, is_public: bool) -> Election:
+        return await election_svc.create_election(
+            db_session,
+            ElectionCreate(
+                title=title,
+                is_public=is_public,
+                candidates=[CandidateCreate(name="候選人", number=1)],
+                ballot_boxes=[BallotBoxCreate(name="第一票匭", expected_total_votes=10)],
+            ),
+            user.id,
+        )
+
+    public_live = await create("公開開票", is_public=True)
+    await election_svc.set_election_status(db_session, public_live.id, ElectionStatus.LIVE)
+    await create("公開草稿", is_public=True)
+    private_live = await create("非公開開票", is_public=False)
+    await election_svc.set_election_status(db_session, private_live.id, ElectionStatus.LIVE)
+
+    elections = await election_svc.list_public_elections(db_session)
+
+    assert [election.id for election in elections] == [public_live.id]
+
+
 async def test_vote_events_are_aggregated_and_reversed_without_deletion(
     db_session: AsyncSession,
 ) -> None:

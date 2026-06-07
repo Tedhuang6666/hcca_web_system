@@ -6,6 +6,7 @@ import {
   Landmark,
   Megaphone,
   MessageSquareText,
+  Radio,
   Scale,
 } from "lucide-react";
 
@@ -27,6 +28,7 @@ const DATABASES = [
 ];
 
 const SERVICES = [
+  { href: "/public/elections", title: "即時開票", description: "查看公開選舉的即時票數、開票率與票匭進度。", icon: Radio },
   { href: "/news", title: "最新公告", description: "掌握班聯會最新消息與公開說明。", icon: Megaphone },
   { href: "/council-proposals", title: "議會提案", description: "查看學生代表大會提案與議事資訊。", icon: Landmark },
   { href: "/petitions/new", title: "提出陳情", description: "向自治組織反映問題並留下正式紀錄。", icon: MessageSquareText },
@@ -37,24 +39,38 @@ export default function PublicHomePage() {
   return (
     <div className="space-y-10 pb-8">
       <section className="overflow-hidden rounded-2xl border border-[var(--public-border)] bg-[var(--public-surface)]">
-        <div className="grid gap-8 px-6 py-10 sm:px-10 lg:grid-cols-[1.15fr_0.85fr] lg:items-end lg:py-14">
+        <div className="grid gap-8 px-6 py-9 sm:px-9 sm:py-11 lg:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.65fr)] lg:items-center">
           <div>
             <p className="public-section-kicker">Open Government</p>
-            <h1 className="mt-3 max-w-3xl font-serif text-3xl font-semibold leading-tight tracking-tight sm:text-5xl">
-              公開資訊，不該藏在登入頁後面。
+            <h1 className="mt-3 max-w-[13em] text-balance font-serif text-3xl font-semibold leading-[1.35] tracking-[-0.03em] sm:text-4xl xl:text-[2.75rem]">
+              公開資訊，不該藏在登入頁後面
             </h1>
-            <p className="mt-5 max-w-2xl text-base leading-8 text-[var(--public-secondary)]">
+            <p className="mt-5 max-w-2xl text-sm leading-7 text-[var(--public-secondary)] sm:text-base sm:leading-8">
               這裡集中提供法規、公文與自治參與服務。查詢公開資料不需要帳號，
               只有建立內部文件、審核與管理操作才需要登入。
             </p>
           </div>
-          <div className="rounded-xl bg-[var(--public-soft)] p-5">
-            <p className="text-sm font-semibold">你可以直接使用</p>
-            <ul className="mt-3 space-y-2 text-sm leading-6 text-[var(--public-secondary)]">
-              <li>查詢與分享已公開的法規、公文</li>
-              <li>閱讀公告、議會提案與自治資訊</li>
-              <li>提出陳情或評議聲請</li>
-            </ul>
+          <div className="rounded-2xl border border-[var(--public-border)] bg-[var(--public-soft)] p-3 sm:p-4">
+            <p className="px-2 pb-2 text-xs font-semibold tracking-[0.1em] text-[var(--public-muted)]">
+              無需登入即可使用
+            </p>
+            <div className="divide-y divide-[var(--public-border)]">
+              {[
+                ["01", "公開資料", "查詢法規、公文與附件"],
+                ["02", "自治資訊", "閱讀公告與議會提案"],
+                ["03", "公共參與", "提出陳情或評議聲請"],
+              ].map(([number, title, description]) => (
+                <div key={number} className="grid grid-cols-[2rem_1fr] gap-3 px-2 py-3.5">
+                  <span className="text-xs font-semibold text-[var(--public-accent)]">{number}</span>
+                  <span>
+                    <span className="block text-sm font-semibold">{title}</span>
+                    <span className="mt-0.5 block text-xs leading-5 text-[var(--public-secondary)]">
+                      {description}
+                    </span>
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>

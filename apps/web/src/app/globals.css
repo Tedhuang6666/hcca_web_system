@@ -605,6 +605,84 @@
   color: var(--public-accent);
 }
 
+.public-nav-dropdown {
+  position: relative;
+}
+
+.public-nav-dropdown summary::-webkit-details-marker {
+  display: none;
+}
+
+.public-nav-dropdown[open] > summary {
+  background: var(--public-accent-soft);
+  color: var(--public-accent);
+}
+
+.public-nav-dropdown[open] > summary svg {
+  transform: rotate(180deg);
+}
+
+.public-nav-dropdown summary svg {
+  margin-left: 0.35rem;
+  transition: transform 180ms ease;
+}
+
+.public-nav-dropdown-panel {
+  position: absolute;
+  top: calc(100% + 0.6rem);
+  right: 0;
+  display: grid;
+  width: min(46rem, calc(100vw - 2rem));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  border: 1px solid var(--public-border);
+  border-radius: 14px;
+  background: var(--public-surface);
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.2);
+  padding: 1rem;
+}
+
+[data-theme="dark"] .public-nav-dropdown-panel {
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+}
+
+.public-nav-dropdown-label {
+  margin-bottom: 0.45rem;
+  padding: 0 0.55rem;
+  color: var(--public-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.public-nav-dropdown-link {
+  display: grid;
+  min-height: 64px;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.65rem;
+  border-radius: 10px;
+  color: var(--public-text);
+  padding: 0.6rem;
+  text-decoration: none;
+  transition: background var(--transition), color var(--transition);
+}
+
+.public-nav-dropdown-link:hover,
+.public-nav-dropdown-link:focus-visible {
+  background: var(--public-soft);
+}
+
+.public-nav-dropdown-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--public-accent-soft);
+  color: var(--public-accent);
+}
+
 /* 公開站深層頁返回鈕：公開站無系統 Topbar，返回鈕由 PublicSiteShell 集中提供 */
 .public-back-link {
   display: inline-flex;

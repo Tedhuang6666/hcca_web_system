@@ -47,6 +47,18 @@ async def list_elections(session: AsyncSession) -> list[Election]:
     return list(result.scalars())
 
 
+async def list_public_elections(session: AsyncSession) -> list[Election]:
+    result = await session.execute(
+        select(Election)
+        .where(
+            Election.is_public.is_(True),
+            Election.status != ElectionStatus.DRAFT.value,
+        )
+        .order_by(Election.updated_at.desc(), Election.created_at.desc())
+    )
+    return list(result.scalars())
+
+
 async def create_election(
     session: AsyncSession, payload: ElectionCreate, created_by_id: uuid.UUID
 ) -> Election:
