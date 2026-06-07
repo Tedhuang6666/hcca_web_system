@@ -1,7 +1,7 @@
 """移除 Passkey 與 WebAuthn 資料表。
 
 Revision ID: 20260607010000
-Revises: 20260606goveventrules
+Revises: 20260607005000
 """
 
 from collections.abc import Sequence
@@ -11,7 +11,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "20260607010000"
-down_revision: str | Sequence[str] | None = "20260606goveventrules"
+down_revision: str | Sequence[str] | None = "20260607005000"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
