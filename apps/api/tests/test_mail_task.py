@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from api.services.mail import enqueue_email, send_email, send_email_now
+from api.services.mail import ResendAPIError, enqueue_email, send_email, send_email_now
 
 
 def _close_coro_and_return(coro, value: str = "email-id") -> str:  # noqa: ANN001
@@ -110,14 +110,35 @@ def test_send_email_retries_on_failure() -> None:
     mock_retry.assert_called_once()
 
 
+def test_send_email_does_not_retry_invalid_api_key() -> None:
+    error = ResendAPIError(401, "Resend API 金鑰無效")
+
+    def run_side_effect(coro):  # noqa: ANN001
+        coro.close()
+        if run_side_effect.calls == 0:
+            run_side_effect.calls += 1
+            raise error
+        return None
+
+    run_side_effect.calls = 0
+    with (
+        patch.object(send_email, "retry") as mock_retry,
+        patch("api.services.mail.asyncio.run", side_effect=run_side_effect),
+        pytest.raises(ResendAPIError, match="金鑰無效"),
+    ):
+        send_email(["x@y.com"], "s", "b")
+
+    mock_retry.assert_not_called()
+
+
 async def test_send_email_now_posts_to_resend(monkeypatch: pytest.MonkeyPatch) -> None:
     """send_email_now 應以 Resend API payload 寄送 HTML 郵件"""
     monkeypatch.setattr("api.services.mail.settings.RESEND_API_KEY", "re_test")
     monkeypatch.setattr("api.services.mail.settings.MAIL_FROM", "noreply@hct.works")
     monkeypatch.setattr("api.services.mail.settings.MAIL_FROM_NAME", "HCCA")
     mock_response = MagicMock()
+    mock_response.is_error = False
     mock_response.json.return_value = {"id": "email-id"}
-    mock_response.raise_for_status = MagicMock()
     mock_client = MagicMock()
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=None)
@@ -135,3 +156,23 @@ async def test_send_email_now_posts_to_resend(monkeypatch: pytest.MonkeyPatch) -
         "subject": "主旨",
         "html": "<p>內容</p>",
     }
+
+
+async def test_send_email_now_explains_invalid_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("api.services.mail.settings.RESEND_API_KEY", "re_invalid")
+    mock_response = MagicMock()
+    mock_response.is_error = True
+    mock_response.status_code = 401
+    mock_response.json.return_value = {"message": "Invalid API key"}
+    mock_client = MagicMock()
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
+    mock_client.post = AsyncMock(return_value=mock_response)
+
+    with (
+        patch("api.services.mail.httpx.AsyncClient", return_value=mock_client),
+        pytest.raises(ResendAPIError, match="更新 RESEND_API_KEY 並重啟 email worker"),
+    ):
+        await send_email_now("user@example.com", "主旨", "<p>內容</p>")

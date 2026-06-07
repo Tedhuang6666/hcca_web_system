@@ -29,6 +29,13 @@ RESEND_EMAILS_URL = "https://api.resend.com/emails"
 EMAIL_RETRY_BACKOFF = [60, 300, 900, 3600]
 
 
+class ResendAPIError(RuntimeError):
+    def __init__(self, status_code: int, message: str) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.retryable = status_code == 429 or status_code >= 500
+
+
 def _format_from() -> str:
     if settings.MAIL_FROM_NAME:
         return f"{settings.MAIL_FROM_NAME} <{settings.MAIL_FROM}>"
@@ -66,7 +73,18 @@ async def _send_via_resend(
             },
             json=payload,
         )
-    response.raise_for_status()
+    if response.is_error:
+        try:
+            detail = str(response.json().get("message") or "").strip()
+        except (TypeError, ValueError):
+            detail = ""
+        if response.status_code == 401:
+            detail = "Resend API 金鑰無效或已撤銷，請更新 RESEND_API_KEY 並重啟 email worker"
+        elif response.status_code == 403:
+            detail = "Resend API 金鑰沒有寄信權限，請檢查金鑰權限與寄件網域"
+        elif not detail:
+            detail = f"Resend API 回應 HTTP {response.status_code}"
+        raise ResendAPIError(response.status_code, detail)
     data = response.json()
     message_id = data.get("id")
     return str(message_id) if message_id else None
@@ -204,10 +222,15 @@ def send_email(
         logger.info("郵件已送出 to=%s subject=%s resend_id=%s", to, subject, message_id)
         return {"status": "sent", "to": to, "subject": subject, "provider_id": message_id}
     except Exception as exc:
-        exhausted = self.request.retries >= self.max_retries
+        permanent = isinstance(exc, ResendAPIError) and not exc.retryable
+        exhausted = permanent or self.request.retries >= self.max_retries
         err = str(exc)[:500]
         delay = EMAIL_RETRY_BACKOFF[min(self.request.retries, len(EMAIL_RETRY_BACKOFF) - 1)]
         next_retry_at = None if exhausted else datetime.now(UTC) + timedelta(seconds=delay)
+        failed_recipient_status = (
+            EmailRecipientStatus.FAILED if permanent else EmailRecipientStatus.DEAD
+        )
+        failed_message_status = EmailStatus.FAILED if permanent else EmailStatus.DEAD
 
         # 狀態回寫採 best-effort：DB 暫時不可用時不可吃掉下方的 self.retry，
         # 否則 task 會直接 crash 而不重試，郵件永遠卡在「寄送中」。
@@ -216,7 +239,7 @@ def send_email(
                 asyncio.run(
                     _update_campaign_recipient_status(
                         email_recipient_id,
-                        EmailRecipientStatus.DEAD if exhausted else EmailRecipientStatus.RETRYING,
+                        failed_recipient_status if exhausted else EmailRecipientStatus.RETRYING,
                         error_detail=err,
                         attempt_count=attempt,
                         next_retry_at=next_retry_at,
@@ -226,7 +249,7 @@ def send_email(
                 asyncio.run(
                     _update_email_message_status(
                         email_message_id,
-                        EmailStatus.DEAD if exhausted else EmailStatus.RETRYING,
+                        failed_message_status if exhausted else EmailStatus.RETRYING,
                         error_detail=err,
                         attempt_count=attempt,
                         next_retry_at=next_retry_at,
@@ -235,6 +258,9 @@ def send_email(
         except Exception:
             logger.exception("更新郵件狀態失敗（不影響重試）to=%s", to)
 
+        if permanent:
+            logger.error("郵件設定錯誤，不重試 to=%s: %s", to, exc)
+            raise
         if exhausted:
             # 進入 dead-letter：raise self.retry 會丟出 MaxRetriesExceededError，
             # 觸發 celery task_failure → Redis DLQ（見 celery_app._push_dead_letter）。
