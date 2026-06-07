@@ -117,7 +117,10 @@ export default function LoginPage() {
             </p>
             <h1
               className="max-w-xl text-[2.5rem] font-semibold leading-[1.28] tracking-[-0.04em] xl:text-5xl 2xl:text-6xl"
-              style={{ fontFamily: "\"Noto Serif TC\", serif" }}
+              style={{
+                color: "#f8f3e5",
+                fontFamily: "\"Noto Serif TC\", serif",
+              }}
             >
               <span className="block whitespace-nowrap">
                 讓校園自治<span className="text-[#e8c970]">更透明，</span>
