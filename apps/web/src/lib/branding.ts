@@ -11,6 +11,8 @@ export const BRANDING = {
   appName: "新竹高中班聯會 HCCA 校園自治整合平台",
   platformName: "校園自治整合平台",
   description: "新竹高中班聯會 HCCA 的數位治理工具，整合公文、法規、公告、會議、購票、學餐與問卷。",
+  emblemPath: "/brand/hcca-emblem.png",
+  emblemAlt: "新竹高中班聯會會徽",
 } as const;
 
 export const BRAND_TITLE = `${BRANDING.orgShortName} ${BRANDING.acronym}`;

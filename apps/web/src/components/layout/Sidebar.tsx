@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { ChevronDown } from "lucide-react";
+import BrandEmblem from "@/components/brand/BrandEmblem";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useModuleStatus } from "@/contexts/ModuleStatusContext";
 import { BRANDING } from "@/lib/branding";
@@ -200,17 +201,7 @@ export default function Sidebar() {
         className="flex items-center gap-3 px-5 flex-shrink-0"
         style={{ height: "60px", borderBottom: "1px solid var(--sidebar-border)" }}>
         <Link href="/" className="flex items-center gap-3 min-w-0" aria-label="回到儀表板">
-          <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-base"
-            style={{
-              background: "linear-gradient(135deg, #c9a84c 0%, #b8962f 100%)",
-              color: "#1a1a2e",
-              fontWeight: 700,
-              boxShadow: "0 2px 10px rgba(201,168,76,0.35)",
-              letterSpacing: "0.02em",
-            }}>
-            {BRANDING.acronym}
-          </div>
+          <BrandEmblem size={40} priority />
           <div className="min-w-0">
             <p
               className="text-sm leading-tight truncate"

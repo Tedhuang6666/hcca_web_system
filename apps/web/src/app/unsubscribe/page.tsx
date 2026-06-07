@@ -3,6 +3,7 @@
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import BrandEmblem from "@/components/brand/BrandEmblem";
 import { ApiError, notificationsApi } from "@/lib/api";
 
 type Status = "idle" | "loading" | "done" | "error";
@@ -34,12 +35,7 @@ function UnsubscribeInner() {
         style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
       >
         <div className="flex items-center gap-3 px-6 py-5" style={{ background: "#1a1a2e" }}>
-          <div
-            className="flex h-9 w-9 items-center justify-center rounded-xl text-base font-bold"
-            style={{ background: "linear-gradient(135deg, #c9a84c 0%, #b8962f 100%)", color: "#1a1a2e" }}
-          >
-            自
-          </div>
+          <BrandEmblem size={40} />
           <div>
             <p className="text-sm font-semibold text-white">校園自治整合平台</p>
             <p className="text-[10px] font-medium tracking-widest" style={{ color: "#c9a84c" }}>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowRight, Database, ExternalLink, Landmark, Megaphone, UsersRound } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import BrandEmblem from "@/components/brand/BrandEmblem";
 import PublicSiteShell from "@/components/site/PublicSiteShell";
 import MarkdownBlock from "@/components/site/MarkdownBlock";
 import { siteApi } from "@/lib/api";
@@ -52,7 +53,7 @@ export default function PublicHomePage() {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={settings.site_logo_url} alt={emblemAlt} />
               ) : (
-                <span>竹中<br />班聯</span>
+                <BrandEmblem className="h-full w-full" size={256} priority />
               )}
             </div>
             <div className="public-signboard-copy">

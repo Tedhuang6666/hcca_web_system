@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { ArrowLeft, LogIn, Menu, Moon, Sun, X } from "lucide-react";
 import { useState } from "react";
 
+import BrandEmblem from "@/components/brand/BrandEmblem";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { BRANDING } from "@/lib/branding";
 import type { PublicSitePageOut, PublicSiteSettingsOut } from "@/lib/types";
@@ -97,7 +98,7 @@ export default function PublicSiteShell({
                   className="public-brand-logo"
                 />
               ) : (
-                "竹"
+                <BrandEmblem size={42} />
               )}
             </span>
             <span className="min-w-0">

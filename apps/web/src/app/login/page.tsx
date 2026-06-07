@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
+import BrandEmblem from "@/components/brand/BrandEmblem";
 import { BRANDING } from "@/lib/branding";
 import { apiUrl } from "@/lib/config";
 import { loginWithPasskey } from "@/lib/passkeys";
@@ -134,11 +135,7 @@ export default function LoginPage() {
 
         <div>
           <div className="flex items-center gap-3 mb-12">
-            <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center text-base font-bold flex-shrink-0"
-              style={{ background: "rgba(255,255,255,0.2)" }}>
-              {BRANDING.acronym}
-            </div>
+            <BrandEmblem size={44} />
             <div>
               <p className="text-base font-semibold leading-tight">{BRANDING.orgShortName}</p>
               <p className="text-xs mt-0.5 opacity-70">{BRANDING.englishName}</p>
@@ -180,11 +177,7 @@ export default function LoginPage() {
 
           {/* 行動版 Logo */}
           <div className="flex items-center gap-3 mb-8 lg:hidden">
-            <div
-              className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold flex-shrink-0"
-              style={{ background: "var(--primary)", color: "var(--primary-fg)" }}>
-              {BRANDING.acronym}
-            </div>
+            <BrandEmblem size={40} framed priority />
             <div>
               <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{BRANDING.orgShortName}</p>
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>{BRANDING.englishName}</p>

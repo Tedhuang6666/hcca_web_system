@@ -553,13 +553,14 @@
   height: 42px;
   flex: 0 0 auto;
   place-items: center;
-  border-radius: 8px;
-  background: var(--public-accent);
-  color: var(--primary-fg);
-  box-shadow: var(--shadow-gold);
+  overflow: hidden;
+  background: transparent;
 }
 
 .public-brand-logo {
+  width: 100%;
+  height: 100%;
+  padding: 0.2rem;
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;

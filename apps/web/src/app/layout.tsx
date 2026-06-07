@@ -21,6 +21,14 @@ export const metadata: Metadata = {
   title: { default: SOCIAL_SHARE_TITLE, template: `%s｜${SOCIAL_SITE_NAME}` },
   description: DEFAULT_DESCRIPTION,
   manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [
+      { url: "/brand/hcca-emblem-192.png", type: "image/png", sizes: "192x192" },
+      { url: "/brand/hcca-emblem-512.png", type: "image/png", sizes: "512x512" },
+    ],
+    apple: [{ url: "/brand/hcca-emblem-apple.png", type: "image/png", sizes: "180x180" }],
+    shortcut: ["/brand/hcca-emblem-192.png"],
+  },
   openGraph: {
     type: "website",
     locale: "zh_TW",

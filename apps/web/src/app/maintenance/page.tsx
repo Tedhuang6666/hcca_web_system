@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Home, RotateCcw, ShieldAlert, Wrench } from "lucide-react";
+import BrandEmblem from "@/components/brand/BrandEmblem";
 
 type MaintenanceState = {
   enabled: boolean;
@@ -84,9 +85,7 @@ function MaintenanceContent() {
       <div className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-6xl flex-col justify-between">
         <header className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--primary)] shadow-sm">
-              <Icon size={20} aria-hidden />
-            </div>
+            <BrandEmblem size={42} framed priority />
             <div>
               <div className="text-sm font-semibold text-[var(--text-primary)]">校園自治平台</div>
               <div className="text-xs text-[var(--text-muted)]">HCCA System Status</div>
