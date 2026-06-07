@@ -198,7 +198,7 @@ export default function LoginPage() {
                 歡迎回來
               </h1>
               <p className="text-sm mt-1.5" style={{ color: "var(--text-muted)" }}>
-                請使用竹中 Google Workspace 帳號或核准白名單登入
+                請使用竹中Google帳戶或授權之外部帳號登入
               </p>
             </div>
 
@@ -252,7 +252,6 @@ export default function LoginPage() {
             </a>
 
             <p className="text-center text-xs leading-relaxed mt-5" style={{ color: "var(--text-disabled)" }}>
-              竹中成員依職位取得功能；白名單帳號由系統管理員核准<br />
               登入即表示同意相關使用規範
             </p>
 
