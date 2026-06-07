@@ -10,6 +10,10 @@ import { cacheCurrentUser } from "@/lib/auth-cache";
 
 declare global {
   interface Window {
+    __hccaGoogleOneTap?: {
+      clientId: string;
+      handleCredential: (response: { credential?: string }) => void;
+    };
     google?: {
       accounts: {
         id: {
@@ -34,7 +38,7 @@ function canShowOneTap(pathname: string): boolean {
   if (!GOOGLE_CLIENT_ID) return false;
   if (typeof window === "undefined") return false;
   if (localStorage.getItem("user_id")) return false;
-  if (pathname === "/login") return true;
+  if (pathname === "/login") return false;
   return !BARE_PATH_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
@@ -69,15 +73,25 @@ export default function GoogleOneTap() {
   );
 
   useEffect(() => {
-    if (!scriptReady || !canShowOneTap(pathname)) return;
+    if (!scriptReady) return;
     const clientId = GOOGLE_CLIENT_ID;
     if (!clientId) return;
-    window.google?.accounts.id.initialize({
-      client_id: clientId,
-      callback: handleCredential,
-      cancel_on_tap_outside: true,
-      context: "signin",
-    });
+
+    if (!window.__hccaGoogleOneTap) {
+      window.__hccaGoogleOneTap = { clientId, handleCredential };
+      window.google?.accounts.id.initialize({
+        client_id: clientId,
+        callback: (response) => window.__hccaGoogleOneTap?.handleCredential(response),
+        cancel_on_tap_outside: true,
+        context: "signin",
+      });
+    } else {
+      window.__hccaGoogleOneTap.handleCredential = handleCredential;
+    }
+  }, [handleCredential, scriptReady]);
+
+  useEffect(() => {
+    if (!scriptReady || !canShowOneTap(pathname)) return;
     let prompted = false;
     const promptTimer = window.setTimeout(() => {
       prompted = true;
@@ -88,7 +102,7 @@ export default function GoogleOneTap() {
       window.clearTimeout(promptTimer);
       if (prompted) window.google?.accounts.id.cancel();
     };
-  }, [handleCredential, pathname, scriptReady]);
+  }, [pathname, scriptReady]);
 
   if (!GOOGLE_CLIENT_ID) return null;
 
