@@ -2968,13 +2968,6 @@ export interface DefenseSummary {
   recent_status_counts: Record<string, number>;
 }
 
-export interface PasskeyCredentialOut {
-  id: string;
-  name: string;
-  last_used_at: string | null;
-  created_at: string;
-}
-
 export interface LineBindingOut {
   linked: boolean;
   line_display_name: string | null;

@@ -1,4 +1,4 @@
-"""身份驗證路由 - Google OAuth2 + JWT Token 管理"""
+"""身份驗證路由 - Google / Discord OAuth2 + JWT Token 管理"""
 
 import logging
 from urllib.parse import urlencode, urlsplit
@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.anomaly_detection import check_suspicious_login, record_login
 from api.core.config import settings
 from api.core.database import get_db
-from api.core.oauth import google
+from api.core.oauth import discord, google
 from api.core.permission_codes import PermissionCode
 from api.core.posthog import get_posthog_client
 from api.core.redirects import safe_next_path
@@ -33,6 +33,12 @@ from api.core.security import (
 from api.dependencies.auth import get_current_active_user
 from api.models.user import User
 from api.schemas.auth import GoogleOneTapRequest, RefreshRequest
+from api.services.discord_bot import (
+    get_user_by_discord_id,
+)
+from api.services.discord_bot import (
+    is_configured as discord_is_configured,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -361,6 +367,96 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
             distinct_id=str(user.id),
             event="user_logged_in",
             properties={"login_method": "google_oauth"},
+        )
+
+    return response
+
+
+@router.get("/discord/login", summary="發起 Discord OAuth2 登入")
+async def discord_login(request: Request) -> RedirectResponse:
+    """使用已綁定的平台 Discord 帳號登入。"""
+    if not discord_is_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Discord OAuth 尚未設定",
+        )
+    frontend_origin = _frontend_origin_for(request, use_saved=False)
+    request.session["frontend_origin"] = frontend_origin
+    request.session["login_next"] = _safe_next_path(request.query_params.get("next"))
+    return await discord.authorize_redirect(request, settings.DISCORD_LOGIN_REDIRECT_URI)
+
+
+@router.get("/discord/callback", summary="Discord OAuth2 Callback")
+async def discord_callback(
+    request: Request, db: AsyncSession = Depends(get_db)
+) -> RedirectResponse:
+    """驗證 Discord 身份，並以既有啟用中的帳號綁定完成登入。"""
+    client_ip = request.client.host if request.client else "unknown"
+    frontend_origin = _frontend_origin_for(request)
+    login_next = _safe_next_path(request.session.get("login_next"))
+
+    try:
+        token_data = await discord.authorize_access_token(request, timeout=30.0)
+        discord_response = await discord.get("users/@me", token=token_data)
+        discord_response.raise_for_status()
+        user_info = discord_response.json()
+    except OAuthError as exc:
+        logger.warning(
+            "Discord OAuth2 authentication failed",
+            extra={"error": str(exc), "client_ip": client_ip},
+        )
+        error_qs = urlencode({"error": "Discord 授權失敗，請重新登入"})
+        return RedirectResponse(url=f"{frontend_origin}/login?{error_qs}")
+    except ConnectTimeout:
+        logger.exception(
+            "Discord OAuth2 endpoint connection timed out",
+            extra={"client_ip": client_ip},
+        )
+        error_qs = urlencode({"error": "連線 Discord 登入服務逾時，請稍後再試"})
+        return RedirectResponse(url=f"{frontend_origin}/login?{error_qs}")
+    except Exception:
+        logger.error(
+            "Unexpected error in Discord OAuth2 callback",
+            exc_info=True,
+            extra={"client_ip": client_ip},
+        )
+        error_qs = urlencode({"error": "伺服器內部錯誤"})
+        return RedirectResponse(url=f"{frontend_origin}/login?{error_qs}")
+
+    user = await get_user_by_discord_id(db, str(user_info["id"]))
+    if user is None:
+        error_qs = urlencode({"error": "此 Discord 帳號尚未綁定，請先使用 Google 登入後綁定"})
+        return RedirectResponse(url=f"{frontend_origin}/login?{error_qs}")
+
+    is_suspicious, reason = await check_suspicious_login(str(user.id), client_ip)
+    if is_suspicious:
+        logger.warning(
+            "Suspicious Discord login detected",
+            extra={"user_id": str(user.id), "reason": reason, "ip": client_ip},
+        )
+    await record_login(str(user.id), client_ip, request.headers.get("user-agent"))
+
+    if user.mfa_enabled:
+        challenge_token = create_mfa_challenge_token(subject=str(user.id))
+        challenge_qs = urlencode({"challenge": challenge_token, "next": login_next})
+        return RedirectResponse(url=f"{frontend_origin}/auth/mfa?{challenge_qs}")
+
+    access_token = create_access_token(
+        subject=str(user.id),
+        extra_claims=await _access_token_claims(db, user),
+    )
+    refresh_token = create_refresh_token(subject=str(user.id))
+    callback_qs = urlencode({"next": login_next})
+    response = RedirectResponse(url=f"{frontend_origin}/auth/callback?{callback_qs}")
+    _set_auth_cookies(response, access_token, refresh_token)
+
+    posthog = get_posthog_client()
+    if posthog:
+        posthog.set(distinct_id=str(user.id), properties={"is_superuser": user.is_superuser})
+        posthog.capture(
+            distinct_id=str(user.id),
+            event="user_logged_in",
+            properties={"login_method": "discord_oauth"},
         )
 
     return response

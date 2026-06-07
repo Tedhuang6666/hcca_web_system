@@ -49,7 +49,6 @@ import type {
   CouncilProposalCaseType, CouncilProposalCreate, CouncilProposalEligibleMeeting, CouncilProposalListItem, CouncilProposalOut, CouncilProposalStatus,
   JudicialPetitionCreate, JudicialPetitionListItem, JudicialPetitionOut, JudicialPetitionStatus,
   NotificationPreferences,
-  PasskeyCredentialOut,
   SearchResultOut,
   WebPushConfigOut,
   WebPushSubscriptionOut,
@@ -1226,33 +1225,6 @@ export const authApi = {
         permissions: string[];
       };
     }>("/auth/google/one-tap", { credential, next }),
-};
-
-export const passkeysApi = {
-  list: () => get<PasskeyCredentialOut[]>("/auth/passkeys"),
-  registrationOptions: () => post<Record<string, unknown>>(
-    "/auth/passkeys/registration/options",
-    {},
-  ),
-  verifyRegistration: (credential: unknown, name?: string) =>
-    post<PasskeyCredentialOut>("/auth/passkeys/registration/verify", { credential, name }),
-  authenticationOptions: (email: string) =>
-    post<Record<string, unknown>>("/auth/passkeys/authentication/options", { email }),
-  verifyAuthentication: (credential: unknown) =>
-    post<{
-      next: string;
-      user: {
-        id: string;
-        display_name: string;
-        email: string;
-        avatar_url?: string | null;
-        allow_external_login?: boolean;
-        is_superuser?: boolean;
-        is_owner?: boolean;
-        permissions: string[];
-      };
-    }>("/auth/passkeys/authentication/verify", { credential }),
-  delete: (id: string) => del<void>(`/auth/passkeys/${id}`),
 };
 
 export const mfaApi = {

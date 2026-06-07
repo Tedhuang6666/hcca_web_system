@@ -95,8 +95,6 @@ def _classify(key: str) -> str:
         return "搜尋"
     if key.startswith("VAPID_"):
         return "Web Push"
-    if key.startswith("PASSKEY_"):
-        return "Passkeys"
     if key.startswith("LOAD_SHED_"):
         return "Load Shedding"
     if key.startswith("MODULE_CIRCUIT_"):

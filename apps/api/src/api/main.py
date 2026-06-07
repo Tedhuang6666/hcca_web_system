@@ -83,7 +83,6 @@ from api.routers import (
     notifications,
     orgs,
     partner_map,
-    passkeys,
     people,
     petitions,
     policies,
@@ -380,7 +379,6 @@ def create_app() -> FastAPI:
     app.include_router(publications.router)
     app.include_router(orgs.router)
     app.include_router(people.router)
-    app.include_router(passkeys.router)
     app.include_router(partner_map.router)
     app.include_router(council_proposals.router)
     app.include_router(judicial_petitions.router)

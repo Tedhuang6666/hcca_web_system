@@ -49,7 +49,7 @@ apps/api/src/api/
 │   ├── announcements.py / notifications.py
 │   ├── orgs.py / positions.py / user_positions.py
 │   ├── audit.py / analytics.py / saved_filters.py
-│   ├── auth.py / users.py / mfa.py / passkeys.py / impersonation.py
+│   ├── auth.py / users.py / mfa.py / impersonation.py
 │   ├── api_keys.py / webhooks.py / public_api.py / feature_flags.py
 │   └── ws.py / line_webhook.py / discord.py / metrics_endpoint.py
 ├── services/       ← 業務邏輯（Router 呼叫 Service，單向依賴）
@@ -76,7 +76,7 @@ apps/api/src/api/
 │   ├── email_message.py / notification.py / outbox.py
 │   ├── audit_log.py / audit_anchor.py / backup_record.py / saved_filter.py
 │   ├── api_key.py / webhook.py / feature_flag.py / policy.py
-│   ├── passkey.py / user_identity.py / discord_account.py
+│   ├── user_identity.py / discord_account.py
 │   └── base.py / types.py（TimestampMixin、共用欄位型別）
 ├── schemas/        ← Pydantic Create/Update/Out/ListItem（按模組分檔）
 └── dependencies/   ← auth.py, permissions.py（require_permission 在此）

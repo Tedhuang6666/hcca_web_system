@@ -2,14 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, ArrowRight, KeyRound, ShieldCheck } from "lucide-react";
-import { toast } from "sonner";
+import { useSearchParams } from "next/navigation";
+import { ArrowLeft, ArrowRight, ShieldCheck } from "lucide-react";
 
 import BrandEmblem from "@/components/brand/BrandEmblem";
 import { BRANDING } from "@/lib/branding";
 import { apiUrl } from "@/lib/config";
-import { loginWithPasskey } from "@/lib/passkeys";
 
 const GOVERNANCE_POINTS = [
   { number: "01", title: "資訊透明", description: "讓公告、法規與議事紀錄清楚可查" },
@@ -18,48 +16,29 @@ const GOVERNANCE_POINTS = [
 ];
 
 export default function LoginPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const error = searchParams.get("error");
   const [mounted, setMounted] = useState(false);
-  const [loginHref, setLoginHref] = useState(apiUrl("/auth/google/login"));
-  const [email, setEmail] = useState("");
-  const [passkeyBusy, setPasskeyBusy] = useState(false);
+  const [googleLoginHref, setGoogleLoginHref] = useState(apiUrl("/auth/google/login"));
+  const [discordLoginHref, setDiscordLoginHref] = useState(apiUrl("/auth/discord/login"));
 
   useEffect(() => {
     setMounted(true);
     const frontendOrigin = encodeURIComponent(window.location.origin);
     const next = searchParams.get("next");
     const nextParam = next ? `&next=${encodeURIComponent(next)}` : "";
-    setLoginHref(apiUrl(`/auth/google/login?frontend_origin=${frontendOrigin}${nextParam}`));
+    setGoogleLoginHref(
+      apiUrl(`/auth/google/login?frontend_origin=${frontendOrigin}${nextParam}`),
+    );
+    setDiscordLoginHref(
+      apiUrl(`/auth/discord/login?frontend_origin=${frontendOrigin}${nextParam}`),
+    );
     if (localStorage.getItem("user_id")) {
       window.location.replace("/");
     }
   }, [searchParams]);
 
   if (!mounted) return null;
-
-  const handlePasskeyLogin = async () => {
-    if (!email.trim()) {
-      toast.error("請先輸入 Email");
-      return;
-    }
-    setPasskeyBusy(true);
-    try {
-      const result = await loginWithPasskey(email.trim());
-      localStorage.setItem("user_id", result.user.id);
-      localStorage.setItem("user_name", result.user.display_name);
-      localStorage.setItem("user_email", result.user.email);
-      if (result.user.avatar_url) localStorage.setItem("user_avatar", result.user.avatar_url);
-      localStorage.setItem("permissions", JSON.stringify(result.user.permissions ?? []));
-      localStorage.setItem("is_superuser", String(Boolean(result.user.is_superuser)));
-      router.replace(searchParams.get("next") || result.next || "/");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Passkey 登入失敗");
-    } finally {
-      setPasskeyBusy(false);
-    }
-  };
 
   return (
     <div
@@ -196,7 +175,7 @@ export default function LoginPage() {
                 歡迎回來
               </h2>
               <p className="mt-3 text-sm leading-6" style={{ color: "var(--text-muted)" }}>
-                使用竹中 Google 帳戶，或以已註冊的 Passkey 繼續。
+                使用竹中 Google 帳戶，或以已綁定的 Discord 帳號繼續。
               </p>
             </div>
 
@@ -231,7 +210,7 @@ export default function LoginPage() {
             )}
 
             <a
-              href={loginHref}
+              href={googleLoginHref}
               className="group flex h-13 w-full cursor-pointer items-center justify-between rounded-xl px-4 text-sm font-semibold transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2"
               style={{
                 background: "#ffffff",
@@ -260,48 +239,35 @@ export default function LoginPage() {
             <div className="my-7 flex items-center gap-4">
               <div className="h-px flex-1" style={{ background: "var(--border)" }} />
               <span className="text-[11px] tracking-[0.12em]" style={{ color: "var(--text-muted)" }}>
-                或使用 PASSKEY
+                或使用 DISCORD
               </span>
               <div className="h-px flex-1" style={{ background: "var(--border)" }} />
             </div>
 
-            <label className="block">
-              <span
-                className="mb-2 block text-xs font-semibold"
-                style={{ color: "var(--text-secondary)" }}
-              >
-                電子郵件
-              </span>
-              <span className="relative block">
-                <KeyRound
-                  size={17}
-                  className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2"
-                  style={{ color: "var(--text-muted)" }}
-                  aria-hidden="true"
-                />
-                <input
-                  className="input h-12 w-full rounded-xl"
-                  style={{ paddingLeft: "2.75rem" }}
-                  type="email"
-                  inputMode="email"
-                  autoComplete="email webauthn"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !passkeyBusy) void handlePasskeyLogin();
-                  }}
-                  placeholder="name@example.com"
-                />
-              </span>
-            </label>
-            <button
-              type="button"
-              className="btn btn-secondary mt-3 h-12 w-full rounded-xl"
-              disabled={passkeyBusy}
-              onClick={handlePasskeyLogin}
+            <a
+              href={discordLoginHref}
+              className="group flex h-13 w-full cursor-pointer items-center justify-between rounded-xl px-4 text-sm font-semibold text-white transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2"
+              style={{
+                background: "#5865f2",
+                boxShadow: "0 8px 24px rgba(88, 101, 242, 0.24)",
+                textDecoration: "none",
+              }}
             >
-              {passkeyBusy ? "正在驗證…" : "使用 Passkey 登入"}
-            </button>
+              <span className="flex items-center gap-3">
+                <svg width="20" height="16" viewBox="0 0 24 18" fill="currentColor" aria-hidden="true">
+                  <path d="M20.3 1.5A18.4 18.4 0 0 0 15.8.1l-.6 1.2a16.8 16.8 0 0 0-6.4 0L8.2.1a18.7 18.7 0 0 0-4.5 1.4C.9 5.6.1 9.6.5 13.5a18.2 18.2 0 0 0 5.6 2.8l1.4-1.9a11.8 11.8 0 0 1-2.1-1l.5-.4a13.1 13.1 0 0 0 12.2 0l.5.4a13 13 0 0 1-2.1 1l1.4 1.9a18.2 18.2 0 0 0 5.6-2.8c.5-4.5-.8-8.5-3.2-12ZM8.2 11.1c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.1 1.1 2.1 2.4-.9 2.4-2.1 2.4Zm7.6 0c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.1 1.1 2.1 2.4-.9 2.4-2.1 2.4Z" />
+                </svg>
+                使用 Discord 帳號登入
+              </span>
+              <ArrowRight
+                size={17}
+                className="transition-transform duration-200 group-hover:translate-x-0.5"
+                aria-hidden="true"
+              />
+            </a>
+            <p className="mt-3 text-center text-xs" style={{ color: "var(--text-muted)" }}>
+              Discord 帳號須先在個人資料完成綁定。
+            </p>
 
             <p className="mt-8 text-center text-xs leading-6" style={{ color: "var(--text-muted)" }}>
               登入即表示你同意

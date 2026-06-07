@@ -4,9 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import QRCode from "qrcode";
 import { toast } from "sonner";
-import { ApiError, mfaApi, passkeysApi } from "@/lib/api";
-import { registerPasskey } from "@/lib/passkeys";
-import type { MFASetupOut, MFAStatusOut, PasskeyCredentialOut } from "@/lib/types";
+import { ApiError, discordApi, mfaApi } from "@/lib/api";
+import type { DiscordBindingOut, MFASetupOut, MFAStatusOut } from "@/lib/types";
 import { SectionSkeleton } from "@/components/ui/Skeleton";
 
 export default function SecuritySettingsPage() {
@@ -19,8 +18,8 @@ export default function SecuritySettingsPage() {
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [passkeys, setPasskeys] = useState<PasskeyCredentialOut[]>([]);
-  const [passkeyBusy, setPasskeyBusy] = useState(false);
+  const [discordBinding, setDiscordBinding] = useState<DiscordBindingOut | null>(null);
+  const [discordBusy, setDiscordBusy] = useState(false);
 
   const loadStatus = () => {
     setLoading(true);
@@ -32,7 +31,13 @@ export default function SecuritySettingsPage() {
 
   useEffect(() => {
     loadStatus();
-    passkeysApi.list().then(setPasskeys).catch(() => setPasskeys([]));
+    discordApi.me().then(setDiscordBinding).catch(() => setDiscordBinding({
+      linked: false,
+      discord_user_id: null,
+      username: null,
+      global_name: null,
+      linked_at: null,
+    }));
   }, []);
 
   useEffect(() => {
@@ -115,29 +120,26 @@ export default function SecuritySettingsPage() {
     }
   };
 
-  const addPasskey = async () => {
-    setPasskeyBusy(true);
-    try {
-      const created = await registerPasskey();
-      setPasskeys((items) => [created, ...items]);
-      toast.success("Passkey 已建立");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "建立 Passkey 失敗");
-    } finally {
-      setPasskeyBusy(false);
-    }
+  const linkDiscord = () => {
+    window.location.href = discordApi.loginUrl("/settings/security");
   };
 
-  const removePasskey = async (id: string) => {
-    setPasskeyBusy(true);
+  const unlinkDiscord = async () => {
+    setDiscordBusy(true);
     try {
-      await passkeysApi.delete(id);
-      setPasskeys((items) => items.filter((item) => item.id !== id));
-      toast.success("Passkey 已刪除");
+      await discordApi.unlink();
+      setDiscordBinding({
+        linked: false,
+        discord_user_id: null,
+        username: null,
+        global_name: null,
+        linked_at: null,
+      });
+      toast.success("Discord 綁定已解除");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "刪除 Passkey 失敗");
+      toast.error(e instanceof ApiError ? e.message : "解除 Discord 綁定失敗");
     } finally {
-      setPasskeyBusy(false);
+      setDiscordBusy(false);
     }
   };
 
@@ -329,44 +331,41 @@ export default function SecuritySettingsPage() {
           style={{ borderBottom: "1px solid var(--border)" }}
         >
           <div>
-            <h2 className="text-sm font-semibold">Passkeys</h2>
+            <h2 className="text-sm font-semibold">Discord 登入</h2>
             <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-              使用 Face ID、Touch ID、Windows Hello 或裝置指紋登入。
+              綁定後可直接使用 Discord 登入平台，並接收 Bot 通知。
             </p>
           </div>
-          <button className="btn btn-primary btn-sm" disabled={passkeyBusy} onClick={addPasskey}>
-            新增 Passkey
-          </button>
+          {discordBinding?.linked ? (
+            <button
+              className="btn btn-ghost btn-sm"
+              disabled={discordBusy}
+              onClick={unlinkDiscord}
+            >
+              解除綁定
+            </button>
+          ) : (
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={discordBusy}
+              onClick={linkDiscord}
+            >
+              連結 Discord
+            </button>
+          )}
         </div>
-        {passkeys.length === 0 ? (
-          <div className="px-5 py-8 text-sm" style={{ color: "var(--text-muted)" }}>
-            尚未建立 Passkey。
-          </div>
-        ) : (
-          <ul>
-            {passkeys.map((item) => (
-              <li
-                key={item.id}
-                className="flex items-center justify-between gap-3 px-5 py-3"
-                style={{ borderBottom: "1px solid var(--border)" }}
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{item.name}</p>
-                  <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                    {item.last_used_at ? `上次使用：${new Date(item.last_used_at).toLocaleString()}` : "尚未使用"}
-                  </p>
-                </div>
-                <button
-                  className="btn btn-ghost btn-sm"
-                  disabled={passkeyBusy}
-                  onClick={() => removePasskey(item.id)}
-                >
-                  刪除
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+        <div className="px-5 py-5">
+          <p className="text-sm" style={{ color: "var(--text-primary)" }}>
+            {discordBinding?.linked
+              ? `已綁定 ${discordBinding.global_name || discordBinding.username || "Discord 帳號"}`
+              : "尚未綁定 Discord"}
+          </p>
+          {discordBinding?.linked_at && (
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              綁定時間：{new Date(discordBinding.linked_at).toLocaleString()}
+            </p>
+          )}
+        </div>
       </section>
     </div>
   );

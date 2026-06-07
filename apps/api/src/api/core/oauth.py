@@ -1,4 +1,4 @@
-"""Authlib OAuth2 設定 - Google OpenID Connect"""
+"""Authlib OAuth2 設定 - Google OpenID Connect 與 Discord OAuth2。"""
 
 from authlib.integrations.starlette_client import OAuth, StarletteOAuth2App
 

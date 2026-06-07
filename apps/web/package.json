@@ -20,7 +20,6 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@sentry/nextjs": "^10.55.0",
-    "@simplewebauthn/browser": "^13.3.0",
     "@tiptap/extension-placeholder": "^3.22.5",
     "@tiptap/extension-underline": "^3.22.5",
     "@tiptap/react": "^3.22.5",

@@ -18,7 +18,6 @@ import api.models.meal  # noqa: F401
 import api.models.meeting  # noqa: F401
 import api.models.notification  # noqa: F401
 import api.models.org  # noqa: F401
-import api.models.passkey  # noqa: F401
 import api.models.petition  # noqa: F401
 import api.models.regulation  # noqa: F401
 import api.models.shop  # noqa: F401

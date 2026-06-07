@@ -121,11 +121,6 @@ class Settings(BaseSettings):
     VAPID_PRIVATE_KEY: str = Field(default="")
     VAPID_SUBJECT: str = Field(default="mailto:admin@example.com")
 
-    # --- Passkeys / WebAuthn ---
-    PASSKEY_RP_ID: str = Field(default="localhost")
-    PASSKEY_RP_NAME: str = Field(default="HCCA 校園自治整合平台")
-    PASSKEY_ORIGIN: str = Field(default="http://localhost:3000")
-
     # --- WebSocket pub/sub backend ---
     # redis：跨 worker / 跨節點廣播（生產建議）；memory：單一進程（測試 / 開發單 worker）
     WS_PUBSUB_BACKEND: str = Field(default="redis")
@@ -196,7 +191,7 @@ class Settings(BaseSettings):
     MAIL_FROM_NAME: str = Field(default="新竹高中班聯會 HCCA")
     # 部署網址單一來源 — 整個系統對外的基底 URL（前端入口；/api、/ws、OAuth 回呼皆同源轉發）。
     # 只要在此填入正式網址（例如 https://hcca40.hct.works），derive_public_urls 會自動推導
-    # ALLOWED_ORIGINS / ALLOWED_HOSTS / 各 OAuth 回呼 / Passkey 等仍停留在 localhost 預設的欄位，
+    # ALLOWED_ORIGINS / ALLOWED_HOSTS / 各 OAuth 回呼等仍停留在 localhost 預設的欄位，
     # 不需逐一手動填寫。email 內的絕對連結（退訂、CTA、通知偏好頁）亦以此為基底。
     FRONTEND_BASE_URL: str = Field(default="http://localhost:3000")
     # Email 客戶端載入使用者上傳檔案（/uploads/...）時需要可公開存取的 API base。
@@ -308,6 +303,7 @@ class Settings(BaseSettings):
     DISCORD_CLIENT_SECRET: str = Field(default="")
     DISCORD_BOT_TOKEN: str = Field(default="")
     DISCORD_REDIRECT_URI: str = Field(default="http://localhost:8000/discord/callback")
+    DISCORD_LOGIN_REDIRECT_URI: str = Field(default="http://localhost:8000/auth/discord/callback")
     DISCORD_GUILD_ID: str = Field(default="")
     DISCORD_COMMAND_SYNC_GUILD_ID: str = Field(default="")
 
@@ -467,10 +463,8 @@ class Settings(BaseSettings):
             self.GOOGLE_REDIRECT_URI = f"{origin}/auth/google/callback"
         if _is_local_url(self.DISCORD_REDIRECT_URI):
             self.DISCORD_REDIRECT_URI = f"{origin}/discord/callback"
-        if _is_local_url(self.PASSKEY_ORIGIN):
-            self.PASSKEY_ORIGIN = origin
-        if host and (self.PASSKEY_RP_ID in _LOCAL_HOSTS or not self.PASSKEY_RP_ID):
-            self.PASSKEY_RP_ID = host
+        if _is_local_url(self.DISCORD_LOGIN_REDIRECT_URI):
+            self.DISCORD_LOGIN_REDIRECT_URI = f"{origin}/auth/discord/callback"
         if _is_local_url(self.API_PUBLIC_BASE_URL):
             self.API_PUBLIC_BASE_URL = origin
 
