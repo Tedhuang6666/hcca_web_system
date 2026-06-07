@@ -4,8 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 
 import { authApi } from "@/lib/api";
 import { cacheCurrentUser, clearAuthCache } from "@/lib/auth-cache";
-
-const PUBLIC_PATHS = ["/login", "/auth"];
+import { isPublicRoute } from "@/lib/route-access";
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -15,8 +14,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     // Public paths — skip auth check
-    const isPublic = PUBLIC_PATHS.some(p => pathname.startsWith(p));
-    if (isPublic) {
+    if (isPublicRoute(pathname)) {
       setReady(true);
       return;
     }

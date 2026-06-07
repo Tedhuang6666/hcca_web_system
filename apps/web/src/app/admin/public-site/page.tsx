@@ -1,6 +1,17 @@
 "use client";
 
-import { Eye, FileText, Link as LinkIcon, Plus, RefreshCw, Save, Trash2, Users } from "lucide-react";
+import {
+  ArrowUpRight,
+  Eye,
+  FileText,
+  Globe2,
+  Link as LinkIcon,
+  Plus,
+  RefreshCw,
+  Save,
+  Trash2,
+  Users,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -417,32 +428,79 @@ export default function PublicSiteAdminPage() {
     return <div className="py-20 text-center text-sm text-[var(--text-muted)]">載入公開網站設定...</div>;
   }
 
+  const publishedPages = pages.filter((page) => page.is_published).length;
+  const activeLinks = links.filter((link) => link.is_active).length;
+  const visibleOfficers = profiles.filter((profile) => profile.is_visible).length;
+
   return (
     <div className="mx-auto max-w-7xl space-y-5">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold">公開網站設定</h1>
-          <p className="mt-1 text-sm text-[var(--text-muted)]">
-            管理官網首頁、CMS 頁面、Linktree、幹部顯示與公告對外入口。
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button type="button" onClick={load} className="btn btn-ghost">
-            <RefreshCw size={16} aria-hidden /> 重新整理
-          </button>
-          <a href="/" target="_blank" rel="noreferrer" className="btn btn-secondary">
-            <Eye size={16} aria-hidden /> 預覽官網
-          </a>
+      <header
+        className="overflow-hidden rounded-2xl"
+        style={{ background: "#173654", color: "#f8f3e5" }}
+      >
+        <div className="grid gap-8 px-6 py-7 lg:grid-cols-[1fr_auto] lg:items-center lg:px-8">
+          <div>
+            <div className="flex items-center gap-2 text-xs font-semibold tracking-[0.16em] text-[#e8c970]">
+              <Globe2 size={15} aria-hidden />
+              PUBLIC SITE CONTROL
+            </div>
+            <h1 className="mt-3 text-2xl font-semibold">公開網站工作台</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-[#cdd8e0]">
+              管理首頁內容、公開頁面、常用連結與幹部資料。發布前可先開啟官網確認實際呈現。
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={load}
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-white/20 px-4 text-sm font-medium transition-colors hover:bg-white/10"
+            >
+              <RefreshCw size={16} aria-hidden /> 同步資料
+            </button>
+            <a
+              href="/"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[#e8c970] px-4 text-sm font-semibold text-[#173654] transition-colors hover:bg-[#f2dc95]"
+            >
+              <Eye size={16} aria-hidden /> 預覽官網
+              <ArrowUpRight size={15} aria-hidden />
+            </a>
+          </div>
         </div>
       </header>
 
-      <nav className="flex gap-2 overflow-x-auto rounded-xl p-2" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }} aria-label="公開網站設定分頁">
+      <section className="grid gap-3 sm:grid-cols-3" aria-label="公開網站內容摘要">
+        {[
+          { label: "已發布頁面", value: publishedPages, detail: `共 ${pages.length} 頁` },
+          { label: "啟用連結", value: activeLinks, detail: `共 ${categories.length} 個分類` },
+          { label: "公開幹部", value: visibleOfficers, detail: "含首頁精選設定" },
+        ].map((item) => (
+          <div key={item.label} className="card p-4">
+            <p className="text-xs font-medium text-[var(--text-muted)]">{item.label}</p>
+            <div className="mt-2 flex items-end justify-between gap-3">
+              <strong className="text-2xl font-semibold text-[var(--text-primary)]">{item.value}</strong>
+              <span className="text-xs text-[var(--text-muted)]">{item.detail}</span>
+            </div>
+          </div>
+        ))}
+      </section>
+
+      <nav
+        className="sticky top-[60px] z-20 flex gap-2 overflow-x-auto rounded-xl p-2"
+        style={{
+          background: "color-mix(in srgb, var(--bg-surface) 92%, transparent)",
+          border: "1px solid var(--border)",
+          backdropFilter: "blur(14px)",
+        }}
+        aria-label="公開網站設定分頁"
+      >
         {tabs.map((item) => (
           <button
             key={item.id}
             type="button"
             onClick={() => setTab(item.id)}
-            className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium"
+            className="inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-lg px-4 text-sm font-medium transition-colors"
             style={{
               background: tab === item.id ? "var(--primary-dim)" : "transparent",
               color: tab === item.id ? "var(--primary)" : "var(--text-secondary)",

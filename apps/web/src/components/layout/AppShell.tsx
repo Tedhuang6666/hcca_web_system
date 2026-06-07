@@ -13,6 +13,7 @@ import ModuleMaintenance from "@/components/ui/ModuleMaintenance";
 import UrgentAnnouncementPopup from "@/components/announcements/UrgentAnnouncementPopup";
 import CommandMenu from "./CommandMenu";
 import { PolicyConsentBanner } from "@/components/legal/PolicyConsentBanner";
+import { isPublicRoute, requiresAuthentication } from "@/lib/route-access";
 
 /** 完全裸頁（不渲染 Shell）：公開官網、login、auth callback、Email 退訂落地頁 */
 const BARE_PATHS = [
@@ -35,42 +36,6 @@ function isBare(pathname: string) {
   return BARE_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }
 
-/** 是否需要登入 */
-function requiresAuth(pathname: string): boolean {
-  if (isBare(pathname)) return false;
-  if (pathname === "/about" || pathname.startsWith("/legal")) return false;
-  if (pathname === "/regulations") return false;
-  // 法規詳細頁與條文深度連結（/regulations/{id}/第N條...）皆為公開可讀；
-  // 僅 /edit、/amendment 子頁需要登入。
-  const regMatch = pathname.match(/^\/regulations\/([^/]+)(\/.*)?$/);
-  if (regMatch) {
-    const [, regId, rest = ""] = regMatch;
-    if (regId !== "new" && regId !== "pending") {
-      if (
-        rest !== "/edit"
-        && rest !== "/amendment"
-        && !rest.startsWith("/edit/")
-        && !rest.startsWith("/amendment/")
-      ) {
-        return false;
-      }
-    }
-  }
-  if (pathname === "/documents") return false;
-  if (pathname === "/documents/delegations") return true;
-  if (/^\/documents\/[^/]+$/.test(pathname) && !pathname.endsWith("/edit")) return false;
-  if (pathname === "/announcements") return false;
-  if (/^\/announcements\/[^/]+$/.test(pathname)) return false;
-  // 問卷列表與詳情頁皆公開可讀（依問卷的開放對象設定）；/surveys/new 仍需登入
-  if (pathname === "/surveys") return false;
-  if (/^\/surveys\/[^/]+$/.test(pathname) && pathname !== "/surveys/new") return false;
-  if (pathname === "/petitions") return false;
-  if (pathname === "/petitions/new") return false;
-  if (pathname === "/council-proposals") return false;
-  if (pathname === "/partner-map") return false;
-  return true;
-}
-
 function AppShellContent({ children }: { children: React.ReactNode }) {
   const { can, isAdmin } = usePermissions();
   const { isModuleDown } = useModuleStatus();
@@ -91,7 +56,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
     const loggedIn = Boolean(localStorage.getItem("user_id"));
     setIsLoggedIn(loggedIn);
 
-    if (!requiresAuth(pathname) || loggedIn) {
+    if (!requiresAuthentication(pathname) || loggedIn) {
       redirectedFrom.current = null;
       setRedirecting(false);
       setAuthReady(true);
@@ -185,7 +150,9 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
         {!sidebarOpen && <BottomTabBar onMoreClick={() => setSidebarOpen((p) => !p)} />}
         <UrgentAnnouncementPopup />
         <CommandMenu />
-        <PolicyConsentBanner isAuthenticated={isLoggedIn && !suppressPolicyConsent} />
+        <PolicyConsentBanner
+          isAuthenticated={isLoggedIn && !suppressPolicyConsent && !isPublicRoute(pathname)}
+        />
       </div>
       </ConfirmProvider>
     </PermissionProvider>

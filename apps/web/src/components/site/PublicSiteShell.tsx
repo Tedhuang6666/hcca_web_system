@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ArrowLeft, LogIn, Menu, Moon, Sun, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import BrandEmblem from "@/components/brand/BrandEmblem";
 import { useTheme } from "@/components/providers/ThemeProvider";
@@ -60,6 +60,7 @@ export default function PublicSiteShell({
   settings?: PublicSiteSettingsOut | null;
 }) {
   const [open, setOpen] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const { theme, toggleTheme } = useTheme();
   const pathname = usePathname();
   const back = getPublicBack(pathname);
@@ -70,6 +71,12 @@ export default function PublicSiteShell({
       label: page.nav_label || page.title,
     })),
   ];
+  const systemHref = isLoggedIn ? "/dashboard" : "/login?next=%2Fdashboard";
+  const systemLabel = isLoggedIn ? "管理系統" : "登入管理";
+
+  useEffect(() => {
+    setIsLoggedIn(Boolean(window.localStorage.getItem("user_id")));
+  }, []);
 
   return (
     <div className="public-site min-h-screen text-[var(--public-text)]">
@@ -126,9 +133,9 @@ export default function PublicSiteShell({
               aria-label={theme === "dark" ? "切換淺色模式" : "切換深色模式"}>
               {theme === "dark" ? <Sun size={18} aria-hidden /> : <Moon size={18} aria-hidden />}
             </button>
-            <Link href="/dashboard" className="public-system-button hidden sm:inline-flex">
+            <Link href={systemHref} className="public-system-button hidden sm:inline-flex">
               <LogIn size={15} aria-hidden />
-              進入系統
+              {systemLabel}
             </Link>
             <button
               type="button"
@@ -159,9 +166,9 @@ export default function PublicSiteShell({
                   {item.label}
                 </Link>
               ))}
-              <Link href="/dashboard" className="public-system-button mt-1 sm:col-span-2">
+              <Link href={systemHref} className="public-system-button mt-1 sm:col-span-2">
                 <LogIn size={15} aria-hidden />
-                進入系統
+                {systemLabel}
               </Link>
             </div>
           </nav>

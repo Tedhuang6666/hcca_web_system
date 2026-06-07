@@ -1,62 +1,145 @@
 import Link from "next/link";
+import {
+  ArrowRight,
+  BookOpenText,
+  FileSearch,
+  Landmark,
+  Megaphone,
+  MessageSquareText,
+  Scale,
+} from "lucide-react";
+
+const DATABASES = [
+  {
+    href: "/public/regulations",
+    title: "法規資料庫",
+    description: "查詢現行法規、條文沿革與版本差異，取得可穩定引用的公開連結。",
+    icon: BookOpenText,
+    meta: "條文、沿革、版本比對",
+  },
+  {
+    href: "/public/documents",
+    title: "公文資料庫",
+    description: "依字號、標題與主旨查找公開公文，查看附件與文件基本資訊。",
+    icon: FileSearch,
+    meta: "字號、主旨、公開附件",
+  },
+];
+
+const SERVICES = [
+  { href: "/news", title: "最新公告", description: "掌握班聯會最新消息與公開說明。", icon: Megaphone },
+  { href: "/council-proposals", title: "議會提案", description: "查看學生代表大會提案與議事資訊。", icon: Landmark },
+  { href: "/petitions/new", title: "提出陳情", description: "向自治組織反映問題並留下正式紀錄。", icon: MessageSquareText },
+  { href: "/judicial-petitions", title: "評議聲請", description: "提出法規審查、機關爭議或其他評議事項。", icon: Scale },
+];
 
 export default function PublicHomePage() {
   return (
-    <div className="space-y-6">
-      <div className="card p-6">
-        <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
-          公開資訊服務層
-        </h1>
-        <p className="text-sm mt-2" style={{ color: "var(--text-muted)" }}>
-          統一的公開檢索入口：公開法規、公開公文。
-        </p>
-        <div className="mt-4 flex flex-wrap gap-3">
-          <Link
-            href="/public/regulations"
-            className="px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90"
-            style={{ background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }}
-          >
-            進入法規資料庫
-          </Link>
-          <Link
-            href="/public/documents"
-            className="px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90"
-            style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}
-          >
-            進入公文資料庫
-          </Link>
+    <div className="space-y-10 pb-8">
+      <section className="overflow-hidden rounded-2xl border border-[var(--public-border)] bg-[var(--public-surface)]">
+        <div className="grid gap-8 px-6 py-10 sm:px-10 lg:grid-cols-[1.15fr_0.85fr] lg:items-end lg:py-14">
+          <div>
+            <p className="public-section-kicker">Open Government</p>
+            <h1 className="mt-3 max-w-3xl font-serif text-3xl font-semibold leading-tight tracking-tight sm:text-5xl">
+              公開資訊，不該藏在登入頁後面。
+            </h1>
+            <p className="mt-5 max-w-2xl text-base leading-8 text-[var(--public-secondary)]">
+              這裡集中提供法規、公文與自治參與服務。查詢公開資料不需要帳號，
+              只有建立內部文件、審核與管理操作才需要登入。
+            </p>
+          </div>
+          <div className="rounded-xl bg-[var(--public-soft)] p-5">
+            <p className="text-sm font-semibold">你可以直接使用</p>
+            <ul className="mt-3 space-y-2 text-sm leading-6 text-[var(--public-secondary)]">
+              <li>查詢與分享已公開的法規、公文</li>
+              <li>閱讀公告、議會提案與自治資訊</li>
+              <li>提出陳情或評議聲請</li>
+            </ul>
+          </div>
         </div>
-      </div>
+      </section>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="card p-5">
-          <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-            法規
-          </h2>
-          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-            條文目錄、穩定錨點連結、版本沿革、版本比對與分享。
-          </p>
-          <div className="mt-3">
-            <Link href="/public/regulations" className="text-sm hover:underline" style={{ color: "var(--primary)" }}>
-              前往查詢 →
-            </Link>
-          </div>
+      <section>
+        <div className="mb-4">
+          <p className="public-section-kicker">Public Records</p>
+          <h2 className="mt-2 text-2xl font-semibold">公開資料庫</h2>
         </div>
-        <div className="card p-5">
-          <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-            公文
-          </h2>
-          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-            公開公文列表、可分享查詢連結、附件預覽（PDF/圖片/連結）。
-          </p>
-          <div className="mt-3">
-            <Link href="/public/documents" className="text-sm hover:underline" style={{ color: "var(--primary)" }}>
-              前往查詢 →
-            </Link>
-          </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          {DATABASES.map((item) => {
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="group rounded-2xl border border-[var(--public-border)] bg-[var(--public-surface)] p-6 transition-colors hover:border-[var(--public-accent)] hover:bg-[var(--public-soft)]"
+              >
+                <div className="flex items-start justify-between gap-5">
+                  <span className="grid h-12 w-12 place-items-center rounded-xl bg-[var(--public-accent-soft)] text-[var(--public-accent)]">
+                    <Icon size={24} aria-hidden />
+                  </span>
+                  <ArrowRight
+                    size={20}
+                    className="text-[var(--public-muted)] transition-colors group-hover:text-[var(--public-accent)]"
+                    aria-hidden
+                  />
+                </div>
+                <h3 className="mt-7 text-xl font-semibold">{item.title}</h3>
+                <p className="mt-2 text-sm leading-7 text-[var(--public-secondary)]">
+                  {item.description}
+                </p>
+                <p className="mt-5 text-xs font-semibold tracking-wide text-[var(--public-muted)]">
+                  {item.meta}
+                </p>
+              </Link>
+            );
+          })}
         </div>
-      </div>
+      </section>
+
+      <section>
+        <div className="mb-4">
+          <p className="public-section-kicker">Participation</p>
+          <h2 className="mt-2 text-2xl font-semibold">公開參與服務</h2>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {SERVICES.map((item) => {
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="flex min-h-32 items-start gap-4 rounded-xl border border-[var(--public-border)] bg-[var(--public-surface)] p-5 transition-colors hover:bg-[var(--public-soft)]"
+              >
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[var(--public-soft)] text-[var(--public-accent)]">
+                  <Icon size={20} aria-hidden />
+                </span>
+                <span>
+                  <span className="block font-semibold">{item.title}</span>
+                  <span className="mt-1.5 block text-sm leading-6 text-[var(--public-secondary)]">
+                    {item.description}
+                  </span>
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-4 rounded-2xl bg-[#173654] px-6 py-7 text-[#f8f3e5] sm:flex-row sm:items-center sm:justify-between sm:px-8">
+        <div>
+          <h2 className="text-lg font-semibold">需要處理內部業務？</h2>
+          <p className="mt-1 text-sm leading-6 text-[#cdd8e0]">
+            文件建立、簽核、內容發布與系統管理會在登入後依權限開放。
+          </p>
+        </div>
+        <Link
+          href="/login?next=%2Fdashboard"
+          className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg bg-[#e8c970] px-4 text-sm font-semibold text-[#173654] transition-colors hover:bg-[#f2dc95]"
+        >
+          登入管理系統
+          <ArrowRight size={16} aria-hidden />
+        </Link>
+      </section>
     </div>
   );
 }
-
