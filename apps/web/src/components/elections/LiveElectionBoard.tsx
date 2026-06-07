@@ -107,9 +107,22 @@ export default function LiveElectionBoard({
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center justify-between gap-4">
-                        <h2 className={`${vertical ? "text-3xl" : "text-2xl"} font-bold`}>
-                          {candidate.name}
-                        </h2>
+                        <div>
+                          {candidate.members.length > 0 ? candidate.members.map((member) => (
+                            <p key={member.id} className="flex flex-wrap items-baseline gap-2">
+                              <span className="text-sm text-slate-400">
+                                {member.position}
+                              </span>
+                              <span className={`${vertical ? "text-3xl" : "text-2xl"} font-bold`}>
+                                {member.name}
+                              </span>
+                            </p>
+                          )) : (
+                            <h2 className={`${vertical ? "text-3xl" : "text-2xl"} font-bold`}>
+                              {candidate.name}
+                            </h2>
+                          )}
+                        </div>
                         {leader && index === 0 && (
                           <span className="rounded-full bg-cyan-300 px-3 py-1 text-sm font-bold text-slate-950">
                             領先

@@ -70,6 +70,7 @@ from api.models.election import (  # noqa: F401
     BallotBox,
     BallotBoxStatus,
     Candidate,
+    CandidateMember,
     Election,
     ElectionStatus,
     VoteEvent,

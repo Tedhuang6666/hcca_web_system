@@ -428,7 +428,13 @@ export const electionsApi = {
     title: string;
     description?: string;
     is_public?: boolean;
-    candidates: { name: string; number: number; color: string; sort_order?: number }[];
+    candidates: {
+      name: string;
+      number: number;
+      color: string;
+      sort_order?: number;
+      members?: { position: string; name: string; sort_order?: number }[];
+    }[];
     ballot_boxes: {
       name: string;
       expected_total_votes?: number | null;

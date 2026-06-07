@@ -13,6 +13,7 @@ from api.models.election import (
     BallotBox,
     BallotBoxStatus,
     Candidate,
+    CandidateMember,
     Election,
     ElectionStatus,
     VoteEvent,
@@ -32,7 +33,10 @@ from api.schemas.election import (
 async def get_election(session: AsyncSession, election_id: uuid.UUID) -> Election | None:
     result = await session.execute(
         select(Election)
-        .options(selectinload(Election.candidates), selectinload(Election.ballot_boxes))
+        .options(
+            selectinload(Election.candidates).selectinload(Candidate.members),
+            selectinload(Election.ballot_boxes),
+        )
         .where(Election.id == election_id)
     )
     return result.scalar_one_or_none()
@@ -58,6 +62,14 @@ async def create_election(
             number=item.number,
             color=item.color,
             sort_order=item.sort_order,
+            members=[
+                CandidateMember(
+                    position=member.position.strip(),
+                    name=member.name.strip(),
+                    sort_order=member.sort_order,
+                )
+                for member in item.members
+            ],
         )
         for item in payload.candidates
     ]
@@ -379,6 +391,7 @@ async def get_live_summary(
                 name=candidate.name,
                 number=candidate.number,
                 color=candidate.color,
+                members=candidate.members,
                 votes=totals[candidate.id],
                 percentage=round(totals[candidate.id] / valid_votes * 100, 1) if valid_votes else 0,
             )

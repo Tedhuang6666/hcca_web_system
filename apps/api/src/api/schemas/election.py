@@ -8,11 +8,25 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from api.models.election import BallotBoxStatus, ElectionStatus, VoteEventKind
 
 
+class CandidateMemberCreate(BaseModel):
+    position: str = Field(min_length=1, max_length=100)
+    name: str = Field(min_length=1, max_length=100)
+    sort_order: int = Field(0, ge=0)
+
+
+class CandidateMemberOut(CandidateMemberCreate):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    candidate_id: uuid.UUID
+
+
 class CandidateCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     number: int = Field(ge=1)
     color: str = Field("#2563eb", pattern=r"^#[0-9A-Fa-f]{6}$")
     sort_order: int = Field(0, ge=0)
+    members: list[CandidateMemberCreate] = Field(default_factory=list)
 
 
 class CandidateOut(CandidateCreate):
@@ -21,6 +35,7 @@ class CandidateOut(CandidateCreate):
     id: uuid.UUID
     election_id: uuid.UUID
     is_active: bool
+    members: list[CandidateMemberOut]
 
 
 class BallotBoxCreate(BaseModel):
@@ -135,6 +150,7 @@ class CandidateTally(BaseModel):
     name: str
     number: int
     color: str
+    members: list[CandidateMemberOut]
     votes: int
     percentage: float
 

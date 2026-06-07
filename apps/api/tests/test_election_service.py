@@ -11,6 +11,7 @@ from api.models.user import User
 from api.schemas.election import (
     BallotBoxCreate,
     CandidateCreate,
+    CandidateMemberCreate,
     ElectionCreate,
     VoteEventCreate,
 )
@@ -31,7 +32,14 @@ async def _create_live_election(db: AsyncSession) -> tuple[User, Election]:
         ElectionCreate(
             title="第 40 屆班聯會選舉",
             candidates=[
-                CandidateCreate(name="候選人 A", number=1),
+                CandidateCreate(
+                    name="主席 王小明、 副主席 李小華",
+                    number=1,
+                    members=[
+                        CandidateMemberCreate(position="主席", name="王小明", sort_order=0),
+                        CandidateMemberCreate(position="副主席", name="李小華", sort_order=1),
+                    ],
+                ),
                 CandidateCreate(name="候選人 B", number=2, color="#dc2626"),
             ],
             ballot_boxes=[BallotBoxCreate(name="一年級票匭", expected_total_votes=100)],
@@ -46,6 +54,22 @@ async def _create_live_election(db: AsyncSession) -> tuple[User, Election]:
         BallotBoxStatus.COUNTING,
     )
     return user, election
+
+
+async def test_create_election_preserves_candidate_member_order(
+    db_session: AsyncSession,
+) -> None:
+    _, election = await _create_live_election(db_session)
+
+    assert [(member.position, member.name) for member in election.candidates[0].members] == [
+        ("主席", "王小明"),
+        ("副主席", "李小華"),
+    ]
+
+    summary = await election_svc.get_live_summary(db_session, election.id)
+
+    assert summary is not None
+    assert [member.name for member in summary.candidates[0].members] == ["王小明", "李小華"]
 
 
 async def test_vote_events_are_aggregated_and_reversed_without_deletion(

@@ -85,6 +85,29 @@ class Candidate(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     election: Mapped[Election] = relationship("Election", back_populates="candidates")
+    members: Mapped[list[CandidateMember]] = relationship(
+        "CandidateMember",
+        back_populates="candidate",
+        cascade="all, delete-orphan",
+        order_by="CandidateMember.sort_order",
+    )
+
+
+class CandidateMember(Base, TimestampMixin):
+    __tablename__ = "election_candidate_members"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    candidate_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("election_candidates.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    position: Mapped[str] = mapped_column(String(100), nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    candidate: Mapped[Candidate] = relationship("Candidate", back_populates="members")
 
 
 class BallotBox(Base, TimestampMixin):
@@ -159,6 +182,7 @@ __all__ = [
     "BallotBox",
     "BallotBoxStatus",
     "Candidate",
+    "CandidateMember",
     "Election",
     "ElectionStatus",
     "VoteEvent",

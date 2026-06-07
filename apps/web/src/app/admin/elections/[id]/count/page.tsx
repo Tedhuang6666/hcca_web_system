@@ -152,7 +152,14 @@ export default function ElectionCountPage({ params }: { params: Promise<{ id: st
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <span className="h-10 w-10 rounded-xl grid place-items-center text-white font-bold" style={{ background: candidate.color }}>{candidate.number}</span>
-                      <strong>{candidate.name}</strong>
+                      <div>
+                        {candidate.members.length > 0 ? candidate.members.map((member) => (
+                          <p key={member.id}>
+                            <span className="text-sm" style={{ color: "var(--text-muted)" }}>{member.position}</span>
+                            <strong className="ml-2">{member.name}</strong>
+                          </p>
+                        )) : <strong>{candidate.name}</strong>}
+                      </div>
                     </div>
                     <span className="text-3xl font-black tabular-nums">{tally?.votes ?? 0}</span>
                   </div>

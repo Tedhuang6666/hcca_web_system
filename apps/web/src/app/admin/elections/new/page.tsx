@@ -5,13 +5,30 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { electionsApi } from "@/lib/api";
 
+type CandidateForm = {
+  number: number;
+  color: string;
+  members: { position: string; name: string }[];
+};
+
+function createCandidate(number: number, color: string): CandidateForm {
+  return {
+    number,
+    color,
+    members: [
+      { position: "主席", name: "" },
+      { position: "副主席", name: "" },
+    ],
+  };
+}
+
 export default function NewElectionPage() {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [candidates, setCandidates] = useState([
-    { name: "", number: 1, color: "#2563eb" },
-    { name: "", number: 2, color: "#dc2626" },
+    createCandidate(1, "#2563eb"),
+    createCandidate(2, "#dc2626"),
   ]);
   const [boxes, setBoxes] = useState([{ name: "", expected_total_votes: "" }]);
   const [saving, setSaving] = useState(false);
@@ -23,7 +40,19 @@ export default function NewElectionPage() {
       const election = await electionsApi.create({
         title,
         description: description || undefined,
-        candidates: candidates.map((item, index) => ({ ...item, sort_order: index })),
+        candidates: candidates.map((item, index) => ({
+          name: item.members
+            .map((member) => `${member.position.trim()} ${member.name.trim()}`)
+            .join("、"),
+          number: item.number,
+          color: item.color,
+          sort_order: index,
+          members: item.members.map((member, memberIndex) => ({
+            position: member.position,
+            name: member.name,
+            sort_order: memberIndex,
+          })),
+        })),
         ballot_boxes: boxes.map((item, index) => ({
           name: item.name,
           expected_total_votes: item.expected_total_votes
@@ -46,7 +75,7 @@ export default function NewElectionPage() {
       <div>
         <h1 className="text-2xl font-bold">建立選舉</h1>
         <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-          開始開票後，候選人／組合與票匭結構將固定
+          開始開票後，候選人、候選組合與票匭結構將固定
         </p>
       </div>
       <section className="card p-6 space-y-4">
@@ -64,18 +93,67 @@ export default function NewElectionPage() {
           <div>
             <h2 className="font-semibold">候選人／候選組合／選項</h2>
             <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-              聯合參選時，可在同一欄填寫完整組合與職位
+              每個號次可加入一位或多位成員，分別填寫參選職位與姓名
             </p>
           </div>
-          <button type="button" className="btn btn-secondary" onClick={() => setCandidates([...candidates, { name: "", number: candidates.length + 1, color: "#7c3aed" }])}>
+          <button type="button" className="btn btn-secondary" onClick={() => setCandidates([...candidates, createCandidate(candidates.length + 1, "#7c3aed")])}>
             新增候選人／組合
           </button>
         </div>
         {candidates.map((candidate, index) => (
-          <div key={index} className="grid grid-cols-[80px_1fr_70px] gap-3">
-            <input type="number" min={1} className="input" value={candidate.number} onChange={(e) => setCandidates(candidates.map((item, i) => i === index ? { ...item, number: Number(e.target.value) } : item))} />
-            <input required className="input" placeholder="例：王小明（主席）＋李小華（副主席）" value={candidate.name} onChange={(e) => setCandidates(candidates.map((item, i) => i === index ? { ...item, name: e.target.value } : item))} />
-            <input type="color" className="input h-10 p-1" value={candidate.color} onChange={(e) => setCandidates(candidates.map((item, i) => i === index ? { ...item, color: e.target.value } : item))} />
+          <div key={index} className="rounded-xl border p-4 space-y-3" style={{ borderColor: "var(--border)" }}>
+            <div className="grid grid-cols-[80px_70px_1fr] items-center gap-3">
+              <input type="number" min={1} className="input" aria-label="候選號次" value={candidate.number} onChange={(e) => setCandidates(candidates.map((item, i) => i === index ? { ...item, number: Number(e.target.value) } : item))} />
+              <input type="color" className="input h-10 p-1" aria-label="候選識別色" value={candidate.color} onChange={(e) => setCandidates(candidates.map((item, i) => i === index ? { ...item, color: e.target.value } : item))} />
+              <strong>{candidate.number} 號候選人／組合</strong>
+            </div>
+            <div className="space-y-2">
+              {candidate.members.map((member, memberIndex) => (
+                <div key={memberIndex} className="grid grid-cols-[minmax(120px,0.7fr)_minmax(160px,1fr)_auto] gap-2">
+                  <input
+                    required
+                    className="input"
+                    placeholder="職位，例如主席"
+                    value={member.position}
+                    onChange={(event) => setCandidates(candidates.map((item, i) => i === index ? {
+                      ...item,
+                      members: item.members.map((current, j) => j === memberIndex ? { ...current, position: event.target.value } : current),
+                    } : item))}
+                  />
+                  <input
+                    required
+                    className="input"
+                    placeholder="姓名"
+                    value={member.name}
+                    onChange={(event) => setCandidates(candidates.map((item, i) => i === index ? {
+                      ...item,
+                      members: item.members.map((current, j) => j === memberIndex ? { ...current, name: event.target.value } : current),
+                    } : item))}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={candidate.members.length === 1}
+                    onClick={() => setCandidates(candidates.map((item, i) => i === index ? {
+                      ...item,
+                      members: item.members.filter((_, j) => j !== memberIndex),
+                    } : item))}
+                  >
+                    移除
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setCandidates(candidates.map((item, i) => i === index ? {
+                ...item,
+                members: [...item.members, { position: "", name: "" }],
+              } : item))}
+            >
+              新增組合成員
+            </button>
           </div>
         ))}
       </section>

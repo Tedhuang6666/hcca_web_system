@@ -6,6 +6,14 @@ export type ElectionStatus = "draft" | "live" | "paused" | "closed";
 export type BallotBoxStatus = "pending" | "counting" | "paused" | "locked";
 export type VoteEventKind = "candidate" | "invalid";
 
+export interface ElectionCandidateMember {
+  id: string;
+  candidate_id: string;
+  position: string;
+  name: string;
+  sort_order: number;
+}
+
 export interface ElectionCandidate {
   id: string;
   election_id: string;
@@ -14,6 +22,7 @@ export interface ElectionCandidate {
   color: string;
   sort_order: number;
   is_active: boolean;
+  members: ElectionCandidateMember[];
 }
 
 export interface ElectionBallotBox {
@@ -68,6 +77,7 @@ export interface CandidateTally {
   name: string;
   number: number;
   color: string;
+  members: ElectionCandidateMember[];
   votes: number;
   percentage: number;
 }
