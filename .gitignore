@@ -15,8 +15,12 @@ node_modules/
 # Cache
 .ruff_cache/
 .pytest_cache/
+.mypy_cache/
 .next/
 apps/web/.next/
+.coverage
+coverage.xml
+htmlcov/
 
 # Environment files
 .env
@@ -69,12 +73,18 @@ RegulationArticleCreate
 .maintainer-tools/
 .cursor/
 .vscode/
+.mcp.json
 docs/
 README_FOR_CLAUDE.md
 CLAUDE.md
+AGENTS.md
 MAINTAINER_CONTEXT.md
 meilisearch
 test.env
+
+# Local database exports and manual backups
+/*.dump
+/backups/manual/
 
 # Celery beat 執行期排程狀態（runtime，勿進版控）
 apps/api/celerybeat-schedule
