@@ -10,6 +10,7 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import Placeholder from "@tiptap/extension-placeholder";
+import { Extension } from "@tiptap/core";
 import { Markdown } from "tiptap-markdown";
 
 // ── CSS for editor ──────────────────────────────────────────────────────────
@@ -74,11 +75,44 @@ type ToolbarBtn = {
   code?: boolean;
 };
 
+const ListEnterKeymap = Extension.create({
+  name: "listEnterKeymap",
+  priority: 1000,
+  addKeyboardShortcuts() {
+    return {
+      Enter: () => {
+        if (!this.editor.isActive("listItem")) return false;
+        return this.editor.commands.splitListItem("listItem");
+      },
+    };
+  },
+});
+
 const TOOLBAR: (ToolbarBtn | "divider")[] = [
   {
-    label: "P", title: "正文段落",
+    label: "P", title: "正文格式",
     isActive: e => e.isActive("paragraph") ?? false,
     action: e => e.chain().focus().setParagraph().run(),
+  },
+  {
+    label: "¶+", title: "新增下一段／清單項目 (Enter)",
+    action: e => {
+      if (e.isActive("listItem")) {
+        e.chain().focus().splitListItem("listItem").run();
+        return;
+      }
+      e.chain().focus().splitBlock().run();
+    },
+  },
+  {
+    label: "×¶", title: "刪除目前段落／清單項目",
+    action: e => {
+      if (e.isActive("listItem")) {
+        e.chain().focus().deleteNode("listItem").run();
+        return;
+      }
+      if (e.isActive("paragraph")) e.chain().focus().deleteNode("paragraph").run();
+    },
   },
   {
     label: "↵", title: "段內換行 (Shift+Enter)",
@@ -189,6 +223,7 @@ const RichTextarea = forwardRef<RichTextareaHandle, RichTextareaProps>(function 
       // Tiptap v3 StarterKit 已內建 underline，停用以避免 "Duplicate extension names" 警告
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       StarterKit.configure({ underline: false } as any),
+      ListEnterKeymap,
       Underline,
       Placeholder.configure({ placeholder }),
       Markdown.configure({ html: false, tightLists: true }),
@@ -309,7 +344,7 @@ const RichTextarea = forwardRef<RichTextareaHandle, RichTextareaProps>(function 
         className="border-t px-3 py-1.5 text-[10px]"
         style={{ borderColor: "var(--border)", color: "var(--text-disabled)" }}
       >
-        Enter 建立新段落，Shift+Enter 在同一段內換行
+        Enter 或 ¶+ 建立下一段／清單項目；Shift+Enter 或 ↵ 在同一段內換行
       </p>
     </div>
   );
