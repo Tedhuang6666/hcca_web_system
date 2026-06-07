@@ -157,7 +157,9 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
           <Topbar onMenuClick={() => setSidebarOpen((p) => !p)} />
           <main
             id="main-content"
-            className="flex-1 overflow-y-auto p-5 md:p-6 pb-20 md:pb-6 animate-slide-in"
+            className={`flex-1 overflow-y-auto p-5 pb-20 md:p-6 md:pb-6 ${
+              pathname.startsWith("/legal") ? "" : "animate-slide-in"
+            }`}
             style={{ background: "var(--bg-base)" }}>
             {moduleDown && moduleId && !isAdmin ? (
               <ModuleMaintenance moduleId={moduleId} />

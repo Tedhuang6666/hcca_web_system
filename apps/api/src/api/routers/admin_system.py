@@ -746,7 +746,9 @@ async def module_trip_history(module_id: str, _admin: AdminUser) -> ModuleTripHi
         max_severity=str(meta["max_severity"]),
         recent_5xx_count=module_5xx_count(module_id),
         severity_breakdown=breakdown,
-        recent_events=[ModuleTripHistoryItem.model_validate(item) for item in recent_trip_events(module_id)],
+        recent_events=[
+            ModuleTripHistoryItem.model_validate(item) for item in recent_trip_events(module_id)
+        ],
     )
 
 
