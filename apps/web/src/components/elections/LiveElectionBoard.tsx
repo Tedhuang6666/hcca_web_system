@@ -346,51 +346,82 @@ export default function LiveElectionBoard({
           )}
         </header>
 
-        {/* 結算冠軍聚焦 */}
-        {champion && (
-          <section className="live-result-enter mt-5 overflow-hidden rounded-2xl border border-[#e8c970]/45 bg-gradient-to-br from-[#e8c970]/[0.14] to-transparent p-6 sm:p-8">
-            <div className="flex flex-col items-center gap-6 text-center sm:flex-row sm:text-left">
-              <div className="relative grid place-items-center">
-                <Trophy className="absolute -top-7 text-[#e8c970]" size={34} aria-hidden />
-                <div
-                  className="live-winner-pop grid h-24 w-24 place-items-center rounded-2xl text-3xl font-black text-white shadow-xl sm:h-28 sm:w-28"
-                  style={{ backgroundColor: champion.color }}
-                >
-                  {champion.number}
-                </div>
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#e8c970]">
-                  {summary.seats > 1 ? `當選（共 ${electedCandidates.length} 名 · 最高票）` : "當選 / 最高票"}
-                </p>
-                <div className="mt-2 flex items-center justify-center gap-3 sm:justify-start">
-                  <MemberAvatars candidate={champion} size={52} />
-                  <div className="min-w-0">
-                    {champion.members.length > 0 ? (
-                      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                        {champion.members.map((member) => (
-                          <span key={member.id} className="text-2xl font-semibold sm:text-3xl">
-                            {member.name}
-                            <span className="ml-1 text-sm font-normal text-[#aebeca]">{member.position}</span>
-                          </span>
-                        ))}
+        {/* 結算當選名單（單人聚焦 / 多人並列） */}
+        {electedCandidates.length > 0 && (
+          <section className="live-result-enter mt-5">
+            <div className="mb-3 flex items-center gap-2">
+              <Trophy className="text-[#e8c970]" size={22} aria-hidden />
+              <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#e8c970]">
+                當選名單{summary.seats > 1 ? `（共 ${electedCandidates.length} 名）` : ""}
+              </p>
+            </div>
+            <div
+              className={`grid gap-3 ${
+                electedCandidates.length === 1
+                  ? ""
+                  : electedCandidates.length === 2
+                    ? "sm:grid-cols-2"
+                    : "sm:grid-cols-2 lg:grid-cols-3"
+              }`}
+            >
+              {electedCandidates.map((winner, i) => {
+                const single = electedCandidates.length === 1;
+                return (
+                  <article
+                    key={winner.candidate_id}
+                    className="live-winner-pop overflow-hidden rounded-2xl border border-[#e8c970]/45 bg-gradient-to-br from-[#e8c970]/[0.14] to-transparent p-5 sm:p-6"
+                    style={{ animationDelay: `${i * 120}ms` }}
+                  >
+                    <div className={`flex items-center gap-4 ${single ? "flex-col text-center sm:flex-row sm:text-left" : ""}`}>
+                      <div className="relative grid shrink-0 place-items-center">
+                        {single && <Trophy className="absolute -top-7 text-[#e8c970]" size={32} aria-hidden />}
+                        <div
+                          className={`grid place-items-center rounded-2xl font-black text-white shadow-xl ${
+                            single ? "h-24 w-24 text-3xl sm:h-28 sm:w-28" : "h-16 w-16 text-2xl"
+                          }`}
+                          style={{ backgroundColor: winner.color }}
+                        >
+                          {winner.number}
+                        </div>
                       </div>
-                    ) : (
-                      <h2 className="text-2xl font-semibold sm:text-3xl">{champion.name}</h2>
-                    )}
-                  </div>
-                </div>
-                <div className="mt-4 flex flex-wrap items-baseline justify-center gap-x-6 gap-y-1 sm:justify-start">
-                  <p>
-                    <AnimatedNumber value={champion.votes} className="text-4xl font-black tabular-nums text-[#e8c970] sm:text-5xl" />
-                    <span className="ml-2 text-lg text-[#aebeca]">票</span>
-                  </p>
-                  <p className="text-lg tabular-nums text-[#cdd8e0]">得票率 {champion.percentage.toFixed(1)}%</p>
-                  {championMargin !== null && (
-                    <p className="text-sm tabular-nums text-[#91a5b5]">領先次高 {championMargin.toLocaleString("zh-TW")} 票</p>
-                  )}
-                </div>
-              </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {!single && (
+                            <span className="rounded-full bg-[#e8c970] px-2 py-0.5 text-[11px] font-bold text-[#173654]">
+                              第 {winner.rank} 名
+                            </span>
+                          )}
+                          <MemberAvatars candidate={winner} size={single ? 48 : 38} />
+                        </div>
+                        <div className="mt-1.5">
+                          {winner.members.length > 0 ? (
+                            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+                              {winner.members.map((member) => (
+                                <span key={member.id} className={`font-semibold ${single ? "text-2xl sm:text-3xl" : "text-xl"}`}>
+                                  {member.name}
+                                  <span className="ml-1 text-xs font-normal text-[#aebeca]">{member.position}</span>
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <h3 className={`font-semibold ${single ? "text-2xl sm:text-3xl" : "text-xl"}`}>{winner.name}</h3>
+                          )}
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-0.5">
+                          <p>
+                            <AnimatedNumber value={winner.votes} className={`font-black tabular-nums text-[#e8c970] ${single ? "text-4xl sm:text-5xl" : "text-3xl"}`} />
+                            <span className="ml-1.5 text-sm text-[#aebeca]">票</span>
+                          </p>
+                          <p className="text-base tabular-nums text-[#cdd8e0]">得票率 {winner.percentage.toFixed(1)}%</p>
+                          {i === 0 && championMargin !== null && (
+                            <p className="text-xs tabular-nums text-[#91a5b5]">領先次高 {championMargin.toLocaleString("zh-TW")} 票</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           </section>
         )}
