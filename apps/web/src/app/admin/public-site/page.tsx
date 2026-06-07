@@ -1,13 +1,18 @@
 "use client";
 
 import {
+  ArrowDown,
+  ArrowUp,
   ArrowUpRight,
+  Compass,
   Eye,
+  EyeOff,
   FileText,
   Globe2,
   Link as LinkIcon,
   Plus,
   RefreshCw,
+  RotateCcw,
   Save,
   Trash2,
   Users,
@@ -16,6 +21,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { ApiError, siteApi } from "@/lib/api";
+import {
+  PUBLIC_NAV_GROUP_META,
+  PUBLIC_NAV_ITEMS,
+  type PublicNavGroupId,
+  type PublicNavOverride,
+  type ResolvedNavItem,
+  resolvePublicNav,
+} from "@/lib/publicNav";
 import type {
   PublicLinkCategoryOut,
   PublicLinkOut,
@@ -25,7 +38,10 @@ import type {
   PublicSiteSettingsOut,
 } from "@/lib/types";
 
-type Tab = "settings" | "pages" | "links" | "officers" | "advanced";
+type Tab = "settings" | "nav" | "pages" | "links" | "officers" | "advanced";
+
+/** 後台導覽列分頁的群組顯示順序。 */
+const NAV_GROUP_ORDER: PublicNavGroupId[] = ["primary", "info", "data", "participation"];
 
 const emptySettings: PublicSiteSettingsOut = {
   id: "",
@@ -56,6 +72,7 @@ const emptySettings: PublicSiteSettingsOut = {
 
 const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "settings", label: "基本設定", icon: <Save size={16} aria-hidden /> },
+  { id: "nav", label: "導覽列", icon: <Compass size={16} aria-hidden /> },
   { id: "pages", label: "頁面內容", icon: <FileText size={16} aria-hidden /> },
   { id: "links", label: "平台連結", icon: <LinkIcon size={16} aria-hidden /> },
   { id: "officers", label: "幹部顯示", icon: <Users size={16} aria-hidden /> },
@@ -215,6 +232,7 @@ export default function PublicSiteAdminPage() {
   const [profiles, setProfiles] = useState<PublicOfficerProfileOut[]>([]);
   const [themeJson, setThemeJson] = useState("{}");
   const [blocksJson, setBlocksJson] = useState("{}");
+  const [navItems, setNavItems] = useState<ResolvedNavItem[]>([]);
 
   const [pageDraft, setPageDraft] = useState({
     slug: "",
@@ -281,6 +299,7 @@ export default function PublicSiteAdminPage() {
       setProfiles(nextProfiles);
       setThemeJson(JSON.stringify(nextSettings.theme_config ?? {}, null, 2));
       setBlocksJson(JSON.stringify(nextSettings.homepage_blocks ?? {}, null, 2));
+      setNavItems(resolvePublicNav(nextSettings.theme_config));
     } catch (error) {
       displayError(error, "載入公開網站設定失敗");
     } finally {
@@ -337,6 +356,54 @@ export default function PublicSiteAdminPage() {
       toast.success("進階設定已儲存");
     } catch (error) {
       displayError(error, error instanceof Error ? error.message : "儲存進階設定失敗");
+    }
+  };
+
+  /** 更新單一導覽項目的覆寫欄位（顯示名稱、是否隱藏）。 */
+  const patchNavItem = (key: string, patch: Partial<ResolvedNavItem>) => {
+    setNavItems((prev) => prev.map((item) => (item.key === key ? { ...item, ...patch } : item)));
+  };
+
+  /** 同組內上移／下移；以 order 為準，移動後重新編號避免衝突。 */
+  const moveNavItem = (key: string, dir: "up" | "down") => {
+    setNavItems((prev) => {
+      const sorted = [...prev].sort((a, b) => a.order - b.order);
+      const idx = sorted.findIndex((item) => item.key === key);
+      if (idx < 0) return prev;
+      const step = dir === "up" ? -1 : 1;
+      let target = idx + step;
+      while (target >= 0 && target < sorted.length && sorted[target].group !== sorted[idx].group) {
+        target += step;
+      }
+      if (target < 0 || target >= sorted.length) return prev;
+      [sorted[idx], sorted[target]] = [sorted[target], sorted[idx]];
+      return sorted.map((item, index) => ({ ...item, order: index }));
+    });
+  };
+
+  /** 還原成內建預設（清空覆寫），仍需按儲存才會生效。 */
+  const resetNav = () => setNavItems(resolvePublicNav(null));
+
+  const saveNav = async () => {
+    try {
+      const sorted = [...navItems].sort((a, b) => a.order - b.order);
+      const items: Record<string, PublicNavOverride> = {};
+      sorted.forEach((item, index) => {
+        const def = PUBLIC_NAV_ITEMS.find((entry) => entry.key === item.key);
+        const override: PublicNavOverride = { order: index };
+        if (item.hidden) override.hidden = true;
+        const label = item.label.trim();
+        if (def && label && label !== def.label) override.label = label;
+        items[item.key] = override;
+      });
+      const nextTheme = { ...(settings.theme_config ?? {}), nav: { items } };
+      const next = await siteApi.updateSettings({ theme_config: nextTheme });
+      setSettings(next);
+      setNavItems(resolvePublicNav(next.theme_config));
+      setThemeJson(JSON.stringify(next.theme_config ?? {}, null, 2));
+      toast.success("導覽列設定已儲存");
+    } catch (error) {
+      displayError(error, "儲存導覽列失敗");
     }
   };
 
@@ -546,6 +613,108 @@ export default function PublicSiteAdminPage() {
             <Field label="使命 Markdown"><TextArea value={settings.mission_md ?? ""} onChange={(e) => setSettings({ ...settings, mission_md: e.target.value })} /></Field>
             <Field label="沿革 Markdown"><TextArea value={settings.history_md ?? ""} onChange={(e) => setSettings({ ...settings, history_md: e.target.value })} /></Field>
           </div>
+        </section>
+      )}
+
+      {tab === "nav" && (
+        <section className="space-y-4">
+          <div className="card space-y-3 p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="font-semibold">公開站導覽列</h2>
+                <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--text-muted)]">
+                  調整公開網站頂部導覽：開關顯示、上下排序、改寫顯示名稱。「主要導覽」會直接出現在頂列，其餘群組收進「所有公開服務」選單；標記「免登入」的服務未登入者也能直接使用。
+                </p>
+              </div>
+              <div className="flex shrink-0 gap-2">
+                <button type="button" onClick={resetNav} className="btn btn-secondary">
+                  <RotateCcw size={16} aria-hidden /> 還原預設
+                </button>
+                <button type="button" onClick={saveNav} className="btn btn-primary">
+                  <Save size={16} aria-hidden /> 儲存導覽列
+                </button>
+              </div>
+            </div>
+          </div>
+          {NAV_GROUP_ORDER.map((groupId) => {
+            const meta = PUBLIC_NAV_GROUP_META[groupId];
+            const items = navItems
+              .filter((item) => item.group === groupId)
+              .sort((a, b) => a.order - b.order);
+            if (items.length === 0) return null;
+            return (
+              <div key={groupId} className="card space-y-3 p-5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-sm font-semibold">{meta.label}</h3>
+                  {meta.hint && (
+                    <span className="rounded-full px-2 py-0.5 text-xs font-semibold" style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
+                      {meta.hint}
+                    </span>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  {items.map((item, index) => {
+                    const Icon = item.icon;
+                    const def = PUBLIC_NAV_ITEMS.find((entry) => entry.key === item.key);
+                    return (
+                      <div
+                        key={item.key}
+                        className={`flex flex-wrap items-center gap-3 rounded-lg px-3 py-2 ${item.hidden ? "opacity-55" : ""}`}
+                        style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
+                      >
+                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
+                          <Icon size={17} aria-hidden />
+                        </span>
+                        <div className="min-w-[10rem] flex-1">
+                          <input
+                            value={item.label}
+                            onChange={(e) => patchNavItem(item.key, { label: e.target.value })}
+                            placeholder={def?.label ?? ""}
+                            aria-label={`${def?.label ?? item.key} 顯示名稱`}
+                            className="w-full rounded-md px-2 py-1 text-sm outline-none"
+                            style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
+                          />
+                          <p className="mt-1 text-xs text-[var(--text-muted)]">
+                            {item.href}
+                            {item.guestUsable && <span className="ml-2 font-medium text-[var(--primary)]">免登入可用</span>}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-ghost"
+                            disabled={index === 0}
+                            aria-label="上移"
+                            onClick={() => moveNavItem(item.key, "up")}
+                          >
+                            <ArrowUp size={15} aria-hidden />
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-ghost"
+                            disabled={index === items.length - 1}
+                            aria-label="下移"
+                            onClick={() => moveNavItem(item.key, "down")}
+                          >
+                            <ArrowDown size={15} aria-hidden />
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-ghost"
+                            aria-label={item.hidden ? "顯示此項目" : "隱藏此項目"}
+                            onClick={() => patchNavItem(item.key, { hidden: !item.hidden })}
+                          >
+                            {item.hidden ? <EyeOff size={15} aria-hidden /> : <Eye size={15} aria-hidden />}
+                            {item.hidden ? "已隱藏" : "顯示中"}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
         </section>
       )}
 

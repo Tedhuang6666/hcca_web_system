@@ -3609,6 +3609,15 @@ html[data-reveal-ready] [data-reveal].is-reveal-in {
    即時開票看板：候選列、動畫、結算畫面、控制台鎖定遮罩
    ══════════════════════════════════════════════════════════════════════════ */
 
+/* 開票看板為獨立深色頁，標題不可套用全域深色字（否則深底看不見） */
+.live-board h1,
+.live-board h2,
+.live-board h3,
+.live-board h4,
+.live-board strong {
+  color: inherit;
+}
+
 /* 候選列換位：FLIP 排序時的平滑滑動 */
 .live-candidate-row {
   transition: transform 620ms cubic-bezier(0.22, 1, 0.36, 1);
