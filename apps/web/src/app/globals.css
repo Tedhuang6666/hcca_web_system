@@ -2306,6 +2306,374 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 .animate-spin { animation: spin 0.8s linear infinite; }
 
+/* ── App atmosphere and dashboard ─────────────────────────────────────── */
+.app-shell {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 88% 4%, color-mix(in srgb, var(--info) 13%, transparent), transparent 30rem),
+    radial-gradient(circle at 12% 92%, color-mix(in srgb, var(--primary) 10%, transparent), transparent 34rem),
+    var(--bg-base);
+}
+
+.app-main {
+  position: relative;
+  background:
+    linear-gradient(color-mix(in srgb, var(--border) 32%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--border) 32%, transparent) 1px, transparent 1px);
+  background-size: 32px 32px;
+  background-attachment: local;
+}
+
+.app-main::before {
+  position: fixed;
+  z-index: -1;
+  width: 24rem;
+  height: 24rem;
+  right: 4%;
+  top: 10%;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--info) 9%, transparent);
+  filter: blur(80px);
+  content: "";
+  pointer-events: none;
+  animation: ambient-drift 12s ease-in-out infinite alternate;
+}
+
+.dashboard-page {
+  position: relative;
+}
+
+.dashboard-hero {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 76%, transparent);
+  border-radius: 24px;
+  color: var(--text-primary);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--bg-elevated) 92%, transparent), color-mix(in srgb, var(--primary-dim) 70%, var(--bg-surface))),
+    var(--bg-surface);
+  box-shadow: 0 28px 70px rgba(26, 26, 46, 0.12), inset 0 1px rgba(255, 255, 255, 0.6);
+  animation: dashboard-hero-enter 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+[data-theme="dark"] .dashboard-hero {
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.42), inset 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.dashboard-hero::after {
+  position: absolute;
+  inset: 0;
+  opacity: 0.32;
+  background-image: radial-gradient(color-mix(in srgb, var(--primary) 58%, transparent) 0.7px, transparent 0.7px);
+  background-size: 14px 14px;
+  mask-image: linear-gradient(90deg, transparent 35%, black);
+  content: "";
+  pointer-events: none;
+}
+
+.dashboard-hero-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  min-height: 205px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+}
+
+.dashboard-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--primary-text);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+}
+
+.dashboard-kicker-icon {
+  display: grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--primary) 42%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary-dim) 84%, transparent);
+  box-shadow: 0 0 24px color-mix(in srgb, var(--primary) 20%, transparent);
+}
+
+.dashboard-title {
+  font-size: clamp(1.8rem, 5vw, 3.25rem);
+  font-weight: 800;
+  line-height: 1.12;
+  letter-spacing: -0.04em;
+}
+
+.dashboard-role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 36%, transparent);
+  border-radius: 999px;
+  padding: 0.3rem 0.55rem;
+  background: color-mix(in srgb, var(--primary-dim) 82%, transparent);
+  color: var(--primary-text);
+  font-size: 0.66rem;
+  font-weight: 750;
+}
+
+.dashboard-subtitle {
+  max-width: 38rem;
+  margin-top: 0.85rem;
+  color: var(--text-secondary);
+  font-size: clamp(0.9rem, 2vw, 1.05rem);
+  line-height: 1.75;
+}
+
+.dashboard-pulse {
+  position: relative;
+  display: grid;
+  width: 7.5rem;
+  height: 7.5rem;
+  flex: 0 0 auto;
+  place-items: center;
+}
+
+.dashboard-pulse-core {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  width: 4.3rem;
+  height: 4.3rem;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--primary) 44%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-elevated) 74%, transparent);
+  color: var(--primary-text);
+  box-shadow: 0 18px 36px color-mix(in srgb, var(--primary) 18%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+.dashboard-pulse-ring {
+  position: absolute;
+  inset: 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 34%, transparent);
+  border-radius: 999px;
+  animation: dashboard-pulse 2.8s ease-out infinite;
+}
+
+.dashboard-pulse-label {
+  position: absolute;
+  right: 0.15rem;
+  bottom: 0.7rem;
+  z-index: 3;
+  border-radius: 999px;
+  padding: 0.2rem 0.42rem;
+  background: var(--success);
+  color: #fff;
+  font-size: 0.55rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--success) 15%, transparent);
+}
+
+.dashboard-hero-glow {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(1px);
+  pointer-events: none;
+}
+
+.dashboard-hero-glow-one {
+  width: 16rem;
+  height: 16rem;
+  right: -5rem;
+  top: -8rem;
+  background: color-mix(in srgb, var(--info) 18%, transparent);
+}
+
+.dashboard-hero-glow-two {
+  width: 12rem;
+  height: 12rem;
+  left: 38%;
+  bottom: -9rem;
+  background: color-mix(in srgb, var(--primary) 17%, transparent);
+}
+
+.dashboard-hero-footer {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  min-height: 60px;
+  align-items: center;
+  gap: 1.25rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  padding: 0.75rem clamp(1.5rem, 4vw, 2.5rem);
+  background: color-mix(in srgb, var(--bg-elevated) 54%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.dashboard-stat {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+.dashboard-stat svg {
+  color: var(--primary-text);
+}
+
+.dashboard-stat strong {
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.dashboard-updated {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+}
+
+.dashboard-primary-action {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 999px;
+  padding: 0 0.9rem;
+  background: var(--text-primary);
+  color: var(--bg-elevated);
+  font-size: 0.75rem;
+  font-weight: 750;
+  text-decoration: none;
+  box-shadow: var(--shadow-md);
+  transition: transform var(--transition), box-shadow var(--transition), background var(--transition);
+}
+
+.dashboard-primary-action:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.dashboard-recents {
+  scrollbar-width: none;
+}
+
+.dashboard-recents::-webkit-scrollbar {
+  display: none;
+}
+
+.dashboard-recent-chip {
+  border: 1px solid color-mix(in srgb, var(--border-strong) 78%, transparent);
+  background: color-mix(in srgb, var(--bg-elevated) 82%, transparent);
+  color: var(--text-secondary);
+  text-decoration: none;
+  box-shadow: var(--shadow-xs);
+  backdrop-filter: blur(10px);
+  transition: border-color var(--transition), color var(--transition), transform var(--transition);
+}
+
+.dashboard-recent-chip:hover {
+  border-color: color-mix(in srgb, var(--primary) 50%, var(--border));
+  color: var(--primary-text);
+  transform: translateY(-1px);
+}
+
+.dashboard-widget {
+  position: relative;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 76%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(14px);
+  animation: dashboard-card-enter 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition);
+}
+
+.dashboard-widget::before {
+  position: absolute;
+  inset: 0 18% auto;
+  height: 1px;
+  opacity: 0;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--primary) 75%, white), transparent);
+  content: "";
+  transition: opacity var(--transition);
+}
+
+.dashboard-widget:hover {
+  border-color: color-mix(in srgb, var(--primary) 34%, var(--border-strong));
+  box-shadow: 0 18px 42px rgba(26, 26, 46, 0.11);
+  transform: translateY(-4px);
+}
+
+.dashboard-widget:hover::before {
+  opacity: 0.9;
+}
+
+[data-theme="dark"] .dashboard-widget:hover {
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.38);
+}
+
+.dashboard-widget-row,
+.dashboard-widget-footer {
+  transition: background var(--transition), color var(--transition);
+}
+
+.dashboard-widget-row:hover,
+.dashboard-widget-footer:hover {
+  background: color-mix(in srgb, var(--primary-dim) 62%, transparent);
+}
+
+@keyframes dashboard-hero-enter {
+  from { opacity: 0; transform: translateY(16px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes dashboard-card-enter {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes dashboard-pulse {
+  0% { opacity: 0.75; transform: scale(0.72); }
+  75%, 100% { opacity: 0; transform: scale(1.12); }
+}
+
+@keyframes ambient-drift {
+  from { transform: translate3d(0, -2%, 0) scale(0.94); }
+  to { transform: translate3d(-8%, 8%, 0) scale(1.08); }
+}
+
+@media (max-width: 767px) {
+  .dashboard-hero-content {
+    min-height: 0;
+    padding-bottom: 1.75rem;
+  }
+
+  .dashboard-pulse {
+    display: none;
+  }
+
+  .dashboard-hero-footer {
+    flex-wrap: wrap;
+    gap: 0.7rem 1rem;
+  }
+
+  .dashboard-updated {
+    width: 100%;
+    order: 3;
+    margin-left: 0;
+  }
+
+  .dashboard-primary-action {
+    margin-left: auto;
+  }
+}
+
 /* Skeleton shimmer：取代 spinner，預期內容形狀 */
 @keyframes skeleton-shimmer {
   0%   { background-position: 200% 0; }

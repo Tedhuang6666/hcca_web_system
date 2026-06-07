@@ -88,7 +88,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
   return (
     <PermissionProvider can={can}>
       <ConfirmProvider>
-      <div className="flex h-screen overflow-hidden" style={{ background: "var(--bg-base)" }}>
+      <div className="app-shell flex h-screen overflow-hidden">
         <a
           href="#main-content"
           className="fixed left-3 top-3 z-[200] -translate-y-20 rounded-md px-3 py-2 text-sm font-medium transition-transform focus:translate-y-0"
@@ -122,10 +122,10 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
           <Topbar onMenuClick={() => setSidebarOpen((p) => !p)} />
           <main
             id="main-content"
-            className={`flex-1 overflow-y-auto p-5 pb-20 md:p-6 md:pb-6 ${
+            className={`app-main flex-1 overflow-y-auto p-5 pb-20 md:p-6 md:pb-6 ${
               pathname.startsWith("/legal") ? "" : "animate-slide-in"
             }`}
-            style={{ background: "var(--bg-base)" }}>
+          >
             {moduleDown && moduleId && !isAdmin ? (
               <ModuleMaintenance moduleId={moduleId} />
             ) : (

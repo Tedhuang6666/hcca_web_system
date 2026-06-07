@@ -4,7 +4,8 @@ import Link from "next/link";
 import { toast } from "sonner";
 import {
   FileText, ListChecks, Landmark, Scale, Megaphone, MessageSquare,
-  CheckSquare, ChevronRight, Plus, Loader2, Sparkles, Clock,
+  CheckSquare, ChevronRight, Plus, Loader2, Sparkles, Clock, ArrowUpRight,
+  Layers3, Zap,
 } from "lucide-react";
 import {
   dashboardApi,
@@ -61,19 +62,16 @@ function formatDate(s?: string | null) {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
-function WidgetCard({ w }: { w: DashboardWidget }) {
+function WidgetCard({ w, index }: { w: DashboardWidget; index: number }) {
   const Icon = WIDGET_ICONS[w.key] ?? FallbackWidgetIcon;
   const sev = SEVERITY_STYLES[w.severity] ?? SEVERITY_STYLES.info;
 
   return (
     <section
       aria-labelledby={`widget-${w.key}`}
-      className="card overflow-hidden flex flex-col"
+      className="dashboard-widget card overflow-hidden flex flex-col"
       style={{
-        background: "var(--bg-surface)",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius-lg)",
-        boxShadow: "var(--shadow-sm)",
+        animationDelay: `${Math.min(index * 55, 330)}ms`,
       }}>
       <header className="px-5 py-4 flex items-center justify-between gap-3"
         style={{ borderBottom: "1px solid var(--border)" }}>
@@ -127,10 +125,9 @@ function WidgetCard({ w }: { w: DashboardWidget }) {
               {it.href ? (
                 <Link
                   href={it.href}
-                  className="flex items-center gap-3 px-5 py-3 transition-colors"
+                  className="dashboard-widget-row flex items-center gap-3 px-5 py-3"
                   style={{ textDecoration: "none" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+                >
                   <div className="flex-1 min-w-0">
                     <p className="text-sm truncate" style={{ color: "var(--text-primary)" }}>
                       {it.title}
@@ -178,14 +175,12 @@ function WidgetCard({ w }: { w: DashboardWidget }) {
       {w.href && (
         <Link
           href={w.href}
-          className="px-5 py-2.5 text-xs font-medium flex items-center justify-end gap-1 transition-colors"
+          className="dashboard-widget-footer px-5 py-2.5 text-xs font-medium flex items-center justify-end gap-1"
           style={{
-            color: "var(--primary)",
+            color: "var(--primary-text)",
             borderTop: "1px solid var(--border)",
             textDecoration: "none",
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+          }}>
           查看全部 <ChevronRight size={12} aria-hidden={true} />
         </Link>
       )}
@@ -249,9 +244,10 @@ export default function DashboardPage() {
   const widgets = data?.widgets ?? [];
   const layoutHint = data?.layout_hint ?? "student";
   const hasAny = widgets.length > 0;
+  const visibleItems = widgets.reduce((sum, widget) => sum + widget.items.length, 0);
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="dashboard-page max-w-6xl mx-auto space-y-6">
 
       {/* 一次性引導：首次進站時提示 */}
       <OnboardingHint id="hint.dashboard.first-visit">
@@ -260,42 +256,69 @@ export default function DashboardPage() {
       </OnboardingHint>
 
       {/* 頁首 */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
-              {greeting}，{userName || "使用者"}
-            </h1>
+      <section className="dashboard-hero">
+        <div className="dashboard-hero-glow dashboard-hero-glow-one" aria-hidden="true" />
+        <div className="dashboard-hero-glow dashboard-hero-glow-two" aria-hidden="true" />
+        <div className="dashboard-hero-content">
+          <div className="min-w-0">
+            <div className="dashboard-kicker">
+              <span className="dashboard-kicker-icon">
+                <Sparkles size={12} aria-hidden={true} />
+              </span>
+              今日治理脈動
+            </div>
+            <div className="mt-4 flex items-center gap-2 flex-wrap">
+              <h1 className="dashboard-title">
+                {greeting}，{userName || "使用者"}
+              </h1>
             {data && (
               <span
-                className="text-[10px] px-1.5 py-0.5 rounded font-medium inline-flex items-center gap-1"
-                style={{
-                  background: "var(--primary-dim)",
-                  color: "var(--primary)",
-                  border: "1px solid var(--info-border)",
-                }}>
+                  className="dashboard-role-badge">
                 <Sparkles size={10} aria-hidden={true} />
                 {HINT_LABEL[layoutHint]}
               </span>
             )}
+            </div>
+            <p className="dashboard-subtitle">
+              {hasAny
+                ? "重要進度、待辦與校園動態，已為你整理在同一個視野裡。"
+                : "今天沒有急迫事項，可以從常用入口開始探索。"}
+            </p>
           </div>
-          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            {hasAny
-              ? "以下是依您的角色聚合的待辦與最新項目"
-              : "目前沒有等您處理的事項"}
-          </p>
+          <div className="dashboard-pulse" aria-hidden="true">
+            <span className="dashboard-pulse-ring" />
+            <span className="dashboard-pulse-core">
+              <Zap size={22} />
+            </span>
+            <span className="dashboard-pulse-label">LIVE</span>
+          </div>
         </div>
-        {can("document:draft") && (
-          <Link href="/documents/new" className="btn btn-primary self-start sm:self-auto">
-            <Plus size={13} aria-hidden={true} />
-            新增公文
-          </Link>
-        )}
-      </div>
+
+        <div className="dashboard-hero-footer">
+          <div className="dashboard-stat">
+            <Layers3 size={16} aria-hidden={true} />
+            <span><strong>{widgets.length}</strong> 個智慧摘要</span>
+          </div>
+          <div className="dashboard-stat">
+            <ListChecks size={16} aria-hidden={true} />
+            <span><strong>{visibleItems}</strong> 筆重點項目</span>
+          </div>
+          <p className="dashboard-updated">
+            內容依權限與角色即時彙整
+          </p>
+          {can("document:draft") && (
+            <Link href="/documents/new" className="dashboard-primary-action">
+              <Plus size={14} aria-hidden={true} />
+              新增公文
+              <ArrowUpRight size={14} aria-hidden={true} />
+            </Link>
+          )}
+        </div>
+      </section>
 
       {/* 最近開啟：個人化捷徑，少翻選單 */}
       {recents.length > 0 && (
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 -mb-1">
+        <div className="dashboard-recents flex items-center gap-2 overflow-x-auto pb-1 -mb-1">
           <span className="flex items-center gap-1 text-xs flex-shrink-0" style={{ color: "var(--text-muted)" }}>
             <Clock size={12} aria-hidden={true} />
             最近開啟
@@ -304,13 +327,7 @@ export default function DashboardPage() {
             <Link
               key={`${item.kind}-${item.id}`}
               href={item.href}
-              className="flex-shrink-0 max-w-[180px] truncate px-3 py-1.5 rounded-full text-xs font-medium transition-opacity hover:opacity-80"
-              style={{
-                background: "var(--bg-surface)",
-                color: "var(--text-secondary)",
-                border: "1px solid var(--border)",
-                textDecoration: "none",
-              }}
+              className="dashboard-recent-chip flex-shrink-0 max-w-[180px] truncate px-3 py-1.5 rounded-full text-xs font-medium"
               title={item.title}>
               {item.title}
             </Link>
@@ -325,8 +342,8 @@ export default function DashboardPage() {
         </div>
       ) : hasAny ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {widgets.map((w) => (
-            <WidgetCard key={w.key} w={w} />
+          {widgets.map((w, index) => (
+            <WidgetCard key={w.key} w={w} index={index} />
           ))}
         </div>
       ) : (
