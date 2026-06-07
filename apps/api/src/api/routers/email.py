@@ -1285,6 +1285,27 @@ async def list_messages(
     return [_to_out(m, m.sender.display_name if m.sender else None) for m in rows]
 
 
+@router.get("/drafts", response_model=list[EmailMessageOut], summary="目前帳號的永久郵件草稿")
+async def list_my_drafts(db: DbDep, user: EmailUser) -> list[EmailMessageOut]:
+    rows = (
+        (
+            await db.execute(
+                select(EmailMessage)
+                .options(selectinload(EmailMessage.sender))
+                .where(
+                    EmailMessage.sender_id == user.id,
+                    EmailMessage.status == EmailStatus.DRAFT,
+                )
+                .order_by(EmailMessage.updated_at.desc())
+                .limit(100)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [_to_out(message, user.display_name) for message in rows]
+
+
 @router.get("/messages/{message_id}", response_model=EmailMessageDetailOut, summary="郵件詳情")
 async def get_message(message_id: uuid.UUID, db: DbDep, user: EmailUser) -> EmailMessageDetailOut:
     stmt = (

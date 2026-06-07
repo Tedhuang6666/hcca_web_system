@@ -241,16 +241,20 @@ function ComposeInner() {
       emailApi.listTemplates(),
       emailApi.listRecipientLists(),
       emailApi.listMessages({ limit: 30 }),
-      emailApi.listMessages({ status: "draft", limit: 100, mine: true }),
     ])
-      .then(([templates, lists, messages, drafts]) => {
+      .then(([templates, lists, messages]) => {
         setPlatformTemplates(templates);
         setRecipientLists(lists);
         setRecentMessages(messages);
-        setDraftMessages(drafts);
       })
       .catch((e) =>
         toast.error(e instanceof ApiError ? e.message : "載入郵件資源失敗"),
+      );
+    emailApi
+      .listDrafts()
+      .then(setDraftMessages)
+      .catch((e) =>
+        toast.error(e instanceof ApiError ? e.message : "載入草稿失敗"),
       );
   }, []);
 

@@ -73,6 +73,27 @@ async def test_create_draft_message_succeeds(client: AsyncClient, db_session: As
 
 
 @pytest.mark.asyncio
+async def test_list_my_drafts_only_returns_current_users_drafts(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    owner = await _seed_user(db_session, "draft-owner@school.edu", ["email:send"])
+    other = await _seed_user(db_session, "draft-other@school.edu", ["email:send"])
+    db_session.add_all(
+        [
+            EmailMessage(sender_id=owner.id, subject="我的永久草稿", status="draft"),
+            EmailMessage(sender_id=other.id, subject="別人的草稿", status="draft"),
+        ]
+    )
+    await db_session.flush()
+    _override_user(owner)
+
+    response = await client.get("/email/drafts")
+
+    assert response.status_code == 200
+    assert [item["subject"] for item in response.json()] == ["我的永久草稿"]
+
+
+@pytest.mark.asyncio
 async def test_create_message_without_auth_returns_401(client: AsyncClient) -> None:
     resp = await client.post("/email/messages", json={"subject": "x", "action": "draft"})
     assert resp.status_code == 401

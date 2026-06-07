@@ -2855,6 +2855,7 @@ export const emailApi = {
   sendMessage: (id: string) => post<EmailMessageOut>(`/email/messages/${id}/send`),
   resendMessage: (id: string) => post<EmailMessageOut>(`/email/messages/${id}/resend`),
   deleteMessage: (id: string) => del<void>(`/email/messages/${id}`),
+  listDrafts: () => get<EmailMessageOut[]>("/email/drafts"),
   listMessages: (params?: {
     status?: string; limit?: number; offset?: number; q?: string;
     sender_id?: string; org_id?: string; template_id?: string;
