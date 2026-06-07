@@ -19,6 +19,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import redis.asyncio as aioredis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.celery_app import celery_app
@@ -37,13 +38,36 @@ async def _task_session() -> AsyncIterator[AsyncSession]:
     "got Future attached to a different loop"。故每次開新 engine 並用後即 dispose。
     """
     from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlalchemy.pool import NullPool
 
-    engine = create_async_engine(str(settings.DATABASE_URL), echo=False)
+    # NullPool：連線一還回（session 結束）就硬關，不留在 pool 裡跨 loop。
+    # 否則預設 AsyncAdaptedQueuePool 會留住 asyncpg 連線，下個 asyncio.run() 的
+    # 新 loop 觸發其 finaliser 時拋 "Event loop is closed"。
+    engine = create_async_engine(str(settings.DATABASE_URL), echo=False, poolclass=NullPool)
     try:
         async with AsyncSession(engine, expire_on_commit=False) as session:
             yield session
     finally:
         await engine.dispose()
+
+
+@asynccontextmanager
+async def _task_redis() -> AsyncIterator[aioredis.Redis]:
+    """每次 asyncio.run() 以新 loop 專屬 redis client 開／關。
+
+    與 _task_session 同理：api.core.security.redis_client 是模組層級共享連線池，
+    首次 await 會把連線綁到當下 event loop。Celery 每次 asyncio.run() 都是新 loop，
+    沿用共享 client 會拋 "got Future attached to a different loop"。
+    """
+    client = aioredis.from_url(
+        str(settings.REDIS_URL),
+        encoding="utf-8",
+        decode_responses=True,
+    )
+    try:
+        yield client
+    finally:
+        await client.aclose()
 
 
 # 門檻
@@ -87,23 +111,21 @@ async def _run() -> dict[str, Any]:
 
 async def _flag_state(key: str) -> bool:
     """回傳是否已在告警狀態。"""
-    from api.core.security import redis_client
-
     try:
-        v = await redis_client.get(_FLAG_PREFIX + key)
+        async with _task_redis() as client:
+            v = await client.get(_FLAG_PREFIX + key)
         return bool(v)
     except Exception:
         return False
 
 
 async def _set_flag(key: str, fired: bool) -> None:
-    from api.core.security import redis_client
-
     try:
-        if fired:
-            await redis_client.set(_FLAG_PREFIX + key, "1", ex=86400)
-        else:
-            await redis_client.delete(_FLAG_PREFIX + key)
+        async with _task_redis() as client:
+            if fired:
+                await client.set(_FLAG_PREFIX + key, "1", ex=86400)
+            else:
+                await client.delete(_FLAG_PREFIX + key)
     except Exception:
         logger.debug("set flag failed key=%s", key, exc_info=True)
 
