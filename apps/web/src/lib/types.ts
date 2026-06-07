@@ -3915,7 +3915,7 @@ export interface ExamTraceInspectOut {
 
 export type PolicyKind =
   | "privacy"
-  | "terms_of_service"
+  | "terms"
   | "accessibility"
   | "cookie"
   | "security";

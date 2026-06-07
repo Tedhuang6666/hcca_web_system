@@ -6,5 +6,5 @@ export const metadata = {
 };
 
 export default function TermsPage() {
-  return <PolicyDocumentViewer kind="terms_of_service" fallbackTitle="服務條款" />;
+  return <PolicyDocumentViewer kind="terms" fallbackTitle="服務條款" />;
 }

@@ -3880,7 +3880,7 @@ export const webhooksApi = {
 // ── 政策（隱私 / ToS / Cookie / 無障礙）───────────────────────────────
 export type PolicyKind =
   | "privacy"
-  | "terms_of_service"
+  | "terms"
   | "cookie"
   | "accessibility"
   | "security";

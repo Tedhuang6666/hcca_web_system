@@ -26,7 +26,7 @@ import {
 
 const KIND_LABEL: Record<PolicyKind, string> = {
   privacy: "隱私權政策",
-  terms_of_service: "服務條款",
+  terms: "服務條款",
   cookie: "Cookie 政策",
   accessibility: "無障礙聲明",
   security: "資安政策",

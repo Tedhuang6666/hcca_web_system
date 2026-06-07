@@ -21,7 +21,7 @@ import type { PendingConsentItem, PolicyKind } from "@/lib/types";
 
 const KIND_LABEL: Record<PolicyKind, string> = {
   privacy: "隱私政策",
-  terms_of_service: "服務條款",
+  terms: "服務條款",
   accessibility: "無障礙聲明",
   cookie: "Cookie 政策",
   security: "安全政策",
