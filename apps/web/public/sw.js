@@ -1,4 +1,4 @@
-const CACHE_NAME = "hcca-shell-v1";
+const CACHE_NAME = "hcca-shell-v2";
 const SHELL_ASSETS = ["/", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
@@ -18,7 +18,13 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
-  if (new URL(request.url).pathname.startsWith("/api/")) return;
+
+  const url = new URL(request.url);
+  // 只攔同源請求。跨來源資源（Google Fonts、頭像、analytics）放給瀏覽器自己依
+  // 各自的 CSP 指令（style-src/img-src/script-src）載入；若在 SW 內用 fetch() 重發，
+  // 會被歸類成 connect-src 而被 CSP 擋下（connect-src 不含這些網域，也不該含）。
+  if (url.origin !== self.location.origin) return;
+  if (url.pathname.startsWith("/api/")) return;
 
   event.respondWith(
     fetch(request)
