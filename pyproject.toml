@@ -11,7 +11,7 @@ dependencies = [
     "authlib>=1.6.9",
     "bcrypt>=5.0.0",
     "boto3>=1.42.88",
-    "celery>=5.3.1",
+    "celery>=5.4.0,<5.6",
     "coloredlogs>=15.0.1",
     "email-validator>=2.3.0",
     "fastapi>=0.135.3",
@@ -30,7 +30,9 @@ dependencies = [
     "python-jose>=3.5.0",
     "python-json-logger>=4.1.0",
     "python-multipart>=0.0.24",
-    "redis>=7.4.0",
+    # redis-py 客戶端版本（非 Redis 伺服器版本）。務必鎖 <6：redis-py 8.x 與
+    # kombu Redis broker transport 不相容，會讓 celery worker idle 也 busy-loop 燒 CPU。
+    "redis>=5.0,<6.0",
     "sentry-sdk>=2.57.0",
     "slowapi>=0.1.9",
     "sqlalchemy>=2.0.49",

@@ -12,7 +12,7 @@ dependencies = [
     "asyncpg>=0.31.0",
     "authlib>=1.6.9",
     "bleach>=6.1.0",
-    "celery[redis]>=5.3.1",
+    "celery[redis]>=5.4.0,<5.6",
     "discord-py>=2.4.0",
     "fastapi[standard]>=0.135.3",
     "google-auth>=2.53.0",
@@ -30,7 +30,10 @@ dependencies = [
     "pypdf>=6.11.0",
     "pywebpush>=2.1.2",
     "python-dotenv>=1.2.2",
-    "redis>=7.4.0",
+    # redis-py 客戶端版本（非 Redis 伺服器版本）。務必鎖 <6：
+    # redis-py 8.x 與 kombu Redis broker transport 不相容，會讓 celery worker
+    # 即使 idle 也 busy-loop 燒滿 CPU（已實測 redis-py 8 → 150%+，5.x → 0%）。
+    "redis>=5.0,<6.0",
     "sentry-sdk[celery,fastapi,sqlalchemy]>=2.0",
     "sqlalchemy[asyncio]>=2.0.49",
     "webauthn>=2.5.3",
