@@ -41,6 +41,10 @@ const nextConfig: NextConfig = {
         destination: `${apiInternalUrl}/auth/google/:path*`,
       },
       {
+        source: "/auth/discord/:path*",
+        destination: `${apiInternalUrl}/auth/discord/:path*`,
+      },
+      {
         source: "/discord/:path*",
         destination: `${apiInternalUrl}/discord/:path*`,
       },
