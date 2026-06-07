@@ -5,12 +5,17 @@ import { Mail, UserRound } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import PublicSiteShell from "@/components/site/PublicSiteShell";
+import { useScrollReveal } from "@/hooks/useScrollReveal";
 import { siteApi } from "@/lib/api";
 import type { PublicOfficerOut, PublicSiteBundleOut } from "@/lib/types";
 
-function OfficerCard({ officer }: { officer: PublicOfficerOut }) {
+function OfficerCard({ officer, index = 0 }: { officer: PublicOfficerOut; index?: number }) {
   return (
-    <article className="card p-5">
+    <article
+      className="card card-hover p-5"
+      data-reveal
+      style={{ "--reveal-delay": `${Math.min(index, 8) * 55}ms` } as React.CSSProperties}
+    >
       <div className="flex items-start gap-4">
         <div
           className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full"
@@ -83,11 +88,13 @@ export default function OfficersPage() {
     return Array.from(map.entries());
   }, [officers]);
 
+  useScrollReveal([grouped]);
+
   return (
     <PublicSiteShell navPages={bundle?.nav_pages ?? []} settings={bundle?.settings}>
       <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
-        <header className="mb-8">
-          <p className="text-sm font-semibold text-[var(--primary)]">Officers</p>
+        <header className="public-page-head mb-8">
+          <p className="public-section-kicker">Officers</p>
           <h1 className="mt-2 text-3xl font-bold">班聯會幹部</h1>
           <p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--text-secondary)]">
             本頁自動列出當屆所有幹部任期，後台可進一步調整公開稱謂、簡介、排序，或隱藏特定成員。
@@ -98,7 +105,7 @@ export default function OfficersPage() {
             <section key={orgName} aria-labelledby={`org-${orgName}`}>
               <h2 id={`org-${orgName}`} className="mb-3 text-lg font-semibold">{orgName}</h2>
               <div className="grid gap-4 md:grid-cols-2">
-                {items.map((officer) => <OfficerCard key={officer.id} officer={officer} />)}
+                {items.map((officer, i) => <OfficerCard key={officer.id} officer={officer} index={i} />)}
               </div>
             </section>
           ))}

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import PublicSiteShell from "@/components/site/PublicSiteShell";
+import { useScrollReveal } from "@/hooks/useScrollReveal";
 import { announcementsApi, siteApi } from "@/lib/api";
 import type { AnnouncementListItem, PublicSiteBundleOut } from "@/lib/types";
 
@@ -30,22 +31,26 @@ export default function NewsPage() {
     [items],
   );
 
+  useScrollReveal([sorted]);
+
   return (
     <PublicSiteShell navPages={bundle?.nav_pages ?? []} settings={bundle?.settings}>
       <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
-        <header className="mb-8">
-          <p className="text-sm font-semibold text-[var(--primary)]">News</p>
+        <header className="public-page-head mb-8">
+          <p className="public-section-kicker">News</p>
           <h1 className="mt-2 text-3xl font-bold">最新公告</h1>
           <p className="mt-3 text-sm leading-7 text-[var(--text-secondary)]">
             對外公開的班聯會公告、活動消息與重要通知。
           </p>
         </header>
         <div className="space-y-3">
-          {sorted.map((item) => (
+          {sorted.map((item, i) => (
             <Link
               key={item.id}
               href={`/news/${item.id}`}
-              className="card card-hover block p-5 no-underline">
+              className="card card-hover block p-5 no-underline"
+              data-reveal
+              style={{ "--reveal-delay": `${Math.min(i, 8) * 55}ms` } as React.CSSProperties}>
               <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
                 {item.is_urgent && (
                   <span className="badge" style={{ color: "var(--danger)", background: "var(--danger-dim)", borderColor: "var(--danger-border)" }}>

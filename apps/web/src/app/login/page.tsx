@@ -63,19 +63,19 @@ export default function LoginPage() {
 
       <div className="grid min-h-screen lg:grid-cols-[minmax(0,1.12fr)_minmax(440px,0.88fr)]">
         <section
-          className="relative hidden overflow-hidden px-12 py-10 lg:flex lg:flex-col lg:justify-between xl:px-20 xl:py-14"
+          className="login-aside relative hidden overflow-hidden px-12 py-10 lg:flex lg:flex-col lg:justify-between xl:px-20 xl:py-14"
           style={{ background: "#173654", color: "#f8f3e5" }}
         >
           <div
-            className="pointer-events-none absolute -left-32 bottom-[-15rem] h-[34rem] w-[34rem] rounded-full"
+            className="login-ring pointer-events-none absolute -left-32 bottom-[-15rem] h-[34rem] w-[34rem] rounded-full"
             style={{ border: "1px solid rgba(232, 201, 112, 0.28)" }}
           />
           <div
-            className="pointer-events-none absolute -left-16 bottom-[-11rem] h-[25rem] w-[25rem] rounded-full"
+            className="login-ring login-ring-2 pointer-events-none absolute -left-16 bottom-[-11rem] h-[25rem] w-[25rem] rounded-full"
             style={{ border: "1px solid rgba(232, 201, 112, 0.22)" }}
           />
           <div
-            className="pointer-events-none absolute right-[-7rem] top-[-8rem] h-80 w-80 rounded-full blur-3xl"
+            className="login-orb pointer-events-none absolute right-[-7rem] top-[-8rem] h-80 w-80 rounded-full blur-3xl"
             style={{ background: "rgba(201, 168, 76, 0.2)" }}
           />
 
@@ -89,9 +89,9 @@ export default function LoginPage() {
             </div>
           </header>
 
-          <div className="relative z-10 max-w-2xl py-16">
+          <div className="login-rise relative z-10 max-w-2xl py-16">
             <p className="mb-6 flex items-center gap-3 text-xs font-semibold tracking-[0.2em] text-[#e8c970]">
-              <span className="h-px w-10 bg-[#e8c970]" />
+              <span className="login-rule h-px w-10 bg-[#e8c970]" />
               HCCA CAMPUS GOVERNANCE
             </p>
             <h1
@@ -211,7 +211,7 @@ export default function LoginPage() {
 
             <a
               href={googleLoginHref}
-              className="group flex h-13 w-full cursor-pointer items-center justify-between rounded-xl px-4 text-sm font-semibold transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2"
+              className="login-oauth group flex h-13 w-full cursor-pointer items-center justify-between rounded-xl px-4 text-sm font-semibold transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2"
               style={{
                 background: "#ffffff",
                 color: "#173654",
@@ -246,7 +246,7 @@ export default function LoginPage() {
 
             <a
               href={discordLoginHref}
-              className="group flex h-13 w-full cursor-pointer items-center justify-between rounded-xl px-4 text-sm font-semibold text-white transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2"
+              className="login-oauth group flex h-13 w-full cursor-pointer items-center justify-between rounded-xl px-4 text-sm font-semibold text-white transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2"
               style={{
                 background: "#5865f2",
                 boxShadow: "0 8px 24px rgba(88, 101, 242, 0.24)",

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import AnnouncementMarkdown from "@/components/announcements/AnnouncementMarkdown";
 import PublicSiteShell from "@/components/site/PublicSiteShell";
+import { useScrollReveal } from "@/hooks/useScrollReveal";
 import { announcementsApi, siteApi } from "@/lib/api";
 import type { AnnouncementOut, PublicSiteBundleOut } from "@/lib/types";
 
@@ -28,6 +29,8 @@ export default function PublicNewsDetailPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
+  useScrollReveal([item]);
+
   return (
     <PublicSiteShell navPages={bundle?.nav_pages ?? []} settings={bundle?.settings}>
       <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
@@ -37,7 +40,7 @@ export default function PublicNewsDetailPage() {
           <div className="card p-10 text-center text-sm text-[var(--text-muted)]">找不到公告</div>
         ) : (
           <article className="space-y-5">
-            <header className="space-y-3">
+            <header className="public-page-head space-y-3">
               <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
                 {item.is_urgent && (
                   <span className="badge" style={{ color: "var(--danger)", background: "var(--danger-dim)", borderColor: "var(--danger-border)" }}>
@@ -51,7 +54,7 @@ export default function PublicNewsDetailPage() {
               <h1 className="text-3xl font-bold leading-tight">{item.title}</h1>
               <p className="text-sm text-[var(--text-muted)]">公告人：{item.author_name || "未命名"}</p>
             </header>
-            <div className="card p-5 md:p-7">
+            <div className="card p-5 md:p-7" data-reveal style={{ "--reveal-delay": "120ms" } as React.CSSProperties}>
               <AnnouncementMarkdown content={item.content} />
             </div>
           </article>

@@ -579,7 +579,9 @@
   .public-desktop-nav {
     display: flex;
   }
-  .public-menu-button,
+  /* 提高選擇器特異度：避免被後面定義的基礎 .public-menu-button 規則蓋過，
+     否則桌面寬度下漢堡選單仍會顯示並與「所有公開服務」下拉重疊。 */
+  .public-header .public-menu-button,
   .public-mobile-backdrop {
     display: none;
   }
@@ -629,41 +631,83 @@
 
 .public-nav-dropdown-panel {
   position: absolute;
-  top: calc(100% + 0.6rem);
+  top: calc(100% + 0.55rem);
   right: 0;
   display: grid;
-  width: min(46rem, calc(100vw - 2rem));
+  width: min(52rem, calc(100vw - 2rem));
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1rem;
+  gap: 0.5rem 1.25rem;
   border: 1px solid var(--public-border);
-  border-radius: 14px;
+  border-radius: 16px;
   background: var(--public-surface);
-  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.2);
-  padding: 1rem;
+  box-shadow: 0 26px 70px rgba(15, 23, 42, 0.22);
+  padding: 1.1rem 1.2rem;
+  animation: public-menu-in 150ms ease;
+}
+
+@keyframes public-menu-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 [data-theme="dark"] .public-nav-dropdown-panel {
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
 }
 
-.public-nav-dropdown-label {
-  margin-bottom: 0.45rem;
-  padding: 0 0.55rem;
+/* 各組之間的細分隔，讓三欄不再黏成一片 */
+.public-nav-dropdown-panel > section + section {
+  padding-left: 1.25rem;
+  border-left: 1px solid var(--public-border);
+}
+
+.public-nav-dropdown-label,
+.public-mobile-group-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.5rem;
+  padding: 0 0.5rem;
   color: var(--public-muted);
   font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0.08em;
 }
 
+.public-nav-dropdown-hint {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.05rem 0.5rem;
+  background: var(--public-accent-soft);
+  color: var(--public-accent);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.public-nav-badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.05rem 0.4rem;
+  background: color-mix(in srgb, var(--public-accent) 14%, transparent);
+  color: var(--public-accent);
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
 .public-nav-dropdown-link {
   display: grid;
-  min-height: 64px;
+  min-height: 58px;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 0.65rem;
   border-radius: 10px;
   color: var(--public-text);
-  padding: 0.6rem;
+  padding: 0.5rem 0.6rem;
   text-decoration: none;
   transition: background var(--transition), color var(--transition);
 }
@@ -673,14 +717,128 @@
   background: var(--public-soft);
 }
 
+.public-nav-dropdown-link:hover .public-nav-dropdown-icon,
+.public-nav-dropdown-link:focus-visible .public-nav-dropdown-icon {
+  background: var(--public-accent);
+  color: var(--primary-fg);
+}
+
 .public-nav-dropdown-icon {
   display: grid;
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   place-items: center;
   border-radius: 9px;
   background: var(--public-accent-soft);
   color: var(--public-accent);
+  transition: background var(--transition), color var(--transition);
+}
+
+/* ── 站台級「正在發生」即時開票橫幅 ───────────────────────────────── */
+.public-live-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.5rem 1rem;
+  background: linear-gradient(90deg, #143150, #1d4265);
+  border-bottom: 1px solid rgba(232, 201, 112, 0.28);
+  color: #f8f3e5;
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+@media (min-width: 640px) {
+  .public-live-strip {
+    padding-inline: 1.5rem;
+  }
+}
+
+.public-live-strip-status {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 999px;
+  padding: 0.12rem 0.6rem;
+  background: rgba(52, 211, 153, 0.14);
+  color: #6ee7b7;
+  font-size: 0.72rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.public-live-strip-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: #34d399;
+}
+
+.public-live-strip-dot[data-live="true"] {
+  animation: public-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes public-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.78); }
+}
+
+.public-live-strip-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.public-live-strip-meta {
+  display: none;
+  flex: 1 1 auto;
+  min-width: 0;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+@media (min-width: 768px) {
+  .public-live-strip-meta {
+    display: inline-flex;
+  }
+}
+
+.public-live-strip-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.1rem 0.55rem;
+  background: rgba(248, 243, 229, 0.12);
+  color: #f4ead0;
+  font-size: 0.74rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.public-live-strip-cta {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.2rem;
+  margin-left: auto;
+  color: #e8c970;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.public-live-strip-radio {
+  flex: 0 0 auto;
+  color: #e8c970;
+}
+
+@media (min-width: 768px) {
+  .public-live-strip-radio {
+    display: none;
+  }
 }
 
 /* 公開站深層頁返回鈕：公開站無系統 Topbar，返回鈕由 PublicSiteShell 集中提供 */
@@ -809,6 +967,27 @@
 .public-mobile-link:focus-visible {
   background: var(--public-accent-soft);
   color: var(--public-accent);
+}
+
+.public-mobile-service-link {
+  display: grid;
+  min-height: 48px;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.6rem;
+  border: 1px solid var(--public-border);
+  border-radius: 10px;
+  background: var(--public-surface);
+  color: var(--public-text);
+  padding: 0.55rem 0.65rem;
+  text-decoration: none;
+  transition: background var(--transition), border-color var(--transition);
+}
+
+.public-mobile-service-link:hover,
+.public-mobile-service-link:focus-visible {
+  background: var(--public-soft);
+  border-color: var(--public-accent);
 }
 
 .public-footer {
@@ -2841,4 +3020,745 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
 /* ── 平板（768-1023px）：sidebar 收窄讓主內容更舒展 ──────────────────── */
 @media (min-width: 768px) and (max-width: 1023px) {
   :root { --sidebar-w: 200px; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   公開站視覺強化 — 霧金治理風的動態語言
+   與系統內 dashboard-hero / ambient-drift 同一套設計語彙。
+   全部進場動畫使用 fill-mode: both，於 prefers-reduced-motion 下會被全域
+   media query 收斂為瞬間到位（見檔首），故可安全停在最終狀態；無限循環動畫
+   亦同步靜止。捲動揭示由 useScrollReveal hook 驅動。
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 捲動揭示：JS 就緒後才隱藏，無 JS 退化為可見 ───────────────────────── */
+html[data-reveal-ready] [data-reveal] {
+  opacity: 0;
+  transform: translateY(22px);
+  transition:
+    opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  transition-delay: var(--reveal-delay, 0ms);
+  will-change: opacity, transform;
+}
+html[data-reveal-ready] [data-reveal].is-reveal-in {
+  opacity: 1;
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-reveal-ready] [data-reveal] {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* ── Hero：極光光暈 + 細點紋理 ─────────────────────────────────────────── */
+.public-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.public-hero::before {
+  content: "";
+  position: absolute;
+  inset: -30% -12% auto -12%;
+  z-index: -2;
+  height: 150%;
+  pointer-events: none;
+  background:
+    radial-gradient(38rem 24rem at 16% 4%, color-mix(in srgb, var(--public-accent) 26%, transparent), transparent 68%),
+    radial-gradient(34rem 26rem at 86% 26%, color-mix(in srgb, var(--info) 18%, transparent), transparent 70%),
+    radial-gradient(30rem 22rem at 60% 110%, color-mix(in srgb, var(--public-accent) 14%, transparent), transparent 72%);
+  filter: blur(6px);
+  animation: public-aurora 18s ease-in-out infinite alternate;
+}
+
+.public-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image: radial-gradient(color-mix(in srgb, var(--public-accent) 42%, transparent) 0.6px, transparent 0.6px);
+  background-size: 22px 22px;
+  mask-image: radial-gradient(circle at 50% 0%, black, transparent 72%);
+  -webkit-mask-image: radial-gradient(circle at 50% 0%, black, transparent 72%);
+}
+
+@keyframes public-aurora {
+  0%   { transform: translate3d(-2%, -1%, 0) scale(1);    opacity: 0.9; }
+  50%  { transform: translate3d(2%, 1.5%, 0) scale(1.06); opacity: 1; }
+  100% { transform: translate3d(-1%, 2%, 0) scale(1.02);  opacity: 0.92; }
+}
+
+/* 深色模式：金光在近黑底用低透明度會發灰，改用較高亮度 + screen 混色發光 */
+[data-theme="dark"] .public-hero::before {
+  background:
+    radial-gradient(38rem 24rem at 16% 4%, rgba(212, 180, 94, 0.5), transparent 64%),
+    radial-gradient(34rem 26rem at 86% 26%, rgba(120, 162, 232, 0.4), transparent 68%),
+    radial-gradient(30rem 22rem at 60% 112%, rgba(212, 180, 94, 0.32), transparent 72%);
+  filter: blur(10px);
+  mix-blend-mode: screen;
+}
+[data-theme="dark"] .public-hero::after {
+  opacity: 0.72;
+  background-image: radial-gradient(rgba(212, 180, 94, 0.62) 0.7px, transparent 0.7px);
+  mix-blend-mode: screen;
+}
+
+/* ── Hero 進場：標題群組依序上升、招牌縮放浮現 ───────────────────────── */
+.public-hero-copy > * {
+  animation: public-rise 720ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.public-hero-copy > .public-eyebrow      { animation-delay: 60ms; }
+.public-hero-copy > h1                    { animation-delay: 150ms; }
+.public-hero-copy > .public-hero-subtitle { animation-delay: 280ms; }
+.public-hero-copy > .public-hero-actions  { animation-delay: 400ms; }
+
+.public-signboard {
+  animation: public-rise-pop 820ms cubic-bezier(0.22, 1, 0.36, 1) 220ms both;
+}
+
+@keyframes public-rise {
+  from { opacity: 0; transform: translateY(26px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes public-rise-pop {
+  from { opacity: 0; transform: translateY(34px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ── 招牌頂線流光 + 會徽輕浮動 ─────────────────────────────────────────── */
+.public-signboard-topline {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--public-accent) 40%, transparent),
+    var(--public-accent),
+    color-mix(in srgb, var(--public-accent) 40%, transparent),
+    transparent
+  );
+  background-size: 220% 100%;
+  animation: public-shimmer-x 3.6s linear infinite;
+}
+
+.public-signboard-emblem img,
+.public-signboard-emblem span,
+.public-signboard-emblem svg {
+  animation: public-float 6.5s ease-in-out infinite;
+}
+
+@keyframes public-shimmer-x {
+  to { background-position: -220% 0; }
+}
+@keyframes public-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-9px); }
+}
+
+/* ── 入口卡片：上浮 + 金邊光暈 + 斜向光掃 + 圖示彈跳 ─────────────────── */
+.public-feature-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.public-feature-card::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -75%;
+  width: 55%;
+  height: 100%;
+  pointer-events: none;
+  transform: skewX(-18deg);
+  background: linear-gradient(
+    100deg,
+    transparent,
+    color-mix(in srgb, #ffffff 42%, transparent),
+    transparent
+  );
+}
+
+.public-feature-card:hover {
+  transform: translateY(-5px);
+  border-color: var(--public-accent);
+  box-shadow:
+    0 18px 40px rgba(26, 26, 46, 0.14),
+    0 0 0 1px color-mix(in srgb, var(--public-accent) 40%, transparent);
+}
+[data-theme="dark"] .public-feature-card:hover {
+  box-shadow:
+    0 20px 46px rgba(0, 0, 0, 0.44),
+    0 0 0 1px color-mix(in srgb, var(--public-accent) 46%, transparent);
+}
+
+.public-feature-card:hover::after {
+  animation: public-sheen 760ms ease;
+}
+
+.public-feature-icon {
+  transition:
+    transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    background 0.3s ease,
+    color 0.3s ease;
+}
+.public-feature-card:hover .public-feature-icon {
+  transform: translateY(-2px) rotate(-7deg) scale(1.1);
+  background: var(--public-accent);
+  color: var(--primary-fg);
+}
+
+@keyframes public-sheen {
+  from { left: -75%; opacity: 0; }
+  20%  { opacity: 1; }
+  to   { left: 130%; opacity: 0; }
+}
+
+/* ── 主要 CTA：微浮 + 金光 + 光掃 + 箭頭前推 ───────────────────────────── */
+.public-cta-primary {
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--shadow-gold);
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.3s ease,
+    background 0.2s ease;
+}
+.public-cta-primary::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -80%;
+  width: 50%;
+  height: 100%;
+  pointer-events: none;
+  transform: skewX(-20deg);
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+}
+.public-cta-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(201, 168, 76, 0.42);
+}
+.public-cta-primary:hover::after {
+  animation: public-sheen 720ms ease;
+}
+.public-cta-primary svg {
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.public-cta-primary:hover svg {
+  transform: translateX(4px);
+}
+
+.public-cta-secondary {
+  transition: transform 0.2s ease, border-color var(--transition), background var(--transition);
+}
+.public-cta-secondary:hover {
+  transform: translateY(-2px);
+  border-color: var(--public-accent);
+}
+
+/* ── 側欄小卡 / 連結列：細緻位移回饋 ───────────────────────────────────── */
+.public-mini-item,
+.public-link-row {
+  transition:
+    transform 0.2s ease,
+    border-color var(--transition),
+    color var(--transition),
+    box-shadow 0.2s ease;
+}
+.public-mini-item:hover {
+  transform: translateX(3px);
+  border-color: var(--public-accent);
+}
+.public-link-row:hover {
+  transform: translateX(3px);
+  box-shadow: var(--shadow-sm);
+}
+.public-link-row svg {
+  transition: transform 0.2s ease;
+}
+.public-link-row:hover svg {
+  transform: translate(2px, -2px);
+}
+
+/* ── 區段標題裝飾線（kicker 前的金色短線） ─────────────────────────────── */
+.public-section-kicker::before {
+  content: "";
+  display: inline-block;
+  width: 1.6rem;
+  height: 2px;
+  margin-right: 0.5rem;
+  vertical-align: middle;
+  border-radius: 99px;
+  background: var(--public-accent);
+}
+
+/* 公開站面板：與入口卡片一致的上浮回饋 */
+.public-panel {
+  transition:
+    transform var(--transition),
+    border-color var(--transition),
+    box-shadow var(--transition);
+}
+.public-about-panel:hover,
+.public-side-panel:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   系統內共用元件動態強化 — 套用於整個後台（單一來源，勿在各頁重寫）
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 主要按鈕：金色光掃 ────────────────────────────────────────────────── */
+.btn-primary {
+  position: relative;
+  overflow: hidden;
+}
+.btn-primary::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -85%;
+  width: 60%;
+  height: 100%;
+  pointer-events: none;
+  transform: skewX(-20deg);
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+}
+.btn-primary:hover:not(:disabled)::after {
+  animation: btn-sheen 720ms ease;
+}
+@keyframes btn-sheen {
+  from { left: -85%; opacity: 0; }
+  18%  { opacity: 1; }
+  to   { left: 130%; opacity: 0; }
+}
+
+/* ── 頁面進場：每次路由切換內容輕柔上升淡入 ────────────────────────────── */
+.page-body {
+  animation: app-page-enter 440ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes app-page-enter {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ── Sidebar 導覽項目：hover 圖示輕推、active 金條滑入 ──────────────────── */
+.sidebar-nav-item svg {
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.sidebar-nav-item:hover svg {
+  transform: translateX(2px) scale(1.08);
+}
+.sidebar-nav-item[aria-current="page"] svg {
+  color: var(--sidebar-text-active);
+}
+
+/* ── Topbar 圖示按鈕：hover 微放大 ─────────────────────────────────────── */
+.topbar-icon-btn {
+  transition:
+    background var(--transition),
+    color var(--transition),
+    border-color var(--transition),
+    transform 0.2s ease;
+}
+.topbar-icon-btn:hover {
+  transform: translateY(-1px);
+}
+.topbar-icon-btn:active {
+  transform: scale(0.94);
+}
+
+/* ── 表格列：hover 金色左緣指示 ────────────────────────────────────────── */
+.table-row {
+  box-shadow: inset 3px 0 0 transparent;
+}
+.table-row:hover {
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
+/* ── 卡片 hover：頂部金色漸層指示線 ────────────────────────────────────── */
+.card-hover {
+  position: relative;
+}
+.card-hover::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 12%;
+  right: 12%;
+  height: 2px;
+  border-radius: 99px;
+  background: linear-gradient(90deg, transparent, var(--primary), transparent);
+  opacity: 0;
+  transition: opacity var(--transition);
+  pointer-events: none;
+}
+.card-hover:hover::before {
+  opacity: 0.9;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   登入頁動態
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* 左側治理敘事面板：極光光暈 */
+.login-aside {
+  position: relative;
+  isolation: isolate;
+}
+.login-aside::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(36rem 26rem at 12% 8%, rgba(201, 168, 76, 0.22), transparent 64%),
+    radial-gradient(30rem 24rem at 92% 90%, rgba(99, 140, 196, 0.18), transparent 66%);
+  animation: public-aurora 20s ease-in-out infinite alternate;
+}
+
+/* 裝飾同心圓：緩慢呼吸 */
+.login-ring {
+  animation: login-ring-breathe 9s ease-in-out infinite;
+}
+.login-ring-2 {
+  animation: login-ring-breathe 9s ease-in-out 1.4s infinite;
+}
+.login-orb {
+  animation: login-orb-drift 14s ease-in-out infinite alternate;
+}
+
+@keyframes login-ring-breathe {
+  0%, 100% { transform: scale(1);    opacity: 0.85; }
+  50%      { transform: scale(1.06); opacity: 1; }
+}
+@keyframes login-orb-drift {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  100% { transform: translate3d(-2.5rem, 1.5rem, 0) scale(1.12); }
+}
+
+/* 左側內容依序浮現 */
+.login-rise > * {
+  animation: public-rise 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.login-rise > *:nth-child(1) { animation-delay: 80ms; }
+.login-rise > *:nth-child(2) { animation-delay: 200ms; }
+.login-rise > *:nth-child(3) { animation-delay: 320ms; }
+.login-rise > *:nth-child(4) { animation-delay: 440ms; }
+
+/* 金色短線流光 */
+.login-rule {
+  position: relative;
+  overflow: hidden;
+}
+.login-rule::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8), transparent);
+  background-size: 220% 100%;
+  animation: public-shimmer-x 3s linear infinite;
+}
+
+/* 登入表單按鈕：光掃（沿用 btn-sheen 的視覺，套在 group） */
+.login-oauth {
+  position: relative;
+  overflow: hidden;
+}
+.login-oauth::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -85%;
+  width: 55%;
+  height: 100%;
+  pointer-events: none;
+  transform: skewX(-20deg);
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+}
+.login-oauth:hover::after {
+  animation: btn-sheen 760ms ease;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   公開內頁：公告 / 幹部 / 關於 等列表與詳情的動態
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* 列表頁頁首依序浮現 */
+.public-page-head > * {
+  animation: public-rise 640ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.public-page-head > *:nth-child(1) { animation-delay: 40ms; }
+.public-page-head > *:nth-child(2) { animation-delay: 130ms; }
+.public-page-head > *:nth-child(3) { animation-delay: 230ms; }
+
+/* 公開卡片連結：沿用 card-hover 視覺，補上箭頭/標題位移與光感 */
+.public-card-link {
+  transition:
+    transform var(--transition),
+    border-color var(--transition),
+    box-shadow var(--transition);
+}
+.public-card-link:hover {
+  transform: translateY(-3px);
+  border-color: var(--public-accent, var(--primary));
+  box-shadow: var(--shadow-md);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   即時開票看板 — 固定深藍底，金光自由發揮
+   ══════════════════════════════════════════════════════════════════════════ */
+.live-board {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+.live-board::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(48rem 32rem at 10% -8%, rgba(232, 201, 112, 0.18), transparent 58%),
+    radial-gradient(42rem 32rem at 94% 6%, rgba(86, 142, 214, 0.2), transparent 62%),
+    radial-gradient(40rem 30rem at 60% 116%, rgba(232, 201, 112, 0.1), transparent 70%);
+  animation: public-aurora 22s ease-in-out infinite alternate;
+}
+
+/* 看板區塊進場 */
+.live-rise {
+  animation: public-rise-pop 640ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.live-stat {
+  animation: public-rise 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.live-stat:nth-child(1) { animation-delay: 80ms; }
+.live-stat:nth-child(2) { animation-delay: 160ms; }
+.live-stat:nth-child(3) { animation-delay: 240ms; }
+.live-stat:nth-child(4) { animation-delay: 320ms; }
+
+.live-stat {
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+.live-stat:hover {
+  transform: translateY(-3px);
+  border-color: rgba(232, 201, 112, 0.4);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+/* 進度條流光（套在填色條上） */
+.live-bar {
+  position: relative;
+  overflow: hidden;
+}
+.live-bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  background-size: 220% 100%;
+  animation: public-shimmer-x 2.4s linear infinite;
+}
+
+/* 領先候選卡：金色呼吸光暈 */
+.live-leader {
+  animation: live-leader-glow 2.8s ease-in-out infinite;
+}
+@keyframes live-leader-glow {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(232, 201, 112, 0.4) inset, 0 0 0 0 rgba(232, 201, 112, 0); }
+  50%      { box-shadow: 0 0 0 1px rgba(232, 201, 112, 0.7) inset, 0 0 32px 0 rgba(232, 201, 112, 0.22); }
+}
+
+/* 領先徽章脈動 */
+.live-badge {
+  animation: live-badge-pop 2s ease-in-out infinite;
+}
+@keyframes live-badge-pop {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.06); }
+}
+
+/* 即時連線亮點 */
+.live-dot-on {
+  position: relative;
+}
+.live-dot-on::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  animation: live-dot-pulse 1.8s ease-out infinite;
+}
+@keyframes live-dot-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.55); }
+  100% { box-shadow: 0 0 0 9px rgba(52, 211, 153, 0); }
+}
+
+/* 載入中：金徽呼吸 */
+.live-loading-mark {
+  animation: public-float 3.4s ease-in-out infinite;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   即時開票看板：候選列、動畫、結算畫面、控制台鎖定遮罩
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* 候選列換位：FLIP 排序時的平滑滑動 */
+.live-candidate-row {
+  transition: transform 620ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+/* 票數增加：金光脈衝 + 數字彈跳 */
+.live-vote-bump {
+  animation: live-vote-bump 700ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes live-vote-bump {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.16); }
+  100% { transform: scale(1); }
+}
+
+.live-row-flash::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(120% 120% at 50% 50%, rgba(232, 201, 112, 0.32), transparent 60%);
+  animation: live-row-flash 900ms ease-out forwards;
+}
+@keyframes live-row-flash {
+  0%   { opacity: 0; }
+  20%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* 超越：紅黑名次徽章上升 + 「超前」標籤滑入 */
+.live-overtake-badge {
+  animation: live-overtake 1100ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes live-overtake {
+  0%   { transform: translateY(8px) scale(0.9); opacity: 0; }
+  30%  { transform: translateY(0) scale(1.12); opacity: 1; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+/* 領先冠軍光暈 */
+.live-leader-glow {
+  animation: live-leader-glow 2.6s ease-in-out infinite;
+}
+@keyframes live-leader-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(232, 201, 112, 0); }
+  50%      { box-shadow: 0 0 28px 0 rgba(232, 201, 112, 0.35); }
+}
+
+/* 進度條光掃 */
+.live-bar-sheen {
+  position: relative;
+  overflow: hidden;
+}
+.live-bar-sheen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.45), transparent 70%);
+  background-size: 220% 100%;
+  animation: public-shimmer-x 2.4s linear infinite;
+}
+
+/* 結算畫面整體進場 */
+.live-result-enter {
+  animation: live-result-enter 720ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes live-result-enter {
+  from { opacity: 0; transform: translateY(18px) scale(0.985); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* 冠軍頭像登場 */
+.live-winner-pop {
+  animation: live-winner-pop 820ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes live-winner-pop {
+  0%   { transform: scale(0.6); opacity: 0; }
+  60%  { transform: scale(1.06); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* 結算金色獎章旋轉光環 */
+.live-trophy-ring {
+  animation: live-trophy-spin 14s linear infinite;
+}
+@keyframes live-trophy-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 彩帶 */
+.live-confetti {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 60;
+}
+.live-confetti i {
+  position: absolute;
+  top: -12vh;
+  width: 9px;
+  height: 14px;
+  border-radius: 2px;
+  opacity: 0.9;
+  animation: live-confetti-fall var(--dur, 3.4s) linear var(--delay, 0s) forwards;
+}
+@keyframes live-confetti-fall {
+  0%   { transform: translateY(-12vh) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(112vh) rotate(680deg); opacity: 0.9; }
+}
+
+/* 控制台票匭鎖定：淡紅遮罩 */
+.lock-guard {
+  position: relative;
+}
+.lock-guard[data-locked="true"] > .lock-guard-content {
+  filter: saturate(0.7);
+  opacity: 0.55;
+  pointer-events: none;
+  user-select: none;
+}
+.lock-guard-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  border-radius: inherit;
+  padding: 1rem;
+  text-align: center;
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  border: 1.5px dashed color-mix(in srgb, var(--danger) 45%, transparent);
+  backdrop-filter: blur(1px);
+  animation: live-result-enter 240ms ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-candidate-row,
+  .live-vote-bump,
+  .live-overtake-badge,
+  .live-leader-glow,
+  .live-bar-sheen::after,
+  .live-result-enter,
+  .live-winner-pop,
+  .live-trophy-ring,
+  .live-confetti i,
+  .live-row-flash::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }
