@@ -78,8 +78,16 @@ export default function GoogleOneTap() {
       cancel_on_tap_outside: true,
       context: "signin",
     });
-    window.google?.accounts.id.prompt();
-    return () => window.google?.accounts.id.cancel();
+    let prompted = false;
+    const promptTimer = window.setTimeout(() => {
+      prompted = true;
+      window.google?.accounts.id.prompt();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(promptTimer);
+      if (prompted) window.google?.accounts.id.cancel();
+    };
   }, [handleCredential, pathname, scriptReady]);
 
   if (!GOOGLE_CLIENT_ID) return null;
