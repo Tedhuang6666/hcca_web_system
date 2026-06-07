@@ -106,7 +106,8 @@ export default function SurveysPage() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="搜尋問卷標題…"
-            className="input pl-9 w-full"
+            className="input w-full"
+            style={{ paddingLeft: "2.25rem" }}
             aria-label="搜尋問卷" />
         </div>
         <select

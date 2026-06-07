@@ -597,7 +597,7 @@ export default function DocumentListPage() {
               <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
             <input type="search" value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="搜尋公文標題或字號…" className="input pl-9 w-full sm:w-64" aria-label="搜尋公文" />
+              placeholder="搜尋公文標題或字號…" className="input w-full sm:w-64" style={{ paddingLeft: "2.25rem" }} aria-label="搜尋公文" />
           </div>
 
           {/* Tab 切換 */}

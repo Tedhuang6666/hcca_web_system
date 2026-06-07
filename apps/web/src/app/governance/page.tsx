@@ -226,7 +226,8 @@ export default function GovernancePage() {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              className="input w-full pl-9"
+              className="input w-full"
+              style={{ paddingLeft: "2.25rem" }}
               placeholder="搜尋事情"
             />
           </label>
