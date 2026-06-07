@@ -155,6 +155,13 @@ export const NAV_ITEMS: NavItem[] = [
     perm: "partner_map:manage",
   },
   {
+    id: "electionsAdmin",
+    href: "/admin/elections",
+    iconKey: "elections",
+    label: "開票控制台",
+    perm: "election:manage",
+  },
+  {
     id: "petitionsManage",
     href: "/petitions/manage",
     iconKey: "petition",
@@ -257,6 +264,7 @@ export const NAV_DEF: NavEntry[] = [
       "shopAdmin",
       "mealVendor",
       "partnerMapAdmin",
+      "electionsAdmin",
       "petitionsManage",
     ]),
   },

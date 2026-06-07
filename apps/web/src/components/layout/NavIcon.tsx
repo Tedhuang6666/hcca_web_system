@@ -28,6 +28,7 @@ import {
   Truck,
   Users,
   Utensils,
+  Vote,
   Warehouse,
   WifiOff,
 } from "lucide-react";
@@ -60,6 +61,7 @@ const Icons: Record<string, React.ComponentType<IconProps>> = {
   classes: Users,
   analytics: BarChart3,
   partnerMap: MapPinned,
+  elections: Vote,
   tasks: Inbox,
   governance: Network,
   systemDefense: Shield,
