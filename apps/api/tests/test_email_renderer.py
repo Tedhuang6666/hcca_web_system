@@ -15,6 +15,7 @@ from api.email.renderer import (
     sanitize_html,
     validate_variable_definitions,
 )
+from api.email.sender import render_generic_message
 
 
 def test_render_notification_includes_content_and_no_leftover_jinja() -> None:
@@ -62,6 +63,33 @@ def test_render_generic_injects_body_html_verbatim() -> None:
     assert "公告標題" in html
     assert "<p>第一段</p>" in html
     assert "<li>項目</li>" in html
+
+
+def test_render_generic_applies_body_spacing_settings() -> None:
+    html = render_generic_message(
+        "測試",
+        "第一段\n\n第二段",
+        {
+            "body_line_height": 1.5,
+            "paragraph_spacing": 6,
+        },
+    )
+
+    assert '<p style="margin:0;">第一段</p>' in html
+    assert '<p style="margin:6px 0 0;">第二段</p>' in html
+    assert 'class="hcca-body" style="line-height:1.5;"' in html
+
+
+def test_render_generic_distinguishes_line_breaks_from_paragraphs() -> None:
+    html = render_generic_message(
+        "測試",
+        "同段第一行  \n同段第二行\n\n下一段",
+        {"body_line_height": 1.4, "paragraph_spacing": 20},
+    )
+
+    assert '<p style="margin:0;">同段第一行<br>' in html
+    assert "同段第二行</p>" in html
+    assert '<p style="margin:20px 0 0;">下一段</p>' in html
 
 
 def test_render_escapes_plain_text_fields() -> None:

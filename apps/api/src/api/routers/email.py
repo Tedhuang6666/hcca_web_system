@@ -128,6 +128,8 @@ class EmailComposePayload(BaseModel):
     accent_color: str = Field(default="#111827", pattern=r"^#[0-9A-Fa-f]{6}$")
     background_color: str = Field(default="#eef2f7", pattern=r"^#[0-9A-Fa-f]{6}$")
     content_background_color: str = Field(default="#ffffff", pattern=r"^#[0-9A-Fa-f]{6}$")
+    body_line_height: float = Field(default=1.6, ge=1.2, le=2.5)
+    paragraph_spacing: int = Field(default=18, ge=0, le=40)
     footer_text: str = Field(default="", max_length=500)
     show_system_footer: bool = True
     banner_image_url: str = Field(default="", max_length=500)
@@ -167,6 +169,8 @@ class EmailMessageUpdate(BaseModel):
     accent_color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
     background_color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
     content_background_color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
+    body_line_height: float | None = Field(default=None, ge=1.2, le=2.5)
+    paragraph_spacing: int | None = Field(default=None, ge=0, le=40)
     footer_text: str | None = Field(default=None, max_length=500)
     show_system_footer: bool | None = None
     banner_image_url: str | None = Field(default=None, max_length=500)
@@ -222,6 +226,8 @@ class EmailMessageDetailOut(EmailMessageOut):
     accent_color: str
     background_color: str
     content_background_color: str
+    body_line_height: float
+    paragraph_spacing: int
     footer_text: str
     show_system_footer: bool
     body: str
@@ -399,6 +405,8 @@ def _build_context(payload: EmailComposePayload) -> dict:
         "accent_color": payload.accent_color,
         "background_color": payload.background_color,
         "content_background_color": payload.content_background_color,
+        "body_line_height": payload.body_line_height,
+        "paragraph_spacing": payload.paragraph_spacing,
         "footer_text": payload.footer_text,
         "show_system_footer": payload.show_system_footer,
         "banner_image_url": _safe_image_url(payload.banner_image_url),
@@ -805,6 +813,8 @@ def _to_detail(
         accent_color=str(ctx.get("accent_color", "#111827")),
         background_color=str(ctx.get("background_color", "#eef2f7")),
         content_background_color=str(ctx.get("content_background_color", "#ffffff")),
+        body_line_height=float(ctx.get("body_line_height", 1.6)),
+        paragraph_spacing=int(ctx.get("paragraph_spacing", 18)),
         footer_text=str(ctx.get("footer_text", "")),
         show_system_footer=bool(ctx.get("show_system_footer", True)),
         body=msg.body,
@@ -1090,6 +1100,8 @@ async def update_message(
         "accent_color",
         "background_color",
         "content_background_color",
+        "body_line_height",
+        "paragraph_spacing",
         "footer_text",
         "show_system_footer",
     ):

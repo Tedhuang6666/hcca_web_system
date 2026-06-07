@@ -3641,6 +3641,8 @@ export interface EmailComposePayload {
   accent_color: string;
   background_color: string;
   content_background_color: string;
+  body_line_height: number;
+  paragraph_spacing: number;
   footer_text: string;
   show_system_footer: boolean;
   banner_image_url: string;
@@ -3699,6 +3701,8 @@ export interface EmailMessageDetailOut extends EmailMessageOut {
   accent_color: string;
   background_color: string;
   content_background_color: string;
+  body_line_height: number;
+  paragraph_spacing: number;
   footer_text: string;
   show_system_footer: boolean;
   body: string;

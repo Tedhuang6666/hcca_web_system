@@ -66,6 +66,8 @@ _CONTEXT_DEFAULTS: dict = {
     "accent_color": "#111827",
     "background_color": "#eef2f7",
     "content_background_color": "#ffffff",
+    "body_line_height": 1.6,
+    "paragraph_spacing": 18,
     "footer_text": "",
     "show_system_footer": True,
     "heading": "",

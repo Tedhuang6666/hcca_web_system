@@ -11,6 +11,12 @@ from api.email.renderer import (
 from api.services.mail import enqueue_email
 
 
+def _style_paragraphs(html: str, paragraph_spacing: int) -> str:
+    following = f'<p style="margin:{paragraph_spacing}px 0 0;">'
+    styled = html.replace("<p>", following)
+    return styled.replace(following, '<p style="margin:0;">', 1)
+
+
 def enqueue_rendered(
     to: list[str],
     subject: str,
@@ -106,6 +112,7 @@ def render_generic_message(
         if str(btn.get("url", "")).strip()
     ]
     rendered_blocks = []
+    paragraph_spacing = int(context.get("paragraph_spacing", 18))
     for block in context.get("blocks", []):
         block_type = str(block.get("type", ""))
         if block_type == "image":
@@ -120,7 +127,12 @@ def render_generic_message(
             block_text = _text(str(block.get("md", "")))
             if block_text.strip():
                 rendered_blocks.append(
-                    {"type": "text", "html": sanitize_html(md.render(block_text))}
+                    {
+                        "type": "text",
+                        "html": _style_paragraphs(
+                            sanitize_html(md.render(block_text)), paragraph_spacing
+                        ),
+                    }
                 )
     html_body = md.render(rendered_body)
     return render_email(
@@ -130,11 +142,12 @@ def render_generic_message(
             "preview_text": _text(
                 str(context.get("preview_text") or rendered_heading or rendered_subject)
             )[:200],
-            "body_html": sanitize_html(html_body),
+            "body_html": _style_paragraphs(sanitize_html(html_body), paragraph_spacing),
             "heading": rendered_heading,
             "accent_color": str(context.get("accent_color") or "#111827"),
             "background_color": str(context.get("background_color") or "#eef2f7"),
             "content_background_color": str(context.get("content_background_color") or "#ffffff"),
+            "body_line_height": float(context.get("body_line_height", 1.6)),
             "footer_text": _text(str(context.get("footer_text") or "")),
             "show_system_footer": bool(context.get("show_system_footer", True)),
             "banner_image_url": rendered_banner_image_url,

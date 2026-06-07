@@ -5,7 +5,7 @@
  * 支援格式：粗體、斜體、刪除線、底線、行內程式碼、
  *           H1/H2/H3、有序/無序清單、引言、水平線、程式碼區塊
  */
-import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, type CSSProperties } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
@@ -19,11 +19,11 @@ const editorStyles = `
   min-height: 160px;
   padding: 0.625rem 0.75rem;
   font-size: 0.875rem;
-  line-height: 1.7;
+  line-height: var(--rich-line-height, 1.6);
   color: var(--text-primary);
   background: var(--bg-surface);
 }
-.tiptap-editor .ProseMirror p { margin: 0 0 0.5em; }
+.tiptap-editor .ProseMirror p { margin: 0 0 var(--rich-paragraph-spacing, 18px); }
 .tiptap-editor .ProseMirror p:last-child { margin-bottom: 0; }
 .tiptap-editor .ProseMirror h1 { font-size: 1.25rem; font-weight: 700; margin: 0.75em 0 0.25em; }
 .tiptap-editor .ProseMirror h2 { font-size: 1.1rem; font-weight: 600; margin: 0.65em 0 0.2em; }
@@ -75,6 +75,15 @@ type ToolbarBtn = {
 };
 
 const TOOLBAR: (ToolbarBtn | "divider")[] = [
+  {
+    label: "P", title: "正文段落",
+    isActive: e => e.isActive("paragraph") ?? false,
+    action: e => e.chain().focus().setParagraph().run(),
+  },
+  {
+    label: "↵", title: "段內換行 (Shift+Enter)",
+    action: e => e.chain().focus().setHardBreak().run(),
+  },
   {
     label: "H1", title: "標題一",
     isActive: e => e.isActive("heading", { level: 1 }) ?? false,
@@ -152,6 +161,8 @@ interface RichTextareaProps {
   minRows?: number;
   placeholder?: string;
   className?: string;
+  lineHeight?: number;
+  paragraphSpacing?: number;
 }
 
 /** 命令式介面：供外部（例如「插入變數」）在游標處插入文字。 */
@@ -164,6 +175,8 @@ const RichTextarea = forwardRef<RichTextareaHandle, RichTextareaProps>(function 
   onChange,
   minRows = 4,
   placeholder = "",
+  lineHeight = 1.6,
+  paragraphSpacing = 18,
 }, ref) {
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
@@ -232,6 +245,10 @@ const RichTextarea = forwardRef<RichTextareaHandle, RichTextareaProps>(function 
   }, []);
 
   const minHeight = `${minRows * 1.7 * 14 + 20}px`;
+  const spacingStyle = {
+    "--rich-line-height": String(lineHeight),
+    "--rich-paragraph-spacing": `${paragraphSpacing}px`,
+  } as CSSProperties;
 
   return (
     <div
@@ -285,9 +302,15 @@ const RichTextarea = forwardRef<RichTextareaHandle, RichTextareaProps>(function 
       </div>
 
       {/* ── 編輯區 ───────────────────────────────────────────────────────── */}
-      <div style={{ minHeight }} className="tiptap-editor">
+      <div style={{ minHeight, ...spacingStyle }} className="tiptap-editor">
         <EditorContent editor={editor} />
       </div>
+      <p
+        className="border-t px-3 py-1.5 text-[10px]"
+        style={{ borderColor: "var(--border)", color: "var(--text-disabled)" }}
+      >
+        Enter 建立新段落，Shift+Enter 在同一段內換行
+      </p>
     </div>
   );
 });

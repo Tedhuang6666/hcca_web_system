@@ -150,6 +150,8 @@ type ComposeDraft = {
   accentColor: string;
   backgroundColor: string;
   contentBackgroundColor: string;
+  bodyLineHeight: number;
+  paragraphSpacing: number;
   footerText: string;
   showSystemFooter: boolean;
   bannerImageUrl: string;
@@ -187,6 +189,8 @@ function ComposeInner() {
   const [accentColor, setAccentColor] = useState("#111827");
   const [backgroundColor, setBackgroundColor] = useState("#eef2f7");
   const [contentBackgroundColor, setContentBackgroundColor] = useState("#ffffff");
+  const [bodyLineHeight, setBodyLineHeight] = useState(1.6);
+  const [paragraphSpacing, setParagraphSpacing] = useState(18);
   const [footerText, setFooterText] = useState("");
   const [showSystemFooter, setShowSystemFooter] = useState(true);
   const [bannerImageUrl, setBannerImageUrl] = useState("");
@@ -291,6 +295,8 @@ function ComposeInner() {
         setAccentColor(m.accent_color ?? "#111827");
         setBackgroundColor(m.background_color ?? "#eef2f7");
         setContentBackgroundColor(m.content_background_color ?? "#ffffff");
+        setBodyLineHeight(m.body_line_height ?? 1.6);
+        setParagraphSpacing(m.paragraph_spacing ?? 18);
         setFooterText(m.footer_text ?? "");
         setShowSystemFooter(m.show_system_footer ?? true);
         setBannerImageUrl(m.banner_image_url ?? "");
@@ -328,6 +334,8 @@ function ComposeInner() {
     setAccentColor(d.accentColor ?? "#111827");
     setBackgroundColor(d.backgroundColor ?? "#eef2f7");
     setContentBackgroundColor(d.contentBackgroundColor ?? "#ffffff");
+    setBodyLineHeight(d.bodyLineHeight ?? 1.6);
+    setParagraphSpacing(d.paragraphSpacing ?? 18);
     setFooterText(d.footerText ?? "");
     setShowSystemFooter(d.showSystemFooter ?? true);
     setBannerImageUrl(d.bannerImageUrl ?? "");
@@ -366,6 +374,8 @@ function ComposeInner() {
       accentColor,
       backgroundColor,
       contentBackgroundColor,
+      bodyLineHeight,
+      paragraphSpacing,
       footerText,
       showSystemFooter,
       bannerImageUrl,
@@ -391,6 +401,8 @@ function ComposeInner() {
       accentColor,
       backgroundColor,
       contentBackgroundColor,
+      bodyLineHeight,
+      paragraphSpacing,
       footerText,
       showSystemFooter,
       bannerImageUrl,
@@ -409,6 +421,8 @@ function ComposeInner() {
       accentColor,
       backgroundColor,
       contentBackgroundColor,
+      bodyLineHeight,
+      paragraphSpacing,
       footerText,
       showSystemFooter,
       bannerImageUrl,
@@ -445,6 +459,8 @@ function ComposeInner() {
       accent_color: accentColor,
       background_color: backgroundColor,
       content_background_color: contentBackgroundColor,
+      body_line_height: bodyLineHeight,
+      paragraph_spacing: paragraphSpacing,
       footer_text: footerText.trim(),
       show_system_footer: showSystemFooter,
       banner_image_url: bannerImageUrl.trim(),
@@ -491,6 +507,8 @@ function ComposeInner() {
       accentColor,
       backgroundColor,
       contentBackgroundColor,
+      bodyLineHeight,
+      paragraphSpacing,
       footerText,
       showSystemFooter,
       bannerImageUrl,
@@ -627,6 +645,8 @@ function ComposeInner() {
     setAccentColor(template.accentColor ?? "#111827");
     setBackgroundColor(template.backgroundColor ?? "#eef2f7");
     setContentBackgroundColor(template.contentBackgroundColor ?? "#ffffff");
+    setBodyLineHeight(template.bodyLineHeight ?? 1.6);
+    setParagraphSpacing(template.paragraphSpacing ?? 18);
     setFooterText(template.footerText ?? "");
     setShowSystemFooter(template.showSystemFooter ?? true);
     setBannerImageUrl(template.bannerImageUrl);
@@ -683,6 +703,8 @@ function ComposeInner() {
     setAccentColor(content.accent_color ?? "#111827");
     setBackgroundColor(content.background_color ?? "#eef2f7");
     setContentBackgroundColor(content.content_background_color ?? "#ffffff");
+    setBodyLineHeight(content.body_line_height ?? 1.6);
+    setParagraphSpacing(content.paragraph_spacing ?? 18);
     setFooterText(content.footer_text ?? "");
     setShowSystemFooter(content.show_system_footer ?? true);
     setBannerImageUrl(content.banner_image_url ?? "");
@@ -708,6 +730,8 @@ function ComposeInner() {
       setAccentColor(message.accent_color ?? "#111827");
       setBackgroundColor(message.background_color ?? "#eef2f7");
       setContentBackgroundColor(message.content_background_color ?? "#ffffff");
+      setBodyLineHeight(message.body_line_height ?? 1.6);
+      setParagraphSpacing(message.paragraph_spacing ?? 18);
       setFooterText(message.footer_text ?? "");
       setShowSystemFooter(message.show_system_footer ?? true);
       setBannerImageUrl(message.banner_image_url ?? "");
@@ -1507,7 +1531,14 @@ function ComposeInner() {
               ))}
             </div>
             <div onFocus={() => (lastFocusRef.current = "body")}>
-              <RichTextarea ref={bodyRef} value={body} onChange={setBody} placeholder="撰寫信件內文…" />
+              <RichTextarea
+                ref={bodyRef}
+                value={body}
+                onChange={setBody}
+                placeholder="撰寫信件內文…"
+                lineHeight={bodyLineHeight}
+                paragraphSpacing={paragraphSpacing}
+              />
             </div>
             <div className="space-y-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1634,6 +1665,40 @@ function ComposeInner() {
                     </span>
                   </label>
                 ))}
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="text-xs">
+                  <span className="mb-1 block" style={{ color: "var(--text-muted)" }}>
+                    段內行距
+                  </span>
+                  <input
+                    type="number"
+                    className="input"
+                    min={1.2}
+                    max={2.5}
+                    step={0.05}
+                    value={bodyLineHeight}
+                    onChange={(event) => {
+                      if (event.target.value) setBodyLineHeight(Number(event.target.value));
+                    }}
+                  />
+                </label>
+                <label className="text-xs">
+                  <span className="mb-1 block" style={{ color: "var(--text-muted)" }}>
+                    段落間距（px）
+                  </span>
+                  <input
+                    type="number"
+                    className="input"
+                    min={0}
+                    max={40}
+                    step={1}
+                    value={paragraphSpacing}
+                    onChange={(event) => {
+                      if (event.target.value) setParagraphSpacing(Number(event.target.value));
+                    }}
+                  />
+                </label>
               </div>
               <div>
                 <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>

@@ -27,6 +27,8 @@ function detailToPreviewPayload(d: EmailMessageDetailOut): EmailComposePayload {
     accent_color: d.accent_color,
     background_color: d.background_color,
     content_background_color: d.content_background_color,
+    body_line_height: d.body_line_height,
+    paragraph_spacing: d.paragraph_spacing,
     footer_text: d.footer_text,
     show_system_footer: d.show_system_footer,
     body: d.body,
