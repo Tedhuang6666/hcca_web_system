@@ -116,12 +116,13 @@ export default function LoginPage() {
               HCCA CAMPUS GOVERNANCE
             </p>
             <h1
-              className="max-w-xl text-5xl font-semibold leading-[1.22] tracking-[-0.04em] xl:text-6xl"
+              className="max-w-xl text-[2.5rem] font-semibold leading-[1.28] tracking-[-0.04em] xl:text-5xl 2xl:text-6xl"
               style={{ fontFamily: "\"Noto Serif TC\", serif" }}
             >
-              讓校園自治，
-              <br />
-              <span className="text-[#e8c970]">更透明，也更靠近每個人。</span>
+              <span className="block whitespace-nowrap">
+                讓校園自治<span className="text-[#e8c970]">更透明，</span>
+              </span>
+              <span className="block whitespace-nowrap text-[#e8c970]">也更靠近每個人。</span>
             </h1>
             <p className="mt-7 max-w-lg text-base leading-8 text-[#cdd8e0]">
               從議事協作到校園服務，將制度、紀錄與參與整合在同一個可信賴的入口。
@@ -145,7 +146,7 @@ export default function LoginPage() {
 
           <footer className="relative z-10 flex items-center justify-between text-[11px] text-[#91a5b5]">
             <span>© {new Date().getFullYear()} {BRANDING.orgName}</span>
-            <span>竹塹 · 新竹</span>
+            <span>竹嶺 · 班聯</span>
           </footer>
         </section>
 
@@ -276,7 +277,8 @@ export default function LoginPage() {
                   aria-hidden="true"
                 />
                 <input
-                  className="input h-12 w-full rounded-xl pl-11"
+                  className="input h-12 w-full rounded-xl"
+                  style={{ paddingLeft: "2.75rem" }}
                   type="email"
                   inputMode="email"
                   autoComplete="email webauthn"
