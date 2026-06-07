@@ -3624,6 +3624,73 @@ html[data-reveal-ready] [data-reveal].is-reveal-in {
   will-change: transform;
 }
 
+/* 加票：選票飄入候選人區域 */
+.live-fly-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  overflow: visible;
+}
+.live-ballot {
+  position: absolute;
+  top: 4px;
+  right: 18%;
+  width: 56px;
+  height: 42px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #fffdf5, #f1e2b6);
+  border: 1.5px solid #e8c970;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45), 0 0 0 4px rgba(232, 201, 112, 0.22);
+  opacity: 0;
+  animation: live-ballot-fly 1.3s cubic-bezier(0.25, 0.8, 0.3, 1) calc(var(--i, 0) * 130ms) forwards;
+}
+/* 選票上的勾選痕跡（放大、加粗） */
+.live-ballot::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  top: 11px;
+  width: 22px;
+  height: 12px;
+  border-left: 4px solid #b8962f;
+  border-bottom: 4px solid #b8962f;
+  transform: rotate(-45deg);
+}
+@keyframes live-ballot-fly {
+  0%   { transform: translate(150px, -140px) rotate(-38deg) scale(0.5); opacity: 0; }
+  16%  { opacity: 1; }
+  58%  { transform: translate(0, 26px) rotate(5deg) scale(1.18); opacity: 1; }
+  100% { transform: translate(0, 96px) rotate(0deg) scale(0.7); opacity: 0; }
+}
+
+/* 加票：大型金色「+N」浮標，飄入後上升淡出 */
+.live-vote-gain {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  z-index: 7;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.28rem 0.85rem;
+  background: #e8c970;
+  color: #173654;
+  font-weight: 900;
+  font-size: clamp(1.5rem, 3.4vw, 2.1rem);
+  line-height: 1;
+  letter-spacing: -0.01em;
+  box-shadow: 0 10px 26px rgba(232, 201, 112, 0.55);
+  pointer-events: none;
+  animation: live-vote-gain 1.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes live-vote-gain {
+  0%   { transform: translateY(18px) scale(0.5); opacity: 0; }
+  22%  { transform: translateY(0) scale(1.2); opacity: 1; }
+  55%  { transform: translateY(-8px) scale(1); opacity: 1; }
+  100% { transform: translateY(-46px) scale(0.95); opacity: 0; }
+}
+
 /* 票數增加：金光脈衝 + 數字彈跳 */
 .live-vote-bump {
   animation: live-vote-bump 700ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -3766,8 +3833,11 @@ html[data-reveal-ready] [data-reveal].is-reveal-in {
   .live-winner-pop,
   .live-trophy-ring,
   .live-confetti i,
-  .live-row-flash::after {
+  .live-row-flash::after,
+  .live-ballot,
+  .live-vote-gain {
     animation: none !important;
     transition: none !important;
   }
+  .live-ballot { display: none; }
 }

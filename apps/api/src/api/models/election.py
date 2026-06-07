@@ -6,7 +6,7 @@ import enum
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -41,11 +41,20 @@ class Election(Base, TimestampMixin):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     title: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    slug: Mapped[str | None] = mapped_column(String(220), nullable=True, unique=True, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default=ElectionStatus.DRAFT.value, index=True
     )
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # 應選名額（要選出幾位／幾組）
+    seats: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    # 在校總人數（投票權人數）；作為投票率分母
+    eligible_voter_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 總投票率門檻百分比（有效票 ÷ 在校總人數，不含廢票）；未達則不產生當選者
+    turnout_threshold_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # 候選人得票率門檻百分比（候選人票 ÷ 有效票）；未設定則無門檻
+    vote_threshold_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_by_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
@@ -105,6 +114,7 @@ class CandidateMember(Base, TimestampMixin):
     )
     position: Mapped[str] = mapped_column(String(100), nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
+    photo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     candidate: Mapped[Candidate] = relationship("Candidate", back_populates="members")

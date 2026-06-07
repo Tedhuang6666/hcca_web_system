@@ -428,12 +428,16 @@ export const electionsApi = {
     title: string;
     description?: string;
     is_public?: boolean;
+    seats?: number;
+    eligible_voter_count?: number | null;
+    turnout_threshold_pct?: number | null;
+    vote_threshold_pct?: number | null;
     candidates: {
       name: string;
       number: number;
       color: string;
       sort_order?: number;
-      members?: { position: string; name: string; sort_order?: number }[];
+      members?: { position: string; name: string; photo_url?: string | null; sort_order?: number }[];
     }[];
     ballot_boxes: {
       name: string;
@@ -441,6 +445,24 @@ export const electionsApi = {
       sort_order?: number;
     }[];
   }) => post<ElectionOut>("/elections", body),
+  uploadImage: async (file: File): Promise<{ url: string }> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const doFetch = () =>
+      fetch(`${BASE}/elections/images`, {
+        method: "POST",
+        credentials: "include",
+        headers: csrfHeaders("POST"),
+        body: fd,
+      });
+    let res = await doFetch();
+    if (res.status === 401) {
+      const ok = await silentRefresh();
+      if (ok) res = await doFetch();
+    }
+    if (!res.ok) throw new ApiError(res.status, await errorMessageFromResponse(res));
+    return res.json();
+  },
   updateStatus: (id: string, status: ElectionStatus) =>
     post<ElectionOut>(`/elections/${pathSegment(id)}/status`, { status }),
   updateBallotBoxStatus: (id: string, boxId: string, status: BallotBoxStatus) =>

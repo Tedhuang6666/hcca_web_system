@@ -11,6 +11,7 @@ from api.models.election import BallotBoxStatus, ElectionStatus, VoteEventKind
 class CandidateMemberCreate(BaseModel):
     position: str = Field(min_length=1, max_length=100)
     name: str = Field(min_length=1, max_length=100)
+    photo_url: str | None = Field(None, max_length=500)
     sort_order: int = Field(0, ge=0)
 
 
@@ -56,6 +57,10 @@ class ElectionCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     description: str | None = Field(None, max_length=2000)
     is_public: bool = True
+    seats: int = Field(1, ge=1, le=100)
+    eligible_voter_count: int | None = Field(None, ge=0)
+    turnout_threshold_pct: float | None = Field(None, ge=0, le=100)
+    vote_threshold_pct: float | None = Field(None, ge=0, le=100)
     candidates: list[CandidateCreate] = Field(min_length=1)
     ballot_boxes: list[BallotBoxCreate] = Field(min_length=1)
 
@@ -66,6 +71,8 @@ class ElectionCreate(BaseModel):
         names = [item.name.strip() for item in self.ballot_boxes]
         if len(set(names)) != len(names):
             raise ValueError("票匭名稱不可重複")
+        if self.turnout_threshold_pct is not None and not self.eligible_voter_count:
+            raise ValueError("設定投票率門檻時必須填寫在校總人數")
         return self
 
 
@@ -73,6 +80,10 @@ class ElectionUpdate(BaseModel):
     title: str | None = Field(None, min_length=1, max_length=200)
     description: str | None = Field(None, max_length=2000)
     is_public: bool | None = None
+    seats: int | None = Field(None, ge=1, le=100)
+    eligible_voter_count: int | None = Field(None, ge=0)
+    turnout_threshold_pct: float | None = Field(None, ge=0, le=100)
+    vote_threshold_pct: float | None = Field(None, ge=0, le=100)
 
 
 class ElectionOut(BaseModel):
@@ -80,9 +91,14 @@ class ElectionOut(BaseModel):
 
     id: uuid.UUID
     title: str
+    slug: str | None
     description: str | None
     status: ElectionStatus
     is_public: bool
+    seats: int
+    eligible_voter_count: int | None
+    turnout_threshold_pct: float | None
+    vote_threshold_pct: float | None
     created_by_id: uuid.UUID
     candidates: list[CandidateOut]
     ballot_boxes: list[BallotBoxOut]
@@ -95,6 +111,7 @@ class ElectionListItem(BaseModel):
 
     id: uuid.UUID
     title: str
+    slug: str | None
     status: ElectionStatus
     is_public: bool
     created_at: datetime
@@ -153,6 +170,9 @@ class CandidateTally(BaseModel):
     members: list[CandidateMemberOut]
     votes: int
     percentage: float
+    rank: int
+    meets_threshold: bool
+    is_elected: bool
 
 
 class BallotBoxTally(BaseModel):
@@ -167,8 +187,16 @@ class BallotBoxTally(BaseModel):
 
 class ElectionLiveSummary(BaseModel):
     election_id: uuid.UUID
+    slug: str | None
     title: str
     status: ElectionStatus
+    seats: int
+    eligible_voter_count: int | None
+    turnout_threshold_pct: float | None
+    turnout_pct: float | None
+    turnout_met: bool
+    vote_threshold_pct: float | None
+    threshold_votes: int | None
     total_votes: int
     valid_votes: int
     invalid_votes: int

@@ -11,6 +11,7 @@ export interface ElectionCandidateMember {
   candidate_id: string;
   position: string;
   name: string;
+  photo_url: string | null;
   sort_order: number;
 }
 
@@ -37,9 +38,14 @@ export interface ElectionBallotBox {
 export interface ElectionOut {
   id: string;
   title: string;
+  slug: string | null;
   description: string | null;
   status: ElectionStatus;
   is_public: boolean;
+  seats: number;
+  eligible_voter_count: number | null;
+  turnout_threshold_pct: number | null;
+  vote_threshold_pct: number | null;
   created_by_id: string;
   candidates: ElectionCandidate[];
   ballot_boxes: ElectionBallotBox[];
@@ -50,6 +56,7 @@ export interface ElectionOut {
 export interface ElectionListItem {
   id: string;
   title: string;
+  slug: string | null;
   status: ElectionStatus;
   is_public: boolean;
   created_at: string;
@@ -80,6 +87,9 @@ export interface CandidateTally {
   members: ElectionCandidateMember[];
   votes: number;
   percentage: number;
+  rank: number;
+  meets_threshold: boolean;
+  is_elected: boolean;
 }
 
 export interface BallotBoxTally {
@@ -94,8 +104,16 @@ export interface BallotBoxTally {
 
 export interface ElectionLiveSummary {
   election_id: string;
+  slug: string | null;
   title: string;
   status: ElectionStatus;
+  seats: number;
+  eligible_voter_count: number | null;
+  turnout_threshold_pct: number | null;
+  turnout_pct: number | null;
+  turnout_met: boolean;
+  vote_threshold_pct: number | null;
+  threshold_votes: number | null;
   total_votes: number;
   valid_votes: number;
   invalid_votes: number;

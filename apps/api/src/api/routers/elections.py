@@ -3,7 +3,8 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
@@ -13,6 +14,7 @@ from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_permission
 from api.models.election import BallotBox, Election
 from api.models.user import User
+from api.services.storage import get_storage
 from api.schemas.election import (
     BallotBoxOut,
     BallotBoxStatusUpdate,
@@ -31,6 +33,12 @@ router = APIRouter(prefix="/elections", tags=["即時開票"])
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
 ManageElection = Depends(require_permission(PermissionCode.ELECTION_MANAGE))
+
+_IMAGE_TYPES = frozenset({"image/jpeg", "image/png", "image/gif", "image/webp"})
+
+
+class ElectionImageOut(BaseModel):
+    url: str
 
 
 async def _election_or_404(session: AsyncSession, election_id: uuid.UUID) -> Election:
@@ -72,6 +80,29 @@ async def list_public_elections(session: DbDep) -> list[Election]:
 )
 async def create_election(payload: ElectionCreate, session: DbDep, user: CurrentUser) -> Election:
     return await election_svc.create_election(session, payload, user.id)
+
+
+@router.post(
+    "/images",
+    response_model=ElectionImageOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[ManageElection],
+    summary="上傳候選人照片，回傳可直接填入候選成員的 URL",
+)
+async def upload_election_image(file: UploadFile = File(...)) -> ElectionImageOut:
+    if (file.content_type or "") not in _IMAGE_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="僅支援 JPEG / PNG / GIF / WebP 圖片",
+        )
+    storage = get_storage()
+    try:
+        stored = await storage.save(file, prefix="elections")
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    return ElectionImageOut(url=stored.url or f"/uploads/{stored.storage_key}")
 
 
 @router.get("/{election_id}", response_model=ElectionOut, dependencies=[ManageElection])
@@ -183,8 +214,11 @@ async def list_vote_events(
     return await election_svc.list_vote_events(session, election_id, limit)
 
 
-@router.get("/public/{election_id}/live", response_model=ElectionLiveSummary)
-async def get_public_live_summary(election_id: uuid.UUID, session: DbDep) -> ElectionLiveSummary:
+@router.get("/public/{election_ref}/live", response_model=ElectionLiveSummary)
+async def get_public_live_summary(election_ref: str, session: DbDep) -> ElectionLiveSummary:
+    election_id = await election_svc.resolve_election_id(session, election_ref)
+    if election_id is None:
+        raise HTTPException(status_code=404, detail="找不到此選舉")
     election = await _election_or_404(session, election_id)
     if not election.is_public:
         raise HTTPException(status_code=404, detail="找不到此選舉")

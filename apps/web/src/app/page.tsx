@@ -17,53 +17,41 @@ import { useEffect, useState } from "react";
 import BrandEmblem from "@/components/brand/BrandEmblem";
 import PublicSiteShell from "@/components/site/PublicSiteShell";
 import MarkdownBlock from "@/components/site/MarkdownBlock";
+import { liveLeader, useLiveElection } from "@/components/site/useLiveElection";
+import { useScrollReveal } from "@/hooks/useScrollReveal";
 import { announcementsApi, siteApi } from "@/lib/api";
-import { apiUrl } from "@/lib/config";
 import { sanitizeCustomCss } from "@/lib/sanitize";
 import type { AnnouncementListItem, PublicSiteBundleOut } from "@/lib/types";
-
-type PublicElection = {
-  id: string;
-  title: string;
-  status: "live" | "paused" | "closed";
-  updated_at: string;
-};
 
 export default function PublicHomePage() {
   const [data, setData] = useState<PublicSiteBundleOut | null>(null);
   const [announcements, setAnnouncements] = useState<AnnouncementListItem[]>([]);
-  const [elections, setElections] = useState<PublicElection[]>([]);
+  const activeElection = useLiveElection();
 
   useEffect(() => {
-    Promise.all([
-      siteApi.public(),
-      announcementsApi.list({ limit: 4 }),
-      fetch(apiUrl("/elections/public"), { credentials: "include" }).then((response) =>
-        response.ok ? response.json() as Promise<PublicElection[]> : [],
-      ),
-    ])
-      .then(([bundle, nextAnnouncements, nextElections]) => {
+    Promise.all([siteApi.public(), announcementsApi.list({ limit: 4 })])
+      .then(([bundle, nextAnnouncements]) => {
         setData(bundle);
         setAnnouncements(nextAnnouncements);
-        setElections(nextElections);
       })
       .catch(() => {
         setData(null);
         setAnnouncements([]);
-        setElections([]);
       });
   }, []);
 
   const settings = data?.settings;
   const links = data?.links.slice(0, 4) ?? [];
   const officers = data?.featured_officers ?? [];
-  const activeElection = elections.find((election) => election.status === "live")
-    ?? elections.find((election) => election.status === "paused");
+  const liveSummary = activeElection?.summary ?? null;
+  const liveLeading = liveLeader(liveSummary);
   const latestAnnouncements = announcements.slice(0, 2);
   const recentlyUpdatedPages = [...(data?.nav_pages ?? [])]
     .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
     .slice(0, 2);
   const emblemAlt = settings?.site_logo_alt || `${settings?.site_title ?? "班聯會"}會徽`;
+
+  useScrollReveal([data, announcements, activeElection]);
 
   return (
     <PublicSiteShell navPages={data?.nav_pages ?? []} settings={settings}>
@@ -107,7 +95,7 @@ export default function PublicHomePage() {
       </section>
 
       {(activeElection || latestAnnouncements.length > 0 || recentlyUpdatedPages.length > 0) && (
-        <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6" aria-labelledby="public-now-title">
+        <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6" aria-labelledby="public-now-title" data-reveal>
           <div className="mb-5 flex items-end justify-between gap-4">
             <div>
               <p className="public-section-kicker">Now & New</p>
@@ -121,7 +109,7 @@ export default function PublicHomePage() {
           <div className={`grid gap-4 ${activeElection ? "lg:grid-cols-[1.15fr_0.85fr]" : ""}`}>
             {activeElection && (
               <Link
-                href={`/live/elections/${activeElection.id}`}
+                href={`/live/elections/${encodeURIComponent(activeElection.summary?.slug ?? activeElection.id)}`}
                 className="group overflow-hidden rounded-2xl bg-[#173654] p-6 text-[#f8f3e5] shadow-lg shadow-slate-950/10 transition-colors hover:bg-[#1d4265] sm:p-8"
               >
                 <div className="flex items-center justify-between gap-4">
@@ -131,14 +119,52 @@ export default function PublicHomePage() {
                   </span>
                   <Radio size={22} className="text-[#e8c970]" aria-hidden />
                 </div>
-                <h3 className="mt-8 font-serif text-2xl font-semibold leading-snug sm:text-3xl">
+                <h3 className="mt-8 font-serif text-2xl font-semibold leading-snug sm:text-3xl" style={{ color: "#f8f3e5" }}>
                   {activeElection.title}
                 </h3>
-                <p className="mt-3 max-w-xl text-sm leading-7 text-[#cdd8e0]">
-                  查看候選人得票、整體開票率與各票匭進度，頁面會自動同步現場紀錄。
-                </p>
-                <span className="mt-7 inline-flex items-center gap-2 text-sm font-semibold text-[#e8c970]">
-                  前往即時開票
+                {liveSummary ? (
+                  <>
+                    <div className="mt-5 flex flex-wrap gap-2">
+                      {typeof liveSummary.progress_percentage === "number" && (
+                        <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold">
+                          開票進度 {Math.round(liveSummary.progress_percentage)}%
+                        </span>
+                      )}
+                      {liveLeading && (
+                        <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold">
+                          領先 {liveLeading.name} {Math.round(liveLeading.percentage)}%
+                        </span>
+                      )}
+                      <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold">
+                        已開 {liveSummary.total_votes.toLocaleString("zh-TW")} 票
+                      </span>
+                    </div>
+                    <div className="mt-4 space-y-2.5">
+                      {liveSummary.candidates.slice(0, 3).map((candidate) => (
+                        <div key={candidate.candidate_id}>
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-medium">{candidate.number}. {candidate.name}</span>
+                            <span className="text-[#cdd8e0]">
+                              {candidate.votes.toLocaleString("zh-TW")} 票 · {Math.round(candidate.percentage)}%
+                            </span>
+                          </div>
+                          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/10">
+                            <div
+                              className="h-full rounded-full transition-[width] duration-500"
+                              style={{ width: `${Math.min(100, candidate.percentage)}%`, background: candidate.color }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p className="mt-3 max-w-xl text-sm leading-7 text-[#cdd8e0]">
+                    查看候選人得票、整體開票率與各票匭進度，頁面會自動同步現場紀錄。
+                  </p>
+                )}
+                <span className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-[#e8c970]">
+                  前往即時開票看完整票數
                   <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" aria-hidden />
                 </span>
               </Link>
@@ -201,10 +227,16 @@ export default function PublicHomePage() {
             icon: Database,
           },
           { href: "/about", title: "關於班聯會", desc: "理解本會任務、沿革與公共角色。", icon: Landmark },
-        ].map((item) => {
+        ].map((item, i) => {
           const Icon = item.icon;
           return (
-            <Link key={item.href} href={item.href} className="public-feature-card">
+            <Link
+              key={item.href}
+              href={item.href}
+              className="public-feature-card"
+              data-reveal
+              style={{ "--reveal-delay": `${i * 80}ms` } as React.CSSProperties}
+            >
               <span className="public-feature-icon"><Icon size={21} aria-hidden /></span>
               <span>
                 <span className="block text-base font-semibold">{item.title}</span>
@@ -218,7 +250,7 @@ export default function PublicHomePage() {
       </section>
 
       <section className="public-editorial">
-        <div className="public-panel public-about-panel">
+        <div className="public-panel public-about-panel" data-reveal>
           <p className="public-section-kicker">About</p>
           <h2>
             {settings?.about_title ?? "關於班聯會"}
@@ -227,7 +259,7 @@ export default function PublicHomePage() {
         </div>
         <aside className="public-side-stack">
           {officers.length > 0 && (
-            <div className="public-panel public-side-panel">
+            <div className="public-panel public-side-panel" data-reveal style={{ "--reveal-delay": "90ms" } as React.CSSProperties}>
               <div className="flex items-center justify-between gap-3">
                 <h2>精選幹部</h2>
                 <Link href="/officers" className="public-text-link">全部</Link>
@@ -245,7 +277,7 @@ export default function PublicHomePage() {
             </div>
           )}
           {links.length > 0 && (
-            <div className="public-panel public-side-panel">
+            <div className="public-panel public-side-panel" data-reveal style={{ "--reveal-delay": "160ms" } as React.CSSProperties}>
               <div className="flex items-center justify-between gap-3">
                 <h2>常用連結</h2>
                 <Link href="/links" className="public-text-link">更多</Link>

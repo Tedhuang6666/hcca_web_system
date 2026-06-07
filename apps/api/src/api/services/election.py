@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import math
+import re
+import unicodedata
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -30,6 +33,37 @@ from api.schemas.election import (
 )
 
 
+def slugify(text: str) -> str:
+    """產生保留中文（CJK）的網址 slug；非字母數字與 CJK 的字元改為 '-'。"""
+    text = unicodedata.normalize("NFKC", (text or "").strip())
+    kept = re.sub(r"[^0-9A-Za-z㐀-䶿一-鿿぀-ヿ０-ｚ]+", "-", text)
+    return kept.strip("-").lower()[:200]
+
+
+async def _unique_slug(
+    session: AsyncSession, title: str, exclude_id: uuid.UUID | None = None
+) -> str:
+    base = slugify(title) or uuid.uuid4().hex[:8]
+    candidate = base
+    suffix = 2
+    while True:
+        stmt = select(Election.id).where(Election.slug == candidate)
+        if exclude_id is not None:
+            stmt = stmt.where(Election.id != exclude_id)
+        if await session.scalar(stmt) is None:
+            return candidate
+        candidate = f"{base}-{suffix}"
+        suffix += 1
+
+
+def _is_uuid(value: str) -> bool:
+    try:
+        uuid.UUID(str(value))
+        return True
+    except (ValueError, AttributeError):
+        return False
+
+
 async def get_election(session: AsyncSession, election_id: uuid.UUID) -> Election | None:
     result = await session.execute(
         select(Election)
@@ -40,6 +74,14 @@ async def get_election(session: AsyncSession, election_id: uuid.UUID) -> Electio
         .where(Election.id == election_id)
     )
     return result.scalar_one_or_none()
+
+
+async def resolve_election_id(session: AsyncSession, ref: str) -> uuid.UUID | None:
+    """以 UUID 或 slug 解析出選舉的真實 UUID（公開連結可用中文 slug）。"""
+    conditions = [Election.slug == ref]
+    if _is_uuid(ref):
+        conditions.append(Election.id == uuid.UUID(ref))
+    return await session.scalar(select(Election.id).where(or_(*conditions)))
 
 
 async def list_elections(session: AsyncSession) -> list[Election]:
@@ -62,10 +104,16 @@ async def list_public_elections(session: AsyncSession) -> list[Election]:
 async def create_election(
     session: AsyncSession, payload: ElectionCreate, created_by_id: uuid.UUID
 ) -> Election:
+    title = payload.title.strip()
     election = Election(
-        title=payload.title.strip(),
+        title=title,
+        slug=await _unique_slug(session, title),
         description=payload.description,
         is_public=payload.is_public,
+        seats=payload.seats,
+        eligible_voter_count=payload.eligible_voter_count,
+        turnout_threshold_pct=payload.turnout_threshold_pct,
+        vote_threshold_pct=payload.vote_threshold_pct,
         created_by_id=created_by_id,
     )
     election.candidates = [
@@ -78,6 +126,7 @@ async def create_election(
                 CandidateMember(
                     position=member.position.strip(),
                     name=member.name.strip(),
+                    photo_url=(member.photo_url or None),
                     sort_order=member.sort_order,
                 )
                 for member in item.members
@@ -103,8 +152,11 @@ async def update_election(
 ) -> Election:
     if election.status != ElectionStatus.DRAFT.value:
         raise ValueError("只有草稿選舉可修改基本資料")
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+    for field, value in data.items():
         setattr(election, field, value.strip() if isinstance(value, str) else value)
+    if "title" in data and data["title"]:
+        election.slug = await _unique_slug(session, election.title, exclude_id=election.id)
     await session.commit()
     return await get_election(session, election.id)  # type: ignore[return-value]
 
@@ -380,10 +432,44 @@ async def get_live_summary(
         select(func.max(VoteEvent.created_at)).where(VoteEvent.election_id == election_id)
     )
 
+    # 總投票率（有效票 ÷ 在校總人數，不含廢票）與其門檻
+    eligible = election.eligible_voter_count or 0
+    turnout_pct = round(valid_votes / eligible * 100, 1) if eligible else None
+    turnout_threshold = election.turnout_threshold_pct
+    turnout_met = turnout_threshold is None or (
+        turnout_pct is not None and turnout_pct >= turnout_threshold
+    )
+
+    # 候選人得票率門檻（候選人票 ÷ 有效票）
+    threshold_pct = election.vote_threshold_pct
+    threshold_votes = (
+        math.ceil(valid_votes * threshold_pct / 100)
+        if threshold_pct is not None and valid_votes
+        else (0 if threshold_pct is not None else None)
+    )
+    active_candidates = [candidate for candidate in election.candidates if candidate.is_active]
+    ranked = sorted(active_candidates, key=lambda c: (-totals[c.id], c.number))
+    rank_by_id = {candidate.id: index for index, candidate in enumerate(ranked)}
+
+    def _meets_threshold(votes: int) -> bool:
+        if votes <= 0:
+            return False
+        if threshold_pct is None:
+            return True
+        return valid_votes > 0 and votes / valid_votes * 100 >= threshold_pct
+
     return ElectionLiveSummary(
         election_id=election.id,
+        slug=election.slug,
         title=election.title,
         status=election.status,
+        seats=election.seats,
+        eligible_voter_count=election.eligible_voter_count,
+        turnout_threshold_pct=turnout_threshold,
+        turnout_pct=turnout_pct,
+        turnout_met=turnout_met,
+        vote_threshold_pct=threshold_pct,
+        threshold_votes=threshold_votes,
         total_votes=total_votes,
         valid_votes=valid_votes,
         invalid_votes=invalid_votes,
@@ -406,6 +492,13 @@ async def get_live_summary(
                 members=candidate.members,
                 votes=totals[candidate.id],
                 percentage=round(totals[candidate.id] / valid_votes * 100, 1) if valid_votes else 0,
+                rank=rank_by_id[candidate.id] + 1,
+                meets_threshold=_meets_threshold(totals[candidate.id]),
+                is_elected=(
+                    turnout_met
+                    and rank_by_id[candidate.id] < election.seats
+                    and _meets_threshold(totals[candidate.id])
+                ),
             )
             for candidate in election.candidates
             if candidate.is_active
