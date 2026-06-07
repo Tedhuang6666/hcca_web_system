@@ -177,7 +177,7 @@ export default function LoginPage() {
 
           {/* 行動版 Logo */}
           <div className="flex items-center gap-3 mb-8 lg:hidden">
-            <BrandEmblem size={40} framed priority />
+            <BrandEmblem size={40} priority />
             <div>
               <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{BRANDING.orgShortName}</p>
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>{BRANDING.englishName}</p>
