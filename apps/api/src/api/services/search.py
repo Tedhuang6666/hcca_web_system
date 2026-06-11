@@ -41,7 +41,8 @@ async def _meili_request(method: str, path: str, json: Any | None = None) -> dic
 
 
 async def search(db: AsyncSession, query: str, *, limit: int = 10) -> list[dict[str, Any]]:
-    q = query.strip()
+    # 去除 NUL：0x00 進到 PostgreSQL ILIKE 後備查詢會丟 CharacterNotInRepertoireError → 500。
+    q = query.replace("\x00", "").strip()
     if meili_enabled():
         try:
             payload = await _meili_request(

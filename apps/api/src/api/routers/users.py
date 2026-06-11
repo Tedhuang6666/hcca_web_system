@@ -86,10 +86,14 @@ async def list_users(
                 u.email = ""
                 u.student_id = None
         return users
-    if not search or len(search.strip()) < 2:
+    # 去除 NUL：PostgreSQL/UTF8 不接受 0x00，直接進 ILIKE 參數會丟
+    # CharacterNotInRepertoireError → 未處理的 500。任何登入者可藉此低成本刷 5xx
+    # 觸發模組斷路器造成 DoS，故在入口先清掉。
+    cleaned = (search or "").replace("\x00", "").strip()
+    if len(cleaned) < 2:
         return []
     q = select(User).where(User.is_active == True)  # noqa: E712
-    pattern = f"%{search.strip()}%"
+    pattern = f"%{cleaned}%"
     if allow_sensitive_search:
         q = q.where(
             or_(
