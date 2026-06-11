@@ -104,34 +104,12 @@ import type {
   VoteEventOut, VoteEventKind,
 } from "./types";
 import { API_BASE, apiUrl } from "./config";
+import { ApiError } from "./api-helpers";
+export { ApiError, withFallback } from "./api-helpers";
 
 const BASE = API_BASE;
 
 // ── 核心 fetch 包裝 ────────────────────────────────────────────────────────────
-
-export class ApiError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-    public requestId?: string | null,
-    public errorId?: string | null,
-  ) {
-    super(message);
-  }
-}
-
-export async function withFallback<T>(
-  promise: Promise<T>,
-  fallback: T,
-  onError?: (error: unknown) => void,
-): Promise<T> {
-  try {
-    return await promise;
-  } catch (error) {
-    onError?.(error);
-    return fallback;
-  }
-}
 
 let refreshPromise: Promise<boolean> | null = null;
 
