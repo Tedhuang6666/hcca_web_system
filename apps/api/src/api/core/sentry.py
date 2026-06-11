@@ -9,6 +9,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from sentry_sdk.types import Event
+
 from api.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -47,7 +49,7 @@ def _scrub(value: Any) -> Any:
     return value
 
 
-def _before_send(event: dict[str, Any], _hint: dict[str, Any]) -> dict[str, Any] | None:
+def _before_send(event: Event, _hint: dict[str, Any]) -> Event | None:
     """過濾 request headers / cookies / data 中的敏感欄位。"""
     from api.core.structured_logging import get_request_id
 

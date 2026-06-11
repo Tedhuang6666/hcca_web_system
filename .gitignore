@@ -85,6 +85,7 @@ test.env
 # Local database exports and manual backups
 /*.dump
 /backups/manual/
+/openapi.json
 
 # Celery beat 執行期排程狀態（runtime，勿進版控）
 apps/api/celerybeat-schedule

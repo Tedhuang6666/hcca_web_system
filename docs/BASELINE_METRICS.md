@@ -52,8 +52,8 @@
 
 | 指標 | 怎麼量 | Baseline | Phase A | Phase B | Phase C | Phase D | 目標 |
 |---|---|---|---|---|---|---|---|
-| 後端測試 pass / fail / skip | PostgreSQL `pytest --asyncio-mode=auto` | 404 / 0 / 0 | | | | | 全 pass、skip 有理由 |
-| 後端測試覆蓋率 | `pytest --cov` | 53.57% | | | | | > 70% |
+| 後端測試 pass / fail / skip | PostgreSQL `pytest --asyncio-mode=auto` | 409 / 0 / 0 | | | | | 全 pass、skip 有理由 |
+| 後端測試覆蓋率 | `pytest --cov` | 53.82% | | | | | > 70% |
 | 前端單元測試 pass / fail | `npm test` | 10 / 0 | | | | | 全 pass |
 | 前端受測模組覆蓋率 | Vitest V8 statements | 76.38% | | | | | 不得下降 |
 | 公開 E2E pass / skip | Playwright desktop + mobile | 4 / 6（登入流程需 storage state） | | | | | 核心流程全 pass |

@@ -80,6 +80,11 @@ files = [
     "apps/api/src/api/core/login_lockout.py",
     "apps/api/src/api/core/anomaly_detection.py",
     "apps/api/src/api/core/field_crypto.py",
+    "apps/api/src/api/core/prometheus_metrics.py",
+    "apps/api/src/api/core/request_id.py",
+    "apps/api/src/api/core/sentry.py",
+    "apps/api/src/api/core/structured_logging.py",
+    "apps/api/src/api/services/metrics_tasks.py",
     "apps/api/src/api/services/storage.py",
 ]
 

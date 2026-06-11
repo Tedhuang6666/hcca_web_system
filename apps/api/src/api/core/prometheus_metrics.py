@@ -1,13 +1,6 @@
 """Prometheus metrics middleware + /metrics endpoint（ADR-001）。
 
-設計：
-- prometheus_client 為 optional 依賴；未安裝時 metrics_enabled = False、
-  middleware no-op、/metrics endpoint 回 503
-- 安裝後立即生效；無需改 router 或 service 程式碼
-
-啟用方式（生產）：
-    uv add prometheus-client --project apps/api
-    docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+prometheus_client 是正式依賴，API 與 worker 啟動後立即生效。
 
 Metrics 收錄：
     hcca_http_requests_total{method, path_template, status}
@@ -34,31 +27,21 @@ from __future__ import annotations
 import logging
 import os
 import time
-from collections.abc import Awaitable, Callable
 
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    CollectorRegistry,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+)
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 logger = logging.getLogger(__name__)
 
-# ── 條件 import：未安裝 prometheus_client 仍能跑 ────────────────
-try:
-    from prometheus_client import (
-        CONTENT_TYPE_LATEST,
-        CollectorRegistry,
-        Counter,
-        Gauge,
-        Histogram,
-        generate_latest,
-    )
-
-    metrics_enabled = True
-except ImportError:
-    metrics_enabled = False
-    CONTENT_TYPE_LATEST = "text/plain; version=0.0.4; charset=utf-8"
-    CollectorRegistry = None  # type: ignore[assignment]
-    Counter = Gauge = Histogram = None  # type: ignore[assignment]
-    generate_latest = None  # type: ignore[assignment]
+metrics_enabled = True
 
 
 _registry = None
@@ -86,12 +69,6 @@ def init_metrics() -> None:
     global _webhook_delivery_total, _outbox_delivery_total, _backup_runs_total
     global _backup_last_success, _websocket_connections
 
-    if not metrics_enabled:
-        logger.info(
-            "prometheus_client not installed; "
-            "metrics disabled. Run `uv add prometheus-client --project apps/api` to enable."
-        )
-        return
     if _registry is not None:
         return
 
@@ -179,8 +156,9 @@ def init_metrics() -> None:
 
 def render_metrics() -> bytes:
     """渲染最新 metrics 為 prometheus text format。"""
-    if not metrics_enabled or _registry is None:
-        return b"# prometheus_client not installed; metrics disabled\n"
+    if _registry is None:
+        init_metrics()
+    assert _registry is not None
     return generate_latest(_registry)
 
 
@@ -196,6 +174,7 @@ def start_metrics_server_from_env() -> bool:
     from prometheus_client import start_http_server
 
     init_metrics()
+    assert _registry is not None
     start_http_server(int(raw_port), registry=_registry)
     _metrics_server_started = True
     logger.info("Prometheus worker metrics listening on port %s", raw_port)
@@ -260,10 +239,10 @@ class PrometheusMetricsMiddleware:
     用 path_template（而非實際 URL）避免 cardinality 爆炸（每個 user_id 都成 label）。
     """
 
-    def __init__(self, app: Callable[[Request], Awaitable[Response]]) -> None:
+    def __init__(self, app: ASGIApp) -> None:
         self.app = app
 
-    async def __call__(self, scope, receive, send) -> None:
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http" or not metrics_enabled:
             await self.app(scope, receive, send)
             return
@@ -275,7 +254,7 @@ class PrometheusMetricsMiddleware:
         if _http_in_flight is not None:
             _http_in_flight.labels(method=method).inc()
 
-        async def _send_wrapper(message) -> None:
+        async def _send_wrapper(message: Message) -> None:
             if message["type"] == "http.response.start":
                 status_holder["code"] = message.get("status", 500)
             await send(message)

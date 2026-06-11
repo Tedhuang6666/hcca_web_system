@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 from redis import Redis
 
 from api.core.celery_app import celery_app
@@ -15,7 +17,7 @@ _QUEUES = ("default", "email", "meal", "documents", "backup", "recovery", "celer
 def collect_queue_depth() -> dict[str, int]:
     client = Redis.from_url(str(settings.REDIS_URL), decode_responses=True)
     try:
-        depths = {queue: int(client.llen(queue)) for queue in _QUEUES}
+        depths = {queue: cast(int, client.llen(queue)) for queue in _QUEUES}
     finally:
         client.close()
     for queue, depth in depths.items():
