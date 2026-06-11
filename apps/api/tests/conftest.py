@@ -22,7 +22,6 @@ os.environ.setdefault("WS_PUBSUB_BACKEND", "memory")
 from collections.abc import AsyncGenerator  # noqa: E402
 from typing import Any  # noqa: E402
 
-import pytest  # noqa: E402
 import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient, Response  # noqa: E402
 from sqlalchemy import text  # noqa: E402
@@ -32,8 +31,8 @@ from sqlalchemy.ext.asyncio import (  # noqa: E402
     create_async_engine,
 )
 
-from api.main import app  # noqa: E402
 from api.core.database import Base, get_db  # noqa: E402
+from api.main import app  # noqa: E402
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -67,9 +66,15 @@ async def _isolate_redis_client_per_test():
         _security.redis_client.connection_pool = old_pool
 
 
-# 優先使用 PostgreSQL test DB，支援 TSVECTOR 等 PG-specific 特性
-# 若無法連線，退回到 aiosqlite in-memory
+# 本機快速測試可使用 SQLite；CI 與整合測試必須明確提供 PostgreSQL，
+# 避免 SQLite 未強制外鍵或型別差異掩蓋正式環境問題。
 TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+if os.getenv("REQUIRE_POSTGRES_TEST_DB", "").lower() == "true" and not TEST_DATABASE_URL.startswith(
+    "postgresql+asyncpg://"
+):
+    raise RuntimeError(
+        "REQUIRE_POSTGRES_TEST_DB=true requires TEST_DATABASE_URL=postgresql+asyncpg://"
+    )
 
 
 class CSRFAwareAsyncClient(AsyncClient):

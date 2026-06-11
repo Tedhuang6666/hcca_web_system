@@ -119,10 +119,10 @@ class Matter(Base, TimestampMixin):
     )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     org_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("orgs.id", ondelete="SET NULL"), nullable=True, index=True
+        UUID(as_uuid=True), ForeignKey("orgs.id", ondelete="SET NULL"), nullable=True
     )
     owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -391,7 +391,6 @@ class PlanningDocument(Base, TimestampMixin):
         UUID(as_uuid=True),
         ForeignKey("governance_cases.id", ondelete="SET NULL"),
         nullable=True,
-        index=True,
     )
     title: Mapped[str] = mapped_column(String(240), nullable=False, index=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)

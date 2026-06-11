@@ -5,26 +5,8 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import create_engine, pool
 
-# --- 載入應用程式設定與所有 ORM 模型（Autogenerate 必需）---
-import api.models.announcement  # noqa: F401
-import api.models.calendar  # noqa: F401
-import api.models.council_proposal  # noqa: F401
-import api.models.defense  # noqa: F401
-import api.models.document  # noqa: F401
-import api.models.email_message  # noqa: F401
-import api.models.exam_paper  # noqa: F401
-import api.models.judicial_petition  # noqa: F401
-import api.models.meal  # noqa: F401
-import api.models.meeting  # noqa: F401
-import api.models.notification  # noqa: F401
-import api.models.org  # noqa: F401
-import api.models.petition  # noqa: F401
-import api.models.regulation  # noqa: F401
-import api.models.shop  # noqa: F401
-import api.models.site  # noqa: F401
-import api.models.survey  # noqa: F401
-import api.models.user  # noqa: F401
-import api.models.web_push  # noqa: F401
+# --- 載入完整 ORM registry（Autogenerate 必需）---
+import api.models  # noqa: F401
 from api.core.config import settings
 from api.core.database import Base
 

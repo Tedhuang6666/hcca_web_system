@@ -202,10 +202,10 @@ class EmailTemplate(Base, TimestampMixin):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     owner_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     org_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("orgs.id", ondelete="CASCADE"), nullable=True, index=True
+        UUID(as_uuid=True), ForeignKey("orgs.id", ondelete="CASCADE"), nullable=True
     )
     visibility: Mapped[str] = mapped_column(
         String(20), nullable=False, default=EmailResourceVisibility.PRIVATE
@@ -262,10 +262,10 @@ class EmailRecipientList(Base, TimestampMixin):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     owner_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     org_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("orgs.id", ondelete="CASCADE"), nullable=True, index=True
+        UUID(as_uuid=True), ForeignKey("orgs.id", ondelete="CASCADE"), nullable=True
     )
     visibility: Mapped[str] = mapped_column(
         String(20), nullable=False, default=EmailResourceVisibility.PRIVATE
@@ -360,7 +360,6 @@ class EmailRecipientEvent(Base, TimestampMixin):
         UUID(as_uuid=True),
         ForeignKey("email_campaign_recipients.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     provider_event_id: Mapped[str] = mapped_column(String(150), nullable=False)
     event_type: Mapped[str] = mapped_column(String(30), nullable=False)
@@ -375,10 +374,14 @@ class EmailRecipientEvent(Base, TimestampMixin):
 
 class EmailSuppression(Base, TimestampMixin):
     __tablename__ = "email_suppressions"
-    __table_args__ = (Index("ix_email_suppressions_active_reason", "is_active", "reason"),)
+    __table_args__ = (
+        UniqueConstraint("email", name="email_suppressions_email_key"),
+        Index("ix_email_suppressions_email", "email", unique=True),
+        Index("ix_email_suppressions_active_reason", "is_active", "reason"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
     reason: Mapped[str] = mapped_column(String(30), nullable=False)
     source: Mapped[str] = mapped_column(String(50), nullable=False, default="system")
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
