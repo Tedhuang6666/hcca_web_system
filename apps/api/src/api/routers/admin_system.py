@@ -373,24 +373,28 @@ def _to_db_view(s: DbPoolSnapshot) -> DbPoolView:
     )
 
 
+def _ws_view() -> WsView:
+    ws_stats = ws_manager.stats()
+    return WsView(
+        total=int(ws_stats["total"]),
+        rooms=int(ws_stats["rooms"]),
+        unique_ips=int(ws_stats["unique_ips"]),
+        per_room=[WsRoomCount(**r) for r in ws_manager.list_rooms()],
+        limits=ws_stats["limits"],
+    )
+
+
 @router.get("/status", response_model=SystemMetricsSnapshot, summary="即時系統指標")
 async def system_status(_admin: AdminUser) -> SystemMetricsSnapshot:
     db = get_db_pool_stats(engine)
     redis = await get_redis_stats()
     celery = await get_celery_stats()
-    ws_stats = ws_manager.stats()
     maintenance = await get_maintenance_state()
     return SystemMetricsSnapshot(
         timestamp=time.time(),
         db_pool=_to_db_view(db),
         redis=RedisView(**redis),
-        ws=WsView(
-            total=int(ws_stats["total"]),
-            rooms=int(ws_stats["rooms"]),
-            unique_ips=int(ws_stats["unique_ips"]),
-            per_room=[WsRoomCount(**r) for r in ws_manager.list_rooms()],
-            limits=ws_stats["limits"],
-        ),
+        ws=_ws_view(),
         celery=CeleryView(
             queues=[CeleryQueueView(**q) for q in celery.get("queues", [])],
             error=celery.get("error"),
@@ -422,11 +426,12 @@ class DiagnosticsView(BaseModel):
     queue_depths: list[QueueDepth]
     email_queue_pending: int
     email_outbox: dict[str, int]  # status -> 件數（含 retrying / dead）
+    ws: WsView
 
 
 @router.get("/diagnostics", response_model=DiagnosticsView, summary="一鍵健康診斷（管理員）")
 async def system_diagnostics(_admin: AdminUser, db: DbDep) -> DiagnosticsView:
-    """彙整 DB / Redis / Celery / queue 積壓 / email outbox / uptime / 版本，
+    """彙整 DB / Redis / Celery / queue 積壓 / email outbox / WebSocket / uptime / 版本，
     供管理員一眼判斷系統健康與寄信積壓。每項皆容錯，不因單一子系統故障而整體 500。"""
     # DB
     try:
@@ -479,6 +484,7 @@ async def system_diagnostics(_admin: AdminUser, db: DbDep) -> DiagnosticsView:
         queue_depths=depths,
         email_queue_pending=email_pending,
         email_outbox=outbox,
+        ws=_ws_view(),
     )
 
 

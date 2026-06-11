@@ -3401,6 +3401,7 @@ export interface SystemDiagnostics {
   queue_depths: { name: string; pending: number }[];
   email_queue_pending: number;
   email_outbox: Record<string, number>;
+  ws: WsView;
 }
 
 export const systemApi = {

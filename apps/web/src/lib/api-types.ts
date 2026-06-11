@@ -686,7 +686,7 @@ export interface paths {
         };
         /**
          * 一鍵健康診斷（管理員）
-         * @description 彙整 DB / Redis / Celery / queue 積壓 / email outbox / uptime / 版本，
+         * @description 彙整 DB / Redis / Celery / queue 積壓 / email outbox / WebSocket / uptime / 版本，
          *     供管理員一眼判斷系統健康與寄信積壓。每項皆容錯，不因單一子系統故障而整體 500。
          */
         get: operations["system_diagnostics_admin_system_diagnostics_get"];
@@ -13792,6 +13792,7 @@ export interface components {
             version: string;
             /** Workers */
             workers: components["schemas"]["CeleryQueueView"][];
+            ws: components["schemas"]["WsView"];
         };
         /** DigestPreferenceIn */
         DigestPreferenceIn: {

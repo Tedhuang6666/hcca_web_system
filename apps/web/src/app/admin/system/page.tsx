@@ -22,7 +22,6 @@ import {
   SlidersHorizontal,
   Trash2,
   UserX,
-  Wifi,
   Wrench,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -813,55 +812,6 @@ export default function SystemDefensePage() {
               </div>
             ))}
           </div>
-        </Panel>
-
-        <Panel title="WebSocket 與背景任務" icon={<Wifi size={18} aria-hidden />}>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <Metric
-              label="WebSocket"
-              value={snapshot.ws.total}
-              detail={`房間 ${snapshot.ws.rooms} / 唯一 IP ${snapshot.ws.unique_ips}`}
-            />
-            <Metric
-              label="Redis clients"
-              value={snapshot.redis.connected_clients}
-              detail={snapshot.redis.error || `blocked ${snapshot.redis.blocked_clients}`}
-              tone={snapshot.redis.error ? "danger" : "neutral"}
-            />
-            <Metric
-              label="Celery workers"
-              value={snapshot.celery.queues.length}
-              detail={snapshot.celery.error || "active/reserved 狀態如下"}
-              tone={snapshot.celery.error ? "danger" : "neutral"}
-            />
-          </div>
-          {snapshot.celery.queues.length > 0 ? (
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="text-xs text-[var(--text-muted)]">
-                  <tr className="border-b border-[var(--border)]">
-                    <th className="py-2 text-left font-medium">Worker</th>
-                    <th className="text-right font-medium">執行中</th>
-                    <th className="text-right font-medium">預留</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {snapshot.celery.queues.map((queue) => (
-                    <tr key={queue.name} className="border-b border-[var(--border)] last:border-0">
-                      <td className="py-2 font-mono text-xs text-[var(--text-primary)]">{queue.name}</td>
-                      <td className="text-right text-[var(--text-secondary)]">{queue.active}</td>
-                      <td className="text-right text-[var(--text-secondary)]">{queue.reserved}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="mt-4 flex items-center gap-2 rounded-md border border-[var(--warning-border)] bg-[var(--warning-dim)] px-3 py-2 text-sm text-[var(--warning)]">
-              <AlertTriangle size={16} aria-hidden />
-              尚未取得 Celery worker 狀態。
-            </div>
-          )}
         </Panel>
 
         <SlowQueriesPanel />
