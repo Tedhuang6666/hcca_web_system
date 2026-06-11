@@ -167,6 +167,74 @@ jobs:
             exit 1
           fi
 
+  performance-smoke:
+    name: k6 Public API Smoke
+    runs-on: ubuntu-latest
+    needs: test
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: campus_platform_perf
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:password@localhost:5432/campus_platform_perf
+      DATABASE_URL_SYNC: postgresql+psycopg2://postgres:password@localhost:5432/campus_platform_perf
+      REDIS_URL: redis://localhost:6379/0
+      SECRET_KEY: ci-test-secret-key-32-characters-min
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+      - name: Install API dependencies
+        run: uv sync --project apps/api
+      - name: Prepare database
+        run: uv run --project apps/api alembic upgrade head
+      - name: Start API
+        run: |
+          uv run --project apps/api uvicorn api.main:app --host 127.0.0.1 --port 8000 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8000/ready && exit 0
+            sleep 2
+          done
+          exit 1
+      - name: Run k6 public smoke
+        run: |
+          docker run --rm --network host \
+            -e BASE_URL=http://127.0.0.1:8000 \
+            -e VUS=2 \
+            -e DURATION=10s \
+            -v "$PWD:/workspace" \
+            grafana/k6:latest run \
+            --summary-export=/workspace/k6-summary.json \
+            /workspace/scripts/load-test.js
+      - name: Upload k6 summary
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: k6-public-smoke
+          path: k6-summary.json
+          if-no-files-found: ignore
+
   web:
     name: Web — Lint, Types & Build
     runs-on: ubuntu-latest
