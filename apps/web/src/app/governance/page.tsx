@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   AlertTriangle,
@@ -57,6 +58,7 @@ function isOverdue(matter: MatterListItem) {
 }
 
 export default function GovernancePage() {
+  const router = useRouter();
   const [dashboard, setDashboard] = useState<GovernanceDashboardOut | null>(null);
   const [matters, setMatters] = useState<MatterListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -95,6 +97,22 @@ export default function GovernancePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const openQuickCreate = () => {
+      if (window.location.hash !== "#quick-create") return;
+      setShowCreate(true);
+      window.requestAnimationFrame(() => {
+        document.getElementById("quick-create")?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      });
+    };
+    openQuickCreate();
+    window.addEventListener("hashchange", openQuickCreate);
+    return () => window.removeEventListener("hashchange", openQuickCreate);
+  }, []);
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!title.trim()) return;
@@ -120,7 +138,8 @@ export default function GovernancePage() {
       setTitle("");
       setDueAt("");
       setShowCreate(false);
-      toast.success("事情已建立");
+      toast.success("事情已建立，接著設定案件、任務或跨模組項目");
+      router.push(`/governance/${matter.id}`);
     } catch (error) {
       toast.error("建立失敗");
       console.error(error);
@@ -157,7 +176,8 @@ export default function GovernancePage() {
 
       {showCreate && (
         <section
-          className="rounded-lg p-4"
+          id="quick-create"
+          className="scroll-mt-24 rounded-lg p-4"
           style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
         >
           <div className="mb-3 flex items-center justify-between">
@@ -168,6 +188,9 @@ export default function GovernancePage() {
               <X size={14} aria-hidden={true} />
             </button>
           </div>
+          <p className="mb-3 text-xs" style={{ color: "var(--text-muted)" }}>
+            事情是跨模組工作的容器。建立後可在同一頁新增案件、任務、會議、公告與問卷。
+          </p>
           <form onSubmit={submit} className="grid gap-3 md:grid-cols-[minmax(0,1.5fr)_1fr_1fr_1fr_auto] md:items-end">
             <Field label="名稱">
               <input

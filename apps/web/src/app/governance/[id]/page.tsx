@@ -34,6 +34,7 @@ import type {
   GovernanceCaseStatus,
   GovernanceWorkflowTemplateOut,
   MatterOut,
+  MatterSpawnResult,
   TimelineEventOut,
   WorkItemOut,
 } from "@/lib/types";
@@ -120,6 +121,7 @@ export default function GovernanceMatterPage() {
   const [automationName, setAutomationName] = useState("");
   const [templateName, setTemplateName] = useState("");
   const [spawnTitle, setSpawnTitle] = useState("");
+  const [lastSpawn, setLastSpawn] = useState<MatterSpawnResult | null>(null);
   const [spawning, setSpawning] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -442,9 +444,8 @@ export default function GovernanceMatterPage() {
       .spawn(matterId, { kind, title })
       .then((result) => {
         setSpawnTitle("");
-        toast.success(`已建立並連動：${result.title}`, {
-          action: { label: "前往", onClick: () => window.open(result.href, "_blank") },
-        });
+        setLastSpawn(result);
+        toast.success(`已建立並連動：${result.title}`);
         load();
       })
       .catch((error) => {
@@ -521,10 +522,15 @@ export default function GovernanceMatterPage() {
         <div className="mb-3 flex items-center gap-2">
           <Sparkles size={16} aria-hidden={true} style={{ color: "var(--primary)" }} />
           <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-            從這件事情建立並連動
+            下一步：建立執行項目
           </h2>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="mb-4 grid gap-2 md:grid-cols-3">
+          <NextStep number="1" title="拆成案件" detail="用下方案件看板整理可交付的工作範圍。" href="#cases" />
+          <NextStep number="2" title="建立跨模組項目" detail="在這裡建立後會自動連回本事情。" href="#create-artifact" />
+          <NextStep number="3" title="追蹤執行" detail="任務、決議與模組事件會集中回流。" href="#tasks" />
+        </div>
+        <div id="create-artifact" className="scroll-mt-24 flex flex-col gap-2 sm:flex-row sm:items-center">
           <input
             value={spawnTitle}
             onChange={(event) => setSpawnTitle(event.target.value)}
@@ -541,6 +547,26 @@ export default function GovernanceMatterPage() {
         <p className="mt-2 text-[11px]" style={{ color: "var(--text-disabled)" }}>
           建立的項目會自動連動本事情，其後續生命週期（核准／發布／決議…）會自動回流到下方時間軸。
         </p>
+        {lastSpawn && (
+          <div
+            className="mt-3 flex flex-col gap-2 rounded-md p-3 sm:flex-row sm:items-center sm:justify-between"
+            style={{ background: "var(--success-dim)", border: "1px solid var(--border)" }}
+            role="status"
+          >
+            <div className="min-w-0">
+              <p className="text-xs font-semibold" style={{ color: "var(--success)" }}>
+                已建立並連動
+              </p>
+              <p className="mt-0.5 truncate text-sm" style={{ color: "var(--text-primary)" }}>
+                {lastSpawn.title}
+              </p>
+            </div>
+            <Link href={lastSpawn.href} className="btn btn-primary flex-shrink-0">
+              立即前往
+              <ExternalLink size={13} aria-hidden={true} />
+            </Link>
+          </div>
+        )}
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[1.5fr_1fr]">
@@ -765,6 +791,41 @@ function SpawnButton({
       {busy ? <Loader2 size={13} className="animate-spin" aria-hidden={true} /> : <Icon size={13} aria-hidden={true} />}
       {label}
     </button>
+  );
+}
+
+function NextStep({
+  number,
+  title,
+  detail,
+  href,
+}: {
+  number: string;
+  title: string;
+  detail: string;
+  href: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="flex gap-3 rounded-md p-3 transition-colors hover:bg-[var(--bg-hover)]"
+      style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", textDecoration: "none" }}
+    >
+      <span
+        className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-xs font-semibold"
+        style={{ background: "var(--primary-dim)", color: "var(--primary)" }}
+      >
+        {number}
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+          {title}
+        </span>
+        <span className="mt-0.5 block text-xs" style={{ color: "var(--text-muted)" }}>
+          {detail}
+        </span>
+      </span>
+    </Link>
   );
 }
 
