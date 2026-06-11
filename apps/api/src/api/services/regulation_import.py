@@ -18,6 +18,10 @@ from pypdf.errors import PdfReadError
 
 from api.models.regulation import ArticleType
 
+# DOCX 內 word/document.xml 解壓後的容量上限：正常法規正文遠小於此；設上限以防
+# 解壓縮炸彈（小 zip 解出 GB 級 XML）拖垮解析執行緒 / 記憶體。
+_MAX_DOCUMENT_XML_BYTES = 50 * 1024 * 1024
+
 _WORD_NS = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
 _NUMERAL_CHARS = "零〇一二三四五六七八九十百千兩"
 _STRUCTURAL_RE = re.compile(rf"^第\s*([{_NUMERAL_CHARS}0-9０-９\-]+)\s*(編|章|節)\s*(.*)$")
@@ -292,9 +296,19 @@ def _extract_docx_paragraphs(file_bytes: bytes, *, filename: str | None = None) 
         raise ValueError("請上傳 .docx Word 文件")
     try:
         with ZipFile(BytesIO(file_bytes)) as docx:
-            document_xml = docx.read("word/document.xml")
+            # 以串流方式只讀有限位元組（不信任 zip 宣告的大小），防解壓縮炸彈。
+            with docx.open("word/document.xml") as entry:
+                document_xml = entry.read(_MAX_DOCUMENT_XML_BYTES + 1)
     except (BadZipFile, KeyError) as exc:
         raise ValueError("無法讀取 DOCX 內容，請確認檔案格式正確") from exc
+
+    if len(document_xml) > _MAX_DOCUMENT_XML_BYTES:
+        raise ValueError("DOCX 內容過大，無法處理")
+
+    # 防 XML 實體展開攻擊（billion laughs / quadratic blowup）：合法 OOXML 正文絕不含
+    # DOCTYPE 或實體宣告，出現即視為惡意而拒絕（stdlib ElementTree 會展開內部實體）。
+    if b"<!DOCTYPE" in document_xml or b"<!ENTITY" in document_xml:
+        raise ValueError("DOCX 內含不被允許的 XML 宣告")
 
     root = ET.fromstring(document_xml)
     paragraphs: list[str] = []
