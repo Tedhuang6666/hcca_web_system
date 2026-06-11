@@ -107,6 +107,9 @@ class ConnectionManager:
             self.room_count(room),
             len(self._ip_connections[client_ip]),
         )
+        from api.core.prometheus_metrics import set_websocket_connections
+
+        set_websocket_connections(self.total_connections())
 
     def disconnect(self, websocket: WebSocket, room: str) -> None:
         """移除連線並停心跳任務；若房間/IP 集合空了則清除 key。"""
@@ -127,6 +130,9 @@ class ConnectionManager:
             hb_task.cancel()
 
         logger.debug("WS 連線中斷 room=%s remaining=%d", room, self.room_count(room))
+        from api.core.prometheus_metrics import set_websocket_connections
+
+        set_websocket_connections(self.total_connections())
 
     def notify_pong(self, websocket: WebSocket) -> None:
         """前端回 pong 時呼叫，更新最後活躍時間。"""

@@ -49,6 +49,13 @@ def _scrub(value: Any) -> Any:
 
 def _before_send(event: dict[str, Any], _hint: dict[str, Any]) -> dict[str, Any] | None:
     """過濾 request headers / cookies / data 中的敏感欄位。"""
+    from api.core.structured_logging import get_request_id
+
+    request_id = get_request_id()
+    if request_id:
+        event.setdefault("tags", {})["request_id"] = request_id
+        event.setdefault("extra", {})["request_id"] = request_id
+
     request = event.get("request")
     if isinstance(request, dict):
         if "headers" in request:

@@ -1,0 +1,100 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "panels": [
+    {
+      "type": "stat",
+      "title": "API requests / sec",
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 0},
+      "targets": [{"expr": "sum(rate(hcca_http_requests_total[5m]))", "refId": "A"}]
+    },
+    {
+      "type": "stat",
+      "title": "5xx rate",
+      "gridPos": {"h": 6, "w": 6, "x": 6, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "percentunit"}},
+      "targets": [{
+        "expr": "sum(rate(hcca_http_requests_total{status=~\"5..\"}[5m])) / clamp_min(sum(rate(hcca_http_requests_total[5m])), 0.001)",
+        "refId": "A"
+      }]
+    },
+    {
+      "type": "stat",
+      "title": "API p95 latency",
+      "gridPos": {"h": 6, "w": 6, "x": 12, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "s"}},
+      "targets": [{
+        "expr": "histogram_quantile(0.95, sum by (le) (rate(hcca_http_request_duration_seconds_bucket[5m])))",
+        "refId": "A"
+      }]
+    },
+    {
+      "type": "stat",
+      "title": "WebSocket connections",
+      "gridPos": {"h": 6, "w": 6, "x": 18, "y": 0},
+      "targets": [{"expr": "sum(hcca_websocket_connections)", "refId": "A"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "API latency by route",
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 6},
+      "fieldConfig": {"defaults": {"unit": "s"}},
+      "targets": [{
+        "expr": "histogram_quantile(0.95, sum by (le, path_template) (rate(hcca_http_request_duration_seconds_bucket[5m])))",
+        "legendFormat": "{{path_template}}",
+        "refId": "A"
+      }]
+    },
+    {
+      "type": "timeseries",
+      "title": "DB queries per request p95",
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 6},
+      "targets": [{
+        "expr": "histogram_quantile(0.95, sum by (le, method) (rate(hcca_db_query_count_per_request_bucket[5m])))",
+        "legendFormat": "{{method}}",
+        "refId": "A"
+      }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Celery outcomes",
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 15},
+      "targets": [{
+        "expr": "sum by (status) (rate(hcca_celery_tasks_total[5m]))",
+        "legendFormat": "{{status}}",
+        "refId": "A"
+      }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Delivery outcomes",
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 15},
+      "targets": [
+        {
+          "expr": "sum by (status) (increase(hcca_email_delivery_total[1h]))",
+          "legendFormat": "email {{status}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (status) (increase(hcca_webhook_delivery_total[1h]))",
+          "legendFormat": "webhook {{status}}",
+          "refId": "B"
+        },
+        {
+          "expr": "sum by (status) (increase(hcca_outbox_delivery_total[1h]))",
+          "legendFormat": "outbox {{status}}",
+          "refId": "C"
+        }
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["hcca", "slo"],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "timezone": "browser",
+  "title": "HCCA Service Overview",
+  "uid": "hcca-overview",
+  "version": 1
+}

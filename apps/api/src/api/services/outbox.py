@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.prometheus_metrics import record_outbox_delivery
 from api.models.outbox import OutboxEvent, OutboxStatus
 
 logger = logging.getLogger(__name__)
@@ -205,15 +206,18 @@ def process_pending_outbox() -> None:
                 _dispatch(event)
                 event.status = OutboxStatus.PROCESSED
                 event.processed_at = datetime.now(UTC)
+                record_outbox_delivery(event.event_type, "processed")
             except Exception as exc:
                 event.retry_count += 1
                 event.last_error = str(exc)
                 if event.retry_count >= _MAX_RETRY:
                     event.status = OutboxStatus.DEAD
+                    record_outbox_delivery(event.event_type, "dead")
                     logger.error(
                         "Outbox event %s dead after %d retries: %s", event.id, _MAX_RETRY, exc
                     )
                 else:
+                    record_outbox_delivery(event.event_type, "retry")
                     logger.warning(
                         "Outbox event %s failed (retry %d): %s", event.id, event.retry_count, exc
                     )

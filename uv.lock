@@ -240,6 +240,7 @@ dependencies = [
     { name = "openpyxl" },
     { name = "pandas" },
     { name = "posthog" },
+    { name = "prometheus-client" },
     { name = "psycopg2-binary" },
     { name = "pyjwt", extra = ["crypto"] },
     { name = "pyotp" },
@@ -282,6 +283,7 @@ requires-dist = [
     { name = "openpyxl", specifier = ">=3.1.5" },
     { name = "pandas", specifier = ">=3.0.2" },
     { name = "posthog", specifier = ">=7.16.2" },
+    { name = "prometheus-client", specifier = ">=0.25.0" },
     { name = "psycopg2-binary", specifier = ">=2.9.11" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.12.1" },
     { name = "pyotp", specifier = ">=2.9.0" },
@@ -2287,6 +2289,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/3e/f5/47118915e8ab01c141f7fbc4a882646de7fe2fb30d446f7c666dbbcf0847/posthog-7.16.2.tar.gz", hash = "sha256:6411aaa3defa31fee43441b4d3284f2cda38652b0221a17b586769c29c913dac", size = 226309, upload-time = "2026-05-28T14:16:53.46Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/86/a7/fb284feb1a38a50edbbd84a4ba4e811e3a3b1f1faaa47be263eae9024460/posthog-7.16.2-py3-none-any.whl", hash = "sha256:f8dcd5bd25bd42a9b3704a79bfb5d58f4c68008f82399a8ddef8195d8a081432", size = 264040, upload-time = "2026-05-28T14:16:51.565Z" },
+]
+
+[[package]]
+name = "prometheus-client"
+version = "0.25.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/1b/fb/d9aa83ffe43ce1f19e557c0971d04b90561b0cfd50762aafb01968285553/prometheus_client-0.25.0.tar.gz", hash = "sha256:5e373b75c31afb3c86f1a52fa1ad470c9aace18082d39ec0d2f918d11cc9ba28", size = 86035, upload-time = "2026-04-09T19:53:42.359Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8d/9b/d4b1e644385499c8346fa9b622a3f030dce14cd6ef8a1871c221a17a67e7/prometheus_client-0.25.0-py3-none-any.whl", hash = "sha256:d5aec89e349a6ec230805d0df882f3807f74fd6c1a2fa86864e3c2279059fed1", size = 64154, upload-time = "2026-04-09T19:53:41.324Z" },
 ]
 
 [[package]]

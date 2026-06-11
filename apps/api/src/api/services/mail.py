@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from api.core.celery_app import celery_app
 from api.core.config import settings
+from api.core.prometheus_metrics import record_email_delivery
 from api.models.email_message import (
     EmailCampaignRecipient,
     EmailMessage,
@@ -219,6 +220,7 @@ def send_email(
                     email_message_id, EmailStatus.SENT, attempt_count=attempt
                 )
             )
+        record_email_delivery("sent")
         logger.info("郵件已送出 to=%s subject=%s resend_id=%s", to, subject, message_id)
         return {"status": "sent", "to": to, "subject": subject, "provider_id": message_id}
     except Exception as exc:
@@ -259,13 +261,16 @@ def send_email(
             logger.exception("更新郵件狀態失敗（不影響重試）to=%s", to)
 
         if permanent:
+            record_email_delivery("failed")
             logger.error("郵件設定錯誤，不重試 to=%s: %s", to, exc)
             raise
         if exhausted:
+            record_email_delivery("dead")
             # 進入 dead-letter：raise self.retry 會丟出 MaxRetriesExceededError，
             # 觸發 celery task_failure → Redis DLQ（見 celery_app._push_dead_letter）。
             logger.error("郵件重試耗盡進入 dead-letter to=%s: %s", to, exc)
         else:
+            record_email_delivery("retry")
             logger.warning(
                 "郵件發送失敗，第 %d 次嘗試，%ds 後重試 to=%s: %s", attempt, delay, to, exc
             )

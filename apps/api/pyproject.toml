@@ -38,6 +38,7 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0.49",
     "weasyprint>=68.1",
     "posthog>=7.16.2",
+    "prometheus-client>=0.25.0",
 ]
 
 [project.scripts]

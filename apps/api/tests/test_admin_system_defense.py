@@ -2,19 +2,23 @@
 
 from __future__ import annotations
 
+import json
 import uuid
+from unittest.mock import AsyncMock, MagicMock
 
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.main import app
+from api.core.celery_app import celery_app
 from api.core.defense import default_rate_limit_config, publish_rules, set_rate_limit_config
 from api.core.ip_blocklist import clear_cache as clear_ip_block_cache
 from api.core.rate_limit import _memory_buckets
 from api.dependencies.auth import get_current_active_user
+from api.main import app
 from api.models.audit_log import AuditLog
 from api.models.user import User
+from api.routers import admin_system
 
 
 def _override_user(user: User) -> None:
@@ -31,6 +35,7 @@ async def _seed_users(db: AsyncSession) -> tuple[User, User]:
         is_active=True,
         is_verified=True,
         is_superuser=True,
+        mfa_enabled=True,
     )
     member = User(
         email="member@school.edu",
@@ -188,3 +193,56 @@ async def test_rate_limit_override_returns_429(client: AsyncClient) -> None:
     assert second.status_code == 429
     assert second.headers["Retry-After"] == "60"
     await _reset_defense_cache()
+
+
+async def test_admin_can_replay_json_safe_dead_letter(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch,
+) -> None:
+    admin, _ = await _seed_users(db_session)
+    _override_user(admin)
+    raw = json.dumps(
+        {
+            "task": "api.services.mail.send_email",
+            "task_id": "failed-task",
+            "replay_args": [["user@example.com"], "subject", "body"],
+            "replay_kwargs": {},
+        }
+    )
+    monkeypatch.setattr(admin_system.redis_client, "lindex", AsyncMock(return_value=raw))
+    monkeypatch.setattr(admin_system.redis_client, "lrem", AsyncMock(return_value=1))
+    result = MagicMock(id="replayed-task")
+    monkeypatch.setattr(celery_app, "send_task", MagicMock(return_value=result))
+
+    response = await client.post(
+        "/admin/system/dead-letters/0/replay",
+        json={"expected_task": "api.services.mail.send_email"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["task_id"] == "replayed-task"
+    celery_app.send_task.assert_called_once()
+    admin_system.redis_client.lrem.assert_awaited_once_with(
+        admin_system.settings.CELERY_DLQ_REDIS_KEY,
+        1,
+        raw,
+    )
+
+
+async def test_dead_letter_replay_rejects_old_display_only_payload(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch,
+) -> None:
+    admin, _ = await _seed_users(db_session)
+    _override_user(admin)
+    raw = json.dumps({"task": "api.services.mail.send_email", "args": ["redacted"]})
+    monkeypatch.setattr(admin_system.redis_client, "lindex", AsyncMock(return_value=raw))
+
+    response = await client.post(
+        "/admin/system/dead-letters/0/replay",
+        json={"expected_task": "api.services.mail.send_email"},
+    )
+
+    assert response.status_code == 409

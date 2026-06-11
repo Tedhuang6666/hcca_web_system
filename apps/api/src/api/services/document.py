@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.core.clock import local_today, now_local
+from api.core.prometheus_metrics import record_document_approval
 from api.core.search import like_contains
 from api.models.document import (
     ApprovalStepStatus,
@@ -1076,6 +1077,7 @@ async def update_document(
         )
 
     await session.flush()
+    record_document_approval("approved")
     return doc
 
 
@@ -1298,6 +1300,7 @@ async def reject_step(
     doc.status = DocumentStatus.REJECTED
     doc.completed_at = now
     await session.flush()
+    record_document_approval("rejected")
     logger.info("公文退件至承辦人 serial=%s by=%s", doc.serial_number, approver_id)
     return doc
 

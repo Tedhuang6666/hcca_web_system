@@ -21,15 +21,16 @@ scrape_configs:
     static_configs:
       - targets: ["api:8000"]
         labels:
-          replica: blue
-      - targets: ["api-green:8000"]
+          replica: primary
+
+  - job_name: celery
+    static_configs:
+      - targets: ["celery-worker:9101"]
         labels:
-          replica: green
-      - targets: ["api-admin:8001"]
-          # admin channel — 流量低、單實例
-        # labels 用 service: admin
+          worker: default
+      - targets: ["email-worker:9101"]
         labels:
-          replica: admin
+          worker: email
 
   # 若有 redis_exporter / postgres_exporter（建議 Phase A2 結束時補）
   # - job_name: redis
@@ -39,9 +40,8 @@ scrape_configs:
   #   static_configs:
   #     - targets: ["postgres-exporter:9187"]
 
-# 告警規則（建議 Phase A2 補）
-# rule_files:
-#   - /etc/prometheus/rules/*.yml
+rule_files:
+  - /etc/prometheus/rules/*.yml
 
 # Alertmanager 整合（建議 Phase A2 補；先用 Sentry + UptimeRobot 接 Discord 即可）
 # alerting:

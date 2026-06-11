@@ -1,0 +1,84 @@
+groups:
+  - name: hcca-slo
+    rules:
+      - alert: HccaApiHighErrorRate
+        expr: |
+          (
+            sum(rate(hcca_http_requests_total{status=~"5.."}[5m]))
+            /
+            clamp_min(sum(rate(hcca_http_requests_total[5m])), 0.001)
+          ) > 0.005
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "HCCA API 5xx rate exceeds 0.5%"
+
+      - alert: HccaApiHighP95Latency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(hcca_http_request_duration_seconds_bucket[5m]))
+          ) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "HCCA API p95 latency exceeds 500ms"
+
+      - alert: HccaCeleryTaskFailures
+        expr: sum(increase(hcca_celery_tasks_total{status="failed"}[15m])) > 3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Multiple Celery tasks failed in 15 minutes"
+
+      - alert: HccaCeleryQueueBacklog
+        expr: max(hcca_celery_queue_depth) > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "A Celery queue has more than 100 pending tasks"
+
+      - alert: HccaOutboxDeadLetter
+        expr: sum(increase(hcca_outbox_delivery_total{status="dead"}[15m])) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "An outbox event exhausted all retries"
+
+      - alert: HccaWebhookDeadLetter
+        expr: sum(increase(hcca_webhook_delivery_total{status="dead"}[15m])) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "A webhook delivery exhausted all retries"
+
+      - alert: HccaEmailDeliveryRateLow
+        expr: |
+          (
+            sum(increase(hcca_email_delivery_total{status="sent"}[1h]))
+            /
+            clamp_min(sum(increase(hcca_email_delivery_total[1h])), 1)
+          ) < 0.95
+          and sum(increase(hcca_email_delivery_total[1h])) >= 20
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Email delivery success rate is below 95%"
+
+      - alert: HccaBackupMissing
+        expr: |
+          absent(hcca_backup_last_success_timestamp_seconds{kind="database"})
+          or
+          (time() - hcca_backup_last_success_timestamp_seconds{kind="database"} > 93600)
+        for: 30m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No successful database backup metric in the last 26 hours"

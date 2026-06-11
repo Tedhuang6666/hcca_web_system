@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 
 from celery import Celery
 from celery.schedules import crontab
-from celery.signals import setup_logging, task_failure, task_retry, task_success
+from celery.signals import setup_logging, task_failure, task_retry, task_success, worker_ready
 from kombu import Queue
 from redis import Redis
 
@@ -34,6 +34,14 @@ def _configure_celery_logging(**_kwargs):  # type: ignore[no-untyped-def]
 configure_logging()
 
 logger = logging.getLogger(__name__)
+
+
+@worker_ready.connect
+def _start_worker_metrics(**_kwargs) -> None:
+    from api.core.prometheus_metrics import start_metrics_server_from_env
+
+    start_metrics_server_from_env()
+
 
 celery_app = Celery(
     "campus_platform",
@@ -118,6 +126,7 @@ celery_app.conf.include = list(celery_app.conf.include or []) + [
     "api.services.watchdog_tasks",
     "api.services.error_report_tasks",
     "api.services.discord_reminders",
+    "api.services.metrics_tasks",
 ]
 
 celery_app.conf.beat_schedule = {
@@ -232,6 +241,10 @@ celery_app.conf.beat_schedule = {
         "task": "api.services.error_report_tasks.send_owner_error_report",
         "schedule": float(settings.ERROR_REPORT_INTERVAL_SECONDS),
     },
+    "collect-celery-queue-depth-every-60s": {
+        "task": "api.services.metrics_tasks.collect_queue_depth",
+        "schedule": 60.0,
+    },
     # Discord 個人摘要 DM（每日 08:00 / 週日 20:00 台北）
     # 注意：celery timezone 已設為 Asia/Taipei，crontab 的 hour 直接是台北時間，勿再手動偏移 UTC。
     "discord-daily-digest-at-8am-taipei": {
@@ -258,6 +271,16 @@ celery_app.conf.task_routes["api.services.error_report_tasks.*"] = {"queue": "em
 def _task_payload(sender, **kwargs) -> dict:
     request = getattr(sender, "request", None)
     delivery_info = getattr(request, "delivery_info", None) or {}
+    raw_args = list(getattr(request, "args", ()) or ())
+    raw_kwargs = dict(getattr(request, "kwargs", {}) or {})
+    try:
+        json.dumps({"args": raw_args, "kwargs": raw_kwargs})
+    except (TypeError, ValueError):
+        replay_args: list | None = None
+        replay_kwargs: dict | None = None
+    else:
+        replay_args = raw_args
+        replay_kwargs = raw_kwargs
     return {
         "timestamp": datetime.now(UTC).isoformat(),
         "task": getattr(sender, "name", None),
@@ -265,10 +288,9 @@ def _task_payload(sender, **kwargs) -> dict:
         "queue": delivery_info.get("routing_key") if isinstance(delivery_info, dict) else None,
         "retries": getattr(request, "retries", None),
         "args": [str(arg)[:200] for arg in getattr(request, "args", ()) or ()],
-        "kwargs": {
-            str(key): str(value)[:200]
-            for key, value in (getattr(request, "kwargs", {}) or {}).items()
-        },
+        "kwargs": {str(key): str(value)[:200] for key, value in raw_kwargs.items()},
+        "replay_args": replay_args,
+        "replay_kwargs": replay_kwargs,
         **kwargs,
     }
 
@@ -289,6 +311,9 @@ def _push_dead_letter(payload: dict) -> None:
 
 @task_retry.connect
 def _log_task_retry(sender=None, request=None, reason=None, einfo=None, **_kwargs) -> None:
+    from api.core.prometheus_metrics import record_celery_task
+
+    record_celery_task(getattr(sender, "name", None), "retry")
     logger.warning(
         "Celery task retry scheduled",
         extra={
@@ -310,6 +335,8 @@ def _record_task_failure(
     einfo=None,
     **_kwargs,
 ) -> None:
+    from api.core.prometheus_metrics import record_celery_task
+
     payload = _task_payload(
         sender,
         status="failed",
@@ -317,6 +344,11 @@ def _record_task_failure(
         exception_type=exception.__class__.__name__ if exception else None,
         exception=str(exception)[:1000] if exception else None,
     )
+    record_celery_task(payload.get("task"), "failed")
+    if payload.get("task") == "api.services.backup_tasks.backup_database":
+        from api.core.prometheus_metrics import record_backup_run
+
+        record_backup_run("database", "failed")
     logger.error(
         "Celery task failed",
         extra={
@@ -331,6 +363,9 @@ def _record_task_failure(
 
 @task_success.connect
 def _log_task_success(sender=None, result=None, **_kwargs) -> None:
+    from api.core.prometheus_metrics import record_celery_task
+
+    record_celery_task(getattr(sender, "name", None), "success")
     logger.info(
         "Celery task completed",
         extra={

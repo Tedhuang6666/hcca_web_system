@@ -14,6 +14,7 @@ from celery.exceptions import MaxRetriesExceededError
 
 from api.core.celery_app import celery_app
 from api.core.config import settings
+from api.core.prometheus_metrics import record_backup_run
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +96,7 @@ def _rotate_old_backups(backup_dir: Path, retention_days: int) -> int:
 def backup_database(self) -> dict:  # type: ignore[type-arg]
     """每日 pg_dump → gz 壓縮 → 輪轉舊檔；停用時直接回傳 skipped。"""
     if not settings.DB_BACKUP_ENABLED:
+        record_backup_run("database", "skipped")
         return {"status": "skipped", "reason": "DB_BACKUP_ENABLED=false"}
 
     backup_dir = Path(settings.DB_BACKUP_DIR)
@@ -197,6 +199,7 @@ def backup_database(self) -> dict:  # type: ignore[type-arg]
     )
 
     removed = _rotate_old_backups(backup_dir, settings.DB_BACKUP_RETENTION_DAYS)
+    record_backup_run("database", "success")
     _ = proc  # silence linter
     return {
         "status": "ok",

@@ -26,6 +26,7 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.celery_app import celery_app
+from api.core.prometheus_metrics import record_webhook_delivery
 from api.services import webhook as webhook_svc
 
 logger = logging.getLogger(__name__)
@@ -94,6 +95,7 @@ async def _deliver_one_async(delivery_id: str) -> dict:
                 max_retries=sub.max_retries,
             )
             await db.commit()
+            record_webhook_delivery(delivery.event_type, "retry" if ok else "dead")
             return {
                 "status": "retry" if ok else "dead",
                 "delivery_id": str(delivery.id),
@@ -108,6 +110,7 @@ async def _deliver_one_async(delivery_id: str) -> dict:
                 response_snippet=snippet,
             )
             await db.commit()
+            record_webhook_delivery(delivery.event_type, "success")
             return {
                 "status": "ok",
                 "delivery_id": str(delivery.id),
@@ -123,6 +126,7 @@ async def _deliver_one_async(delivery_id: str) -> dict:
             max_retries=sub.max_retries,
         )
         await db.commit()
+        record_webhook_delivery(delivery.event_type, "retry" if ok else "dead")
         return {
             "status": "retry" if ok else "dead",
             "delivery_id": str(delivery.id),

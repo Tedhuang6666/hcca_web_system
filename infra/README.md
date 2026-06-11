@@ -14,6 +14,10 @@
 # Production
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
+# Monitoring（Prometheus + Grafana）
+docker compose --env-file .env.production -f docker-compose.prod.yml \
+  --profile monitoring up -d prometheus grafana
+
 # Production blue-green（零停機部署）
 docker compose --env-file .env.production -f docker-compose.bluegreen.yml up -d db redis proxy
 bash scripts/zero-downtime-deploy.sh blue
@@ -41,8 +45,6 @@ bash dev.sh
 ## 待完成
 
 - [ ] Caddy + Origin TLS（Cloudflare Origin Certificate）
-- [ ] Prometheus rule files（SLO 違反告警）
-- [ ] Grafana dashboards JSON（請求延遲、5xx、Celery queue depth）
 - [ ] redis_exporter + postgres_exporter
-- [ ] Alertmanager（可選；初期用 Sentry 即可）
+- [ ] Alertmanager 通知接 Discord / Email
 - [ ] backup volume mount for cross-host sync

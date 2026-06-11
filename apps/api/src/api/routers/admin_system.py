@@ -15,7 +15,7 @@ import json
 import time
 import uuid
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -62,6 +62,7 @@ from api.core.query_audit import get_slow_queries
 from api.core.security import redis_client, revoke_user
 from api.core.ws_manager import manager as ws_manager
 from api.dependencies.auth import get_current_active_user
+from api.dependencies.permissions import require_admin_mfa
 from api.models.email_message import EmailMessage
 from api.models.user import User
 from api.services import audit as audit_svc
@@ -346,11 +347,17 @@ class DeadLetterItem(BaseModel):
     exception: str | None = None
     args: list[str] = Field(default_factory=list)
     kwargs: dict[str, str] = Field(default_factory=dict)
+    replay_args: list[Any] | None = None
+    replay_kwargs: dict[str, Any] | None = None
 
 
 class DeadLetterResponse(BaseModel):
     key: str
     items: list[DeadLetterItem]
+
+
+class DeadLetterReplayBody(BaseModel):
+    expected_task: str = Field(..., min_length=1, max_length=200)
 
 
 # ── 即時指標總集 ─────────────────────────────────────────────────────────────
@@ -497,10 +504,70 @@ async def list_dead_letters(_admin: AdminUser, limit: int = 50) -> DeadLetterRes
     "/dead-letters",
     response_model=dict,
     summary="清空 Celery Dead Letter Queue",
+    dependencies=[Depends(require_admin_mfa)],
 )
-async def clear_dead_letters(_admin: AdminUser) -> dict:
+async def clear_dead_letters(session: DbDep, _admin: AdminUser) -> dict:
     removed = await redis_client.delete(settings.CELERY_DLQ_REDIS_KEY)
+    await audit_svc.record(
+        session,
+        entity_type="celery_dead_letter",
+        entity_id=settings.CELERY_DLQ_REDIS_KEY,
+        action="clear",
+        actor_id=str(_admin.id),
+        meta={"removed": bool(removed)},
+        summary="清空 Celery Dead Letter Queue",
+    )
+    await session.commit()
     return {"cleared": bool(removed), "key": settings.CELERY_DLQ_REDIS_KEY}
+
+
+@router.post(
+    "/dead-letters/{index}/replay",
+    response_model=dict,
+    summary="安全重放單筆 Celery Dead Letter",
+    dependencies=[Depends(require_admin_mfa)],
+)
+async def replay_dead_letter(
+    index: int,
+    body: DeadLetterReplayBody,
+    session: DbDep,
+    _admin: AdminUser,
+) -> dict:
+    if index < 0:
+        raise HTTPException(status_code=400, detail="index 不可小於 0")
+    raw = await redis_client.lindex(settings.CELERY_DLQ_REDIS_KEY, index)
+    if raw is None:
+        raise HTTPException(status_code=404, detail="Dead letter 不存在")
+    try:
+        payload = json.loads(raw)
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=409, detail="Dead letter 格式損壞") from exc
+
+    task = payload.get("task") if isinstance(payload, dict) else None
+    replay_args = payload.get("replay_args") if isinstance(payload, dict) else None
+    replay_kwargs = payload.get("replay_kwargs") if isinstance(payload, dict) else None
+    if task != body.expected_task:
+        raise HTTPException(status_code=409, detail="expected_task 與 dead letter 不符")
+    if not isinstance(task, str) or not task.startswith("api.services."):
+        raise HTTPException(status_code=409, detail="只允許重放平台內部 task")
+    if not isinstance(replay_args, list) or not isinstance(replay_kwargs, dict):
+        raise HTTPException(status_code=409, detail="此舊項目未保存可安全重放的原始參數")
+
+    from api.core.celery_app import celery_app
+
+    result = celery_app.send_task(task, args=replay_args, kwargs=replay_kwargs)
+    await redis_client.lrem(settings.CELERY_DLQ_REDIS_KEY, 1, raw)
+    await audit_svc.record(
+        session,
+        entity_type="celery_dead_letter",
+        entity_id=str(payload.get("task_id") or index),
+        action="replay",
+        actor_id=str(_admin.id),
+        meta={"task": task, "new_task_id": result.id},
+        summary=f"重放 Celery task：{task}",
+    )
+    await session.commit()
+    return {"replayed": True, "task": task, "task_id": result.id}
 
 
 # ── Maintenance ──────────────────────────────────────────────────────────────
