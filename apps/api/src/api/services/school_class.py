@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import date
 
@@ -290,10 +291,17 @@ def _render_class_template(
         "student_no": student_no if student_no is not None else "",
         "student_no_padded": "" if student_no is None else str(student_no).zfill(student_no_width),
     }
-    try:
-        return template.format(**values)
-    except KeyError as e:
-        raise ValueError(f"不支援的模板變數：{e.args[0]}") from e
+
+    # 不用 str.format()：它允許 `{academic_year.__class__...}` 之類的屬性穿透，
+    # 在 template 由使用者輸入時可被用來讀取物件內部（資訊洩漏）。改為只替換
+    # 已知的 `{word}` 佔位符；未知變數拋錯，含 `.`/索引存取的片段不符 `\w+` 故原樣保留。
+    def _sub(match: re.Match[str]) -> str:
+        key = match.group(1)
+        if key not in values:
+            raise ValueError(f"不支援的模板變數：{key}")
+        return str(values[key])
+
+    return re.sub(r"\{(\w+)\}", _sub, template)
 
 
 async def bulk_create_classes(

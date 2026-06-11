@@ -13,7 +13,6 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 from redis.exceptions import RedisError
 from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -424,9 +423,17 @@ def create_app() -> FastAPI:
     app.include_router(impersonation.router)
     app.include_router(feature_flags.router)
 
-    # 使用者上傳檔案（公告媒體、問卷圖片等）的靜態存取；
-    # 生產環境通常由反向代理直接服務，此處確保開發環境也可正常顯示。
-    app.mount("/uploads", StaticFiles(directory="uploads", check_dir=False), name="uploads")
+    # 使用者上傳檔案的靜態存取：僅限「本就公開」的媒體前綴（公告圖、問卷圖、官網素材）。
+    # 公文附件（uploads/{document_id}/...）刻意不在此靜態服務，必須走已授權的
+    # /documents/{doc_id}/attachments/{att_id}/download|preview 端點，否則會繞過
+    # assert_access / 密等檢查造成未認證下載。詳見 api.core.uploads_static。
+    from api.core.uploads_static import PublicUploadsStaticFiles
+
+    app.mount(
+        "/uploads",
+        PublicUploadsStaticFiles(directory="uploads", check_dir=False),
+        name="uploads",
+    )
 
     @app.middleware("http")
     async def _request_timing_middleware(

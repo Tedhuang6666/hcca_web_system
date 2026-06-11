@@ -86,20 +86,26 @@ class StoredFile:
 
 # ── LocalStorage 實作 ──────────────────────────────────────────────────────────
 
+# 允許的 MIME 類型 → 正規化副檔名（安全白名單）。
+#
+# 安全：磁碟上的副檔名一律由「通過驗證的 MIME」決定，而非用戶端提供的檔名。
+# 否則攻擊者可宣告 Content-Type: application/pdf（過白名單）卻把檔名取成
+# evil.html / evil.svg，靜態服務時會依副檔名回 text/html、image/svg+xml 而被瀏覽器
+# 當作可執行內容渲染，形成儲存型 XSS。固定副檔名即可徹底封死此類型混淆。
+_MIME_TO_EXT: dict[str, str] = {
+    "application/pdf": ".pdf",
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+    "application/msword": ".doc",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+    "application/vnd.ms-excel": ".xls",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+}
+
 # 允許的 MIME 類型（安全白名單）
-_ALLOWED_TYPES: frozenset[str] = frozenset(
-    {
-        "application/pdf",
-        "image/jpeg",
-        "image/png",
-        "image/gif",
-        "image/webp",
-        "application/msword",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "application/vnd.ms-excel",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    }
-)
+_ALLOWED_TYPES: frozenset[str] = frozenset(_MIME_TO_EXT)
 
 MAX_FILE_SIZE = 20 * 1024 * 1024  # 20 MB
 
@@ -146,10 +152,11 @@ class LocalStorageBackend(StorageBackend):
             msg = f"不支援的檔案類型：{content_type}"
             raise ValueError(msg)
 
-        # 產生唯一 storage_key（使用清理後的副檔名）
+        # 產生唯一 storage_key。副檔名一律由「通過驗證的 MIME」決定，不採用用戶端
+        # 提供的原始副檔名，避免 content-type/副檔名混淆造成的儲存型 XSS。
         original_filename = file.filename or "file"
         sanitized = _sanitize_filename(original_filename)
-        ext = Path(sanitized).suffix or ""
+        ext = _MIME_TO_EXT[content_type]  # content_type 已驗證在白名單內
         unique_name = f"{uuid.uuid4().hex}{ext}"
         key = f"{prefix}/{unique_name}".lstrip("/") if prefix else unique_name
 

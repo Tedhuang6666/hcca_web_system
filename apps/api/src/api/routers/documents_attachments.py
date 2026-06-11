@@ -38,6 +38,11 @@ CurrentUser = Annotated[User, Depends(get_current_active_user)]
 OptionalUser = Annotated[User | None, Depends(get_optional_user)]
 
 
+def _attachment_download_path(doc_id: uuid.UUID, att_id: uuid.UUID) -> str:
+    """已授權的附件下載端點路徑（取代原始 /uploads 靜態路徑）。"""
+    return f"/documents/{doc_id}/attachments/{att_id}/download"
+
+
 class AttachmentRenameRequest(BaseModel):
     filename: str
 
@@ -83,10 +88,11 @@ async def list_attachments(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此公文")
     else:
         await assert_access(session, doc, current_user)
-    storage = get_storage()
     for att in doc.attachments:
+        # 一律指向已授權的下載端點，不暴露原始 /uploads 靜態路徑（該路徑已不再服務
+        # 公文附件，且會繞過存取控制）。外部連結附件（無 storage_key）維持空字串。
         if att.storage_key:
-            att.__dict__["url"] = await storage.get_url(att.storage_key)
+            att.__dict__["url"] = _attachment_download_path(doc.id, att.id)
         else:
             att.__dict__["url"] = ""
     return doc.attachments
@@ -129,7 +135,7 @@ async def upload_attachment(
     )
     session.add(attachment)
     await session.flush()
-    attachment.__dict__["url"] = stored.url
+    attachment.__dict__["url"] = _attachment_download_path(doc.id, attachment.id)
     return attachment
 
 
