@@ -7,7 +7,6 @@ import hashlib
 import hmac
 import json
 import logging
-import random
 import re
 import secrets
 import uuid
@@ -117,10 +116,15 @@ def verify_signature(body: str, signature: str) -> None:
 
 
 async def create_link_code(user_id: uuid.UUID) -> tuple[str, datetime]:
-    """建立短效 LINE 綁定碼。"""
+    """建立短效 LINE 綁定碼。
+
+    安全：綁定碼一旦被猜中，攻擊者的 LINE 帳號就會綁到產碼者的平台帳號，再經
+    /line/open 自動登入即可冒用該帳號。故使用 8 位數（1 億組）並搭配 _bind_line_user
+    的 per-LINE-user 失敗鎖定，杜絕暴力猜碼接管帳號。沿用全數字以便在 LINE 內輸入。
+    """
     expires_at = datetime.now(UTC) + timedelta(seconds=_LINK_CODE_TTL_SECONDS)
     for _ in range(10):
-        code = f"{random.SystemRandom().randint(0, 999999):06d}"
+        code = f"{secrets.randbelow(100_000_000):08d}"
         key = f"{_LINK_CODE_PREFIX}{code}"
         created = await redis_client.set(
             key,
@@ -187,9 +191,18 @@ async def _bind_line_user(
     code: str,
     line_display_name: str | None = None,
 ) -> str:
+    # per-LINE-user 失敗鎖定：限制單一 LINE 帳號的猜碼速率，封死暴力猜綁定碼接管帳號。
+    from api.core.login_lockout import is_locked, record_failure, record_success
+
+    lock_id = f"line_bind:{line_user_id}"
+    locked = await is_locked(lock_id)
+    if locked:
+        return f"嘗試次數過多，請於 {locked // 60 + 1} 分鐘後再試。"
+
     key = f"{_LINK_CODE_PREFIX}{code.strip()}"
     raw = await redis_client.get(key)
     if not raw:
+        await record_failure(lock_id)
         return "綁定碼無效或已過期，請回平台重新產生。"
     try:
         user_id = uuid.UUID(json.loads(raw)["user_id"])
@@ -224,6 +237,7 @@ async def _bind_line_user(
         link.unlinked_at = None
     await redis_client.delete(key)
     await db.flush()
+    await record_success(lock_id)
 
     user = await db.get(User, user_id)
     name = user.display_name if user else "您的帳號"
