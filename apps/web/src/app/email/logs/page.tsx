@@ -166,6 +166,17 @@ export default function EmailLogsPage() {
     }
   };
 
+  const createFromMessage = async (id: string) => {
+    setBusyId(id);
+    try {
+      const draft = await emailApi.cloneMessage(id, "all");
+      window.location.href = `/email?draft=${draft.id}`;
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "建立新信失敗");
+      setBusyId(null);
+    }
+  };
+
   const showDetail = async (id: string) => {
     setBusyId(id);
     try {
@@ -368,6 +379,16 @@ export default function EmailLogsPage() {
                         重新寄送
                       </button>
                     )}
+                    {m.status !== "draft" && m.recipient_count > 0 && (
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        disabled={busyId === m.id}
+                        onClick={() => createFromMessage(m.id)}
+                        title="擷取這封信的實際收件名單、內容與附件建立新草稿"
+                      >
+                        沿用名單建立新信
+                      </button>
+                    )}
                   </div>
                 </li>
               );
@@ -392,6 +413,15 @@ export default function EmailLogsPage() {
                   onClick={() => resend(detail.id)}
                 >
                   重新寄送未送達
+                </button>
+              )}
+              {detail.recipient_count > 0 && (
+                <button
+                  className="btn btn-secondary btn-sm"
+                  disabled={busyId === detail.id}
+                  onClick={() => createFromMessage(detail.id)}
+                >
+                  沿用名單建立新信
                 </button>
               )}
               <button className="btn btn-ghost btn-sm" onClick={closeDetail}>

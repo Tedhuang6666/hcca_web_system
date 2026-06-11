@@ -662,8 +662,31 @@ async def _render_attachments(
     return resend_attachments, link_blocks
 
 
+async def _render_requested_attachments(
+    db: AsyncSession, user: User, attachment_ids: list[uuid.UUID]
+) -> tuple[list[dict[str, str]], list[dict]]:
+    if not attachment_ids:
+        return [], []
+    attachments = (
+        (
+            await db.execute(
+                select(EmailAttachment).where(
+                    EmailAttachment.id.in_(attachment_ids),
+                    EmailAttachment.uploaded_by_id == user.id,
+                    EmailAttachment.revoked_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if len(attachments) != len(set(attachment_ids)):
+        raise HTTPException(status_code=404, detail="部分附件不存在或無權使用")
+    return await _render_attachments(list(attachments))
+
+
 async def _send_now(db: AsyncSession, user: User, msg: EmailMessage) -> None:
-    """解析收件人、配額檢查、渲染、逐封排入寄送佇列，並更新 msg 狀態。"""
+    """解析收件人、落庫後逐封排入寄送佇列，並更新 msg 狀態。"""
     rows = await _resolve_personalized_recipients(db, msg)
     if not rows:
         raise HTTPException(
@@ -700,15 +723,21 @@ async def _send_now(db: AsyncSession, user: User, msg: EmailMessage) -> None:
     resend_attachments, link_blocks = await _render_attachments(list(attachments))
     render_context = dict(msg.context or {})
     render_context["blocks"] = [*list(render_context.get("blocks", [])), *link_blocks]
+    dispatches: list[tuple[PersonalizedRecipient, EmailCampaignRecipient, str, str]] = []
+    for row, recipient in zip(rows, recipient_models, strict=True):
+        personal = _make_personalization_context(row)
+        subject = render_generic_subject(msg.subject, personal)
+        html = render_generic_message(msg.subject, msg.body, render_context, personal)
+        dispatches.append((row, recipient, subject, html))
+
+    # Worker 可能在 API request 結束前立刻取件；先 commit，確保 task 查得到收件人紀錄，
+    # 才能正確回寫 attempt_count 與寄送狀態。
+    await db.commit()
+
     task_ids: list[str] = []
-    batch_size = max(1, settings.EMAIL_SEND_BATCH_SIZE)
-    for start in range(0, len(rows), batch_size):
-        batch_rows = rows[start : start + batch_size]
-        batch_models = recipient_models[start : start + batch_size]
-        for row, recipient in zip(batch_rows, batch_models, strict=True):
-            personal = _make_personalization_context(row)
-            subject = render_generic_subject(msg.subject, personal)
-            html = render_generic_message(msg.subject, msg.body, render_context, personal)
+    enqueue_errors = 0
+    for row, recipient, subject, html in dispatches:
+        try:
             task_ids.extend(
                 enqueue_rendered(
                     [row.email],
@@ -720,7 +749,17 @@ async def _send_now(db: AsyncSession, user: User, msg: EmailMessage) -> None:
                 )
             )
             recipient.celery_task_id = task_ids[-1] if task_ids else None
+        except Exception as exc:  # noqa: BLE001
+            enqueue_errors += 1
+            recipient.status = EmailRecipientStatus.FAILED
+            recipient.error_detail = f"無法排入寄送佇列：{str(exc)[:450]}"
     msg.celery_task_id = task_ids[0] if task_ids else None
+    if not task_ids:
+        msg.status = EmailStatus.FAILED
+        msg.error_detail = f"全部收件人無法排入寄送佇列（{enqueue_errors} 人）"
+    elif enqueue_errors:
+        msg.error_detail = f"部分收件人無法排入寄送佇列（{enqueue_errors} 人）"
+    await db.flush()
 
 
 async def _requeue_unsent(db: AsyncSession, msg: EmailMessage) -> int:
@@ -751,6 +790,7 @@ async def _requeue_unsent(db: AsyncSession, msg: EmailMessage) -> int:
     resend_attachments, link_blocks = await _render_attachments(list(attachments))
     render_context = dict(msg.context or {})
     render_context["blocks"] = [*list(render_context.get("blocks", [])), *link_blocks]
+    dispatches: list[tuple[EmailCampaignRecipient, str, str]] = []
     for recipient in rows:
         personal = build_personalization_context(
             user_id=recipient.user_id,
@@ -763,19 +803,37 @@ async def _requeue_unsent(db: AsyncSession, msg: EmailMessage) -> int:
         html = render_generic_message(msg.subject, msg.body, render_context, personal)
         recipient.status = EmailRecipientStatus.QUEUED
         recipient.error_detail = None
-        task_ids = enqueue_rendered(
-            [recipient.email],
-            subject,
-            html,
-            str(msg.id),
-            str(recipient.id),
-            resend_attachments or None,
-        )
-        recipient.celery_task_id = task_ids[0] if task_ids else None
+        recipient.next_retry_at = None
+        dispatches.append((recipient, subject, html))
     msg.status = EmailStatus.QUEUED
     msg.error_detail = None
+    await db.commit()
+
+    requeued = 0
+    enqueue_errors = 0
+    for recipient, subject, html in dispatches:
+        try:
+            task_ids = enqueue_rendered(
+                [recipient.email],
+                subject,
+                html,
+                str(msg.id),
+                str(recipient.id),
+                resend_attachments or None,
+            )
+            recipient.celery_task_id = task_ids[0] if task_ids else None
+            requeued += len(task_ids)
+        except Exception as exc:  # noqa: BLE001
+            enqueue_errors += 1
+            recipient.status = EmailRecipientStatus.FAILED
+            recipient.error_detail = f"無法排入寄送佇列：{str(exc)[:450]}"
+    if requeued == 0:
+        msg.status = EmailStatus.FAILED
+        msg.error_detail = f"全部收件人無法排入寄送佇列（{enqueue_errors} 人）"
+    elif enqueue_errors:
+        msg.error_detail = f"部分收件人無法排入寄送佇列（{enqueue_errors} 人）"
     await db.flush()
-    return len(rows)
+    return requeued
 
 
 def _to_out(msg: EmailMessage, sender_name: str | None) -> EmailMessageOut:
@@ -942,7 +1000,7 @@ async def preview_email(body: EmailComposePayload, user: EmailUser) -> EmailPrev
 
 
 @router.post("/test", response_model=TestSendOut, summary="測試寄送：渲染後只寄給自己（不計配額）")
-async def test_send(body: EmailComposePayload, user: EmailUser) -> TestSendOut:
+async def test_send(body: EmailComposePayload, db: DbDep, user: EmailUser) -> TestSendOut:
     if not user.email:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="您的帳號沒有 Email"
@@ -963,8 +1021,18 @@ async def test_send(body: EmailComposePayload, user: EmailUser) -> TestSendOut:
         custom_variables=custom,
     )
     subject = render_generic_subject(body.subject, personal)
-    html = render_generic_message(body.subject, body.body, _build_context(body), personal)
-    enqueue_rendered([user.email], f"[測試] {subject}", html)
+    resend_attachments, link_blocks = await _render_requested_attachments(
+        db, user, body.attachment_ids
+    )
+    render_context = _build_context(body)
+    render_context["blocks"] = [*list(render_context.get("blocks", [])), *link_blocks]
+    html = render_generic_message(body.subject, body.body, render_context, personal)
+    enqueue_rendered(
+        [user.email],
+        f"[測試] {subject}",
+        html,
+        attachments=resend_attachments or None,
+    )
     return TestSendOut(status="queued", sent_to=user.email)
 
 
@@ -973,7 +1041,9 @@ async def test_send(body: EmailComposePayload, user: EmailUser) -> TestSendOut:
     response_model=SampleTestSendOut,
     summary="抽樣測試寄送：以選定資料列渲染後寄至測試信箱",
 )
-async def test_send_sample(body: EmailSampleTestPayload, user: EmailUser) -> SampleTestSendOut:
+async def test_send_sample(
+    body: EmailSampleTestPayload, db: DbDep, user: EmailUser
+) -> SampleTestSendOut:
     destinations = [str(value) for value in body.test_emails] or [user.email]
     if not destinations or not destinations[0]:
         raise HTTPException(status_code=422, detail="沒有可用的測試收件信箱")
@@ -993,6 +1063,11 @@ async def test_send_sample(body: EmailSampleTestPayload, user: EmailUser) -> Sam
                 variables=body.preview_variables,
             )
         ]
+    resend_attachments, link_blocks = await _render_requested_attachments(
+        db, user, body.attachment_ids
+    )
+    render_context = _build_context(body)
+    render_context["blocks"] = [*list(render_context.get("blocks", [])), *link_blocks]
     queued = 0
     for index, row in enumerate(selected):
         custom = _merged_custom_variables(definitions, body.default_variables, row.variables)
@@ -1012,9 +1087,14 @@ async def test_send_sample(body: EmailSampleTestPayload, user: EmailUser) -> Sam
             custom_variables=custom,
         )
         subject = render_generic_subject(body.subject, personal)
-        html = render_generic_message(body.subject, body.body, _build_context(body), personal)
+        html = render_generic_message(body.subject, body.body, render_context, personal)
         for destination in destinations:
-            enqueue_rendered([destination], f"[抽樣 {index + 1}] {subject}", html)
+            enqueue_rendered(
+                [destination],
+                f"[抽樣 {index + 1}] {subject}",
+                html,
+                attachments=resend_attachments or None,
+            )
             queued += 1
     return SampleTestSendOut(status="queued", queued=queued, sent_to=destinations)
 

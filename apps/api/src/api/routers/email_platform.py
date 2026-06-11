@@ -329,7 +329,16 @@ async def clone_message(
     user: EmailUser,
     audience: str = Query("all", pattern="^(all|unopened|undelivered)$"),
 ) -> dict[str, str]:
-    source = await _check_message_view(db, user, message_id)
+    source = (
+        await db.execute(
+            select(EmailMessage)
+            .options(selectinload(EmailMessage.attachments))
+            .where(EmailMessage.id == message_id)
+        )
+    ).scalar_one_or_none()
+    if source is None:
+        raise HTTPException(status_code=404, detail="郵件不存在")
+    await _check_message_view(db, user, message_id)
     recipients = (
         (
             await db.execute(
@@ -370,6 +379,28 @@ async def clone_message(
         status="draft",
     )
     db.add(draft)
+    await db.flush()
+    for attachment in source.attachments:
+        if attachment.revoked_at is not None:
+            continue
+        db.add(
+            EmailAttachment(
+                message_id=draft.id,
+                template_id=attachment.template_id,
+                uploaded_by_id=user.id,
+                storage_key=attachment.storage_key,
+                filename=attachment.filename,
+                content_type=attachment.content_type,
+                file_size=attachment.file_size,
+                delivery_mode=attachment.delivery_mode,
+                expires_at=(
+                    datetime.now(UTC)
+                    + timedelta(seconds=settings.EMAIL_ATTACHMENT_LINK_EXPIRES_SECONDS)
+                    if attachment.delivery_mode == EmailAttachmentMode.LINK
+                    else None
+                ),
+            )
+        )
     await db.flush()
     return {"id": str(draft.id)}
 

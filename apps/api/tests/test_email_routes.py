@@ -214,6 +214,101 @@ async def test_external_email_recipients_can_be_previewed_and_saved(
 
 
 @pytest.mark.asyncio
+async def test_send_commits_recipient_before_enqueue(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = await _seed_user(db_session, "commit-before-send@school.edu", ["email:send"])
+    _override_user(user)
+    enqueue_transaction_states: list[bool] = []
+
+    def fake_enqueue(*args, **kwargs) -> list[str]:
+        enqueue_transaction_states.append(db_session.in_transaction())
+        return ["task-id"]
+
+    monkeypatch.setattr("api.routers.email.enqueue_rendered", fake_enqueue)
+
+    response = await client.post(
+        "/email/messages",
+        json={
+            "subject": "交易順序測試",
+            "action": "send",
+            "recipients": {"external_emails": ["recipient@example.org"]},
+        },
+    )
+
+    assert response.status_code == 201
+    assert enqueue_transaction_states == [False]
+
+
+@pytest.mark.asyncio
+async def test_test_send_includes_attachments(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = await _seed_user(db_session, "test-attachment@school.edu", ["email:send"])
+    _override_user(user)
+    attachment_id = uuid.uuid4()
+    captured: list[dict] = []
+
+    async def fake_render_requested(*args, **kwargs):
+        return [{"filename": "agenda.pdf", "content": "encoded"}], []
+
+    def fake_enqueue(*args, **kwargs) -> list[str]:
+        captured.append(kwargs)
+        return ["task-id"]
+
+    monkeypatch.setattr("api.routers.email._render_requested_attachments", fake_render_requested)
+    monkeypatch.setattr("api.routers.email.enqueue_rendered", fake_enqueue)
+
+    response = await client.post(
+        "/email/test",
+        json={
+            "subject": "附件測試",
+            "attachment_ids": [str(attachment_id)],
+        },
+    )
+
+    assert response.status_code == 200
+    assert captured[0]["attachments"] == [{"filename": "agenda.pdf", "content": "encoded"}]
+
+
+@pytest.mark.asyncio
+async def test_resend_commits_recipient_before_enqueue(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = await _seed_user(db_session, "commit-before-resend@school.edu", ["email:send"])
+    message = EmailMessage(
+        sender_id=user.id,
+        subject="重新寄送交易順序",
+        body="內容",
+        status="queued",
+        recipient_count=1,
+    )
+    db_session.add(message)
+    await db_session.flush()
+    db_session.add(
+        EmailCampaignRecipient(
+            message_id=message.id,
+            email="retry@example.org",
+            status="queued",
+        )
+    )
+    await db_session.commit()
+    _override_user(user)
+    enqueue_transaction_states: list[bool] = []
+
+    def fake_enqueue(*args, **kwargs) -> list[str]:
+        enqueue_transaction_states.append(db_session.in_transaction())
+        return ["retry-task-id"]
+
+    monkeypatch.setattr("api.routers.email.enqueue_rendered", fake_enqueue)
+
+    response = await client.post(f"/email/messages/{message.id}/resend")
+
+    assert response.status_code == 200
+    assert enqueue_transaction_states == [False]
+
+
+@pytest.mark.asyncio
 async def test_recipient_table_overrides_name_and_uses_chinese_placeholder(
     client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:

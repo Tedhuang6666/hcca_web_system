@@ -5,11 +5,13 @@ from datetime import UTC, datetime
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.main import app
 from api.dependencies.auth import get_current_active_user
+from api.main import app
 from api.models.email_message import (
+    EmailAttachment,
     EmailCampaignRecipient,
     EmailMessage,
     EmailSuppression,
@@ -153,3 +155,56 @@ async def test_resend_event_is_idempotent_and_updates_analytics(
     analytics = await platform_svc.get_analytics(db_session, message.id)
     assert analytics["opened"] == 1
     assert analytics["open_rate_estimated"] == 1
+
+
+@pytest.mark.asyncio
+async def test_clone_message_copies_recipient_snapshot_and_attachments(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await _superuser(db_session)
+    source = EmailMessage(
+        sender_id=user.id,
+        subject="會議通知",
+        body="會議內容",
+        recipient_count=1,
+        status="sent",
+    )
+    db_session.add(source)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            EmailCampaignRecipient(
+                message_id=source.id,
+                email="member@example.org",
+                name="出席人",
+                variables={"職稱": "代表"},
+                status="sent",
+            ),
+            EmailAttachment(
+                message_id=source.id,
+                uploaded_by_id=user.id,
+                storage_key="email/attachments/agenda.pdf",
+                filename="agenda.pdf",
+                content_type="application/pdf",
+                file_size=1024,
+                delivery_mode="attachment",
+            ),
+        ]
+    )
+    await db_session.commit()
+    _override_user(user)
+
+    response = await client.post(f"/email/messages/{source.id}/clone?audience=all")
+
+    assert response.status_code == 200
+    draft_id = uuid.UUID(response.json()["id"])
+    draft = await db_session.get(EmailMessage, draft_id)
+    assert draft is not None
+    assert draft.recipient_spec == {"external_emails": ["member@example.org"]}
+    assert draft.recipient_variables[0]["variables"] == {"職稱": "代表"}
+    cloned_attachment = await db_session.scalar(
+        select(EmailAttachment).where(EmailAttachment.message_id == draft_id)
+    )
+    assert cloned_attachment is not None
+    assert cloned_attachment.filename == "agenda.pdf"
+    assert cloned_attachment.storage_key == "email/attachments/agenda.pdf"
