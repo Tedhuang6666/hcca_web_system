@@ -69,7 +69,7 @@
 | 平均月停機時間 | UptimeRobot | N/A | | | | | < 3.6 h |
 | 部署 frequency | git tag / deploy log | 月 ? 次 | | | | | 週 ≥ 1 次 |
 | MTTR（incident 復原） | docs/INCIDENT_RUNBOOK 紀錄 | N/A | | | | | < 4 h |
-| 備份還原時間（DR drill） | docs/DR_DRILL_LOG | N/A | | | | | < 4 h |
+| 備份還原時間（DR drill） | `scripts/dr-database-drill.sh` | 8 秒（本機 PostgreSQL） | | | | | < 4 h |
 
 ---
 
