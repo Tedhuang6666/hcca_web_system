@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Search as SearchIcon, FileText, Scale, Calendar, Megaphone } from "lucide-react";
-import { searchApi, ApiError } from "@/lib/api";
+import { searchApi, apiErrorMessage } from "@/lib/api";
 import type { SearchResultOut } from "@/lib/types";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import SmartEmptyState from "@/components/ui/SmartEmptyState";
@@ -50,7 +50,7 @@ function SearchInner() {
     searchApi
       .global(activeQ.trim(), 30)
       .then(setResults)
-      .catch((e) => toast.error(e instanceof ApiError ? e.message : "搜尋失敗"))
+      .catch((e) => toast.error(apiErrorMessage(e, "搜尋失敗")))
       .finally(() => setLoading(false));
   }, [activeQ]);
 

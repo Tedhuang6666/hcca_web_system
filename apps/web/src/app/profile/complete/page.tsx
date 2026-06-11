@@ -2,7 +2,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { usersApi, ApiError } from "@/lib/api";
+import { Loader2 } from "lucide-react";
+import { usersApi, ApiError, apiErrorMessage } from "@/lib/api";
 import type { UserRead } from "@/lib/types";
 
 /** 從學校 Google 信箱中解析學號（g0{student_id}@hchs.hc.edu.tw） */
@@ -46,7 +47,7 @@ export default function CompleteProfilePage() {
       if (e instanceof ApiError && e.status === 409) {
         toast.error("此學號已被使用，請確認您的學號");
       } else {
-        toast.error(e instanceof ApiError ? e.message : "儲存失敗，請稍後再試");
+        toast.error(apiErrorMessage(e, "儲存失敗，請稍後再試"));
       }
     } finally {
       setSaving(false);
@@ -56,8 +57,7 @@ export default function CompleteProfilePage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--bg-base)" }}>
-        <div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin"
-          style={{ borderColor: "var(--border-strong)", borderTopColor: "var(--primary)" }} />
+        <Loader2 size={32} className="animate-spin" style={{ color: "var(--primary)" }} aria-label="載入中" />
       </div>
     );
   }

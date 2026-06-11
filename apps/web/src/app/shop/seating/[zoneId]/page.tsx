@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { seatingApi, ApiError } from "@/lib/api";
+import { seatingApi, apiErrorMessage } from "@/lib/api";
 import type { SeatMapOut, SeatState, SeatStateKind } from "@/lib/types";
 
 const SEAT = 34;
@@ -64,7 +64,7 @@ export default function SeatSelectionPage() {
         return mine.size ? mine : prev;
       });
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "讀取座位圖失敗");
+      toast.error(apiErrorMessage(e, "讀取座位圖失敗"));
     } finally {
       setLoading(false);
     }
@@ -97,7 +97,7 @@ export default function SeatSelectionPage() {
         setMap((prev) => (prev ? { ...prev, hold_expires_at: res.expires_at } : prev));
         load();
       } catch (e) {
-        toast.error(e instanceof ApiError ? e.message : "保留座位失敗");
+        toast.error(apiErrorMessage(e, "保留座位失敗"));
       } finally {
         setHolding(false);
       }
@@ -131,7 +131,7 @@ export default function SeatSelectionPage() {
       toast.success("劃位完成！");
       router.push(`/shop/orders/${orderId}`);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "劃位失敗");
+      toast.error(apiErrorMessage(e, "劃位失敗"));
       load();
     } finally {
       setConfirming(false);

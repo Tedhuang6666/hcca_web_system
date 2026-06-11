@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { surveysApi, orgsApi, ApiError } from "@/lib/api";
+import { surveysApi, orgsApi, apiErrorMessage } from "@/lib/api";
 import type { OrgRead } from "@/lib/api";
 import type { QuestionType, ValidationRule, UserSummary } from "@/lib/types";
 import { uploadUrl } from "@/lib/config";
@@ -98,7 +98,7 @@ function ImageField({
       onChange(url);
       toast.success("圖片已上傳");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "圖片上傳失敗");
+      toast.error(apiErrorMessage(e, "圖片上傳失敗"));
     } finally {
       setUploading(false);
     }
@@ -467,7 +467,7 @@ export default function NewSurveyPage() {
       router.push(`/surveys/${encodeURIComponent(survey.title)}`);
     } catch (e) {
       flushDraft();
-      toast.error(e instanceof ApiError ? e.message : "建立失敗");
+      toast.error(apiErrorMessage(e, "建立失敗"));
     } finally { setSaving(false); }
   };
 

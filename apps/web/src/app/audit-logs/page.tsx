@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { ApiError, auditLogsApi, usersApi, type UserSummary } from "@/lib/api";
+import { auditLogsApi, usersApi, type UserSummary, apiErrorMessage } from "@/lib/api";
 import type { AuditLogOut } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
 import Modal from "@/components/ui/Modal";
@@ -379,7 +379,7 @@ export default function AuditLogsPage() {
       setOffset(nextOffset);
       setHasMore(data.length === PAGE_SIZE);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "載入稽核日誌失敗");
+      toast.error(apiErrorMessage(e, "載入稽核日誌失敗"));
     } finally {
       setLoading(false);
       setLoadingMore(false);

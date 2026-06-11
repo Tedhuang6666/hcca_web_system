@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ApiError, emailApi } from "@/lib/api";
+import { emailApi, apiErrorMessage } from "@/lib/api";
 import type {
   EmailAnalyticsOut,
   EmailCampaignRecipientOut,
@@ -120,7 +120,7 @@ export default function EmailLogsPage() {
         limit: 100,
       })
       .then(setRows)
-      .catch((e) => toast.error(e instanceof ApiError ? e.message : "載入失敗"))
+      .catch((e) => toast.error(apiErrorMessage(e, "載入失敗")))
       .finally(() => setLoading(false));
   }, [tab, query, dateFrom, dateTo, orgId, templateId]);
 
@@ -139,7 +139,7 @@ export default function EmailLogsPage() {
       toast.success("已排入寄送佇列");
       load();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "寄送失敗");
+      toast.error(apiErrorMessage(e, "寄送失敗"));
     } finally {
       setBusyId(null);
     }
@@ -160,7 +160,7 @@ export default function EmailLogsPage() {
       }
       load();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "重新寄送失敗");
+      toast.error(apiErrorMessage(e, "重新寄送失敗"));
     } finally {
       setBusyId(null);
     }
@@ -172,7 +172,7 @@ export default function EmailLogsPage() {
       const draft = await emailApi.cloneMessage(id, "all");
       window.location.href = `/email?draft=${draft.id}`;
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "建立新信失敗");
+      toast.error(apiErrorMessage(e, "建立新信失敗"));
       setBusyId(null);
     }
   };
@@ -204,7 +204,7 @@ export default function EmailLogsPage() {
           .catch(() => setDetailHtml(""));
       }
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "載入詳情失敗");
+      toast.error(apiErrorMessage(e, "載入詳情失敗"));
     } finally {
       setBusyId(null);
     }
@@ -228,7 +228,7 @@ export default function EmailLogsPage() {
       setDetailHtml(result.html);
     } catch (e) {
       setDetailHtml("");
-      toast.error(e instanceof ApiError ? e.message : "載入收件人預覽失敗");
+      toast.error(apiErrorMessage(e, "載入收件人預覽失敗"));
     }
   };
 
@@ -240,7 +240,7 @@ export default function EmailLogsPage() {
       toast.success(scheduled ? "已取消預約" : "草稿已刪除");
       load();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "操作失敗");
+      toast.error(apiErrorMessage(e, "操作失敗"));
     } finally {
       setBusyId(null);
     }

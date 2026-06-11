@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { orgsApi, ApiError } from "@/lib/api";
+import { orgsApi, apiErrorMessage } from "@/lib/api";
 import type { OrgRead } from "@/lib/api";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import SmartEmptyState from "@/components/ui/SmartEmptyState";
@@ -15,7 +15,7 @@ export default function OrgsPage() {
   useEffect(() => {
     orgsApi.list()
       .then(setOrgs)
-      .catch(e => toast.error(e instanceof ApiError ? e.message : "載入失敗"))
+      .catch(e => toast.error(apiErrorMessage(e, "載入失敗")))
       .finally(() => setLoading(false));
   }, []);
 

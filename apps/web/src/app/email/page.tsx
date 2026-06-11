@@ -8,7 +8,7 @@ import Modal from "@/components/ui/Modal";
 import RichTextarea, { type RichTextareaHandle } from "@/components/ui/RichTextarea";
 import RecipientPicker from "@/components/email/RecipientPicker";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
-import { ApiError, emailApi } from "@/lib/api";
+import { ApiError, emailApi, apiErrorMessage } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
 import type {
   EmailBlock,
@@ -252,13 +252,13 @@ function ComposeInner() {
         setRecentMessages(messages);
       })
       .catch((e) =>
-        toast.error(e instanceof ApiError ? e.message : "載入郵件資源失敗"),
+        toast.error(apiErrorMessage(e, "載入郵件資源失敗")),
       );
     emailApi
       .listDrafts()
       .then(setDraftMessages)
       .catch((e) =>
-        toast.error(e instanceof ApiError ? e.message : "載入草稿失敗"),
+        toast.error(apiErrorMessage(e, "載入草稿失敗")),
       );
   }, []);
 
@@ -322,7 +322,7 @@ function ComposeInner() {
         }));
         setRecipientRows(rows);
       })
-      .catch((e) => toast.error(e instanceof ApiError ? e.message : "載入草稿失敗"));
+      .catch((e) => toast.error(apiErrorMessage(e, "載入草稿失敗")));
   }, [draftId]);
 
   // 離開頁面或非自然關閉（關閉分頁、重新整理、切到背景）時自動暫存草稿至本機；
@@ -746,7 +746,7 @@ function ComposeInner() {
       setTrackClicks(message.track_clicks);
       toast.success("已套用過去郵件格式，未帶入舊收件人");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "載入過去郵件失敗");
+      toast.error(apiErrorMessage(e, "載入過去郵件失敗"));
     }
   };
 
@@ -764,7 +764,7 @@ function ComposeInner() {
       setPlatformTemplateId(template.id);
       toast.success("平台範本已儲存");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "儲存平台範本失敗");
+      toast.error(apiErrorMessage(e, "儲存平台範本失敗"));
     }
   };
 
@@ -805,7 +805,7 @@ function ComposeInner() {
           : "檔案較大，將以安全下載連結寄送",
       );
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "附件上傳失敗");
+      toast.error(apiErrorMessage(e, "附件上傳失敗"));
     } finally {
       setUploadingAttachment(false);
     }
@@ -817,7 +817,7 @@ function ComposeInner() {
       setAttachments((rows) => rows.filter((item) => item.id !== attachment.id));
       setRetainedAttachmentIds((ids) => ids.filter((id) => id !== attachment.id));
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "移除附件失敗");
+      toast.error(apiErrorMessage(e, "移除附件失敗"));
     }
   };
 
@@ -857,7 +857,7 @@ function ComposeInner() {
       updateBlock(i, { url: result.url });
       toast.success("圖片已上傳");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "圖片上傳失敗");
+      toast.error(apiErrorMessage(e, "圖片上傳失敗"));
     } finally {
       setUploadingImage(false);
     }
@@ -870,7 +870,7 @@ function ComposeInner() {
       if (!bannerImageAlt.trim()) setBannerImageAlt(result.filename);
       toast.success("主圖已上傳");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "主圖上傳失敗");
+      toast.error(apiErrorMessage(e, "主圖上傳失敗"));
     } finally {
       setUploadingImage(false);
     }
@@ -1036,7 +1036,7 @@ function ComposeInner() {
       const res = await emailApi.test(buildPayload());
       toast.success(`測試信已寄出至 ${res.sent_to}`);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "測試寄送失敗");
+      toast.error(apiErrorMessage(e, "測試寄送失敗"));
     } finally {
       setBusy(false);
     }
@@ -1064,7 +1064,7 @@ function ComposeInner() {
       clearDraft();
       toast.success(activeDraftId ? "草稿已更新並同步" : "草稿已永久儲存並同步");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "儲存草稿失敗");
+      toast.error(apiErrorMessage(e, "儲存草稿失敗"));
     } finally {
       setBusy(false);
     }
@@ -1087,7 +1087,7 @@ function ComposeInner() {
       }
       return result;
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "寄送預檢失敗");
+      toast.error(apiErrorMessage(e, "寄送預檢失敗"));
       return null;
     }
   };
@@ -1110,7 +1110,7 @@ function ComposeInner() {
       toast.success("已排定預約寄送");
       router.push("/email/logs");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "預約寄送失敗");
+      toast.error(apiErrorMessage(e, "預約寄送失敗"));
     } finally {
       setBusy(false);
     }
@@ -1134,7 +1134,7 @@ function ComposeInner() {
       toast.success("信件已排入寄送佇列");
       router.push("/email/logs");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "寄送失敗");
+      toast.error(apiErrorMessage(e, "寄送失敗"));
     } finally {
       setBusy(false);
     }
@@ -2175,7 +2175,7 @@ function ComposeInner() {
                     });
                     toast.success(`已排入 ${result.queued} 封抽樣測試信`);
                   } catch (e) {
-                    toast.error(e instanceof ApiError ? e.message : "抽樣測試失敗");
+                    toast.error(apiErrorMessage(e, "抽樣測試失敗"));
                   }
                 }}
               >

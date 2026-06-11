@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { CheckSquare, RefreshCw, Square } from "lucide-react";
 import { toast } from "sonner";
-import { shopApi, ApiError } from "@/lib/api";
+import { shopApi, apiErrorMessage } from "@/lib/api";
 import type { OrderListItem } from "@/lib/types";
 import { OrderStatusBadge } from "@/components/ui/StatusBadge";
 
@@ -27,7 +27,7 @@ export default function ClassOrdersPage() {
         setOrders(items);
         setSelectedIds((current) => current.filter((id) => items.some((item) => item.id === id)));
       })
-      .catch((e) => toast.error(e instanceof ApiError ? e.message : "載入失敗"))
+      .catch((e) => toast.error(apiErrorMessage(e, "載入失敗")))
       .finally(() => setLoading(false));
   }, [paidFilter]);
 
@@ -45,7 +45,7 @@ export default function ClassOrdersPage() {
       setSelectedIds((current) => current.filter((id) => id !== order.id));
       toast.success(updated.is_paid ? "已標示為已繳費" : "已取消繳費標示");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "更新失敗");
+      toast.error(apiErrorMessage(e, "更新失敗"));
     } finally {
       setBusy(null);
     }
@@ -97,7 +97,7 @@ export default function ClassOrdersPage() {
       setSelectedIds([]);
       toast.success(isPaid ? `已標示 ${targets.length} 筆為已繳費` : `已取消 ${targets.length} 筆繳費標示`);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "批量更新失敗");
+      toast.error(apiErrorMessage(e, "批量更新失敗"));
     } finally {
       setBatchBusy(false);
     }

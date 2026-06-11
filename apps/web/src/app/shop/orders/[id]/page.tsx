@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { toast } from "sonner";
-import { seatingApi, shopApi, ApiError } from "@/lib/api";
+import { seatingApi, shopApi, apiErrorMessage } from "@/lib/api";
 import { OrderStatusBadge } from "@/components/ui/StatusBadge";
 import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 import type { SeatBookingOut, OrderOut, ProductOut, ZoneListItem } from "@/lib/types";
@@ -43,7 +43,7 @@ export default function OrderDetailPage() {
       }
       setSeatingItems(seating);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "載入訂單失敗");
+      toast.error(apiErrorMessage(e, "載入訂單失敗"));
     } finally {
       setLoading(false);
     }

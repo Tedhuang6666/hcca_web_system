@@ -9,20 +9,17 @@ import {
   Plus,
   RefreshCcw,
   Save,
-  ScrollText,
-} from "lucide-react";
+  ScrollText } from "lucide-react";
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
 import {
-  ApiError,
   policiesApi,
   type PolicyDocumentListItem,
   type PolicyDocumentOut,
   type PolicyKind,
   type PrivacyRequestOut,
-  type PrivacyRequestStatus,
-} from "@/lib/api";
+  type PrivacyRequestStatus, apiErrorMessage } from "@/lib/api";
 
 const KIND_LABEL: Record<PolicyKind, string> = {
   privacy: "隱私權政策",
@@ -140,7 +137,7 @@ function DocumentsTab() {
       const rows = await policiesApi.list(filter || undefined);
       setItems(rows);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "讀取失敗");
+      toast.error(apiErrorMessage(e, "讀取失敗"));
     }
   }, [filter]);
 
@@ -153,7 +150,7 @@ function DocumentsTab() {
       const d = await policiesApi.detail(item.kind, item.version);
       setSelected(d);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "讀取詳情失敗");
+      toast.error(apiErrorMessage(e, "讀取詳情失敗"));
     }
   };
 
@@ -172,7 +169,7 @@ function DocumentsTab() {
       await load();
       if (selected?.id === item.id) await openDetail(item);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "啟用失敗");
+      toast.error(apiErrorMessage(e, "啟用失敗"));
     } finally {
       setBusy(false);
     }
@@ -311,7 +308,7 @@ function DocumentEditor({
       toast.success("已儲存");
       await onSaved();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "儲存失敗");
+      toast.error(apiErrorMessage(e, "儲存失敗"));
     } finally {
       setSaving(false);
     }
@@ -444,7 +441,7 @@ function CreateModal({
       onCreated();
       onClose();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "建立失敗");
+      toast.error(apiErrorMessage(e, "建立失敗"));
     } finally {
       setBusy(false);
     }
@@ -551,7 +548,7 @@ function PrivacyRequestsTab() {
       const items = await policiesApi.listPrivacyRequests();
       setRows(items);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "讀取失敗");
+      toast.error(apiErrorMessage(e, "讀取失敗"));
     }
   }, []);
 
@@ -578,7 +575,7 @@ function PrivacyRequestsTab() {
       setActive(null);
       await load();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "更新失敗");
+      toast.error(apiErrorMessage(e, "更新失敗"));
     } finally {
       setBusy(false);
     }

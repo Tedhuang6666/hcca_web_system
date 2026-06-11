@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { activitiesApi, shopApi, ApiError } from "@/lib/api";
+import { activitiesApi, shopApi, apiErrorMessage } from "@/lib/api";
 import type { Activity, OrderListItem } from "@/lib/types";
 import { OrderStatusBadge } from "@/components/ui/StatusBadge";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -31,7 +31,7 @@ export default function OrdersPage() {
       const data = await shopApi.listOrders(params);
       setOrders(data);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "載入失敗");
+      toast.error(apiErrorMessage(e, "載入失敗"));
     } finally {
       setLoading(false);
     }

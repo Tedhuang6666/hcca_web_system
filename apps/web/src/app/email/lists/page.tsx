@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { useOrgOptions } from "@/components/ui/targeting";
-import { ApiError, emailApi } from "@/lib/api";
+import { emailApi, apiErrorMessage } from "@/lib/api";
 import type { EmailRecipientListOut, EmailResourceVisibility } from "@/lib/types";
 
 const EMPTY_RECIPIENTS = {
@@ -24,7 +24,7 @@ export default function EmailListsPage() {
     emailApi
       .listRecipientLists()
       .then(setRows)
-      .catch((e) => toast.error(e instanceof ApiError ? e.message : "載入名單失敗"));
+      .catch((e) => toast.error(apiErrorMessage(e, "載入名單失敗")));
   useEffect(() => {
     void load();
   }, []);
@@ -50,7 +50,7 @@ export default function EmailListsPage() {
       load();
       toast.success("名單已建立並自動去除重複 Email");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "建立名單失敗");
+      toast.error(apiErrorMessage(e, "建立名單失敗"));
     }
   };
 

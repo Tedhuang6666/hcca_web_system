@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { announcementsApi, ApiError } from "@/lib/api";
+import { announcementsApi, apiErrorMessage } from "@/lib/api";
 import AnnouncementEditor from "@/components/announcements/AnnouncementEditor";
 import AnnouncementAudiencePicker, {
   type AudienceValue,
@@ -111,7 +111,7 @@ export default function NewAnnouncementPage() {
       router.push(`/announcements/${created.id}/edit`);
     } catch (e) {
       flushDraft();
-      toast.error(e instanceof ApiError ? e.message : "建立公告失敗");
+      toast.error(apiErrorMessage(e, "建立公告失敗"));
     } finally {
       setSaving(false);
     }

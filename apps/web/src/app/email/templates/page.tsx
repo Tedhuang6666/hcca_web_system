@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { useOrgOptions } from "@/components/ui/targeting";
-import { ApiError, emailApi } from "@/lib/api";
+import { emailApi, apiErrorMessage } from "@/lib/api";
 import type { EmailResourceVisibility, EmailTemplateOut } from "@/lib/types";
 
 export default function EmailTemplatesPage() {
@@ -21,7 +21,7 @@ export default function EmailTemplatesPage() {
     emailApi
       .listTemplates()
       .then(setRows)
-      .catch((e) => toast.error(e instanceof ApiError ? e.message : "載入範本失敗"));
+      .catch((e) => toast.error(apiErrorMessage(e, "載入範本失敗")));
 
   useEffect(() => {
     void load();
@@ -60,7 +60,7 @@ export default function EmailTemplatesPage() {
       load();
       toast.success("範本已建立");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "建立範本失敗");
+      toast.error(apiErrorMessage(e, "建立範本失敗"));
     } finally {
       setBusy(false);
     }

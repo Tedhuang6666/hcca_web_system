@@ -3,7 +3,8 @@ import { useState, useEffect, useCallback, useMemo, memo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { documentsApi, usersApi, ApiError } from "@/lib/api";
+import { Loader2 } from "lucide-react";
+import { documentsApi, usersApi, ApiError, apiErrorMessage } from "@/lib/api";
 import type { UserSummary } from "@/lib/api";
 import type { DocumentOut } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -174,7 +175,7 @@ export default function DocumentDetailPage() {
         setForbidden(true);
       } else {
         setForbidden(false);
-        toast.error(e instanceof ApiError ? e.message : "載入失敗");
+        toast.error(apiErrorMessage(e, "載入失敗"));
       }
     } finally { setLoading(false); }
   }, [id]);
@@ -207,7 +208,7 @@ export default function DocumentDetailPage() {
       toast.success(delegateId ? "代理人已設定" : "代理人已清除");
       router.refresh();
       fetchDoc();
-    } catch (e) { toast.error(e instanceof ApiError ? e.message : "操作失敗"); }
+    } catch (e) { toast.error(apiErrorMessage(e, "操作失敗")); }
   };
 
   const handleReject = async (comment: string, mode: "to_creator" | "to_previous") => {
@@ -219,7 +220,7 @@ export default function DocumentDetailPage() {
 
   const handleRecall = async () => {
     try { await documentsApi.recall(id); toast.success("已撤回"); fetchDoc(); }
-    catch (e) { toast.error(e instanceof ApiError ? e.message : "操作失敗"); }
+    catch (e) { toast.error(apiErrorMessage(e, "操作失敗")); }
   };
 
   const handleSubmit = async () => {
@@ -230,7 +231,7 @@ export default function DocumentDetailPage() {
       fetchDoc();
       setSubmitMode(false);
       setApproverIds([]);
-    } catch (e) { toast.error(e instanceof ApiError ? e.message : "送審失敗"); }
+    } catch (e) { toast.error(apiErrorMessage(e, "送審失敗")); }
   };
 
   const handleIssueDirect = async () => {
@@ -239,7 +240,7 @@ export default function DocumentDetailPage() {
       await documentsApi.issueDirect(id);
       toast.success("已直接發文");
       fetchDoc();
-    } catch (e) { toast.error(e instanceof ApiError ? e.message : "操作失敗"); }
+    } catch (e) { toast.error(apiErrorMessage(e, "操作失敗")); }
   };
 
   // 進入送審模式時自動載入建議審核人
@@ -261,7 +262,7 @@ export default function DocumentDetailPage() {
       toast.success(`已上傳 ${file.name}`);
       fetchDoc();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "上傳失敗");
+      toast.error(apiErrorMessage(e, "上傳失敗"));
     } finally { setUploadingFile(false); }
   };
 
@@ -271,7 +272,7 @@ export default function DocumentDetailPage() {
       toast.success("附件已刪除");
       fetchDoc();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "刪除失敗");
+      toast.error(apiErrorMessage(e, "刪除失敗"));
     }
   };
 
@@ -292,7 +293,7 @@ export default function DocumentDetailPage() {
       setNewLinkUrl(""); setNewLinkText("");
       fetchDoc();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "新增連結失敗");
+      toast.error(apiErrorMessage(e, "新增連結失敗"));
     } finally { setAddingLink(false); }
   };
 
@@ -306,7 +307,7 @@ export default function DocumentDetailPage() {
       toast.success("附件名稱已更新");
       fetchDoc();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "更新失敗");
+      toast.error(apiErrorMessage(e, "更新失敗"));
     }
   };
 
@@ -522,10 +523,7 @@ export default function DocumentDetailPage() {
             className="px-4 py-2 rounded-lg text-sm font-medium inline-flex items-center gap-1.5 transition-colors hover:opacity-90 disabled:opacity-60 disabled:cursor-wait"
             style={{ background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }}>
             {printingPdf ? (
-              <svg className="animate-spin" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                <path d="M21 12a9 9 0 0 1-9 9"/>
-                <path d="M3 12a9 9 0 0 1 9-9"/>
-              </svg>
+              <Loader2 size={13} className="animate-spin" aria-hidden={true} />
             ) : (
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
                 <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>

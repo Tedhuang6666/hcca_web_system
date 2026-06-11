@@ -1,6 +1,7 @@
 "use client";
 import { useEffect } from "react";
 import { useSearchParams } from "next/navigation";
+import { Loader2 } from "lucide-react";
 
 import { cacheCurrentUser } from "@/lib/auth-cache";
 import { apiUrl } from "@/lib/config";
@@ -68,8 +69,7 @@ export default function AuthCallbackPage() {
     <div className="min-h-screen flex items-center justify-center"
       style={{ background: "var(--primary-fg)" }}>
       <div className="text-center space-y-3">
-        <div className="w-10 h-10 border-2 border-t-transparent rounded-full animate-spin mx-auto"
-          style={{ borderColor: "var(--primary)", borderTopColor: "transparent" }} />
+        <Loader2 size={40} className="mx-auto animate-spin" style={{ color: "var(--primary)" }} aria-label="載入中" />
         <p className="text-slate-400 text-sm">正在完成登入...</p>
       </div>
     </div>

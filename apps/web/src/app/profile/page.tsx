@@ -2,7 +2,8 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
-import { usersApi, classApi, ApiError, lineApi, discordApi } from "@/lib/api";
+import { Loader2 } from "lucide-react";
+import { usersApi, classApi, lineApi, discordApi, apiErrorMessage } from "@/lib/api";
 import type {
   DiscordBindingOut,
   LineBindingOut,
@@ -145,7 +146,7 @@ export default function ProfilePage() {
       localStorage.setItem("user_name", updated.display_name);
       toast.success("顯示名稱已更新");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "更新失敗");
+      toast.error(apiErrorMessage(e, "更新失敗"));
       throw e;
     }
   }
@@ -156,7 +157,7 @@ export default function ProfilePage() {
       setUser(updated);
       toast.success("學號已更新");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "更新失敗");
+      toast.error(apiErrorMessage(e, "更新失敗"));
       throw e;
     }
   }
@@ -180,7 +181,7 @@ export default function ProfilePage() {
       setEmailVerificationPending(true);
       toast.success("驗證碼已寄出，10 分鐘內有效");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "寄送驗證碼失敗");
+      toast.error(apiErrorMessage(e, "寄送驗證碼失敗"));
     } finally {
       setEmailBusy(false);
     }
@@ -200,7 +201,7 @@ export default function ProfilePage() {
       setEmailVerificationPending(false);
       toast.success("登入 Email 已連結");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "驗證失敗");
+      toast.error(apiErrorMessage(e, "驗證失敗"));
     } finally {
       setEmailBusy(false);
     }
@@ -213,7 +214,7 @@ export default function ProfilePage() {
       setLineCode(code);
       toast.success("LINE 綁定碼已產生");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "產生綁定碼失敗");
+      toast.error(apiErrorMessage(e, "產生綁定碼失敗"));
     } finally {
       setLineBusy(false);
     }
@@ -227,7 +228,7 @@ export default function ProfilePage() {
       setLineCode(null);
       toast.success("已解除 LINE 綁定");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "解除綁定失敗");
+      toast.error(apiErrorMessage(e, "解除綁定失敗"));
     } finally {
       setLineBusy(false);
     }
@@ -250,7 +251,7 @@ export default function ProfilePage() {
       });
       toast.success("已解除 Discord 綁定");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "解除綁定失敗");
+      toast.error(apiErrorMessage(e, "解除綁定失敗"));
     } finally {
       setDiscordBusy(false);
     }
@@ -272,8 +273,7 @@ export default function ProfilePage() {
   if (loading) {
     return (
       <div className="py-24 text-center" style={{ color: "var(--text-muted)" }}>
-        <div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin mx-auto mb-3"
-          style={{ borderColor: "var(--border-strong)", borderTopColor: "var(--primary)" }}
+        <Loader2 size={32} className="mx-auto mb-3 animate-spin" style={{ color: "var(--primary)" }}
           role="status" aria-label="載入中" />
         <p className="text-sm">載入中…</p>
       </div>

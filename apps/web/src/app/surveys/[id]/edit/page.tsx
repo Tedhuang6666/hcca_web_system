@@ -3,7 +3,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { activitiesApi, surveysApi, orgsApi, usersApi, ApiError } from "@/lib/api";
+import { Loader2 } from "lucide-react";
+import { activitiesApi, surveysApi, orgsApi, usersApi, apiErrorMessage } from "@/lib/api";
 import type { SurveyQuestionBody, OrgRead } from "@/lib/api";
 import type { Activity, SurveyOut, SurveyQuestionOut, QuestionType, UserSummary } from "@/lib/types";
 import { uploadUrl } from "@/lib/config";
@@ -118,7 +119,7 @@ function QuestionRow({
       setImageUrl(url);
       toast.success("圖片已上傳，記得儲存此題");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "上傳失敗");
+      toast.error(apiErrorMessage(e, "上傳失敗"));
     }
   };
 
@@ -503,7 +504,7 @@ export default function EditSurveyPage() {
       toast.success("基本資料已更新");
       load();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "更新失敗");
+      toast.error(apiErrorMessage(e, "更新失敗"));
     } finally { setBusy(false); }
   };
 
@@ -513,7 +514,7 @@ export default function EditSurveyPage() {
       toast.success("題目已更新");
       load();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "更新失敗");
+      toast.error(apiErrorMessage(e, "更新失敗"));
       throw e;
     }
   };
@@ -526,7 +527,7 @@ export default function EditSurveyPage() {
       toast.success("題目已刪除");
       load();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "刪除失敗");
+      toast.error(apiErrorMessage(e, "刪除失敗"));
     } finally { setBusy(false); }
   };
 
@@ -545,7 +546,7 @@ export default function EditSurveyPage() {
       }
       load();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "排序失敗");
+      toast.error(apiErrorMessage(e, "排序失敗"));
     } finally { setBusy(false); }
   };
 
@@ -575,15 +576,14 @@ export default function EditSurveyPage() {
       toast.success("題目已新增");
       load();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "新增失敗");
+      toast.error(apiErrorMessage(e, "新增失敗"));
     } finally { setBusy(false); }
   };
 
   if (loading) {
     return (
       <div className="py-20 text-center" style={{ color: "var(--text-muted)" }}>
-        <div className="w-7 h-7 rounded-full border-2 border-t-transparent animate-spin mx-auto mb-3"
-          style={{ borderColor: "var(--border-strong)", borderTopColor: "var(--primary)" }} />
+        <Loader2 size={28} className="mx-auto mb-3 animate-spin" style={{ color: "var(--primary)" }} aria-label="載入中" />
         <p className="text-sm">載入中…</p>
       </div>
     );

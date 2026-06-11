@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { activitiesApi, shopApi, orgsApi, classApi, ApiError } from "@/lib/api";
+import { activitiesApi, shopApi, orgsApi, classApi, apiErrorMessage } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
 import { usePermissions } from "@/hooks/usePermissions";
 import Modal from "@/components/ui/Modal";
@@ -44,7 +44,7 @@ function ImageField({ value, onChange }: { value: string | null; onChange: (u: s
       const { url } = await shopApi.uploadImage(file);
       onChange(url);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "上傳失敗");
+      toast.error(apiErrorMessage(e, "上傳失敗"));
     } finally {
       setBusy(false);
     }
@@ -187,7 +187,7 @@ function EntityModal({
                 toast.success("已儲存");
                 onSaved();
               } catch (e) {
-                toast.error(e instanceof ApiError ? e.message : "儲存失敗");
+                toast.error(apiErrorMessage(e, "儲存失敗"));
               } finally {
                 setBusy(false);
               }
@@ -237,7 +237,7 @@ function NewSeriesModal({
               toast.success("系列已建立");
               onSaved();
             } catch (e) {
-              toast.error(e instanceof ApiError ? e.message : "建立失敗");
+              toast.error(apiErrorMessage(e, "建立失敗"));
             } finally { setBusy(false); }
           }} className="btn flex-1"
             style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
@@ -360,7 +360,7 @@ function ProductFormModal({
               toast.success("已儲存");
               onSaved();
             } catch (e) {
-              toast.error(e instanceof ApiError ? e.message : "儲存失敗");
+              toast.error(apiErrorMessage(e, "儲存失敗"));
             } finally { setBusy(false); }
           }} className="btn flex-1"
             style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
@@ -419,7 +419,7 @@ function OptionModal({
               toast.success("已儲存");
               onSaved();
             } catch (e) {
-              toast.error(e instanceof ApiError ? e.message : "儲存失敗");
+              toast.error(apiErrorMessage(e, "儲存失敗"));
             } finally { setBusy(false); }
           }} className="btn flex-1"
             style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
@@ -522,7 +522,7 @@ function VariantGroupModal({
       toast.success("變體群組已儲存");
       onSaved();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "儲存失敗");
+      toast.error(apiErrorMessage(e, "儲存失敗"));
     } finally {
       setBusy(false);
     }
@@ -618,7 +618,7 @@ function SmartOptionsModal({
       toast.success(`已新增 ${finalDrafts.length} 個選項`);
       onSaved();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "智慧新增失敗");
+      toast.error(apiErrorMessage(e, "智慧新增失敗"));
     } finally {
       setBusy(false);
     }
@@ -720,7 +720,7 @@ function VariantManager({
       await shopApi.deleteVariantGroup(g.id);
       onChanged();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "刪除失敗");
+      toast.error(apiErrorMessage(e, "刪除失敗"));
     }
   };
 
@@ -729,7 +729,7 @@ function VariantManager({
       await shopApi.deleteVariantOption(o.id);
       onChanged();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "刪除失敗");
+      toast.error(apiErrorMessage(e, "刪除失敗"));
     }
   };
 
@@ -872,7 +872,7 @@ function StatsView({ activityId }: { activityId: string }) {
       .then(setData)
       .catch((e) => {
         setData(null);
-        setError(e instanceof ApiError ? e.message : "統計載入失敗");
+        setError(apiErrorMessage(e, "統計載入失敗"));
       })
       .finally(() => setLoading(false));
   }, [activityId, classId, dateFrom, dateTo, grade, groupBy, orgId, paid, productId, statusFilter, userId]);
@@ -1198,7 +1198,7 @@ export default function ShopAdminPage() {
       loadCategories();
       if (cat?.id === c.id) selectCategory(null);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "刪除失敗");
+      toast.error(apiErrorMessage(e, "刪除失敗"));
     }
   };
   const delSeries = async (s: ProductSeriesOut) => {
@@ -1208,7 +1208,7 @@ export default function ShopAdminPage() {
       if (cat) loadSeries(cat.id);
       if (series?.id === s.id) selectSeries(null);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "刪除失敗");
+      toast.error(apiErrorMessage(e, "刪除失敗"));
     }
   };
   const toggleProduct = async (p: ProductOut) => {
@@ -1218,7 +1218,7 @@ export default function ShopAdminPage() {
       if (series) loadProducts(series.id);
       if (productId === p.id) loadProduct(p.id);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "操作失敗");
+      toast.error(apiErrorMessage(e, "操作失敗"));
     }
   };
   const selectCategory = (next: ProductCategoryOut | null) => {

@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import Link from "next/link";
-import { shopApi, ApiError } from "@/lib/api";
+import { shopApi, apiErrorMessage } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
 import type { CatalogCategoryOut, CatalogProductOut, ProductOut } from "@/lib/types";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
@@ -58,7 +58,7 @@ function ProductModal({
     shopApi
       .getProduct(productId)
       .then(setProduct)
-      .catch((e) => toast.error(e instanceof ApiError ? e.message : "載入商品失敗"));
+      .catch((e) => toast.error(apiErrorMessage(e, "載入商品失敗")));
   }, [productId]);
 
   useEffect(() => {
@@ -103,7 +103,7 @@ function ProductModal({
       toast.success("已加入購物車");
       onAdded();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "加入失敗");
+      toast.error(apiErrorMessage(e, "加入失敗"));
     } finally {
       setLoading(false);
     }
@@ -282,7 +282,7 @@ export default function ShopPage() {
         setCatalog(data);
         setSelectedCategoryId((current) => current ?? data[0]?.id ?? null);
       })
-      .catch((e) => toast.error(e instanceof ApiError ? e.message : "載入失敗"))
+      .catch((e) => toast.error(apiErrorMessage(e, "載入失敗")))
       .finally(() => setLoading(false));
   }, [setSelectedCategoryId, activityId]);
 

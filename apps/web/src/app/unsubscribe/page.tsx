@@ -4,7 +4,7 @@ import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import BrandEmblem from "@/components/brand/BrandEmblem";
-import { ApiError, notificationsApi } from "@/lib/api";
+import { notificationsApi, apiErrorMessage } from "@/lib/api";
 
 type Status = "idle" | "loading" | "done" | "error";
 
@@ -20,7 +20,7 @@ function UnsubscribeInner() {
       setMessage(res.message);
       setStatus("done");
     } catch (e) {
-      setMessage(e instanceof ApiError ? e.message : "退訂失敗，連結可能已失效");
+      setMessage(apiErrorMessage(e, "退訂失敗，連結可能已失效"));
       setStatus("error");
     }
   };

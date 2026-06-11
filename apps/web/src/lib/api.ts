@@ -105,7 +105,7 @@ import type {
 } from "./types";
 import { API_BASE, apiUrl } from "./config";
 import { ApiError } from "./api-helpers";
-export { ApiError, withFallback } from "./api-helpers";
+export { ApiError, withFallback, apiErrorMessage } from "./api-helpers";
 
 const BASE = API_BASE;
 

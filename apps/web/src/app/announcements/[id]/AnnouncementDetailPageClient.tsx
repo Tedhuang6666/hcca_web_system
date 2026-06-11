@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { toast } from "sonner";
-import { announcementsApi, ApiError } from "@/lib/api";
+import { announcementsApi, apiErrorMessage } from "@/lib/api";
 import type { AnnouncementOut } from "@/lib/types";
 import { recordRecent } from "@/lib/recents";
 import AnnouncementMarkdown from "@/components/announcements/AnnouncementMarkdown";
@@ -42,7 +42,7 @@ export default function AnnouncementDetailPageClient({
     }
     announcementsApi.get(id)
       .then(setItem)
-      .catch((e) => toast.error(e instanceof ApiError ? e.message : "載入公告失敗"))
+      .catch((e) => toast.error(apiErrorMessage(e, "載入公告失敗")))
       .finally(() => setLoading(false));
   }, [id, initialItem]);
 

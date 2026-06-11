@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import LawTreeEditor, { inferParentIdByPrevious } from "@/components/regulations/LawTreeEditor";
-import { ApiError, regulationsApi } from "@/lib/api";
+import { regulationsApi, apiErrorMessage } from "@/lib/api";
 import type { ArticleType, RegulationArticleOut, RegulationOut } from "@/lib/types";
 
 // ── 型別定義 ──────────────────────────────────────────────────────────────────
@@ -785,7 +785,7 @@ export function StepSubmit({
       URL.revokeObjectURL(url);
       toast.success("修正條文對照表已匯出");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "匯出 PDF 失敗");
+      toast.error(apiErrorMessage(e, "匯出 PDF 失敗"));
     }
   };
 
@@ -869,7 +869,7 @@ export function StepSubmit({
       toast.success("已建立修正草案，請在草案頁面確認內容後送審");
       onDone(draftReg.id);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "建立草案失敗");
+      toast.error(apiErrorMessage(e, "建立草案失敗"));
     } finally { setSubmitting(false); }
   };
 

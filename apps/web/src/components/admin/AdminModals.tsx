@@ -5,7 +5,7 @@ import { toast } from "sonner";
 
 import Modal from "@/components/ui/Modal";
 import { PermCheckboxes } from "@/components/admin/PermissionCatalog";
-import { adminApi, ApiError } from "@/lib/api";
+import { adminApi, apiErrorMessage } from "@/lib/api";
 import type { OrgWithPositions, PermissionCodeInfo, PositionSummary } from "@/lib/types";
 
 // ── 預先建立帳號 Modal ────────────────────────────────────────────────────────
@@ -46,7 +46,7 @@ export function PreRegisterModal({
       });
       toast.success("預先帳號已建立");
       onDone();
-    } catch (e) { toast.error(e instanceof ApiError ? e.message : "建立失敗"); }
+    } catch (e) { toast.error(apiErrorMessage(e, "建立失敗")); }
     finally { setLoading(false); }
   };
 
@@ -156,7 +156,7 @@ export function NewOrgModal({
       });
       toast.success("組織已建立");
       onDone();
-    } catch (e) { toast.error(e instanceof ApiError ? e.message : "建立失敗"); }
+    } catch (e) { toast.error(apiErrorMessage(e, "建立失敗")); }
     finally { setLoading(false); }
   };
 
@@ -241,7 +241,7 @@ export function NewPositionModal({
       });
       toast.success("職位已建立");
       onDone();
-    } catch (e) { toast.error(e instanceof ApiError ? e.message : "建立失敗"); }
+    } catch (e) { toast.error(apiErrorMessage(e, "建立失敗")); }
     finally { setLoading(false); }
   };
 

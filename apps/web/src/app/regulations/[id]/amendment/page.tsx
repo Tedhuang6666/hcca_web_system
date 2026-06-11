@@ -16,10 +16,9 @@ import {
   saveDrafts,
   type AmendmentType,
   type Draft,
-  type DraftStatus,
-} from "@/components/regulations/AmendmentDraftParts";
+  type DraftStatus } from "@/components/regulations/AmendmentDraftParts";
 import { usePermissions } from "@/hooks/usePermissions";
-import { ApiError, regulationsApi, regulationHref } from "@/lib/api";
+import { regulationsApi, regulationHref, apiErrorMessage } from "@/lib/api";
 import type { RegulationOut } from "@/lib/types";
 
 // ── 主頁面 ────────────────────────────────────────────────────────────────────
@@ -46,7 +45,7 @@ export default function DraftAmendmentPage() {
     setNewDraftName(`${new Date().toLocaleDateString("zh-TW")} 修正草案`);
     regulationsApi.get(id)
       .then(r => { setReg(r); setLoading(false); })
-      .catch(e => { toast.error(e instanceof ApiError ? e.message : "載入失敗"); setLoading(false); });
+      .catch(e => { toast.error(apiErrorMessage(e, "載入失敗")); setLoading(false); });
   }, [id]);
 
   // 從 localStorage 載入草案

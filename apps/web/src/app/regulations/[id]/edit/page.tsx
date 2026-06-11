@@ -15,15 +15,14 @@ import {
   buildLawTree,
   flattenTree,
   type LawNode,
-  type NewArtForm,
-} from "@/components/regulations/RegulationEditParts";
+  type NewArtForm } from "@/components/regulations/RegulationEditParts";
 import LawTreeEditor, { inferParentIdByPrevious } from "@/components/regulations/LawTreeEditor";
 import { ArticleDrawer } from "@/components/regulations/ArticleDrawer";
 import SmartTextarea from "@/components/ui/SmartTextarea";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import { useOnlineAutosave } from "@/hooks/useOnlineAutosave";
-import { ApiError, regulationsApi, regulationHref, serialTemplatesApi } from "@/lib/api";
+import { regulationsApi, regulationHref, serialTemplatesApi, apiErrorMessage } from "@/lib/api";
 import { ARTICLE_TYPE_LABEL, canNestInside } from "@/lib/regulationStructure";
 import type {
   ArticleType,
@@ -256,7 +255,7 @@ export default function EditRegulationPage() {
           .sort((a, b) => a.sort_index - b.sort_index)
       );
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "載入失敗");
+      toast.error(apiErrorMessage(e, "載入失敗"));
     } finally { setLoading(false); }
   }, [id]);
 
@@ -313,7 +312,7 @@ export default function EditRegulationPage() {
       router.replace(`${regulationHref(updated)}/edit`);
     } catch (e) {
       flushDraft();
-      toast.error(e instanceof ApiError ? e.message : "儲存失敗");
+      toast.error(apiErrorMessage(e, "儲存失敗"));
     } finally { setSavingInfo(false); }
   };
 
@@ -396,7 +395,7 @@ export default function EditRegulationPage() {
       setAddingEnd(false); setEndForm(EMPTY_FORM);
     } catch (e) {
       flushDraft();
-      toast.error(e instanceof ApiError ? e.message : "插入失敗");
+      toast.error(apiErrorMessage(e, "插入失敗"));
     } finally { setInserting(false); }
   };
 
@@ -415,7 +414,7 @@ export default function EditRegulationPage() {
       toast.success("條文已更新");
       setEditingArt(null);
       fetchReg();
-    } catch (e) { toast.error(e instanceof ApiError ? e.message : "更新失敗"); }
+    } catch (e) { toast.error(apiErrorMessage(e, "更新失敗")); }
   };
 
   // ── 條文刪除 ─────────────────────────────────────────────────────────────────
@@ -425,7 +424,7 @@ export default function EditRegulationPage() {
       await regulationsApi.deleteArticle(id, art.id, false);
       toast.success("條文已移除");
       fetchReg();
-    } catch (e) { toast.error(e instanceof ApiError ? e.message : "刪除失敗"); }
+    } catch (e) { toast.error(apiErrorMessage(e, "刪除失敗")); }
   };
 
   const handleStructureContent = async () => {
@@ -441,7 +440,7 @@ export default function EditRegulationPage() {
       );
       toast.success("已從全文解析出結構化條文");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "解析失敗");
+      toast.error(apiErrorMessage(e, "解析失敗"));
     } finally {
       setStructuringContent(false);
     }
@@ -480,7 +479,7 @@ export default function EditRegulationPage() {
       await fetchReg();
       toast.success("已新增同級條文");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "新增同級條文失敗");
+      toast.error(apiErrorMessage(e, "新增同級條文失敗"));
     }
   };
 
@@ -508,7 +507,7 @@ export default function EditRegulationPage() {
       await persistTree(clone);
       toast.success("已降級為前一節點子項");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "降級失敗");
+      toast.error(apiErrorMessage(e, "降級失敗"));
     }
   };
 
@@ -534,7 +533,7 @@ export default function EditRegulationPage() {
       toast.success("法規已發布");
       setShowPublish(false);
       router.push(currentRegHref);
-    } catch (e) { toast.error(e instanceof ApiError ? e.message : "發布失敗"); }
+    } catch (e) { toast.error(apiErrorMessage(e, "發布失敗")); }
   };
 
   // ── 送審（草稿 → 送審中） ─────────────────────────────────────────────────────
@@ -544,7 +543,7 @@ export default function EditRegulationPage() {
       await regulationsApi.submitReview(id);
       toast.success("已送交審議");
       fetchReg();
-    } catch (e) { toast.error(e instanceof ApiError ? e.message : "送審失敗"); }
+    } catch (e) { toast.error(apiErrorMessage(e, "送審失敗")); }
   };
 
   // ── 停用 / 刪除草稿 ──────────────────────────────────────────────────────────
@@ -557,7 +556,7 @@ export default function EditRegulationPage() {
       await regulationsApi.archive(id);
       toast.success("法規已停用");
       router.push(currentRegHref);
-    } catch (e) { toast.error(e instanceof ApiError ? e.message : "操作失敗"); }
+    } catch (e) { toast.error(apiErrorMessage(e, "操作失敗")); }
     finally { setConfirmArchive(false); }
   };
 
@@ -566,7 +565,7 @@ export default function EditRegulationPage() {
       await regulationsApi.delete(id);
       toast.success("草稿已刪除");
       router.push("/regulations");
-    } catch (e) { toast.error(e instanceof ApiError ? e.message : "刪除失敗"); }
+    } catch (e) { toast.error(apiErrorMessage(e, "刪除失敗")); }
     finally { setConfirmDelete(false); }
   };
 
@@ -729,7 +728,7 @@ export default function EditRegulationPage() {
                     toast.success("已完成主席公布");
                     fetchReg();
                   } catch (e) {
-                    toast.error(e instanceof ApiError ? e.message : "主席公布失敗");
+                    toast.error(apiErrorMessage(e, "主席公布失敗"));
                   }
                 }}
                 className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer whitespace-nowrap"

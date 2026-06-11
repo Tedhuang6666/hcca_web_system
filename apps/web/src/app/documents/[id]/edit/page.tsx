@@ -4,8 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
-  documentsApi, documentsRecipientsApi, serialTemplatesApi, ApiError,
-} from "@/lib/api";
+  documentsApi, documentsRecipientsApi, serialTemplatesApi, apiErrorMessage } from "@/lib/api";
 import type {
   DocumentOut, DocumentUrgency, DocumentClassification,
   DocumentCategory, RecipientType, SerialTemplateOut,
@@ -275,7 +274,7 @@ export default function EditDocumentPage() {
         id: r.id, recipient_type: r.recipient_type, name: r.name, email: r.email ?? "",
       })));
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "載入失敗");
+      toast.error(apiErrorMessage(e, "載入失敗"));
     } finally {
       setLoading(false);
     }
@@ -317,7 +316,7 @@ export default function EditDocumentPage() {
       router.push(`/documents/${id}`);
     } catch (e) {
       flushDraft();
-      toast.error(e instanceof ApiError ? e.message : "儲存失敗");
+      toast.error(apiErrorMessage(e, "儲存失敗"));
     } finally { setSaving(false); }
   };
 
@@ -328,7 +327,7 @@ export default function EditDocumentPage() {
       toast.success(`已上傳 ${file.name}`);
       fetchDoc();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "上傳失敗");
+      toast.error(apiErrorMessage(e, "上傳失敗"));
     } finally { setUploadingFile(false); }
   };
 
@@ -338,7 +337,7 @@ export default function EditDocumentPage() {
       toast.success("附件已刪除");
       fetchDoc();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "刪除失敗");
+      toast.error(apiErrorMessage(e, "刪除失敗"));
     }
   };
 

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { announcementsApi, ApiError } from "@/lib/api";
+import { announcementsApi, apiErrorMessage } from "@/lib/api";
 import type { AnnouncementListItem } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
@@ -64,7 +64,7 @@ export default function AnnouncementsPage() {
       : announcementsApi.list(params);
     req
       .then(setItems)
-      .catch((e) => toast.error(e instanceof ApiError ? e.message : "載入公告失敗"))
+      .catch((e) => toast.error(apiErrorMessage(e, "載入公告失敗")))
       .finally(() => setLoading(false));
   }, [activityId, showDrafts, canListDrafts]);
 

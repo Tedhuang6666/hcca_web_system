@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { announcementsApi, ApiError } from "@/lib/api";
+import { announcementsApi, apiErrorMessage } from "@/lib/api";
 import type { AnnouncementMediaOut } from "@/lib/types";
 import AnnouncementMarkdown from "./AnnouncementMarkdown";
 
@@ -51,7 +51,7 @@ export default function AnnouncementEditor({
       insertImage(uploaded.url, uploaded.filename);
       toast.success("圖片已插入公告");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "上傳失敗");
+      toast.error(apiErrorMessage(e, "上傳失敗"));
     } finally {
       setUploading(false);
     }

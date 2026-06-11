@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { mealApi, ApiError } from "@/lib/api";
+import { mealApi, apiErrorMessage } from "@/lib/api";
 import type { MealOrderListItem, MealOrderOut, MealOrderStatus, MenuScheduleListItem, MealVendorOut } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
 
@@ -222,7 +222,7 @@ function VendorDashboard() {
     try {
       const all = await mealApi.listOrders({ my_only: false, schedule_id: selectedSchedule, limit: 100 });
       setOrders(all);
-    } catch (e) { toast.error(e instanceof ApiError ? e.message : "載入失敗"); }
+    } catch (e) { toast.error(apiErrorMessage(e, "載入失敗")); }
     finally { setLoading(false); }
   }, [selectedSchedule]);
 
@@ -230,7 +230,7 @@ function VendorDashboard() {
 
   const handleConfirm = async (id: string) => {
     try { await mealApi.confirmOrder(id); toast.success("已確認"); await loadOrders(); }
-    catch (e) { toast.error(e instanceof ApiError ? e.message : "操作失敗"); }
+    catch (e) { toast.error(apiErrorMessage(e, "操作失敗")); }
   };
 
   const handleBatchConfirm = async () => {
@@ -260,7 +260,7 @@ function VendorDashboard() {
 
   const handleComplete = async (id: string) => {
     try { await mealApi.completeOrder(id); toast.success("已標記完成"); await loadOrders(); }
-    catch (e) { toast.error(e instanceof ApiError ? e.message : "操作失敗"); }
+    catch (e) { toast.error(apiErrorMessage(e, "操作失敗")); }
   };
 
   const filtered = orders.filter(o =>
@@ -451,7 +451,7 @@ export default function MealOrdersPage() {
     setLoading(true);
     mealApi.listOrders({ my_only: true, limit: 100 })
       .then(setOrders)
-      .catch(e => toast.error(e instanceof ApiError ? e.message : "載入失敗"))
+      .catch(e => toast.error(apiErrorMessage(e, "載入失敗")))
       .finally(() => setLoading(false));
   }, []);
 
@@ -464,7 +464,7 @@ export default function MealOrdersPage() {
       toast.success("訂單已取消");
       load();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "取消失敗");
+      toast.error(apiErrorMessage(e, "取消失敗"));
     }
   };
 

@@ -5,7 +5,7 @@ import { AlertTriangle, Info, Lock, RefreshCcw, Search, Trash2 } from "lucide-re
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
-import { ApiError, trashApi, type TrashEntry } from "@/lib/api";
+import { trashApi, type TrashEntry, apiErrorMessage } from "@/lib/api";
 
 const DAYS_OPTIONS = [1, 3, 7, 14, 30, 90];
 
@@ -27,7 +27,7 @@ export default function TrashPage() {
       });
       setRows(items);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "讀取失敗");
+      toast.error(apiErrorMessage(e, "讀取失敗"));
     } finally {
       setLoading(false);
     }

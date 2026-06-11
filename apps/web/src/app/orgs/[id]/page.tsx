@@ -3,7 +3,8 @@ import { useEffect, useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { orgsApi, adminApi, ApiError, withFallback } from "@/lib/api";
+import { Loader2 } from "lucide-react";
+import { orgsApi, adminApi, withFallback, apiErrorMessage } from "@/lib/api";
 import { apiUrl } from "@/lib/config";
 import type { OrgRead } from "@/lib/api";
 import type { OrgWithPositions, AdminUserDetail } from "@/lib/types";
@@ -35,7 +36,7 @@ export default function OrgDetailPage() {
     ]).then(([o, all]) => {
       setOrg(o);
       setAllOrgs(all);
-    }).catch(e => toast.error(e instanceof ApiError ? e.message : "載入組織資訊失敗"))
+    }).catch(e => toast.error(apiErrorMessage(e, "載入組織資訊失敗")))
       .finally(() => setLoading(false));
 
     // 嘗試載入職位（帶 permission codes）
@@ -90,8 +91,7 @@ export default function OrgDetailPage() {
   if (loading || !org) {
     return (
       <div className="flex items-center justify-center py-32">
-        <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
-          style={{ borderColor: "var(--primary)", borderTopColor: "transparent" }} />
+        <Loader2 size={32} className="animate-spin" style={{ color: "var(--primary)" }} aria-label="載入中" />
       </div>
     );
   }

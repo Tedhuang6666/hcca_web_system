@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import LawTreeEditor, { inferParentIdByPrevious } from "@/components/regulations/LawTreeEditor";
 import SmartTextarea from "@/components/ui/SmartTextarea";
-import { ApiError, orgsApi, regulationsApi, regulationHref, type OrgRead } from "@/lib/api";
+import { orgsApi, regulationsApi, regulationHref, type OrgRead, apiErrorMessage } from "@/lib/api";
 import type { ArticleType, RegulationArticleOut, RegulationCategory } from "@/lib/types";
 import { orgDisplayName } from "@/lib/orgs";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
@@ -157,7 +157,7 @@ export default function NewRegulationPage() {
       router.push(`${regulationHref(reg)}/edit`);
     } catch (e) {
       flushDraft();
-      toast.error(e instanceof ApiError ? e.message : "建立失敗");
+      toast.error(apiErrorMessage(e, "建立失敗"));
     } finally {
       setSaving(false);
     }
@@ -187,7 +187,7 @@ export default function NewRegulationPage() {
       }
       toast.error(failed[0]?.detail ?? "匯入失敗");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "匯入失敗");
+      toast.error(apiErrorMessage(e, "匯入失敗"));
     } finally {
       setImporting(false);
     }

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
-import { ApiError, documentsApi, orgsApi, usersApi, withFallback } from "@/lib/api";
+import { documentsApi, orgsApi, usersApi, withFallback, apiErrorMessage } from "@/lib/api";
 import type { OrgRead, UserSummary } from "@/lib/api";
 import type { DocumentApprovalDelegationOut, UserPositionRead } from "@/lib/types";
 import { orgDisplayName } from "@/lib/orgs";
@@ -118,7 +118,7 @@ export default function DocumentDelegationsPage() {
       resetForm();
       await load();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "儲存代理授權失敗");
+      toast.error(apiErrorMessage(e, "儲存代理授權失敗"));
     } finally {
       setSaving(false);
     }
@@ -142,7 +142,7 @@ export default function DocumentDelegationsPage() {
       toast.success("代理授權已停用");
       await load();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "停用失敗");
+      toast.error(apiErrorMessage(e, "停用失敗"));
     }
   };
 

@@ -19,8 +19,7 @@ import {
   ApiError,
   systemApi,
   type AppSettingField,
-  type AppSettingsListResponse,
-} from "@/lib/api";
+  type AppSettingsListResponse, apiErrorMessage } from "@/lib/api";
 
 type MfaPurpose =
   | { kind: "reveal"; keys: string[] }
@@ -49,7 +48,7 @@ export default function SystemSettingsPage() {
         setData(null);
         return;
       }
-      setLoadError(e instanceof ApiError ? e.message : "讀取系統設定失敗");
+      setLoadError(apiErrorMessage(e, "讀取系統設定失敗"));
     }
   }, []);
 
@@ -115,7 +114,7 @@ export default function SystemSettingsPage() {
       }
       setMfaPrompt(null);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "操作失敗");
+      toast.error(apiErrorMessage(e, "操作失敗"));
     }
   };
 
@@ -126,7 +125,7 @@ export default function SystemSettingsPage() {
       toast.success(`重啟已排程（環境：${out.environment}）`);
       setRestartScheduled(false);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "重啟失敗");
+      toast.error(apiErrorMessage(e, "重啟失敗"));
     }
   };
 

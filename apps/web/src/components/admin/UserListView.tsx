@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { adminApi, ApiError } from "@/lib/api";
+import { adminApi, apiErrorMessage } from "@/lib/api";
 import type { AdminUserDetail, PermissionCodeInfo, PositionSummary } from "@/lib/types";
 
 // ── 使用者列表視圖 ────────────────────────────────────────────────────────────
@@ -45,7 +45,7 @@ export default function UserListView({
       toast.success("職位已指派");
       setAssignPos(p => ({ ...p, [userId]: "" }));
       onUpdated();
-    } catch (e) { toast.error(e instanceof ApiError ? e.message : "指派失敗"); }
+    } catch (e) { toast.error(apiErrorMessage(e, "指派失敗")); }
     finally { setAssigning(null); }
   };
 
@@ -54,7 +54,7 @@ export default function UserListView({
       await adminApi.removeUserPosition(userId, userPositionId);
       toast.success("職位已移除");
       onUpdated();
-    } catch (e) { toast.error(e instanceof ApiError ? e.message : "移除失敗"); }
+    } catch (e) { toast.error(apiErrorMessage(e, "移除失敗")); }
   };
 
   const toggleActive = async (u: AdminUserDetail) => {
@@ -63,7 +63,7 @@ export default function UserListView({
       await adminApi.updateUser(u.id, { is_active: !u.is_active });
       toast.success(u.is_active ? "帳號已停用" : "帳號已啟用");
       onUpdated();
-    } catch (e) { toast.error(e instanceof ApiError ? e.message : "操作失敗"); }
+    } catch (e) { toast.error(apiErrorMessage(e, "操作失敗")); }
   };
 
   const toggleSuperuser = async (u: AdminUserDetail) => {
@@ -74,7 +74,7 @@ export default function UserListView({
       await adminApi.updateUser(u.id, { is_superuser: !u.is_superuser });
       toast.success(`已${action}`);
       onUpdated();
-    } catch (e) { toast.error(e instanceof ApiError ? e.message : "操作失敗"); }
+    } catch (e) { toast.error(apiErrorMessage(e, "操作失敗")); }
   };
 
   return (

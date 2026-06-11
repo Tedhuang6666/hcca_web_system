@@ -8,20 +8,17 @@ import {
   Lock,
   RefreshCcw,
   ShieldOff,
-  UserCheck,
-} from "lucide-react";
+  UserCheck } from "lucide-react";
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
 import {
-  ApiError,
   privacyApi,
   privacyRequestsApi,
   type PrivacyExportFile,
   type PrivacyExportResult,
   type PrivacyRequestOut,
-  type PrivacyRequestStatus,
-} from "@/lib/api";
+  type PrivacyRequestStatus, apiErrorMessage } from "@/lib/api";
 
 function fmtSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -43,7 +40,7 @@ export default function PrivacyPage() {
       const items = await privacyApi.listExports();
       setExports(items);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "讀取匯出列表失敗");
+      toast.error(apiErrorMessage(e, "讀取匯出列表失敗"));
     }
   }, []);
 
@@ -51,7 +48,7 @@ export default function PrivacyPage() {
     try {
       setRequests(await privacyRequestsApi.listAdmin());
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "讀取個資請求失敗");
+      toast.error(apiErrorMessage(e, "讀取個資請求失敗"));
     }
   }, []);
 
@@ -77,7 +74,7 @@ export default function PrivacyPage() {
       );
       await loadExports();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "匯出失敗");
+      toast.error(apiErrorMessage(e, "匯出失敗"));
     } finally {
       setBusy(false);
     }
@@ -104,7 +101,7 @@ export default function PrivacyPage() {
       const result = await privacyApi.anonymizeUser(uid, "假名化");
       toast.success(`完成，更新 ${result.fields_updated.length} 個欄位`);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "假名化失敗");
+      toast.error(apiErrorMessage(e, "假名化失敗"));
     } finally {
       setBusy(false);
     }
@@ -121,7 +118,7 @@ export default function PrivacyPage() {
       setRequests((items) => items.map((item) => (item.id === id ? row : item)));
       toast.success("已更新請求狀態");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "更新失敗");
+      toast.error(apiErrorMessage(e, "更新失敗"));
     } finally {
       setRequestBusy(null);
     }

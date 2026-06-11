@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { surveysApi, ApiError } from "@/lib/api";
+import { surveysApi, apiErrorMessage } from "@/lib/api";
 import type { SurveyListItem, SurveyStatus } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
 import { usePersistedState } from "@/hooks/usePersistedState";
@@ -49,7 +49,7 @@ export default function SurveysPage() {
       : surveysApi.listPublic(tab === "open" ? { status: "open" } : undefined);
     req
       .then(setSurveys)
-      .catch(e => toast.error(e instanceof ApiError ? e.message : "載入失敗"))
+      .catch(e => toast.error(apiErrorMessage(e, "載入失敗")))
       .finally(() => setLoading(false));
   }, [activityId, tab]);
 

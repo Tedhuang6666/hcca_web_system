@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo, type ReactNode } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { regulationsApi, ApiError, regulationHref } from "@/lib/api";
+import { regulationsApi, regulationHref, apiErrorMessage } from "@/lib/api";
 import type {
   RegulationArticleOut,
   RegulationCategory,
@@ -127,7 +127,7 @@ export default function RegulationsPage() {
       : regulationsApi.list(params);
     req
       .then(setAllRegs)
-      .catch((e) => toast.error(e instanceof ApiError ? e.message : "載入失敗"))
+      .catch((e) => toast.error(apiErrorMessage(e, "載入失敗")))
       .finally(() => setLoading(false));
   }, [category, search, showAll, canManage, workflow]);
 

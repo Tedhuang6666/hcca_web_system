@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ApiError, discordApi, lineApi, notificationsApi } from "@/lib/api";
+import { discordApi, lineApi, notificationsApi, apiErrorMessage } from "@/lib/api";
 import type { ChannelPref, NotificationPreferences } from "@/lib/types";
 import { enableWebPush } from "@/lib/web-push";
 import { SectionSkeleton } from "@/components/ui/Skeleton";
@@ -89,7 +89,7 @@ export default function NotificationSettingsPage() {
         setDiscordLinked(Boolean(discord.linked));
         setDigest(digestPref.frequency);
       })
-      .catch((e) => toast.error(e instanceof ApiError ? e.message : "載入通知偏好失敗"))
+      .catch((e) => toast.error(apiErrorMessage(e, "載入通知偏好失敗")))
       .finally(() => setLoading(false));
   }, []);
 
@@ -107,7 +107,7 @@ export default function NotificationSettingsPage() {
             : "已啟用每週摘要（週一 08:00 寄送）",
       );
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "更新摘要設定失敗");
+      toast.error(apiErrorMessage(e, "更新摘要設定失敗"));
       setDigest(prev);
     } finally {
       setDigestSaving(false);
@@ -133,7 +133,7 @@ export default function NotificationSettingsPage() {
       setPrefs(saved);
       toast.success("通知偏好已更新");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "更新失敗");
+      toast.error(apiErrorMessage(e, "更新失敗"));
       setPrefs(prev);
     } finally {
       setSaving(false);
@@ -185,7 +185,7 @@ export default function NotificationSettingsPage() {
       const result = await notificationsApi.testWebPush();
       toast.success(result.sent > 0 ? "已送出測試推播" : "沒有可用的推播訂閱");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "測試推播失敗");
+      toast.error(apiErrorMessage(e, "測試推播失敗"));
     } finally {
       setPushBusy(false);
     }

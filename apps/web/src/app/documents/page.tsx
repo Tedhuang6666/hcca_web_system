@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { documentsApi, orgsApi, savedFiltersApi, usersApi, ApiError, withFallback } from "@/lib/api";
+import { documentsApi, orgsApi, savedFiltersApi, usersApi, withFallback, apiErrorMessage } from "@/lib/api";
 import type { OrgRead, UserSummary } from "@/lib/api";
 import type { Activity, BatchDocumentOperationOut, DocumentListItem, DocumentStatus, SavedFilterOut } from "@/lib/types";
 import { orgDisplayName } from "@/lib/orgs";
@@ -209,7 +209,7 @@ export default function DocumentListPage() {
         setHasMore(data.length === PAGE_SIZE);
         setSelectedIds(new Set());
       })
-      .catch((e) => toast.error(e instanceof ApiError ? e.message : "載入失敗"))
+      .catch((e) => toast.error(apiErrorMessage(e, "載入失敗")))
       .finally(() => setLoading(false));
   }, [
     activeTab, search, filterCategory, filterClassification, filterVisibility,
@@ -287,7 +287,7 @@ export default function DocumentListPage() {
       setSavedFilters(prev => [created, ...prev]);
       toast.success("已儲存常用篩選");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "儲存失敗");
+      toast.error(apiErrorMessage(e, "儲存失敗"));
     }
   };
 
@@ -298,7 +298,7 @@ export default function DocumentListPage() {
       setSavedFilters(prev => prev.filter(x => x.id !== id));
       toast.success("已刪除");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "刪除失敗");
+      toast.error(apiErrorMessage(e, "刪除失敗"));
     }
   };
 
@@ -328,7 +328,7 @@ export default function DocumentListPage() {
       setOffset(nextOffset);
       setHasMore(more.length === PAGE_SIZE);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "載入失敗");
+      toast.error(apiErrorMessage(e, "載入失敗"));
     } finally {
       setLoadingMore(false);
     }
@@ -438,7 +438,7 @@ export default function DocumentListPage() {
       summarizeBatch(result);
       await reloadCurrent();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "批量操作失敗");
+      toast.error(apiErrorMessage(e, "批量操作失敗"));
     } finally {
       setBatchBusy(false);
     }

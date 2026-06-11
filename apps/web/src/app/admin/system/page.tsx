@@ -41,8 +41,7 @@ import {
   type RateLimitConfig,
   type RecentErrorItem,
   type SystemFeatureFlag,
-  type SystemMetricsSnapshot,
-} from "@/lib/api";
+  type SystemMetricsSnapshot, apiErrorMessage } from "@/lib/api";
 
 const POLL_INTERVAL_MS = 5000;
 const DEFAULT_RATE_LIMIT: RateLimitConfig = {
@@ -262,7 +261,7 @@ export default function SystemDefensePage() {
       if (ipsResult.status === "fulfilled") setIpList(ipsResult.value);
       setLoadError(null);
     } catch (e) {
-      const message = e instanceof ApiError ? e.message : "讀取防護狀態失敗";
+      const message = apiErrorMessage(e, "讀取防護狀態失敗");
       setLoadError(message);
       if (e instanceof ApiError && e.status !== 503) toast.error(message);
     } finally {
@@ -298,7 +297,7 @@ export default function SystemDefensePage() {
       toast.success(enabled ? "已啟用全站維護模式" : "已關閉維護模式");
       refresh();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "切換維護模式失敗");
+      toast.error(apiErrorMessage(e, "切換維護模式失敗"));
     }
   };
 
@@ -308,7 +307,7 @@ export default function SystemDefensePage() {
       toast.success(`防護模式已切換為${modeLabel(mode)}`);
       refresh();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "切換防護模式失敗");
+      toast.error(apiErrorMessage(e, "切換防護模式失敗"));
     }
   };
 
@@ -318,7 +317,7 @@ export default function SystemDefensePage() {
       toast.success("限流策略已更新");
       refresh();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "更新限流失敗");
+      toast.error(apiErrorMessage(e, "更新限流失敗"));
     }
   };
 
@@ -338,7 +337,7 @@ export default function SystemDefensePage() {
       setRuleReason("");
       refresh();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "建立規則失敗");
+      toast.error(apiErrorMessage(e, "建立規則失敗"));
     }
   };
 
@@ -349,7 +348,7 @@ export default function SystemDefensePage() {
       toast.success("防禦規則已停用");
       refresh();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "停用規則失敗");
+      toast.error(apiErrorMessage(e, "停用規則失敗"));
     }
   };
 
@@ -366,7 +365,7 @@ export default function SystemDefensePage() {
       setIpReason("");
       refresh();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "封鎖失敗");
+      toast.error(apiErrorMessage(e, "封鎖失敗"));
     }
   };
 
@@ -377,7 +376,7 @@ export default function SystemDefensePage() {
       toast.success(`已解除 ${ip}`);
       refresh();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "解除失敗");
+      toast.error(apiErrorMessage(e, "解除失敗"));
     }
   };
 
@@ -389,7 +388,7 @@ export default function SystemDefensePage() {
       toast.success(`已撤銷 ${out.revoked_count} 個 token`);
       setRevokeUserId("");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "撤銷失敗");
+      toast.error(apiErrorMessage(e, "撤銷失敗"));
     }
   };
 
@@ -399,7 +398,7 @@ export default function SystemDefensePage() {
       toast.success(`${flag.description}：${!flag.enabled ? "已啟用" : "已停用"}`);
       refresh();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "切換失敗");
+      toast.error(apiErrorMessage(e, "切換失敗"));
     }
   };
 
@@ -841,7 +840,7 @@ function ModulesPanel() {
     try {
       setModules(await systemApi.listModules());
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "載入模組狀態失敗");
+      toast.error(apiErrorMessage(e, "載入模組狀態失敗"));
     } finally {
       setLoading(false);
     }
@@ -860,7 +859,7 @@ function ModulesPanel() {
       toast.success(`${mod.label}：${on ? "已開啟維護" : "已關閉維護"}`);
       load();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "切換模組維護失敗");
+      toast.error(apiErrorMessage(e, "切換模組維護失敗"));
     } finally {
       setBusy(null);
     }
@@ -874,7 +873,7 @@ function ModulesPanel() {
       toast.success(`${mod.label} 已重啟`);
       load();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "重啟模組失敗");
+      toast.error(apiErrorMessage(e, "重啟模組失敗"));
     } finally {
       setBusy(null);
     }
@@ -899,7 +898,7 @@ function ModulesPanel() {
       }
       load();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "嘗試恢復失敗");
+      toast.error(apiErrorMessage(e, "嘗試恢復失敗"));
     } finally {
       setBusy(null);
     }
@@ -1036,7 +1035,7 @@ function SlowQueriesPanel() {
       const data = await systemApi.slowQueries(10);
       setItems(data.items);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "載入慢查詢失敗");
+      toast.error(apiErrorMessage(e, "載入慢查詢失敗"));
     } finally {
       setLoading(false);
     }
@@ -1194,7 +1193,7 @@ function RecentErrorsPanel() {
       const data = await systemApi.recentErrors(50);
       setItems(data.items);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "載入錯誤紀錄失敗");
+      toast.error(apiErrorMessage(e, "載入錯誤紀錄失敗"));
     } finally {
       setLoading(false);
     }
@@ -1211,7 +1210,7 @@ function RecentErrorsPanel() {
       toast.success(`已清空 ${out.cleared} 筆錯誤`);
       setItems([]);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "清空失敗");
+      toast.error(apiErrorMessage(e, "清空失敗"));
     }
   };
 
@@ -1228,7 +1227,7 @@ function RecentErrorsPanel() {
       setLookupResult(item);
     } catch (e) {
       setLookupResult(null);
-      toast.error(e instanceof ApiError ? e.message : "查詢失敗");
+      toast.error(apiErrorMessage(e, "查詢失敗"));
     } finally {
       setLookupLoading(false);
     }
@@ -1347,7 +1346,7 @@ function DeadLetterPanel() {
       const data = await systemApi.deadLetters(50);
       setItems(data.items);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "載入 Celery 失敗紀錄失敗");
+      toast.error(apiErrorMessage(e, "載入 Celery 失敗紀錄失敗"));
     } finally {
       setLoading(false);
     }
@@ -1364,7 +1363,7 @@ function DeadLetterPanel() {
       toast.success("已清空 Celery dead-letter");
       setItems([]);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "清空失敗");
+      toast.error(apiErrorMessage(e, "清空失敗"));
     }
   };
 
@@ -1458,7 +1457,7 @@ function RecoveryToolsPanel({ onChanged }: { onChanged: () => void }) {
       setLastResult(msg);
       onChanged();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "清除快取失敗");
+      toast.error(apiErrorMessage(e, "清除快取失敗"));
     } finally {
       setBusy(null);
     }
@@ -1481,7 +1480,7 @@ function RecoveryToolsPanel({ onChanged }: { onChanged: () => void }) {
       setLastResult(msg);
       onChanged();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "資料庫升級失敗");
+      toast.error(apiErrorMessage(e, "資料庫升級失敗"));
     } finally {
       setBusy(null);
     }
@@ -1501,7 +1500,7 @@ function RecoveryToolsPanel({ onChanged }: { onChanged: () => void }) {
       toast.success(msg);
       setLastResult(msg);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "重啟失敗");
+      toast.error(apiErrorMessage(e, "重啟失敗"));
     } finally {
       setBusy(null);
     }

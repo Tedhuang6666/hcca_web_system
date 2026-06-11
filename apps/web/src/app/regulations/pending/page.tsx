@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 
-import { regulationsApi, ApiError, regulationHref } from "@/lib/api";
+import { regulationsApi, regulationHref, apiErrorMessage } from "@/lib/api";
 import type { RegulationListItem, RegulationWorkflowStatus } from "@/lib/types";
 import { RegulationCategoryBadge } from "@/components/ui/StatusBadge";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -48,7 +48,7 @@ export default function PendingRegulationsDashboard() {
         for (const [key, rows] of entries) next[key] = rows;
         setGroups(next);
       })
-      .catch((e) => toast.error(e instanceof ApiError ? e.message : "載入失敗"))
+      .catch((e) => toast.error(apiErrorMessage(e, "載入失敗")))
       .finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canSeeAll]);

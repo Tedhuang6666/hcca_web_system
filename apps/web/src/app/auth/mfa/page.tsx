@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { ApiError, authApi, mfaApi } from "@/lib/api";
+import { authApi, mfaApi, apiErrorMessage } from "@/lib/api";
 import { cacheCurrentUser } from "@/lib/auth-cache";
 import { safeNextPath } from "@/lib/safe-redirect";
 
@@ -29,7 +29,7 @@ export default function MFALoginPage() {
       cacheCurrentUser(me);
       window.location.replace(next);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "驗證失敗，請重新輸入");
+      toast.error(apiErrorMessage(e, "驗證失敗，請重新輸入"));
     } finally {
       setSubmitting(false);
     }

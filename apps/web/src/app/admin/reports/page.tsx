@@ -6,11 +6,9 @@ import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
 import {
-  ApiError,
   reportsApi,
   type ReportResult,
-  type ReportSummary,
-} from "@/lib/api";
+  type ReportSummary, apiErrorMessage } from "@/lib/api";
 
 export default function ReportsPage() {
   const { isAdmin } = usePermissions();
@@ -23,7 +21,7 @@ export default function ReportsPage() {
       const r = await reportsApi.list();
       setList(r);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "讀取報表列表失敗");
+      toast.error(apiErrorMessage(e, "讀取報表列表失敗"));
     }
   }, []);
 
@@ -37,7 +35,7 @@ export default function ReportsPage() {
       const r = await reportsApi.run(id);
       setActive(r);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "執行失敗");
+      toast.error(apiErrorMessage(e, "執行失敗"));
     } finally {
       setBusy(false);
     }

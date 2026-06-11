@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { activitiesApi, announcementsApi, ApiError } from "@/lib/api";
+import { activitiesApi, announcementsApi, apiErrorMessage } from "@/lib/api";
 import type { AnnouncementMediaOut, AnnouncementOut } from "@/lib/types";
 import AnnouncementEditor from "@/components/announcements/AnnouncementEditor";
 import AnnouncementAudiencePicker, {
@@ -80,7 +80,7 @@ export default function EditAnnouncementPage() {
         setMedia(data.media);
         setActivityId(data.activity_id ?? "");
       })
-      .catch((e) => toast.error(e instanceof ApiError ? e.message : "載入公告失敗"));
+      .catch((e) => toast.error(apiErrorMessage(e, "載入公告失敗")));
   }, [id]);
 
   const saveContent = async () => {
@@ -112,7 +112,7 @@ export default function EditAnnouncementPage() {
       toast.success("公告已儲存");
     } catch (e) {
       flushDraft();
-      toast.error(e instanceof ApiError ? e.message : "儲存失敗");
+      toast.error(apiErrorMessage(e, "儲存失敗"));
     } finally {
       setSaving(false);
     }
@@ -129,7 +129,7 @@ export default function EditAnnouncementPage() {
       setItem(updated);
       toast.success("緊急公告設定已更新");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "更新緊急設定失敗");
+      toast.error(apiErrorMessage(e, "更新緊急設定失敗"));
     } finally {
       setSaving(false);
     }
@@ -145,7 +145,7 @@ export default function EditAnnouncementPage() {
       setItem(updated);
       toast.success(updated.is_published ? "公告已發布" : "公告已取消發布");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "發布狀態更新失敗");
+      toast.error(apiErrorMessage(e, "發布狀態更新失敗"));
     } finally {
       setSaving(false);
     }
@@ -159,7 +159,7 @@ export default function EditAnnouncementPage() {
       toast.success("公告已刪除");
       router.push("/announcements");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "刪除失敗");
+      toast.error(apiErrorMessage(e, "刪除失敗"));
       setSaving(false);
     }
   };

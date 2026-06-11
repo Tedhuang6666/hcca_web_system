@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { ensurePermissionCatalog, PermCheckboxes } from "@/components/admin/PermissionCatalog";
 import Modal from "@/components/ui/Modal";
 import MobileBackToList from "@/components/ui/MobileBackToList";
-import { adminApi, ApiError, classApi, orgsApi, withFallback } from "@/lib/api";
+import { adminApi, ApiError, apiErrorMessage, classApi, orgsApi, withFallback } from "@/lib/api";
 import type { OrgRead } from "@/lib/api";
 import type {
   AdminUserDetail,
@@ -75,7 +75,7 @@ function parseBatchUsers(input: string) {
 }
 
 function displayError(e: unknown, fallback: string) {
-  toast.error(e instanceof ApiError ? e.message : fallback);
+  toast.error(apiErrorMessage(e, fallback));
 }
 
 function Icon({ name }: { name: "org" | "users" | "shield" | "plus" | "search" | "edit" | "trash" }) {

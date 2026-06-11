@@ -9,18 +9,15 @@ import {
   Plus,
   RefreshCcw,
   Trash2,
-  Webhook,
-} from "lucide-react";
+  Webhook } from "lucide-react";
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
 import {
-  ApiError,
   webhooksApi,
   type WebhookDeliveryOut,
   type WebhookSubscriptionCreatedResponse,
-  type WebhookSubscriptionOut,
-} from "@/lib/api";
+  type WebhookSubscriptionOut, apiErrorMessage } from "@/lib/api";
 
 const STATUS_COLOR: Record<string, string> = {
   pending: "var(--warning)",
@@ -51,7 +48,7 @@ export default function WebhooksPage() {
       const rows = await webhooksApi.list(onlyActive);
       setSubs(rows);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "讀取失敗");
+      toast.error(apiErrorMessage(e, "讀取失敗"));
     }
   }, [onlyActive]);
 
@@ -82,7 +79,7 @@ export default function WebhooksPage() {
       setEvents("");
       await load();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "建立失敗");
+      toast.error(apiErrorMessage(e, "建立失敗"));
     } finally {
       setBusy(false);
     }
@@ -95,7 +92,7 @@ export default function WebhooksPage() {
       toast.success(sub.is_active ? "已停用" : "已啟用");
       await load();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "更新失敗");
+      toast.error(apiErrorMessage(e, "更新失敗"));
     } finally {
       setBusy(false);
     }
@@ -109,7 +106,7 @@ export default function WebhooksPage() {
       toast.success("已刪除");
       await load();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "刪除失敗");
+      toast.error(apiErrorMessage(e, "刪除失敗"));
     } finally {
       setBusy(false);
     }
@@ -121,7 +118,7 @@ export default function WebhooksPage() {
       const items = await webhooksApi.deliveries(sub.id, 100);
       setDeliveriesFor({ sub, items });
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "讀取投遞紀錄失敗");
+      toast.error(apiErrorMessage(e, "讀取投遞紀錄失敗"));
     } finally {
       setBusy(false);
     }

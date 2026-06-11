@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
 import QRCode from "qrcode";
 import {
   DndContext,
@@ -21,7 +22,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { surveysApi, ApiError } from "@/lib/api";
+import { surveysApi, ApiError, apiErrorMessage } from "@/lib/api";
 import type { SurveyOut, SurveyQuestionOut, SurveyStats, SurveyResponseAdminItem, ConditionRule } from "@/lib/types";
 import { uploadUrl } from "@/lib/config";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -550,7 +551,7 @@ function StatsView({ surveyId }: { surveyId: string }) {
       URL.revokeObjectURL(url);
       toast.success("試算表已開始下載");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "匯出失敗");
+      toast.error(apiErrorMessage(e, "匯出失敗"));
     } finally {
       setExporting(false);
     }
@@ -915,7 +916,7 @@ export default function SurveyDetailPage() {
       if (e instanceof ApiError && e.status === 409) {
         toast.error("您已填答過此問卷");
       } else {
-        toast.error(e instanceof ApiError ? e.message : "提交失敗");
+        toast.error(apiErrorMessage(e, "提交失敗"));
       }
     } finally { setSubmitting(false); }
   };
@@ -929,7 +930,7 @@ export default function SurveyDetailPage() {
         await surveysApi.close(id);
         toast.success("問卷已關閉");
         load();
-      } catch (e) { toast.error(e instanceof ApiError ? e.message : "操作失敗"); }
+      } catch (e) { toast.error(apiErrorMessage(e, "操作失敗")); }
       finally { setClosing(false); }
     } else if (survey.status === "draft") {
       setOpening(true);
@@ -937,7 +938,7 @@ export default function SurveyDetailPage() {
         await surveysApi.open(id);
         toast.success("問卷已開放填答");
         load();
-      } catch (e) { toast.error(e instanceof ApiError ? e.message : "操作失敗"); }
+      } catch (e) { toast.error(apiErrorMessage(e, "操作失敗")); }
       finally { setOpening(false); }
     }
   };
@@ -945,8 +946,7 @@ export default function SurveyDetailPage() {
   if (loading) {
     return (
       <div className="py-20 text-center" style={{ color: "var(--text-muted)" }}>
-        <div className="w-7 h-7 rounded-full border-2 border-t-transparent animate-spin mx-auto mb-3"
-          style={{ borderColor: "var(--border-strong)", borderTopColor: "var(--primary)" }} />
+        <Loader2 size={28} className="mx-auto mb-3 animate-spin" style={{ color: "var(--primary)" }} aria-label="載入中" />
         <p className="text-sm">載入中…</p>
       </div>
     );

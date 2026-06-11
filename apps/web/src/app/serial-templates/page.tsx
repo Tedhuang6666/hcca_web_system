@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { serialTemplatesApi, orgsApi, ApiError } from "@/lib/api";
+import { serialTemplatesApi, orgsApi, apiErrorMessage } from "@/lib/api";
 import type { OrgRead } from "@/lib/api";
 import type { SerialTemplateOut } from "@/lib/types";
 import { orgDisplayName } from "@/lib/orgs";
@@ -63,7 +63,7 @@ export default function SerialTemplatesPage() {
     setLoading(true);
     serialTemplatesApi.list({ active_only: activeOnly })
       .then(setTemplates)
-      .catch(e => toast.error(e instanceof ApiError ? e.message : "載入失敗"))
+      .catch(e => toast.error(apiErrorMessage(e, "載入失敗")))
       .finally(() => setLoading(false));
   }, [activeOnly]);
 
@@ -111,7 +111,7 @@ export default function SerialTemplatesPage() {
       setOrgPrefixInput("");
       load();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "建立失敗");
+      toast.error(apiErrorMessage(e, "建立失敗"));
     } finally { setSaving(false); }
   };
 
@@ -122,7 +122,7 @@ export default function SerialTemplatesPage() {
       toast.success("已停用");
       load();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "停用失敗");
+      toast.error(apiErrorMessage(e, "停用失敗"));
     }
   };
 
@@ -410,7 +410,7 @@ function TemplateCard({
       setEditing(false);
       onUpdated();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "更新失敗");
+      toast.error(apiErrorMessage(e, "更新失敗"));
     } finally {
       setSaving(false);
     }

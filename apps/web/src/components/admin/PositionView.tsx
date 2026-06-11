@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { PermCheckboxes } from "@/components/admin/PermissionCatalog";
-import { adminApi, ApiError } from "@/lib/api";
+import { adminApi, apiErrorMessage } from "@/lib/api";
 import type { AdminUserDetail, PermissionCodeInfo, PositionSummary } from "@/lib/types";
 
 // ── 職位詳情視圖 ──────────────────────────────────────────────────────────────
@@ -66,7 +66,7 @@ export default function PositionView({
       toast.success("權限已更新");
       setEditingPerms(false);
       onUpdated();
-    } catch (e) { toast.error(e instanceof ApiError ? e.message : "更新失敗"); }
+    } catch (e) { toast.error(apiErrorMessage(e, "更新失敗")); }
     finally { setSaving(false); }
   };
 
@@ -83,7 +83,7 @@ export default function PositionView({
       setAddingMember(false);
       setMemberUserId(""); setMemberSearch(""); setMemberEnd("");
       onUpdated();
-    } catch (e) { toast.error(e instanceof ApiError ? e.message : "新增失敗"); }
+    } catch (e) { toast.error(apiErrorMessage(e, "新增失敗")); }
     finally { setAddingMemberLoading(false); }
   };
 
@@ -95,7 +95,7 @@ export default function PositionView({
       await adminApi.removeUserPosition(user.id, up.user_position_id);
       toast.success("已移除");
       onUpdated();
-    } catch (e) { toast.error(e instanceof ApiError ? e.message : "移除失敗"); }
+    } catch (e) { toast.error(apiErrorMessage(e, "移除失敗")); }
   };
 
   const deletePos = async () => {
@@ -104,7 +104,7 @@ export default function PositionView({
       await adminApi.deletePosition(positionId);
       toast.success("職位已刪除");
       onUpdated();
-    } catch (e) { toast.error(e instanceof ApiError ? e.message : "刪除失敗"); }
+    } catch (e) { toast.error(apiErrorMessage(e, "刪除失敗")); }
   };
 
   const saveHierarchy = async () => {
@@ -125,7 +125,7 @@ export default function PositionView({
       setEditingHierarchy(false);
       onUpdated();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "更新失敗");
+      toast.error(apiErrorMessage(e, "更新失敗"));
     } finally {
       setSavingHierarchy(false);
     }

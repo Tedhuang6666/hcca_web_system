@@ -7,19 +7,16 @@ import {
   Eye,
   Lock,
   Play,
-  RotateCcw,
-} from "lucide-react";
+  RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
 import {
-  ApiError,
   termRolloverApi,
   type DryRunBody,
   type DryRunOut,
   type ExecuteRolloverOut,
-  type NewAssignmentIn,
-} from "@/lib/api";
+  type NewAssignmentIn, apiErrorMessage } from "@/lib/api";
 
 const SAMPLE_ASSIGNMENTS = `# 每行一筆，欄位以 tab 或逗號分隔：
 # user_id, position_id, start_date(YYYY-MM-DD), end_date(空白=無期限)
@@ -98,7 +95,7 @@ export default function TermRolloverPage() {
           (r.summary.warnings ? `（警告 ${r.summary.warnings}）` : ""),
       );
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "預覽失敗");
+      toast.error(apiErrorMessage(e, "預覽失敗"));
     } finally {
       setBusy(false);
     }
@@ -133,7 +130,7 @@ export default function TermRolloverPage() {
       setExecuteResult(r);
       toast.success(`完成 batch=${r.batch_id}`);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "執行失敗");
+      toast.error(apiErrorMessage(e, "執行失敗"));
     } finally {
       setBusy(false);
     }
@@ -159,7 +156,7 @@ export default function TermRolloverPage() {
       setExecuteResult(null);
       setDryRunResult(null);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "復原失敗");
+      toast.error(apiErrorMessage(e, "復原失敗"));
     } finally {
       setBusy(false);
     }

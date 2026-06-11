@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ApiError, policiesApi } from "@/lib/api";
+import { policiesApi, apiErrorMessage } from "@/lib/api";
 import { normalizeCouncilName } from "@/lib/copy";
 import type { PolicyDocumentOut, PolicyKind } from "@/lib/types";
 
@@ -31,7 +31,7 @@ export default function PolicyDocumentViewer({
       })
       .catch((e) => {
         if (!cancelled) {
-          setError(e instanceof ApiError ? e.message : "無法載入政策文件");
+          setError(apiErrorMessage(e, "無法載入政策文件"));
         }
       });
     return () => {

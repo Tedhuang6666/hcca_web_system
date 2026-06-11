@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ApiError, emailApi } from "@/lib/api";
+import { emailApi, apiErrorMessage } from "@/lib/api";
 import type { EmailAnalyticsOut, EmailMessageOut } from "@/lib/types";
 
 const percent = (value: number) => `${(value * 100).toFixed(1)}%`;
@@ -23,7 +23,7 @@ export default function EmailAnalyticsPage() {
     try {
       setAnalytics(await emailApi.getAnalytics(id));
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "載入分析失敗");
+      toast.error(apiErrorMessage(e, "載入分析失敗"));
     }
   };
 

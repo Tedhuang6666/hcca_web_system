@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { notificationsApi, ApiError } from "@/lib/api";
+import { notificationsApi, apiErrorMessage } from "@/lib/api";
 import type { NotificationItem } from "@/lib/api";
 import { useWS } from "@/hooks/useWS";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
@@ -177,7 +177,7 @@ export default function NotificationsPage() {
       setUnreadCount(counts.unread);
     } catch (e) {
       setLoadError(true);
-      toast.error(e instanceof ApiError ? e.message : "載入失敗");
+      toast.error(apiErrorMessage(e, "載入失敗"));
     } finally {
       setLoading(false);
     }
@@ -223,7 +223,7 @@ export default function NotificationsPage() {
       setUnreadCount(0);
       toast.success(`已將 ${r.marked_read} 則通知標記為已讀`);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "操作失敗");
+      toast.error(apiErrorMessage(e, "操作失敗"));
     }
   };
 

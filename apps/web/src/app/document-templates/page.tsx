@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ApiError, documentTemplatesApi, orgsApi } from "@/lib/api";
+import { documentTemplatesApi, orgsApi, apiErrorMessage } from "@/lib/api";
 import type { OrgRead } from "@/lib/api";
 import type {
   DocumentCategory,
@@ -94,7 +94,7 @@ export default function DocumentTemplatesPage() {
         active_only: activeOnly,
       })
       .then(setTemplates)
-      .catch((e) => toast.error(e instanceof ApiError ? e.message : "載入公文範本失敗"))
+      .catch((e) => toast.error(apiErrorMessage(e, "載入公文範本失敗")))
       .finally(() => setLoading(false));
   }, [activeOnly, keyword, orgFilter]);
 
@@ -176,7 +176,7 @@ export default function DocumentTemplatesPage() {
       resetForm();
       loadTemplates();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "儲存公文範本失敗");
+      toast.error(apiErrorMessage(e, "儲存公文範本失敗"));
     } finally {
       setSaving(false);
     }
@@ -189,7 +189,7 @@ export default function DocumentTemplatesPage() {
       toast.success("公文範本已停用");
       loadTemplates();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "停用失敗");
+      toast.error(apiErrorMessage(e, "停用失敗"));
     }
   };
 

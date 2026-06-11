@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { SeatInput, SeatOut, SeatStatus, ZoneOut } from "@/lib/types";
-import { seatingApi, ApiError } from "@/lib/api";
+import { seatingApi, apiErrorMessage } from "@/lib/api";
 
 /**
  * 自由拖拉座位圖編輯器。
@@ -198,7 +198,7 @@ export default function SeatMapEditor({
       toast.success(`已儲存 ${updated.seats.length} 個座位`);
       onSaved?.(updated);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "儲存失敗");
+      toast.error(apiErrorMessage(e, "儲存失敗"));
     } finally {
       setSaving(false);
     }

@@ -6,10 +6,8 @@ import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
 import {
-  ApiError,
   userLifecycleApi,
-  type LifecycleStatus,
-} from "@/lib/api";
+  type LifecycleStatus, apiErrorMessage } from "@/lib/api";
 
 type ActionKind = "freeze" | "archive_alumni" | "restore";
 
@@ -37,7 +35,7 @@ export default function UserLifecyclePage() {
       const s = await userLifecycleApi.status(uid);
       setStatus(s);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "讀取失敗");
+      toast.error(apiErrorMessage(e, "讀取失敗"));
       setStatus(null);
     } finally {
       setBusy(false);
@@ -77,7 +75,7 @@ export default function UserLifecyclePage() {
       );
       await loadStatus();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "操作失敗");
+      toast.error(apiErrorMessage(e, "操作失敗"));
     } finally {
       setBusy(false);
     }

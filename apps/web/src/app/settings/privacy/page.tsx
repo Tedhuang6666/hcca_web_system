@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Download, FileCheck2, RefreshCcw, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
-import { ApiError, policiesApi, privacyRequestsApi } from "@/lib/api";
+import { policiesApi, privacyRequestsApi, apiErrorMessage } from "@/lib/api";
 import type {
   PolicyConsentOut,
   PrivacyRequestOut,
@@ -52,7 +52,7 @@ export default function PrivacySettingsPage() {
         setConsents(consentRows);
       })
       .catch((e) => {
-        toast.error(e instanceof ApiError ? e.message : "載入隱私設定失敗");
+        toast.error(apiErrorMessage(e, "載入隱私設定失敗"));
       })
       .finally(() => setLoading(false));
   };
@@ -78,7 +78,7 @@ export default function PrivacySettingsPage() {
       setDescription("");
       toast.success("已送出個資權利請求");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "送出失敗");
+      toast.error(apiErrorMessage(e, "送出失敗"));
     } finally {
       setSubmitting(false);
     }
@@ -92,7 +92,7 @@ export default function PrivacySettingsPage() {
       setItems((prev) => prev.map((item) => (item.id === id ? row : item)));
       toast.success("已取消請求");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "取消失敗");
+      toast.error(apiErrorMessage(e, "取消失敗"));
     }
   };
 

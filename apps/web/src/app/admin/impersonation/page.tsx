@@ -7,16 +7,13 @@ import {
   Lock,
   LogOut,
   ShieldHalf,
-  UserCog,
-} from "lucide-react";
+  UserCog } from "lucide-react";
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
 import {
-  ApiError,
   impersonationApi,
-  type ImpersonationStartResponse,
-} from "@/lib/api";
+  type ImpersonationStartResponse, apiErrorMessage } from "@/lib/api";
 
 export default function ImpersonationPage() {
   const { isAdmin } = usePermissions();
@@ -46,7 +43,7 @@ export default function ImpersonationPage() {
       setActive(r);
       toast.success(`已啟動 ${r.expires_in_minutes} 分鐘 impersonation`);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "啟動失敗");
+      toast.error(apiErrorMessage(e, "啟動失敗"));
     } finally {
       setBusy(false);
     }
@@ -60,7 +57,7 @@ export default function ImpersonationPage() {
       toast.success("已結束 impersonation（token 已撤銷）");
       setActive(null);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "結束失敗");
+      toast.error(apiErrorMessage(e, "結束失敗"));
     } finally {
       setBusy(false);
     }

@@ -7,16 +7,13 @@ import {
   Lock,
   Plus,
   RefreshCcw,
-  Save,
-} from "lucide-react";
+  Save } from "lucide-react";
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
 import {
-  ApiError,
   featureFlagsApi,
-  type FeatureFlagOut,
-} from "@/lib/api";
+  type FeatureFlagOut, apiErrorMessage } from "@/lib/api";
 
 export default function FeatureFlagsPage() {
   const { isAdmin } = usePermissions();
@@ -30,7 +27,7 @@ export default function FeatureFlagsPage() {
       const rows = await featureFlagsApi.list();
       setFlags(rows);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "讀取失敗");
+      toast.error(apiErrorMessage(e, "讀取失敗"));
     }
   }, []);
 
@@ -52,7 +49,7 @@ export default function FeatureFlagsPage() {
       setNewDesc("");
       await load();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "新增失敗");
+      toast.error(apiErrorMessage(e, "新增失敗"));
     } finally {
       setBusy(false);
     }
@@ -159,7 +156,7 @@ function FlagRow({ flag, onChange }: { flag: FeatureFlagOut; onChange: () => voi
       toast.success(`已儲存 ${flag.key}`);
       onChange();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "儲存失敗");
+      toast.error(apiErrorMessage(e, "儲存失敗"));
     } finally {
       setBusy(false);
     }
@@ -173,7 +170,7 @@ function FlagRow({ flag, onChange }: { flag: FeatureFlagOut; onChange: () => voi
       toast.success("已封存");
       onChange();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "封存失敗");
+      toast.error(apiErrorMessage(e, "封存失敗"));
     } finally {
       setBusy(false);
     }

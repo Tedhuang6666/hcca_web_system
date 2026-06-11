@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { documentsApi, documentTemplatesApi, serialTemplatesApi, orgsApi, usersApi, ApiError } from "@/lib/api";
+import { documentsApi, documentTemplatesApi, serialTemplatesApi, orgsApi, usersApi, apiErrorMessage } from "@/lib/api";
 import type {
   DocumentUrgency, DocumentClassification, DocumentCategory,
   DocumentVisibility, RecipientType, SerialTemplateOut,
@@ -411,7 +411,7 @@ export default function NewDocumentPage() {
         );
         toast.success(`已套用公文範本「${template.name}」`);
       })
-      .catch((e) => toast.error(e instanceof ApiError ? e.message : "套用公文範本失敗"));
+      .catch((e) => toast.error(apiErrorMessage(e, "套用公文範本失敗")));
   }, [templateId]);
 
 
@@ -467,7 +467,7 @@ export default function NewDocumentPage() {
     } catch (e) {
       flushDraft();
       flushDraftFiles();
-      toast.error(e instanceof ApiError ? e.message : "儲存失敗");
+      toast.error(apiErrorMessage(e, "儲存失敗"));
     } finally {
       setSaving(false);
     }

@@ -6,11 +6,9 @@ import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
 import {
-  ApiError,
   apiKeysApi,
   type ApiKeyCreatedResponse,
-  type ApiKeyOut,
-} from "@/lib/api";
+  type ApiKeyOut, apiErrorMessage } from "@/lib/api";
 
 export default function ApiKeysPage() {
   const { isAdmin } = usePermissions();
@@ -30,7 +28,7 @@ export default function ApiKeysPage() {
       const rows = await apiKeysApi.list(includeRevoked);
       setKeys(rows);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "讀取失敗");
+      toast.error(apiErrorMessage(e, "讀取失敗"));
     }
   }, [includeRevoked]);
 
@@ -60,7 +58,7 @@ export default function ApiKeysPage() {
       setExpiresAt("");
       await load();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "建立失敗");
+      toast.error(apiErrorMessage(e, "建立失敗"));
     } finally {
       setBusy(false);
     }
@@ -75,7 +73,7 @@ export default function ApiKeysPage() {
       toast.success("已撤銷");
       await load();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "撤銷失敗");
+      toast.error(apiErrorMessage(e, "撤銷失敗"));
     } finally {
       setBusy(false);
     }

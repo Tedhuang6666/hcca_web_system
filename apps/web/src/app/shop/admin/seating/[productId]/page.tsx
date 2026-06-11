@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { toast } from "sonner";
-import { seatingApi, shopApi, ApiError } from "@/lib/api";
+import { seatingApi, shopApi, apiErrorMessage } from "@/lib/api";
 import { usePermissions } from "@/hooks/usePermissions";
 import Modal from "@/components/ui/Modal";
 import MultiCombobox from "@/components/ui/MultiCombobox";
@@ -106,7 +106,7 @@ function WaveEditor({ zone, onSaved }: { zone: ZoneOut; onSaved: (z: ZoneOut) =>
       toast.success("已儲存分批開放時段");
       onSaved(updated);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "儲存失敗");
+      toast.error(apiErrorMessage(e, "儲存失敗"));
     } finally {
       setSaving(false);
     }
@@ -164,7 +164,7 @@ function AssignmentsPanel({ zone }: { zone: ZoneOut }) {
       toast.success("已釋放");
       load();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "釋放失敗");
+      toast.error(apiErrorMessage(e, "釋放失敗"));
     }
   };
 
@@ -214,7 +214,7 @@ export default function ProductSeatingPage() {
       setActiveZone(z);
       setTab("seats");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "讀取場次失敗");
+      toast.error(apiErrorMessage(e, "讀取場次失敗"));
     }
   };
 
@@ -235,7 +235,7 @@ export default function ProductSeatingPage() {
       openZone(z.id);
       toast.success("已建立場次");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "建立失敗");
+      toast.error(apiErrorMessage(e, "建立失敗"));
     }
   };
 
@@ -247,7 +247,7 @@ export default function ProductSeatingPage() {
       loadZones();
       toast.success("已刪除");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "刪除失敗");
+      toast.error(apiErrorMessage(e, "刪除失敗"));
     }
   };
 

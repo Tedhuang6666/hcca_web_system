@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import QRCode from "qrcode";
 import { toast } from "sonner";
-import { ApiError, discordApi, mfaApi } from "@/lib/api";
+import { discordApi, mfaApi, apiErrorMessage } from "@/lib/api";
 import type { DiscordBindingOut, MFASetupOut, MFAStatusOut } from "@/lib/types";
 import { SectionSkeleton } from "@/components/ui/Skeleton";
 
@@ -25,7 +25,7 @@ export default function SecuritySettingsPage() {
     setLoading(true);
     mfaApi.status()
       .then(setStatus)
-      .catch((e) => toast.error(e instanceof ApiError ? e.message : "載入安全設定失敗"))
+      .catch((e) => toast.error(apiErrorMessage(e, "載入安全設定失敗")))
       .finally(() => setLoading(false));
   };
 
@@ -69,7 +69,7 @@ export default function SecuritySettingsPage() {
       setSetup(result);
       setConfirmCode("");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "建立 2FA 設定失敗");
+      toast.error(apiErrorMessage(e, "建立 2FA 設定失敗"));
     } finally {
       setBusy(false);
     }
@@ -85,7 +85,7 @@ export default function SecuritySettingsPage() {
       setConfirmCode("");
       loadStatus();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "驗證碼錯誤");
+      toast.error(apiErrorMessage(e, "驗證碼錯誤"));
     } finally {
       setBusy(false);
     }
@@ -99,7 +99,7 @@ export default function SecuritySettingsPage() {
       setDisableCode("");
       loadStatus();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "停用失敗");
+      toast.error(apiErrorMessage(e, "停用失敗"));
     } finally {
       setBusy(false);
     }
@@ -114,7 +114,7 @@ export default function SecuritySettingsPage() {
       toast.success("備用碼已重新產生");
       loadStatus();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "重產備用碼失敗");
+      toast.error(apiErrorMessage(e, "重產備用碼失敗"));
     } finally {
       setBusy(false);
     }
@@ -137,7 +137,7 @@ export default function SecuritySettingsPage() {
       });
       toast.success("Discord 綁定已解除");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "解除 Discord 綁定失敗");
+      toast.error(apiErrorMessage(e, "解除 Discord 綁定失敗"));
     } finally {
       setDiscordBusy(false);
     }

@@ -10,19 +10,16 @@ import {
   Lock,
   Play,
   RefreshCcw,
-  Trash2,
-} from "lucide-react";
+  Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
 import {
-  ApiError,
   lifecycleApi,
   type LifecycleAction,
   type LifecycleArchiveFile,
   type LifecyclePreviewResult,
-  type LifecycleRuleSummary,
-} from "@/lib/api";
+  type LifecycleRuleSummary, apiErrorMessage } from "@/lib/api";
 
 type RunningKey = string | null;
 
@@ -66,7 +63,7 @@ export default function DataLifecyclePage() {
       setRules(rs);
       setArchives(ar);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "讀取失敗");
+      setError(apiErrorMessage(e, "讀取失敗"));
     }
   }, []);
 
@@ -89,7 +86,7 @@ export default function DataLifecyclePage() {
       setPreviews((prev) => ({ ...prev, [ruleId]: result }));
       toast.success(`預覽：將處理 ${result.matched_count} 筆`);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "預覽失敗");
+      toast.error(apiErrorMessage(e, "預覽失敗"));
     } finally {
       setRunning(null);
     }
@@ -135,7 +132,7 @@ export default function DataLifecyclePage() {
       );
       await reload();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "執行失敗");
+      toast.error(apiErrorMessage(e, "執行失敗"));
     } finally {
       setRunning(null);
     }
@@ -147,7 +144,7 @@ export default function DataLifecyclePage() {
       const rows = await lifecycleApi.previewArchive(path, 50);
       setArchivePreview({ path, rows });
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "讀取歸檔失敗");
+      toast.error(apiErrorMessage(e, "讀取歸檔失敗"));
     } finally {
       setRunning(null);
     }

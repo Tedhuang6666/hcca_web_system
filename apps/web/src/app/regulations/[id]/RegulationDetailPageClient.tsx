@@ -10,8 +10,8 @@ import {
   FilePenLine,
   ScrollText,
   Trash2,
-  Undo2,
-} from "lucide-react";
+  Loader2,
+  Undo2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -39,7 +39,7 @@ import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { RegulationCategoryBadge } from "@/components/ui/StatusBadge";
 import { usePermissions } from "@/hooks/usePermissions";
 import { usePersistedZoom } from "@/hooks/usePersistedZoom";
-import { ApiError, documentsApi, regulationsApi, regulationHref } from "@/lib/api";
+import { documentsApi, regulationsApi, regulationHref, apiErrorMessage } from "@/lib/api";
 import { apiUrl } from "@/lib/config";
 import { formatGeneratedHistoryRows, splitLegislativeHistory } from "@/lib/regulationHistory";
 import { recordRecent } from "@/lib/recents";
@@ -132,7 +132,7 @@ export default function RegulationDetailPageClient() {
   useEffect(() => {
     regulationsApi.get(id)
       .then(setReg)
-      .catch(e => toast.error(e instanceof ApiError ? e.message : "載入失敗"))
+      .catch(e => toast.error(apiErrorMessage(e, "載入失敗")))
       .finally(() => setLoading(false));
   }, [id]);
 
@@ -183,7 +183,7 @@ export default function RegulationDetailPageClient() {
     } else {
       setWfActionLoading(true);
       try { await fn(""); reload(); toast.success(`${label} 成功`); }
-      catch (e) { toast.error(e instanceof ApiError ? e.message : "操作失敗"); }
+      catch (e) { toast.error(apiErrorMessage(e, "操作失敗")); }
       finally { setWfActionLoading(false); }
     }
   }, [reload]);
@@ -212,7 +212,7 @@ export default function RegulationDetailPageClient() {
       setMeetingPicker(null);
       reload();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "操作失敗");
+      toast.error(apiErrorMessage(e, "操作失敗"));
     } finally { setWfActionLoading(false); }
   }, [meetingPicker, pickerMeetingId, pickerNote, id, reload]);
 
@@ -682,10 +682,7 @@ export default function RegulationDetailPageClient() {
                   className="px-3 py-1.5 rounded-lg text-xs font-medium inline-flex items-center gap-1.5 transition-colors hover:opacity-80 disabled:opacity-60 disabled:cursor-wait"
                   style={{ color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
                   {printingPdf ? (
-                    <svg className="animate-spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                      <path d="M21 12a9 9 0 0 1-9 9"/>
-                      <path d="M3 12a9 9 0 0 1 9-9"/>
-                    </svg>
+                    <Loader2 size={12} className="animate-spin" aria-hidden={true} />
                   ) : (
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
                       <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
@@ -821,7 +818,7 @@ export default function RegulationDetailPageClient() {
                         const updated = await regulationsApi.unfreeze(id);
                         setReg(updated);
                         toast.success("法規已解凍");
-                      } catch (e) { toast.error(e instanceof ApiError ? e.message : "解凍失敗"); }
+                      } catch (e) { toast.error(apiErrorMessage(e, "解凍失敗")); }
                     }}
                     className="mt-2 text-xs px-3 py-1 rounded-lg"
                     style={{ color: "#fb923c", background: "rgba(251,146,60,0.1)", border: "1px solid rgba(251,146,60,0.3)" }}>
@@ -1298,7 +1295,7 @@ export default function RegulationDetailPageClient() {
                     setReg(updated);
                     setShowFreeze(false);
                     toast.success("法規已凍結");
-                  } catch (e) { toast.error(e instanceof ApiError ? e.message : "凍結失敗"); }
+                  } catch (e) { toast.error(apiErrorMessage(e, "凍結失敗")); }
                   finally { setFreezeLoading(false); }
                 }}
                 className="text-xs px-4 py-1.5 rounded-lg font-medium disabled:opacity-50"
@@ -1381,7 +1378,7 @@ export default function RegulationDetailPageClient() {
                     setShowRepeal(false);
                     toast.success("法規已廢止");
                   } catch (e) {
-                    toast.error(e instanceof ApiError ? e.message : "廢止失敗");
+                    toast.error(apiErrorMessage(e, "廢止失敗"));
                   } finally {
                     setRepealLoading(false);
                   }
@@ -1410,7 +1407,7 @@ export default function RegulationDetailPageClient() {
               reload();
               toast.success(`${wfNoteModal.label} 成功`);
             } catch (e) {
-              toast.error(e instanceof ApiError ? e.message : "操作失敗");
+              toast.error(apiErrorMessage(e, "操作失敗"));
             } finally { setWfActionLoading(false); }
           }}
         />

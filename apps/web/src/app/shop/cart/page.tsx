@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { shopApi, ApiError } from "@/lib/api";
+import { shopApi, apiErrorMessage } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
 import type { CartOut, CartItemOut } from "@/lib/types";
 
@@ -133,7 +133,7 @@ export default function CartPage() {
     shopApi
       .getCart()
       .then(setCart)
-      .catch((e) => toast.error(e instanceof ApiError ? e.message : "載入失敗"))
+      .catch((e) => toast.error(apiErrorMessage(e, "載入失敗")))
       .finally(() => setLoading(false));
   }, []);
 
@@ -143,7 +143,7 @@ export default function CartPage() {
     try {
       setCart(await shopApi.updateCartItem(itemId, qty));
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "更新失敗");
+      toast.error(apiErrorMessage(e, "更新失敗"));
     }
   };
 
@@ -151,7 +151,7 @@ export default function CartPage() {
     try {
       setCart(await shopApi.removeCartItem(itemId));
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "移除失敗");
+      toast.error(apiErrorMessage(e, "移除失敗"));
     }
   };
 
@@ -162,7 +162,7 @@ export default function CartPage() {
       toast.success(`送單成功，共 ${orders.length} 張訂單`);
       router.push("/shop/orders");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "送單失敗");
+      toast.error(apiErrorMessage(e, "送單失敗"));
     } finally {
       setSubmitting(false);
     }
