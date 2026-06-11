@@ -6,13 +6,14 @@ import uuid
 from typing import Annotated
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.clock import local_today
 from api.core.database import get_db
+from api.core.login_lockout import is_locked, record_failure, record_success
 from api.core.permission_codes import PermissionCode
 from api.core.posthog import get_posthog_client
 from api.dependencies.auth import get_current_active_user, get_optional_user
@@ -290,13 +291,33 @@ async def create_petition(
 
 @router.get("/lookup", response_model=PetitionLookupOut, summary="以案號與驗證碼查詢案件")
 async def lookup_case(
+    request: Request,
     session: DbDep,
     case_number: str = Query(..., min_length=7, max_length=7, pattern=r"^\d{7}$"),
     verification_code: str = Query(..., min_length=5, max_length=5, pattern=r"^\d{5}$"),
 ) -> PetitionLookupOut:
+    # 此端點未認證、成功即回傳陳情人 PII（姓名/Email/學號）。驗證碼僅 5 位數
+    # （10 萬組）且案號可枚舉，僅靠全域限流不足以擋暴力破解 → 加上 per-IP 與
+    # per-案號 的失敗鎖定（5 次/10 分 → 鎖 15 分），讓 PII 暴力枚舉不可行。
+    client_ip = request.client.host if request.client else "unknown"
+    ip_key = f"petition_lookup_ip:{client_ip}"
+    case_key = f"petition_lookup_case:{case_number}"
+    for lock_key in (ip_key, case_key):
+        locked = await is_locked(lock_key)
+        if locked:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"嘗試次數過多，請於 {locked // 60 + 1} 分鐘後再試",
+            )
+
     case_obj = await petition_svc.get_case_by_number(session, case_number)
     if case_obj is None or not petition_svc.verify_code(case_obj, verification_code):
+        await record_failure(ip_key)
+        await record_failure(case_key)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="案號或驗證碼錯誤")
+
+    await record_success(ip_key)
+    await record_success(case_key)
     return PetitionLookupOut.model_validate(
         await _decorate_case(case_obj, include_internal=False, can_view_submitter=True)
     )

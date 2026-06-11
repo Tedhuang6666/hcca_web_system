@@ -98,10 +98,16 @@ async def _authenticate_ws(websocket: WebSocket) -> str | None:
 
 async def _assert_room_access(room: str, user_id: str) -> None:
     """
-    房間授權規則：
+    房間授權規則（預設拒絕 default-deny）：
     - user:{uuid}：只能加入自己的房間；admin:all 例外
     - org:{uuid}：必須是該 org 成員；admin:all 例外
-    - 其他房間：任何已登入者可加入
+    - meeting:{uuid}：已登入者可加入（即時議程/投票頁使用）
+    - 其餘房間（election/document/petition/survey/...）：僅 admin:all
+
+    安全：先前為「其他房間任何已登入者可加入」的 default-allow，導致任何已登入者
+    （含外部 Google 帳號）可加入 election:/meeting:/petition: 等伺服器推播房間，
+    讀取未公開選舉的即時票數、會議即時內容等敏感資料。公開開票請改用唯讀的
+    /ws/public/elections/{id}（僅限 is_public 選舉）。
     """
     try:
         user_uuid = uuid.UUID(user_id)
@@ -132,6 +138,13 @@ async def _assert_room_access(room: str, user_id: str) -> None:
             if not is_member:
                 raise PermissionError("無權加入此組織房間")
             return
+
+        if room.startswith("meeting:"):
+            # 即時議程/投票頁使用；保留已登入者可加入。
+            return
+
+        # 預設拒絕：未明確授權的房間一律不得加入。
+        raise PermissionError("無權加入此房間")
 
 
 # ── WebSocket 端點 ────────────────────────────────────────────────────────────
@@ -192,30 +205,12 @@ async def websocket_room(
         while True:
             raw = await websocket.receive_json()
 
-            msg_type: str = raw.get("type", "message")
-            data: dict = raw.get("data", {})
-
-            # 心跳回應：純內部記帳，不廣播
-            if msg_type == "pong":
+            # 本端點為伺服器→客戶端單向推播：只處理心跳，其餘 client 訊息一律忽略，
+            # 不轉發任何 client 廣播。先前會把 client 訊息廣播回房間，導致任何已登入者
+            # 可注入/竄改房間訊息（例如對公開開票房間推送假的 election_update 票數）。
+            # 真正的動作（投票等）一律走 HTTP 端點，不依賴 WS 上行訊息。
+            if raw.get("type") == "pong":
                 manager.notify_pong(websocket)
-                continue
-
-            outbound = manager.build_message(msg_type, data, room=room, sender=user_id)
-
-            if msg_type == "broadcast_all":
-                # 特殊類型：全域廣播，僅允許擁有 admin:all 權限的使用者
-                async with AsyncSessionLocal() as db:
-                    codes = await get_user_permission_codes(db, user_id)
-                if "admin:all" not in codes:
-                    await websocket.send_json(
-                        manager.build_message(
-                            "error", {"detail": "需要 admin:all 權限才能執行全域廣播"}, room=room
-                        )
-                    )
-                else:
-                    await manager.broadcast_all(outbound)
-            else:
-                await manager.broadcast_to_room(room, outbound)
 
     except WebSocketDisconnect:
         manager.disconnect(websocket, room)
