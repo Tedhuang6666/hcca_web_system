@@ -279,6 +279,12 @@ function isOffline(): boolean {
   return typeof navigator !== "undefined" && navigator.onLine === false;
 }
 
+function isProtectionRecoveryPath(pathname: string): boolean {
+  return ["/login", "/auth", "/admin", "/maintenance"].some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
+
 async function request<T>(
   path: string,
   init: RequestInit = {},
@@ -396,7 +402,7 @@ async function request<T>(
         const kind = payload.maintenance ? "maintenance" : "busy";
         const params = new URLSearchParams({ retry: retryAfter, detail, kind });
         if (payload.until) params.set("until", String(payload.until));
-        if (!window.location.pathname.startsWith("/maintenance")) {
+        if (!isProtectionRecoveryPath(window.location.pathname)) {
           window.location.assign(`/maintenance?${params.toString()}`);
         }
       }
