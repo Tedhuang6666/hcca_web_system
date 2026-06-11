@@ -101,6 +101,11 @@ export default function ProfilePage() {
   const [lineCode, setLineCode] = useState<LineLinkCodeOut | null>(null);
   const [lineBusy, setLineBusy] = useState(false);
   const [discordBusy, setDiscordBusy] = useState(false);
+  const [linkedEmails, setLinkedEmails] = useState<string[]>([]);
+  const [newEmail, setNewEmail] = useState("");
+  const [emailCode, setEmailCode] = useState("");
+  const [emailVerificationPending, setEmailVerificationPending] = useState(false);
+  const [emailBusy, setEmailBusy] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -108,9 +113,11 @@ export default function ProfilePage() {
     Promise.all([
       usersApi.me().catch(() => null),
       usersApi.myPositions(false).catch(() => []),
-    ]).then(([u, pos]) => {
+      usersApi.myEmails().catch(() => ({ emails: [] })),
+    ]).then(([u, pos, emailResult]) => {
       if (u) setUser(u);
       setPositions(pos as UserPositionRead[]);
+      setLinkedEmails(emailResult.emails);
     }).finally(() => setLoading(false));
 
     classApi.myClass().then(setMyClass).catch(() => setMyClass(null));
@@ -160,6 +167,43 @@ export default function ProfilePage() {
       const updated = await usersApi.updateMe({ show_email: !user.show_email });
       setUser(updated);
     } catch { /* ignore */ }
+  }
+
+  async function requestEmailVerification() {
+    if (!newEmail.trim()) {
+      toast.error("請輸入要連結的 Email");
+      return;
+    }
+    setEmailBusy(true);
+    try {
+      await usersApi.requestEmailVerification(newEmail.trim());
+      setEmailVerificationPending(true);
+      toast.success("驗證碼已寄出，10 分鐘內有效");
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "寄送驗證碼失敗");
+    } finally {
+      setEmailBusy(false);
+    }
+  }
+
+  async function verifyEmail() {
+    if (!/^\d{6}$/.test(emailCode)) {
+      toast.error("請輸入 6 位數驗證碼");
+      return;
+    }
+    setEmailBusy(true);
+    try {
+      const result = await usersApi.verifyEmail(newEmail.trim(), emailCode);
+      setLinkedEmails(result.emails);
+      setNewEmail("");
+      setEmailCode("");
+      setEmailVerificationPending(false);
+      toast.success("登入 Email 已連結");
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "驗證失敗");
+    } finally {
+      setEmailBusy(false);
+    }
   }
 
   async function createLineCode() {
@@ -303,7 +347,61 @@ export default function ProfilePage() {
           </div>
           <div>
             <p className="text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>電子郵件</p>
-            <p className="text-sm" style={{ color: "var(--text-primary)" }}>{user?.email ?? "—"}</p>
+            <div className="space-y-1">
+              {(linkedEmails.length > 0 ? linkedEmails : [user?.email ?? "—"]).map((email) => (
+                <p key={email} className="text-sm break-all" style={{ color: "var(--text-primary)" }}>
+                  {email}
+                  {email === user?.email && (
+                    <span className="ml-2 text-[10px]" style={{ color: "var(--text-muted)" }}>
+                      主要
+                    </span>
+                  )}
+                </p>
+              ))}
+            </div>
+            <div className="mt-3 space-y-2">
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="email"
+                  value={newEmail}
+                  onChange={(event) => {
+                    setNewEmail(event.target.value);
+                    setEmailVerificationPending(false);
+                    setEmailCode("");
+                  }}
+                  placeholder="新增私人或其他校務 Email"
+                  className="input flex-1"
+                />
+                <button
+                  onClick={requestEmailVerification}
+                  disabled={emailBusy || !newEmail.trim()}
+                  className="btn btn-primary text-xs"
+                >
+                  寄送驗證碼
+                </button>
+              </div>
+              {emailVerificationPending && (
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    inputMode="numeric"
+                    value={emailCode}
+                    onChange={(event) => setEmailCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="6 位數驗證碼"
+                    className="input flex-1 font-mono"
+                  />
+                  <button
+                    onClick={verifyEmail}
+                    disabled={emailBusy || emailCode.length !== 6}
+                    className="btn btn-primary text-xs"
+                  >
+                    驗證並連結
+                  </button>
+                </div>
+              )}
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                新 Email 驗證成功後，可使用該 Google 帳號登入同一個平台帳戶。
+              </p>
+            </div>
           </div>
 
           {/* 公文承辦人顯示設定 */}

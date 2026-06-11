@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.main import app
 from api.dependencies.auth import get_current_active_user
+from api.main import app
 from api.models.org import Org, Position, UserPosition
 from api.models.user import User
+from api.models.user_identity import UserIdentity
+from api.routers import auth as auth_router
 
 
 async def _seed_admin_data(db: AsyncSession) -> tuple[User, User, Org, Position, UserPosition]:
@@ -145,6 +148,118 @@ async def test_admin_can_pre_register_external_email_with_login_permission(
 
 
 @pytest.mark.asyncio
+async def test_pre_register_school_email_extracts_student_id_and_links_aliases(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin, _, _, _, _ = await _seed_admin_data(db_session)
+    _override_user(admin)
+
+    response = await client.post(
+        "/admin/users/pre-register",
+        json={
+            "display_name": "多信箱學生",
+            "email": "g0112040103@hchs.hc.edu.tw",
+            "linked_emails": ["student.private@gmail.com"],
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["student_id"] == "112040103"
+    assert payload["linked_emails"] == [
+        "g0112040103@hchs.hc.edu.tw",
+        "student.private@gmail.com",
+    ]
+    assert payload["allow_external_login"] is True
+
+
+@pytest.mark.asyncio
+async def test_google_login_with_linked_email_uses_existing_user(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = User(
+        email="g0112040104@hchs.hc.edu.tw",
+        display_name="別名登入學生",
+        student_id="112040104",
+        is_active=True,
+        is_verified=False,
+        allow_external_login=True,
+    )
+    db_session.add(user)
+    await db_session.flush()
+    db_session.add(
+        UserIdentity(
+            user_id=user.id,
+            provider="email",
+            external_id="linked.private@gmail.com",
+            email="linked.private@gmail.com",
+            display_name=user.display_name,
+            linked_at=datetime.now(UTC),
+        )
+    )
+    await db_session.flush()
+
+    async def not_suspicious(*_args: object) -> tuple[bool, None]:
+        return False, None
+
+    async def no_op(*_args: object) -> None:
+        return None
+
+    monkeypatch.setattr(auth_router, "check_suspicious_login", not_suspicious)
+    monkeypatch.setattr(auth_router, "record_login", no_op)
+
+    logged_in = await auth_router._upsert_google_user(
+        db_session,
+        google_sub="google-linked-sub",
+        email="linked.private@gmail.com",
+        display_name="別名登入學生",
+        avatar_url=None,
+        client_ip="127.0.0.1",
+        user_agent="pytest",
+    )
+
+    assert logged_in.id == user.id
+    assert (
+        await db_session.scalar(select(User).where(User.email == "linked.private@gmail.com"))
+        is None
+    )
+    identity = await db_session.scalar(
+        select(UserIdentity).where(
+            UserIdentity.provider == "google",
+            UserIdentity.external_id == "google-linked-sub",
+        )
+    )
+    assert identity is not None
+    assert identity.user_id == user.id
+
+
+@pytest.mark.asyncio
+async def test_admin_can_link_school_email_to_existing_user_and_extract_student_id(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin, member, _, _, _ = await _seed_admin_data(db_session)
+    _override_user(admin)
+
+    response = await client.post(
+        f"/admin/users/{member.id}/emails",
+        json={"emails": ["g0112040105@hchs.hc.edu.tw", "member.private@gmail.com"]},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["student_id"] == "112040105"
+    assert payload["allow_external_login"] is True
+    assert set(payload["linked_emails"]) == {
+        "g0112040105@hchs.hc.edu.tw",
+        "member@school.edu",
+        "member.private@gmail.com",
+    }
+
+
+@pytest.mark.asyncio
 async def test_admin_can_toggle_external_login_permission(
     client: AsyncClient,
     db_session: AsyncSession,
@@ -159,3 +274,37 @@ async def test_admin_can_toggle_external_login_permission(
 
     assert response.status_code == 200
     assert response.json()["allow_external_login"] is True
+
+
+@pytest.mark.asyncio
+async def test_admin_can_batch_pre_register_with_partial_failure(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin, member, _, position, _ = await _seed_admin_data(db_session)
+    _override_user(admin)
+
+    response = await client.post(
+        "/admin/users/pre-register/batch",
+        json={
+            "users": [
+                {
+                    "display_name": "批次學生",
+                    "student_id": "112040101",
+                    "position_ids": [str(position.id)],
+                },
+                {
+                    "display_name": "重複帳號",
+                    "email": member.email,
+                    "position_ids": [str(position.id)],
+                },
+            ]
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["created"] == 1
+    assert payload["failed"] == 1
+    assert payload["results"][0]["email"] == "g0112040101@hchs.hc.edu.tw"
+    assert payload["results"][1]["error"] == "學號或 Email 已存在"

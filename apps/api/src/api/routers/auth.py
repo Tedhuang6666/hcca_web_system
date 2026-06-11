@@ -1,6 +1,7 @@
 """身份驗證路由 - Google / Discord OAuth2 + JWT Token 管理"""
 
 import logging
+from datetime import UTC, datetime
 from urllib.parse import urlencode, urlsplit
 
 from anyio import to_thread
@@ -32,6 +33,7 @@ from api.core.security import (
 )
 from api.dependencies.auth import get_current_active_user
 from api.models.user import User
+from api.models.user_identity import UserIdentity
 from api.schemas.auth import GoogleOneTapRequest, RefreshRequest
 from api.services.discord_bot import (
     get_user_by_discord_id,
@@ -182,10 +184,37 @@ async def _upsert_google_user(
     client_ip: str,
     user_agent: str | None,
 ) -> User:
-    existing_user_by_email_result = await db.execute(select(User).where(User.email == email))
-    existing_user_by_email = existing_user_by_email_result.scalar_one_or_none()
+    identity_by_sub = await db.scalar(
+        select(UserIdentity).where(
+            UserIdentity.provider == "google",
+            UserIdentity.external_id == google_sub,
+        )
+    )
+    identity_by_email = await db.scalar(
+        select(UserIdentity).where(UserIdentity.email == email).order_by(UserIdentity.linked_at)
+    )
+    linked_user_id = identity_by_sub.user_id if identity_by_sub else None
+    if linked_user_id is None and identity_by_email:
+        linked_user_id = identity_by_email.user_id
+    linked_user = await db.get(User, linked_user_id) if linked_user_id else None
+    existing_user_by_email = await db.scalar(select(User).where(User.email == email))
+    matched_user_ids = {
+        matched_id
+        for matched_id in (
+            identity_by_sub.user_id if identity_by_sub else None,
+            identity_by_email.user_id if identity_by_email else None,
+            existing_user_by_email.id if existing_user_by_email else None,
+        )
+        if matched_id is not None
+    }
+    if len(matched_user_ids) > 1:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="此 Google 身份與 Email 已分別連結不同帳戶，請聯絡管理員",
+        )
+    login_user = linked_user or existing_user_by_email
 
-    if not _email_can_login(email, existing_user_by_email):
+    if not _email_can_login(email, login_user):
         logger.warning(
             "Rejected Google login from disallowed email domain",
             extra={"email": email, "client_ip": client_ip},
@@ -199,9 +228,8 @@ async def _upsert_google_user(
     if email.endswith("@hchs.hc.edu.tw") and email.startswith("g0"):
         student_id = email[2:].split("@")[0]
 
-    result = await db.execute(select(User).where(User.google_sub == google_sub))
-    user = result.scalar_one_or_none() or existing_user_by_email
-
+    legacy_google_user = await db.scalar(select(User).where(User.google_sub == google_sub))
+    user = linked_user or legacy_google_user or existing_user_by_email
     is_superuser_candidate = email in settings.SUPERUSER_EMAILS or email in settings.OWNER_EMAILS
     is_superuser = False
 
@@ -239,6 +267,24 @@ async def _upsert_google_user(
         if student_id and not user.student_id:
             user.student_id = student_id
 
+    await db.flush()
+    now = datetime.now(UTC)
+    if identity_by_sub is None:
+        db.add(
+            UserIdentity(
+                user_id=user.id,
+                provider="google",
+                external_id=google_sub,
+                email=email,
+                display_name=display_name,
+                linked_at=now,
+                last_login_at=now,
+            )
+        )
+    else:
+        identity_by_sub.email = email
+        identity_by_sub.display_name = display_name
+        identity_by_sub.last_login_at = now
     await db.flush()
 
     is_suspicious, reason = await check_suspicious_login(str(user.id), client_ip)

@@ -29,17 +29,18 @@ from api.dependencies.permissions import require_permission
 from api.models.org import Org, Permission, Position, PositionCategory, UserPosition
 from api.models.person import PersonAffiliationKind, PersonAffiliationSource
 from api.models.user import User
+from api.models.user_identity import UserIdentity
 from api.services import audit as audit_svc
 from api.services import person as person_svc
+from api.services import user_registration as user_registration_svc
 from api.services.discord_bot import enqueue_role_sync
 from api.services.permission import get_user_permission_codes
+from api.services.user_registration import UserRegistrationError
 
 router = APIRouter(prefix="/admin", tags=["管理員"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 AdminUser = Annotated[User, Depends(require_permission(PermissionCode.ADMIN_ALL))]
-
-SCHOOL_EMAIL_DOMAIN = "hchs.hc.edu.tw"
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
 
@@ -64,6 +65,7 @@ class UserDetail(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
     email: str
+    linked_emails: list[str] = Field(default_factory=list)
     display_name: str
     student_id: str | None
     avatar_url: str | None
@@ -82,6 +84,11 @@ class UserPreRegister(BaseModel):
 
     student_id: str | None = Field(None, min_length=1, max_length=20, description="學號")
     email: str | None = Field(None, min_length=5, max_length=255, description="自訂登入信箱")
+    linked_emails: list[str] = Field(
+        default_factory=list,
+        max_length=10,
+        description="可登入同一帳戶的其他 Email",
+    )
     allow_external_login: bool = Field(
         False,
         description="允許校外信箱繞過 LOGIN_ALLOWED_EMAIL_DOMAINS 登入",
@@ -94,6 +101,31 @@ class UserPreRegister(BaseModel):
     custom_permission_codes: list[str] = Field(default_factory=list, description="自訂權限碼清單")
     start_date: date = Field(default_factory=date.today, description="任期開始日")
     end_date: date | None = Field(None, description="任期結束日（None = 無期限）")
+
+
+class UserBatchPreRegister(BaseModel):
+    users: list[UserPreRegister] = Field(..., min_length=1, max_length=200)
+
+
+class UserBatchPreRegisterItem(BaseModel):
+    index: int
+    success: bool
+    display_name: str
+    email: str | None = None
+    student_id: str | None = None
+    user_id: uuid.UUID | None = None
+    error: str | None = None
+
+
+class UserBatchPreRegisterResult(BaseModel):
+    total: int
+    created: int
+    failed: int
+    results: list[UserBatchPreRegisterItem]
+
+
+class LinkUserEmailsRequest(BaseModel):
+    emails: list[str] = Field(..., min_length=1, max_length=10)
 
 
 class AssignPositionsRequest(BaseModel):
@@ -188,9 +220,17 @@ async def _enrich_user(db: AsyncSession, user: User) -> UserDetail:
         )
 
     effective = await get_user_permission_codes(db, user.id)
+    identity_emails = (
+        await db.scalars(
+            select(UserIdentity.email)
+            .where(UserIdentity.user_id == user.id, UserIdentity.email.is_not(None))
+            .distinct()
+        )
+    ).all()
     return UserDetail(
         id=user.id,
         email=user.email,
+        linked_emails=sorted({user.email, *(email for email in identity_emails if email)}),
         display_name=user.display_name,
         student_id=user.student_id,
         avatar_url=user.avatar_url,
@@ -257,136 +297,66 @@ async def pre_register_user(
     Email 格式：g0{student_id}@hchs.hc.edu.tw。
     學生首次以 Google 帳號登入時，系統依 email 自動匹配並連結帳號。
     """
-    if body.email and body.email.strip():
-        email = body.email.strip().lower()
-    else:
-        if not body.student_id or not body.student_id.strip():
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="未提供 email 時，student_id 為必填",
-            )
-        email = f"g0{body.student_id.strip()}@{SCHOOL_EMAIL_DOMAIN}"
-
-    cond = User.email == email
-    if body.student_id:
-        cond = cond | (User.student_id == body.student_id)
-    dup_check = await db.execute(select(User).where(cond))
-    if dup_check.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="學號或 Email 已存在",
-        )
-
-    user = User(
-        email=email,
-        display_name=body.display_name,
-        student_id=body.student_id,
-        is_verified=False,
-        is_active=True,
-        allow_external_login=body.allow_external_login,
-        is_superuser=False,
-    )
-    db.add(user)
-    await db.flush()
-
-    # 指派職位
-    for pos_id in body.position_ids:
-        pos_check = await db.execute(
-            select(Position).options(selectinload(Position.org)).where(Position.id == pos_id)
-        )
-        position = pos_check.scalar_one_or_none()
-        if not position:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"職位 {pos_id} 不存在",
-            )
-        if position.org and not position.org.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"職位 {position.name} 所屬組織已停用，無法指派",
-            )
-        db.add(
-            user_position := UserPosition(
-                user_id=user.id,
-                position_id=pos_id,
-                start_date=body.start_date,
-                end_date=body.end_date,
-            )
-        )
-        await db.flush()
-        await person_svc.record_affiliation_for_user_position(
+    try:
+        user = await user_registration_svc.pre_register_user(
             db,
-            user=user,
-            kind=PersonAffiliationKind.ORG_POSITION,
-            position_id=pos_id,
-            start_date=user_position.start_date,
-            end_date=user_position.end_date,
-            synced_user_position_id=user_position.id,
-            source=PersonAffiliationSource.RBAC_SYNC,
+            **body.model_dump(),
+            actor=admin_user,
         )
-
-    # 自訂權限：自動建立一個使用者專用職位並掛上權限碼
-    if body.custom_permission_codes:
-        invalid_codes = validate_permission_codes(body.custom_permission_codes)
-        if invalid_codes:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"存在未知權限碼：{', '.join(invalid_codes)}",
-            )
-        if body.custom_permission_org_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="使用自訂權限時，custom_permission_org_id 為必填",
-            )
-        org_check = await db.execute(select(Org).where(Org.id == body.custom_permission_org_id))
-        org = org_check.scalar_one_or_none()
-        if org is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="自訂權限組織不存在")
-        if not org.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="自訂權限組織已停用，無法使用",
-            )
-
-        custom_pos = Position(
-            org_id=org.id,
-            name=f"外部協作-{body.display_name}",
-            description=f"系統自動建立：{user.email} 的自訂權限職位",
-            category=PositionCategory.SYSTEM,
-        )
-        db.add(custom_pos)
-        await db.flush()
-        for code in sorted(set(body.custom_permission_codes)):
-            db.add(Permission(position_id=custom_pos.id, code=code))
-        db.add(
-            UserPosition(
-                user_id=user.id,
-                position_id=custom_pos.id,
-                start_date=body.start_date,
-                end_date=body.end_date,
-            )
-        )
-
-    await db.flush()
-    await audit_svc.record(
-        db,
-        entity_type="user",
-        entity_id=str(user.id),
-        action="user.pre_register",
-        actor_id=str(admin_user.id),
-        actor_email=admin_user.email,
-        meta={
-            "email": user.email,
-            "student_id": user.student_id,
-            "position_ids": [str(pos_id) for pos_id in body.position_ids],
-            "custom_permission_codes": sorted(set(body.custom_permission_codes)),
-            "custom_permission_org_id": (
-                str(body.custom_permission_org_id) if body.custom_permission_org_id else None
-            ),
-        },
-        summary=f"預先建立使用者「{user.display_name}」",
-    )
+    except UserRegistrationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     return await _enrich_user(db, user)
+
+
+@router.post(
+    "/users/pre-register/batch",
+    response_model=UserBatchPreRegisterResult,
+    status_code=status.HTTP_201_CREATED,
+    summary="批次預先建立帳號",
+)
+async def batch_pre_register_users(
+    body: UserBatchPreRegister,
+    db: DbDep,
+    admin_user: AdminUser,
+) -> UserBatchPreRegisterResult:
+    results: list[UserBatchPreRegisterItem] = []
+    for index, item in enumerate(body.users):
+        try:
+            async with db.begin_nested():
+                user = await user_registration_svc.pre_register_user(
+                    db,
+                    **item.model_dump(),
+                    actor=admin_user,
+                )
+            results.append(
+                UserBatchPreRegisterItem(
+                    index=index,
+                    success=True,
+                    display_name=user.display_name,
+                    email=user.email,
+                    student_id=user.student_id,
+                    user_id=user.id,
+                )
+            )
+        except UserRegistrationError as exc:
+            results.append(
+                UserBatchPreRegisterItem(
+                    index=index,
+                    success=False,
+                    display_name=item.display_name,
+                    email=item.email,
+                    student_id=item.student_id,
+                    error=exc.detail,
+                )
+            )
+
+    created = sum(result.success for result in results)
+    return UserBatchPreRegisterResult(
+        total=len(results),
+        created=created,
+        failed=len(results) - created,
+        results=results,
+    )
 
 
 @router.get(
@@ -399,6 +369,32 @@ async def get_user(user_id: uuid.UUID, db: DbDep, _: AdminUser) -> UserDetail:
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="使用者不存在")
+    return await _enrich_user(db, user)
+
+
+@router.post(
+    "/users/{user_id}/emails",
+    response_model=UserDetail,
+    summary="連結其他登入 Email 到既有帳號",
+)
+async def link_user_emails(
+    user_id: uuid.UUID,
+    body: LinkUserEmailsRequest,
+    db: DbDep,
+    admin_user: AdminUser,
+) -> UserDetail:
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="使用者不存在")
+    try:
+        await user_registration_svc.link_user_emails(
+            db,
+            user=user,
+            emails=body.emails,
+            actor=admin_user,
+        )
+    except UserRegistrationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     return await _enrich_user(db, user)
 
 

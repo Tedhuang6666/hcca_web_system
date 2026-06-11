@@ -2109,6 +2109,7 @@ export interface PositionSummary {
 export interface AdminUserDetail {
   id: string;
   email: string;
+  linked_emails: string[];
   display_name: string;
   student_id: string | null;
   avatar_url: string | null;
@@ -2120,6 +2121,21 @@ export interface AdminUserDetail {
   created_at: string;
   positions: PositionSummary[];
   effective_permissions: string[];
+}
+
+export interface UserBatchPreRegisterResult {
+  total: number;
+  created: number;
+  failed: number;
+  results: {
+    index: number;
+    success: boolean;
+    display_name: string;
+    email: string | null;
+    student_id: string | null;
+    user_id: string | null;
+    error: string | null;
+  }[];
 }
 
 export interface OrgWithPositions {
@@ -3238,6 +3254,11 @@ export interface EntityRelationOut {
   created_by_id: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface EntityRelationGraphOut {
+  nodes: Array<{ type: string; id: string }>;
+  edges: EntityRelationOut[];
 }
 
 export interface TimelineEventOut {

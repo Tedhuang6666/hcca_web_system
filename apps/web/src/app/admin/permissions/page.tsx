@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { ensurePermissionCatalog, PermCheckboxes } from "@/components/admin/PermissionCatalog";
@@ -15,6 +15,7 @@ import type {
   PositionCategory,
   PositionSummary,
   SchoolClassListItem,
+  UserBatchPreRegisterResult,
 } from "@/lib/types";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 
@@ -53,6 +54,24 @@ const highRisk = (code: string) =>
 function uniquePositionsById(positions: PositionSummary[]) {
   return Array.from(new Map(positions.map((position) => [position.id, position])).values())
     .sort((a, b) => `${a.category} ${a.org_name} ${a.name}`.localeCompare(`${b.category} ${b.org_name} ${b.name}`, "zh-Hant"));
+}
+
+function parseBatchUsers(input: string) {
+  return input
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line, index) => {
+      const [identifier = "", displayName = ""] = line
+        .split(/[\t,，]/, 2)
+        .map((value) => value.trim());
+      return {
+        line: index + 1,
+        identifiers: identifier.split(";").map((value) => value.trim()).filter(Boolean),
+        displayName,
+        valid: Boolean(identifier && displayName),
+      };
+    });
 }
 
 function displayError(e: unknown, fallback: string) {
@@ -322,7 +341,7 @@ export default function PermissionsAdminPage() {
       )}
 
       {showNewOrg && <OrgCreateModal orgs={activeOrgs} onClose={() => setShowNewOrg(false)} onDone={() => { setShowNewOrg(false); load(); }} />}
-      {showWizard && <OnboardingWizard users={users} positions={activePositions} orgs={activeOrgs} permCodes={permCodes} onClose={() => setShowWizard(false)} onDone={() => { setShowWizard(false); load(); }} />}
+      {showWizard && <OnboardingWizard users={users} positions={activePositions} orgs={activeOrgs} permCodes={permCodes} onClose={() => setShowWizard(false)} onDone={(close = true) => { if (close) setShowWizard(false); load(); }} />}
       {confirmState && (
         <Modal title={confirmState.title} onClose={() => setConfirmState(null)}>
           <p className="text-sm leading-6" style={{ color: "var(--text-secondary)" }}>{confirmState.body}</p>
@@ -1019,6 +1038,7 @@ function UserPanel({
   const [positionId, setPositionId] = useState("");
   const [classId, setClassId] = useState("");
   const [asCadre, setAsCadre] = useState(false);
+  const [emailAlias, setEmailAlias] = useState("");
   const [start, setStart] = useState(today());
   const [end, setEnd] = useState("");
   const available = uniquePositionsById(positions)
@@ -1048,6 +1068,18 @@ function UserPanel({
       displayError(e, "加入班級失敗");
     }
   };
+  const addEmailAlias = async () => {
+    const emails = emailAlias.split(/[,，;\s]+/).map((value) => value.trim()).filter(Boolean);
+    if (emails.length === 0) return;
+    try {
+      await adminApi.linkUserEmails(user.id, emails);
+      toast.success("登入 Email 已連結");
+      setEmailAlias("");
+      await onRefresh();
+    } catch (e) {
+      displayError(e, "連結 Email 失敗");
+    }
+  };
   return (
     <div className="w-full p-5 space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -1057,7 +1089,10 @@ function UserPanel({
             {user.display_name}
           </h2>
           <div className="mt-2 space-y-1 text-xs" style={{ color: "var(--text-muted)" }}>
-            <p className="break-all">Email：{user.email}</p>
+            <p className="break-all">主要 Email：{user.email}</p>
+            <p className="break-all">
+              登入 Email：{user.linked_emails.length > 0 ? user.linked_emails.join("、") : user.email}
+            </p>
             <p>學號：{user.student_id ?? "未設定"}</p>
           </div>
           {user.allow_external_login && (
@@ -1105,6 +1140,26 @@ function UserPanel({
           </SmallButton>
         </div>
       </div>
+      <section className="rounded-xl p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
+        <div>
+          <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+            連結其他登入 Email
+          </h3>
+          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+            可連結私人或其他校務信箱；使用任一已連結 Google 帳號登入都會進入同一帳戶。
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
+          <TextInput
+            value={emailAlias}
+            onChange={(event) => setEmailAlias(event.target.value)}
+            placeholder="name@gmail.com，可用逗號分隔多筆"
+          />
+          <SmallButton onClick={addEmailAlias} tone="primary" disabled={!emailAlias.trim()}>
+            連結 Email
+          </SmallButton>
+        </div>
+      </section>
       <section className="rounded-xl p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
         <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>指派新職位</h3>
         <div className="grid grid-cols-1 sm:grid-cols-[1fr_130px_130px_auto] gap-2 items-end">
@@ -1253,12 +1308,13 @@ function OnboardingWizard({
   orgs: OrgRead[];
   permCodes: PermissionCodeInfo[];
   onClose: () => void;
-  onDone: () => void;
+  onDone: (close?: boolean) => void;
 }) {
-  const [mode, setMode] = useState<"new" | "existing">("new");
+  const [mode, setMode] = useState<"new" | "batch" | "existing">("new");
   const [userId, setUserId] = useState("");
   const [studentId, setStudentId] = useState("");
   const [email, setEmail] = useState("");
+  const [linkedEmails, setLinkedEmails] = useState("");
   const [allowExternalLogin, setAllowExternalLogin] = useState(false);
   const [name, setName] = useState("");
   const [positionId, setPositionId] = useState("");
@@ -1266,10 +1322,16 @@ function OnboardingWizard({
   const [end, setEnd] = useState("");
   const [customOrgId, setCustomOrgId] = useState("");
   const [customCodes, setCustomCodes] = useState<string[]>([]);
+  const [batchInput, setBatchInput] = useState("");
+  const [batchResult, setBatchResult] = useState<UserBatchPreRegisterResult | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const uniquePositions = uniquePositionsById(positions);
   const selectedPosition = uniquePositions.find((p) => p.id === positionId);
   const previewCodes = Array.from(new Set([...(selectedPosition?.permission_codes ?? []), ...customCodes]));
+  const batchUsers = useMemo(() => parseBatchUsers(batchInput), [batchInput]);
+  const invalidBatchUsers = batchUsers.filter((user) => !user.valid);
   const submit = async () => {
+    setSubmitting(true);
     try {
       if (mode === "existing") {
         if (!userId || !positionId) {
@@ -1277,7 +1339,7 @@ function OnboardingWizard({
           return;
         }
         await adminApi.addUserPosition(userId, { position_id: positionId, start_date: start, end_date: end || null });
-      } else {
+      } else if (mode === "new") {
         if (!name.trim() || (!studentId.trim() && !email.trim())) {
           toast.error("請填寫姓名，並提供學號或 Email");
           return;
@@ -1286,6 +1348,7 @@ function OnboardingWizard({
           display_name: name.trim(),
           student_id: studentId.trim() || null,
           email: email.trim() || null,
+          linked_emails: linkedEmails.split(/[,，;\s]+/).map((value) => value.trim()).filter(Boolean),
           allow_external_login: allowExternalLogin,
           position_ids: positionId ? [positionId] : [],
           start_date: start,
@@ -1293,11 +1356,46 @@ function OnboardingWizard({
           custom_permission_org_id: customCodes.length > 0 ? customOrgId || null : null,
           custom_permission_codes: customCodes,
         });
+      } else {
+        if (batchUsers.length === 0) {
+          toast.error("請貼上至少一筆帳號資料");
+          return;
+        }
+        if (batchUsers.length > 200) {
+          toast.error("單次最多建立 200 筆帳號");
+          return;
+        }
+        if (invalidBatchUsers.length > 0) {
+          toast.error(`第 ${invalidBatchUsers.map((user) => user.line).join("、")} 列格式不完整`);
+          return;
+        }
+        const result = await adminApi.batchPreRegister({
+          users: batchUsers.map((user) => ({
+            display_name: user.displayName,
+            student_id: user.identifiers[0]?.includes("@") ? null : user.identifiers[0],
+            email: user.identifiers[0]?.includes("@") ? user.identifiers[0] : null,
+            linked_emails: user.identifiers.slice(1),
+            allow_external_login: user.identifiers.some(
+              (identifier) => identifier.includes("@") && !identifier.endsWith("@hchs.hc.edu.tw"),
+            ),
+            position_ids: positionId ? [positionId] : [],
+            start_date: start,
+            end_date: end || null,
+          })),
+        });
+        setBatchResult(result);
+        if (result.failed > 0) {
+          toast.warning(`已建立 ${result.created} 筆，${result.failed} 筆需要修正`);
+          await onDone(false);
+          return;
+        }
       }
       toast.success("新人上任流程已完成");
       onDone();
     } catch (e) {
       displayError(e, "新人上任流程失敗");
+    } finally {
+      setSubmitting(false);
     }
   };
   return (
@@ -1306,9 +1404,10 @@ function OnboardingWizard({
         <div className="space-y-2">
           {[
             ["new", "建立新帳號"],
+            ["batch", "批次建立"],
             ["existing", "選擇既有使用者"],
           ].map(([key, label]) => (
-            <button key={key} onClick={() => setMode(key as "new" | "existing")} className="w-full text-left px-3 py-2 rounded-lg text-sm cursor-pointer" style={mode === key ? { background: "var(--primary-dim)", color: "var(--primary)" } : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>{label}</button>
+            <button key={key} onClick={() => setMode(key as "new" | "batch" | "existing")} className="w-full text-left px-3 py-2 rounded-lg text-sm cursor-pointer" style={mode === key ? { background: "var(--primary-dim)", color: "var(--primary)" } : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>{label}</button>
           ))}
           <div className="rounded-xl p-3" style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
             <p className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>權限預覽</p>
@@ -1319,11 +1418,17 @@ function OnboardingWizard({
         <div className="space-y-4">
           {mode === "existing" ? (
             <SelectInput value={userId} onChange={(e) => setUserId(e.target.value)}><option value="">選擇使用者</option>{users.map((u) => <option key={u.id} value={u.id}>{u.display_name} · {u.email}</option>)}</SelectInput>
-          ) : (
+          ) : mode === "new" ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <TextInput value={name} onChange={(e) => setName(e.target.value)} placeholder="姓名" />
               <TextInput value={studentId} onChange={(e) => setStudentId(e.target.value)} placeholder="學號（擇一）" />
               <TextInput value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email（擇一）" className="sm:col-span-2" />
+              <TextInput
+                value={linkedEmails}
+                onChange={(e) => setLinkedEmails(e.target.value)}
+                placeholder="其他登入 Email（選填，可用逗號分隔）"
+                className="sm:col-span-2"
+              />
               <label
                 className="sm:col-span-2 flex items-center gap-2 text-xs"
                 style={{ color: "var(--text-secondary)" }}
@@ -1335,6 +1440,37 @@ function OnboardingWizard({
                 />
                 允許此帳號以校外信箱登入（僅登入門禁，不影響下方職位與權限）
               </label>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <textarea
+                value={batchInput}
+                onChange={(event) => {
+                  setBatchInput(event.target.value);
+                  setBatchResult(null);
+                }}
+                rows={8}
+                placeholder={"112040101,王小明\ng0112040102@hchs.hc.edu.tw;private@gmail.com,李小華"}
+                className="w-full text-sm px-3 py-2 rounded-lg outline-none font-mono"
+                style={{
+                  background: "var(--bg-surface)",
+                  border: "1px solid var(--border)",
+                  color: "var(--text-primary)",
+                }}
+              />
+              <div className="flex justify-between text-xs" style={{ color: "var(--text-muted)" }}>
+                <span>每列：學號或 Email[;其他 Email],姓名，也可貼上試算表兩欄</span>
+                <span>{batchUsers.length} / 200 筆</span>
+              </div>
+              {batchResult && batchResult.failed > 0 && (
+                <div className="max-h-32 overflow-y-auto rounded-lg p-2 text-xs space-y-1" style={{ border: "1px solid rgba(245,158,11,0.3)" }}>
+                  {batchResult.results.filter((result) => !result.success).map((result) => (
+                    <p key={result.index} style={{ color: "#f59e0b" }}>
+                      第 {result.index + 1} 列 {result.display_name}：{result.error}
+                    </p>
+                  ))}
+                </div>
+              )}
             </div>
           )}
           <div className="grid grid-cols-1 sm:grid-cols-[1fr_150px_150px] gap-3">
@@ -1358,7 +1494,9 @@ function OnboardingWizard({
       </div>
       <div className="flex justify-end gap-2">
         <SmallButton onClick={onClose}>取消</SmallButton>
-        <SmallButton onClick={submit} tone="primary">確認上任</SmallButton>
+        <SmallButton onClick={submit} tone="primary" disabled={submitting}>
+          {submitting ? "處理中..." : mode === "batch" ? `建立 ${batchUsers.length} 筆` : "確認上任"}
+        </SmallButton>
       </div>
     </Modal>
   );

@@ -86,7 +86,7 @@ import type {
   WorkItemCreate, WorkItemOut, WorkItemUpdate,
   AutomationRuleCreate, AutomationRuleOut, AutomationRuleUpdate, AutomationMeta,
   MatterLinkRef, MatterSpawnKind, MatterSpawnResult, DecisionCreate, DecisionOut, DecisionUpdate,
-  EntityRelationCreate, EntityRelationOut, GovernanceCaseCreate, GovernanceCaseOut,
+  EntityRelationCreate, EntityRelationGraphOut, EntityRelationOut, GovernanceCaseCreate, GovernanceCaseOut,
   GovernanceCaseUpdate, GovernanceDashboardOut, GovernanceWorkflowTemplateCreate,
   GovernanceWorkflowTemplateOut, MatterCreate, MatterListItem, MatterOut, MatterRoleAssignmentCreate,
   MatterRoleAssignmentOut, MatterRoleAssignmentUpdate, MatterUpdate, PlanningDocumentCreate,
@@ -1295,6 +1295,11 @@ export const usersApi = {
     display_name?: string; student_id?: string;
     show_email?: boolean;
   }) => patch<import("@/lib/types").UserRead>("/users/me", body),
+  myEmails: () => get<{ emails: string[] }>("/users/me/emails"),
+  requestEmailVerification: (email: string) =>
+    post<{ message: string }>("/users/me/emails/verification", { email }),
+  verifyEmail: (email: string, code: string) =>
+    post<{ emails: string[] }>("/users/me/emails/verify", { email, code }),
   myPositions: (activeOnly = false) =>
     get<import("@/lib/types").UserPositionRead[]>(
       `/user-positions/me?active_only=${activeOnly}`
@@ -1490,6 +1495,23 @@ export const governanceApi = {
     patch<GovernanceCaseOut>(`/governance/cases/${id}`, body),
   createRelation: (matterId: string, body: EntityRelationCreate) =>
     post<EntityRelationOut>(`/governance/matters/${matterId}/relations`, body),
+  listEntityRelations: (entityType: string, entityId: string) =>
+    get<EntityRelationOut[]>(
+      `/governance/entities/${encodeURIComponent(entityType)}/${entityId}/relations`,
+    ),
+  createEntityRelation: (
+    entityType: string,
+    entityId: string,
+    body: EntityRelationCreate,
+  ) =>
+    post<EntityRelationOut>(
+      `/governance/entities/${encodeURIComponent(entityType)}/${entityId}/relations`,
+      body,
+    ),
+  entityGraph: (entityType: string, entityId: string, depth = 2) =>
+    get<EntityRelationGraphOut>(
+      `/governance/entities/${encodeURIComponent(entityType)}/${entityId}/graph?depth=${depth}`,
+    ),
   deleteRelation: (relationId: string) => del<void>(`/governance/relations/${relationId}`),
   linksForTarget: (targetType: string, targetId: string) =>
     get<MatterLinkRef[]>(
@@ -1610,6 +1632,7 @@ export const contextApi = {
 
 import type {
   AdminUserDetail, OrgWithPositions, PermissionCodeInfo, PositionCategory, PositionSummary,
+  UserBatchPreRegisterResult,
 } from "./types";
 
 export const adminApi = {
@@ -1626,11 +1649,22 @@ export const adminApi = {
   getUser: (id: string) => get<AdminUserDetail>(`/admin/users/${id}`),
   preRegister: (body: {
     student_id?: string | null; email?: string | null; display_name: string;
+    linked_emails?: string[];
     allow_external_login?: boolean;
     position_ids?: string[]; start_date?: string; end_date?: string | null;
     custom_permission_org_id?: string | null;
     custom_permission_codes?: string[];
   }) => post<AdminUserDetail>("/admin/users/pre-register", body),
+  batchPreRegister: (body: {
+    users: {
+      student_id?: string | null; email?: string | null; display_name: string;
+      linked_emails?: string[];
+      allow_external_login?: boolean;
+      position_ids?: string[]; start_date?: string; end_date?: string | null;
+    }[];
+  }) => post<UserBatchPreRegisterResult>("/admin/users/pre-register/batch", body),
+  linkUserEmails: (id: string, emails: string[]) =>
+    post<AdminUserDetail>(`/admin/users/${id}/emails`, { emails }),
   updateUser: (id: string, body: {
     display_name?: string;
     is_active?: boolean;
@@ -2681,6 +2715,10 @@ export const meetingsApi = {
     content: string;
     status?: MeetingDecisionStatus;
     regulation_transition_to?: string | null;
+    create_follow_up?: boolean;
+    follow_up_assignee_id?: string | null;
+    follow_up_due_at?: string | null;
+    create_document_draft?: boolean;
   }) => post<MeetingDecisionOut>(`/meetings/${id}/decisions`, body),
   updateDecision: (id: string, decisionId: string, body: Partial<{
     motion_id: string | null;

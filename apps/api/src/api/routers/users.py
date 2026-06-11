@@ -13,7 +13,9 @@ from api.core.database import get_db
 from api.dependencies.auth import get_current_active_user
 from api.models.user import User
 from api.schemas.auth import UserRead
+from api.services import user_email_verification as email_verification_svc
 from api.services.permission import get_user_permission_codes
+from api.services.user_registration import UserRegistrationError
 
 router = APIRouter(prefix="/users", tags=["使用者"])
 
@@ -27,6 +29,20 @@ class UserSelfUpdate(BaseModel):
     show_email: bool | None = None
 
 
+def _verified_student_id_from_email(email: str) -> str | None:
+    """由本人已驗證的校園 Google 信箱推導學號（與 auth.py 的登入派生邏輯一致）。
+
+    學號是身分信任錨點：roster/RBAC 會以 student_id 將使用者連結到 Person 主檔並
+    同步其職務權限（見 services/person.ensure_person_for_user）。因此自助更新時，
+    student_id 只能設成「由本人已驗證校園信箱推導出的值」，不可任意自填他人學號，
+    否則外部帳號可冒領未註冊學生的學號而綁定其身分與權限。
+    """
+    normalized = email.strip().lower()
+    if normalized.endswith("@hchs.hc.edu.tw") and normalized.startswith("g0"):
+        return normalized[2:].split("@", maxsplit=1)[0]
+    return None
+
+
 class UserSummary(BaseModel):
     id: uuid.UUID
     display_name: str
@@ -34,6 +50,18 @@ class UserSummary(BaseModel):
     student_id: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class EmailVerificationRequest(BaseModel):
+    email: str = Field(..., min_length=5, max_length=255)
+
+
+class EmailVerificationConfirm(EmailVerificationRequest):
+    code: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+
+class LinkedEmailsOut(BaseModel):
+    emails: list[str]
 
 
 @router.get("", response_model=list[UserSummary], summary="搜尋使用者（供下拉選單使用）")
@@ -99,7 +127,18 @@ async def update_me(
     if body.display_name is not None:
         current_user.display_name = body.display_name
     if body.student_id is not None:
-        current_user.student_id = body.student_id or None
+        requested = body.student_id.strip() or None
+        if requested != current_user.student_id:
+            # 只允許設成本人已驗證校園信箱推導出的學號（或清空），杜絕冒領他人學號
+            # 造成的身分綁定／權限提升（見 _verified_student_id_from_email）。
+            if requested is not None and requested != _verified_student_id_from_email(
+                current_user.email
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="學號需與您的校園帳號一致，無法自行指定他人學號",
+                )
+            current_user.student_id = requested
     if body.show_email is not None:
         current_user.show_email = body.show_email
     try:
@@ -117,3 +156,47 @@ async def update_me(
             detail="資料衝突，請確認填入的資料是否唯一",
         ) from exc
     return current_user
+
+
+@router.get("/me/emails", response_model=LinkedEmailsOut, summary="列出自己的登入 Email")
+async def list_my_emails(db: DbDep, current_user: CurrentUser) -> LinkedEmailsOut:
+    return LinkedEmailsOut(emails=await email_verification_svc.list_user_emails(db, current_user))
+
+
+@router.post(
+    "/me/emails/verification",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="寄送 Email 連結驗證碼",
+)
+async def request_email_verification(
+    body: EmailVerificationRequest,
+    db: DbDep,
+    current_user: CurrentUser,
+) -> dict[str, str]:
+    try:
+        await email_verification_svc.request_verification(db, current_user, body.email)
+    except UserRegistrationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    return {"message": "驗證碼已寄出"}
+
+
+@router.post(
+    "/me/emails/verify",
+    response_model=LinkedEmailsOut,
+    summary="驗證並連結 Email",
+)
+async def verify_email(
+    body: EmailVerificationConfirm,
+    db: DbDep,
+    current_user: CurrentUser,
+) -> LinkedEmailsOut:
+    try:
+        await email_verification_svc.verify_and_link(
+            db,
+            user=current_user,
+            email=body.email,
+            code=body.code,
+        )
+    except UserRegistrationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    return LinkedEmailsOut(emails=await email_verification_svc.list_user_emails(db, current_user))
