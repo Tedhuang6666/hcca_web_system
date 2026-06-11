@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Clock,
   ExternalLink,
+  FileText,
   Gavel,
   ListChecks,
   Megaphone,
@@ -22,6 +23,7 @@ import {
 import { meetingsApi } from "@/lib/api";
 import { useWS } from "@/hooks/useWS";
 import SimpleMeetingConsole from "@/components/meetings/SimpleMeetingConsole";
+import UserPicker from "@/components/surveys/UserPicker";
 import type {
   MeetingAgendaItemOut,
   MeetingOut,
@@ -29,6 +31,7 @@ import type {
   MeetingScreenOut,
   MeetingScreenReadingMode,
   MeetingSpeechQueueItemOut,
+  UserSummary,
   VoteThresholdType,
 } from "@/lib/types";
 
@@ -90,6 +93,11 @@ export default function MeetingControlPage({ params }: { params: Promise<{ id: s
   const [thresholdType, setThresholdType] = useState<VoteThresholdType>("simple_majority");
   const [customThreshold, setCustomThreshold] = useState(0);
   const [speakerName, setSpeakerName] = useState("");
+  const [decisionTitle, setDecisionTitle] = useState("");
+  const [decisionContent, setDecisionContent] = useState("");
+  const [decisionAssignees, setDecisionAssignees] = useState<UserSummary[]>([]);
+  const [decisionDueAt, setDecisionDueAt] = useState("");
+  const [decisionDocument, setDecisionDocument] = useState(false);
   const [screenAgendaId, setScreenAgendaId] = useState("");
   const [now, setNow] = useState(Date.now());
 
@@ -386,6 +394,94 @@ export default function MeetingControlPage({ params }: { params: Promise<{ id: s
               <button onClick={() => run(() => meetingsApi.extendSpeech(meeting.id, activeSpeech.id, 30), "已延長 30 秒")} className="rounded-md border border-[var(--border)] px-3 py-2 text-sm">+30 秒</button>
               <button onClick={() => run(() => meetingsApi.extendSpeech(meeting.id, activeSpeech.id, 60), "已延長 1 分鐘")} className="rounded-md border border-[var(--border)] px-3 py-2 text-sm">+1 分鐘</button>
               <button onClick={() => run(() => meetingsApi.finishSpeech(meeting.id, activeSpeech.id), "發言已結束")} className="rounded-md border border-[var(--border)] px-3 py-2 text-sm">結束發言</button>
+            </div>
+          )}
+        </section>
+
+        <section className="rounded-lg border border-[var(--border)] p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <Gavel size={17} aria-hidden="true" />
+            <div>
+              <h2 className="font-semibold">形成正式決議與後續工作</h2>
+              <p className="text-xs text-[var(--muted)]">
+                自動列入承辦人待辦；設定期限後同步到行事曆與提醒。
+              </p>
+            </div>
+          </div>
+          {!current ? (
+            <p className="text-sm text-[var(--muted)]">請先選定目前議案。</p>
+          ) : (
+            <div className="grid gap-3">
+              <input
+                value={decisionTitle}
+                onChange={(event) => setDecisionTitle(event.target.value)}
+                className="input"
+                placeholder={`決議標題，例如：執行「${current.title}」`}
+              />
+              <textarea
+                value={decisionContent}
+                onChange={(event) => setDecisionContent(event.target.value)}
+                className="input min-h-24"
+                placeholder="輸入正式決議內容與執行要求"
+              />
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <p className="mb-1 text-xs text-[var(--muted)]">
+                    承辦人（未選則指派給建立者）
+                  </p>
+                  <UserPicker
+                    value={decisionAssignees}
+                    onChange={(users) => setDecisionAssignees(users.slice(-1))}
+                  />
+                </div>
+                <label>
+                  <span className="mb-1 block text-xs text-[var(--muted)]">完成期限</span>
+                  <input
+                    type="datetime-local"
+                    value={decisionDueAt}
+                    onChange={(event) => setDecisionDueAt(event.target.value)}
+                    className="input w-full"
+                  />
+                </label>
+              </div>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={decisionDocument}
+                  onChange={(event) => setDecisionDocument(event.target.checked)}
+                />
+                <FileText size={15} aria-hidden="true" />
+                同時建立公文草稿並帶入決議內容
+              </label>
+              <button
+                type="button"
+                disabled={!decisionTitle.trim() || !decisionContent.trim() || busy}
+                onClick={() =>
+                  run(async () => {
+                    await meetingsApi.createDecision(meeting.id, {
+                      agenda_item_id: current.id,
+                      title: decisionTitle.trim(),
+                      content: decisionContent.trim(),
+                      status: "passed",
+                      create_follow_up: true,
+                      follow_up_assignee_id: decisionAssignees[0]?.id ?? null,
+                      follow_up_due_at: decisionDueAt
+                        ? new Date(decisionDueAt).toISOString()
+                        : null,
+                      create_document_draft: decisionDocument,
+                    });
+                    setDecisionTitle("");
+                    setDecisionContent("");
+                    setDecisionAssignees([]);
+                    setDecisionDueAt("");
+                    setDecisionDocument(false);
+                  }, "決議、待辦與跨模組項目已建立")
+                }
+                className="btn btn-primary justify-center"
+              >
+                <CheckCircle2 size={15} aria-hidden="true" />
+                通過決議並建立後續工作
+              </button>
             </div>
           )}
         </section>

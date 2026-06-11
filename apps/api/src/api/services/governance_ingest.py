@@ -33,9 +33,11 @@ from api.models.governance import (
     MatterStatus,
     MatterType,
 )
+from api.models.user import User
 from api.models.work_item import WorkItem, WorkItemStatus
 from api.services import governance as governance_svc
 from api.services import governance_events
+from api.services import work_item as work_item_svc
 from api.services.outbox import emit
 
 logger = logging.getLogger(__name__)
@@ -64,6 +66,20 @@ ENTITY_LABEL: dict[str, str] = {
     "receivable": "收款",
     "vote": "投票",
     "ticket": "售票",
+    "user": "使用者",
+    "person": "人員",
+    "position": "職位",
+    "school_class": "班級",
+    "product": "商品",
+    "meal_vendor": "餐商",
+    "partner_business": "特約商家",
+    "email_message": "郵件",
+    "document_template": "公文範本",
+    "serial_template": "字號模板",
+    "webhook": "Webhook",
+    "api_key": "API Key",
+    "feature_flag": "功能旗標",
+    "policy": "政策文件",
 }
 
 # 可作為自動化觸發點的事件型別（trigger_type）。前端規則編輯器也使用此清單。
@@ -86,9 +102,57 @@ ACTION_TYPES: dict[str, str] = {
     "create_task": "建立任務",
     "create_decision": "建立決議",
     "create_timeline_event": "新增時間軸紀錄",
+    "create_relation": "建立跨模組關聯",
+    "create_calendar_event": "建立行事曆事件",
+    "create_document_draft": "建立公文草稿",
+    "create_meeting": "建立會議",
+    "create_announcement": "建立公告草稿",
+    "create_survey": "建立問卷",
     "set_matter_status": "變更事情狀態",
     "notify_admins": "通知管理員",
 }
+
+
+def _as_datetime(value) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+async def _link_created_artifact(
+    db: AsyncSession,
+    *,
+    matter: Matter,
+    actor_id: uuid.UUID | None,
+    target_type: str,
+    target_id: uuid.UUID,
+    title: str,
+    href: str,
+    context: dict,
+) -> None:
+    db.add(
+        EntityRelation(
+            matter_id=matter.id,
+            source_type=str(context.get("source_type") or "matter"),
+            source_id=(
+                uuid.UUID(str(context["source_id"])) if context.get("source_id") else matter.id
+            ),
+            target_type=target_type,
+            target_id=target_id,
+            relation="produces",
+            title=title,
+            href=href,
+            note="由跨模組自動化建立",
+            created_by_id=actor_id,
+            meta={"origin": "automation", "trigger": context.get("event_type")},
+        )
+    )
+    await db.flush()
 
 
 def _render(template: str | None, context: dict) -> str | None:
@@ -135,6 +199,89 @@ async def _has_decision_for_source(
         )
     )
     return existing is not None
+
+
+async def create_meeting_decision_outputs(
+    db: AsyncSession,
+    *,
+    meeting,
+    decision,
+    actor,
+    create_follow_up: bool,
+    follow_up_assignee_id: uuid.UUID | None,
+    follow_up_due_at: datetime | None,
+    create_document_draft: bool,
+) -> uuid.UUID | None:
+    """把正式會議決議轉成待辦、行事曆期限與可選的公文草稿。"""
+    if create_follow_up:
+        existing = await db.scalar(
+            select(WorkItem.id).where(
+                WorkItem.source_type == "meeting_decision",
+                WorkItem.source_id == decision.id,
+                WorkItem.is_active.is_(True),
+            )
+        )
+        if existing is None:
+            from api.schemas.work_item import WorkItemCreate
+
+            await work_item_svc.create_work_item(
+                db,
+                data=WorkItemCreate(
+                    title=f"執行決議：{decision.title}",
+                    description=decision.content,
+                    assigned_to_id=follow_up_assignee_id or actor.id,
+                    source_type="meeting_decision",
+                    source_id=decision.id,
+                    due_at=follow_up_due_at,
+                ),
+                created_by_id=actor.id,
+            )
+
+    if not create_document_draft:
+        return None
+
+    from api.models.document import DocumentCategory
+    from api.schemas.document import DocumentCreate
+    from api.services import document as document_svc
+
+    document = await document_svc.create_document(
+        db,
+        data=DocumentCreate(
+            title=f"{decision.title}執行公文",
+            org_id=meeting.org_id,
+            category=DocumentCategory.LETTER,
+            subject=f"檢送「{decision.title}」決議事項，請依決議內容辦理。",
+            doc_description=(
+                f"本案依「{meeting.title}」正式決議辦理。\n\n決議內容：{decision.content}"
+            ),
+            action_required="請承辦人確認受文者、完成公文內容並送交簽核。",
+            content=f"## 決議依據\n\n{decision.content}",
+            handler_name=actor.display_name,
+            handler_email=actor.email,
+            due_date=follow_up_due_at,
+        ),
+        created_by=actor.id,
+    )
+
+    matter_ids = await _linked_matter_ids(db, "meeting", meeting.id)
+    for matter_id in matter_ids:
+        db.add(
+            EntityRelation(
+                matter_id=matter_id,
+                source_type="meeting_decision",
+                source_id=decision.id,
+                target_type="document",
+                target_id=document.id,
+                relation="produces",
+                title=document.title,
+                href=f"/documents/{document.id}",
+                note="由會議決議自動建立的公文草稿",
+                created_by_id=actor.id,
+                meta={"origin": "meeting_decision"},
+            )
+        )
+    await db.flush()
+    return document.id
 
 
 async def _materialize_for_matter(
@@ -317,6 +464,165 @@ async def _exec_action(
             body=_render(action.get("body"), context),
             actor_id=actor_id,
             actor_email=actor_email,
+        )
+
+    elif action_type == "create_relation":
+        target_id = _render(action.get("target_id"), context)
+        target_type = _render(action.get("target_type"), context)
+        if target_id and target_type:
+            db.add(
+                EntityRelation(
+                    matter_id=matter.id,
+                    source_type=str(context.get("source_type") or "matter"),
+                    source_id=(
+                        uuid.UUID(str(context["source_id"]))
+                        if context.get("source_id")
+                        else matter.id
+                    ),
+                    target_type=target_type,
+                    target_id=uuid.UUID(target_id),
+                    relation=str(action.get("relation") or "related"),
+                    title=_render(action.get("title"), context)
+                    or context.get("title")
+                    or target_type,
+                    href=_render(action.get("href"), context),
+                    note=_render(action.get("note"), context),
+                    created_by_id=actor_id,
+                    meta={"origin": "automation"},
+                )
+            )
+            await db.flush()
+
+    elif action_type == "create_calendar_event" and actor_id is not None:
+        from api.models.calendar import (
+            CalendarEvent,
+            CalendarEventStatus,
+            CalendarEventType,
+            CalendarVisibility,
+        )
+
+        starts_at = _as_datetime(
+            _render(action.get("starts_at"), context)
+            or context.get("due_at")
+            or context.get("starts_at")
+        )
+        if starts_at is not None:
+            event = CalendarEvent(
+                org_id=matter.org_id,
+                title=_render(action.get("title"), context) or context.get("title") or "治理行程",
+                description=_render(action.get("description"), context),
+                event_type=CalendarEventType(
+                    str(action.get("event_type") or CalendarEventType.DEADLINE)
+                ),
+                status=CalendarEventStatus.CONFIRMED,
+                visibility=CalendarVisibility.ORG,
+                starts_at=starts_at,
+                ends_at=_as_datetime(_render(action.get("ends_at"), context)),
+                href=f"/governance/{matter.id}",
+                created_by=actor_id,
+                updated_by=actor_id,
+            )
+            db.add(event)
+            await db.flush()
+            await _link_created_artifact(
+                db,
+                matter=matter,
+                actor_id=actor_id,
+                target_type="calendar_event",
+                target_id=event.id,
+                title=event.title,
+                href="/calendar",
+                context=context,
+            )
+
+    elif action_type in {
+        "create_document_draft",
+        "create_meeting",
+        "create_announcement",
+        "create_survey",
+    }:
+        actor = await db.get(User, actor_id) if actor_id else None
+        if actor is None or matter.org_id is None:
+            return matter
+        artifact_title = (
+            _render(action.get("title"), context) or context.get("title") or matter.title
+        )
+        if action_type == "create_document_draft":
+            from api.models.document import DocumentCategory
+            from api.schemas.document import DocumentCreate
+            from api.services import document as document_svc
+
+            artifact = await document_svc.create_document(
+                db,
+                data=DocumentCreate(
+                    title=artifact_title,
+                    org_id=matter.org_id,
+                    category=DocumentCategory.LETTER,
+                    subject=(
+                        _render(action.get("subject"), context)
+                        or f"檢送「{artifact_title}」相關事項，請查照辦理。"
+                    ),
+                    doc_description=_render(action.get("description"), context)
+                    or context.get("summary"),
+                    action_required=_render(action.get("action_required"), context)
+                    or "請承辦人確認內容、受文者並送交簽核。",
+                    content=_render(action.get("content"), context) or context.get("summary") or "",
+                    handler_name=actor.display_name,
+                    handler_email=actor.email,
+                    due_date=_as_datetime(context.get("due_at")),
+                ),
+                created_by=actor.id,
+            )
+            target_type, href = "document", f"/documents/{artifact.id}"
+        elif action_type == "create_meeting":
+            from api.schemas.meeting import MeetingCreate
+            from api.services import meeting as meeting_svc
+
+            artifact = await meeting_svc.create_meeting(
+                db,
+                data=MeetingCreate(
+                    title=artifact_title,
+                    org_id=matter.org_id,
+                    starts_at=_as_datetime(
+                        _render(action.get("starts_at"), context) or context.get("starts_at")
+                    ),
+                ),
+                created_by=actor.id,
+            )
+            target_type, href = "meeting", f"/meetings/{artifact.id}"
+        elif action_type == "create_announcement":
+            from api.schemas.announcement import AnnouncementCreate
+            from api.services import announcement as announcement_svc
+
+            artifact = await announcement_svc.create(
+                db,
+                author=actor,
+                body=AnnouncementCreate(
+                    title=artifact_title,
+                    content={"body": _render(action.get("content"), context) or ""},
+                    org_id=matter.org_id,
+                ),
+            )
+            target_type, href = "announcement", f"/announcements/{artifact.id}"
+        else:
+            from api.schemas.survey import SurveyCreate
+            from api.services import survey as survey_svc
+
+            artifact = await survey_svc.create_survey(
+                db,
+                data=SurveyCreate(title=artifact_title, org_id=matter.org_id),
+                created_by=actor.id,
+            )
+            target_type, href = "survey", f"/surveys/{artifact.id}"
+        await _link_created_artifact(
+            db,
+            matter=matter,
+            actor_id=actor.id,
+            target_type=target_type,
+            target_id=artifact.id,
+            title=artifact_title,
+            href=href,
+            context=context,
         )
 
     elif action_type == "set_matter_status":

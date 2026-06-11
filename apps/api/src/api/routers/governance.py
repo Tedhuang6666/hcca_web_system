@@ -22,6 +22,7 @@ from api.schemas.governance import (
     DecisionOut,
     DecisionUpdate,
     EntityRelationCreate,
+    EntityRelationGraphOut,
     EntityRelationOut,
     GovernanceCaseCreate,
     GovernanceCaseOut,
@@ -285,6 +286,71 @@ async def list_links_for_target(
         )
         for relation, matter in rows
     ]
+
+
+@router.get(
+    "/entities/{entity_type}/{entity_id}/relations",
+    response_model=list[EntityRelationOut],
+    summary="列出任意模組實體的正反向關聯",
+)
+async def list_entity_relations(
+    entity_type: str,
+    entity_id: uuid.UUID,
+    db: DbDep,
+    _: CurrentUser,
+) -> list[EntityRelationOut]:
+    rows = await governance_svc.list_entity_relations(
+        db, entity_type=entity_type, entity_id=entity_id
+    )
+    return [EntityRelationOut.model_validate(row) for row in rows]
+
+
+@router.post(
+    "/entities/{entity_type}/{entity_id}/relations",
+    response_model=EntityRelationOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="建立任意模組實體間的關聯",
+    dependencies=[GovernanceManagerDep],
+)
+async def create_entity_relation(
+    entity_type: str,
+    entity_id: uuid.UUID,
+    body: EntityRelationCreate,
+    db: DbDep,
+    user: CurrentUser,
+) -> EntityRelationOut:
+    relation = await governance_svc.create_entity_relation(
+        db,
+        source_type=entity_type,
+        source_id=entity_id,
+        data=body,
+        user=user,
+    )
+    return EntityRelationOut.model_validate(relation)
+
+
+@router.get(
+    "/entities/{entity_type}/{entity_id}/graph",
+    response_model=EntityRelationGraphOut,
+    summary="取得跨模組關聯圖",
+)
+async def get_entity_relation_graph(
+    entity_type: str,
+    entity_id: uuid.UUID,
+    db: DbDep,
+    _: CurrentUser,
+    depth: int = Query(2, ge=1, le=3),
+) -> EntityRelationGraphOut:
+    nodes, edges = await governance_svc.entity_relation_graph(
+        db,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        depth=depth,
+    )
+    return EntityRelationGraphOut(
+        nodes=[{"type": node["type"], "id": str(node["id"])} for node in nodes],
+        edges=[EntityRelationOut.model_validate(edge) for edge in edges],
+    )
 
 
 @router.delete(

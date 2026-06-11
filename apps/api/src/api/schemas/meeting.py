@@ -422,6 +422,10 @@ class DecisionCreate(BaseModel):
     content: str = Field(..., min_length=1)
     status: MeetingDecisionStatus = MeetingDecisionStatus.DRAFT
     regulation_transition_to: str | None = Field(None, max_length=50)
+    create_follow_up: bool = True
+    follow_up_assignee_id: uuid.UUID | None = None
+    follow_up_due_at: datetime | None = None
+    create_document_draft: bool = False
 
 
 class DecisionUpdate(BaseModel):

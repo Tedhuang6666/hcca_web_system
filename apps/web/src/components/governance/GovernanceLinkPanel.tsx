@@ -6,6 +6,7 @@ import {
   Check,
   ChevronRight,
   FolderKanban,
+  GitBranch,
   Link2,
   Loader2,
   Plus,
@@ -14,7 +15,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { governanceApi } from "@/lib/api";
-import type { MatterListItem, MatterLinkRef } from "@/lib/types";
+import type { EntityRelationOut, MatterListItem, MatterLinkRef } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
 
 type GovernanceEntityType =
@@ -31,7 +32,27 @@ type GovernanceEntityType =
   | "order"
   | "org"
   | "vote"
-  | "ticket";
+  | "ticket"
+  | "meal_order"
+  | "meal_schedule"
+  | "calendar_event"
+  | "publication"
+  | "exam_paper"
+  | "receivable"
+  | "user"
+  | "person"
+  | "position"
+  | "school_class"
+  | "product"
+  | "meal_vendor"
+  | "partner_business"
+  | "email_message"
+  | "document_template"
+  | "serial_template"
+  | "webhook"
+  | "api_key"
+  | "feature_flag"
+  | "policy";
 
 const ENTITY_LABEL: Record<GovernanceEntityType, string> = {
   document: "公文",
@@ -48,6 +69,26 @@ const ENTITY_LABEL: Record<GovernanceEntityType, string> = {
   org: "組織",
   vote: "投票",
   ticket: "售票",
+  meal_order: "學餐訂單",
+  meal_schedule: "學餐排程",
+  calendar_event: "行事曆",
+  publication: "發布",
+  exam_paper: "試卷",
+  receivable: "收款",
+  user: "使用者",
+  person: "人員",
+  position: "職位",
+  school_class: "班級",
+  product: "商品",
+  meal_vendor: "餐商",
+  partner_business: "特約商家",
+  email_message: "郵件",
+  document_template: "公文範本",
+  serial_template: "字號模板",
+  webhook: "Webhook",
+  api_key: "API Key",
+  feature_flag: "功能旗標",
+  policy: "政策文件",
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -91,6 +132,11 @@ export default function GovernanceLinkPanel({
   const [query, setQuery] = useState("");
   const [matters, setMatters] = useState<MatterListItem[]>([]);
   const [links, setLinks] = useState<MatterLinkRef[]>([]);
+  const [relations, setRelations] = useState<EntityRelationOut[]>([]);
+  const [targetType, setTargetType] = useState<GovernanceEntityType>("document");
+  const [targetId, setTargetId] = useState("");
+  const [targetTitle, setTargetTitle] = useState("");
+  const [targetHref, setTargetHref] = useState("");
 
   // 反向查詢：這筆資源屬於哪些事情。
   useEffect(() => {
@@ -102,6 +148,21 @@ export default function GovernanceLinkPanel({
       })
       .catch(() => {
         /* 詳情頁不因治理查詢失敗而中斷 */
+      });
+    return () => {
+      alive = false;
+    };
+  }, [entityType, entityId]);
+
+  useEffect(() => {
+    let alive = true;
+    governanceApi
+      .listEntityRelations(entityType, entityId)
+      .then((rows) => {
+        if (alive) setRelations(rows);
+      })
+      .catch(() => {
+        /* 不讓整合關聯查詢阻斷模組詳情頁 */
       });
     return () => {
       alive = false;
@@ -186,6 +247,52 @@ export default function GovernanceLinkPanel({
     }
   };
 
+  const createDirectRelation = async () => {
+    if (!targetId.trim() || !targetTitle.trim()) {
+      toast.error("請填寫目標 ID 與名稱");
+      return;
+    }
+    setSaving(true);
+    try {
+      const relation = await governanceApi.createEntityRelation(entityType, entityId, {
+        case_id: null,
+        source_type: entityType,
+        source_id: entityId,
+        target_type: targetType,
+        target_id: targetId.trim(),
+        relation: "related",
+        title: targetTitle.trim(),
+        href: targetHref.trim() || null,
+        note: `${ENTITY_LABEL[entityType]}與${ENTITY_LABEL[targetType]}直接關聯`,
+        meta: { linked_from: "module_detail" },
+      });
+      setRelations((prev) => [relation, ...prev]);
+      setTargetId("");
+      setTargetTitle("");
+      setTargetHref("");
+      toast.success("跨模組關聯已建立");
+    } catch (error) {
+      toast.error("建立跨模組關聯失敗，請確認目標 ID");
+      console.error(error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const unlinkDirect = async (relation: EntityRelationOut) => {
+    setSaving(true);
+    try {
+      await governanceApi.deleteRelation(relation.id);
+      setRelations((prev) => prev.filter((item) => item.id !== relation.id));
+      toast.success("已解除跨模組關聯");
+    } catch (error) {
+      toast.error("解除關聯失敗");
+      console.error(error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="relative flex flex-wrap items-center gap-2">
       {links.map((link) => (
@@ -218,6 +325,48 @@ export default function GovernanceLinkPanel({
           </button>
         </span>
       ))}
+      {relations
+        .filter((relation) => !(relation.matter_id && relation.source_type === "matter"))
+        .map((relation) => (
+          <span
+            key={relation.id}
+            className={`flex items-center gap-1.5 rounded-md ${compact ? "px-2 py-1" : "px-3 py-1.5"}`}
+            style={{
+              background: "var(--bg-hover)",
+              color: "var(--text-secondary)",
+              border: "1px solid var(--border)",
+            }}
+          >
+            <GitBranch size={12} aria-hidden={true} />
+            {relation.source_type === entityType &&
+            relation.source_id === entityId &&
+            relation.href ? (
+              <Link
+                href={relation.href}
+                className="max-w-[160px] truncate text-xs font-semibold"
+                title={relation.title}
+              >
+                {ENTITY_LABEL[relation.target_type as GovernanceEntityType] ??
+                  relation.target_type}
+                ：{relation.title}
+              </Link>
+            ) : (
+              <span className="max-w-[160px] truncate text-xs" title={relation.title}>
+                {relation.source_type === entityType && relation.source_id === entityId
+                  ? `${ENTITY_LABEL[relation.target_type as GovernanceEntityType] ?? relation.target_type}：${relation.title}`
+                  : `來自 ${ENTITY_LABEL[relation.source_type as GovernanceEntityType] ?? relation.source_type}`}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => unlinkDirect(relation)}
+              disabled={saving}
+              aria-label={`解除與「${relation.title}」的關聯`}
+            >
+              <X size={11} aria-hidden={true} />
+            </button>
+          </span>
+        ))}
 
       <button
         type="button"
@@ -344,6 +493,57 @@ export default function GovernanceLinkPanel({
                 {matters.length === 0 ? "找不到進行中的事情" : "已全部納入或無相符項目"}
               </div>
             )}
+          </div>
+
+          <div className="space-y-2 p-3" style={{ borderTop: "1px solid var(--border)" }}>
+            <div>
+              <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
+                直接連到其他模組
+              </p>
+              <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-muted)" }}>
+                建立任意模組實體間的關聯，不必先建立治理事情。
+              </p>
+            </div>
+            <div className="grid grid-cols-[120px_1fr] gap-2">
+              <select
+                value={targetType}
+                onChange={(event) =>
+                  setTargetType(event.target.value as GovernanceEntityType)
+                }
+                className="input"
+              >
+                {Object.entries(ENTITY_LABEL).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+              <input
+                value={targetId}
+                onChange={(event) => setTargetId(event.target.value)}
+                className="input"
+                placeholder="目標資料 ID"
+              />
+            </div>
+            <input
+              value={targetTitle}
+              onChange={(event) => setTargetTitle(event.target.value)}
+              className="input w-full"
+              placeholder="關聯項目名稱"
+            />
+            <input
+              value={targetHref}
+              onChange={(event) => setTargetHref(event.target.value)}
+              className="input w-full"
+              placeholder="前往網址，例如 /documents/..."
+            />
+            <button
+              type="button"
+              className="btn btn-secondary w-full justify-center"
+              onClick={createDirectRelation}
+              disabled={saving}
+            >
+              <GitBranch size={13} aria-hidden={true} />
+              建立跨模組關聯
+            </button>
           </div>
 
           <Link

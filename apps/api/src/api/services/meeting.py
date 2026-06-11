@@ -1035,7 +1035,15 @@ async def create_decision(
     data: DecisionCreate,
     created_by: uuid.UUID,
 ) -> MeetingDecision:
-    decision = MeetingDecision(meeting_id=meeting.id, created_by=created_by, **data.model_dump())
+    decision_fields = data.model_dump(
+        exclude={
+            "create_follow_up",
+            "follow_up_assignee_id",
+            "follow_up_due_at",
+            "create_document_draft",
+        }
+    )
+    decision = MeetingDecision(meeting_id=meeting.id, created_by=created_by, **decision_fields)
     session.add(decision)
     item = next((x for x in meeting.agenda_items if x.id == data.agenda_item_id), None)
     if item is not None and data.status != "draft":

@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -302,6 +302,104 @@ async def create_relation(
         },
     )
     return relation
+
+
+async def create_entity_relation(
+    db: AsyncSession,
+    *,
+    source_type: str,
+    source_id: uuid.UUID,
+    data: EntityRelationCreate,
+    user: User,
+) -> EntityRelation:
+    existing = await db.scalar(
+        select(EntityRelation).where(
+            EntityRelation.source_type == source_type,
+            EntityRelation.source_id == source_id,
+            EntityRelation.target_type == data.target_type,
+            EntityRelation.target_id == data.target_id,
+            EntityRelation.relation == data.relation,
+        )
+    )
+    if existing is not None:
+        return existing
+    relation = EntityRelation(
+        **data.model_dump(exclude={"source_type", "source_id"}),
+        source_type=source_type,
+        source_id=source_id,
+        created_by_id=user.id,
+    )
+    db.add(relation)
+    await db.flush()
+    return relation
+
+
+async def list_entity_relations(
+    db: AsyncSession,
+    *,
+    entity_type: str,
+    entity_id: uuid.UUID,
+) -> list[EntityRelation]:
+    rows = await db.execute(
+        select(EntityRelation)
+        .where(
+            or_(
+                and_(
+                    EntityRelation.source_type == entity_type,
+                    EntityRelation.source_id == entity_id,
+                ),
+                and_(
+                    EntityRelation.target_type == entity_type,
+                    EntityRelation.target_id == entity_id,
+                ),
+            )
+        )
+        .order_by(EntityRelation.updated_at.desc())
+    )
+    return list(rows.scalars().all())
+
+
+async def entity_relation_graph(
+    db: AsyncSession,
+    *,
+    entity_type: str,
+    entity_id: uuid.UUID,
+    depth: int,
+) -> tuple[list[dict], list[EntityRelation]]:
+    frontier = {(entity_type, entity_id)}
+    visited = set(frontier)
+    edges: dict[uuid.UUID, EntityRelation] = {}
+    for _ in range(depth):
+        if not frontier:
+            break
+        clauses = []
+        for node_type, node_id in frontier:
+            clauses.extend(
+                [
+                    and_(
+                        EntityRelation.source_type == node_type,
+                        EntityRelation.source_id == node_id,
+                    ),
+                    and_(
+                        EntityRelation.target_type == node_type,
+                        EntityRelation.target_id == node_id,
+                    ),
+                ]
+            )
+        rows = list((await db.execute(select(EntityRelation).where(or_(*clauses)))).scalars().all())
+        next_frontier: set[tuple[str, uuid.UUID]] = set()
+        for edge in rows:
+            edges[edge.id] = edge
+            for node_type, node_id in (
+                (edge.source_type, edge.source_id),
+                (edge.target_type, edge.target_id),
+            ):
+                if node_id is not None and (node_type, node_id) not in visited:
+                    visited.add((node_type, node_id))
+                    next_frontier.add((node_type, node_id))
+        frontier = next_frontier
+    nodes = [{"type": node_type, "id": node_id} for node_type, node_id in visited]
+    return nodes, list(edges.values())
 
 
 async def list_relations_for_target(

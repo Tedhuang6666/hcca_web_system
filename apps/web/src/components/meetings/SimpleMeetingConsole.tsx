@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   ChevronRight,
   ExternalLink,
+  FileText,
   Gavel,
   Monitor,
   Play,
@@ -15,11 +16,13 @@ import {
 } from "lucide-react";
 import { meetingsApi } from "@/lib/api";
 import { useWS } from "@/hooks/useWS";
+import UserPicker from "@/components/surveys/UserPicker";
 import type {
   MeetingAgendaItemOut,
   MeetingAttendanceOut,
   MeetingOut,
   MeetingVoteOption,
+  UserSummary,
 } from "@/lib/types";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -60,6 +63,10 @@ export default function SimpleMeetingConsole({ meetingId }: { meetingId: string 
   const [tallyReject, setTallyReject] = useState(0);
   const [tallyAbstain, setTallyAbstain] = useState(0);
   const [tallyCustom, setTallyCustom] = useState<Record<string, number>>({});
+  const [decisionContent, setDecisionContent] = useState("");
+  const [decisionAssignees, setDecisionAssignees] = useState<UserSummary[]>([]);
+  const [decisionDueAt, setDecisionDueAt] = useState("");
+  const [decisionDocument, setDecisionDocument] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -254,6 +261,26 @@ export default function SimpleMeetingConsole({ meetingId }: { meetingId: string 
     resetVotePanel();
   }
 
+  async function createIntegratedDecision() {
+    if (!meeting || !current || !decisionContent.trim()) return;
+    await run(async () => {
+      await meetingsApi.createDecision(meeting.id, {
+        agenda_item_id: current.id,
+        title: current.title,
+        content: decisionContent.trim(),
+        status: "passed",
+        create_follow_up: true,
+        follow_up_assignee_id: decisionAssignees[0]?.id ?? null,
+        follow_up_due_at: decisionDueAt ? new Date(decisionDueAt).toISOString() : null,
+        create_document_draft: decisionDocument,
+      });
+      setDecisionContent("");
+      setDecisionAssignees([]);
+      setDecisionDueAt("");
+      setDecisionDocument(false);
+    }, "正式決議、待辦與跨模組項目已建立");
+  }
+
   if (error && !meeting) return <main className="p-6 text-sm text-red-500">{error}</main>;
   if (!meeting) return <main className="p-6 text-sm text-[var(--muted)]">載入議場...</main>;
 
@@ -391,6 +418,51 @@ export default function SimpleMeetingConsole({ meetingId }: { meetingId: string 
                 {current.resolution}
               </p>
             )}
+
+            <div className="mt-4 grid gap-3 rounded-md border border-[var(--border)] p-3">
+              <div>
+                <p className="text-sm font-semibold">決議後續整合</p>
+                <p className="text-xs text-[var(--muted)]">
+                  建立正式決議後，自動產生待辦；期限會同步到行事曆與提醒。
+                </p>
+              </div>
+              <textarea
+                value={decisionContent}
+                onChange={(event) => setDecisionContent(event.target.value)}
+                rows={3}
+                className="rounded-md border border-[var(--border)] bg-transparent px-3 py-2 text-sm"
+                placeholder="輸入正式決議內容與執行要求"
+              />
+              <UserPicker
+                value={decisionAssignees}
+                onChange={(users) => setDecisionAssignees(users.slice(-1))}
+              />
+              <input
+                type="datetime-local"
+                value={decisionDueAt}
+                onChange={(event) => setDecisionDueAt(event.target.value)}
+                className="rounded-md border border-[var(--border)] bg-transparent px-3 py-2 text-sm"
+                aria-label="決議執行期限"
+              />
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={decisionDocument}
+                  onChange={(event) => setDecisionDocument(event.target.checked)}
+                />
+                <FileText size={15} aria-hidden="true" />
+                同時建立公文草稿
+              </label>
+              <button
+                type="button"
+                disabled={!decisionContent.trim() || busy}
+                onClick={createIntegratedDecision}
+                className="inline-flex items-center justify-center gap-2 rounded-md bg-[var(--primary)] px-3 py-2 text-sm font-medium text-black"
+              >
+                <CheckCircle2 size={15} aria-hidden="true" />
+                建立正式決議與後續工作
+              </button>
+            </div>
 
             {/* 表決區 */}
             <div className="mt-5 border-t border-[var(--border)] pt-4">

@@ -6,6 +6,7 @@ import { Check, Copy, History, Lock, Monitor, Smartphone, Undo2, X } from "lucid
 import { toast } from "sonner";
 import { electionsApi } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
+import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 import type {
   BallotBoxStatus,
   ElectionLiveSummary,
@@ -242,6 +243,13 @@ export default function ElectionCountPage({ params }: { params: Promise<{ id: st
             {summary.vote_threshold_pct !== null && `・門檻 ${summary.vote_threshold_pct}%`}
           </p>
         </div>
+        <GovernanceLinkPanel
+          entityType="election"
+          entityId={election.id}
+          title={election.title}
+          href={`/admin/elections/${election.id}/count`}
+          compact
+        />
         <div className="flex shrink-0 flex-wrap items-center gap-1.5">
           {electionActions.map((item) => (
             <button key={item.status} disabled={busy} className="btn btn-primary btn-sm" onClick={() => run(() => electionsApi.updateStatus(id, item.status), item.label)}>

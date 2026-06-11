@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from typing import Annotated
 
@@ -107,6 +108,8 @@ from api.services import governance_ingest
 from api.services import meeting as meeting_svc
 from api.services import workflow as workflow_svc
 from api.services.storage import get_storage
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/meetings", tags=["議事系統"])
 public_router = APIRouter(prefix="/public/meetings", tags=["公開議事大屏"])
@@ -1268,6 +1271,21 @@ async def create_decision(
     decision = await meeting_svc.create_decision(
         session, meeting, data=payload, created_by=current_user.id
     )
+    try:
+        async with session.begin_nested():
+            document_id = await governance_ingest.create_meeting_decision_outputs(
+                session,
+                meeting=meeting,
+                decision=decision,
+                actor=current_user,
+                create_follow_up=payload.create_follow_up,
+                follow_up_assignee_id=payload.follow_up_assignee_id,
+                follow_up_due_at=payload.follow_up_due_at,
+                create_document_draft=payload.create_document_draft,
+            )
+    except Exception:
+        logger.warning("meeting decision output integration failed", exc_info=True)
+        document_id = None
     agenda_item = next(
         (item for item in meeting.agenda_items if item.id == decision.agenda_item_id), None
     )
@@ -1341,6 +1359,13 @@ async def create_decision(
             "title": decision.title,
             "content": decision.content,
             "status": str(decision.status),
+            "follow_up_assignee_id": (
+                str(payload.follow_up_assignee_id) if payload.follow_up_assignee_id else None
+            ),
+            "follow_up_due_at": (
+                payload.follow_up_due_at.isoformat() if payload.follow_up_due_at else None
+            ),
+            "document_id": str(document_id) if document_id else None,
         },
     )
     return decision

@@ -949,15 +949,16 @@ async def create_document(
         serial = manual_serial
     else:
         if data.serial_template_id is None:
-            raise ValueError("請選擇字號模板，或手動指定公文字號")
-        template = await get_serial_template(session, data.serial_template_id)
-        if template is None or not template.is_active:
-            msg = "指定的字號模板不存在或已停用"
-            raise ValueError(msg)
-        if template.org_id != data.org_id:
-            msg = "字號模板不屬於此組織，無法使用"
-            raise PermissionError(msg)
-        serial = await generate_serial_from_template(session, template)
+            serial = f"DRAFT-{datetime.now(UTC):%Y%m%d}-{uuid.uuid4().hex[:8].upper()}"
+        else:
+            template = await get_serial_template(session, data.serial_template_id)
+            if template is None or not template.is_active:
+                msg = "指定的字號模板不存在或已停用"
+                raise ValueError(msg)
+            if template.org_id != data.org_id:
+                msg = "字號模板不屬於此組織，無法使用"
+                raise PermissionError(msg)
+            serial = await generate_serial_from_template(session, template)
 
     visibility = data.visibility_level
     doc = Document(

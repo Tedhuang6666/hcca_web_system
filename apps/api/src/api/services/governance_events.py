@@ -130,11 +130,80 @@ ENTITY_HREF: dict[str, Callable[[str], str]] = {
     "calendar_event": lambda i: "/calendar",
     "exam_paper": lambda i: "/exam-papers",
     "receivable": lambda i: "/finance/receivables",
+    "election": lambda i: f"/admin/elections/{i}/count",
+    "vote": lambda i: "/meetings",
+    "ticket": lambda i: "/shop",
+    "work_item": lambda i: "/tasks",
+    "email_message": lambda i: "/email/logs",
+    "webhook": lambda i: "/admin/webhooks",
+    "api_key": lambda i: "/admin/api-keys",
+    "policy": lambda i: "/admin/policies",
+    "user": lambda i: f"/admin/people?user={i}",
+    "person": lambda i: f"/admin/people?person={i}",
+    "position": lambda i: "/admin/permissions",
+    "school_class": lambda i: "/admin/classes",
+    "product": lambda i: "/shop/admin",
+    "meal_vendor": lambda i: "/meal/vendor",
+    "partner_business": lambda i: "/partner-map/admin",
+    "document_template": lambda i: "/document-templates",
+    "serial_template": lambda i: "/serial-templates",
+    "feature_flag": lambda i: "/admin/feature-flags",
+}
+
+ENTITY_LABELS: dict[str, str] = {
+    "document": "公文",
+    "meeting": "會議",
+    "regulation": "法規",
+    "survey": "問卷",
+    "petition": "陳情",
+    "judicial_petition": "評議",
+    "council_proposal": "議會提案",
+    "activity": "活動",
+    "announcement": "公告",
+    "order": "校商訂單",
+    "meal_order": "學餐訂單",
+    "meal_schedule": "學餐排程",
+    "org": "組織",
+    "publication": "發布",
+    "calendar_event": "行事曆",
+    "exam_paper": "試卷",
+    "receivable": "收款",
+    "election": "選舉",
+    "vote": "投票",
+    "ticket": "售票",
+    "work_item": "待辦",
+    "email_message": "郵件",
+    "webhook": "Webhook",
+    "api_key": "API Key",
+    "policy": "政策文件",
+    "user": "使用者",
+    "person": "人員",
+    "position": "職位",
+    "school_class": "班級",
+    "product": "商品",
+    "meal_vendor": "餐商",
+    "partner_business": "特約商家",
+    "document_template": "公文範本",
+    "serial_template": "字號模板",
+    "feature_flag": "功能旗標",
+}
+
+ENTITY_TYPE_ALIASES = {
+    "petition_case": "petition",
+    "shop_order": "order",
 }
 
 
 def lookup(entity_type: str, action: str) -> EventSpec | None:
-    return GOVERNANCE_EVENT_MAP.get((entity_type, action))
+    explicit = GOVERNANCE_EVENT_MAP.get((entity_type, action))
+    if explicit is not None:
+        return explicit
+    source_type = ENTITY_TYPE_ALIASES.get(entity_type, entity_type)
+    label = ENTITY_LABELS.get(source_type)
+    if label is None:
+        return None
+    event_type = action if "." in action else f"{source_type}.{action}"
+    return EventSpec(event_type, source_type, f"{label}：{action}")
 
 
 def href_for(source_type: str, entity_id: str) -> str | None:

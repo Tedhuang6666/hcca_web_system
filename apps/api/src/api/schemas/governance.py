@@ -270,6 +270,11 @@ class EntityRelationOut(BaseModel):
     updated_at: datetime
 
 
+class EntityRelationGraphOut(BaseModel):
+    nodes: list[dict]
+    edges: list[EntityRelationOut]
+
+
 class TimelineEventOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
