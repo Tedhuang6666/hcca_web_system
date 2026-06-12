@@ -59,6 +59,7 @@ import type {
   DiscordNicknamePrefixRuleIn, DiscordNicknamePrefixRuleOut,
   DiscordOrgChannelMappingIn, DiscordOrgChannelMappingOut,
   DiscordRoleMappingIn, DiscordRoleMappingOut,
+  DiscordRolePolicyIn, DiscordRolePolicyOut, DiscordMemberSyncStateOut,
   DocumentEfficiencyOut, DeptRankingItem, PendingAlertItem, AnnouncementParticipationItem,
   SurveyParticipationItem, AnalyticsInsightsOut,
   EmailCampaignRecipientOut,
@@ -89,6 +90,8 @@ import type {
   MatterLinkRef, MatterSpawnKind, MatterSpawnResult, DecisionCreate, DecisionOut, DecisionUpdate,
   EntityRelationCreate, EntityRelationGraphOut, EntityRelationOut, GovernanceCaseCreate, GovernanceCaseOut,
   GovernanceCaseUpdate, GovernanceDashboardOut, GovernanceWorkflowTemplateCreate,
+  GovernanceDiscordEventRouteIn, GovernanceDiscordEventRouteOut,
+  GovernanceDiscordWorkspaceIn, GovernanceDiscordWorkspaceOut,
   GovernanceModuleCapabilityOut, GovernanceResourceSearchOut, GovernanceWorkflowTemplateOut,
   MatterCreate, MatterListItem, MatterOut, MatterRoleAssignmentCreate,
   MatterRoleAssignmentOut, MatterRoleAssignmentUpdate, MatterUpdate, PlanningDocumentCreate,
@@ -1328,6 +1331,28 @@ export const discordApi = {
   updateRoleMapping: (id: string, body: DiscordRoleMappingIn) =>
     patch<DiscordRoleMappingOut>(`/discord/role-mappings/${id}`, body),
   deleteRoleMapping: (id: string) => del<void>(`/discord/role-mappings/${id}`),
+  listRolePolicies: (guildId?: string) =>
+    get<DiscordRolePolicyOut[]>(
+      `/discord/role-policies${guildId ? `?guild_id=${encodeURIComponent(guildId)}` : ""}`,
+    ),
+  createRolePolicy: (body: DiscordRolePolicyIn) =>
+    post<DiscordRolePolicyOut>("/discord/role-policies", body),
+  updateRolePolicy: (id: string, body: DiscordRolePolicyIn) =>
+    patch<DiscordRolePolicyOut>(`/discord/role-policies/${id}`, body),
+  deleteRolePolicy: (id: string) => del<void>(`/discord/role-policies/${id}`),
+  memberSyncStates: (guildId?: string, driftOnly = false) => {
+    const q = new URLSearchParams();
+    if (guildId) q.set("guild_id", guildId);
+    if (driftOnly) q.set("drift_only", "true");
+    return get<DiscordMemberSyncStateOut[]>(`/discord/member-sync-states?${q.toString()}`);
+  },
+  repairMemberSyncState: (id: string) =>
+    post<void>(`/discord/member-sync-states/${id}/repair`, {}),
+  repairMemberSyncStates: (stateIds: string[] = []) =>
+    post<{ queued: number }>("/discord/member-sync-states/repair", {
+      state_ids: stateIds,
+      drift_only: true,
+    }),
 };
 
 export const workItemsApi = {
@@ -1489,6 +1514,29 @@ export const governanceApi = {
   },
   createMatter: (body: MatterCreate) => post<MatterOut>("/governance/matters", body),
   getMatter: (id: string) => get<MatterOut>(`/governance/matters/${id}`),
+  discordWorkspace: (id: string) =>
+    get<GovernanceDiscordWorkspaceOut | null>(
+      `/governance/matters/${id}/discord-workspace`,
+    ),
+  saveDiscordWorkspace: (id: string, body: GovernanceDiscordWorkspaceIn) =>
+    put<GovernanceDiscordWorkspaceOut>(
+      `/governance/matters/${id}/discord-workspace`,
+      body,
+    ),
+  syncDiscordWorkspace: (id: string) =>
+    post<GovernanceDiscordWorkspaceOut>(
+      `/governance/matters/${id}/discord-workspace/sync`,
+      {},
+    ),
+  discordRoutes: (id: string) =>
+    get<GovernanceDiscordEventRouteOut[]>(
+      `/governance/matters/${id}/discord-routes`,
+    ),
+  saveDiscordRoute: (id: string, body: GovernanceDiscordEventRouteIn) =>
+    put<GovernanceDiscordEventRouteOut>(
+      `/governance/matters/${id}/discord-routes`,
+      body,
+    ),
   updateMatter: (id: string, body: MatterUpdate) =>
     patch<MatterOut>(`/governance/matters/${id}`, body),
   createProgram: (matterId: string, body: ProgramCreate) =>

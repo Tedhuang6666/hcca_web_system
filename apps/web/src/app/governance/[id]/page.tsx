@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import type { CSSProperties } from "react";
 import GovernanceArtifactDrawer from "@/components/governance/GovernanceArtifactDrawer";
+import GovernanceDiscordPanel from "@/components/governance/GovernanceDiscordPanel";
 import PlanningDocumentsPanel from "@/components/governance/PlanningDocumentsPanel";
 import { governanceApi } from "@/lib/api";
 import type {
@@ -553,6 +554,8 @@ export default function GovernanceMatterPage() {
           </div>
         )}
       </section>
+
+      <GovernanceDiscordPanel matterId={matterId} initial={matter.discord_workspace} />
 
       <section className="grid gap-5 xl:grid-cols-[1.5fr_1fr]">
         <div className="space-y-5">

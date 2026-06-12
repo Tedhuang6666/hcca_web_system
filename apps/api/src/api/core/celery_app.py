@@ -126,6 +126,7 @@ celery_app.conf.include = list(celery_app.conf.include or []) + [
     "api.services.watchdog_tasks",
     "api.services.error_report_tasks",
     "api.services.discord_reminders",
+    "api.services.discord_sync_tasks",
     "api.services.metrics_tasks",
 ]
 
@@ -258,6 +259,10 @@ celery_app.conf.beat_schedule = {
     # Discord 行事曆 T-1h / T-24h 個人提醒掃描
     "discord-reminder-sweep-every-15min": {
         "task": "api.services.discord_reminders.reminder_sweep",
+        "schedule": 900.0,
+    },
+    "discord-member-reconcile-every-15min": {
+        "task": "api.services.discord_sync_tasks.reconcile_members",
         "schedule": 900.0,
     },
 }

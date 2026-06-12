@@ -34,6 +34,19 @@ class DiscordMemberJoinedOut(BaseModel):
     platform_display_name: str | None = None
 
 
+class DiscordMemberUpdatedIn(BaseModel):
+    guild_id: str = Field(..., min_length=1, max_length=32)
+    discord_user_id: str = Field(..., min_length=1, max_length=32)
+    nickname: str = Field(..., min_length=1, max_length=100)
+    role_ids: list[str] = Field(default_factory=list, max_length=250)
+
+
+class DiscordMemberUpdatedOut(BaseModel):
+    linked: bool
+    has_role_drift: bool
+    expected_nickname: str | None = None
+
+
 class DiscordCommandRequest(BaseModel):
     discord_user_id: str = Field(..., min_length=1, max_length=32)
     interaction_id: str = Field(..., min_length=1, max_length=32)
@@ -68,4 +81,6 @@ __all__ = [
     "DiscordCommandResponse",
     "DiscordMemberJoinedIn",
     "DiscordMemberJoinedOut",
+    "DiscordMemberUpdatedIn",
+    "DiscordMemberUpdatedOut",
 ]

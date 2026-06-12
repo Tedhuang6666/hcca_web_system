@@ -3131,6 +3131,43 @@ export interface DiscordRoleMappingOut {
 
 export type DiscordRoleMappingIn = Omit<DiscordRoleMappingOut, "id" | "created_at" | "updated_at">;
 
+export interface DiscordRolePolicyOut {
+  id: string;
+  guild_id: string;
+  role_id: string;
+  role_name: string | null;
+  org_id: string | null;
+  position_id: string | null;
+  nickname_label: string | null;
+  priority: number;
+  manage_role: boolean;
+  use_in_nickname: boolean;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type DiscordRolePolicyIn = Omit<
+  DiscordRolePolicyOut,
+  "id" | "created_at" | "updated_at"
+>;
+
+export interface DiscordMemberSyncStateOut {
+  id: string;
+  guild_id: string;
+  discord_user_id: string;
+  user_id: string | null;
+  base_nickname: string | null;
+  actual_nickname: string | null;
+  expected_nickname: string | null;
+  actual_role_ids: string[];
+  desired_role_ids: string[];
+  has_role_drift: boolean;
+  last_seen_at: string | null;
+  last_synced_at: string | null;
+  last_error: string | null;
+}
+
 export interface DiscordNicknamePrefixRuleOut {
   id: string;
   guild_id: string;
@@ -3526,7 +3563,58 @@ export interface MatterOut extends Omit<MatterListItem, "case_count" | "open_tas
   decisions: DecisionOut[];
   planning_documents: PlanningDocumentOut[];
   role_assignments: MatterRoleAssignmentOut[];
+  discord_workspace: GovernanceDiscordWorkspaceOut | null;
 }
+
+export interface GovernanceDiscordEventRouteOut {
+  id: string;
+  workspace_id: string;
+  event_type: string;
+  channel_kind: "discussion" | "announcement" | "staff" | "custom";
+  channel_id: string | null;
+  create_thread: boolean;
+  mention_role_id: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type GovernanceDiscordEventRouteIn = Omit<
+  GovernanceDiscordEventRouteOut,
+  "id" | "workspace_id" | "created_at" | "updated_at"
+>;
+
+export interface GovernanceDiscordWorkspaceOut {
+  id: string;
+  matter_id: string;
+  guild_id: string;
+  mode: "existing" | "managed";
+  category_id: string | null;
+  discussion_channel_id: string | null;
+  announcement_channel_id: string | null;
+  staff_channel_id: string | null;
+  mention_role_id: string | null;
+  sync_status: string;
+  last_error: string | null;
+  last_synced_at: string | null;
+  auto_sync: boolean;
+  is_active: boolean;
+  routes: GovernanceDiscordEventRouteOut[];
+  created_at: string;
+  updated_at: string;
+}
+
+export type GovernanceDiscordWorkspaceIn = Omit<
+  GovernanceDiscordWorkspaceOut,
+  | "id"
+  | "matter_id"
+  | "sync_status"
+  | "last_error"
+  | "last_synced_at"
+  | "routes"
+  | "created_at"
+  | "updated_at"
+>;
 
 export interface GovernanceStatsOut {
   active_matters: number;

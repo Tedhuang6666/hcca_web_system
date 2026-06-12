@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from api.models.governance import (
     AutomationRuleStatus,
@@ -411,6 +411,61 @@ class MatterRoleAssignmentOut(BaseModel):
     updated_at: datetime
 
 
+class GovernanceDiscordEventRouteIn(BaseModel):
+    event_type: str = Field(..., min_length=1, max_length=60)
+    channel_kind: str = Field("discussion", pattern="^(discussion|announcement|staff|custom)$")
+    channel_id: str | None = Field(None, max_length=32)
+    create_thread: bool = False
+    mention_role_id: str | None = Field(None, max_length=32)
+    is_active: bool = True
+
+    @model_validator(mode="after")
+    def validate_custom_channel(self) -> GovernanceDiscordEventRouteIn:
+        if self.channel_kind == "custom" and not self.channel_id:
+            raise ValueError("指定既有頻道時必須選擇頻道")
+        return self
+
+
+class GovernanceDiscordEventRouteOut(GovernanceDiscordEventRouteIn):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    workspace_id: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
+
+
+class GovernanceDiscordWorkspaceIn(BaseModel):
+    guild_id: str = Field(..., min_length=1, max_length=32)
+    mode: str = Field("existing", pattern="^(existing|managed)$")
+    category_id: str | None = Field(None, max_length=32)
+    discussion_channel_id: str | None = Field(None, max_length=32)
+    announcement_channel_id: str | None = Field(None, max_length=32)
+    staff_channel_id: str | None = Field(None, max_length=32)
+    mention_role_id: str | None = Field(None, max_length=32)
+    auto_sync: bool = True
+    is_active: bool = True
+
+    @model_validator(mode="after")
+    def validate_existing_workspace(self) -> GovernanceDiscordWorkspaceIn:
+        if self.mode == "existing" and not self.discussion_channel_id:
+            raise ValueError("綁定既有工作區時必須選擇討論頻道")
+        return self
+
+
+class GovernanceDiscordWorkspaceOut(GovernanceDiscordWorkspaceIn):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    matter_id: uuid.UUID
+    sync_status: str
+    last_error: str | None
+    last_synced_at: datetime | None
+    routes: list[GovernanceDiscordEventRouteOut] = []
+    created_at: datetime
+    updated_at: datetime
+
+
 class GovernanceWorkflowTemplateOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -522,6 +577,7 @@ class MatterOut(BaseModel):
     decisions: list[DecisionOut] = []
     planning_documents: list[PlanningDocumentOut] = []
     role_assignments: list[MatterRoleAssignmentOut] = []
+    discord_workspace: GovernanceDiscordWorkspaceOut | None = None
 
 
 class GovernanceStatsOut(BaseModel):

@@ -37,6 +37,10 @@ from api.schemas.governance import (
     GovernanceCaseOut,
     GovernanceCaseUpdate,
     GovernanceDashboardOut,
+    GovernanceDiscordEventRouteIn,
+    GovernanceDiscordEventRouteOut,
+    GovernanceDiscordWorkspaceIn,
+    GovernanceDiscordWorkspaceOut,
     GovernanceModuleCapabilityOut,
     GovernanceResourceSearchOut,
     GovernanceWorkflowTemplateCreate,
@@ -68,7 +72,7 @@ from api.services import announcement as announcement_svc
 from api.services import audit as audit_svc
 from api.services import document as document_svc
 from api.services import governance as governance_svc
-from api.services import governance_ingest, governance_modules
+from api.services import governance_discord, governance_ingest, governance_modules
 from api.services import meeting as meeting_svc
 from api.services import regulation as regulation_svc
 from api.services import survey as survey_svc
@@ -162,6 +166,90 @@ async def create_matter(body: MatterCreate, db: DbDep, user: CurrentUser) -> Mat
 @router.get("/matters/{matter_id}", response_model=MatterOut, summary="取得事情中心")
 async def get_matter(matter_id: uuid.UUID, db: DbDep, _: CurrentUser) -> Matter:
     return await _matter_or_404(db, matter_id)
+
+
+@router.get(
+    "/matters/{matter_id}/discord-workspace",
+    response_model=GovernanceDiscordWorkspaceOut | None,
+    summary="取得治理事項 Discord 工作區",
+)
+async def get_matter_discord_workspace(matter_id: uuid.UUID, db: DbDep, _: CurrentUser) -> object:
+    await _matter_or_404(db, matter_id)
+    return await governance_discord.get_workspace(db, matter_id)
+
+
+@router.put(
+    "/matters/{matter_id}/discord-workspace",
+    response_model=GovernanceDiscordWorkspaceOut,
+    dependencies=[GovernanceManagerDep],
+    summary="建立或綁定治理事項 Discord 工作區",
+)
+async def upsert_matter_discord_workspace(
+    matter_id: uuid.UUID,
+    body: GovernanceDiscordWorkspaceIn,
+    db: DbDep,
+    user: CurrentUser,
+) -> object:
+    matter = await _matter_or_404(db, matter_id)
+    workspace = await governance_discord.upsert_workspace(db, matter, body.model_dump())
+    if workspace.mode == "managed" or workspace.auto_sync:
+        await governance_discord.enqueue_workspace_sync(db, workspace)
+    await audit_svc.record(
+        db,
+        entity_type="governance_discord_workspace",
+        entity_id=str(workspace.id),
+        action="governance.discord_workspace.upsert",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        meta=body.model_dump(),
+        summary=f"設定事情「{matter.title}」Discord 工作區",
+    )
+    return workspace
+
+
+@router.post(
+    "/matters/{matter_id}/discord-workspace/sync",
+    response_model=GovernanceDiscordWorkspaceOut,
+    dependencies=[GovernanceManagerDep],
+    summary="同步治理事項 Discord 工作區",
+)
+async def sync_matter_discord_workspace(matter_id: uuid.UUID, db: DbDep, _: CurrentUser) -> object:
+    await _matter_or_404(db, matter_id)
+    workspace = await governance_discord.get_workspace(db, matter_id)
+    if workspace is None:
+        raise HTTPException(status_code=404, detail="Discord 工作區尚未設定")
+    await governance_discord.enqueue_workspace_sync(db, workspace)
+    return workspace
+
+
+@router.get(
+    "/matters/{matter_id}/discord-routes",
+    response_model=list[GovernanceDiscordEventRouteOut],
+    summary="列出治理事項 Discord 事件路由",
+)
+async def list_matter_discord_routes(matter_id: uuid.UUID, db: DbDep, _: CurrentUser) -> list:
+    await _matter_or_404(db, matter_id)
+    workspace = await governance_discord.get_workspace(db, matter_id)
+    return [] if workspace is None else await governance_discord.list_routes(db, workspace.id)
+
+
+@router.put(
+    "/matters/{matter_id}/discord-routes",
+    response_model=GovernanceDiscordEventRouteOut,
+    dependencies=[GovernanceManagerDep],
+    summary="建立或更新治理事項 Discord 事件路由",
+)
+async def upsert_matter_discord_route(
+    matter_id: uuid.UUID,
+    body: GovernanceDiscordEventRouteIn,
+    db: DbDep,
+    _: CurrentUser,
+) -> object:
+    await _matter_or_404(db, matter_id)
+    workspace = await governance_discord.get_workspace(db, matter_id)
+    if workspace is None:
+        raise HTTPException(status_code=409, detail="請先設定 Discord 工作區")
+    return await governance_discord.upsert_route(db, workspace, body.model_dump())
 
 
 @router.patch(
