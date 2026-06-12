@@ -1,10 +1,10 @@
 """時間軸事件 / 任務 / 決議"""
+
 from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.governance import (
@@ -17,8 +17,8 @@ from api.models.user import User
 from api.models.work_item import WorkItem
 from api.schemas.governance import DecisionCreate, DecisionUpdate, TimelineEventCreate
 from api.schemas.work_item import WorkItemCreate
-from api.services._base import apply_updates
 from api.services import work_item as work_item_svc
+from api.services._base import apply_updates
 
 
 async def record_event(

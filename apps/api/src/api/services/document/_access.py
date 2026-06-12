@@ -1,4 +1,5 @@
 """公文可見性 / 存取控制 / 查詢輔助"""
+
 from __future__ import annotations
 
 import uuid

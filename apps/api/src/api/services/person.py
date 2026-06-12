@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.core.cache import cache_invalidate
-from api.services._base import apply_updates
 from api.core.clock import local_today
 from api.models.org import Position, UserPosition
 from api.models.person import (
@@ -37,6 +36,7 @@ from api.schemas.person import (
     PersonRosterImportResult,
     PersonUpdate,
 )
+from api.services._base import apply_updates
 from api.services.discord_bot import enqueue_role_sync
 
 

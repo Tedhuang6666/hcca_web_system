@@ -1,4 +1,5 @@
 """議程 / 出勤 / 法案推進 / 議事事件"""
+
 from __future__ import annotations
 
 import uuid
@@ -21,8 +22,6 @@ from api.models.meeting import (
     MeetingAttendanceSource,
     MeetingBillStage,
     MeetingEvent,
-    MeetingMode,
-    MeetingRequestStatus,
     MeetingStatus,
 )
 from api.models.org import Org, Permission, Position, UserPosition
@@ -39,8 +38,8 @@ from api.schemas.meeting import (
     AttendanceSourceResolveRequest,
     AttendanceUpdate,
 )
-from api.services._base import apply_updates
 from api.services import school_class as class_svc
+from api.services._base import apply_updates
 from api.services.permission import active_tenure_filter
 
 # 各階段「自動帶入議程」的法案狀態

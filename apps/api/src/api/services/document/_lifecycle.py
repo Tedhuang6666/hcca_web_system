@@ -1,4 +1,5 @@
 """公文 CRUD / 狀態機 / 審核 / 代行授權 / 受文者"""
+
 from __future__ import annotations
 
 import logging

@@ -1,4 +1,5 @@
 """商家 / 商品 / 可用時段 / 序號"""
+
 from __future__ import annotations
 
 import logging
@@ -11,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.core.clock import now_local
-from api.services._base import apply_updates
 from api.models.meal import (
     MealClassPickupCode,
     MealOrder,
@@ -34,6 +34,7 @@ from api.schemas.meal import (
     MealVendorUpdate,
     MealWeeklyAvailabilityCreate,
 )
+from api.services._base import apply_updates
 
 logger = logging.getLogger(__name__)
 

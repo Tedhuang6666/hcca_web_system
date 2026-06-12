@@ -1,4 +1,5 @@
 """報表匯出 / 統計 / 未取餐處理"""
+
 from __future__ import annotations
 
 import io
@@ -13,7 +14,6 @@ from api.models.meal import (
     MealOrder,
     MealOrderItem,
     MealOrderStatus,
-    MealPickupStatus,
     MealVendor,
     MenuItem,
     MenuSchedule,

@@ -295,10 +295,9 @@ def _extract_docx_paragraphs(file_bytes: bytes, *, filename: str | None = None) 
     if filename and not filename.lower().endswith(".docx"):
         raise ValueError("請上傳 .docx Word 文件")
     try:
-        with ZipFile(BytesIO(file_bytes)) as docx:
+        with ZipFile(BytesIO(file_bytes)) as docx, docx.open("word/document.xml") as entry:
             # 以串流方式只讀有限位元組（不信任 zip 宣告的大小），防解壓縮炸彈。
-            with docx.open("word/document.xml") as entry:
-                document_xml = entry.read(_MAX_DOCUMENT_XML_BYTES + 1)
+            document_xml = entry.read(_MAX_DOCUMENT_XML_BYTES + 1)
     except (BadZipFile, KeyError) as exc:
         raise ValueError("無法讀取 DOCX 內容，請確認檔案格式正確") from exc
 

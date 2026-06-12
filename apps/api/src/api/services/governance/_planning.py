@@ -1,4 +1,5 @@
 """企劃書 / 職務指派 / 工作流程範本 / 自動化規則 / 儀表板"""
+
 from __future__ import annotations
 
 import uuid
@@ -328,9 +329,7 @@ async def dashboard(db: AsyncSession, *, user: User) -> dict:
     open_cases = await db.scalar(
         select(func.count(GovernanceCase.id)).where(
             GovernanceCase.is_active.is_(True),
-            GovernanceCase.status.in_(
-                [CaseStatus.TODO, CaseStatus.IN_PROGRESS, CaseStatus.REVIEW]
-            ),
+            GovernanceCase.status.in_([CaseStatus.TODO, CaseStatus.IN_PROGRESS, CaseStatus.REVIEW]),
         )
     )
     open_tasks = await db.scalar(

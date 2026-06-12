@@ -1,4 +1,5 @@
 """表決 / 計時 / 動議 / 決議 / 迴避 / 發言隊列"""
+
 from __future__ import annotations
 
 import uuid
@@ -7,7 +8,6 @@ from datetime import UTC, datetime
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.services._base import apply_updates
 from api.models.meeting import (
     AttendanceStatus,
     BallotChoice,
@@ -32,6 +32,7 @@ from api.models.meeting import (
     VoteThresholdType,
     VoteVisibility,
 )
+from api.models.user import User
 from api.schemas.meeting import (
     DecisionCreate,
     DecisionUpdate,
@@ -45,7 +46,7 @@ from api.schemas.meeting import (
     VoteCreate,
     VoteUpdate,
 )
-from api.models.user import User
+from api.services._base import apply_updates
 
 
 def _vote_tally(vote: MeetingVote, eligible_count: int, present_voters: int = 0) -> dict:
@@ -195,9 +196,7 @@ async def update_decision(
     return decision
 
 
-async def get_or_create_screen_state(
-    session: AsyncSession, meeting: Meeting
-) -> MeetingScreenState:
+async def get_or_create_screen_state(session: AsyncSession, meeting: Meeting) -> MeetingScreenState:
     state = meeting.screen_state
     if state is None:
         state = MeetingScreenState(meeting_id=meeting.id)
@@ -206,9 +205,7 @@ async def get_or_create_screen_state(
     return state
 
 
-async def get_or_create_timer_state(
-    session: AsyncSession, meeting: Meeting
-) -> MeetingTimerState:
+async def get_or_create_timer_state(session: AsyncSession, meeting: Meeting) -> MeetingTimerState:
     state = meeting.timer_state
     if state is None:
         state = MeetingTimerState(
@@ -239,9 +236,7 @@ async def update_screen_state(
     return state
 
 
-async def update_vote(
-    session: AsyncSession, vote: MeetingVote, *, data: VoteUpdate
-) -> MeetingVote:
+async def update_vote(session: AsyncSession, vote: MeetingVote, *, data: VoteUpdate) -> MeetingVote:
     apply_updates(vote, data)
     await session.flush()
     return vote
