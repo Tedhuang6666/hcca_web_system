@@ -32,7 +32,7 @@ dependencies = [
     "python-multipart>=0.0.24",
     # redis-py 客戶端版本（非 Redis 伺服器版本）。務必鎖 <6：redis-py 8.x 與
     # kombu Redis broker transport 不相容，會讓 celery worker idle 也 busy-loop 燒 CPU。
-    "redis>=5.0,<6.0",
+    "redis>=5.0,<9.0",
     "sentry-sdk>=2.57.0",
     "slowapi>=0.1.9",
     "sqlalchemy>=2.0.49",
