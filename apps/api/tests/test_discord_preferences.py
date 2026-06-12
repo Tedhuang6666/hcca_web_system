@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import time
 from unittest.mock import patch
 
-from api.services.discord_bot import _in_quiet_hours
+from api.services.discord_gateway import _in_quiet_hours
 
 
 class _PrefStub:

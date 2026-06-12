@@ -1,0 +1,24 @@
+FROM python:3.12-slim AS builder
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+WORKDIR /build
+COPY apps/discord-bot/pyproject.toml ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --no-dev --no-editable --no-install-project
+
+FROM python:3.12-slim AS runtime
+
+RUN groupadd --gid 1001 appgroup && \
+    useradd --uid 1001 --gid appgroup --no-create-home appuser
+
+WORKDIR /app
+COPY --from=builder /build/.venv /app/.venv
+COPY apps/discord-bot/src /app/src
+
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH="/app/src"
+
+USER appuser
+CMD ["python", "-m", "hcca_discord_bot"]

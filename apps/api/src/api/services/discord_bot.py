@@ -9,7 +9,6 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-import httpx
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,10 +44,6 @@ _OPEN_TOKEN_TTL_SECONDS = 5 * 60
 
 def is_configured() -> bool:
     return bool(settings.DISCORD_CLIENT_ID and settings.DISCORD_CLIENT_SECRET)
-
-
-def bot_configured() -> bool:
-    return bool(settings.DISCORD_BOT_TOKEN)
 
 
 def _safe_frontend_path(path: str | None) -> str:
@@ -1011,24 +1006,6 @@ async def emit_tenure_ended(
     )
 
 
-def _discord_headers() -> dict[str, str]:
-    return {
-        "Authorization": f"Bot {settings.DISCORD_BOT_TOKEN}",
-        "Content-Type": "application/json",
-    }
-
-
-def _sanitize_channel_name(value: str) -> str:
-    allowed = []
-    for char in value.lower():
-        if char.isalnum() or char in {"-", "_"}:
-            allowed.append(char)
-        elif char.isspace():
-            allowed.append("-")
-    name = "".join(allowed).strip("-")
-    return name[:80] or "petition"
-
-
 async def enqueue_petition_private_channel(
     db: AsyncSession, case_obj: PetitionCase, *, force: bool = False
 ) -> bool:
@@ -1063,134 +1040,19 @@ async def enqueue_petition_private_channel(
     return True
 
 
-def create_petition_private_channel(payload: dict[str, Any]) -> str | None:
-    if not bot_configured():
-        logger.warning("Discord Bot 未設定，跳過陳情私密頻道建立")
-        return None
-    guild_id = str(payload["guild_id"])
-    case_id = str(payload["case_id"])
-    case_number = str(payload.get("case_number") or case_id[:8])
-    title = str(payload.get("title") or "陳情案件")
-    staff_role_id = str(payload["staff_role_id"])
-    submitter_id = payload.get("submitter_discord_user_id")
-
-    view_channel = 1 << 10
-    send_messages = 1 << 11
-    manage_messages = 1 << 13
-    attach_files = 1 << 15
-    read_history = 1 << 16
-    petitioner_allow = view_channel | send_messages | attach_files | read_history
-    staff_allow = petitioner_allow | manage_messages
-    overwrites: list[dict[str, Any]] = [
-        {"id": guild_id, "type": 0, "deny": str(view_channel), "allow": "0"},
-        {"id": staff_role_id, "type": 0, "allow": str(staff_allow), "deny": "0"},
-    ]
-    if submitter_id:
-        overwrites.append(
-            {"id": str(submitter_id), "type": 1, "allow": str(petitioner_allow), "deny": "0"}
-        )
-    body: dict[str, Any] = {
-        "name": _sanitize_channel_name(f"petition-{case_number}-{title[:24]}"),
-        "type": 0,
-        "topic": f"HCCA 陳情案件 {case_number}。正式長文與附件請回平台處理。",
-        "permission_overwrites": overwrites,
-    }
-    if payload.get("category_id"):
-        body["parent_id"] = str(payload["category_id"])
-    with httpx.Client(timeout=10.0, headers=_discord_headers()) as client:
-        created = client.post(f"https://discord.com/api/v10/guilds/{guild_id}/channels", json=body)
-        created.raise_for_status()
-        channel = created.json()
-        channel_id = str(channel["id"])
-        intro = (
-            f"陳情案件 {case_number} 已建立私密討論頻道。\n"
-            f"案件：{title}\n"
-            f"{'<@' + str(submitter_id) + '> ' if submitter_id else ''}"
-            "這裡適合快速補充與溝通；正式回覆、附件與結案仍會保存到平台。"
-        )
-        message = client.post(
-            f"https://discord.com/api/v10/channels/{channel_id}/messages",
-            json={"content": intro[:1900]},
-        )
-        message.raise_for_status()
-
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import Session
-
-    from api.core.config import settings
-
-    sync_url = str(settings.DATABASE_URL).replace("+asyncpg", "")
-    engine = create_engine(sync_url)
-    with Session(engine) as session:
-        case_obj = session.get(PetitionCase, uuid.UUID(case_id))
-        if case_obj is not None:
-            case_obj.discord_guild_id = guild_id
-            case_obj.discord_channel_id = channel_id
-            case_obj.discord_channel_created_at = datetime.now(UTC)
-            session.commit()
-    return channel_id
-
-
-async def fetch_bot_guilds() -> list[dict[str, Any]]:
-    if not bot_configured():
-        return []
-    async with httpx.AsyncClient(timeout=10.0, headers=_discord_headers()) as client:
-        res = await client.get("https://discord.com/api/v10/users/@me/guilds")
-        res.raise_for_status()
-        return list(res.json())
-
-
-async def fetch_guild_channels(guild_id: str) -> list[dict[str, Any]]:
-    if not bot_configured():
-        return []
-    async with httpx.AsyncClient(timeout=10.0, headers=_discord_headers()) as client:
-        res = await client.get(f"https://discord.com/api/v10/guilds/{guild_id}/channels")
-        res.raise_for_status()
-        return list(res.json())
-
-
-async def fetch_guild_roles(guild_id: str) -> list[dict[str, Any]]:
-    if not bot_configured():
-        return []
-    async with httpx.AsyncClient(timeout=10.0, headers=_discord_headers()) as client:
-        res = await client.get(f"https://discord.com/api/v10/guilds/{guild_id}/roles")
-        res.raise_for_status()
-        return list(res.json())
-
-
-async def fetch_bot_user() -> dict[str, Any] | None:
-    if not bot_configured():
-        return None
-    async with httpx.AsyncClient(timeout=10.0, headers=_discord_headers()) as client:
-        res = await client.get("https://discord.com/api/v10/users/@me")
-        res.raise_for_status()
-        return dict(res.json())
-
-
-async def fetch_guild_member(guild_id: str, discord_user_id: str) -> dict[str, Any] | None:
-    if not bot_configured():
-        return None
-    async with httpx.AsyncClient(timeout=10.0, headers=_discord_headers()) as client:
-        res = await client.get(
-            f"https://discord.com/api/v10/guilds/{guild_id}/members/{discord_user_id}"
-        )
-        if res.status_code == 404:
-            return None
-        res.raise_for_status()
-        return dict(res.json())
-
-
 async def bot_health_snapshot(db: AsyncSession) -> dict[str, Any]:
-    bot_user = await fetch_bot_user()
+    from api.services.discord_gateway import read_inventory
+
+    inventory = await read_inventory()
     configs = (await db.execute(select(DiscordGuildConfig))).scalars().all()
     active_links = await db.scalar(
         select(DiscordAccountLink).where(DiscordAccountLink.is_active.is_(True)).limit(1)
     )
     return {
-        "bot_configured": bot_configured(),
+        "bot_configured": inventory is not None,
         "oauth_configured": is_configured(),
-        "bot_user_id": str(bot_user.get("id")) if bot_user else None,
-        "bot_username": str(bot_user.get("username")) if bot_user else None,
+        "bot_user_id": str(inventory.get("bot_user_id")) if inventory else None,
+        "bot_username": str(inventory.get("bot_username")) if inventory else None,
         "configured_guild_count": len(configs),
         "has_active_links": active_links is not None,
     }
@@ -1209,287 +1071,9 @@ async def enqueue_all_role_sync(db: AsyncSession) -> int:
     return count
 
 
-def send_dm(
-    discord_user_id: str,
-    *,
-    title: str | None = None,
-    body: str | None = None,
-    link: str | None = None,
-    embed: dict[str, Any] | None = None,
-    components: list[dict[str, Any]] | None = None,
-) -> None:
-    if not bot_configured():
-        logger.warning("Discord Bot 未設定，跳過 DM")
-        return
-    payload: dict[str, Any] = {}
-    if embed is not None:
-        payload["embeds"] = [embed]
-    else:
-        text = title or "HCCA 平台通知"
-        if body:
-            text = f"{text}\n{body}"
-        if link:
-            text = f"{text}\n{_absolute_url(link)}"
-        payload["content"] = text[:1900]
-    if components:
-        payload["components"] = components
-    with httpx.Client(timeout=10.0, headers=_discord_headers()) as client:
-        channel = client.post(
-            "https://discord.com/api/v10/users/@me/channels",
-            json={"recipient_id": discord_user_id},
-        )
-        channel.raise_for_status()
-        channel_id = channel.json()["id"]
-        message = client.post(
-            f"https://discord.com/api/v10/channels/{channel_id}/messages",
-            json=payload,
-        )
-        message.raise_for_status()
-
-
-def send_channel_message(
-    channel_id: str,
-    *,
-    title: str | None = None,
-    body: str | None = None,
-    embed: dict[str, Any] | None = None,
-    components: list[dict[str, Any]] | None = None,
-    thread_name: str | None = None,
-) -> None:
-    if not bot_configured():
-        logger.warning("Discord Bot 未設定，跳過頻道訊息")
-        return
-    payload: dict[str, Any] = {}
-    if embed is not None:
-        payload["embeds"] = [embed]
-    else:
-        content = (title or "") if body is None else f"{title or ''}\n{body}".strip()
-        payload["content"] = content[:1900]
-    if components:
-        payload["components"] = components
-    with httpx.Client(timeout=10.0, headers=_discord_headers()) as client:
-        res = client.post(
-            f"https://discord.com/api/v10/channels/{channel_id}/messages",
-            json=payload,
-        )
-        res.raise_for_status()
-        if thread_name:
-            message_id = str(res.json().get("id") or "")
-            if message_id:
-                thread_res = client.post(
-                    f"https://discord.com/api/v10/channels/{channel_id}/messages/{message_id}/threads",
-                    json={
-                        "name": thread_name[:100],
-                        "auto_archive_duration": 1440,
-                    },
-                )
-                if thread_res.status_code >= 400:
-                    logger.warning(
-                        "Discord 自動開 thread 失敗 channel=%s message=%s status=%s",
-                        channel_id,
-                        message_id,
-                        thread_res.status_code,
-                    )
-
-
-def _strip_managed_prefix(name: str, prefixes: list[str]) -> str:
-    value = name.strip()
-    for prefix in sorted((p.strip() for p in prefixes if p.strip()), key=len, reverse=True):
-        if value.startswith(prefix):
-            return value[len(prefix) :].strip()
-    return value
-
-
-def _with_prefix(base_name: str, prefix: str | None) -> str:
-    name = base_name.strip() or "HCCA"
-    value = f"{prefix.strip()}{name}" if prefix else name
-    return value[:32]
-
-
-def sync_member_roles(
-    guild_id: str,
-    discord_user_id: str,
-    role_ids: list[str],
-    managed_role_ids: list[str] | None = None,
-    nickname_prefix: str | None = None,
-    managed_nickname_prefixes: list[str] | None = None,
-) -> None:
-    if not bot_configured():
-        logger.warning("Discord Bot 未設定，跳過角色同步")
-        return
-    with httpx.Client(timeout=10.0, headers=_discord_headers()) as client:
-        member_payload: dict[str, Any] | None = None
-        if managed_role_ids is not None:
-            member = client.get(
-                f"https://discord.com/api/v10/guilds/{guild_id}/members/{discord_user_id}"
-            )
-            member.raise_for_status()
-            member_payload = member.json()
-            current_roles = set(member_payload.get("roles") or [])
-            desired = set(role_ids)
-            for role_id in set(managed_role_ids) - desired:
-                if role_id in current_roles:
-                    res = client.delete(
-                        f"https://discord.com/api/v10/guilds/{guild_id}/members/{discord_user_id}/roles/{role_id}"
-                    )
-                    res.raise_for_status()
-        for role_id in role_ids:
-            res = client.put(
-                f"https://discord.com/api/v10/guilds/{guild_id}/members/{discord_user_id}/roles/{role_id}"
-            )
-            res.raise_for_status()
-        if managed_nickname_prefixes is not None:
-            if member_payload is None:
-                member = client.get(
-                    f"https://discord.com/api/v10/guilds/{guild_id}/members/{discord_user_id}"
-                )
-                member.raise_for_status()
-                member_payload = member.json()
-            user_payload = member_payload.get("user") or {}
-            current_name = (
-                member_payload.get("nick")
-                or user_payload.get("global_name")
-                or user_payload.get("username")
-                or "HCCA"
-            )
-            base_name = _strip_managed_prefix(str(current_name), managed_nickname_prefixes)
-            desired_nick = _with_prefix(base_name, nickname_prefix)
-            if desired_nick != member_payload.get("nick"):
-                res = client.patch(
-                    f"https://discord.com/api/v10/guilds/{guild_id}/members/{discord_user_id}",
-                    json={"nick": desired_nick},
-                )
-                res.raise_for_status()
-    logger.info(
-        "Discord 角色同步完成 guild=%s user=%s roles=%d", guild_id, discord_user_id, len(role_ids)
-    )
-
-
-def format_discord_payload(payload: dict[str, Any]) -> tuple[str, str | None]:
-    title = str(payload.get("title") or "HCCA 平台通知")
-    body = payload.get("body")
-    link = payload.get("link")
-    if link:
-        href = str(link)
-        if not href.startswith(("http://", "https://")):
-            href = _absolute_url(href)
-        body = f"{body}\n{href}" if body else href
-    return title, str(body) if body else None
-
-
-def _get_user_preference(session: Any, user_id: uuid.UUID) -> Any | None:
-    """讀取 DiscordNotificationPreference；若表不存在或讀取失敗回 None。"""
-    try:
-        from sqlalchemy import select as _select
-
-        from api.models.discord_account import DiscordNotificationPreference
-
-        return session.execute(
-            _select(DiscordNotificationPreference).where(
-                DiscordNotificationPreference.user_id == user_id
-            )
-        ).scalar_one_or_none()
-    except ImportError:
-        return None
-    except Exception as exc:
-        logger.debug("讀取 DM preference 失敗：%s", exc)
-        return None
-
-
-def _user_dm_allowed(session: Any, user_id: uuid.UUID, category: str | None) -> bool:
-    """檢查 NotificationPreference category 是否允許；未綁定 preference 預設 True。"""
-    if not category:
-        return True
-    pref = _get_user_preference(session, user_id)
-    if pref is None:
-        return True
-    prefs = pref.preferences or {}
-    return bool(prefs.get(category, True))
-
-
-def _in_quiet_hours(pref: Any) -> bool:
-    """檢查當前時刻是否落在 user quiet hours 區間（依 pref.timezone）。"""
-    if pref is None:
-        return False
-    start = getattr(pref, "quiet_hours_start", None)
-    end = getattr(pref, "quiet_hours_end", None)
-    if start is None or end is None:
-        return False
-    try:
-        from zoneinfo import ZoneInfo
-
-        tz_name = getattr(pref, "timezone", None) or "Asia/Taipei"
-        now_local = datetime.now(ZoneInfo(tz_name)).time()
-    except Exception:
-        now_local = datetime.now(UTC).time()
-    if start <= end:
-        return start <= now_local < end
-    # 跨午夜，例如 22:00 → 08:00
-    return now_local >= start or now_local < end
-
-
-def dispatch_user_dm(payload: dict[str, Any]) -> None:
-    """Celery 端 user_dm 分派：解析平台 user_id → DiscordAccountLink → send_dm。
-
-    payload schema:
-        - user_id: str(UUID) 必填
-        - embed: dict 必填（純文字 DM 直接走舊 discord.push）
-        - components: list[dict] 可選
-        - category: str 可選；若帶入會查 NotificationPreference 是否允許
-    """
-    user_id_str = payload.get("user_id")
-    embed = payload.get("embed")
-    components = payload.get("components")
-    category = payload.get("category")
-    if not user_id_str or embed is None:
-        logger.warning("discord.user_dm payload 缺 user_id 或 embed")
-        return
-    try:
-        user_uuid = uuid.UUID(str(user_id_str))
-    except (TypeError, ValueError):
-        logger.warning("discord.user_dm user_id 非合法 UUID：%s", user_id_str)
-        return
-
-    from sqlalchemy import create_engine
-    from sqlalchemy import select as _select
-    from sqlalchemy.orm import Session
-
-    sync_url = str(settings.DATABASE_URL).replace("+asyncpg", "")
-    eng = create_engine(sync_url)
-    with Session(eng) as session:
-        link = session.execute(
-            _select(DiscordAccountLink).where(
-                DiscordAccountLink.user_id == user_uuid,
-                DiscordAccountLink.is_active.is_(True),
-            )
-        ).scalar_one_or_none()
-        if link is None:
-            logger.info("Discord DM 略過：使用者 %s 未綁定", user_uuid)
-            return
-        pref = _get_user_preference(session, user_uuid)
-        if category and pref is not None:
-            prefs = pref.preferences or {}
-            if not bool(prefs.get(category, True)):
-                logger.info("Discord DM 略過：user=%s category=%s 已關閉", user_uuid, category)
-                return
-        if _in_quiet_hours(pref):
-            logger.info(
-                "Discord DM 略過：user=%s category=%s 在 quiet hours 區間",
-                user_uuid,
-                category,
-            )
-            return
-        discord_user_id = link.discord_user_id
-
-    send_dm(str(discord_user_id), embed=embed, components=components)
-
-
 __all__ = [
-    "bot_configured",
     "consume_open_token",
     "create_open_url",
-    "create_petition_private_channel",
-    "dispatch_user_dm",
     "emit_announcement_notice",
     "emit_calendar_event_published",
     "emit_calendar_event_reminder",
@@ -1518,12 +1102,6 @@ __all__ = [
     "enqueue_petition_private_channel",
     "enqueue_role_sync",
     "bot_health_snapshot",
-    "format_discord_payload",
-    "fetch_bot_user",
-    "fetch_bot_guilds",
-    "fetch_guild_channels",
-    "fetch_guild_member",
-    "fetch_guild_roles",
     "get_guild_config",
     "get_primary_guild_config",
     "get_org_announcement_channel",
@@ -1531,9 +1109,6 @@ __all__ = [
     "get_user_by_discord_id",
     "get_user_link",
     "is_configured",
-    "send_channel_message",
-    "send_dm",
-    "sync_member_roles",
     "unlink_user",
     "upsert_user_link",
 ]

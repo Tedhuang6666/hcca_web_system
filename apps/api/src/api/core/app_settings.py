@@ -45,7 +45,6 @@ _SECRET_KEYS_EXPLICIT: frozenset[str] = frozenset(
         "LINE_CHANNEL_SECRET",
         "LINE_CHANNEL_ACCESS_TOKEN",
         "DISCORD_CLIENT_SECRET",
-        "DISCORD_BOT_TOKEN",
         "MEILISEARCH_API_KEY",
         "VAPID_PRIVATE_KEY",
         "SENTRY_DSN",

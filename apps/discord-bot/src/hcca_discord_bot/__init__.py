@@ -1,0 +1,1 @@
+"""HCCA standalone Discord Bot."""

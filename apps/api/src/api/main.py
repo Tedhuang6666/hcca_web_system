@@ -63,6 +63,7 @@ from api.routers import (
     dashboard,
     data_lifecycle,
     discord,
+    discord_internal,
     documents,
     documents_approve,
     documents_attachments,
@@ -388,6 +389,7 @@ def create_app() -> FastAPI:
     app.include_router(documents_approve.router)
     app.include_router(documents_attachments.router)
     app.include_router(discord.router)
+    app.include_router(discord_internal.router)
     app.include_router(template_router)
     app.include_router(serial_router)
     app.include_router(regulations.router)

@@ -74,61 +74,6 @@ def _dispatch(event: OutboxEvent) -> None:
                 href = f"{base}{href if href.startswith('/') else '/' + href}"
             text = f"{text}\n{href}"
         push_text_message(str(payload.get("line_user_id")), text)
-    elif etype == "discord.push":
-        from api.services.discord_bot import format_discord_payload, send_dm
-
-        title, body = format_discord_payload(payload)
-        send_dm(str(payload.get("discord_user_id")), title=title, body=body)
-    elif etype == "discord.channel_alert":
-        from api.services.discord_bot import format_discord_payload, send_channel_message
-
-        embed = payload.get("embed")
-        components = payload.get("components")
-        thread_name = payload.get("thread_name")
-        if embed is not None:
-            send_channel_message(
-                str(payload.get("channel_id")),
-                embed=embed,
-                components=components,
-                thread_name=thread_name,
-            )
-        else:
-            title, body = format_discord_payload(payload)
-            send_channel_message(
-                str(payload.get("channel_id")),
-                title=title,
-                body=body,
-                components=components,
-                thread_name=thread_name,
-            )
-    elif etype == "discord.embed_alert":
-        from api.services.discord_bot import send_channel_message
-
-        send_channel_message(
-            str(payload.get("channel_id")),
-            embed=payload.get("embed"),
-            components=payload.get("components"),
-            thread_name=payload.get("thread_name"),
-        )
-    elif etype == "discord.user_dm":
-        from api.services.discord_bot import dispatch_user_dm
-
-        dispatch_user_dm(payload)
-    elif etype == "discord.role_sync":
-        from api.services.discord_bot import sync_member_roles
-
-        sync_member_roles(
-            str(payload.get("guild_id")),
-            str(payload.get("discord_user_id")),
-            list(payload.get("role_ids") or []),
-            list(payload.get("managed_role_ids") or []),
-            payload.get("nickname_prefix"),
-            list(payload.get("managed_nickname_prefixes") or []),
-        )
-    elif etype == "discord.petition_channel_create":
-        from api.services.discord_bot import create_petition_private_channel
-
-        create_petition_private_channel(payload)
     elif etype == "email.send":
         # 通用 email 發送事件：解耦業務模組（meal/digest/...）對 mail service 的直接依賴
         to = payload.get("to", "")
@@ -193,6 +138,7 @@ def process_pending_outbox() -> None:
             session.execute(
                 select(OutboxEvent)
                 .where(OutboxEvent.status == OutboxStatus.PENDING)
+                .where(~OutboxEvent.event_type.like("discord.%"))
                 .order_by(OutboxEvent.created_at)
                 .limit(50)
                 .with_for_update(skip_locked=True)

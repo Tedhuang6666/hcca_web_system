@@ -301,7 +301,6 @@ class Settings(BaseSettings):
     # --- Discord Bot / OAuth 設定 ---
     DISCORD_CLIENT_ID: str = Field(default="")
     DISCORD_CLIENT_SECRET: str = Field(default="")
-    DISCORD_BOT_TOKEN: str = Field(default="")
     DISCORD_REDIRECT_URI: str = Field(default="http://localhost:8000/discord/callback")
     DISCORD_LOGIN_REDIRECT_URI: str = Field(default="http://localhost:8000/auth/discord/callback")
     DISCORD_GUILD_ID: str = Field(default="")

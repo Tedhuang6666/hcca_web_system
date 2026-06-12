@@ -47,6 +47,7 @@ members = [
     "apps/api",
     "libs/shared",
 ]
+exclude = ["apps/discord-bot"]
 
 [tool.ruff]
 line-length = 100

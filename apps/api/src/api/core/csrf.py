@@ -48,6 +48,8 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             "/auth/refresh",
             "/line/webhook",
             "/email/resend/webhook",
+            # 內部服務使用 API key，不依賴瀏覽器 cookie。
+            "/internal/discord",
             # 退訂端點以簽章 token 保護，免登入且無 CSRF cookie，故豁免
             "/notifications/unsubscribe",
         ]

@@ -32,15 +32,13 @@ from api.models.discord_account import (
 )
 from api.models.user import User
 from api.services import audit as audit_svc
+from api.services import discord_gateway
 from api.services.discord_bot import (
     bot_health_snapshot,
     consume_open_token,
     emit_moderation_log,
     enqueue_all_role_sync,
     enqueue_role_sync,
-    fetch_bot_guilds,
-    fetch_guild_channels,
-    fetch_guild_roles,
     get_user_link,
     is_configured,
     unlink_user,
@@ -387,11 +385,9 @@ async def send_discord_test_message(
     summary="列出 Bot 已加入的 Discord 伺服器",
 )
 async def available_guilds() -> list[DiscordGuildOptionOut]:
-    try:
-        guilds = await fetch_bot_guilds()
-    except Exception as exc:
-        logger.warning("Discord guild fetch failed", exc_info=True)
-        raise HTTPException(status_code=502, detail="無法從 Discord 取得伺服器清單") from exc
+    guilds = await discord_gateway.inventory_guilds()
+    if not guilds:
+        raise HTTPException(status_code=503, detail="Discord Bot 離線或尚未回報伺服器清單")
     return [
         DiscordGuildOptionOut(
             id=str(item["id"]), name=str(item.get("name") or item["id"]), icon=item.get("icon")
@@ -407,11 +403,10 @@ async def available_guilds() -> list[DiscordGuildOptionOut]:
     summary="列出 Discord 伺服器頻道",
 )
 async def guild_channels(guild_id: str) -> list[DiscordChannelOptionOut]:
-    try:
-        channels = await fetch_guild_channels(guild_id)
-    except Exception as exc:
-        logger.warning("Discord channel fetch failed guild=%s", guild_id, exc_info=True)
-        raise HTTPException(status_code=502, detail="無法從 Discord 取得頻道清單") from exc
+    guild = await discord_gateway.inventory_guild(guild_id)
+    if guild is None:
+        raise HTTPException(status_code=404, detail="Bot 未加入此 Discord 伺服器")
+    channels = list(guild.get("channels", []))
     allowed_types = {0, 4, 5, 10, 11, 12, 15, 16}
     rows = [
         DiscordChannelOptionOut(
@@ -433,11 +428,10 @@ async def guild_channels(guild_id: str) -> list[DiscordChannelOptionOut]:
     summary="列出 Discord 伺服器身分組",
 )
 async def guild_roles(guild_id: str) -> list[DiscordRoleOptionOut]:
-    try:
-        roles = await fetch_guild_roles(guild_id)
-    except Exception as exc:
-        logger.warning("Discord role fetch failed guild=%s", guild_id, exc_info=True)
-        raise HTTPException(status_code=502, detail="無法從 Discord 取得身分組清單") from exc
+    guild = await discord_gateway.inventory_guild(guild_id)
+    if guild is None:
+        raise HTTPException(status_code=404, detail="Bot 未加入此 Discord 伺服器")
+    roles = list(guild.get("roles", []))
     rows = [
         DiscordRoleOptionOut(
             id=str(item["id"]),
