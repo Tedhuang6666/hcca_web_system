@@ -1,8 +1,8 @@
 "use client";
-import { useState, useEffect, useMemo, type ReactNode } from "react";
+import { useState, useMemo, type ReactNode } from "react";
 import Link from "next/link";
-import { toast } from "sonner";
-import { regulationsApi, regulationHref, apiErrorMessage } from "@/lib/api";
+import { regulationsApi, regulationHref } from "@/lib/api";
+import { useFetch } from "@/hooks/useFetch";
 import type {
   RegulationArticleOut,
   RegulationCategory,
@@ -106,8 +106,6 @@ function articleLabel(article: RegulationArticleOut): string {
 }
 
 export default function RegulationsPage() {
-  const [allRegs, setAllRegs] = useState<Array<RegulationListItem | RegulationSearchResult>>([]);
-  const [loading, setLoading] = useState(true);
   const [category, setCategory] = usePersistedState<RegulationCategory | "all">("hcca:pref:regulations:category:v1", "all");
   const [workflow, setWorkflow] = usePersistedState<RegulationWorkflowStatus | "all">("hcca:pref:regulations:workflow:v1", "all");
   const [search, setSearch] = useState("");
@@ -116,20 +114,20 @@ export default function RegulationsPage() {
 
   const canManage = can("regulation:create") || can("regulation:admin");
 
-  useEffect(() => {
-    setLoading(true);
-    const params: Record<string, string> = {};
-    if (category !== "all") params.category = category;
-    if (canManage && workflow !== "all") params.workflow_status = workflow;
-    if (!showAll || !canManage) params.active_only = "true";
-    const req = search.trim()
-      ? regulationsApi.search(search.trim(), params)
-      : regulationsApi.list(params);
-    req
-      .then(setAllRegs)
-      .catch((e) => toast.error(apiErrorMessage(e, "載入失敗")))
-      .finally(() => setLoading(false));
-  }, [category, search, showAll, canManage, workflow]);
+  const [allRegs, loading] = useFetch(
+    () => {
+      const params: Record<string, string> = {};
+      if (category !== "all") params.category = category;
+      if (canManage && workflow !== "all") params.workflow_status = workflow;
+      if (!showAll || !canManage) params.active_only = "true";
+      return search.trim()
+        ? regulationsApi.search(search.trim(), params)
+        : regulationsApi.list(params);
+    },
+    [category, search, showAll, canManage, workflow],
+    "載入失敗",
+    [] as Array<RegulationListItem | RegulationSearchResult>,
+  );
 
   const sorted = useMemo(
     () => [...allRegs].sort((a, b) => (b.published_at ?? "").localeCompare(a.published_at ?? "")),

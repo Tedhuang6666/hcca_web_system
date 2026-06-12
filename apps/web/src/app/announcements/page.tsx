@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { toast } from "sonner";
-import { announcementsApi, apiErrorMessage } from "@/lib/api";
+import { announcementsApi } from "@/lib/api";
 import type { AnnouncementListItem } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useFetch } from "@/hooks/useFetch";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import ActivitySelect from "@/components/activities/ActivitySelect";
 import type { Activity } from "@/lib/types";
@@ -40,8 +40,6 @@ function StatusBadge({ item }: { item: AnnouncementListItem }) {
 }
 
 export default function AnnouncementsPage() {
-  const [items, setItems] = useState<AnnouncementListItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const [showDrafts, setShowDrafts] = useState(false);
   const [activityId, setActivityId] = useState("");
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -56,17 +54,17 @@ export default function AnnouncementsPage() {
     "announcement:media_manage",
   );
 
-  useEffect(() => {
-    setLoading(true);
-    const params = { limit: 100, activity_id: activityId || undefined };
-    const req = showDrafts && canListDrafts
-      ? announcementsApi.listAll(params)
-      : announcementsApi.list(params);
-    req
-      .then(setItems)
-      .catch((e) => toast.error(apiErrorMessage(e, "載入公告失敗")))
-      .finally(() => setLoading(false));
-  }, [activityId, showDrafts, canListDrafts]);
+  const [items, loading] = useFetch(
+    () => {
+      const params = { limit: 100, activity_id: activityId || undefined };
+      return showDrafts && canListDrafts
+        ? announcementsApi.listAll(params)
+        : announcementsApi.list(params);
+    },
+    [activityId, showDrafts, canListDrafts],
+    "載入公告失敗",
+    [] as AnnouncementListItem[],
+  );
 
   const activityNameById = useMemo(
     () => new Map(activities.map((activity) => [activity.id, activity.name])),

@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.models.discord_account import DiscordAccountLink
 from api.models.work_item import WorkItem, WorkItemStatus
 from api.schemas.work_item import WorkItemCreate, WorkItemUpdate
+from api.services._base import apply_updates
 from api.services.outbox import emit
 
 
@@ -71,9 +72,7 @@ async def list_work_items_by_source(
 
 async def update_work_item(db: AsyncSession, *, item: WorkItem, data: WorkItemUpdate) -> WorkItem:
     before_status = item.status
-    payload = data.model_dump(exclude_unset=True)
-    for key, value in payload.items():
-        setattr(item, key, value)
+    payload = apply_updates(item, data)
     if item.status == WorkItemStatus.DONE and before_status != WorkItemStatus.DONE:
         item.completed_at = datetime.now(UTC)
     if item.status == WorkItemStatus.OPEN:

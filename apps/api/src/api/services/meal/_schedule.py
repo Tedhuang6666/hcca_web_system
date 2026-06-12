@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from api.models.meal import MealOrderItem, MenuItem, MenuSchedule
 from api.schemas.meal import MenuItemCreate, MenuItemUpdate, MenuScheduleCreate, MenuScheduleUpdate
+from api.services._base import apply_updates
 from api.services.meal._vendor import get_vendor
 
 logger = logging.getLogger(__name__)
@@ -84,8 +85,7 @@ async def update_schedule(
 ) -> MenuSchedule:
     if schedule.is_closed:
         raise ValueError("已結單的排程不能修改")
-    for field, value in data.model_dump(exclude_none=True).items():
-        setattr(schedule, field, value)
+    apply_updates(schedule, data, exclude_none=True)
     await session.flush()
     return schedule
 
@@ -131,8 +131,7 @@ async def update_menu_item(
     schedule = await session.get(MenuSchedule, item.schedule_id)
     if schedule and schedule.is_closed:
         raise ValueError("已結單的排程不能修改品項")
-    for field, value in data.model_dump(exclude_none=True).items():
-        setattr(item, field, value)
+    apply_updates(item, data, exclude_none=True)
     await session.flush()
     return item
 

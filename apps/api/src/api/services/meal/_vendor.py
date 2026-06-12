@@ -253,8 +253,7 @@ async def remove_vendor_manager(
 async def update_vendor(
     session: AsyncSession, vendor: MealVendor, *, data: MealVendorUpdate
 ) -> MealVendor:
-    for field, value in data.model_dump(exclude_none=True).items():
-        setattr(vendor, field, value)
+    apply_updates(vendor, data, exclude_none=True)
     await session.flush()
     return vendor
 

@@ -1,8 +1,8 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { toast } from "sonner";
-import { surveysApi, apiErrorMessage } from "@/lib/api";
+import { surveysApi } from "@/lib/api";
+import { useFetch } from "@/hooks/useFetch";
 import type { SurveyListItem, SurveyStatus } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
 import { usePersistedState } from "@/hooks/usePersistedState";
@@ -26,8 +26,6 @@ const SURVEY_SORT = [
 ];
 
 export default function SurveysPage() {
-  const [surveys, setSurveys] = useState<SurveyListItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const [tab, setTab] = usePersistedState<"open" | "all">("hcca:pref:surveys:tab:v1", "open");
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = usePersistedState<string>("hcca:pref:surveys:sort:v1", "newest");
@@ -36,22 +34,22 @@ export default function SurveysPage() {
   const { can } = usePermissions();
   const canManage = can("survey:manage") || activities.length > 0;
 
-  useEffect(() => {
-    setLoading(true);
-    const params = {
-      ...(tab === "open" ? { status: "open" } : {}),
-      ...(activityId ? { activity_id: activityId } : {}),
-    };
-    // 未登入者改用公開問卷列表（僅 is_public 且開放/已截止的問卷）
-    const isLoggedIn = typeof window !== "undefined" && !!localStorage.getItem("user_id");
-    const req = isLoggedIn
-      ? surveysApi.list(params)
-      : surveysApi.listPublic(tab === "open" ? { status: "open" } : undefined);
-    req
-      .then(setSurveys)
-      .catch(e => toast.error(apiErrorMessage(e, "載入失敗")))
-      .finally(() => setLoading(false));
-  }, [activityId, tab]);
+  // 未登入者改用公開問卷列表（僅 is_public 且開放/已截止的問卷）
+  const [surveys, loading] = useFetch(
+    () => {
+      const params = {
+        ...(tab === "open" ? { status: "open" } : {}),
+        ...(activityId ? { activity_id: activityId } : {}),
+      };
+      const isLoggedIn = typeof window !== "undefined" && !!localStorage.getItem("user_id");
+      return isLoggedIn
+        ? surveysApi.list(params)
+        : surveysApi.listPublic(tab === "open" ? { status: "open" } : undefined);
+    },
+    [activityId, tab],
+    "載入失敗",
+    [] as SurveyListItem[],
+  );
 
   const activityNameById = new Map(activities.map((activity) => [activity.id, activity.name]));
 
