@@ -3302,6 +3302,26 @@ export interface PlanningDocumentRevisionOut {
   created_by_id: string | null;
   created_at: string;
   updated_at: string;
+  attachment_links: PlanningDocumentRevisionAttachmentOut[];
+}
+
+export interface PlanningDocumentAttachmentOut {
+  id: string;
+  document_id: string;
+  filename: string;
+  display_name: string | null;
+  content_type: string;
+  file_size: number;
+  uploaded_by_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PlanningDocumentRevisionAttachmentOut {
+  attachment_id: string;
+  is_primary: boolean;
+  sort_order: number;
+  attachment: PlanningDocumentAttachmentOut;
 }
 
 export interface PlanningDocumentOut {
@@ -3319,6 +3339,28 @@ export interface PlanningDocumentOut {
   created_at: string;
   updated_at: string;
   revisions: PlanningDocumentRevisionOut[];
+  attachments: PlanningDocumentAttachmentOut[];
+}
+
+export interface GovernanceModuleCapabilityOut {
+  key: string;
+  label: string;
+  category: string;
+  icon: string;
+  href: string;
+  create_mode: "quick" | "guided" | "link";
+  searchable: boolean;
+  requires_org: boolean;
+  permission_codes: string[];
+}
+
+export interface GovernanceResourceSearchOut {
+  id: string;
+  kind: string;
+  title: string;
+  summary: string;
+  status: string | null;
+  href: string;
 }
 
 export interface MatterRoleAssignmentOut {
@@ -3370,7 +3412,13 @@ export type AutomationRuleUpdate = Partial<
   Pick<AutomationRuleOut, "name" | "description" | "trigger_type" | "conditions" | "actions" | "matter_id" | "status">
 >;
 
-export type MatterSpawnKind = "task" | "announcement" | "survey" | "meeting";
+export type MatterSpawnKind =
+  | "task"
+  | "announcement"
+  | "survey"
+  | "meeting"
+  | "document"
+  | "regulation";
 
 /** 從事情主動建立並連動的artifact回傳。 */
 export interface MatterSpawnResult {
@@ -3516,6 +3564,8 @@ export type PlanningDocumentCreate = Pick<
   version_label: string;
   content: string;
   change_reason?: string | null;
+  attachment_ids?: string[];
+  primary_attachment_id?: string | null;
 };
 export type PlanningDocumentUpdate = Partial<
   Pick<PlanningDocumentOut, "case_id" | "title" | "summary" | "status" | "meta">
@@ -3523,7 +3573,10 @@ export type PlanningDocumentUpdate = Partial<
 export type PlanningDocumentRevisionCreate = Pick<
   PlanningDocumentRevisionOut,
   "version_label" | "content" | "change_reason"
->;
+> & {
+  attachment_ids?: string[];
+  primary_attachment_id?: string | null;
+};
 export type MatterRoleAssignmentCreate = Pick<
   MatterRoleAssignmentOut,
   | "parent_id"

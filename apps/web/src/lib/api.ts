@@ -88,9 +88,11 @@ import type {
   MatterLinkRef, MatterSpawnKind, MatterSpawnResult, DecisionCreate, DecisionOut, DecisionUpdate,
   EntityRelationCreate, EntityRelationGraphOut, EntityRelationOut, GovernanceCaseCreate, GovernanceCaseOut,
   GovernanceCaseUpdate, GovernanceDashboardOut, GovernanceWorkflowTemplateCreate,
-  GovernanceWorkflowTemplateOut, MatterCreate, MatterListItem, MatterOut, MatterRoleAssignmentCreate,
+  GovernanceModuleCapabilityOut, GovernanceResourceSearchOut, GovernanceWorkflowTemplateOut,
+  MatterCreate, MatterListItem, MatterOut, MatterRoleAssignmentCreate,
   MatterRoleAssignmentOut, MatterRoleAssignmentUpdate, MatterUpdate, PlanningDocumentCreate,
-  PlanningDocumentOut, PlanningDocumentRevisionCreate, PlanningDocumentRevisionOut,
+  PlanningDocumentAttachmentOut, PlanningDocumentOut, PlanningDocumentRevisionCreate,
+  PlanningDocumentRevisionOut,
   PlanningDocumentUpdate, ProgramCreate, ProgramOut, ProgramUpdate, TimelineEventCreate,
   TimelineEventOut,
   PendingConsentItem, PolicyConsentOut,
@@ -1515,6 +1517,48 @@ export const governanceApi = {
     patch<PlanningDocumentOut>(`/governance/planning-documents/${id}`, body),
   createPlanningRevision: (id: string, body: PlanningDocumentRevisionCreate) =>
     post<PlanningDocumentRevisionOut>(`/governance/planning-documents/${id}/revisions`, body),
+  moduleCapabilities: () =>
+    get<GovernanceModuleCapabilityOut[]>("/governance/module-capabilities"),
+  searchResources: (kind: string, q: string, limit = 20) =>
+    get<GovernanceResourceSearchOut[]>(
+      `/governance/resources/search?${new URLSearchParams({
+        kind,
+        q,
+        limit: String(limit),
+      }).toString()}`,
+    ),
+  uploadPlanningAttachment: async (id: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    const doFetch = () =>
+      fetch(`${BASE}/governance/planning-documents/${id}/attachments`, {
+        method: "POST",
+        credentials: "include",
+        headers: csrfHeaders("POST"),
+        body: form,
+      });
+    let response = await doFetch();
+    if (response.status === 401 && await silentRefresh()) response = await doFetch();
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      throw new ApiError(
+        response.status,
+        formatErrorDetail(payload?.detail, "附件上傳失敗"),
+      );
+    }
+    return response.json() as Promise<PlanningDocumentAttachmentOut>;
+  },
+  renamePlanningAttachment: (documentId: string, attachmentId: string, displayName: string) =>
+    patch<PlanningDocumentAttachmentOut>(
+      `/governance/planning-documents/${documentId}/attachments/${attachmentId}`,
+      { display_name: displayName },
+    ),
+  deletePlanningAttachment: (documentId: string, attachmentId: string) =>
+    del<void>(`/governance/planning-documents/${documentId}/attachments/${attachmentId}`),
+  planningAttachmentDownloadUrl: (documentId: string, attachmentId: string) =>
+    `${BASE}/governance/planning-documents/${documentId}/attachments/${attachmentId}/download`,
+  planningAttachmentPreviewUrl: (documentId: string, attachmentId: string) =>
+    `${BASE}/governance/planning-documents/${documentId}/attachments/${attachmentId}/preview`,
   createRoleAssignment: (matterId: string, body: MatterRoleAssignmentCreate) =>
     post<MatterRoleAssignmentOut>(`/governance/matters/${matterId}/roles`, body),
   updateRoleAssignment: (id: string, body: MatterRoleAssignmentUpdate) =>

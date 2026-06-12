@@ -22,7 +22,9 @@ from api.models.governance import (
     MatterRoleAssignment,
     MatterStatus,
     PlanningDocument,
+    PlanningDocumentAttachment,
     PlanningDocumentRevision,
+    PlanningDocumentRevisionAttachment,
     PlanningDocumentStatus,
     Program,
     TimelineEvent,
@@ -139,7 +141,11 @@ async def get_matter(db: AsyncSession, matter_id: uuid.UUID) -> Matter | None:
             selectinload(Matter.links),
             selectinload(Matter.events),
             selectinload(Matter.decisions),
-            selectinload(Matter.planning_documents).selectinload(PlanningDocument.revisions),
+            selectinload(Matter.planning_documents).selectinload(PlanningDocument.attachments),
+            selectinload(Matter.planning_documents)
+            .selectinload(PlanningDocument.revisions)
+            .selectinload(PlanningDocumentRevision.attachment_links)
+            .selectinload(PlanningDocumentRevisionAttachment.attachment),
             selectinload(Matter.role_assignments),
         )
         .where(Matter.id == matter_id, Matter.is_active.is_(True))
@@ -550,7 +556,15 @@ async def update_decision(
 async def create_planning_document(
     db: AsyncSession, *, matter: Matter, data: PlanningDocumentCreate, user: User
 ) -> PlanningDocument:
-    payload = data.model_dump(exclude={"version_label", "content", "change_reason"})
+    payload = data.model_dump(
+        exclude={
+            "version_label",
+            "content",
+            "change_reason",
+            "attachment_ids",
+            "primary_attachment_id",
+        }
+    )
     document = PlanningDocument(matter_id=matter.id, **payload, created_by_id=user.id)
     db.add(document)
     await db.flush()
@@ -564,6 +578,13 @@ async def create_planning_document(
     )
     db.add(revision)
     await db.flush()
+    await _set_revision_attachments(
+        db,
+        document=document,
+        revision=revision,
+        attachment_ids=data.attachment_ids,
+        primary_attachment_id=data.primary_attachment_id,
+    )
     await record_event(
         db,
         matter_id=matter.id,
@@ -581,7 +602,12 @@ async def get_planning_document(
 ) -> PlanningDocument | None:
     result = await db.execute(
         select(PlanningDocument)
-        .options(selectinload(PlanningDocument.revisions))
+        .options(
+            selectinload(PlanningDocument.attachments),
+            selectinload(PlanningDocument.revisions)
+            .selectinload(PlanningDocumentRevision.attachment_links)
+            .selectinload(PlanningDocumentRevisionAttachment.attachment),
+        )
         .where(PlanningDocument.id == document_id, PlanningDocument.is_active.is_(True))
     )
     return result.scalar_one_or_none()
@@ -627,6 +653,13 @@ async def create_planning_revision(
     document.current_version = version_number
     db.add(revision)
     await db.flush()
+    await _set_revision_attachments(
+        db,
+        document=document,
+        revision=revision,
+        attachment_ids=data.attachment_ids,
+        primary_attachment_id=data.primary_attachment_id,
+    )
     await record_event(
         db,
         matter_id=document.matter_id,
@@ -637,6 +670,63 @@ async def create_planning_revision(
         payload={"planning_document_id": str(document.id), "revision_id": str(revision.id)},
     )
     return revision
+
+
+async def _set_revision_attachments(
+    db: AsyncSession,
+    *,
+    document: PlanningDocument,
+    revision: PlanningDocumentRevision,
+    attachment_ids: list[uuid.UUID],
+    primary_attachment_id: uuid.UUID | None,
+) -> None:
+    unique_ids = list(dict.fromkeys(attachment_ids))
+    if primary_attachment_id and primary_attachment_id not in unique_ids:
+        raise ValueError("主要文件必須包含在此版本附件中")
+    if not unique_ids:
+        return
+    rows = (
+        (
+            await db.execute(
+                select(PlanningDocumentAttachment).where(
+                    PlanningDocumentAttachment.document_id == document.id,
+                    PlanningDocumentAttachment.id.in_(unique_ids),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if len(rows) != len(unique_ids):
+        raise ValueError("版本包含不屬於此企劃書的附件")
+    attachments_by_id = {row.id: row for row in rows}
+    for index, attachment_id in enumerate(unique_ids):
+        db.add(
+            PlanningDocumentRevisionAttachment(
+                revision=revision,
+                attachment=attachments_by_id[attachment_id],
+                is_primary=attachment_id == primary_attachment_id,
+                sort_order=index,
+            )
+        )
+    await db.flush()
+
+
+async def get_planning_attachment(
+    db: AsyncSession, attachment_id: uuid.UUID
+) -> PlanningDocumentAttachment | None:
+    return await db.get(PlanningDocumentAttachment, attachment_id)
+
+
+async def attachment_is_referenced(db: AsyncSession, attachment_id: uuid.UUID) -> bool:
+    return (
+        await db.scalar(
+            select(PlanningDocumentRevisionAttachment.attachment_id)
+            .where(PlanningDocumentRevisionAttachment.attachment_id == attachment_id)
+            .limit(1)
+        )
+        is not None
+    )
 
 
 async def create_role_assignment(

@@ -416,6 +416,12 @@ class PlanningDocument(Base, TimestampMixin):
         cascade="all, delete-orphan",
         order_by="PlanningDocumentRevision.version_number",
     )
+    attachments: Mapped[list[PlanningDocumentAttachment]] = relationship(
+        "PlanningDocumentAttachment",
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by="PlanningDocumentAttachment.created_at",
+    )
 
 
 class PlanningDocumentRevision(Base, TimestampMixin):
@@ -448,6 +454,75 @@ class PlanningDocumentRevision(Base, TimestampMixin):
         "PlanningDocument", back_populates="revisions"
     )
     created_by: Mapped[User | None] = relationship("User")
+    attachment_links: Mapped[list[PlanningDocumentRevisionAttachment]] = relationship(
+        "PlanningDocumentRevisionAttachment",
+        back_populates="revision",
+        cascade="all, delete-orphan",
+        order_by="PlanningDocumentRevisionAttachment.sort_order",
+    )
+
+
+class PlanningDocumentAttachment(Base, TimestampMixin):
+    """企劃書共用附件；版本透過關聯表引用，不重複儲存檔案。"""
+
+    __tablename__ = "planning_document_attachments"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("planning_documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    storage_key: Mapped[str] = mapped_column(String(500), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    file_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    uploaded_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    document: Mapped[PlanningDocument] = relationship(
+        "PlanningDocument", back_populates="attachments"
+    )
+    uploaded_by: Mapped[User | None] = relationship("User")
+    revision_links: Mapped[list[PlanningDocumentRevisionAttachment]] = relationship(
+        "PlanningDocumentRevisionAttachment",
+        back_populates="attachment",
+        cascade="all, delete-orphan",
+    )
+
+
+class PlanningDocumentRevisionAttachment(Base):
+    """企劃版本引用附件及主要文件標記。"""
+
+    __tablename__ = "planning_document_revision_attachments"
+    __table_args__ = (
+        Index("ix_planning_revision_attachments_revision", "revision_id", "sort_order"),
+    )
+
+    revision_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("planning_document_revisions.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    attachment_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("planning_document_attachments.id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+    is_primary: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    revision: Mapped[PlanningDocumentRevision] = relationship(
+        "PlanningDocumentRevision", back_populates="attachment_links"
+    )
+    attachment: Mapped[PlanningDocumentAttachment] = relationship(
+        "PlanningDocumentAttachment", back_populates="revision_links"
+    )
 
 
 class MatterRoleAssignment(Base, TimestampMixin):

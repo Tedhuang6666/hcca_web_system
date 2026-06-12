@@ -4,15 +4,24 @@ from __future__ import annotations
 
 import uuid
 from typing import Annotated
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import FileResponse, RedirectResponse
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_any
-from api.models.governance import GovernanceCase, Matter, Program
+from api.models.governance import (
+    GovernanceCase,
+    Matter,
+    PlanningDocumentAttachment,
+    Program,
+)
+from api.models.regulation import RegulationCategory
 from api.models.user import User
 from api.schemas.governance import (
     AutomationRuleCreate,
@@ -28,6 +37,8 @@ from api.schemas.governance import (
     GovernanceCaseOut,
     GovernanceCaseUpdate,
     GovernanceDashboardOut,
+    GovernanceModuleCapabilityOut,
+    GovernanceResourceSearchOut,
     GovernanceWorkflowTemplateCreate,
     GovernanceWorkflowTemplateOut,
     MatterCreate,
@@ -40,6 +51,7 @@ from api.schemas.governance import (
     MatterSpawnIn,
     MatterSpawnOut,
     MatterUpdate,
+    PlanningDocumentAttachmentOut,
     PlanningDocumentCreate,
     PlanningDocumentOut,
     PlanningDocumentRevisionCreate,
@@ -54,11 +66,14 @@ from api.schemas.governance import (
 from api.schemas.work_item import WorkItemCreate, WorkItemOut
 from api.services import announcement as announcement_svc
 from api.services import audit as audit_svc
+from api.services import document as document_svc
 from api.services import governance as governance_svc
-from api.services import governance_ingest
+from api.services import governance_ingest, governance_modules
 from api.services import meeting as meeting_svc
+from api.services import regulation as regulation_svc
 from api.services import survey as survey_svc
 from api.services import work_item as work_item_svc
+from api.services.storage import StorageBackend, get_storage
 
 router = APIRouter(prefix="/governance", tags=["事情治理中樞"])
 
@@ -385,7 +400,9 @@ async def spawn_artifact(
     後續其生命週期事件（經 audit 橋接）會自動回流到事情時間軸。
     """
     from api.schemas.announcement import AnnouncementCreate
+    from api.schemas.document import DocumentCreate
     from api.schemas.meeting import MeetingCreate
+    from api.schemas.regulation import RegulationCreate
     from api.schemas.survey import SurveyCreate
 
     matter = await _matter_or_404(db, matter_id)
@@ -424,6 +441,35 @@ async def spawn_artifact(
             db, data=MeetingCreate(title=title, org_id=org_id), created_by=user.id
         )
         target_type, href = "meeting", f"/meetings/{artifact.id}"
+    elif body.kind == "document":
+        if org_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="建立公文需先為事情設定負責組織",
+            )
+        artifact = await document_svc.create_document(
+            db,
+            data=DocumentCreate(title=title, org_id=org_id, content=""),
+            created_by=user.id,
+        )
+        target_type, href = "document", f"/documents/{artifact.id}"
+    elif body.kind == "regulation":
+        if org_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="建立法規草案需先為事情設定負責組織",
+            )
+        artifact = await regulation_svc.create_regulation(
+            db,
+            data=RegulationCreate(
+                title=title,
+                category=RegulationCategory.PROCEDURE,
+                content="",
+                org_id=org_id,
+            ),
+            created_by=user.id,
+        )
+        target_type, href = "regulation", f"/regulations/{artifact.id}"
     else:  # pragma: no cover - schema 已限制 kind
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不支援的建立類型")
 
@@ -443,6 +489,31 @@ async def spawn_artifact(
         user=user,
     )
     return MatterSpawnOut(kind=body.kind, id=artifact.id, title=title, href=href)
+
+
+@router.get(
+    "/module-capabilities",
+    response_model=list[GovernanceModuleCapabilityOut],
+    summary="列出事情中心可建立或連接的模組",
+)
+async def list_module_capabilities(_: CurrentUser) -> list[dict]:
+    return list(governance_modules.MODULE_CAPABILITIES)
+
+
+@router.get(
+    "/resources/search",
+    response_model=list[GovernanceResourceSearchOut],
+    summary="依模組搜尋可連接資源",
+    dependencies=[GovernanceManagerDep],
+)
+async def search_governance_resources(
+    db: DbDep,
+    _: CurrentUser,
+    kind: str = Query(..., min_length=1, max_length=50),
+    q: str = Query("", max_length=120),
+    limit: int = Query(20, ge=1, le=50),
+) -> list[dict]:
+    return await governance_modules.search_resources(db, kind=kind, query=q, limit=limit)
 
 
 @router.post(
@@ -598,10 +669,189 @@ async def create_planning_revision(
     document = await governance_svc.get_planning_document(db, document_id)
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="企劃書不存在")
-    revision = await governance_svc.create_planning_revision(
-        db, document=document, data=body, user=user
-    )
+    try:
+        revision = await governance_svc.create_planning_revision(
+            db, document=document, data=body, user=user
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
     return PlanningDocumentRevisionOut.model_validate(revision)
+
+
+class PlanningAttachmentRename(BaseModel):
+    display_name: str = Field(..., min_length=1, max_length=255)
+
+
+async def _serve_planning_attachment(
+    storage: StorageBackend,
+    attachment: PlanningDocumentAttachment,
+    disposition: str,
+) -> FileResponse | RedirectResponse:
+    filename = attachment.display_name or attachment.filename
+    encoded_filename = quote(filename.encode("utf-8"))
+    local = storage.local_path(attachment.storage_key)
+    if local is not None:
+        if not local.exists():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="附件檔案不存在")
+        headers = {"Content-Disposition": f"{disposition}; filename*=UTF-8''{encoded_filename}"}
+        if disposition == "attachment":
+            return FileResponse(
+                str(local),
+                filename=filename,
+                media_type=attachment.content_type,
+                headers=headers,
+            )
+        return FileResponse(str(local), media_type=attachment.content_type, headers=headers)
+    url = await storage.get_url(
+        attachment.storage_key,
+        disposition=disposition,
+        download_name=filename,
+    )
+    return RedirectResponse(url=url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+
+
+@router.post(
+    "/planning-documents/{document_id}/attachments",
+    response_model=PlanningDocumentAttachmentOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="上傳企劃書共用附件",
+    dependencies=[GovernanceManagerDep],
+)
+async def upload_planning_attachment(
+    document_id: uuid.UUID,
+    db: DbDep,
+    user: CurrentUser,
+    file: UploadFile = File(...),
+) -> PlanningDocumentAttachment:
+    document = await governance_svc.get_planning_document(db, document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="企劃書不存在")
+    try:
+        stored = await get_storage().save(file, prefix=f"planning/{document.id}")
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    attachment = PlanningDocumentAttachment(
+        document_id=document.id,
+        filename=stored.filename,
+        storage_key=stored.storage_key,
+        content_type=stored.content_type,
+        file_size=stored.file_size,
+        uploaded_by_id=user.id,
+    )
+    db.add(attachment)
+    await db.flush()
+    return attachment
+
+
+@router.get(
+    "/planning-documents/{document_id}/attachments",
+    response_model=list[PlanningDocumentAttachmentOut],
+    summary="列出企劃書共用附件",
+)
+async def list_planning_attachments(
+    document_id: uuid.UUID,
+    db: DbDep,
+    _: CurrentUser,
+) -> list[PlanningDocumentAttachment]:
+    document = await governance_svc.get_planning_document(db, document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="企劃書不存在")
+    return document.attachments
+
+
+@router.patch(
+    "/planning-documents/{document_id}/attachments/{attachment_id}",
+    response_model=PlanningDocumentAttachmentOut,
+    summary="重新命名企劃附件",
+    dependencies=[GovernanceManagerDep],
+)
+async def rename_planning_attachment(
+    document_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    body: PlanningAttachmentRename,
+    db: DbDep,
+    _: CurrentUser,
+) -> PlanningDocumentAttachment:
+    attachment = await governance_svc.get_planning_attachment(db, attachment_id)
+    if attachment is None or attachment.document_id != document_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="附件不存在")
+    attachment.display_name = body.display_name.strip()
+    await db.flush()
+    return attachment
+
+
+@router.delete(
+    "/planning-documents/{document_id}/attachments/{attachment_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="刪除未被版本引用的企劃附件",
+    dependencies=[GovernanceManagerDep],
+)
+async def delete_planning_attachment(
+    document_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    db: DbDep,
+    _: CurrentUser,
+) -> None:
+    attachment = await governance_svc.get_planning_attachment(db, attachment_id)
+    if attachment is None or attachment.document_id != document_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="附件不存在")
+    if await governance_svc.attachment_is_referenced(db, attachment.id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="附件已被企劃版本引用，無法刪除",
+        )
+    await get_storage().delete(attachment.storage_key)
+    await db.delete(attachment)
+
+
+async def _planning_attachment_or_404(
+    db: AsyncSession, document_id: uuid.UUID, attachment_id: uuid.UUID
+) -> PlanningDocumentAttachment:
+    attachment = await governance_svc.get_planning_attachment(db, attachment_id)
+    if attachment is None or attachment.document_id != document_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="附件不存在")
+    return attachment
+
+
+@router.get(
+    "/planning-documents/{document_id}/attachments/{attachment_id}/download",
+    summary="下載企劃附件",
+    response_model=None,
+)
+async def download_planning_attachment(
+    document_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    db: DbDep,
+    _: CurrentUser,
+) -> FileResponse | RedirectResponse:
+    attachment = await _planning_attachment_or_404(db, document_id, attachment_id)
+    return await _serve_planning_attachment(get_storage(), attachment, "attachment")
+
+
+@router.get(
+    "/planning-documents/{document_id}/attachments/{attachment_id}/preview",
+    summary="內嵌預覽企劃附件",
+    response_model=None,
+)
+async def preview_planning_attachment(
+    document_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    db: DbDep,
+    _: CurrentUser,
+) -> FileResponse | RedirectResponse:
+    attachment = await _planning_attachment_or_404(db, document_id, attachment_id)
+    if attachment.content_type != "application/pdf" and not attachment.content_type.startswith(
+        "image/"
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="此檔案格式不支援內嵌預覽",
+        )
+    return await _serve_planning_attachment(get_storage(), attachment, "inline")
 
 
 @router.post(

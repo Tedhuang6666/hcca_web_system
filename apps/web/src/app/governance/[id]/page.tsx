@@ -13,7 +13,6 @@ import {
   FolderKanban,
   GitBranch,
   Loader2,
-  Megaphone,
   Pause,
   Play,
   Plus,
@@ -25,6 +24,8 @@ import {
   Zap,
 } from "lucide-react";
 import type { CSSProperties } from "react";
+import GovernanceArtifactDrawer from "@/components/governance/GovernanceArtifactDrawer";
+import PlanningDocumentsPanel from "@/components/governance/PlanningDocumentsPanel";
 import { governanceApi } from "@/lib/api";
 import type {
   EntityRelationOut,
@@ -120,9 +121,8 @@ export default function GovernanceMatterPage() {
   const [unitName, setUnitName] = useState("");
   const [automationName, setAutomationName] = useState("");
   const [templateName, setTemplateName] = useState("");
-  const [spawnTitle, setSpawnTitle] = useState("");
   const [lastSpawn, setLastSpawn] = useState<MatterSpawnResult | null>(null);
-  const [spawning, setSpawning] = useState<string | null>(null);
+  const [artifactDrawer, setArtifactDrawer] = useState<"create" | "link" | null>(null);
   const [saving, setSaving] = useState(false);
 
   const load = () => {
@@ -436,25 +436,6 @@ export default function GovernanceMatterPage() {
       });
   };
 
-  const spawn = (kind: "task" | "announcement" | "survey" | "meeting") => {
-    const title = spawnTitle.trim() || matter?.title;
-    if (!title) return;
-    setSpawning(kind);
-    governanceApi
-      .spawn(matterId, { kind, title })
-      .then((result) => {
-        setSpawnTitle("");
-        setLastSpawn(result);
-        toast.success(`已建立並連動：${result.title}`);
-        load();
-      })
-      .catch((error) => {
-        toast.error(error?.message || "建立失敗（會議／問卷需先設定事情的負責組織）");
-        console.error(error);
-      })
-      .finally(() => setSpawning(null));
-  };
-
   const updateCaseStatus = (item: GovernanceCaseOut, status: GovernanceCaseStatus) => {
     governanceApi
       .updateCase(item.id, { status })
@@ -530,19 +511,23 @@ export default function GovernanceMatterPage() {
           <NextStep number="2" title="建立跨模組項目" detail="在這裡建立後會自動連回本事情。" href="#create-artifact" />
           <NextStep number="3" title="追蹤執行" detail="任務、決議與模組事件會集中回流。" href="#tasks" />
         </div>
-        <div id="create-artifact" className="scroll-mt-24 flex flex-col gap-2 sm:flex-row sm:items-center">
-          <input
-            value={spawnTitle}
-            onChange={(event) => setSpawnTitle(event.target.value)}
-            className="input min-w-0 flex-1"
-            placeholder={`名稱（留空則用「${matter.title}」）`}
-          />
-          <div className="flex flex-wrap gap-2">
-            <SpawnButton icon={CheckSquare} label="任務" busy={spawning === "task"} onClick={() => spawn("task")} />
-            <SpawnButton icon={Megaphone} label="公告草稿" busy={spawning === "announcement"} onClick={() => spawn("announcement")} />
-            <SpawnButton icon={FilePlus2} label="問卷" busy={spawning === "survey"} onClick={() => spawn("survey")} />
-            <SpawnButton icon={Workflow} label="會議" busy={spawning === "meeting"} onClick={() => spawn("meeting")} />
-          </div>
+        <div id="create-artifact" className="scroll-mt-24 grid gap-2 sm:grid-cols-2">
+          <button
+            type="button"
+            className="btn btn-primary min-h-12 justify-center"
+            onClick={() => setArtifactDrawer("create")}
+          >
+            <Plus size={16} aria-hidden={true} />
+            建立新項目
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary min-h-12 justify-center"
+            onClick={() => setArtifactDrawer("link")}
+          >
+            <GitBranch size={16} aria-hidden={true} />
+            連接既有項目
+          </button>
         </div>
         <p className="mt-2 text-[11px]" style={{ color: "var(--text-disabled)" }}>
           建立的項目會自動連動本事情，其後續生命週期（核准／發布／決議…）會自動回流到下方時間軸。
@@ -653,18 +638,14 @@ export default function GovernanceMatterPage() {
               <input value={planContent} onChange={(event) => setPlanContent(event.target.value)} className="input" placeholder="草稿內容摘要" />
               <button type="submit" className="btn btn-secondary"><Plus size={13} aria-hidden={true} />新增企劃</button>
             </form>
-            <div className="space-y-2">
-              {matter.planning_documents.map((doc) => (
-                <article key={doc.id} className="rounded-md p-3" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{doc.title}</p>
-                    <span className="text-xs" style={{ color: "var(--text-muted)" }}>v{doc.current_version}</span>
-                  </div>
-                  <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{doc.status} · {doc.revisions.length} 個版本</p>
-                </article>
-              ))}
-              {matter.planning_documents.length === 0 && <EmptyInline label="尚無企劃書" />}
-            </div>
+            <PlanningDocumentsPanel
+              documents={matter.planning_documents}
+              onChange={(planningDocuments) =>
+                setMatter((current) =>
+                  current ? { ...current, planning_documents: planningDocuments } : current,
+                )
+              }
+            />
           </Panel>
         </div>
 
@@ -771,26 +752,22 @@ export default function GovernanceMatterPage() {
           </Panel>
         </div>
       </section>
+      <GovernanceArtifactDrawer
+        open={artifactDrawer !== null}
+        mode={artifactDrawer ?? "create"}
+        matter={matter}
+        onClose={() => setArtifactDrawer(null)}
+        onLinked={(relation) =>
+          setMatter((current) =>
+            current ? { ...current, links: [relation, ...current.links] } : current,
+          )
+        }
+        onSpawned={(result) => {
+          setLastSpawn(result);
+          load();
+        }}
+      />
     </div>
-  );
-}
-
-function SpawnButton({
-  icon: Icon,
-  label,
-  busy,
-  onClick,
-}: {
-  icon: React.ComponentType<{ size: number; "aria-hidden": boolean }>;
-  label: string;
-  busy: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button type="button" className="btn btn-secondary text-xs" onClick={onClick} disabled={busy}>
-      {busy ? <Loader2 size={13} className="animate-spin" aria-hidden={true} /> : <Icon size={13} aria-hidden={true} />}
-      {label}
-    </button>
   );
 }
 

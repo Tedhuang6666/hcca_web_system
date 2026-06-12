@@ -145,6 +145,8 @@ class PlanningDocumentCreate(BaseModel):
     version_label: str = Field("草稿版", min_length=1, max_length=80)
     content: str = Field("", max_length=50000)
     change_reason: str | None = Field(None, max_length=5000)
+    attachment_ids: list[uuid.UUID] = Field(default_factory=list, max_length=20)
+    primary_attachment_id: uuid.UUID | None = None
     meta: dict = Field(default_factory=dict)
 
 
@@ -160,6 +162,8 @@ class PlanningDocumentRevisionCreate(BaseModel):
     version_label: str = Field(..., min_length=1, max_length=80)
     content: str = Field(..., min_length=1, max_length=50000)
     change_reason: str | None = Field(None, max_length=5000)
+    attachment_ids: list[uuid.UUID] = Field(default_factory=list, max_length=20)
+    primary_attachment_id: uuid.UUID | None = None
 
 
 class MatterRoleAssignmentCreate(BaseModel):
@@ -310,6 +314,29 @@ class DecisionOut(BaseModel):
     updated_at: datetime
 
 
+class PlanningDocumentAttachmentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    document_id: uuid.UUID
+    filename: str
+    display_name: str | None
+    content_type: str
+    file_size: int
+    uploaded_by_id: uuid.UUID | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class PlanningDocumentRevisionAttachmentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    attachment_id: uuid.UUID
+    is_primary: bool
+    sort_order: int
+    attachment: PlanningDocumentAttachmentOut
+
+
 class PlanningDocumentRevisionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -322,6 +349,7 @@ class PlanningDocumentRevisionOut(BaseModel):
     created_by_id: uuid.UUID | None
     created_at: datetime
     updated_at: datetime
+    attachment_links: list[PlanningDocumentRevisionAttachmentOut] = []
 
 
 class PlanningDocumentOut(BaseModel):
@@ -341,6 +369,28 @@ class PlanningDocumentOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     revisions: list[PlanningDocumentRevisionOut] = []
+    attachments: list[PlanningDocumentAttachmentOut] = []
+
+
+class GovernanceModuleCapabilityOut(BaseModel):
+    key: str
+    label: str
+    category: str
+    icon: str
+    href: str
+    create_mode: str
+    searchable: bool
+    requires_org: bool = False
+    permission_codes: list[str] = []
+
+
+class GovernanceResourceSearchOut(BaseModel):
+    id: uuid.UUID
+    kind: str
+    title: str
+    summary: str = ""
+    status: str | None = None
+    href: str
 
 
 class MatterRoleAssignmentOut(BaseModel):
@@ -397,7 +447,7 @@ class AutomationRuleOut(BaseModel):
 class MatterSpawnIn(BaseModel):
     """從事情主動建立並連動模組artifact（指揮中心）。"""
 
-    kind: str = Field(..., pattern="^(task|announcement|survey|meeting)$")
+    kind: str = Field(..., pattern="^(task|announcement|survey|meeting|document|regulation)$")
     title: str = Field(..., min_length=1, max_length=200)
     org_id: uuid.UUID | None = None
 

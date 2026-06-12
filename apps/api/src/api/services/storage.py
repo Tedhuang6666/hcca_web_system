@@ -102,6 +102,8 @@ _MIME_TO_EXT: dict[str, str] = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
     "application/vnd.ms-excel": ".xls",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+    "application/vnd.ms-powerpoint": ".ppt",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
 }
 
 # 允許的 MIME 類型（安全白名單）
