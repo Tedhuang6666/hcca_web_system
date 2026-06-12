@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.core.clock import now_local
+from api.services._base import apply_updates
 from api.models.meal import (
     MealClassPickupCode,
     MealOrder,

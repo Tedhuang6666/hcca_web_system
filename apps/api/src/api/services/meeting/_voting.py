@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.services._base import apply_updates
 from api.models.meeting import (
     AttendanceStatus,
     BallotChoice,
@@ -157,8 +158,7 @@ async def create_motion(
 async def update_motion(
     session: AsyncSession, motion: MeetingMotion, *, data: MotionUpdate
 ) -> MeetingMotion:
-    for field, value in data.model_dump(exclude_unset=True).items():
-        setattr(motion, field, value)
+    apply_updates(motion, data)
     await session.flush()
     return motion
 
@@ -190,8 +190,7 @@ async def create_decision(
 async def update_decision(
     session: AsyncSession, decision: MeetingDecision, *, data: DecisionUpdate
 ) -> MeetingDecision:
-    for field, value in data.model_dump(exclude_unset=True).items():
-        setattr(decision, field, value)
+    apply_updates(decision, data)
     await session.flush()
     return decision
 
@@ -243,8 +242,7 @@ async def update_screen_state(
 async def update_vote(
     session: AsyncSession, vote: MeetingVote, *, data: VoteUpdate
 ) -> MeetingVote:
-    for field, value in data.model_dump(exclude_unset=True).items():
-        setattr(vote, field, value)
+    apply_updates(vote, data)
     await session.flush()
     return vote
 
@@ -302,8 +300,7 @@ async def update_speech_queue_item(
     *,
     data: SpeechQueueUpdate,
 ) -> MeetingSpeechQueueItem:
-    for field, value in data.model_dump(exclude_unset=True).items():
-        setattr(item, field, value)
+    apply_updates(item, data)
     if (
         "duration_seconds" in data.model_fields_set
         and "remaining_seconds" not in data.model_fields_set

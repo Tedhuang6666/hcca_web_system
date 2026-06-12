@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.core.clock import now_local
+from api.services._base import apply_updates
 from api.models.shop import (
     Product,
     ProductCategory,
@@ -88,8 +89,7 @@ async def create_category(
 async def update_category(
     session: AsyncSession, category: ProductCategory, *, data: ProductCategoryUpdate
 ) -> ProductCategory:
-    for field, value in data.model_dump(exclude_unset=True).items():
-        setattr(category, field, value)
+    apply_updates(category, data)
     await session.flush()
     return category
 
@@ -144,8 +144,7 @@ async def create_series(session: AsyncSession, *, data: ProductSeriesCreate) -> 
 async def update_series(
     session: AsyncSession, series: ProductSeries, *, data: ProductSeriesUpdate
 ) -> ProductSeries:
-    for field, value in data.model_dump(exclude_unset=True).items():
-        setattr(series, field, value)
+    apply_updates(series, data)
     await session.flush()
     return series
 
@@ -322,8 +321,7 @@ async def add_variant_group(
 async def update_variant_group(
     session: AsyncSession, group: ProductVariantGroup, *, data: ProductVariantGroupUpdate
 ) -> ProductVariantGroup:
-    for field, value in data.model_dump(exclude_unset=True).items():
-        setattr(group, field, value)
+    apply_updates(group, data)
     await session.flush()
     return group
 

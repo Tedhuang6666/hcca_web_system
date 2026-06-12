@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.core.permission_codes import PermissionCode
+from api.services._base import apply_updates
 from api.models.calendar import (
     CalendarEvent,
     CalendarEventChecklistItem,
