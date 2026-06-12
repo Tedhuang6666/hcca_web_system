@@ -165,8 +165,7 @@ async def create_type(session: AsyncSession, data: PetitionTypeCreate) -> Petiti
 async def update_type(
     session: AsyncSession, petition_type: PetitionType, data: PetitionTypeUpdate
 ) -> PetitionType:
-    for field, value in data.model_dump(exclude_unset=True).items():
-        setattr(petition_type, field, value)
+    apply_updates(petition_type, data)
     await session.flush()
     return petition_type
 

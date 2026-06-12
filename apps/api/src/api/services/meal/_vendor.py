@@ -385,8 +385,7 @@ async def create_product(session: AsyncSession, *, data: MealProductCreate) -> M
 async def update_product(
     session: AsyncSession, product: MealProduct, *, data: MealProductUpdate
 ) -> MealProduct:
-    for field, value in data.model_dump(exclude_unset=True).items():
-        setattr(product, field, value)
+    apply_updates(product, data)
     await session.flush()
     return product
 

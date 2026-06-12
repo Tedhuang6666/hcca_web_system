@@ -195,8 +195,7 @@ async def create_person(db: AsyncSession, *, data: PersonCreate) -> Person:
 
 
 async def update_person(db: AsyncSession, person: Person, *, data: PersonUpdate) -> Person:
-    for field, value in data.model_dump(exclude_unset=True).items():
-        setattr(person, field, value)
+    apply_updates(person, data)
     await db.flush()
     if person.user_id is not None:
         await sync_pending_affiliations_for_person(db, person)
@@ -351,8 +350,7 @@ async def update_affiliation(
     db: AsyncSession, affiliation: PersonAffiliation, *, data: PersonAffiliationUpdate
 ) -> PersonAffiliation:
     before_status = affiliation.status
-    for field, value in data.model_dump(exclude_unset=True).items():
-        setattr(affiliation, field, value)
+    apply_updates(affiliation, data)
     if affiliation.status == PersonAffiliationStatus.ENDED and affiliation.end_date is None:
         affiliation.end_date = local_today()
     if affiliation.end_date is not None and affiliation.status == PersonAffiliationStatus.ACTIVE:

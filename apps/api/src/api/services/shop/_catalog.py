@@ -364,8 +364,7 @@ async def update_variant_option(
     *,
     data: ProductVariantOptionUpdate,
 ) -> ProductVariantOption:
-    for field, value in data.model_dump(exclude_unset=True).items():
-        setattr(option, field, value)
+    apply_updates(option, data)
     await session.flush()
     return option
 

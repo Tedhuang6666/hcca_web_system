@@ -144,8 +144,7 @@ async def create_zone(session: AsyncSession, *, data: ZoneCreate) -> SeatingZone
 
 
 async def update_zone(session: AsyncSession, zone: SeatingZone, *, data: ZoneUpdate) -> SeatingZone:
-    for field, value in data.model_dump(exclude_unset=True).items():
-        setattr(zone, field, value)
+    apply_updates(zone, data)
     await session.flush()
     return zone
 

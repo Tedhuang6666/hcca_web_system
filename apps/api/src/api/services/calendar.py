@@ -266,8 +266,7 @@ async def update_participant(
     *,
     data: CalendarParticipantUpdate,
 ) -> CalendarEventParticipant:
-    for field, value in data.model_dump(exclude_unset=True).items():
-        setattr(participant, field, value)
+    apply_updates(participant, data)
     await session.flush()
     return participant
 
