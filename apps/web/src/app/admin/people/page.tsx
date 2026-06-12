@@ -23,6 +23,7 @@ import { toast } from "sonner";
 import { usePermissions } from "@/hooks/usePermissions";
 import MobileBackToList from "@/components/ui/MobileBackToList";
 import { adminApi, ApiError, classApi, orgsApi, peopleApi, withFallback } from "@/lib/api";
+import { today } from "@/lib/dateUtils";
 import type {
   AdminUserDetail,
   OrgRead,
@@ -59,10 +60,6 @@ const CLASS_ROLE_OPTIONS = [
   { key: "treasurer", label: "總務/收款" },
   { key: "general_affairs", label: "事務" },
 ];
-
-function today() {
-  return new Date().toISOString().slice(0, 10);
-}
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback;

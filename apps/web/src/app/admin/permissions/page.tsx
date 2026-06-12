@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { ensurePermissionCatalog, PermCheckboxes } from "@/components/admin/PermissionCatalog";
+import { today } from "@/lib/dateUtils";
 import Modal from "@/components/ui/Modal";
 import MobileBackToList from "@/components/ui/MobileBackToList";
 import { adminApi, ApiError, apiErrorMessage, classApi, orgsApi, withFallback } from "@/lib/api";
@@ -42,7 +43,6 @@ const POSITION_CATEGORY_OPTIONS: { value: PositionCategory; label: string }[] = 
   { value: "system", label: "系統職位（外部協作 / 特殊權限）" },
 ];
 
-const today = () => new Date().toISOString().split("T")[0];
 const highRisk = (code: string) =>
   code === "admin:all" ||
   code.includes("admin") ||

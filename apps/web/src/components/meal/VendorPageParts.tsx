@@ -4,6 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { mealApi } from "@/lib/api";
+import { today } from "@/lib/dateUtils";
 import type {
   MealOrderOut,
   MealOrderStatus,
@@ -30,8 +31,6 @@ export interface ScheduleForm {
 export const EMPTY_SCH: ScheduleForm = { vendor_id: "", date: "", order_open_time: "", order_deadline: "", note: "" };
 
 // ── 工具函式 ─────────────────────────────────────────────────────────────────
-
-export function today() { return new Date().toISOString().slice(0, 10); }
 
 export function fmtDT(iso: string | null) {
   if (!iso) return "—";

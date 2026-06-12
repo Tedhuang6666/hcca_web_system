@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { activitiesApi, adminApi, orgsApi } from "@/lib/api";
 import type { Activity, ActivityConvener, AdminUserDetail, OrgRead } from "@/lib/types";
+import { today } from "@/lib/dateUtils";
 
 const STATUS_LABEL: Record<Activity["status"], string> = {
   draft: "草稿",
@@ -13,8 +14,6 @@ const STATUS_LABEL: Record<Activity["status"], string> = {
   ended: "已結束",
   archived: "已封存",
 };
-
-const today = () => new Date().toISOString().slice(0, 10);
 
 export default function AdminActivitiesPage() {
   const [activities, setActivities] = useState<Activity[]>([]);

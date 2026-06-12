@@ -20,18 +20,9 @@ import type {
 } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
 import { usePersistedState } from "@/hooks/usePersistedState";
+import { today, addDays } from "@/lib/dateUtils";
 
 const RANGE_DAYS = 14;
-
-function today() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function addDays(days: number) {
-  const value = new Date();
-  value.setDate(value.getDate() + days);
-  return value.toISOString().slice(0, 10);
-}
 
 function formatDate(date: string) {
   return new Date(`${date}T00:00:00`).toLocaleDateString("zh-TW", {

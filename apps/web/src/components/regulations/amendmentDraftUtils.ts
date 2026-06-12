@@ -1,4 +1,5 @@
 import type { ArticleType, RegulationArticleOut } from "@/lib/types";
+import { ARTICLE_TYPE_LABEL } from "@/lib/regulationStructure";
 
 // ── 型別定義 ──────────────────────────────────────────────────────────────────
 
@@ -45,12 +46,7 @@ export interface DraftTreeArticle {
   comment?: string;
 }
 
-export const ARTICLE_TYPE_LABEL: Record<string, string> = {
-  volume: "編", chapter: "章", section: "節",
-  article: "條", paragraph: "項",
-  subparagraph: "款", item: "目",
-  special_clause: "附則",
-};
+export { ARTICLE_TYPE_LABEL };
 
 // ── localStorage 工具（含 schema versioning） ─────────────────────────────────
 

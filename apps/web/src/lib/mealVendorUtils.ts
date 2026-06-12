@@ -4,6 +4,8 @@
  * 從 `apps/web/src/app/meal/vendor/page.tsx` 提取，使主檔聚焦於 UI 與業務狀態。
  */
 
+export { today, addDays } from "./dateUtils";
+
 export type QuickPickupSlot = {
   label: string;
   start: string;
@@ -34,16 +36,6 @@ export const orderLabel: Record<string, string> = {
   cancelled: "已取消",
   completed: "已完成",
 };
-
-export function today(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-export function addDays(days: number): string {
-  const value = new Date();
-  value.setDate(value.getDate() + days);
-  return value.toISOString().slice(0, 10);
-}
 
 export function toIso(value: string): string | null {
   return value ? new Date(value).toISOString() : null;

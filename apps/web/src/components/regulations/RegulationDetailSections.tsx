@@ -11,8 +11,6 @@ import type {
   RegulationWorkflowStatus,
 } from "@/lib/types";
 import {
-  ARTICLE_TYPE_LABEL as STRUCT_LABEL,
-  ARTICLE_IS_STRUCTURAL as STRUCT_IS_STRUCTURAL,
   buildArticleDisplayRows as buildDisplayRowsFn,
 } from "@/lib/regulationStructure";
 
@@ -23,9 +21,6 @@ export type Tab = "content" | "revisions" | "workflow";
 export function isTab(value: string | null): value is Tab {
   return value === "content" || value === "revisions" || value === "workflow";
 }
-
-export const ARTICLE_TYPE_LABEL = STRUCT_LABEL as Record<ArticleType, string>;
-export const ARTICLE_IS_STRUCTURAL = STRUCT_IS_STRUCTURAL as Record<ArticleType, boolean>;
 
 type ProposalChangeCard = {
   status: string;
