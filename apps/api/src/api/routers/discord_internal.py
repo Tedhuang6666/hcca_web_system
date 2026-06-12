@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -16,6 +17,7 @@ from api.schemas.discord_internal import (
     DiscordBotEventAck,
     DiscordBotEventOut,
     DiscordBotInventoryIn,
+    DiscordBotStatusOut,
     DiscordCommandRequest,
     DiscordCommandResponse,
     DiscordMemberJoinedIn,
@@ -30,6 +32,11 @@ router = APIRouter(
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 BotKeyDep = Annotated[ApiKey, Depends(require_api_scope("discord:bot"))]
+
+
+@router.get("/status", response_model=DiscordBotStatusOut)
+async def bot_status(_api_key: BotKeyDep) -> DiscordBotStatusOut:
+    return DiscordBotStatusOut(status="ok", server_time=datetime.now(UTC))
 
 
 @router.get("/events/claim", response_model=DiscordBotEventOut | None)

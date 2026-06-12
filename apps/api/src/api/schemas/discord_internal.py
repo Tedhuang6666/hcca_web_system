@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -51,10 +52,18 @@ class DiscordBotInventoryIn(BaseModel):
     guilds: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class DiscordBotStatusOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    status: str
+    server_time: datetime
+
+
 __all__ = [
     "DiscordBotInventoryIn",
     "DiscordBotEventAck",
     "DiscordBotEventOut",
+    "DiscordBotStatusOut",
     "DiscordCommandRequest",
     "DiscordCommandResponse",
     "DiscordMemberJoinedIn",

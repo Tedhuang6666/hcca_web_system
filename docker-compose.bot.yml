@@ -1,0 +1,16 @@
+services:
+  discord-bot:
+    build:
+      context: .
+      dockerfile: apps/discord-bot/Dockerfile
+    container_name: campus_discord_bot
+    restart: unless-stopped
+    environment:
+      HCCA_API_URL: ${HCCA_DISCORD_BOT_API_URL:?請設定 API 的公開 HTTPS 網址}
+      HCCA_API_KEY: ${HCCA_DISCORD_BOT_API_KEY:?請設定 discord:bot API Key}
+      HCCA_API_CF_ACCESS_CLIENT_ID: ${HCCA_DISCORD_BOT_CF_ACCESS_CLIENT_ID:-}
+      HCCA_API_CF_ACCESS_CLIENT_SECRET: ${HCCA_DISCORD_BOT_CF_ACCESS_CLIENT_SECRET:-}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:?請設定前端公開網址}
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:?請設定 Discord Bot Token}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:-}
+      DISCORD_COMMAND_SYNC_GUILD_ID: ${DISCORD_COMMAND_SYNC_GUILD_ID:-}

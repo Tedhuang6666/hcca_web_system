@@ -24,6 +24,7 @@ _rate_config_cache: tuple[float, dict[str, Any]] | None = None
 _REDIS_TIMEOUT_SECONDS = 0.8
 
 DEFAULT_RATE_LIMIT_OVERRIDES: list[dict[str, int | str]] = [
+    {"path_prefix": "/internal/discord", "requests": 600, "window_seconds": 60},
     {"path_prefix": "/auth/refresh", "requests": 20, "window_seconds": 60},
     {"path_prefix": "/auth/google/login", "requests": 20, "window_seconds": 60},
     {"path_prefix": "/auth/google/callback", "requests": 20, "window_seconds": 60},

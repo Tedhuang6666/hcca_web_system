@@ -38,6 +38,19 @@ async def test_claim_discord_event_requires_api_key(client):
     assert response.status_code == 401
 
 
+async def test_discord_bot_status_verifies_remote_connection(client, db_session):
+    raw_key = await _bot_key(db_session)
+
+    response = await client.get(
+        "/internal/discord/status",
+        headers={"X-API-Key": raw_key},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    assert response.json()["server_time"]
+
+
 async def test_claim_and_ack_discord_event(client, db_session, monkeypatch):
     raw_key = await _bot_key(db_session)
     event = await emit(

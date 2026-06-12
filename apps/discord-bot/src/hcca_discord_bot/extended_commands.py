@@ -12,7 +12,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from hcca_discord_bot.api_client import PlatformCommandError
+from hcca_discord_bot.api_client import PlatformCommandError, PlatformUnavailableError
 from hcca_discord_bot.commands import _command, _due_autocomplete, _parse_datetime
 from hcca_discord_bot.config import settings
 
@@ -513,7 +513,7 @@ class RegulationListenerCog(commands.Cog):
                 guild_id=message.guild.id,
                 arguments={"content": message.content},
             )
-        except PlatformCommandError:
+        except (PlatformCommandError, PlatformUnavailableError):
             return
         if not data["items"]:
             return

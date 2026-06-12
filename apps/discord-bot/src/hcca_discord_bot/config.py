@@ -9,6 +9,8 @@ class Settings(BaseSettings):
 
     HCCA_API_URL: str = Field(default="http://localhost:8000")
     HCCA_API_KEY: str = Field(default="")
+    HCCA_API_CF_ACCESS_CLIENT_ID: str = Field(default="")
+    HCCA_API_CF_ACCESS_CLIENT_SECRET: str = Field(default="")
     FRONTEND_BASE_URL: str = Field(default="http://localhost:3000")
     DISCORD_BOT_TOKEN: str = Field(default="")
     DISCORD_GUILD_ID: str = Field(default="")

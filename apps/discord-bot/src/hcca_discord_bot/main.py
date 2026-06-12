@@ -7,10 +7,9 @@ import logging
 import uuid
 
 import discord
-import httpx
 from discord.ext import commands
 
-from hcca_discord_bot.api_client import PlatformApiClient
+from hcca_discord_bot.api_client import PlatformApiClient, PlatformUnavailableError
 from hcca_discord_bot.commands import load_commands
 from hcca_discord_bot.config import settings
 from hcca_discord_bot.delivery import dispatch
@@ -29,8 +28,14 @@ class HccaDiscordBot(commands.Bot):
             intents=intents,
             help_command=None,
         )
-        self.platform = PlatformApiClient(settings.HCCA_API_URL, settings.HCCA_API_KEY)
+        self.platform = PlatformApiClient(
+            settings.HCCA_API_URL,
+            settings.HCCA_API_KEY,
+            cf_access_client_id=settings.HCCA_API_CF_ACCESS_CLIENT_ID,
+            cf_access_client_secret=settings.HCCA_API_CF_ACCESS_CLIENT_SECRET,
+        )
         self.delivery_task: asyncio.Task[None] | None = None
+        self.inventory_task: asyncio.Task[None] | None = None
 
     async def setup_hook(self) -> None:
         await load_commands(self)
@@ -43,11 +48,13 @@ class HccaDiscordBot(commands.Bot):
         else:
             await self.tree.sync()
         self.delivery_task = asyncio.create_task(self.delivery_loop())
+        self.inventory_task = asyncio.create_task(self.inventory_loop())
 
     async def close(self) -> None:
-        if self.delivery_task is not None:
-            self.delivery_task.cancel()
-            await asyncio.gather(self.delivery_task, return_exceptions=True)
+        tasks = [task for task in (self.delivery_task, self.inventory_task) if task is not None]
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
         await self.platform.close()
         await super().close()
 
@@ -58,10 +65,15 @@ class HccaDiscordBot(commands.Bot):
                 discord_user_id=member.id,
                 display_name=member.display_name,
             )
-        except httpx.HTTPError:
+        except PlatformUnavailableError:
             logger.exception("Failed to report Discord member join")
 
     async def on_ready(self) -> None:
+        try:
+            status = await self.platform.status()
+            logger.info("Connected to platform API: %s", status["status"])
+        except PlatformUnavailableError:
+            logger.warning("Platform API is currently unavailable; retrying in background")
         await self.report_inventory()
 
     async def on_guild_join(self, _guild: discord.Guild) -> None:
@@ -126,8 +138,14 @@ class HccaDiscordBot(commands.Bot):
                     "guilds": guilds,
                 }
             )
-        except httpx.HTTPError:
-            logger.exception("Failed to report Discord inventory")
+        except PlatformUnavailableError:
+            logger.warning("Failed to report Discord inventory; will retry")
+
+    async def inventory_loop(self) -> None:
+        await self.wait_until_ready()
+        while not self.is_closed():
+            await self.report_inventory()
+            await asyncio.sleep(20)
 
     async def delivery_loop(self) -> None:
         await self.wait_until_ready()

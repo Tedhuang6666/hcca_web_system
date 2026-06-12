@@ -13,7 +13,11 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from hcca_discord_bot.api_client import PlatformApiClient, PlatformCommandError
+from hcca_discord_bot.api_client import (
+    PlatformApiClient,
+    PlatformCommandError,
+    PlatformUnavailableError,
+)
 
 _CATEGORY_LABEL = {
     "document_pending": "公文待核",
@@ -68,6 +72,16 @@ async def _command(
             else interaction.response.send_message
         )
         await sender(str(exc), ephemeral=True)
+        return None
+    except PlatformUnavailableError:
+        if silent:
+            return None
+        sender = (
+            interaction.followup.send
+            if interaction.response.is_done()
+            else interaction.response.send_message
+        )
+        await sender("平台 API 暫時無法連線，請稍後再試。", ephemeral=True)
         return None
 
 
