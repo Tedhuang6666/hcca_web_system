@@ -13,7 +13,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.core.clock import local_today, roc_year
-from api.services._base import apply_updates
 from api.core.config import settings
 from api.core.database import advisory_xact_lock
 from api.models.org import Org, Position, UserPosition
@@ -41,6 +40,7 @@ from api.schemas.petition import (
     PetitionTypeCreate,
     PetitionTypeUpdate,
 )
+from api.services._base import apply_updates
 from api.services.permission import active_tenure_filter
 
 STATUS_LABELS: dict[PetitionStatus, str] = {

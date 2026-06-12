@@ -1,4 +1,5 @@
 """字號自動生成 + 字號模板 CRUD"""
+
 from __future__ import annotations
 
 import logging

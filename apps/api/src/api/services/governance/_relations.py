@@ -1,4 +1,5 @@
 """實體關聯 / 跨模組圖譜"""
+
 from __future__ import annotations
 
 import uuid
@@ -120,9 +121,7 @@ async def entity_relation_graph(
                     ),
                 ]
             )
-        rows = list(
-            (await db.execute(select(EntityRelation).where(or_(*clauses)))).scalars().all()
-        )
+        rows = list((await db.execute(select(EntityRelation).where(or_(*clauses)))).scalars().all())
         next_frontier: set[tuple[str, uuid.UUID]] = set()
         for edge in rows:
             edges[edge.id] = edge

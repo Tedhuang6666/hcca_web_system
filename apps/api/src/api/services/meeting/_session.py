@@ -1,4 +1,5 @@
 """會議 CRUD / 生命週期"""
+
 from __future__ import annotations
 
 import logging
@@ -10,17 +11,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from api.services._base import apply_updates
 from api.models.meeting import (
-    AgendaItemType,
-    AttendanceRole,
-    AttendanceStatus,
     Meeting,
     MeetingAgendaItem,
     MeetingAgendaRecusal,
     MeetingAttendance,
     MeetingBallot,
-    MeetingBillStage,
     MeetingMode,
     MeetingMotion,
     MeetingRequest,
@@ -32,6 +28,7 @@ from api.models.meeting import (
 )
 from api.models.org import Org
 from api.schemas.meeting import MeetingCreate, MeetingUpdate
+from api.services._base import apply_updates
 
 logger = logging.getLogger(__name__)
 

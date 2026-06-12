@@ -1,4 +1,5 @@
 """商品目錄：分類 / 系列 / 商品 CRUD / 變體 / 瀏覽樹"""
+
 from __future__ import annotations
 
 import logging
@@ -9,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.core.clock import now_local
-from api.services._base import apply_updates
 from api.models.shop import (
     Product,
     ProductCategory,
@@ -33,6 +33,7 @@ from api.schemas.shop import (
     ProductVariantOptionCreate,
     ProductVariantOptionUpdate,
 )
+from api.services._base import apply_updates
 
 logger = logging.getLogger(__name__)
 

@@ -1,4 +1,5 @@
 """菜單排程 / 菜單品項 / 自動結單"""
+
 from __future__ import annotations
 
 import logging

@@ -1,4 +1,5 @@
 """螢幕 / 加入 / 工作台 / 會議紀錄 payload 組裝"""
+
 from __future__ import annotations
 
 import uuid
@@ -31,9 +32,7 @@ from api.services.meeting._voting import (
 )
 
 
-async def decorate_vote(
-    session: AsyncSession, vote, *, include_ballots: bool
-) -> dict:
+async def decorate_vote(session: AsyncSession, vote, *, include_ballots: bool) -> dict:
     eligible = await eligible_voter_count(session, vote.meeting_id)
     if vote.agenda_item_id is not None:
         eligible -= await recused_voter_count(session, vote.meeting_id, vote.agenda_item_id)
@@ -77,9 +76,7 @@ def _vote_roster_status(record: dict[str, int]) -> str:
     return "not_voted"
 
 
-async def vote_roster_payload(
-    session: AsyncSession, meeting: Meeting, vote
-) -> dict | None:
+async def vote_roster_payload(session: AsyncSession, meeting: Meeting, vote) -> dict | None:
     if vote is None:
         return None
 
@@ -195,9 +192,7 @@ async def screen_payload(session: AsyncSession, meeting: Meeting) -> dict:
     }
 
 
-async def join_payload(
-    session: AsyncSession, meeting: Meeting, *, user_id: uuid.UUID
-) -> dict:
+async def join_payload(session: AsyncSession, meeting: Meeting, *, user_id: uuid.UUID) -> dict:
     record = await session.scalar(
         select(MeetingAttendance).where(
             MeetingAttendance.meeting_id == meeting.id,

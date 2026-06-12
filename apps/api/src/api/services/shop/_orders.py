@@ -1,4 +1,5 @@
 """購物車 / 訂單 CRUD / 序列化 / 統計"""
+
 from __future__ import annotations
 
 import logging
@@ -19,7 +20,6 @@ from api.models.shop import (
     ProductCategory,
     ProductSeries,
     ProductStatus,
-    ProductVariantGroup,
 )
 from api.schemas.shop import (
     CartItemCreate,
@@ -91,9 +91,7 @@ async def get_or_create_cart(session: AsyncSession, user_id: uuid.UUID) -> Cart:
     return cart
 
 
-async def add_cart_item(
-    session: AsyncSession, user_id: uuid.UUID, *, data: CartItemCreate
-) -> Cart:
+async def add_cart_item(session: AsyncSession, user_id: uuid.UUID, *, data: CartItemCreate) -> Cart:
     cart = await get_or_create_cart(session, user_id)
     product = await get_product(session, data.product_id)
     if product is None:

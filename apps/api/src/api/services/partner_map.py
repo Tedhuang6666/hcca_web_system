@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.core.search import like_contains
-from api.services._base import apply_updates
 from api.models.partner_map import (
     PartnerBusiness,
     PartnerBusinessStatus,
@@ -34,6 +33,7 @@ from api.schemas.partner_map import (
     PartnerTagCreate,
     PartnerTagUpdate,
 )
+from api.services._base import apply_updates
 
 
 def active_offer_clause(now: datetime | None = None):

@@ -1,4 +1,5 @@
 """共用 service 工具函式"""
+
 from __future__ import annotations
 
 from pydantic import BaseModel

@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.core.clock import local_today
-from api.services._base import apply_updates
 from api.models.org import Position, UserPosition
 from api.models.site import (
     PublicLink,
@@ -34,6 +33,7 @@ from api.schemas.site import (
     PublicSitePageUpdate,
     PublicSiteSettingsUpdate,
 )
+from api.services._base import apply_updates
 
 DEFAULT_SETTINGS = {
     "site_title": "新竹高中班聯會",

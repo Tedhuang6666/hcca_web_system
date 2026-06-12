@@ -1,4 +1,5 @@
 """訂單 CRUD / 班級訂購 / 核銷"""
+
 from __future__ import annotations
 
 import logging
@@ -201,7 +202,9 @@ async def create_meal_order(
     order_items: list[dict] = []
 
     for item_req in data.items:
-        menu_item = await _validate_and_lock_menu_item(session, item_req=item_req, schedule=schedule)
+        menu_item = await _validate_and_lock_menu_item(
+            session, item_req=item_req, schedule=schedule
+        )
         subtotal = menu_item.price * item_req.quantity
         total_price += subtotal
         order_items.append(

@@ -1,4 +1,5 @@
 """事情 / 專案 / 案件 CRUD"""
+
 from __future__ import annotations
 
 import uuid
@@ -14,7 +15,6 @@ from api.models.governance import (
     GovernanceCase,
     GovernanceEventType,
     Matter,
-    MatterStatus,
     PlanningDocument,
     PlanningDocumentRevision,
     PlanningDocumentRevisionAttachment,

@@ -18,7 +18,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from api.services._base import apply_updates
 from api.models.seating import (
     Seat,
     SeatAssignment,
@@ -42,6 +41,7 @@ from api.schemas.seating import (
     ZoneUpdate,
 )
 from api.services import recipient as recipient_svc
+from api.services._base import apply_updates
 
 logger = logging.getLogger(__name__)
 
