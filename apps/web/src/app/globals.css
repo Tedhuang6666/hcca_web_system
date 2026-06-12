@@ -3032,18 +3032,14 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
    亦同步靜止。捲動揭示由 useScrollReveal hook 驅動。
    ══════════════════════════════════════════════════════════════════════════ */
 
-/* ── 捲動揭示：JS 就緒後才隱藏，無 JS 退化為可見 ───────────────────────── */
+/* ── 捲動揭示：只做位移，避免淡入期間降低文字對比 ─────────────────────── */
 html[data-reveal-ready] [data-reveal] {
-  opacity: 0;
   transform: translateY(22px);
-  transition:
-    opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
-    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
   transition-delay: var(--reveal-delay, 0ms);
-  will-change: opacity, transform;
+  will-change: transform;
 }
 html[data-reveal-ready] [data-reveal].is-reveal-in {
-  opacity: 1;
   transform: none;
 }
 @media (prefers-reduced-motion: reduce) {
