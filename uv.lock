@@ -662,7 +662,7 @@ requires-dist = [
     { name = "authlib", specifier = ">=1.6.9" },
     { name = "bcrypt", specifier = ">=5.0.0" },
     { name = "boto3", specifier = ">=1.42.88" },
-    { name = "celery", specifier = ">=5.4.0,<5.6" },
+    { name = "celery", specifier = ">=5.4.0,<5.7" },
     { name = "coloredlogs", specifier = ">=15.0.1" },
     { name = "email-validator", specifier = ">=2.3.0" },
     { name = "fastapi", specifier = ">=0.135.3" },
