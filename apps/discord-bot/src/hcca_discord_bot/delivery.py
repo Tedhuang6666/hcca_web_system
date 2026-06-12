@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import discord
@@ -161,6 +162,185 @@ async def _create_petition_channel(
     return {"guild_id": str(guild.id), "channel_id": str(channel.id)}
 
 
+def _safe_channel_name(value: str) -> str:
+    normalized = re.sub(r"[^a-z0-9\u4e00-\u9fff]+", "-", value.lower()).strip("-")
+    return normalized[:90] or "activity"
+
+
+async def _activity_workspace_sync(
+    client: discord.Client, payload: dict[str, Any]
+) -> dict[str, Any]:
+    guild = client.get_guild(int(payload["guild_id"]))
+    if guild is None:
+        raise LookupError(f"Discord guild {payload['guild_id']} is unavailable")
+
+    activity_name = str(payload.get("activity_name") or "活動")
+    archived = bool(payload.get("archive"))
+    category = None
+    if payload.get("category_id"):
+        candidate = guild.get_channel(int(payload["category_id"]))
+        if isinstance(candidate, discord.CategoryChannel):
+            category = candidate
+
+    convener_role = None
+    if payload.get("convener_role_id"):
+        convener_role = guild.get_role(int(payload["convener_role_id"]))
+    if convener_role is None:
+        convener_role = await guild.create_role(
+            name=f"{activity_name}｜總召"[:100],
+            mentionable=True,
+            reason="HCCA activity workspace sync",
+        )
+
+    role_results: list[dict[str, Any]] = []
+    activity_roles: list[tuple[dict[str, Any], discord.Role]] = []
+    for item in payload.get("roles", []):
+        role = guild.get_role(int(item["discord_role_id"])) if item.get("discord_role_id") else None
+        if role is None:
+            role = await guild.create_role(
+                name=f"{activity_name}｜{item['name']}"[:100],
+                mentionable=True,
+                reason="HCCA activity workspace sync",
+            )
+        elif role.name != f"{activity_name}｜{item['name']}"[:100]:
+            await role.edit(
+                name=f"{activity_name}｜{item['name']}"[:100],
+                reason="HCCA activity workspace sync",
+            )
+        activity_roles.append((item, role))
+
+    overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
+        guild.default_role: discord.PermissionOverwrite(view_channel=False),
+        convener_role: discord.PermissionOverwrite(
+            view_channel=True,
+            send_messages=not archived,
+            manage_messages=not archived,
+            read_message_history=True,
+        ),
+    }
+    for _item, role in activity_roles:
+        overwrites[role] = discord.PermissionOverwrite(
+            view_channel=True,
+            send_messages=not archived,
+            read_message_history=True,
+        )
+
+    category_name = f"{'已封存｜' if archived else ''}{activity_name}"[:100]
+    if category is None:
+        category = await guild.create_category(
+            category_name,
+            overwrites=overwrites,
+            reason="HCCA activity workspace sync",
+        )
+    else:
+        await category.edit(
+            name=category_name,
+            overwrites=overwrites,
+            reason="HCCA activity workspace sync",
+        )
+
+    async def ensure_text_channel(
+        channel_id: str | None,
+        name: str,
+        channel_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite],
+    ) -> discord.TextChannel:
+        channel = guild.get_channel(int(channel_id)) if channel_id else None
+        if not isinstance(channel, discord.TextChannel):
+            return await guild.create_text_channel(
+                name=name,
+                category=category,
+                overwrites=channel_overwrites,
+                reason="HCCA activity workspace sync",
+            )
+        await channel.edit(
+            category=category,
+            overwrites=channel_overwrites,
+            reason="HCCA activity workspace sync",
+        )
+        return channel
+
+    general = await ensure_text_channel(
+        payload.get("general_channel_id"),
+        "一般討論",
+        overwrites,
+    )
+    announcement = await ensure_text_channel(
+        payload.get("announcement_channel_id"),
+        "活動公告",
+        overwrites,
+    )
+    staff_overwrites = {
+        guild.default_role: discord.PermissionOverwrite(view_channel=False),
+        convener_role: discord.PermissionOverwrite(
+            view_channel=True,
+            send_messages=not archived,
+            manage_messages=not archived,
+            read_message_history=True,
+        ),
+    }
+    staff = await ensure_text_channel(
+        payload.get("staff_channel_id"),
+        "核心工作區",
+        staff_overwrites,
+    )
+
+    desired_by_role: dict[int, set[int]] = {
+        convener_role.id: {int(value) for value in payload.get("convener_discord_user_ids", [])}
+    }
+    for item, role in activity_roles:
+        desired_by_role[role.id] = {int(value) for value in item.get("member_discord_user_ids", [])}
+        role_channel = None
+        if item.get("create_private_channel"):
+            role_overwrites = {
+                guild.default_role: discord.PermissionOverwrite(view_channel=False),
+                convener_role: discord.PermissionOverwrite(
+                    view_channel=True,
+                    send_messages=not archived,
+                    read_message_history=True,
+                ),
+                role: discord.PermissionOverwrite(
+                    view_channel=True,
+                    send_messages=not archived,
+                    read_message_history=True,
+                ),
+            }
+            role_channel = await ensure_text_channel(
+                item.get("discord_channel_id"),
+                _safe_channel_name(str(item["name"])),
+                role_overwrites,
+            )
+        role_results.append(
+            {
+                "id": str(item["id"]),
+                "discord_role_id": str(role.id),
+                "discord_channel_id": str(role_channel.id) if role_channel else None,
+            }
+        )
+
+    for role_id, desired_member_ids in desired_by_role.items():
+        role = guild.get_role(role_id)
+        if role is None:
+            continue
+        for member in list(role.members):
+            if member.id not in desired_member_ids:
+                await member.remove_roles(role, reason="HCCA activity workspace sync")
+        for member_id in desired_member_ids:
+            member = guild.get_member(member_id) or await guild.fetch_member(member_id)
+            if role not in member.roles:
+                await member.add_roles(role, reason="HCCA activity workspace sync")
+
+    return {
+        "guild_id": str(guild.id),
+        "category_id": str(category.id),
+        "general_channel_id": str(general.id),
+        "announcement_channel_id": str(announcement.id),
+        "staff_channel_id": str(staff.id),
+        "convener_role_id": str(convener_role.id),
+        "roles": role_results,
+        "archived": archived,
+    }
+
+
 async def dispatch(
     client: discord.Client,
     event_type: str,
@@ -174,6 +354,8 @@ async def dispatch(
         await _sync_roles(client, payload)
     elif event_type == "discord.petition_channel_create":
         return await _create_petition_channel(client, payload)
+    elif event_type == "discord.activity_workspace_sync":
+        return await _activity_workspace_sync(client, payload)
     else:
         raise ValueError(f"Unsupported Discord event type: {event_type}")
     return {}

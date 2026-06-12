@@ -74,7 +74,8 @@ import type {
   PartnerTagCreate, PartnerTagOut, PartnerTagUpdate,
   ExamGradeTrack, ExamPaperDownloadOut, ExamPaperListItem, ExamPaperOut, ExamPaperUpdate,
   ExamTraceInspectOut,
-  Activity, ActivityConvener, ActivityCreate,
+  Activity, ActivityConvener, ActivityCreate, ActivityMember, ActivityRole,
+  DiscordActivityWorkspace,
   WorkflowInstanceOut, WorkflowLinkCreate, WorkflowLinkOut, WorkflowTimelineOut,
   WorkflowTransitionCreate,
   ActivityClosingReportOut, ActivityLinkCreate, ActivityLinkOut, ActivityLinkSuggestion,
@@ -1413,6 +1414,31 @@ export const activitiesApi = {
   updateConvener: (id: string, body: { start_date?: string; end_date?: string | null }) =>
     patch<ActivityConvener>(`/activities/conveners/${id}`, body),
   removeConvener: (id: string) => del<void>(`/activities/conveners/${id}`),
+  discordWorkspace: (id: string) =>
+    get<DiscordActivityWorkspace | null>(`/activities/${id}/discord-workspace`),
+  saveDiscordWorkspace: (
+    id: string,
+    body: Omit<
+      DiscordActivityWorkspace,
+      "id" | "activity_id" | "sync_status" | "last_error" | "last_synced_at" | "created_at" | "updated_at"
+    >,
+  ) => put<DiscordActivityWorkspace>(`/activities/${id}/discord-workspace`, body),
+  syncDiscordWorkspace: (id: string) =>
+    post<DiscordActivityWorkspace>(`/activities/${id}/discord-workspace/sync`, {}),
+  listRoles: (id: string) => get<ActivityRole[]>(`/activities/${id}/roles`),
+  createRole: (
+    id: string,
+    body: { key: string; name: string; description?: string | null; create_private_channel: boolean },
+  ) => post<ActivityRole>(`/activities/${id}/roles`, body),
+  updateRole: (activityId: string, roleId: string, body: Partial<ActivityRole>) =>
+    patch<ActivityRole>(`/activities/${activityId}/roles/${roleId}`, body),
+  listMembers: (id: string) => get<ActivityMember[]>(`/activities/${id}/members`),
+  appointMember: (
+    id: string,
+    body: { role_id: string; user_id: string; start_date: string; end_date?: string | null },
+  ) => post<ActivityMember>(`/activities/${id}/members`, body),
+  removeMember: (activityId: string, memberId: string) =>
+    del<void>(`/activities/${activityId}/members/${memberId}`),
 };
 
 // ── 跨模組工作流 ──────────────────────────────────────────────────────────────

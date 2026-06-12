@@ -13,6 +13,7 @@ from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_permission
 from api.models.activity import Activity
+from api.models.activity_discord import ActivityMember, ActivityRole
 from api.models.user import User
 from api.schemas.activity import (
     ActivityConvenerCreate,
@@ -22,6 +23,15 @@ from api.schemas.activity import (
     ActivityOut,
     ActivityUpdate,
 )
+from api.schemas.activity_discord import (
+    ActivityMemberCreate,
+    ActivityMemberOut,
+    ActivityRoleCreate,
+    ActivityRoleOut,
+    ActivityRoleUpdate,
+    DiscordActivityWorkspaceOut,
+    DiscordActivityWorkspaceUpsert,
+)
 from api.schemas.activity_link import (
     ActivityClosingReportOut,
     ActivityLinkCreate,
@@ -30,6 +40,7 @@ from api.schemas.activity_link import (
     ActivityWorkspaceOut,
 )
 from api.services import activity as activity_svc
+from api.services import activity_discord as activity_discord_svc
 from api.services import activity_workspace as workspace_svc
 from api.services import audit as audit_svc
 
@@ -279,6 +290,9 @@ async def update_activity(
 async def archive_activity(activity_id: uuid.UUID, db: DbDep, user: CurrentUser) -> Activity:
     activity = await _activity_or_404(db, activity_id)
     archived = await activity_svc.archive_activity(db, activity)
+    discord_workspace = await activity_discord_svc.get_workspace(db, activity.id)
+    if discord_workspace is not None and discord_workspace.is_active:
+        await activity_discord_svc.enqueue_workspace_sync(db, discord_workspace, archive=True)
     await audit_svc.record(
         db,
         entity_type="activity",
@@ -289,6 +303,191 @@ async def archive_activity(activity_id: uuid.UUID, db: DbDep, user: CurrentUser)
         summary=f"封存活動「{archived.name}」",
     )
     return archived
+
+
+@router.get(
+    "/{activity_id}/discord-workspace",
+    response_model=DiscordActivityWorkspaceOut | None,
+    summary="取得活動 Discord 工作區",
+)
+async def get_discord_workspace(
+    activity_id: uuid.UUID, db: DbDep, _: CurrentUser
+) -> DiscordActivityWorkspaceOut | None:
+    await _activity_or_404(db, activity_id)
+    return await activity_discord_svc.get_workspace(db, activity_id)
+
+
+@router.put(
+    "/{activity_id}/discord-workspace",
+    response_model=DiscordActivityWorkspaceOut,
+    summary="建立或更新活動 Discord 工作區",
+)
+async def upsert_discord_workspace(
+    activity_id: uuid.UUID,
+    payload: DiscordActivityWorkspaceUpsert,
+    db: DbDep,
+    user: CurrentUser,
+) -> DiscordActivityWorkspaceOut:
+    activity = await _activity_or_404(db, activity_id)
+    await _require_activity_resource_manager(db, user, activity.id)
+    workspace = await activity_discord_svc.upsert_workspace(db, activity, payload)
+    await activity_discord_svc.enqueue_workspace_sync(db, workspace)
+    await audit_svc.record(
+        db,
+        entity_type="discord_activity_workspace",
+        entity_id=str(workspace.id),
+        action="activity.discord_workspace.upsert",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        meta=payload.model_dump(),
+        summary=f"設定活動「{activity.name}」Discord 工作區",
+    )
+    return DiscordActivityWorkspaceOut.model_validate(workspace)
+
+
+@router.post(
+    "/{activity_id}/discord-workspace/sync",
+    response_model=DiscordActivityWorkspaceOut,
+    summary="同步活動 Discord 工作區",
+)
+async def sync_discord_workspace(
+    activity_id: uuid.UUID, db: DbDep, user: CurrentUser
+) -> DiscordActivityWorkspaceOut:
+    activity = await _activity_or_404(db, activity_id)
+    await _require_activity_resource_manager(db, user, activity.id)
+    workspace = await activity_discord_svc.get_workspace(db, activity.id)
+    if workspace is None:
+        raise HTTPException(status_code=404, detail="活動 Discord 工作區尚未設定")
+    await activity_discord_svc.enqueue_workspace_sync(db, workspace)
+    return DiscordActivityWorkspaceOut.model_validate(workspace)
+
+
+@router.get(
+    "/{activity_id}/roles",
+    response_model=list[ActivityRoleOut],
+    summary="列出活動職務",
+)
+async def list_activity_roles(
+    activity_id: uuid.UUID, db: DbDep, _: CurrentUser
+) -> list[ActivityRole]:
+    await _activity_or_404(db, activity_id)
+    return await activity_discord_svc.list_roles(db, activity_id)
+
+
+@router.post(
+    "/{activity_id}/roles",
+    response_model=ActivityRoleOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="建立活動職務",
+)
+async def create_activity_role(
+    activity_id: uuid.UUID,
+    payload: ActivityRoleCreate,
+    db: DbDep,
+    user: CurrentUser,
+) -> ActivityRole:
+    activity = await _activity_or_404(db, activity_id)
+    await _require_activity_resource_manager(db, user, activity.id)
+    try:
+        role = await activity_discord_svc.create_role(db, activity, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await audit_svc.record(
+        db,
+        entity_type="activity_role",
+        entity_id=str(role.id),
+        action="activity.role.create",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        meta=payload.model_dump(),
+        summary=f"建立活動「{activity.name}」職務「{role.name}」",
+    )
+    return role
+
+
+@router.patch(
+    "/{activity_id}/roles/{role_id}",
+    response_model=ActivityRoleOut,
+    summary="更新活動職務",
+)
+async def update_activity_role(
+    activity_id: uuid.UUID,
+    role_id: uuid.UUID,
+    payload: ActivityRoleUpdate,
+    db: DbDep,
+    user: CurrentUser,
+) -> ActivityRole:
+    activity = await _activity_or_404(db, activity_id)
+    await _require_activity_resource_manager(db, user, activity.id)
+    role = await db.get(ActivityRole, role_id)
+    if role is None or role.activity_id != activity.id:
+        raise HTTPException(status_code=404, detail="活動職務不存在")
+    return await activity_discord_svc.update_role(db, role, payload)
+
+
+@router.get(
+    "/{activity_id}/members",
+    response_model=list[ActivityMemberOut],
+    summary="列出活動職務成員",
+)
+async def list_activity_members(
+    activity_id: uuid.UUID, db: DbDep, _: CurrentUser
+) -> list[ActivityMemberOut]:
+    await _activity_or_404(db, activity_id)
+    return [
+        ActivityMemberOut.model_validate(member)
+        for member in await activity_discord_svc.list_members(db, activity_id)
+    ]
+
+
+@router.post(
+    "/{activity_id}/members",
+    response_model=ActivityMemberOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="任命活動職務成員",
+)
+async def appoint_activity_member(
+    activity_id: uuid.UUID,
+    payload: ActivityMemberCreate,
+    db: DbDep,
+    user: CurrentUser,
+) -> ActivityMemberOut:
+    activity = await _activity_or_404(db, activity_id)
+    await _require_activity_resource_manager(db, user, activity.id)
+    try:
+        member = await activity_discord_svc.appoint_member(db, activity, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await audit_svc.record(
+        db,
+        entity_type="activity_member",
+        entity_id=str(member.id),
+        action="activity.member.appoint",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        meta=payload.model_dump(mode="json"),
+        summary=f"任命活動「{activity.name}」職務成員",
+    )
+    return ActivityMemberOut.model_validate(member)
+
+
+@router.delete(
+    "/{activity_id}/members/{member_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="卸任活動職務成員",
+)
+async def remove_activity_member(
+    activity_id: uuid.UUID,
+    member_id: uuid.UUID,
+    db: DbDep,
+    user: CurrentUser,
+) -> None:
+    activity = await _activity_or_404(db, activity_id)
+    await _require_activity_resource_manager(db, user, activity.id)
+    member = await db.get(ActivityMember, member_id)
+    if member is None or member.activity_id != activity.id:
+        raise HTTPException(status_code=404, detail="活動職務任命不存在")
+    await activity_discord_svc.remove_member(db, member)
 
 
 @router.get(
@@ -334,6 +533,10 @@ async def appoint_convener(
         meta=payload.model_dump(mode="json"),
         summary=f"任命活動「{activity.name}」總召",
     )
+    await activity_discord_svc.enqueue_workspace_sync_if_enabled(db, activity.id)
+    from api.services.discord_bot import enqueue_role_sync
+
+    await enqueue_role_sync(db, convener.user_id)
     return ActivityConvenerOut.model_validate(convener)
 
 
@@ -366,6 +569,10 @@ async def update_convener(
         meta=payload.model_dump(mode="json", exclude_unset=True),
         summary="更新活動總召任期",
     )
+    await activity_discord_svc.enqueue_workspace_sync_if_enabled(db, updated.activity_id)
+    from api.services.discord_bot import enqueue_role_sync
+
+    await enqueue_role_sync(db, updated.user_id)
     return ActivityConvenerOut.model_validate(updated)
 
 
@@ -389,4 +596,10 @@ async def remove_convener(convener_id: uuid.UUID, db: DbDep, user: CurrentUser) 
         meta={"activity_id": str(convener.activity_id), "user_id": str(convener.user_id)},
         summary="卸任活動總召",
     )
+    activity_id = convener.activity_id
+    convener_user_id = convener.user_id
     await activity_svc.remove_convener(db, convener)
+    await activity_discord_svc.enqueue_workspace_sync_if_enabled(db, activity_id)
+    from api.services.discord_bot import enqueue_role_sync
+
+    await enqueue_role_sync(db, convener_user_id)
