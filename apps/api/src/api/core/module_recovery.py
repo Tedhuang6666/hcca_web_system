@@ -72,6 +72,9 @@ async def attempt_recovery(module_id: str, *, force: bool = False) -> bool:
     if not existing or not existing.get("on"):
         return True  # 本來就沒在維護
 
+    if existing.get("mode") == "closed":
+        return False  # 管理員明確關閉，不可被健康探測自動恢復
+
     if not force and existing.get("source") == "manual":
         # manual 維護不在這裡自動解除（admin 必須走 force 路徑）
         return False

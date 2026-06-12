@@ -190,6 +190,7 @@ class ModuleStatusOut(BaseModel):
     id: str
     label: str
     on: bool
+    mode: Literal["maintenance", "closed"] = "maintenance"
     source: str | None = None
     reason: str = ""
     since: float | None = None
@@ -228,12 +229,14 @@ class ModuleStatusPublic(BaseModel):
     id: str
     label: str
     on: bool
+    mode: Literal["maintenance", "closed"] = "maintenance"
     reason: str = ""
     until: float | None = None
 
 
 class ModuleMaintenanceBody(BaseModel):
     on: bool
+    mode: Literal["maintenance", "closed"] = "maintenance"
     reason: str = Field("", max_length=500)
 
 
@@ -250,6 +253,7 @@ async def public_module_status() -> list[ModuleStatusPublic]:
                 id=mid,
                 label=spec.label,
                 on=bool(st and st.get("on")),
+                mode=(st or {}).get("mode", "maintenance"),
                 reason=(st or {}).get("reason", "") if st else "",
                 until=(st or {}).get("until") if st else None,
             )
@@ -683,6 +687,7 @@ async def list_modules(_admin: AdminUser) -> list[ModuleStatusOut]:
                 id=mid,
                 label=spec.label,
                 on=bool(st.get("on")),
+                mode=st.get("mode", "maintenance"),
                 source=st.get("source"),
                 reason=st.get("reason", ""),
                 since=st.get("since"),
@@ -701,7 +706,13 @@ async def update_module_maintenance(
     module_id: str, body: ModuleMaintenanceBody, session: DbDep, _admin: AdminUser
 ) -> ModuleStatusOut:
     _validate_module(module_id)
-    state = await set_module_maintenance(module_id, on=body.on, source="manual", reason=body.reason)
+    state = await set_module_maintenance(
+        module_id,
+        on=body.on,
+        mode=body.mode,
+        source="manual",
+        reason=body.reason,
+    )
     await audit_svc.record(
         session,
         entity_type="defense_rule",
@@ -709,21 +720,31 @@ async def update_module_maintenance(
         action="set_module_maintenance",
         actor_id=str(_admin.id),
         actor_email=_admin.email,
-        meta={"module": module_id, "on": body.on, "reason": body.reason},
-        summary=f"{'開啟' if body.on else '關閉'}模組維護：{MODULES[module_id].label}",
+        meta={"module": module_id, "on": body.on, "mode": body.mode, "reason": body.reason},
+        summary=(
+            f"關閉模組：{MODULES[module_id].label}"
+            if body.on and body.mode == "closed"
+            else f"{'開啟' if body.on else '關閉'}模組維護：{MODULES[module_id].label}"
+        ),
     )
     await emit_security_alert(
         session,
         title="模組維護狀態已更新",
-        body=f"module={module_id} on={body.on} actor={_admin.email}",
+        body=f"module={module_id} on={body.on} mode={body.mode} actor={_admin.email}",
     )
     await ws_manager.broadcast_all(
-        {"type": "module_maintenance", "module": module_id, "on": body.on}
+        {
+            "type": "module_maintenance",
+            "module": module_id,
+            "on": body.on,
+            "mode": body.mode,
+        }
     )
     return ModuleStatusOut(
         id=module_id,
         label=MODULES[module_id].label,
         on=bool(state.get("on")),
+        mode=state.get("mode", "maintenance"),
         source=state.get("source"),
         reason=state.get("reason", ""),
         since=state.get("since"),

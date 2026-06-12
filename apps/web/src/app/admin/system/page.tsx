@@ -852,11 +852,21 @@ function ModulesPanel() {
     return () => clearInterval(timer);
   }, [load]);
 
-  const setMaintenance = async (mod: ModuleStatus, on: boolean) => {
+  const setMaintenance = async (
+    mod: ModuleStatus,
+    on: boolean,
+    mode: "maintenance" | "closed" = "maintenance",
+  ) => {
     setBusy(mod.id);
     try {
-      await systemApi.setModuleMaintenance(mod.id, { on, reason: reasons[mod.id] ?? "" });
-      toast.success(`${mod.label}：${on ? "已開啟維護" : "已關閉維護"}`);
+      await systemApi.setModuleMaintenance(mod.id, {
+        on,
+        mode,
+        reason: reasons[mod.id] ?? "",
+      });
+      toast.success(
+        `${mod.label}：${!on ? "已恢復正常" : mode === "closed" ? "已關閉模組" : "已開啟維護"}`,
+      );
       load();
     } catch (e) {
       toast.error(apiErrorMessage(e, "切換模組維護失敗"));
@@ -905,7 +915,13 @@ function ModulesPanel() {
   };
 
   const sourceLabel = (mod: ModuleStatus) =>
-    !mod.on ? "正常" : mod.source === "auto" ? "維護中（自動）" : "維護中（手動）";
+    !mod.on
+      ? "正常"
+      : mod.mode === "closed"
+        ? "已關閉"
+        : mod.source === "auto"
+          ? "維護中（自動）"
+          : "維護中（手動）";
 
   const severityLabel = (sev: string) =>
     sev === "CRITICAL" ? "🔴 嚴重" : sev === "HIGH" ? "🟠 高" : "🟡 一般";
@@ -921,7 +937,8 @@ function ModulesPanel() {
       }
     >
       <p className="mb-3 text-xs text-[var(--text-muted)]">
-        針對單一功能模組開啟維護：只有該模組的 API 與頁面停用，平台其他功能不受影響。模組大量錯誤時會
+        可將單一功能模組設為維護或直接關閉。關閉時會隱藏相關導覽，直接連結也只顯示系統關閉中；
+        維護時只有該模組的 API 與頁面停用，平台其他功能不受影響。模組大量錯誤時會
         自動進入維護（自動，冷卻時間指數退避），冷卻後 half-open 探測通過自動恢復；
         1h 內累計跳閘 3-7 次（依嚴重度）會升級為手動維護，需「嘗試恢復」或「重啟」介入。
       </p>
@@ -977,20 +994,31 @@ function ModulesPanel() {
                           disabled={busy === mod.id}
                           className="btn-sm btn-secondary"
                         >
-                          關閉維護
+                          恢復正常
                         </button>
                       ) : (
-                        <button
-                          type="button"
-                          onClick={() => setMaintenance(mod, true)}
-                          disabled={busy === mod.id}
-                          className="btn-sm btn-danger-ghost"
-                        >
-                          <Power size={14} aria-hidden />
-                          開啟維護
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setMaintenance(mod, true, "maintenance")}
+                            disabled={busy === mod.id}
+                            className="btn-sm btn-danger-ghost"
+                          >
+                            <Power size={14} aria-hidden />
+                            開啟維護
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMaintenance(mod, true, "closed")}
+                            disabled={busy === mod.id}
+                            className="btn-sm btn-danger-ghost"
+                          >
+                            <Ban size={14} aria-hidden />
+                            關閉模組
+                          </button>
+                        </>
                       )}
-                      {mod.on && (
+                      {mod.on && mod.mode !== "closed" && (
                         <button
                           type="button"
                           onClick={() => recover(mod)}

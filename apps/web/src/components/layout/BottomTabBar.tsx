@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { LogIn, MoreHorizontal } from "lucide-react";
 import { useWS } from "@/hooks/useWS";
 import { useInboxCounts } from "@/hooks/useInboxCounts";
+import { useModuleStatus } from "@/contexts/ModuleStatusContext";
+import { NAV_ID_TO_MODULE, moduleForPath } from "@/lib/modules";
 import {
   filterNavItems,
   NAV_PREF_EVENT,
@@ -48,6 +50,7 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
   const [userRoom, setUserRoom] = useState<string | null>(null);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [navPrefs, setNavPrefs] = useState(() => readNavPreferences());
+  const { isModuleClosed } = useModuleStatus();
   // 待辦／未讀計數輪詢：訪客（未登入）不請求；致命狀態會自動停止。
   const {
     taskCount,
@@ -114,13 +117,16 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
 
   const tabs: Tab[] = useMemo(() => {
     if (role === "guest") {
-      return [
+      const guestTabs: Tab[] = [
         { href: "/regulations",   label: "法規", iconKey: "regulations",   match: (p) => p.startsWith("/regulations") },
         { href: "/announcements", label: "公告", iconKey: "announcement",  match: (p) => p.startsWith("/announcements") },
         { href: "/partner-map",   label: "特約", iconKey: "partnerMap",    match: (p) => p.startsWith("/partner-map") },
         { href: "/petitions/new", label: "陳情", iconKey: "petition",      match: (p) => p.startsWith("/petitions") },
         { href: "/login",         label: "登入", icon: (p) => <LogIn {...p} />,         match: (p) => p === "/login" },
       ];
+      return guestTabs.filter(
+        (tab) => !tab.href || !isModuleClosed(moduleForPath(tab.href)),
+      );
     }
     const superuser = typeof window !== "undefined" && (
       localStorage.getItem("is_superuser") === "true" || localStorage.getItem("is_owner") === "true"
@@ -132,10 +138,14 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
     const can = (code: string) => superuser || perms.has("admin:all") || perms.has(code);
     const hasPrefix = (prefix: string) =>
       superuser || perms.has("admin:all") || Array.from(perms).some((perm) => perm.startsWith(prefix));
-    const available = filterNavItems(orderedItems(navPrefs.mobileOrder, navPrefs.mobileHidden), can, hasPrefix);
+    const available = filterNavItems(
+      orderedItems(navPrefs.mobileOrder, navPrefs.mobileHidden),
+      can,
+      hasPrefix,
+    ).filter((item) => !isModuleClosed(NAV_ID_TO_MODULE[item.id] ?? null));
     const topTabs = available.slice(0, 4).map(navItemToTab);
     return [...topTabs, { label: "更多", icon: (p) => <MoreHorizontal {...p} />, onClick: onMoreClick }];
-  }, [navPrefs, role, onMoreClick]);
+  }, [navPrefs, role, onMoreClick, isModuleClosed]);
 
   if (keyboardOpen) return null;
   if (!roleResolved) return null;

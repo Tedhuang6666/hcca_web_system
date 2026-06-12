@@ -189,12 +189,13 @@ class LoadShedMiddleware:
             await self._respond_maintenance(scope, send, maintenance)
             return
 
-        # 3. Module maintenance（單一模組；admin 照常放行以便驗證/修復）
-        if not can_bypass:
-            module_id = match_module(path)
-            if module_id:
-                mstate = await get_module_maintenance(module_id)
-                if mstate and mstate.get("on"):
+        # 3. Module state：維護模式允許 admin 驗證；關閉模式只保留 /admin 管理通道。
+        module_id = match_module(path)
+        if module_id:
+            mstate = await get_module_maintenance(module_id)
+            if mstate and mstate.get("on"):
+                closed = mstate.get("mode") == "closed"
+                if closed or not can_bypass:
                     await self._respond_module_maintenance(scope, send, module_id, mstate)
                     return
 
@@ -239,12 +240,19 @@ class LoadShedMiddleware:
         self, scope: Scope, send: Send, module_id: str, state: dict
     ) -> None:
         reason = state.get("reason") or ""
-        message = f"此功能模組維護中，請稍後再試{('：' + reason) if reason else ''}"
+        closed = state.get("mode") == "closed"
+        message = (
+            f"此功能模組系統關閉中{('：' + reason) if reason else ''}"
+            if closed
+            else f"此功能模組維護中，請稍後再試{('：' + reason) if reason else ''}"
+        )
         resp = JSONResponse(
             {
                 "detail": message,
                 "module_maintenance": True,
+                "module_closed": closed,
                 "module": module_id,
+                "mode": state.get("mode", "maintenance"),
                 "source": state.get("source"),
                 "until": state.get("until"),
             },
