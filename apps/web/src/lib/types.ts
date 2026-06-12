@@ -1775,6 +1775,55 @@ export interface ActivityConvener {
   user_email: string;
 }
 
+export interface ActivityRole {
+  id: string;
+  activity_id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  discord_role_id: string | null;
+  discord_channel_id: string | null;
+  create_private_channel: boolean;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ActivityMember {
+  id: string;
+  activity_id: string;
+  role_id: string;
+  user_id: string;
+  start_date: string;
+  end_date: string | null;
+  role_name: string;
+  user_name: string;
+  user_email: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type DiscordActivitySyncStatus = "idle" | "pending" | "synced" | "failed" | "archived";
+
+export interface DiscordActivityWorkspace {
+  id: string;
+  activity_id: string;
+  guild_id: string;
+  category_id: string | null;
+  general_channel_id: string | null;
+  announcement_channel_id: string | null;
+  staff_channel_id: string | null;
+  convener_role_id: string | null;
+  sync_status: DiscordActivitySyncStatus;
+  last_error: string | null;
+  last_synced_at: string | null;
+  auto_sync: boolean;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 // ── 跨模組工作流 ──────────────────────────────────────────────────────────────
 
 export interface WorkflowTransitionCreate {

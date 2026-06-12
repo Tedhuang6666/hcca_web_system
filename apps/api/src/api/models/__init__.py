@@ -5,6 +5,12 @@
 # 公告系統
 # 稽核日誌（不可變）
 from api.models.activity import Activity, ActivityConvener, ActivityStatus  # noqa: F401
+from api.models.activity_discord import (  # noqa: F401
+    ActivityMember,
+    ActivityRole,
+    DiscordActivitySyncStatus,
+    DiscordActivityWorkspace,
+)
 from api.models.activity_link import ActivityLink, ActivityLinkKind  # noqa: F401
 from api.models.announcement import (  # noqa: F401
     Announcement,
