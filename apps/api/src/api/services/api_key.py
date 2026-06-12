@@ -2,7 +2,7 @@
 
 責任：
 - 產生密碼學安全的 raw key（一次性回給呼叫端、不存明文）
-- 存 sha256 hash + key_prefix
+- 存 HMAC-SHA256 digest + key_prefix
 - 透過 hash 反查、驗證有效性（active / not revoked / not expired）
 - revoke / list / 統計
 
@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import secrets
 import uuid
 from datetime import UTC, datetime
@@ -19,17 +20,28 @@ from datetime import UTC, datetime
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.config import settings
 from api.models.api_key import ApiKey
 
 _PREFIX = "hcca_"
 
 
 def _hash_key(raw: str) -> str:
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    digest = hmac.new(
+        settings.SECRET_KEY.encode("utf-8"),
+        raw.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"hmac-sha256:{digest}"
+
+
+def _legacy_hash_key(raw: str) -> str:
+    # Existing keys contain 256 bits of random entropy; this is compatibility verification only.
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()  # lgtm[py/weak-sensitive-data-hashing]
 
 
 def generate_raw_key() -> tuple[str, str]:
-    """產生 raw key 字串並計算 sha256；回傳 (raw, sha256_hex)。"""
+    """產生 raw key 字串並計算 keyed digest；回傳 (raw, digest)。"""
     raw = _PREFIX + secrets.token_urlsafe(32)
     return raw, _hash_key(raw)
 
@@ -105,8 +117,21 @@ async def find_active_by_raw(db: AsyncSession, raw_key: str) -> ApiKey | None:
     if not raw_key or not raw_key.startswith(_PREFIX):
         return None
     key_hash = _hash_key(raw_key)
-    stmt = select(ApiKey).where(ApiKey.key_hash == key_hash)
-    row = (await db.execute(stmt)).scalar_one_or_none()
+    key_prefix = raw_key[: len(_PREFIX) + 8]
+    stmt = select(ApiKey).where(ApiKey.key_prefix == key_prefix)
+    candidates = (await db.execute(stmt)).scalars().all()
+    row = next(
+        (
+            candidate
+            for candidate in candidates
+            if hmac.compare_digest(candidate.key_hash, key_hash)
+            or (
+                not candidate.key_hash.startswith("hmac-sha256:")
+                and hmac.compare_digest(candidate.key_hash, _legacy_hash_key(raw_key))
+            )
+        ),
+        None,
+    )
     if row is None:
         return None
     if not row.is_active or row.revoked_at is not None:
@@ -114,6 +139,9 @@ async def find_active_by_raw(db: AsyncSession, raw_key: str) -> ApiKey | None:
     now = datetime.now(UTC)
     if row.expires_at is not None and row.expires_at < now:
         return None
+    if not row.key_hash.startswith("hmac-sha256:"):
+        row.key_hash = key_hash
+        await db.flush()
     return row
 
 

@@ -20,8 +20,33 @@ export function serverApiUrl(path: string): string {
   return `${API_INTERNAL_BASE}${path}`;
 }
 
+export function safeImageUrl(url: string | null | undefined): string {
+  const value = url?.trim();
+  if (!value) return "";
+
+  if (value.startsWith("/") && !value.startsWith("//")) {
+    return value;
+  }
+
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.href : "";
+  } catch {
+    return "";
+  }
+}
+
+export function safeInternalHref(href: string | null | undefined, fallback = "/"): string {
+  const value = href?.trim();
+  if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("\\")) {
+    return fallback;
+  }
+  return value;
+}
+
 /** 將後端回傳的 /uploads/... 相對路徑解析成可在瀏覽器顯示的完整 URL。 */
 export function uploadUrl(url: string | null | undefined): string {
   if (!url) return "";
-  return url.startsWith("/uploads/") ? `${API_BASE}${url}` : url;
+  const resolved = url.startsWith("/uploads/") ? `${API_BASE}${url}` : url;
+  return safeImageUrl(resolved);
 }

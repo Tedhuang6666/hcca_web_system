@@ -21,6 +21,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { ApiError, siteApi } from "@/lib/api";
+import { safeImageUrl } from "@/lib/config";
 import {
   PUBLIC_NAV_GROUP_META,
   PUBLIC_NAV_ITEMS,
@@ -203,7 +204,11 @@ function ImageField({
       <div className="grid h-28 place-items-center rounded-lg" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
         {value ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={value} alt={alt || `${label}預覽`} className="max-h-24 max-w-full object-contain" />
+          <img
+            src={safeImageUrl(value)}
+            alt={alt || `${label}預覽`}
+            className="max-h-24 max-w-full object-contain"
+          />
         ) : (
           <span className="text-xs text-[var(--text-muted)]">{label}預覽</span>
         )}

@@ -7,6 +7,6 @@
     "build": "mjml templates/notification.mjml -o compiled/notification.html && mjml templates/generic.mjml -o compiled/generic.html"
   },
   "devDependencies": {
-    "mjml": "^4.15.3"
+    "mjml": "^4.18.0"
   }
 }

@@ -31,6 +31,7 @@ async def test_mfa_setup_confirm_encrypts_secret_and_persists_backup_hashes(
     assert user.mfa_secret.startswith("enc:v1:")
     assert user.mfa_pending_secret is None
     assert mfa_svc.backup_code_count(user) == 8
+    assert all(item.startswith("scrypt:") for item in user.mfa_backup_code_hashes["codes"])
 
 
 @pytest.mark.asyncio

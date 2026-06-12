@@ -28,7 +28,7 @@ from api.services.permission import get_user_permission_codes
 
 def _bucket_for(user_id: str, flag_key: str) -> int:
     """穩定的 0-99 桶：同 user 同 flag 永遠同桶。"""
-    h = hashlib.sha1(f"{user_id}:{flag_key}".encode()).hexdigest()
+    h = hashlib.sha256(f"{user_id}:{flag_key}".encode()).hexdigest()
     return int(h[:8], 16) % 100
 
 

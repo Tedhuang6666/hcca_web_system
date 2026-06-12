@@ -133,7 +133,7 @@ def backup_database(self) -> dict:  # type: ignore[type-arg]
                 check=True,
                 timeout=600,
             )
-        logger.info("DB backup complete file=%s size=%d", target, target.stat().st_size)
+        logger.info("DB backup complete size=%d", target.stat().st_size)
     except FileNotFoundError as e:
         logger.error("pg_dump 未安裝；請於 worker 環境安裝 postgresql-client", exc_info=True)
         try:
@@ -145,15 +145,14 @@ def backup_database(self) -> dict:  # type: ignore[type-arg]
             )
             raise
     except subprocess.CalledProcessError as e:
-        stderr_text = e.stderr.decode(errors="ignore") if e.stderr else ""
-        logger.error("pg_dump 失敗 stderr=%s", stderr_text)
+        logger.error("pg_dump 失敗 exit_code=%s", e.returncode)
         target.unlink(missing_ok=True)
         try:
             raise self.retry(exc=e) from e
         except MaxRetriesExceededError:
             _emit_backup_alert_sync(
                 title="🚨 資料庫備份失敗（已達重試上限）",
-                body=f"原因：pg_dump 執行失敗\nstderr 摘錄：{stderr_text[:400]}",
+                body=f"原因：pg_dump 執行失敗（exit code {e.returncode}）。請查看受限 worker 記錄。",
             )
             raise
     except subprocess.TimeoutExpired as e:

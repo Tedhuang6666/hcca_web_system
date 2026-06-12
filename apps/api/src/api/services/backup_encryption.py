@@ -109,7 +109,7 @@ def encrypt_file(
         try:
             src.unlink()
         except OSError:
-            logger.warning("無法刪除原始備份檔（明文）：%s", src, exc_info=True)
+            logger.warning("無法刪除原始備份檔（明文）", exc_info=True)
 
     return out
 

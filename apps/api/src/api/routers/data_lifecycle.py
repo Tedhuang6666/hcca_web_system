@@ -182,10 +182,12 @@ async def download_archive(
     user: LifecycleUser,
     path: str = Query(..., min_length=1),
 ) -> StreamingResponse:
-    root = svc.archive_root()
-    target = (root / path).resolve()
-    if not str(target).startswith(str(root.resolve())) or not target.exists():
-        raise HTTPException(status_code=404, detail="找不到歸檔檔")
+    try:
+        target = svc.resolve_archive_file(path)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="找不到歸檔檔") from exc
+    except OSError as exc:
+        raise HTTPException(status_code=404, detail="找不到歸檔檔") from exc
 
     await audit_svc.record(
         db,
