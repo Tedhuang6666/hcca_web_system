@@ -10,8 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.config import settings
 from api.core.database import get_db
+from api.core.defense import find_identity_block
 from api.core.security import decode_token, is_blacklisted, register_active_token
 from api.models.user import User
+from api.models.user_identity import UserIdentity
 
 if TYPE_CHECKING:
     pass
@@ -109,6 +111,27 @@ async def get_current_user(
     user = result.scalar_one_or_none()
     if user is None:
         raise _CREDENTIALS_EXCEPTION
+
+    identity_emails = await db.scalars(
+        select(UserIdentity.email).where(
+            UserIdentity.user_id == user.id,
+            UserIdentity.email.is_not(None),
+        )
+    )
+    block = await find_identity_block(
+        user_id=str(user.id),
+        emails={user.email, *(email for email in identity_emails.all() if email)},
+    )
+    if block:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "message": "此帳號已被網站封鎖",
+                "blocked": True,
+                "reason": block.get("reason") or "未提供原因",
+                "expires_at": block.get("expires_at"),
+            },
+        )
 
     # 使用即註冊 jti，供 admin 端 revoke_user 強制登出
     await register_active_token(

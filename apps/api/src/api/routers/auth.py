@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.anomaly_detection import check_suspicious_login, record_login
 from api.core.config import settings
 from api.core.database import get_db
+from api.core.defense import find_identity_block
 from api.core.oauth import discord, google
 from api.core.permission_codes import PermissionCode
 from api.core.posthog import get_posthog_client
@@ -184,6 +185,17 @@ async def _upsert_google_user(
     client_ip: str,
     user_agent: str | None,
 ) -> User:
+    email_block = await find_identity_block(emails={email})
+    if email_block:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "message": "此信箱已被網站封鎖",
+                "blocked": True,
+                "reason": email_block.get("reason") or "未提供原因",
+                "expires_at": email_block.get("expires_at"),
+            },
+        )
     identity_by_sub = await db.scalar(
         select(UserIdentity).where(
             UserIdentity.provider == "google",
@@ -230,6 +242,18 @@ async def _upsert_google_user(
 
     legacy_google_user = await db.scalar(select(User).where(User.google_sub == google_sub))
     user = linked_user or legacy_google_user or existing_user_by_email
+    if user:
+        user_block = await find_identity_block(user_id=str(user.id), emails={email, user.email})
+        if user_block:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "message": "此帳號已被網站封鎖",
+                    "blocked": True,
+                    "reason": user_block.get("reason") or "未提供原因",
+                    "expires_at": user_block.get("expires_at"),
+                },
+            )
     is_superuser_candidate = email in settings.SUPERUSER_EMAILS or email in settings.OWNER_EMAILS
     is_superuser = False
 
@@ -388,6 +412,18 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
             user_agent=request.headers.get("user-agent"),
         )
     except HTTPException as exc:
+        if isinstance(exc.detail, dict) and exc.detail.get("blocked"):
+            blocked_qs = urlencode(
+                {
+                    "reason": str(exc.detail.get("reason") or "未提供原因"),
+                    **(
+                        {"until": str(exc.detail["expires_at"])}
+                        if exc.detail.get("expires_at")
+                        else {}
+                    ),
+                }
+            )
+            return RedirectResponse(url=f"{frontend_origin}/blocked?{blocked_qs}")
         error_qs = urlencode({"error": str(exc.detail)})
         return RedirectResponse(url=f"{frontend_origin}/login?{error_qs}")
 
@@ -473,6 +509,17 @@ async def discord_callback(
     if user is None:
         error_qs = urlencode({"error": "此 Discord 帳號尚未綁定，請先使用 Google 登入後綁定"})
         return RedirectResponse(url=f"{frontend_origin}/login?{error_qs}")
+    user_block = await find_identity_block(user_id=str(user.id), emails={user.email})
+    if user_block:
+        blocked_qs = urlencode(
+            {
+                "reason": str(user_block.get("reason") or "未提供原因"),
+                **(
+                    {"until": str(user_block["expires_at"])} if user_block.get("expires_at") else {}
+                ),
+            }
+        )
+        return RedirectResponse(url=f"{frontend_origin}/blocked?{blocked_qs}")
 
     is_suspicious, reason = await check_suspicious_login(str(user.id), client_ip)
     if is_suspicious:
@@ -612,6 +659,17 @@ async def refresh_token(
     user = result.scalar_one_or_none()
     if user is None or not user.is_active:
         raise credentials_exception
+    user_block = await find_identity_block(user_id=str(user.id), emails={user.email})
+    if user_block:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "message": "此帳號已被網站封鎖",
+                "blocked": True,
+                "reason": user_block.get("reason") or "未提供原因",
+                "expires_at": user_block.get("expires_at"),
+            },
+        )
 
     # 舊 Refresh Token 加入黑名單（Token Rotation）
     await add_to_blacklist(token)

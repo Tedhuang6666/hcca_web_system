@@ -26,7 +26,7 @@ from starlette.types import Receive, Scope, Send
 from api.core.config import settings
 from api.core.database import engine
 from api.core.defense import endpoint_lockdown_reason
-from api.core.ip_blocklist import is_blocked
+from api.core.ip_blocklist import get_block, is_blocked
 from api.core.load_signals import get_5xx_ratio, get_active_requests
 from api.core.maintenance import (
     get_load_shed_force_mode,
@@ -53,6 +53,7 @@ ALWAYS_ALLOWED_PATHS = frozenset(
         "/auth/logout",
         "/system/maintenance",
         "/system/module-status",
+        "/system/access-status",
     }
 )
 ALWAYS_ALLOWED_PREFIXES = (
@@ -174,7 +175,7 @@ class LoadShedMiddleware:
         # 1. IP 黑名單（信任來源豁免；is_blocked 對白名單 IP 已回 False，
         #    此處的 not trusted 主要讓「非白名單 IP + 有效掃描 token」也能穿過）
         if not trusted and await is_blocked(ip):
-            await self._respond_blocked(scope, send)
+            await self._respond_blocked(scope, send, await get_block(ip))
             return
 
         can_bypass = trusted or _can_bypass_protection(scope)
@@ -220,9 +221,16 @@ class LoadShedMiddleware:
 
         await self.app(scope, receive, send)
 
-    async def _respond_blocked(self, scope: Scope, send: Send) -> None:
+    async def _respond_blocked(self, scope: Scope, send: Send, block: dict | None = None) -> None:
         resp = JSONResponse(
-            {"detail": "您的 IP 已被封鎖，請聯絡管理員"},
+            {
+                "detail": {
+                    "message": "您的網路位址已被網站封鎖",
+                    "blocked": True,
+                    "reason": (block or {}).get("reason") or "未提供原因",
+                    "expires_at": (block or {}).get("expires_at"),
+                }
+            },
             status_code=403,
         )
         await self._send_response(resp, scope, send)

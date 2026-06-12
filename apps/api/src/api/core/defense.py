@@ -216,6 +216,36 @@ async def is_ip_blocked(ip: str) -> bool:
     return False
 
 
+async def find_ip_block(ip: str) -> dict[str, Any] | None:
+    if await is_ip_allowed(ip):
+        return None
+    for rule in await get_rules():
+        rule_type = rule.get("rule_type")
+        if rule_type not in {"ip_block", "cidr_block"} or not _rule_not_expired(rule):
+            continue
+        if _ip_matches(str(rule.get("target", "")), ip):
+            return rule
+    return None
+
+
+async def find_identity_block(
+    *,
+    user_id: str | None = None,
+    emails: set[str] | None = None,
+) -> dict[str, Any] | None:
+    normalized_emails = {email.strip().lower() for email in emails or set() if email.strip()}
+    for rule in await get_rules():
+        if not _rule_not_expired(rule):
+            continue
+        rule_type = rule.get("rule_type")
+        target = str(rule.get("target", "")).strip()
+        if rule_type == "user_block" and user_id and target == user_id:
+            return rule
+        if rule_type == "email_block" and target.lower() in normalized_emails:
+            return rule
+    return None
+
+
 async def endpoint_lockdown_reason(path: str) -> str | None:
     for rule in await get_rules():
         if rule.get("rule_type") != "endpoint_lockdown" or not _rule_not_expired(rule):

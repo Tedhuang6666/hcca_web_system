@@ -19,6 +19,8 @@ class DefenseRuleType(StrEnum):
     IP_BLOCK = "ip_block"
     CIDR_BLOCK = "cidr_block"
     IP_ALLOW = "ip_allow"
+    USER_BLOCK = "user_block"
+    EMAIL_BLOCK = "email_block"
     RATE_LIMIT_OVERRIDE = "rate_limit_override"
     ENDPOINT_LOCKDOWN = "endpoint_lockdown"
     BOT_CHALLENGE_PLACEHOLDER = "bot_challenge_placeholder"

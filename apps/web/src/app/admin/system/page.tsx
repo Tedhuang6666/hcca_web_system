@@ -41,7 +41,14 @@ import {
   type RateLimitConfig,
   type RecentErrorItem,
   type SystemFeatureFlag,
-  type SystemMetricsSnapshot, apiErrorMessage } from "@/lib/api";
+  type SystemMetricsSnapshot,
+  apiErrorMessage,
+} from "@/lib/api";
+import {
+  blockUserAccount,
+  previewUserBlock,
+  type UserBlockPreview,
+} from "@/lib/user-block-api";
 
 const POLL_INTERVAL_MS = 5000;
 const DEFAULT_RATE_LIMIT: RateLimitConfig = {
@@ -223,6 +230,11 @@ export default function SystemDefensePage() {
   const [ipReason, setIpReason] = useState("");
   const [ipTtl, setIpTtl] = useState(3600);
   const [revokeUserId, setRevokeUserId] = useState("");
+  const [blockUserIdentifier, setBlockUserIdentifier] = useState("");
+  const [blockUserReason, setBlockUserReason] = useState("");
+  const [blockUserPreview, setBlockUserPreview] = useState<UserBlockPreview | null>(null);
+  const [blockUserEmails, setBlockUserEmails] = useState(true);
+  const [blockUserIps, setBlockUserIps] = useState(false);
   const [rateLimit, setRateLimit] = useState<RateLimitConfig>(DEFAULT_RATE_LIMIT);
   const [ruleType, setRuleType] = useState<DefenseRuleType>("ip_block");
   const [ruleTarget, setRuleTarget] = useState("");
@@ -389,6 +401,36 @@ export default function SystemDefensePage() {
       setRevokeUserId("");
     } catch (e) {
       toast.error(apiErrorMessage(e, "撤銷失敗"));
+    }
+  };
+
+  const previewUser = async () => {
+    if (!blockUserIdentifier.trim()) return;
+    try {
+      setBlockUserPreview(await previewUserBlock(blockUserIdentifier.trim()));
+    } catch (e) {
+      setBlockUserPreview(null);
+      toast.error(apiErrorMessage(e, "找不到使用者"));
+    }
+  };
+
+  const blockUser = async () => {
+    if (!blockUserIdentifier.trim() || !blockUserReason.trim()) return;
+    if (!window.confirm(`確定封鎖 ${blockUserPreview?.email ?? blockUserIdentifier}？`)) return;
+    try {
+      const result = await blockUserAccount({
+        identifier: blockUserIdentifier.trim(),
+        reason: blockUserReason.trim(),
+        include_emails: blockUserEmails,
+        include_ips: blockUserIps,
+      });
+      toast.success(`已封鎖 ${result.email}，建立 ${result.rules.length} 條規則`);
+      setBlockUserIdentifier("");
+      setBlockUserReason("");
+      setBlockUserPreview(null);
+      refresh();
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "封鎖使用者失敗"));
     }
   };
 
@@ -644,7 +686,12 @@ export default function SystemDefensePage() {
               value={ruleType}
               onChange={(e) => setRuleType(e.target.value as DefenseRuleType)}
             >
-              {(["ip_block", "cidr_block", "ip_allow", "endpoint_lockdown"] as DefenseRuleType[]).map(
+              {([
+                "ip_block",
+                "cidr_block",
+                "ip_allow",
+                "endpoint_lockdown",
+              ] as DefenseRuleType[]).map(
                 (type) => (
                   <option key={type} value={type}>
                     {ruleTypeLabel(type)}
@@ -656,7 +703,7 @@ export default function SystemDefensePage() {
               type="text"
               value={ruleTarget}
               onChange={(e) => setRuleTarget(e.target.value)}
-              placeholder="IP / CIDR / 路徑前綴"
+              placeholder="IP / CIDR / UUID / Email / 路徑"
               className="input font-mono"
             />
             <input
@@ -781,6 +828,73 @@ export default function SystemDefensePage() {
 
       <section className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[0.9fr_1.1fr]">
         <Panel title="使用者與功能處置" icon={<Activity size={18} aria-hidden />}>
+          <div className="space-y-2 rounded-lg border border-[var(--danger-border)] bg-[var(--danger-dim)] p-3">
+            <div className="text-sm font-semibold text-[var(--danger)]">封鎖使用者</div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input
+                type="text"
+                value={blockUserIdentifier}
+                onChange={(e) => {
+                  setBlockUserIdentifier(e.target.value);
+                  setBlockUserPreview(null);
+                }}
+                placeholder="使用者 UUID 或任一 Email"
+                className="input flex-1"
+              />
+              <button type="button" onClick={previewUser} className="btn btn-ghost">
+                查詢
+              </button>
+            </div>
+            {blockUserPreview && (
+              <div className="rounded-md border border-[var(--border)] bg-[var(--bg-surface)] p-3 text-xs">
+                <div className="font-medium text-[var(--text-primary)]">
+                  {blockUserPreview.display_name} / {blockUserPreview.email}
+                </div>
+                <div className="mt-1 text-[var(--text-muted)]">
+                  使用過的 Email：{blockUserPreview.emails.join("、") || "無"}
+                </div>
+                <div className="mt-1 text-[var(--text-muted)]">
+                  近 30 天登入 IP：{blockUserPreview.ips.join("、") || "無紀錄"}
+                </div>
+              </div>
+            )}
+            <input
+              type="text"
+              value={blockUserReason}
+              onChange={(e) => setBlockUserReason(e.target.value)}
+              placeholder="封鎖原因（會顯示給使用者）"
+              className="input"
+            />
+            <div className="flex flex-wrap items-center gap-4 text-xs text-[var(--text-secondary)]">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={blockUserEmails}
+                  onChange={(e) => setBlockUserEmails(e.target.checked)}
+                />
+                一併封鎖使用過的 Email
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={blockUserIps}
+                  onChange={(e) => setBlockUserIps(e.target.checked)}
+                />
+                一併封鎖近 30 天登入 IP
+              </label>
+            </div>
+            <button
+              type="button"
+              onClick={blockUser}
+              disabled={!blockUserIdentifier.trim() || !blockUserReason.trim()}
+              className="btn btn-danger"
+            >
+              <Ban size={16} aria-hidden />
+              封鎖並強制登出
+            </button>
+          </div>
+
+          <div className="my-4 border-t border-[var(--border)]" />
           <div className="flex flex-col gap-2 sm:flex-row">
             <input
               type="text"

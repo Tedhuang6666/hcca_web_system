@@ -4,6 +4,7 @@
 的暫時黑名單（預設 1 小時），讓 LoadShedMiddleware 在下個 request 直接擋下。
 """
 
+import json
 import logging
 from datetime import UTC, datetime, timedelta
 
@@ -20,6 +21,40 @@ async def record_login(user_id: str, ip: str, user_agent: str | None = None) -> 
     key = f"login:{user_id}"
     value = f"{ip}|{user_agent or 'unknown'}|{datetime.now(UTC).isoformat()}"
     await redis_client.set(key, value, ex=30 * 24 * 3600)  # 保留 30 天
+    history_key = f"login_history:{user_id}"
+    await redis_client.zadd(
+        history_key,
+        {
+            json.dumps({"ip": ip, "user_agent": user_agent or "unknown"}): datetime.now(
+                UTC
+            ).timestamp()
+        },
+    )
+    await redis_client.zremrangebyscore(
+        history_key,
+        "-inf",
+        (datetime.now(UTC) - timedelta(days=30)).timestamp(),
+    )
+    await redis_client.expire(history_key, 30 * 24 * 3600)
+
+
+async def get_login_ips(user_id: str) -> list[str]:
+    rows = await redis_client.zrevrange(f"login_history:{user_id}", 0, 99)
+    ips: list[str] = []
+    for raw in rows:
+        try:
+            value = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        ip = str(value.get("ip", "")).strip()
+        if ip and ip != "unknown" and ip not in ips:
+            ips.append(ip)
+    legacy = await redis_client.get(f"login:{user_id}")
+    if legacy:
+        legacy_ip = str(legacy).split("|", maxsplit=1)[0].strip()
+        if legacy_ip and legacy_ip != "unknown" and legacy_ip not in ips:
+            ips.append(legacy_ip)
+    return ips
 
 
 async def check_suspicious_login(user_id: str, current_ip: str) -> tuple[bool, str | None]:
