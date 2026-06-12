@@ -11,6 +11,7 @@ import type {
   RegulationWorkflowStatus,
 } from "@/lib/types";
 import {
+  ARTICLE_TYPE_LABEL,
   buildArticleDisplayRows as buildDisplayRowsFn,
 } from "@/lib/regulationStructure";
 

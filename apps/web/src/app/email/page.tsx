@@ -11,13 +11,19 @@ import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import { ApiError, emailApi, apiErrorMessage } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
 import type {
-  EmailComposePayload,
   EmailAttachmentOut,
+  EmailBlock,
+  EmailButton,
+  EmailButtonStyle,
+  EmailCardRow,
+  EmailComposePayload,
   EmailMessageOut,
   EmailPreflightOut,
   EmailRecipientListOut,
   EmailRecipientVariableInput,
   EmailTemplateOut,
+  EmailVariableDefinition,
+  RecipientSelector,
 } from "@/lib/types";
 import {
   AUTOSAVE_KEY,
