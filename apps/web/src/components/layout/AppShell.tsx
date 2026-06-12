@@ -38,11 +38,12 @@ function isBare(pathname: string) {
 
 function AppShellContent({ children }: { children: React.ReactNode }) {
   const { can, isAdmin } = usePermissions();
-  const { isModuleDown } = useModuleStatus();
+  const { isModuleDown, moduleInfo: getModuleInfo } = useModuleStatus();
   const router = useRouter();
   const pathname = usePathname();
   const moduleId = moduleForPath(pathname);
   const moduleDown = isModuleDown(moduleId);
+  const moduleInfo = getModuleInfo(moduleId);
   const suppressPolicyConsent = pathname.startsWith("/legal");
   const [authReady, setAuthReady] = useState(false);
   const [redirecting, setRedirecting] = useState(false);
@@ -126,7 +127,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
               pathname.startsWith("/legal") ? "" : "animate-slide-in"
             }`}
           >
-            {moduleDown && moduleId && !isAdmin ? (
+            {moduleDown && moduleId && (!isAdmin || moduleInfo?.mode === "closed") ? (
               <ModuleMaintenance moduleId={moduleId} />
             ) : (
               <>

@@ -8,14 +8,14 @@ import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.main import app
 from api.core import maintenance as maint
-from api.core import module_health
+from api.core import module_health, module_recovery
 from api.core.config import settings
 from api.core.load_shed import _can_bypass_protection
 from api.core.modules import MODULE_IDS, match_module
 from api.core.security import create_access_token, redis_client
 from api.dependencies.auth import get_current_active_user
+from api.main import app
 from api.models.user import User
 
 
@@ -115,6 +115,57 @@ async def test_module_maintenance_blocks_non_admin_but_admin_bypasses(
     anon_scope = {"type": "http", "headers": []}
     assert _can_bypass_protection(admin_scope) is True
     assert _can_bypass_protection(anon_scope) is False
+
+
+async def test_closed_module_blocks_admin_and_reports_closed(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await maint.set_module_maintenance(
+        "shop",
+        on=True,
+        mode="closed",
+        source="manual",
+        reason="本學期停用",
+    )
+    maint.clear_cache()
+    token = create_access_token("admin-subject", {"is_admin": True})
+
+    resp = await client.get(
+        "/shop",
+        cookies={settings.ACCESS_TOKEN_COOKIE_NAME: token},
+    )
+
+    assert resp.status_code == 503
+    body = resp.json()
+    assert body["module_closed"] is True
+    assert body["mode"] == "closed"
+    assert "系統關閉中" in body["detail"]
+
+
+async def test_closed_module_is_not_cleared_by_forced_recovery() -> None:
+    await maint.set_module_maintenance("meal", on=True, mode="closed", source="manual")
+
+    recovered = await module_recovery.attempt_recovery("meal", force=True)
+
+    assert recovered is False
+    state = await maint.get_module_maintenance("meal")
+    assert state is not None
+    assert state["mode"] == "closed"
+
+
+async def test_closed_module_is_not_overwritten_by_auto_maintenance() -> None:
+    await maint.set_module_maintenance("surveys", on=True, mode="closed", source="manual")
+
+    state = await maint.set_module_maintenance(
+        "surveys",
+        on=True,
+        source="auto",
+        reason="自動健康檢查失敗",
+        ttl=60,
+    )
+
+    assert state["mode"] == "closed"
+    assert state["source"] == "manual"
 
 
 async def test_set_module_maintenance_requires_superuser_returns_403(

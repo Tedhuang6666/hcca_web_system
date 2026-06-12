@@ -1,6 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { Home, RotateCcw, Wrench } from "lucide-react";
+import { Ban, Home, RotateCcw, Wrench } from "lucide-react";
 import { useModuleStatus } from "@/contexts/ModuleStatusContext";
 import type { ModuleId } from "@/lib/modules";
 
@@ -12,17 +12,21 @@ export default function ModuleMaintenance({ moduleId }: { moduleId: ModuleId }) 
   const label = info?.label ?? "此功能";
   const reason = info?.reason ?? "";
   const until = info?.until ?? null;
+  const closed = info?.mode === "closed";
+  const Icon = closed ? Ban : Wrench;
 
   return (
     <div className="mx-auto flex min-h-[60vh] w-full max-w-2xl flex-col items-center justify-center text-center">
       <div className="grid h-16 w-16 place-items-center rounded-2xl border border-[var(--warning-border)] bg-[var(--warning-dim)] text-[var(--warning)]">
-        <Wrench size={28} aria-hidden />
+        <Icon size={28} aria-hidden />
       </div>
       <h1 className="mt-6 text-2xl font-semibold text-[var(--text-primary)] md:text-3xl">
-        {label}維護中
+        {closed ? `${label}系統關閉中` : `${label}維護中`}
       </h1>
       <p className="mt-3 max-w-md text-sm leading-7 text-[var(--text-secondary)]">
-        此模組暫時停止服務，平台其他功能不受影響，您可以從左側選單前往其他模組。
+        {closed
+          ? "此模組目前已由系統管理員關閉，平台其他功能不受影響。"
+          : "此模組暫時停止服務，平台其他功能不受影響，您可以從左側選單前往其他模組。"}
       </p>
       {reason && (
         <p className="mt-4 max-w-md rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 text-sm leading-6 text-[var(--text-secondary)] shadow-sm">

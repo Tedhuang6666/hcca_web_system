@@ -10,6 +10,7 @@ import { isFatalApiStatus } from "@/lib/polling";
 interface ModuleStatusValue {
   statuses: Record<string, ModuleStatusPublic>;
   isModuleDown: (id: ModuleId | null) => boolean;
+  isModuleClosed: (id: ModuleId | null) => boolean;
   moduleInfo: (id: ModuleId | null) => ModuleStatusPublic | null;
   refresh: () => void;
 }
@@ -17,6 +18,7 @@ interface ModuleStatusValue {
 const ModuleStatusContext = createContext<ModuleStatusValue>({
   statuses: {},
   isModuleDown: () => false,
+  isModuleClosed: () => false,
   moduleInfo: () => null,
   refresh: () => {},
 });
@@ -85,13 +87,19 @@ export function ModuleStatusProvider({ children }: { children: React.ReactNode }
     (id: ModuleId | null) => (id ? Boolean(statuses[id]?.on) : false),
     [statuses],
   );
+  const isModuleClosed = useCallback(
+    (id: ModuleId | null) => (id ? statuses[id]?.on && statuses[id]?.mode === "closed" : false),
+    [statuses],
+  );
   const moduleInfo = useCallback(
     (id: ModuleId | null) => (id ? (statuses[id] ?? null) : null),
     [statuses],
   );
 
   return (
-    <ModuleStatusContext.Provider value={{ statuses, isModuleDown, moduleInfo, refresh }}>
+    <ModuleStatusContext.Provider
+      value={{ statuses, isModuleDown, isModuleClosed, moduleInfo, refresh }}
+    >
       {children}
     </ModuleStatusContext.Provider>
   );

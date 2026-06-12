@@ -3259,6 +3259,7 @@ export interface ModuleStatus {
   id: string;
   label: string;
   on: boolean;
+  mode: "maintenance" | "closed";
   source: "manual" | "auto" | null;
   reason: string;
   since: number | null;
@@ -3295,6 +3296,7 @@ export interface ModuleStatusPublic {
   id: string;
   label: string;
   on: boolean;
+  mode: "maintenance" | "closed";
   reason: string;
   until: number | null;
 }
@@ -3478,7 +3480,10 @@ export const systemApi = {
   moduleStatuses: () => get<ModuleStatusPublic[]>("/system/module-status"),
   diagnostics: () => get<SystemDiagnostics>("/admin/system/diagnostics"),
   listModules: () => get<ModuleStatus[]>("/admin/system/modules"),
-  setModuleMaintenance: (id: string, body: { on: boolean; reason?: string }) =>
+  setModuleMaintenance: (
+    id: string,
+    body: { on: boolean; mode?: "maintenance" | "closed"; reason?: string },
+  ) =>
     put<ModuleStatus>(`/admin/system/modules/${encodeURIComponent(id)}/maintenance`, body),
   restartModule: (id: string) =>
     post<{ ok: boolean; module: string }>(

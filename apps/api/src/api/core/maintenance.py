@@ -185,9 +185,10 @@ async def set_load_shed_force_mode(mode: str) -> str:
 
 
 async def get_module_maintenance(module_id: str) -> dict[str, Any] | None:
-    """讀取單一模組維護狀態：{on, source, reason, since, until} 或 None（未維護）。
+    """讀取單一模組狀態：{on, mode, source, reason, since, until} 或 None（正常）。
 
     source: "manual"（管理員手動）| "auto"（斷路器自動）。
+    mode: "maintenance"（維護）| "closed"（管理員關閉）。
     until 到期或 key 不存在皆視為未維護（回 None）。
     """
     key = MODULE_MAINTENANCE_PREFIX + module_id
@@ -219,19 +220,36 @@ async def set_module_maintenance(
     module_id: str,
     *,
     on: bool,
+    mode: str = "maintenance",
     source: str = "manual",
     reason: str = "",
     ttl: int | None = None,
 ) -> dict[str, Any]:
-    """開關單一模組維護。auto 通常帶 ttl（到期自動恢復）；manual 不帶 ttl。"""
+    """設定單一模組狀態。closed 僅供管理員手動關閉；auto 只能進入 maintenance。"""
     key = MODULE_MAINTENANCE_PREFIX + module_id
     if not on:
         await clear_module_maintenance(module_id)
-        return {"on": False, "source": source, "reason": reason, "since": None, "until": None}
+        return {
+            "on": False,
+            "mode": "maintenance",
+            "source": source,
+            "reason": reason,
+            "since": None,
+            "until": None,
+        }
+    if mode not in {"maintenance", "closed"}:
+        raise ValueError(f"Invalid module mode: {mode}")
+    if mode == "closed" and source != "manual":
+        raise ValueError("Closed module mode must be manual")
+    if source == "auto":
+        existing = await get_module_maintenance(module_id)
+        if existing and existing.get("mode") == "closed":
+            return existing
 
     now = time.time()
     state = {
         "on": True,
+        "mode": mode,
         "source": source,
         "reason": reason,
         "since": now,
