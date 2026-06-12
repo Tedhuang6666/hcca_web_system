@@ -144,6 +144,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/activities/{activity_id}/discord-workspace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 取得活動 Discord 工作區 */
+        get: operations["get_discord_workspace_activities__activity_id__discord_workspace_get"];
+        /** 建立或更新活動 Discord 工作區 */
+        put: operations["upsert_discord_workspace_activities__activity_id__discord_workspace_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/activities/{activity_id}/discord-workspace/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 同步活動 Discord 工作區 */
+        post: operations["sync_discord_workspace_activities__activity_id__discord_workspace_sync_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/activities/{activity_id}/link-suggestions": {
         parameters: {
             query?: never;
@@ -211,6 +246,76 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/activities/{activity_id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出活動職務成員 */
+        get: operations["list_activity_members_activities__activity_id__members_get"];
+        put?: never;
+        /** 任命活動職務成員 */
+        post: operations["appoint_activity_member_activities__activity_id__members_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/activities/{activity_id}/members/{member_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 卸任活動職務成員 */
+        delete: operations["remove_activity_member_activities__activity_id__members__member_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/activities/{activity_id}/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出活動職務 */
+        get: operations["list_activity_roles_activities__activity_id__roles_get"];
+        put?: never;
+        /** 建立活動職務 */
+        post: operations["create_activity_role_activities__activity_id__roles_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/activities/{activity_id}/roles/{role_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 更新活動職務 */
+        patch: operations["update_activity_role_activities__activity_id__roles__role_id__patch"];
         trace?: never;
     };
     "/activities/{activity_id}/workspace": {
@@ -669,6 +774,40 @@ export interface paths {
         };
         /** Defense Summary */
         get: operations["defense_summary_admin_system_defense_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/system/defense/user-blocks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Block User */
+        post: operations["block_user_admin_system_defense_user_blocks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/system/defense/users/{identifier}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Preview User Block */
+        get: operations["preview_user_block_admin_system_defense_users__identifier__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2780,6 +2919,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/discord/member-sync-states": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出 Discord 成員同步差異 */
+        get: operations["list_member_sync_states_discord_member_sync_states_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/discord/member-sync-states/repair": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 批次修復 Discord 成員身分組與暱稱 */
+        post: operations["repair_member_sync_states_discord_member_sync_states_repair_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/discord/member-sync-states/{state_id}/repair": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 依平台狀態修復 Discord 成員身分組與暱稱 */
+        post: operations["repair_member_sync_state_discord_member_sync_states__state_id__repair_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/discord/nickname-prefix-rules": {
         parameters: {
             query?: never;
@@ -2902,6 +3092,42 @@ export interface paths {
         head?: never;
         /** Update Role Mapping */
         patch: operations["update_role_mapping_discord_role_mappings__mapping_id__patch"];
+        trace?: never;
+    };
+    "/discord/role-policies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出統一 Discord 身分組政策 */
+        get: operations["list_role_policies_discord_role_policies_get"];
+        put?: never;
+        /** 建立或更新 Discord 身分組政策 */
+        post: operations["create_role_policy_discord_role_policies_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/discord/role-policies/{policy_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 停用 Discord 身分組政策 */
+        delete: operations["delete_role_policy_discord_role_policies__policy_id__delete"];
+        options?: never;
+        head?: never;
+        /** 更新 Discord 身分組政策 */
+        patch: operations["update_role_policy_discord_role_policies__policy_id__patch"];
         trace?: never;
     };
     "/discord/sync-all": {
@@ -4481,6 +4707,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/governance/matters/{matter_id}/discord-routes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出治理事項 Discord 事件路由 */
+        get: operations["list_matter_discord_routes_governance_matters__matter_id__discord_routes_get"];
+        /** 建立或更新治理事項 Discord 事件路由 */
+        put: operations["upsert_matter_discord_route_governance_matters__matter_id__discord_routes_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/governance/matters/{matter_id}/discord-workspace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 取得治理事項 Discord 工作區 */
+        get: operations["get_matter_discord_workspace_governance_matters__matter_id__discord_workspace_get"];
+        /** 建立或綁定治理事項 Discord 工作區 */
+        put: operations["upsert_matter_discord_workspace_governance_matters__matter_id__discord_workspace_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/governance/matters/{matter_id}/discord-workspace/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 同步治理事項 Discord 工作區 */
+        post: operations["sync_matter_discord_workspace_governance_matters__matter_id__discord_workspace_sync_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/governance/matters/{matter_id}/events": {
         parameters: {
             query?: never;
@@ -4607,6 +4886,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/governance/module-capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出事情中心可建立或連接的模組 */
+        get: operations["list_module_capabilities_governance_module_capabilities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/governance/planning-documents/{document_id}": {
         parameters: {
             query?: never;
@@ -4622,6 +4918,76 @@ export interface paths {
         head?: never;
         /** 更新企劃書 */
         patch: operations["update_planning_document_governance_planning_documents__document_id__patch"];
+        trace?: never;
+    };
+    "/governance/planning-documents/{document_id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出企劃書共用附件 */
+        get: operations["list_planning_attachments_governance_planning_documents__document_id__attachments_get"];
+        put?: never;
+        /** 上傳企劃書共用附件 */
+        post: operations["upload_planning_attachment_governance_planning_documents__document_id__attachments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/governance/planning-documents/{document_id}/attachments/{attachment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 刪除未被版本引用的企劃附件 */
+        delete: operations["delete_planning_attachment_governance_planning_documents__document_id__attachments__attachment_id__delete"];
+        options?: never;
+        head?: never;
+        /** 重新命名企劃附件 */
+        patch: operations["rename_planning_attachment_governance_planning_documents__document_id__attachments__attachment_id__patch"];
+        trace?: never;
+    };
+    "/governance/planning-documents/{document_id}/attachments/{attachment_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 下載企劃附件 */
+        get: operations["download_planning_attachment_governance_planning_documents__document_id__attachments__attachment_id__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/governance/planning-documents/{document_id}/attachments/{attachment_id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 內嵌預覽企劃附件 */
+        get: operations["preview_planning_attachment_governance_planning_documents__document_id__attachments__attachment_id__preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/governance/planning-documents/{document_id}/revisions": {
@@ -4675,6 +5041,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/governance/resources/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 依模組搜尋可連接資源 */
+        get: operations["search_governance_resources_governance_resources_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/governance/roles/{assignment_id}": {
         parameters: {
             query?: never;
@@ -4719,6 +5102,125 @@ export interface paths {
         };
         /** 健康檢查 */
         get: operations["health_check_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/discord/commands/{operation}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute Command */
+        post: operations["execute_command_internal_discord_commands__operation__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/discord/events/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Claim Event */
+        get: operations["claim_event_internal_discord_events_claim_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/discord/events/{event_id}/ack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Acknowledge Event */
+        post: operations["acknowledge_event_internal_discord_events__event_id__ack_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/discord/inventory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Inventory */
+        put: operations["update_inventory_internal_discord_inventory_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/discord/members/joined": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Member Joined */
+        post: operations["member_joined_internal_discord_members_joined_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/discord/members/updated": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Member Updated */
+        post: operations["member_updated_internal_discord_members_updated_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/discord/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Bot Status */
+        get: operations["bot_status_internal_discord_status_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -10067,6 +10569,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/system/access-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 檢查目前訪客是否遭封鎖 */
+        get: operations["public_access_status_system_access_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/system/maintenance": {
         parameters: {
             query?: never;
@@ -10481,6 +11000,18 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AccessBlockStatus */
+        AccessBlockStatus: {
+            /** Blocked */
+            blocked: boolean;
+            /** Expires At */
+            expires_at?: number | null;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+        };
         /**
          * AcclamationRequest
          * @description 無異議通過：一鍵建立並關閉表決。
@@ -10704,6 +11235,81 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** ActivityMemberCreate */
+        ActivityMemberCreate: {
+            /** End Date */
+            end_date?: string | null;
+            /**
+             * Role Id
+             * Format: uuid
+             */
+            role_id: string;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /** ActivityMemberOut */
+        ActivityMemberOut: {
+            /**
+             * Activity Id
+             * Format: uuid
+             */
+            activity_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** End Date */
+            end_date: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Role Id
+             * Format: uuid
+             */
+            role_id: string;
+            /**
+             * Role Name
+             * @default
+             */
+            role_name: string;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * User Email
+             * @default
+             */
+            user_email: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /**
+             * User Name
+             * @default
+             */
+            user_name: string;
+        };
         /** ActivityOut */
         ActivityOut: {
             /**
@@ -10734,6 +11340,77 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** ActivityRoleCreate */
+        ActivityRoleCreate: {
+            /**
+             * Create Private Channel
+             * @default false
+             */
+            create_private_channel: boolean;
+            /** Description */
+            description?: string | null;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /**
+             * Sort Order
+             * @default 100
+             */
+            sort_order: number;
+        };
+        /** ActivityRoleOut */
+        ActivityRoleOut: {
+            /**
+             * Activity Id
+             * Format: uuid
+             */
+            activity_id: string;
+            /** Create Private Channel */
+            create_private_channel: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description: string | null;
+            /** Discord Channel Id */
+            discord_channel_id: string | null;
+            /** Discord Role Id */
+            discord_role_id: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Sort Order */
+            sort_order: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** ActivityRoleUpdate */
+        ActivityRoleUpdate: {
+            /** Create Private Channel */
+            create_private_channel?: boolean | null;
+            /** Description */
+            description?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Name */
+            name?: string | null;
+            /** Sort Order */
+            sort_order?: number | null;
         };
         /**
          * ActivityStatus
@@ -12233,6 +12910,11 @@ export interface components {
             /** File */
             file: string;
         };
+        /** Body_upload_planning_attachment_governance_planning_documents__document_id__attachments_post */
+        Body_upload_planning_attachment_governance_planning_documents__document_id__attachments_post: {
+            /** File */
+            file: string;
+        };
         /** Body_upload_survey_image_surveys_images_post */
         Body_upload_survey_image_surveys_images_post: {
             /** File */
@@ -13665,7 +14347,7 @@ export interface components {
              * Rule Type
              * @enum {string}
              */
-            rule_type: "ip_block" | "cidr_block" | "ip_allow" | "rate_limit_override" | "endpoint_lockdown" | "bot_challenge_placeholder";
+            rule_type: "ip_block" | "cidr_block" | "ip_allow" | "user_block" | "email_block" | "rate_limit_override" | "endpoint_lockdown" | "bot_challenge_placeholder";
             /** Target */
             target: string;
         };
@@ -13709,7 +14391,7 @@ export interface components {
             /** Reason */
             reason?: string | null;
             /** Rule Type */
-            rule_type?: ("ip_block" | "cidr_block" | "ip_allow" | "rate_limit_override" | "endpoint_lockdown" | "bot_challenge_placeholder") | null;
+            rule_type?: ("ip_block" | "cidr_block" | "ip_allow" | "user_block" | "email_block" | "rate_limit_override" | "endpoint_lockdown" | "bot_challenge_placeholder") | null;
             /** Target */
             target?: string | null;
         };
@@ -13810,6 +14492,86 @@ export interface components {
              */
             frequency: string;
         };
+        /**
+         * DiscordActivitySyncStatus
+         * @enum {string}
+         */
+        DiscordActivitySyncStatus: "idle" | "pending" | "synced" | "failed" | "archived";
+        /** DiscordActivityWorkspaceOut */
+        DiscordActivityWorkspaceOut: {
+            /**
+             * Activity Id
+             * Format: uuid
+             */
+            activity_id: string;
+            /** Announcement Channel Id */
+            announcement_channel_id?: string | null;
+            /**
+             * Auto Sync
+             * @default true
+             */
+            auto_sync: boolean;
+            /** Category Id */
+            category_id?: string | null;
+            /** Convener Role Id */
+            convener_role_id?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** General Channel Id */
+            general_channel_id?: string | null;
+            /** Guild Id */
+            guild_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Last Error */
+            last_error: string | null;
+            /** Last Synced At */
+            last_synced_at: string | null;
+            /** Staff Channel Id */
+            staff_channel_id?: string | null;
+            sync_status: components["schemas"]["DiscordActivitySyncStatus"];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** DiscordActivityWorkspaceUpsert */
+        DiscordActivityWorkspaceUpsert: {
+            /** Announcement Channel Id */
+            announcement_channel_id?: string | null;
+            /**
+             * Auto Sync
+             * @default true
+             */
+            auto_sync: boolean;
+            /** Category Id */
+            category_id?: string | null;
+            /** Convener Role Id */
+            convener_role_id?: string | null;
+            /** General Channel Id */
+            general_channel_id?: string | null;
+            /** Guild Id */
+            guild_id: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Staff Channel Id */
+            staff_channel_id?: string | null;
+        };
         /** DiscordBindingOut */
         DiscordBindingOut: {
             /** Discord User Id */
@@ -13822,6 +14584,31 @@ export interface components {
             linked_at?: string | null;
             /** Username */
             username?: string | null;
+        };
+        /** DiscordBotEventAck */
+        DiscordBotEventAck: {
+            /** Error */
+            error?: string | null;
+            /** Result */
+            result?: {
+                [key: string]: unknown;
+            };
+            /** Success */
+            success: boolean;
+        };
+        /** DiscordBotEventOut */
+        DiscordBotEventOut: {
+            /** Event Type */
+            event_type: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            };
         };
         /** DiscordBotHealthOut */
         DiscordBotHealthOut: {
@@ -13838,6 +14625,29 @@ export interface components {
             /** Oauth Configured */
             oauth_configured: boolean;
         };
+        /** DiscordBotInventoryIn */
+        DiscordBotInventoryIn: {
+            /** Bot User Id */
+            bot_user_id: string;
+            /** Bot Username */
+            bot_username: string;
+            /** Guilds */
+            guilds?: {
+                [key: string]: unknown;
+            }[];
+            /** Latency Ms */
+            latency_ms: number;
+        };
+        /** DiscordBotStatusOut */
+        DiscordBotStatusOut: {
+            /**
+             * Server Time
+             * Format: date-time
+             */
+            server_time: string;
+            /** Status */
+            status: string;
+        };
         /** DiscordChannelOptionOut */
         DiscordChannelOptionOut: {
             /** Id */
@@ -13848,6 +14658,26 @@ export interface components {
             parent_id?: string | null;
             /** Type */
             type: number;
+        };
+        /** DiscordCommandRequest */
+        DiscordCommandRequest: {
+            /** Arguments */
+            arguments?: {
+                [key: string]: unknown;
+            };
+            /** Discord User Id */
+            discord_user_id: string;
+            /** Guild Id */
+            guild_id?: string | null;
+            /** Interaction Id */
+            interaction_id: string;
+        };
+        /** DiscordCommandResponse */
+        DiscordCommandResponse: {
+            /** Data */
+            data?: {
+                [key: string]: unknown;
+            };
         };
         /** DiscordGuildConfigIn */
         DiscordGuildConfigIn: {
@@ -13942,6 +14772,89 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+        };
+        /** DiscordMemberJoinedIn */
+        DiscordMemberJoinedIn: {
+            /** Discord User Id */
+            discord_user_id: string;
+            /** Display Name */
+            display_name: string;
+            /** Guild Id */
+            guild_id: string;
+        };
+        /** DiscordMemberJoinedOut */
+        DiscordMemberJoinedOut: {
+            /** Linked */
+            linked: boolean;
+            /** Platform Display Name */
+            platform_display_name?: string | null;
+        };
+        /** DiscordMemberRepairBatchIn */
+        DiscordMemberRepairBatchIn: {
+            /**
+             * Drift Only
+             * @default true
+             */
+            drift_only: boolean;
+            /** State Ids */
+            state_ids?: string[];
+        };
+        /** DiscordMemberRepairBatchOut */
+        DiscordMemberRepairBatchOut: {
+            /** Queued */
+            queued: number;
+        };
+        /** DiscordMemberSyncStateOut */
+        DiscordMemberSyncStateOut: {
+            /** Actual Nickname */
+            actual_nickname: string | null;
+            /** Actual Role Ids */
+            actual_role_ids: unknown[];
+            /** Base Nickname */
+            base_nickname: string | null;
+            /** Desired Role Ids */
+            desired_role_ids: unknown[];
+            /** Discord User Id */
+            discord_user_id: string;
+            /** Expected Nickname */
+            expected_nickname: string | null;
+            /** Guild Id */
+            guild_id: string;
+            /** Has Role Drift */
+            has_role_drift: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Last Error */
+            last_error: string | null;
+            /** Last Seen At */
+            last_seen_at: string | null;
+            /** Last Synced At */
+            last_synced_at: string | null;
+            /** User Id */
+            user_id: string | null;
+        };
+        /** DiscordMemberUpdatedIn */
+        DiscordMemberUpdatedIn: {
+            /** Discord User Id */
+            discord_user_id: string;
+            /** Guild Id */
+            guild_id: string;
+            /** Nickname */
+            nickname: string;
+            /** Role Ids */
+            role_ids?: string[];
+        };
+        /** DiscordMemberUpdatedOut */
+        DiscordMemberUpdatedOut: {
+            /** Expected Nickname */
+            expected_nickname?: string | null;
+            /** Has Role Drift */
+            has_role_drift: boolean;
+            /** Linked */
+            linked: boolean;
         };
         /** DiscordNicknamePrefixRuleIn */
         DiscordNicknamePrefixRuleIn: {
@@ -14126,6 +15039,91 @@ export interface components {
              * @default 0
              */
             position: number;
+        };
+        /** DiscordRolePolicyIn */
+        DiscordRolePolicyIn: {
+            /** Guild Id */
+            guild_id: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /**
+             * Manage Role
+             * @default true
+             */
+            manage_role: boolean;
+            /** Nickname Label */
+            nickname_label?: string | null;
+            /** Org Id */
+            org_id?: string | null;
+            /** Position Id */
+            position_id?: string | null;
+            /**
+             * Priority
+             * @default 100
+             */
+            priority: number;
+            /** Role Id */
+            role_id: string;
+            /** Role Name */
+            role_name?: string | null;
+            /**
+             * Use In Nickname
+             * @default true
+             */
+            use_in_nickname: boolean;
+        };
+        /** DiscordRolePolicyOut */
+        DiscordRolePolicyOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Guild Id */
+            guild_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /**
+             * Manage Role
+             * @default true
+             */
+            manage_role: boolean;
+            /** Nickname Label */
+            nickname_label?: string | null;
+            /** Org Id */
+            org_id?: string | null;
+            /** Position Id */
+            position_id?: string | null;
+            /**
+             * Priority
+             * @default 100
+             */
+            priority: number;
+            /** Role Id */
+            role_id: string;
+            /** Role Name */
+            role_name?: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Use In Nickname
+             * @default true
+             */
+            use_in_nickname: boolean;
         };
         /** DiscordSyncAllOut */
         DiscordSyncAllOut: {
@@ -16700,6 +17698,213 @@ export interface components {
             matters: components["schemas"]["MatterListItem"][];
             stats: components["schemas"]["GovernanceStatsOut"];
         };
+        /** GovernanceDiscordEventRouteIn */
+        GovernanceDiscordEventRouteIn: {
+            /** Channel Id */
+            channel_id?: string | null;
+            /**
+             * Channel Kind
+             * @default discussion
+             */
+            channel_kind: string;
+            /**
+             * Create Thread
+             * @default false
+             */
+            create_thread: boolean;
+            /** Event Type */
+            event_type: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Mention Role Id */
+            mention_role_id?: string | null;
+        };
+        /** GovernanceDiscordEventRouteOut */
+        GovernanceDiscordEventRouteOut: {
+            /** Channel Id */
+            channel_id?: string | null;
+            /**
+             * Channel Kind
+             * @default discussion
+             */
+            channel_kind: string;
+            /**
+             * Create Thread
+             * @default false
+             */
+            create_thread: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Event Type */
+            event_type: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Mention Role Id */
+            mention_role_id?: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /** GovernanceDiscordWorkspaceIn */
+        GovernanceDiscordWorkspaceIn: {
+            /** Announcement Channel Id */
+            announcement_channel_id?: string | null;
+            /**
+             * Auto Sync
+             * @default true
+             */
+            auto_sync: boolean;
+            /** Category Id */
+            category_id?: string | null;
+            /** Discussion Channel Id */
+            discussion_channel_id?: string | null;
+            /** Guild Id */
+            guild_id: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Mention Role Id */
+            mention_role_id?: string | null;
+            /**
+             * Mode
+             * @default existing
+             */
+            mode: string;
+            /** Staff Channel Id */
+            staff_channel_id?: string | null;
+        };
+        /** GovernanceDiscordWorkspaceOut */
+        GovernanceDiscordWorkspaceOut: {
+            /** Announcement Channel Id */
+            announcement_channel_id?: string | null;
+            /**
+             * Auto Sync
+             * @default true
+             */
+            auto_sync: boolean;
+            /** Category Id */
+            category_id?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Discussion Channel Id */
+            discussion_channel_id?: string | null;
+            /** Guild Id */
+            guild_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Last Error */
+            last_error: string | null;
+            /** Last Synced At */
+            last_synced_at: string | null;
+            /**
+             * Matter Id
+             * Format: uuid
+             */
+            matter_id: string;
+            /** Mention Role Id */
+            mention_role_id?: string | null;
+            /**
+             * Mode
+             * @default existing
+             */
+            mode: string;
+            /**
+             * Routes
+             * @default []
+             */
+            routes: components["schemas"]["GovernanceDiscordEventRouteOut"][];
+            /** Staff Channel Id */
+            staff_channel_id?: string | null;
+            /** Sync Status */
+            sync_status: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** GovernanceModuleCapabilityOut */
+        GovernanceModuleCapabilityOut: {
+            /** Category */
+            category: string;
+            /** Create Mode */
+            create_mode: string;
+            /** Href */
+            href: string;
+            /** Icon */
+            icon: string;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /**
+             * Permission Codes
+             * @default []
+             */
+            permission_codes: string[];
+            /**
+             * Requires Org
+             * @default false
+             */
+            requires_org: boolean;
+            /** Searchable */
+            searchable: boolean;
+        };
+        /** GovernanceResourceSearchOut */
+        GovernanceResourceSearchOut: {
+            /** Href */
+            href: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Status */
+            status?: string | null;
+            /**
+             * Summary
+             * @default
+             */
+            summary: string;
+            /** Title */
+            title: string;
+        };
         /** GovernanceStatsOut */
         GovernanceStatsOut: {
             /** Active Matters */
@@ -17342,6 +18547,7 @@ export interface components {
             decisions: components["schemas"]["api__schemas__governance__DecisionOut"][];
             /** Description */
             description: string | null;
+            discord_workspace?: components["schemas"]["GovernanceDiscordWorkspaceOut"] | null;
             /** Due At */
             due_at: string | null;
             /**
@@ -18920,6 +20126,12 @@ export interface components {
         };
         /** ModuleMaintenanceBody */
         ModuleMaintenanceBody: {
+            /**
+             * Mode
+             * @default maintenance
+             * @enum {string}
+             */
+            mode: "maintenance" | "closed";
             /** On */
             on: boolean;
             /**
@@ -18953,6 +20165,12 @@ export interface components {
              * @default NORMAL
              */
             max_severity: string;
+            /**
+             * Mode
+             * @default maintenance
+             * @enum {string}
+             */
+            mode: "maintenance" | "closed";
             /** On */
             on: boolean;
             /**
@@ -18987,6 +20205,12 @@ export interface components {
             id: string;
             /** Label */
             label: string;
+            /**
+             * Mode
+             * @default maintenance
+             * @enum {string}
+             */
+            mode: "maintenance" | "closed";
             /** On */
             on: boolean;
             /**
@@ -21270,8 +22494,48 @@ export interface components {
             /** Total Price */
             total_price: number;
         };
+        /** PlanningAttachmentRename */
+        PlanningAttachmentRename: {
+            /** Display Name */
+            display_name: string;
+        };
+        /** PlanningDocumentAttachmentOut */
+        PlanningDocumentAttachmentOut: {
+            /** Content Type */
+            content_type: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Display Name */
+            display_name: string | null;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** File Size */
+            file_size: number;
+            /** Filename */
+            filename: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Uploaded By Id */
+            uploaded_by_id: string | null;
+        };
         /** PlanningDocumentCreate */
         PlanningDocumentCreate: {
+            /** Attachment Ids */
+            attachment_ids?: string[];
             /** Case Id */
             case_id?: string | null;
             /** Change Reason */
@@ -21285,6 +22549,8 @@ export interface components {
             meta?: {
                 [key: string]: unknown;
             };
+            /** Primary Attachment Id */
+            primary_attachment_id?: string | null;
             /** @default draft */
             status: components["schemas"]["PlanningDocumentStatus"];
             /** Summary */
@@ -21301,6 +22567,11 @@ export interface components {
         PlanningDocumentOut: {
             /** Approved At */
             approved_at: string | null;
+            /**
+             * Attachments
+             * @default []
+             */
+            attachments: components["schemas"]["PlanningDocumentAttachmentOut"][];
             /** Case Id */
             case_id: string | null;
             /**
@@ -21345,17 +22616,39 @@ export interface components {
              */
             updated_at: string;
         };
+        /** PlanningDocumentRevisionAttachmentOut */
+        PlanningDocumentRevisionAttachmentOut: {
+            attachment: components["schemas"]["PlanningDocumentAttachmentOut"];
+            /**
+             * Attachment Id
+             * Format: uuid
+             */
+            attachment_id: string;
+            /** Is Primary */
+            is_primary: boolean;
+            /** Sort Order */
+            sort_order: number;
+        };
         /** PlanningDocumentRevisionCreate */
         PlanningDocumentRevisionCreate: {
+            /** Attachment Ids */
+            attachment_ids?: string[];
             /** Change Reason */
             change_reason?: string | null;
             /** Content */
             content: string;
+            /** Primary Attachment Id */
+            primary_attachment_id?: string | null;
             /** Version Label */
             version_label: string;
         };
         /** PlanningDocumentRevisionOut */
         PlanningDocumentRevisionOut: {
+            /**
+             * Attachment Links
+             * @default []
+             */
+            attachment_links: components["schemas"]["PlanningDocumentRevisionAttachmentOut"][];
             /** Change Reason */
             change_reason: string | null;
             /** Content */
@@ -25833,6 +27126,61 @@ export interface components {
             /** Total */
             total: number;
         };
+        /** UserBlockBody */
+        UserBlockBody: {
+            /** Expires At */
+            expires_at?: string | null;
+            /** Identifier */
+            identifier: string;
+            /**
+             * Include Emails
+             * @default true
+             */
+            include_emails: boolean;
+            /**
+             * Include Ips
+             * @default false
+             */
+            include_ips: boolean;
+            /** Reason */
+            reason: string;
+        };
+        /** UserBlockPreview */
+        UserBlockPreview: {
+            /** Display Name */
+            display_name: string;
+            /** Email */
+            email: string;
+            /** Emails */
+            emails: string[];
+            /** Ips */
+            ips: string[];
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /** UserBlockResult */
+        UserBlockResult: {
+            /** Display Name */
+            display_name: string;
+            /** Email */
+            email: string;
+            /** Emails */
+            emails: string[];
+            /** Ips */
+            ips: string[];
+            /** Revoked Count */
+            revoked_count: number;
+            /** Rules */
+            rules: components["schemas"]["DefenseRuleOut"][];
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
         /** UserBrief */
         UserBrief: {
             /** Display Name */
@@ -27823,6 +29171,103 @@ export interface operations {
             };
         };
     };
+    get_discord_workspace_activities__activity_id__discord_workspace_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                activity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscordActivityWorkspaceOut"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upsert_discord_workspace_activities__activity_id__discord_workspace_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                activity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiscordActivityWorkspaceUpsert"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscordActivityWorkspaceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sync_discord_workspace_activities__activity_id__discord_workspace_sync_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                activity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscordActivityWorkspaceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     activity_link_suggestions_activities__activity_id__link_suggestions_get: {
         parameters: {
             query?: {
@@ -27972,6 +29417,204 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_activity_members_activities__activity_id__members_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                activity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityMemberOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    appoint_activity_member_activities__activity_id__members_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                activity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActivityMemberCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityMemberOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_activity_member_activities__activity_id__members__member_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                activity_id: string;
+                member_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_activity_roles_activities__activity_id__roles_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                activity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRoleOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_activity_role_activities__activity_id__roles_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                activity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActivityRoleCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRoleOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_activity_role_activities__activity_id__roles__role_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                activity_id: string;
+                role_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActivityRoleUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRoleOut"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -28919,6 +30562,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DefenseSummary"];
+                };
+            };
+        };
+    };
+    block_user_admin_system_defense_user_blocks_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserBlockBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserBlockResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_user_block_admin_system_defense_users__identifier__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                identifier: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserBlockPreview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -33168,6 +34875,100 @@ export interface operations {
             };
         };
     };
+    list_member_sync_states_discord_member_sync_states_get: {
+        parameters: {
+            query?: {
+                guild_id?: string | null;
+                drift_only?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscordMemberSyncStateOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    repair_member_sync_states_discord_member_sync_states_repair_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiscordMemberRepairBatchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscordMemberRepairBatchOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    repair_member_sync_state_discord_member_sync_states__state_id__repair_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                state_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_nickname_prefix_rules_discord_nickname_prefix_rules_get: {
         parameters: {
             query?: never;
@@ -33502,6 +35303,134 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DiscordRoleMappingOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_role_policies_discord_role_policies_get: {
+        parameters: {
+            query?: {
+                guild_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscordRolePolicyOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_role_policy_discord_role_policies_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiscordRolePolicyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscordRolePolicyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_role_policy_discord_role_policies__policy_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                policy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_role_policy_discord_role_policies__policy_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                policy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiscordRolePolicyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscordRolePolicyOut"];
                 };
             };
             /** @description Validation Error */
@@ -37562,6 +39491,169 @@ export interface operations {
             };
         };
     };
+    list_matter_discord_routes_governance_matters__matter_id__discord_routes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceDiscordEventRouteOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upsert_matter_discord_route_governance_matters__matter_id__discord_routes_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GovernanceDiscordEventRouteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceDiscordEventRouteOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_matter_discord_workspace_governance_matters__matter_id__discord_workspace_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceDiscordWorkspaceOut"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upsert_matter_discord_workspace_governance_matters__matter_id__discord_workspace_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GovernanceDiscordWorkspaceIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceDiscordWorkspaceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sync_matter_discord_workspace_governance_matters__matter_id__discord_workspace_sync_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceDiscordWorkspaceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_timeline_event_governance_matters__matter_id__events_post: {
         parameters: {
             query?: never;
@@ -37840,6 +39932,26 @@ export interface operations {
             };
         };
     };
+    list_module_capabilities_governance_module_capabilities_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceModuleCapabilityOut"][];
+                };
+            };
+        };
+    };
     update_planning_document_governance_planning_documents__document_id__patch: {
         parameters: {
             query?: never;
@@ -37862,6 +39974,202 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlanningDocumentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_planning_attachments_governance_planning_documents__document_id__attachments_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanningDocumentAttachmentOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_planning_attachment_governance_planning_documents__document_id__attachments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_planning_attachment_governance_planning_documents__document_id__attachments_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanningDocumentAttachmentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_planning_attachment_governance_planning_documents__document_id__attachments__attachment_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_planning_attachment_governance_planning_documents__document_id__attachments__attachment_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanningAttachmentRename"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanningDocumentAttachmentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_planning_attachment_governance_planning_documents__document_id__attachments__attachment_id__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_planning_attachment_governance_planning_documents__document_id__attachments__attachment_id__preview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -37962,6 +40270,39 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_governance_resources_governance_resources_search_get: {
+        parameters: {
+            query: {
+                kind: string;
+                q?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceResourceSearchOut"][];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -38080,6 +40421,222 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+        };
+    };
+    execute_command_internal_discord_commands__operation__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operation: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiscordCommandRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscordCommandResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    claim_event_internal_discord_events_claim_get: {
+        parameters: {
+            query?: {
+                wait_seconds?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscordBotEventOut"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    acknowledge_event_internal_discord_events__event_id__ack_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiscordBotEventAck"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_inventory_internal_discord_inventory_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiscordBotInventoryIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    member_joined_internal_discord_members_joined_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiscordMemberJoinedIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscordMemberJoinedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    member_updated_internal_discord_members_updated_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiscordMemberUpdatedIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscordMemberUpdatedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bot_status_internal_discord_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscordBotStatusOut"];
                 };
             };
         };
@@ -50428,6 +52985,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    public_access_status_system_access_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessBlockStatus"];
                 };
             };
         };

@@ -91,7 +91,7 @@ jobs:
         run: uv sync --project apps/api
 
       - name: Apply all database migrations
-        run: uv run --project apps/api alembic upgrade head
+        run: uv run --directory apps/api alembic upgrade head
 
       # 覆蓋率門檻由 pyproject [tool.coverage.report] fail_under 控制（ratchet：補測試後逐步調高）。
       - name: Run Pytest with coverage
@@ -152,12 +152,12 @@ jobs:
         run: uv sync --project apps/api
 
       - name: Upgrade database to head
-        run: uv run --project apps/api alembic upgrade head
+        run: uv run --directory apps/api alembic upgrade head
 
       - name: Verify models match migration head
         run: |
           before="$(find apps/api/alembic/versions -maxdepth 1 -type f -name '*.py' | sort)"
-          uv run --project apps/api alembic revision --autogenerate -m ci_schema_drift
+          uv run --directory apps/api alembic revision --autogenerate -m ci_schema_drift
           after="$(find apps/api/alembic/versions -maxdepth 1 -type f -name '*.py' | sort)"
           generated="$(comm -13 <(printf '%s\n' "$before") <(printf '%s\n' "$after"))"
           if [ -z "$generated" ]; then
@@ -267,7 +267,7 @@ jobs:
       - name: Install API dependencies
         run: uv sync --project apps/api
       - name: Prepare database
-        run: uv run --project apps/api alembic upgrade head
+        run: uv run --directory apps/api alembic upgrade head
       - name: Start API
         run: |
           uv run --project apps/api uvicorn api.main:app --host 127.0.0.1 --port 8000 &
