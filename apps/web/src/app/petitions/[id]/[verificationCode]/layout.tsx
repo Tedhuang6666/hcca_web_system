@@ -2,12 +2,8 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 import { serverApiUrl } from "@/lib/config";
-import {
-  SOCIAL_IMAGE,
-  SOCIAL_SHARE_TITLE,
-  SOCIAL_SITE_NAME,
-  socialDescription,
-} from "@/lib/social-metadata";
+import { socialDescription } from "@/lib/social-metadata";
+import { pageMetadata } from "@/lib/seo";
 
 type PetitionMeta = {
   case_number: string;
@@ -34,25 +30,11 @@ export async function generateMetadata(
     "陳情案件進度查詢。",
   );
   const path = `/petitions/${id}/${verificationCode}`;
-  return {
-    title: SOCIAL_SHARE_TITLE,
+  return pageMetadata({
+    title: item?.title ?? "陳情案件進度",
     description,
-    alternates: { canonical: path },
-    openGraph: {
-      title: SOCIAL_SHARE_TITLE,
-      description,
-      type: "article",
-      url: path,
-      siteName: SOCIAL_SITE_NAME,
-      images: [SOCIAL_IMAGE],
-    },
-    twitter: {
-      card: "summary_large_image",
-      title: SOCIAL_SHARE_TITLE,
-      description,
-      images: [SOCIAL_IMAGE.url],
-    },
-  };
+    path,
+  });
 }
 
 export default function PetitionShareLayout({ children }: { children: ReactNode }) {

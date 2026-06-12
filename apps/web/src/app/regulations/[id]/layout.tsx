@@ -2,12 +2,8 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 import { serverApiUrl } from "@/lib/config";
-import {
-  SOCIAL_IMAGE,
-  SOCIAL_SHARE_TITLE,
-  SOCIAL_SITE_NAME,
-  socialDescription,
-} from "@/lib/social-metadata";
+import { socialDescription } from "@/lib/social-metadata";
+import { pageMetadata } from "@/lib/seo";
 
 type RegulationMeta = {
   title: string;
@@ -35,25 +31,7 @@ export async function generateMetadata(
     "法規條文查詢。",
   );
   const path = `/regulations/${encodeURIComponent(regTitle)}`;
-  return {
-    title: SOCIAL_SHARE_TITLE,
-    description,
-    alternates: { canonical: path },
-    openGraph: {
-      title: SOCIAL_SHARE_TITLE,
-      description,
-      type: "article",
-      url: path,
-      siteName: SOCIAL_SITE_NAME,
-      images: [SOCIAL_IMAGE],
-    },
-    twitter: {
-      card: "summary_large_image",
-      title: SOCIAL_SHARE_TITLE,
-      description,
-      images: [SOCIAL_IMAGE.url],
-    },
-  };
+  return pageMetadata({ title: regTitle, description, path });
 }
 
 export default function RegulationDetailLayout({ children }: { children: ReactNode }) {

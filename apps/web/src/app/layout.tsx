@@ -20,6 +20,24 @@ export const metadata: Metadata = {
   applicationName: SOCIAL_SITE_NAME,
   title: { default: SOCIAL_SHARE_TITLE, template: `%s｜${SOCIAL_SITE_NAME}` },
   description: DEFAULT_DESCRIPTION,
+  authors: [{ name: BRANDING.orgShortName, url: "/" }],
+  creator: BRANDING.orgShortName,
+  publisher: BRANDING.orgShortName,
+  category: "education",
+  keywords: [
+    BRANDING.orgShortName,
+    BRANDING.acronym,
+    BRANDING.schoolName,
+    "校園自治",
+    "學生自治",
+    "班聯會",
+  ],
+  referrer: "origin-when-cross-origin",
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
+  },
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [
@@ -42,7 +60,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: SOCIAL_SHARE_TITLE,
     description: DEFAULT_DESCRIPTION,
-    images: [SOCIAL_IMAGE.url],
+    images: [{ url: SOCIAL_IMAGE.url, alt: SOCIAL_IMAGE.alt }],
   },
 };
 

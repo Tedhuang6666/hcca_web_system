@@ -1,6 +1,11 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
 import { ImageResponse } from "next/og";
 
 import { BRANDING } from "@/lib/branding";
+
+export const alt = `${BRANDING.orgShortName} ${BRANDING.acronym} 校園自治整合平台`;
 
 export const size = {
   width: 1200,
@@ -9,7 +14,13 @@ export const size = {
 
 export const contentType = "image/png";
 
-export default function Image() {
+export default async function Image() {
+  const emblemData = await readFile(
+    join(process.cwd(), "public/brand/hcca-emblem.png"),
+    "base64",
+  );
+  const emblemSrc = `data:image/png;base64,${emblemData}`;
+
   return new ImageResponse(
     (
       <div
@@ -34,19 +45,24 @@ export default function Image() {
         >
           <div
             style={{
-              width: 104,
-              height: 104,
-              borderRadius: 26,
+              width: 116,
+              height: 116,
+              borderRadius: 58,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              background: BRANDING.accentColor,
-              color: "#102033",
-              fontSize: 48,
-              fontWeight: 800,
+              background: "#f8fafc",
+              boxShadow: "0 12px 36px rgba(0, 0, 0, 0.22)",
+              overflow: "hidden",
             }}
           >
-            {BRANDING.acronym}
+            <img
+              src={emblemSrc}
+              alt={BRANDING.emblemAlt}
+              width={104}
+              height={104}
+              style={{ objectFit: "contain" }}
+            />
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <div style={{ fontSize: 38, fontWeight: 800 }}>{BRANDING.orgShortName}</div>

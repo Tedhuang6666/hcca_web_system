@@ -6,7 +6,8 @@ export const SOCIAL_IMAGE = {
   url: "/opengraph-image",
   width: 1200,
   height: 630,
-  alt: `${BRANDING.orgShortName} Open Graph image`,
+  alt: `${BRANDING.orgShortName} ${BRANDING.acronym} 校園自治整合平台`,
+  type: "image/png",
 };
 
 export function socialDescription(kind: string, detail: string | null | undefined, fallback: string) {
