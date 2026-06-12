@@ -16,6 +16,7 @@ from api.models.publication import (
     PublicationStatus,
 )
 from api.schemas.publication import PublicationCampaignCreate, PublicationCampaignUpdate
+from api.services._base import apply_updates
 from api.services.outbox import emit
 
 
@@ -51,8 +52,7 @@ async def create_campaign(
 async def update_campaign(
     db: AsyncSession, campaign: PublicationCampaign, data: PublicationCampaignUpdate
 ) -> PublicationCampaign:
-    for key, value in data.model_dump(exclude_unset=True).items():
-        setattr(campaign, key, value)
+    apply_updates(campaign, data)
     await db.flush()
     await db.refresh(campaign)
     return campaign

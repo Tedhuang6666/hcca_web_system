@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.core.search import like_contains
+from api.services._base import apply_updates
 from api.models.partner_map import (
     PartnerBusiness,
     PartnerBusinessStatus,
@@ -113,8 +114,7 @@ async def create_tag(db: AsyncSession, data: PartnerTagCreate) -> PartnerTag:
 
 
 async def update_tag(db: AsyncSession, tag: PartnerTag, data: PartnerTagUpdate) -> PartnerTag:
-    for key, value in data.model_dump(exclude_unset=True).items():
-        setattr(tag, key, value)
+    apply_updates(tag, data)
     await db.flush()
     await db.refresh(tag)
     return tag
@@ -282,8 +282,7 @@ async def get_location(db: AsyncSession, location_id: uuid.UUID) -> PartnerLocat
 async def update_location(
     db: AsyncSession, location: PartnerLocation, data: PartnerLocationUpdate
 ) -> PartnerLocation:
-    for key, value in data.model_dump(exclude_unset=True).items():
-        setattr(location, key, value)
+    apply_updates(location, data)
     await db.flush()
     await db.refresh(location)
     return location
@@ -310,8 +309,7 @@ async def get_offer(db: AsyncSession, offer_id: uuid.UUID) -> PartnerOffer | Non
 async def update_offer(
     db: AsyncSession, offer: PartnerOffer, data: PartnerOfferUpdate
 ) -> PartnerOffer:
-    for key, value in data.model_dump(exclude_unset=True).items():
-        setattr(offer, key, value)
+    apply_updates(offer, data)
     await db.flush()
     await db.refresh(offer)
     return offer

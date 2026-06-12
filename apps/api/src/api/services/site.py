@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.core.clock import local_today
+from api.services._base import apply_updates
 from api.models.org import Position, UserPosition
 from api.models.site import (
     PublicLink,
@@ -72,8 +73,7 @@ async def get_settings(db: AsyncSession) -> PublicSiteSettings:
 
 async def update_settings(db: AsyncSession, data: PublicSiteSettingsUpdate) -> PublicSiteSettings:
     settings = await get_settings(db)
-    for key, value in data.model_dump(exclude_unset=True).items():
-        setattr(settings, key, value)
+    apply_updates(settings, data)
     await db.flush()
     return settings
 
@@ -101,8 +101,7 @@ async def create_link_category(
 async def update_link_category(
     db: AsyncSession, category: PublicLinkCategory, data: PublicLinkCategoryUpdate
 ) -> PublicLinkCategory:
-    for key, value in data.model_dump(exclude_unset=True).items():
-        setattr(category, key, value)
+    apply_updates(category, data)
     await db.flush()
     return category
 
@@ -135,8 +134,7 @@ async def create_link(db: AsyncSession, data: PublicLinkCreate) -> PublicLink:
 
 
 async def update_link(db: AsyncSession, link: PublicLink, data: PublicLinkUpdate) -> PublicLink:
-    for key, value in data.model_dump(exclude_unset=True).items():
-        setattr(link, key, value)
+    apply_updates(link, data)
     await db.flush()
     return await get_link(db, link.id) or link
 
@@ -224,8 +222,7 @@ async def create_officer_profile(
 async def update_officer_profile(
     db: AsyncSession, profile: PublicOfficerProfile, data: PublicOfficerProfileUpdate
 ) -> PublicOfficerProfile:
-    for key, value in data.model_dump(exclude_unset=True).items():
-        setattr(profile, key, value)
+    apply_updates(profile, data)
     await db.flush()
     return profile
 
@@ -328,7 +325,6 @@ async def create_page(db: AsyncSession, data: PublicSitePageCreate) -> PublicSit
 async def update_page(
     db: AsyncSession, page: PublicSitePage, data: PublicSitePageUpdate
 ) -> PublicSitePage:
-    for key, value in data.model_dump(exclude_unset=True).items():
-        setattr(page, key, value)
+    apply_updates(page, data)
     await db.flush()
     return page

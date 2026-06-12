@@ -1,0 +1,15 @@
+"""共用 service 工具函式"""
+from __future__ import annotations
+
+from pydantic import BaseModel
+
+
+def apply_updates(entity: object, data: BaseModel) -> dict:
+    """將 Pydantic schema 中有設定的欄位套用到 SQLAlchemy model 實例上。
+
+    回傳 payload dict，供後續 event 記錄使用。
+    """
+    payload = data.model_dump(exclude_unset=True)
+    for key, value in payload.items():
+        setattr(entity, key, value)
+    return payload

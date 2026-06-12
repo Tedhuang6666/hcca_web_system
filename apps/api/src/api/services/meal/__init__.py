@@ -1,0 +1,128 @@
+"""學餐訂購系統服務層
+
+結構：
+  _vendor.py   - 商家 / 商品 / 可用時段 / 序號生成
+  _schedule.py - 菜單排程 / 菜單品項 / 自動結單
+  _order.py    - 訂單 CRUD / 班級訂購 / 核銷
+  _export.py   - 報表匯出 / 統計 / 未取餐處理
+"""
+
+from api.services.meal._export import (
+    check_and_handle_no_shows,
+    export_meal_orders_csv,
+    export_meal_orders_excel,
+    get_schedule_item_stats,
+    get_schedule_pickup_list,
+)
+from api.services.meal._order import (
+    cancel_meal_order,
+    complete_meal_order,
+    confirm_meal_order,
+    create_meal_order,
+    create_platform_meal_order,
+    get_meal_order,
+    get_or_create_class_pickup_code,
+    get_order_by_pickup_code,
+    get_order_by_serial,
+    list_class_meal_orders,
+    list_meal_orders,
+    lookup_and_redeem_pickup_code,
+    replace_meal_order_items,
+    set_order_paid,
+)
+from api.services.meal._schedule import (
+    add_menu_item,
+    auto_close_expired_schedules,
+    close_schedule,
+    create_schedule,
+    delete_menu_item,
+    get_menu_item,
+    get_schedule,
+    list_schedules,
+    update_menu_item,
+    update_schedule,
+)
+from api.services.meal._vendor import (
+    assign_vendor_manager,
+    bulk_create_weekly_availabilities,
+    create_availability,
+    create_product,
+    create_vendor,
+    create_vendor_application,
+    generate_class_pickup_code,
+    generate_meal_serial,
+    generate_pickup_code,
+    get_pickup_slot,
+    get_product,
+    get_vendor,
+    get_vendor_application,
+    is_vendor_manager,
+    list_availabilities,
+    list_products,
+    list_vendor_applications,
+    list_vendor_managers,
+    list_vendors,
+    remove_vendor_manager,
+    review_vendor_application,
+    update_product,
+    update_vendor,
+)
+
+__all__ = [
+    # vendor
+    "generate_meal_serial",
+    "generate_pickup_code",
+    "generate_class_pickup_code",
+    "get_vendor",
+    "list_vendors",
+    "create_vendor",
+    "create_vendor_application",
+    "list_vendor_applications",
+    "review_vendor_application",
+    "get_vendor_application",
+    "is_vendor_manager",
+    "list_vendor_managers",
+    "remove_vendor_manager",
+    "update_vendor",
+    "assign_vendor_manager",
+    "list_products",
+    "get_product",
+    "create_product",
+    "update_product",
+    "create_availability",
+    "bulk_create_weekly_availabilities",
+    "list_availabilities",
+    "get_pickup_slot",
+    # schedule
+    "get_schedule",
+    "list_schedules",
+    "create_schedule",
+    "update_schedule",
+    "close_schedule",
+    "get_menu_item",
+    "add_menu_item",
+    "update_menu_item",
+    "delete_menu_item",
+    "auto_close_expired_schedules",
+    # order
+    "get_meal_order",
+    "list_meal_orders",
+    "create_meal_order",
+    "create_platform_meal_order",
+    "cancel_meal_order",
+    "replace_meal_order_items",
+    "confirm_meal_order",
+    "complete_meal_order",
+    "set_order_paid",
+    "list_class_meal_orders",
+    "get_or_create_class_pickup_code",
+    "lookup_and_redeem_pickup_code",
+    "get_order_by_serial",
+    "get_order_by_pickup_code",
+    # export
+    "export_meal_orders_excel",
+    "export_meal_orders_csv",
+    "check_and_handle_no_shows",
+    "get_schedule_item_stats",
+    "get_schedule_pickup_list",
+]
