@@ -110,6 +110,28 @@ class PlatformApiClient:
             raise PlatformUnavailableError("無法連線至平台 API") from exc
         self._raise_for_status(response)
 
+    async def member_updated(
+        self,
+        *,
+        guild_id: int,
+        discord_user_id: int,
+        nickname: str,
+        role_ids: list[int],
+    ) -> None:
+        try:
+            response = await self._client.post(
+                "/internal/discord/members/updated",
+                json={
+                    "guild_id": str(guild_id),
+                    "discord_user_id": str(discord_user_id),
+                    "nickname": nickname,
+                    "role_ids": [str(value) for value in role_ids],
+                },
+            )
+        except httpx.RequestError as exc:
+            raise PlatformUnavailableError("無法連線至平台 API") from exc
+        self._raise_for_status(response)
+
     async def update_inventory(self, payload: dict[str, Any]) -> None:
         try:
             response = await self._client.put("/internal/discord/inventory", json=payload)

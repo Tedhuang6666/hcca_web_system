@@ -75,7 +75,7 @@ async def _send_channel(client: discord.Client, payload: dict[str, Any]) -> None
         await message.create_thread(name=str(thread_name)[:100])
 
 
-async def _sync_roles(client: discord.Client, payload: dict[str, Any]) -> None:
+async def _sync_roles(client: discord.Client, payload: dict[str, Any]) -> dict[str, Any]:
     guild = client.get_guild(int(payload["guild_id"]))
     if guild is None:
         guild = await client.fetch_guild(int(payload["guild_id"]))
@@ -83,29 +83,43 @@ async def _sync_roles(client: discord.Client, payload: dict[str, Any]) -> None:
     if member is None:
         member = await guild.fetch_member(int(payload["discord_user_id"]))
 
-    desired_ids = {int(value) for value in payload.get("role_ids", [])}
-    managed_ids = {int(value) for value in payload.get("managed_role_ids", [])}
-    current_ids = {role.id for role in member.roles}
-    add_roles = [guild.get_role(role_id) for role_id in desired_ids - current_ids]
-    remove_roles = [
-        guild.get_role(role_id) for role_id in (managed_ids & current_ids) - desired_ids
-    ]
-    if roles := [role for role in add_roles if role is not None]:
-        await member.add_roles(*roles, reason="HCCA platform role sync")
-    if roles := [role for role in remove_roles if role is not None]:
-        await member.remove_roles(*roles, reason="HCCA platform role sync")
+    if payload.get("apply_roles", True):
+        desired_ids = {int(value) for value in payload.get("role_ids", [])}
+        managed_ids = {int(value) for value in payload.get("managed_role_ids", [])}
+        current_ids = {role.id for role in member.roles}
+        add_roles = [guild.get_role(role_id) for role_id in desired_ids - current_ids]
+        remove_roles = [
+            guild.get_role(role_id) for role_id in (managed_ids & current_ids) - desired_ids
+        ]
+        if roles := [role for role in add_roles if role is not None]:
+            await member.add_roles(*roles, reason="HCCA platform role sync")
+        if roles := [role for role in remove_roles if role is not None]:
+            await member.remove_roles(*roles, reason="HCCA platform role sync")
 
     prefix = payload.get("nickname_prefix")
     managed_prefixes = tuple(str(value) for value in payload.get("managed_nickname_prefixes", []))
-    base_name = member.display_name
+    base_name = str(payload.get("base_nickname") or member.display_name)
+    previous_prefix = payload.get("previous_prefix")
+    if previous_prefix and base_name.startswith(f"{previous_prefix}｜"):
+        base_name = base_name[len(str(previous_prefix)) + 1 :]
     for managed_prefix in managed_prefixes:
-        marker = f"{managed_prefix} "
+        marker = f"{managed_prefix}｜"
         if base_name.startswith(marker):
             base_name = base_name[len(marker) :]
             break
-    desired_nick = f"{prefix} {base_name}"[:32] if prefix else base_name[:32]
+    desired_nick = str(
+        payload.get("expected_nickname")
+        or (f"{prefix}｜{base_name}" if prefix else base_name)
+    )[:32]
     if desired_nick != member.display_name:
         await member.edit(nick=desired_nick, reason="HCCA platform nickname sync")
+    refreshed = guild.get_member(member.id) or member
+    return {
+        "nickname": desired_nick,
+        "base_nickname": base_name,
+        "applied_prefix": prefix,
+        "role_ids": [str(role.id) for role in refreshed.roles if not role.is_default()],
+    }
 
 
 async def _create_petition_channel(
@@ -341,6 +355,82 @@ async def _activity_workspace_sync(
     }
 
 
+async def _governance_workspace_sync(
+    client: discord.Client, payload: dict[str, Any]
+) -> dict[str, Any]:
+    guild = client.get_guild(int(payload["guild_id"]))
+    if guild is None:
+        raise LookupError(f"Discord guild {payload['guild_id']} is unavailable")
+    if payload.get("mode") == "existing":
+        if not payload.get("discussion_channel_id"):
+            raise ValueError("Existing governance workspace requires discussion_channel_id")
+        return {
+            "category_id": payload.get("category_id"),
+            "discussion_channel_id": payload.get("discussion_channel_id"),
+            "announcement_channel_id": payload.get("announcement_channel_id"),
+            "staff_channel_id": payload.get("staff_channel_id"),
+        }
+
+    roles = [
+        role
+        for role_id in payload.get("org_role_ids", [])
+        if (role := guild.get_role(int(role_id))) is not None
+    ]
+    if payload.get("mention_role_id"):
+        mention_role = guild.get_role(int(payload["mention_role_id"]))
+        if mention_role is not None and mention_role not in roles:
+            roles.append(mention_role)
+    overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
+        guild.default_role: discord.PermissionOverwrite(view_channel=False),
+    }
+    for role in roles:
+        overwrites[role] = discord.PermissionOverwrite(
+            view_channel=True,
+            send_messages=True,
+            read_message_history=True,
+        )
+    category = None
+    if payload.get("category_id"):
+        candidate = guild.get_channel(int(payload["category_id"]))
+        if isinstance(candidate, discord.CategoryChannel):
+            category = candidate
+    name = str(payload.get("matter_name") or "治理事項")
+    if category is None:
+        category = await guild.create_category(
+            name[:100],
+            overwrites=overwrites,
+            reason="HCCA governance workspace sync",
+        )
+    else:
+        await category.edit(
+            name=name[:100],
+            overwrites=overwrites,
+            reason="HCCA governance workspace sync",
+        )
+
+    async def ensure(channel_id: str | None, channel_name: str) -> discord.TextChannel:
+        channel = guild.get_channel(int(channel_id)) if channel_id else None
+        if not isinstance(channel, discord.TextChannel):
+            return await guild.create_text_channel(
+                channel_name,
+                category=category,
+                overwrites=overwrites,
+                reason="HCCA governance workspace sync",
+            )
+        await channel.edit(category=category, overwrites=overwrites)
+        return channel
+
+    discussion = await ensure(payload.get("discussion_channel_id"), "事項討論")
+    announcement = await ensure(payload.get("announcement_channel_id"), "事項公告")
+    staff = await ensure(payload.get("staff_channel_id"), "核心工作區")
+    return {
+        "category_id": str(category.id),
+        "discussion_channel_id": str(discussion.id),
+        "announcement_channel_id": str(announcement.id),
+        "staff_channel_id": str(staff.id),
+    }
+
+
 async def dispatch(
     client: discord.Client,
     event_type: str,
@@ -350,12 +440,14 @@ async def dispatch(
         await _send_dm(client, payload)
     elif event_type in {"discord.channel_alert", "discord.embed_alert"}:
         await _send_channel(client, payload)
-    elif event_type == "discord.role_sync":
-        await _sync_roles(client, payload)
+    elif event_type in {"discord.role_sync", "discord.nickname_sync"}:
+        return await _sync_roles(client, payload)
     elif event_type == "discord.petition_channel_create":
         return await _create_petition_channel(client, payload)
     elif event_type == "discord.activity_workspace_sync":
         return await _activity_workspace_sync(client, payload)
+    elif event_type == "discord.governance_workspace_sync":
+        return await _governance_workspace_sync(client, payload)
     else:
         raise ValueError(f"Unsupported Discord event type: {event_type}")
     return {}

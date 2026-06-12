@@ -19,10 +19,12 @@ from api.models.announcement import Announcement, AnnouncementAudience, announce
 from api.models.discord_account import (
     DiscordAccountLink,
     DiscordGuildConfig,
+    DiscordMemberSyncState,
     DiscordNicknamePrefixRule,
     DiscordOrgChannelMapping,
     DiscordRoleMapping,
     DiscordRoleMappingKind,
+    DiscordRolePolicy,
 )
 from api.models.document import Document, DocumentStatus, DocumentVisibility
 from api.models.org import Position, UserPosition
@@ -176,6 +178,10 @@ async def list_active_role_ids_for_user(
     by_guild: dict[str, set[str]] = {}
     for row in rows:
         by_guild.setdefault(row.guild_id, set()).add(row.role_id)
+    from api.services.discord_governance import desired_policy_role_ids_for_user
+
+    for guild_id, role_ids in (await desired_policy_role_ids_for_user(db, user_id)).items():
+        by_guild.setdefault(guild_id, set()).update(role_ids)
     return by_guild
 
 
@@ -216,6 +222,11 @@ async def list_active_nickname_prefixes_for_user(
 
 
 async def enqueue_role_sync(db: AsyncSession, user_id: uuid.UUID) -> None:
+    from api.services.discord_governance import (
+        compose_nickname,
+        policies_for_roles,
+        select_prefix_labels,
+    )
     from api.services.outbox import emit
 
     link = await get_user_link(db, user_id)
@@ -229,6 +240,19 @@ async def enqueue_role_sync(db: AsyncSession, user_id: uuid.UUID) -> None:
     all_mapped_by_guild: dict[str, set[str]] = {}
     for guild_id, role_id in mapped_rows:
         all_mapped_by_guild.setdefault(guild_id, set()).add(role_id)
+    policy_rows = (
+        await db.execute(
+            select(
+                DiscordRolePolicy.guild_id,
+                DiscordRolePolicy.role_id,
+            ).where(
+                DiscordRolePolicy.is_active.is_(True),
+                DiscordRolePolicy.manage_role.is_(True),
+            )
+        )
+    ).all()
+    for guild_id, role_id in policy_rows:
+        all_mapped_by_guild.setdefault(guild_id, set()).add(role_id)
     prefix_rows = (
         await db.execute(
             select(DiscordNicknamePrefixRule.guild_id, DiscordNicknamePrefixRule.prefix).where(
@@ -239,9 +263,33 @@ async def enqueue_role_sync(db: AsyncSession, user_id: uuid.UUID) -> None:
     all_prefixes_by_guild: dict[str, set[str]] = {}
     for guild_id, prefix in prefix_rows:
         all_prefixes_by_guild.setdefault(guild_id, set()).add(prefix)
-    for guild_id in sorted(set(all_mapped_by_guild) | set(all_prefixes_by_guild)):
+    policy_guilds = set(
+        (
+            await db.execute(
+                select(DiscordRolePolicy.guild_id).where(DiscordRolePolicy.is_active.is_(True))
+            )
+        ).scalars()
+    )
+    for guild_id in sorted(set(all_mapped_by_guild) | set(all_prefixes_by_guild) | policy_guilds):
         managed_role_ids = all_mapped_by_guild.get(guild_id, set())
         role_ids = desired.get(guild_id, set())
+        state = await db.scalar(
+            select(DiscordMemberSyncState).where(
+                DiscordMemberSyncState.guild_id == guild_id,
+                DiscordMemberSyncState.discord_user_id == link.discord_user_id,
+            )
+        )
+        actual_role_ids = set(state.actual_role_ids if state else [])
+        nickname_role_ids = role_ids | (actual_role_ids - managed_role_ids)
+        policies = await policies_for_roles(db, guild_id, nickname_role_ids)
+        policy_nickname, policy_prefix = compose_nickname(
+            select_prefix_labels(policies),
+            (state.base_nickname if state and state.base_nickname else link.global_name)
+            or link.username
+            or "Discord member",
+        )
+        legacy_prefix = nickname_prefixes.get(guild_id)
+        nickname_prefix = policy_prefix or legacy_prefix
         await emit(
             db,
             event_type="discord.role_sync",
@@ -250,8 +298,12 @@ async def enqueue_role_sync(db: AsyncSession, user_id: uuid.UUID) -> None:
                 "discord_user_id": link.discord_user_id,
                 "role_ids": sorted(role_ids),
                 "managed_role_ids": sorted(managed_role_ids),
-                "nickname_prefix": nickname_prefixes.get(guild_id),
+                "nickname_prefix": nickname_prefix,
                 "managed_nickname_prefixes": sorted(all_prefixes_by_guild.get(guild_id, set())),
+                "base_nickname": state.base_nickname if state else None,
+                "expected_nickname": policy_nickname if policy_prefix else None,
+                "previous_prefix": state.last_applied_prefix if state else None,
+                "apply_roles": True,
             },
         )
 

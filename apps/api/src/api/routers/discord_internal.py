@@ -22,6 +22,8 @@ from api.schemas.discord_internal import (
     DiscordCommandResponse,
     DiscordMemberJoinedIn,
     DiscordMemberJoinedOut,
+    DiscordMemberUpdatedIn,
+    DiscordMemberUpdatedOut,
 )
 from api.services import discord_commands, discord_gateway
 
@@ -92,6 +94,26 @@ async def member_joined(
     return DiscordMemberJoinedOut(
         linked=display_name is not None,
         platform_display_name=display_name,
+    )
+
+
+@router.post("/members/updated", response_model=DiscordMemberUpdatedOut)
+async def member_updated(
+    body: DiscordMemberUpdatedIn,
+    db: DbDep,
+    _api_key: BotKeyDep,
+) -> DiscordMemberUpdatedOut:
+    state = await discord_gateway.handle_member_updated(
+        db,
+        guild_id=body.guild_id,
+        discord_user_id=body.discord_user_id,
+        nickname=body.nickname,
+        role_ids=set(body.role_ids),
+    )
+    return DiscordMemberUpdatedOut(
+        linked=state.user_id is not None,
+        has_role_drift=state.has_role_drift,
+        expected_nickname=state.expected_nickname,
     )
 
 

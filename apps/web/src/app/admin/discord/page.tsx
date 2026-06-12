@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { adminApi, ApiError, discordApi, orgsApi } from "@/lib/api";
 import { orgDisplayName } from "@/lib/orgs";
+import DiscordRolePolicyPanel from "@/components/admin/DiscordRolePolicyPanel";
 import type {
   DiscordGuildConfigIn,
   DiscordGuildConfigOut,
@@ -331,33 +332,25 @@ export default function DiscordAdminPage() {
   ) => (
     <label className="space-y-1 text-xs" style={{ color: "var(--text-muted)" }}>
       <span>{label}</span>
-      {channelOptions.length > 0 ? (
-        <select
-          className="input w-full"
-          value={configDraft[key] ?? ""}
-          onChange={(event) =>
-            setConfigDraft((current) => ({ ...current, [key]: event.target.value || null }))
-          }
-        >
-          <option value="">不設定</option>
-          {channelOptions
-            .filter((channel) => key === "petition_private_category_id" ? channel.type === 4 : channel.type !== 4)
-            .map((channel) => (
-            <option key={channel.id} value={channel.id}>
-              {channel.type === 4 ? "分類：" : "#"}{channel.name}
-            </option>
-          ))}
-        </select>
-      ) : (
-        <input
-          className="input w-full"
-          placeholder="手動輸入頻道 ID"
-          value={configDraft[key] ?? ""}
-          onChange={(event) =>
-            setConfigDraft((current) => ({ ...current, [key]: event.target.value || null }))
-          }
-        />
-      )}
+      <select
+        className="input w-full"
+        value={configDraft[key] ?? ""}
+        disabled={!configDraft.guild_id || channelOptions.length === 0}
+        onChange={(event) =>
+          setConfigDraft((current) => ({ ...current, [key]: event.target.value || null }))
+        }
+      >
+        <option value="">{channelOptions.length === 0 ? "尚無可選頻道" : "不設定"}</option>
+        {channelOptions
+          .filter((channel) =>
+            key === "petition_private_category_id" ? channel.type === 4 : channel.type !== 4
+          )
+          .map((channel) => (
+          <option key={channel.id} value={channel.id}>
+            {channel.type === 4 ? "分類：" : "#"}{channel.name}
+          </option>
+        ))}
+      </select>
     </label>
   );
 
@@ -456,33 +449,25 @@ export default function DiscordAdminPage() {
         <h2 className="text-sm font-semibold">伺服器與頻道</h2>
         {discordFetchError && (
           <p className="mt-2 text-xs" style={{ color: "var(--danger)" }}>
-            {discordFetchError}。可先手動輸入 ID，確認 Bot Token 與伺服器權限後會自動出現選單。
+            {discordFetchError}。請確認 Bot Token 與伺服器權限，資源載入後即可由選單設定。
           </p>
         )}
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <label className="space-y-1 text-xs" style={{ color: "var(--text-muted)" }}>
             <span>Discord 伺服器</span>
-            {guildOptions.length > 0 ? (
-              <select
-                className="input w-full"
-                value={configDraft.guild_id}
-                onChange={(event) => selectGuild(event.target.value)}
-              >
-                <option value="">選擇伺服器</option>
-                {guildOptions.map((guild) => (
-                  <option key={guild.id} value={guild.id}>{guild.name}</option>
-                ))}
-              </select>
-            ) : (
-              <input
-                className="input w-full"
-                placeholder="手動輸入 Guild ID"
-                value={configDraft.guild_id}
-                onChange={(event) =>
-                  setConfigDraft((current) => ({ ...current, guild_id: event.target.value }))
-                }
-              />
-            )}
+            <select
+              className="input w-full"
+              value={configDraft.guild_id}
+              disabled={guildOptions.length === 0}
+              onChange={(event) => selectGuild(event.target.value)}
+            >
+              <option value="">
+                {guildOptions.length === 0 ? "尚無可選伺服器" : "選擇伺服器"}
+              </option>
+              {guildOptions.map((guild) => (
+                <option key={guild.id} value={guild.id}>{guild.name}</option>
+              ))}
+            </select>
           </label>
           <label className="space-y-1 text-xs" style={{ color: "var(--text-muted)" }}>
             <span>顯示名稱</span>
@@ -516,61 +501,41 @@ export default function DiscordAdminPage() {
           </label>
           <label className="space-y-1 text-xs" style={{ color: "var(--text-muted)" }}>
             <span>管理員身分組</span>
-            {roleOptions.length > 0 ? (
-              <select
-                className="input w-full"
-                value={configDraft.admin_role_id ?? ""}
-                onChange={(event) =>
-                  setConfigDraft((current) => ({ ...current, admin_role_id: event.target.value || null }))
-                }
-              >
-                <option value="">不設定</option>
-                {roleOptions.map((role) => (
-                  <option key={role.id} value={role.id}>{role.name}</option>
-                ))}
-              </select>
-            ) : (
-              <input
-                className="input w-full"
-                placeholder="手動輸入 Role ID"
-                value={configDraft.admin_role_id ?? ""}
-                onChange={(event) =>
-                  setConfigDraft((current) => ({ ...current, admin_role_id: event.target.value || null }))
-                }
-              />
-            )}
+            <select
+              className="input w-full"
+              value={configDraft.admin_role_id ?? ""}
+              disabled={roleOptions.length === 0}
+              onChange={(event) =>
+                setConfigDraft((current) => ({
+                  ...current,
+                  admin_role_id: event.target.value || null,
+                }))
+              }
+            >
+              <option value="">{roleOptions.length === 0 ? "尚無可選身分組" : "不設定"}</option>
+              {roleOptions.map((role) => (
+                <option key={role.id} value={role.id}>{role.name}</option>
+              ))}
+            </select>
           </label>
           <label className="space-y-1 text-xs" style={{ color: "var(--text-muted)" }}>
             <span>陳情幹部身分組</span>
-            {roleOptions.length > 0 ? (
-              <select
-                className="input w-full"
-                value={configDraft.petition_staff_role_id ?? ""}
-                onChange={(event) =>
-                  setConfigDraft((current) => ({
-                    ...current,
-                    petition_staff_role_id: event.target.value || null,
-                  }))
-                }
-              >
-                <option value="">不設定</option>
-                {roleOptions.map((role) => (
-                  <option key={role.id} value={role.id}>{role.name}</option>
-                ))}
-              </select>
-            ) : (
-              <input
-                className="input w-full"
-                placeholder="手動輸入 Role ID"
-                value={configDraft.petition_staff_role_id ?? ""}
-                onChange={(event) =>
-                  setConfigDraft((current) => ({
-                    ...current,
-                    petition_staff_role_id: event.target.value || null,
-                  }))
-                }
-              />
-            )}
+            <select
+              className="input w-full"
+              value={configDraft.petition_staff_role_id ?? ""}
+              disabled={roleOptions.length === 0}
+              onChange={(event) =>
+                setConfigDraft((current) => ({
+                  ...current,
+                  petition_staff_role_id: event.target.value || null,
+                }))
+              }
+            >
+              <option value="">{roleOptions.length === 0 ? "尚無可選身分組" : "不設定"}</option>
+              {roleOptions.map((role) => (
+                <option key={role.id} value={role.id}>{role.name}</option>
+              ))}
+            </select>
           </label>
         </div>
         {loadingDiscordMeta && (
@@ -583,7 +548,14 @@ export default function DiscordAdminPage() {
         </button>
       </section>
 
-      <section className="card p-5">
+      <DiscordRolePolicyPanel
+        guildId={configDraft.guild_id}
+        orgs={orgs}
+        positions={positions}
+        roles={roleOptions}
+      />
+
+      <section className="card hidden p-5">
         <h2 className="text-sm font-semibold">職位 / 組織身分組同步</h2>
         <div className="mt-4 grid gap-3 sm:grid-cols-5">
           <label className="space-y-1 text-xs sm:col-span-1" style={{ color: "var(--text-muted)" }}>
@@ -628,30 +600,20 @@ export default function DiscordAdminPage() {
             )}
           </label>
           <label className="space-y-1 text-xs sm:col-span-2" style={{ color: "var(--text-muted)" }}>
-            <span>Discord Role ID</span>
-            {roleOptions.length > 0 ? (
-              <select
-                className="input w-full"
-                value={mappingDraft.role_id}
-                onChange={(event) =>
-                  setMappingDraft((current) => ({ ...current, role_id: event.target.value }))
-                }
-              >
-                <option value="">選擇 Discord 身分組</option>
-                {roleOptions.map((role) => (
-                  <option key={role.id} value={role.id}>{role.name}</option>
-                ))}
-              </select>
-            ) : (
-              <input
-                className="input w-full"
-                placeholder="手動輸入 Role ID"
-                value={mappingDraft.role_id}
-                onChange={(event) =>
-                  setMappingDraft((current) => ({ ...current, role_id: event.target.value }))
-                }
-              />
-            )}
+            <span>Discord 身分組</span>
+            <select
+              className="input w-full"
+              value={mappingDraft.role_id}
+              disabled={roleOptions.length === 0}
+              onChange={(event) =>
+                setMappingDraft((current) => ({ ...current, role_id: event.target.value }))
+              }
+            >
+              <option value="">選擇 Discord 身分組</option>
+              {roleOptions.map((role) => (
+                <option key={role.id} value={role.id}>{role.name}</option>
+              ))}
+            </select>
           </label>
         </div>
         <button className="btn btn-primary mt-4" onClick={createMapping} disabled={busy || !mappingDraft.guild_id || !mappingDraft.role_id}>
@@ -697,7 +659,7 @@ export default function DiscordAdminPage() {
         </div>
       </section>
 
-      <section className="card p-5">
+      <section className="card hidden p-5">
         <h2 className="text-sm font-semibold">社群暱稱前綴</h2>
         <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
           依職位或組織自動套用前綴，會保留成員原本自訂暱稱。優先序數字越小越優先：行政 10、司法 20、學代 30、立法 40。
@@ -856,29 +818,19 @@ export default function DiscordAdminPage() {
           </label>
           <label className="space-y-1 text-xs" style={{ color: "var(--text-muted)" }}>
             <span>Discord 公告頻道</span>
-            {channelOptions.length > 0 ? (
-              <select
-                className="input w-full"
-                value={orgChannelDraft.channel_id}
-                onChange={(event) =>
-                  setOrgChannelDraft((current) => ({ ...current, channel_id: event.target.value }))
-                }
-              >
-                <option value="">選擇頻道</option>
-                {channelOptions.map((channel) => (
-                  <option key={channel.id} value={channel.id}>#{channel.name}</option>
-                ))}
-              </select>
-            ) : (
-              <input
-                className="input w-full"
-                placeholder="手動輸入頻道 ID"
-                value={orgChannelDraft.channel_id}
-                onChange={(event) =>
-                  setOrgChannelDraft((current) => ({ ...current, channel_id: event.target.value }))
-                }
-              />
-            )}
+            <select
+              className="input w-full"
+              value={orgChannelDraft.channel_id}
+              disabled={channelOptions.length === 0}
+              onChange={(event) =>
+                setOrgChannelDraft((current) => ({ ...current, channel_id: event.target.value }))
+              }
+            >
+              <option value="">{channelOptions.length === 0 ? "尚無可選頻道" : "選擇頻道"}</option>
+              {channelOptions.map((channel) => (
+                <option key={channel.id} value={channel.id}>#{channel.name}</option>
+              ))}
+            </select>
           </label>
         </div>
         <button

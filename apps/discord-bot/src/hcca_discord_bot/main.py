@@ -68,6 +68,21 @@ class HccaDiscordBot(commands.Bot):
         except PlatformUnavailableError:
             logger.exception("Failed to report Discord member join")
 
+    async def on_member_update(
+        self, before: discord.Member, after: discord.Member
+    ) -> None:
+        if before.roles == after.roles and before.display_name == after.display_name:
+            return
+        try:
+            await self.platform.member_updated(
+                guild_id=after.guild.id,
+                discord_user_id=after.id,
+                nickname=after.display_name,
+                role_ids=[role.id for role in after.roles if not role.is_default()],
+            )
+        except PlatformUnavailableError:
+            logger.exception("Failed to report Discord member update")
+
     async def on_ready(self) -> None:
         try:
             status = await self.platform.status()
@@ -92,6 +107,11 @@ class HccaDiscordBot(commands.Bot):
         await self.report_inventory()
 
     async def on_guild_role_delete(self, _role: discord.Role) -> None:
+        await self.report_inventory()
+
+    async def on_guild_role_update(
+        self, _before: discord.Role, _after: discord.Role
+    ) -> None:
         await self.report_inventory()
 
     async def report_inventory(self) -> None:

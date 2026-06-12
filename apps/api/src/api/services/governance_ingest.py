@@ -735,6 +735,16 @@ async def ingest(
             summary=summary,
             payload={**payload, "source_type": source_type, "source_id": str(source_id)},
         )
+        from api.services.governance_discord import emit_matter_event
+
+        await emit_matter_event(
+            db,
+            matter_id=matter_id,
+            event_type=event_type,
+            title=event_title,
+            body=summary,
+            href=href,
+        )
 
     context = {
         "event_type": event_type,

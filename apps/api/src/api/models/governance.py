@@ -171,6 +171,12 @@ class Matter(Base, TimestampMixin):
         cascade="all, delete-orphan",
         foreign_keys="MatterRoleAssignment.matter_id",
     )
+    discord_workspace: Mapped[GovernanceDiscordWorkspace | None] = relationship(
+        "GovernanceDiscordWorkspace",
+        back_populates="matter",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
 
 
 class Program(Base, TimestampMixin):
@@ -566,6 +572,75 @@ class MatterRoleAssignment(Base, TimestampMixin):
     user: Mapped[User | None] = relationship("User")
 
 
+class GovernanceDiscordWorkspace(Base, TimestampMixin):
+    """治理事項綁定既有頻道或由平台建立的 Discord 工作區。"""
+
+    __tablename__ = "governance_discord_workspaces"
+    __table_args__ = (
+        UniqueConstraint("matter_id", name="uq_governance_discord_workspace_matter"),
+        Index("ix_governance_discord_workspace_guild", "guild_id", "is_active"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    matter_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("matters.id", ondelete="CASCADE"), nullable=False
+    )
+    guild_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    mode: Mapped[str] = mapped_column(String(20), nullable=False, default="existing")
+    category_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    discussion_channel_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    announcement_channel_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    staff_channel_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    mention_role_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    sync_status: Mapped[str] = mapped_column(String(20), nullable=False, default="idle")
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    auto_sync: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+
+    matter: Mapped[Matter] = relationship("Matter", back_populates="discord_workspace")
+    routes: Mapped[list[GovernanceDiscordEventRoute]] = relationship(
+        "GovernanceDiscordEventRoute",
+        back_populates="workspace",
+        cascade="all, delete-orphan",
+    )
+
+
+class GovernanceDiscordEventRoute(Base, TimestampMixin):
+    """治理事項各模組事件的 Discord 投遞規則。"""
+
+    __tablename__ = "governance_discord_event_routes"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "event_type", name="uq_governance_discord_event_route"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("governance_discord_workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    event_type: Mapped[str] = mapped_column(String(60), nullable=False)
+    channel_kind: Mapped[str] = mapped_column(String(20), nullable=False, default="discussion")
+    channel_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    create_thread: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    mention_role_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+
+    workspace: Mapped[GovernanceDiscordWorkspace] = relationship(
+        "GovernanceDiscordWorkspace", back_populates="routes"
+    )
+
+
 class GovernanceWorkflowTemplate(Base, TimestampMixin):
     """可套用於案件的流程模板。"""
 
@@ -639,6 +714,8 @@ __all__ = [
     "EntityRelation",
     "GovernanceWorkflowTemplate",
     "GovernanceCase",
+    "GovernanceDiscordEventRoute",
+    "GovernanceDiscordWorkspace",
     "GovernanceEventType",
     "Matter",
     "MatterPriority",

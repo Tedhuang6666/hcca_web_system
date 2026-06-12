@@ -13,6 +13,7 @@ from api.models.governance import (
     CaseStatus,
     EntityRelation,
     GovernanceCase,
+    GovernanceDiscordWorkspace,
     GovernanceEventType,
     Matter,
     PlanningDocument,
@@ -126,6 +127,7 @@ async def get_matter(db: AsyncSession, matter_id: uuid.UUID) -> Matter | None:
             .selectinload(PlanningDocumentRevision.attachment_links)
             .selectinload(PlanningDocumentRevisionAttachment.attachment),
             selectinload(Matter.role_assignments),
+            selectinload(Matter.discord_workspace).selectinload(GovernanceDiscordWorkspace.routes),
         )
         .where(Matter.id == matter_id, Matter.is_active.is_(True))
     )

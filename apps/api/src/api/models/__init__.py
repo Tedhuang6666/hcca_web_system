@@ -47,11 +47,13 @@ from api.models.discord_account import (  # noqa: F401
     DEFAULT_DM_CATEGORIES,
     DiscordAccountLink,
     DiscordGuildConfig,
+    DiscordMemberSyncState,
     DiscordNicknamePrefixRule,
     DiscordNotificationPreference,
     DiscordOrgChannelMapping,
     DiscordRoleMapping,
     DiscordRoleMappingKind,
+    DiscordRolePolicy,
 )
 from api.models.document import (  # noqa: F401
     ApprovalStepStatus,
@@ -110,6 +112,8 @@ from api.models.governance import (  # noqa: F401
     DecisionStatus,
     EntityRelation,
     GovernanceCase,
+    GovernanceDiscordEventRoute,
+    GovernanceDiscordWorkspace,
     GovernanceEventType,
     GovernanceWorkflowTemplate,
     Matter,

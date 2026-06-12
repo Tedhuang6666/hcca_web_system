@@ -18,7 +18,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.prometheus_metrics import record_outbox_delivery
 from api.core.security import redis_client
-from api.models.discord_account import DiscordAccountLink, DiscordNotificationPreference
+from api.models.discord_account import (
+    DiscordAccountLink,
+    DiscordMemberSyncState,
+    DiscordNotificationPreference,
+)
 from api.models.outbox import OutboxEvent, OutboxStatus
 from api.models.petition import PetitionCase
 from api.services.discord_bot import (
@@ -151,6 +155,18 @@ async def acknowledge_event(
                 error=None,
                 result=result,
             )
+        elif event.event_type == "discord.governance_workspace_sync":
+            from api.services.governance_discord import apply_workspace_result
+
+            await apply_workspace_result(
+                db,
+                str(event.payload.get("workspace_id") or ""),
+                success=True,
+                error=None,
+                result=result,
+            )
+        elif event.event_type in {"discord.role_sync", "discord.nickname_sync"}:
+            await _save_member_sync_result(db, event.payload, result)
     else:
         event.retry_count += 1
         event.last_error = (error or "Discord Bot delivery failed")[:2000]
@@ -169,10 +185,52 @@ async def acknowledge_event(
                 error=error,
                 result=result,
             )
+        elif event.event_type == "discord.governance_workspace_sync":
+            from api.services.governance_discord import apply_workspace_result
+
+            await apply_workspace_result(
+                db,
+                str(event.payload.get("workspace_id") or ""),
+                success=False,
+                error=error,
+                result=result,
+            )
 
     await redis_client.delete(f"{_LEASE_PREFIX}{event.id}")
     await db.flush()
     return True
+
+
+async def _save_member_sync_result(
+    db: AsyncSession, payload: dict[str, Any], result: dict[str, Any]
+) -> None:
+    guild_id = str(payload.get("guild_id") or "")
+    discord_user_id = str(payload.get("discord_user_id") or "")
+    if not guild_id or not discord_user_id:
+        return
+    state = await db.scalar(
+        select(DiscordMemberSyncState).where(
+            DiscordMemberSyncState.guild_id == guild_id,
+            DiscordMemberSyncState.discord_user_id == discord_user_id,
+        )
+    )
+    if state is None:
+        state = DiscordMemberSyncState(
+            guild_id=guild_id,
+            discord_user_id=discord_user_id,
+        )
+        db.add(state)
+    state.base_nickname = result.get("base_nickname") or state.base_nickname
+    state.actual_nickname = result.get("nickname") or state.actual_nickname
+    state.expected_nickname = result.get("nickname") or state.expected_nickname
+    state.last_applied_prefix = result.get("applied_prefix")
+    if isinstance(result.get("role_ids"), list):
+        state.actual_role_ids = sorted(str(value) for value in result["role_ids"])
+    if payload.get("apply_roles", True):
+        state.has_role_drift = False
+    state.last_synced_at = datetime.now(UTC)
+    state.last_seen_at = datetime.now(UTC)
+    state.last_error = None
 
 
 async def _save_petition_channel(
@@ -219,6 +277,52 @@ async def handle_member_joined(
     return user.display_name if user is not None else None
 
 
+async def handle_member_updated(
+    db: AsyncSession,
+    *,
+    guild_id: str,
+    discord_user_id: str,
+    nickname: str,
+    role_ids: set[str],
+) -> DiscordMemberSyncState:
+    from api.services.discord_governance import observe_member
+    from api.services.outbox import emit
+
+    state = await observe_member(
+        db,
+        guild_id=guild_id,
+        discord_user_id=discord_user_id,
+        nickname=nickname,
+        role_ids=role_ids,
+    )
+    if state.expected_nickname and state.expected_nickname != nickname:
+        expected_prefix, separator, _base = state.expected_nickname.partition("｜")
+        await emit(
+            db,
+            event_type="discord.nickname_sync",
+            payload={
+                "guild_id": guild_id,
+                "discord_user_id": discord_user_id,
+                "nickname_prefix": expected_prefix if separator else None,
+                "base_nickname": state.base_nickname,
+                "expected_nickname": state.expected_nickname,
+                "previous_prefix": state.last_applied_prefix,
+                "apply_roles": False,
+            },
+        )
+    if state.has_role_drift:
+        await emit_moderation_log(
+            db,
+            guild_id=guild_id,
+            title="Discord 受管身分組與平台不一致",
+            body=(
+                f"<@{discord_user_id}> 的身分組已在 Discord 端變動。"
+                "平台僅記錄差異，不會自動覆蓋；請至治理台檢視或修復。"
+            ),
+        )
+    return state
+
+
 async def write_inventory(payload: dict[str, Any]) -> None:
     await redis_client.set(
         _INVENTORY_KEY,
@@ -254,6 +358,7 @@ __all__ = [
     "acknowledge_event",
     "claim_next_event",
     "handle_member_joined",
+    "handle_member_updated",
     "inventory_guild",
     "inventory_guilds",
     "read_inventory",
