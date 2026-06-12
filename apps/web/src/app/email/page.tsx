@@ -1,8 +1,9 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import DOMPurify from "dompurify";
 import { toast } from "sonner";
 import Modal from "@/components/ui/Modal";
 import RichTextarea, { type RichTextareaHandle } from "@/components/ui/RichTextarea";
@@ -106,6 +107,16 @@ function ComposeInner() {
   const [trackOpens, setTrackOpens] = useState(true);
   const [trackClicks, setTrackClicks] = useState(true);
   const [preflightResult, setPreflightResult] = useState<EmailPreflightOut | null>(null);
+  const sanitizedPreviewHtml = useMemo(
+    () =>
+      typeof window === "undefined"
+        ? ""
+        : DOMPurify.sanitize(previewHtml, {
+            WHOLE_DOCUMENT: true,
+            FORBID_TAGS: ["base", "embed", "form", "iframe", "meta", "object", "script"],
+          }),
+    [previewHtml],
+  );
 
   const loadPlatformResources = useCallback(() => {
     Promise.all([
@@ -1973,7 +1984,7 @@ function ComposeInner() {
             {previewHtml ? (
               <iframe
                 title="信件預覽"
-                srcDoc={previewHtml}
+                srcDoc={sanitizedPreviewHtml}
                 sandbox=""
                 className="h-[520px] w-full"
                 style={{ background: "#fff" }}

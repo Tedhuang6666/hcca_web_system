@@ -244,14 +244,18 @@ def list_archives() -> list[dict[str, Any]]:
     return out
 
 
+def resolve_archive_file(relative_path: str) -> Path:
+    root = archive_root()
+    normalized = relative_path.replace("\\", "/")
+    for archive_file in root.rglob("*.jsonl.gz"):
+        if archive_file.relative_to(root).as_posix() == normalized and archive_file.is_file():
+            return archive_file
+    raise FileNotFoundError(relative_path)
+
+
 def read_archive(relative_path: str, limit: int = 100) -> list[dict[str, Any]]:
     """讀取 archive 檔案的前 N 行（含 metadata header）。UI 預覽用。"""
-    root = archive_root()
-    target = (root / relative_path).resolve()
-    if not str(target).startswith(str(root.resolve())):
-        raise ValueError("非法路徑")
-    if not target.exists():
-        raise FileNotFoundError(relative_path)
+    target = resolve_archive_file(relative_path)
     rows: list[dict[str, Any]] = []
     with gzip.open(target, "rt", encoding="utf-8") as fh:
         for i, line in enumerate(fh):

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { analyticsApi, withFallback } from "@/lib/api";
+import { safeInternalHref } from "@/lib/config";
 import type {
   AnalyticsInsightItem,
   AnnouncementParticipationItem,
@@ -192,7 +193,7 @@ export default function AnalyticsPage() {
             {insights.slice(0, 6).map((item) => (
               <li key={item.id} style={{ borderBottom: "1px solid var(--border)" }}>
                 <Link
-                  href={item.href}
+                  href={safeInternalHref(item.href, "/analytics")}
                   className="block px-5 py-3 transition-colors"
                   style={{ textDecoration: "none" }}>
                   <div className="flex items-start justify-between gap-3">

@@ -2,7 +2,7 @@
 
 設計：
 - 明文 key 只在建立時回傳一次（之後看不到，忘了只能 revoke 重發）
-- DB 存 sha256 hash + 可選的 encrypted 明文 mirror（用 field_crypto）
+- DB 存 keyed digest + 可選的 encrypted 明文 mirror（用 field_crypto）
 - 每把 key 獨立 rate limit
 - scopes 是 permission code list（同 RBAC 體系）
 - 可設過期時間、可隨時 revoke
@@ -53,7 +53,7 @@ class ApiKey(Base, TimestampMixin):
     """key 前 8 chars，前端顯示時用（識別不洩漏）。"""
 
     key_hash: Mapped[str] = mapped_column(String(128), nullable=False)
-    """key 完整字串的 sha256/argon2 hash（看實作）。"""
+    """key 完整字串的 keyed digest（看實作）。"""
 
     encrypted_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     """可選的 encrypted 明文 mirror（用 field_crypto.encrypt_field 包）。

@@ -86,14 +86,10 @@ def list_exports() -> list[dict[str, Any]]:
 
 
 def read_export_bytes(filename: str) -> bytes:
-    root = exports_root().resolve()
-    target = (root / filename).resolve()
-    # 用 is_relative_to 取代 str.startswith：後者有「前綴目錄」繞過風險（例如 root 為
-    # .../privacy_exports 時，.../privacy_exports_x 也會 startswith 成功）。同時只接受
-    # 真正的 .zip 檔，杜絕路徑穿越讀取 .env / 金鑰等伺服器檔案。
-    if not target.is_relative_to(root) or target.suffix.lower() != ".zip" or not target.is_file():
-        raise FileNotFoundError(filename)
-    return target.read_bytes()
+    for export_file in exports_root().glob("*.zip"):
+        if export_file.name == filename and export_file.is_file():
+            return export_file.read_bytes()
+    raise FileNotFoundError(filename)
 
 
 # ── 序列化 ─────────────────────────────────────────────────────────────────

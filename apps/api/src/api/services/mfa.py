@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 _ENCRYPTED_PREFIX = "enc:v1:"
 _BACKUP_CODE_COUNT = 8
+_BACKUP_CODE_SALT_BYTES = 16
 
 
 def _fernet() -> Fernet:
@@ -51,16 +52,19 @@ def _normalize_code(code: str) -> str:
 
 def _hash_backup_code(code: str) -> str:
     normalized = _normalize_code(code)
-    digest = hmac.new(
-        settings.SECRET_KEY.encode("utf-8"),
+    salt = secrets.token_bytes(_BACKUP_CODE_SALT_BYTES)
+    digest = hashlib.scrypt(
         normalized.encode("utf-8"),
-        hashlib.sha256,
-    ).hexdigest()
-    return f"sha256:{digest}"
+        salt=salt,
+        n=2**14,
+        r=8,
+        p=1,
+    )
+    return f"scrypt:{salt.hex()}:{digest.hex()}"
 
 
 def _generate_backup_codes() -> list[str]:
-    return [secrets.token_hex(4).upper() for _ in range(_BACKUP_CODE_COUNT)]
+    return [secrets.token_hex(8).upper() for _ in range(_BACKUP_CODE_COUNT)]
 
 
 def _hashes_payload(codes: list[str]) -> dict[str, list[str]]:
@@ -105,9 +109,23 @@ def _consume_backup_code(user: User, code: str) -> bool:
     stored = list((user.mfa_backup_code_hashes or {}).get("codes", []))
     if not stored:
         return False
-    candidate = _hash_backup_code(code)
+    normalized = _normalize_code(code)
     for index, item in enumerate(stored):
-        if hmac.compare_digest(candidate, item):
+        try:
+            algorithm, salt_hex, digest_hex = item.split(":", 2)
+            if algorithm != "scrypt":
+                continue
+            candidate = hashlib.scrypt(
+                normalized.encode("utf-8"),
+                salt=bytes.fromhex(salt_hex),
+                n=2**14,
+                r=8,
+                p=1,
+            )
+            expected = bytes.fromhex(digest_hex)
+        except (ValueError, TypeError):
+            continue
+        if hmac.compare_digest(candidate, expected):
             del stored[index]
             user.mfa_backup_code_hashes = {"codes": stored}
             return True
