@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core import defense as defense_cache
 from api.models.defense import DefenseRule, DefenseRuleType
 from api.models.user import User
+from api.models.user_identity import UserIdentity
 from api.services import audit as audit_svc
 
 
@@ -53,6 +54,15 @@ def _validate_target(rule_type: str, target: str) -> None:
             ipaddress.ip_network(target, strict=False)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail="target 必須是有效 CIDR") from exc
+    elif parsed == DefenseRuleType.USER_BLOCK:
+        try:
+            uuid.UUID(target)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="target 必須是有效使用者 UUID") from exc
+    elif parsed == DefenseRuleType.EMAIL_BLOCK:
+        normalized = target.strip().lower()
+        if "@" not in normalized or normalized.startswith("@") or normalized.endswith("@"):
+            raise HTTPException(status_code=422, detail="target 必須是有效 Email") from None
     elif parsed in {
         DefenseRuleType.RATE_LIMIT_OVERRIDE,
         DefenseRuleType.ENDPOINT_LOCKDOWN,
@@ -122,6 +132,8 @@ async def create_rule(
     expires_at: datetime | None = None,
 ) -> DefenseRule:
     target = target.strip()
+    if rule_type == DefenseRuleType.EMAIL_BLOCK:
+        target = target.lower()
     _validate_target(rule_type, target)
     rule = DefenseRule(
         rule_type=rule_type,
@@ -243,3 +255,36 @@ async def summary(session: AsyncSession) -> dict[str, Any]:
 
 def rule_to_dict(rule: DefenseRule) -> dict[str, Any]:
     return _serialize_rule(rule)
+
+
+async def get_user_block_targets(
+    session: AsyncSession,
+    identifier: str,
+) -> tuple[User, list[str]]:
+    identifier = identifier.strip()
+    user: User | None = None
+    try:
+        user = await session.get(User, uuid.UUID(identifier))
+    except ValueError:
+        normalized = identifier.lower()
+        user = await session.scalar(select(User).where(func.lower(User.email) == normalized))
+        if user is None:
+            identity = await session.scalar(
+                select(UserIdentity).where(func.lower(UserIdentity.email) == normalized)
+            )
+            if identity:
+                user = await session.get(User, identity.user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="找不到使用者")
+
+    identity_emails = await session.scalars(
+        select(UserIdentity.email).where(
+            UserIdentity.user_id == user.id,
+            UserIdentity.email.is_not(None),
+        )
+    )
+    emails = {
+        user.email.strip().lower(),
+        *(email.strip().lower() for email in identity_emails.all() if email),
+    }
+    return user, sorted(emails)

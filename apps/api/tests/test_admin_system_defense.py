@@ -17,7 +17,9 @@ from api.core.rate_limit import _memory_buckets
 from api.dependencies.auth import get_current_active_user
 from api.main import app
 from api.models.audit_log import AuditLog
+from api.models.defense import DefenseRule
 from api.models.user import User
+from api.models.user_identity import UserIdentity
 from api.routers import admin_system
 
 
@@ -127,6 +129,8 @@ async def test_cidr_block_hits_middleware_and_allowlist_wins(client: AsyncClient
 
     blocked = await client.get("/")
     assert blocked.status_code == 403
+    assert blocked.json()["detail"]["blocked"] is True
+    assert blocked.json()["detail"]["reason"] == "test block"
 
     await publish_rules(
         [
@@ -171,6 +175,52 @@ async def test_cidr_block_hits_middleware_and_allowlist_wins(client: AsyncClient
 
     allowed = await client.get("/")
     assert allowed.status_code == 200
+    await _reset_defense_cache()
+
+
+async def test_admin_can_preview_and_block_user_with_all_known_emails(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    await _reset_defense_cache()
+    admin, member = await _seed_users(db_session)
+    db_session.add(
+        UserIdentity(
+            user_id=member.id,
+            provider="google",
+            external_id="member-google-sub",
+            email="member.alias@school.edu",
+            linked_at=admin.created_at,
+        )
+    )
+    await db_session.flush()
+    _override_user(admin)
+
+    preview = await client.get(f"/admin/system/defense/users/{member.email}")
+    assert preview.status_code == 200
+    assert preview.json()["emails"] == ["member.alias@school.edu", "member@school.edu"]
+
+    response = await client.post(
+        "/admin/system/defense/user-blocks",
+        json={
+            "identifier": str(member.id),
+            "reason": "違反平台使用規範",
+            "include_emails": True,
+            "include_ips": False,
+        },
+    )
+    assert response.status_code == 201
+    assert {rule["rule_type"] for rule in response.json()["rules"]} == {
+        "user_block",
+        "email_block",
+    }
+
+    rows = await db_session.scalars(select(DefenseRule).where(DefenseRule.is_active.is_(True)))
+    targets = {(row.rule_type, row.target) for row in rows.all()}
+    assert ("user_block", str(member.id)) in targets
+    assert ("email_block", "member@school.edu") in targets
+    assert ("email_block", "member.alias@school.edu") in targets
+
     await _reset_defense_cache()
 
 

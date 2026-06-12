@@ -65,6 +65,25 @@ async def is_blocked(ip: str) -> bool:
     return blocked
 
 
+async def get_block(ip: str) -> dict[str, Any] | None:
+    if is_trusted_ip(ip) or await is_ip_allowed(ip):
+        return None
+    try:
+        raw = await asyncio.wait_for(redis_client.hget(BLOCKLIST_KEY, ip), timeout=0.8)
+    except (RedisError, TimeoutError):
+        raw = None
+    if raw:
+        try:
+            data = json.loads(raw)
+            if data.get("expires_at") is None or data["expires_at"] > time.time():
+                return {"target": ip, "rule_type": "ip_block", **data}
+        except (json.JSONDecodeError, TypeError, KeyError):
+            return {"target": ip, "rule_type": "ip_block", "reason": "", "expires_at": None}
+    from api.core.defense import find_ip_block
+
+    return await find_ip_block(ip)
+
+
 async def block(ip: str, *, reason: str = "", ttl_seconds: int | None = 3600) -> None:
     """加入黑名單；ttl_seconds=None 代表永久。"""
     expires_at = (time.time() + ttl_seconds) if ttl_seconds else None

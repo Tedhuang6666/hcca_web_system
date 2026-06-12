@@ -13,6 +13,7 @@ const MAINTENANCE_CHECK_TIMEOUT_MS = 800;
 const SERIAL_RE = /^[一-鿿]+字(?:第)?(\d+)號$/;
 const MAINTENANCE_EXEMPT_PREFIXES = [
   "/maintenance",
+  "/blocked",
   "/admin/system",
   "/login",
   "/auth",
@@ -163,8 +164,50 @@ async function maintenanceRedirect(req: NextRequest) {
   }
 }
 
+async function blockedRedirect(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+  if (pathname === "/blocked" || pathname.startsWith("/blocked/")) return null;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), MAINTENANCE_CHECK_TIMEOUT_MS);
+  try {
+    const headers: Record<string, string> = {
+      cookie: req.headers.get("cookie") ?? "",
+    };
+    for (const name of ["cf-connecting-ip", "x-forwarded-for", "x-real-ip"]) {
+      const value = req.headers.get(name);
+      if (value) headers[name] = value;
+    }
+    const res = await fetch(`${API_INTERNAL_BASE}/system/access-status`, {
+      headers,
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    if (!res.ok) return null;
+    const state = (await res.json()) as {
+      blocked?: boolean;
+      reason?: string;
+      expires_at?: number | null;
+    };
+    if (!state.blocked) return null;
+
+    const url = req.nextUrl.clone();
+    url.pathname = "/blocked";
+    url.search = "";
+    if (state.reason) url.searchParams.set("reason", state.reason);
+    if (state.expires_at) url.searchParams.set("until", String(state.expires_at));
+    return NextResponse.redirect(url);
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const blocked = await blockedRedirect(req);
+  if (blocked) return blocked;
   const redirect = await maintenanceRedirect(req);
   if (redirect) return redirect;
 

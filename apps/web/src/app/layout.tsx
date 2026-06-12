@@ -8,6 +8,7 @@ import GoogleOneTap from "@/components/auth/GoogleOneTap";
 import PwaInstallPrompt from "@/components/pwa/PwaInstallPrompt";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import TelemetryProvider from "@/components/providers/TelemetryProvider";
+import AccessBlockGuard from "@/components/security/AccessBlockGuard";
 import ScrollProgressBar from "@/components/ui/ScrollProgressBar";
 import { BRANDING } from "@/lib/branding";
 import { SOCIAL_IMAGE, SOCIAL_SHARE_TITLE, SOCIAL_SITE_NAME } from "@/lib/social-metadata";
@@ -107,6 +108,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="antialiased">
         <ThemeProvider>
+          <AccessBlockGuard />
           <ScrollProgressBar />
           <Suspense fallback={null}>
             <TelemetryProvider />

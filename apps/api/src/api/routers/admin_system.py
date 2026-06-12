@@ -17,7 +17,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from redis.exceptions import RedisError
 from sqlalchemy import func, select, text
@@ -25,10 +25,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core import app_settings as app_settings_svc
 from api.core import recovery
+from api.core.anomaly_detection import get_login_ips
 from api.core.config import settings
 from api.core.database import engine, get_db
+from api.core.defense import find_identity_block
 from api.core.error_audit import clear_errors, find_error_by_id, get_recent_errors
 from api.core.ip_blocklist import block as ip_block
+from api.core.ip_blocklist import get_block as get_ip_block
 from api.core.ip_blocklist import list_blocked as ip_list_blocked
 from api.core.ip_blocklist import unblock as ip_unblock
 from api.core.load_signals import snapshot as load_snapshot
@@ -61,10 +64,11 @@ from api.core.modules import MODULES
 from api.core.query_audit import get_slow_queries
 from api.core.security import redis_client, revoke_user
 from api.core.ws_manager import manager as ws_manager
-from api.dependencies.auth import get_current_active_user
+from api.dependencies.auth import get_current_active_user, get_optional_user
 from api.dependencies.permissions import require_admin_mfa
 from api.models.email_message import EmailMessage
 from api.models.user import User
+from api.models.user_identity import UserIdentity
 from api.services import audit as audit_svc
 from api.services import defense as defense_svc
 from api.services import mfa as mfa_svc
@@ -240,6 +244,12 @@ class ModuleMaintenanceBody(BaseModel):
     reason: str = Field("", max_length=500)
 
 
+class AccessBlockStatus(BaseModel):
+    blocked: bool
+    reason: str = ""
+    expires_at: float | None = None
+
+
 @public_router.get(
     "/module-status", response_model=list[ModuleStatusPublic], summary="公開模組維護狀態"
 )
@@ -259,6 +269,46 @@ async def public_module_status() -> list[ModuleStatusPublic]:
             )
         )
     return out
+
+
+@public_router.get(
+    "/access-status",
+    response_model=AccessBlockStatus,
+    summary="檢查目前訪客是否遭封鎖",
+)
+async def public_access_status(
+    request: Request,
+    session: DbDep,
+    user: User | None = Depends(get_optional_user),
+) -> AccessBlockStatus:
+    ip = request.client.host if request.client else "unknown"
+    ip_block = await get_ip_block(ip)
+    if ip_block:
+        return AccessBlockStatus(
+            blocked=True,
+            reason=str(ip_block.get("reason") or "未提供原因"),
+            expires_at=ip_block.get("expires_at"),
+        )
+    if user is None:
+        return AccessBlockStatus(blocked=False)
+
+    identity_emails = await session.scalars(
+        select(UserIdentity.email).where(
+            UserIdentity.user_id == user.id,
+            UserIdentity.email.is_not(None),
+        )
+    )
+    identity_block = await find_identity_block(
+        user_id=str(user.id),
+        emails={user.email, *(email for email in identity_emails.all() if email)},
+    )
+    if not identity_block:
+        return AccessBlockStatus(blocked=False)
+    return AccessBlockStatus(
+        blocked=True,
+        reason=str(identity_block.get("reason") or "未提供原因"),
+        expires_at=identity_block.get("expires_at"),
+    )
 
 
 class IpBlockBody(BaseModel):
@@ -281,6 +331,8 @@ DefenseRuleTypeLiteral = Literal[
     "ip_block",
     "cidr_block",
     "ip_allow",
+    "user_block",
+    "email_block",
     "rate_limit_override",
     "endpoint_lockdown",
     "bot_challenge_placeholder",
@@ -338,6 +390,27 @@ class DefenseSummary(BaseModel):
     active_rules: list[DefenseRuleOut]
     rate_limit: dict
     recent_status_counts: dict[str, int]
+
+
+class UserBlockPreview(BaseModel):
+    user_id: uuid.UUID
+    email: str
+    display_name: str
+    emails: list[str]
+    ips: list[str]
+
+
+class UserBlockBody(BaseModel):
+    identifier: str = Field(..., min_length=1, max_length=255)
+    reason: str = Field(..., min_length=1, max_length=1000)
+    expires_at: datetime | None = None
+    include_emails: bool = True
+    include_ips: bool = False
+
+
+class UserBlockResult(UserBlockPreview):
+    rules: list[DefenseRuleOut]
+    revoked_count: int
 
 
 class DeadLetterItem(BaseModel):
@@ -1055,6 +1128,75 @@ async def deactivate_defense_rule(
         body=f"rule={rule_id}\nactor={_admin.email}",
     )
     return DefenseRuleOut(**defense_svc.rule_to_dict(rule))
+
+
+@router.get("/defense/users/{identifier}", response_model=UserBlockPreview)
+async def preview_user_block(
+    identifier: str,
+    session: DbDep,
+    _admin: AdminUser,
+) -> UserBlockPreview:
+    user, emails = await defense_svc.get_user_block_targets(session, identifier)
+    return UserBlockPreview(
+        user_id=user.id,
+        email=user.email,
+        display_name=user.display_name,
+        emails=emails,
+        ips=await get_login_ips(str(user.id)),
+    )
+
+
+@router.post(
+    "/defense/user-blocks",
+    response_model=UserBlockResult,
+    status_code=status.HTTP_201_CREATED,
+)
+async def block_user(
+    body: UserBlockBody,
+    session: DbDep,
+    _admin: AdminUser,
+) -> UserBlockResult:
+    user, emails = await defense_svc.get_user_block_targets(session, body.identifier)
+    if user.id == _admin.id:
+        raise HTTPException(status_code=409, detail="不可封鎖目前登入的管理員帳號")
+
+    ips = await get_login_ips(str(user.id))
+    targets = [("user_block", str(user.id))]
+    if body.include_emails:
+        targets.extend(("email_block", email) for email in emails)
+    if body.include_ips:
+        targets.extend(("ip_block", ip) for ip in ips)
+
+    rules = [
+        await defense_svc.create_rule(
+            session,
+            actor=_admin,
+            rule_type=rule_type,
+            target=target,
+            reason=body.reason,
+            expires_at=body.expires_at,
+            config={"source": "user_block", "user_id": str(user.id)},
+        )
+        for rule_type, target in targets
+    ]
+    revoked_count = await revoke_user(str(user.id))
+    await emit_security_alert(
+        session,
+        title="封鎖使用者",
+        body=(
+            f"user={user.id}\nemail={user.email}\nactor={_admin.email}\n"
+            f"rules={len(rules)}\nreason={body.reason}"
+        ),
+    )
+    return UserBlockResult(
+        user_id=user.id,
+        email=user.email,
+        display_name=user.display_name,
+        emails=emails,
+        ips=ips,
+        rules=[DefenseRuleOut(**defense_svc.rule_to_dict(rule)) for rule in rules],
+        revoked_count=revoked_count,
+    )
 
 
 @router.get("/rate-limit", response_model=dict)
