@@ -96,7 +96,9 @@ async def test_scrypt_api_key_authenticates(
         rate_limit_per_minute=60,
         is_active=True,
     )
-    db_session.add_all([owner, row])
+    db_session.add(owner)
+    await db_session.flush()
+    db_session.add(row)
     await db_session.flush()
 
     authenticated = await api_key.find_active_by_raw(db_session, raw)
