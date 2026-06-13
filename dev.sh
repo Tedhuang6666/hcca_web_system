@@ -8,8 +8,8 @@
 #   - CRLF → LF 轉換
 #   - .env 從 .env.example 自動複製
 #   - .env 缺漏 .env.example 中的 key 時提示（避免靜默吃預設）
-#   - 舊 dev.sh / uvicorn / next-server 殘留行程清理
-#   - port 3000 / 8000 佔用者自動終止
+#   - 舊 dev.sh / uvicorn / next-server / Discord Bot 殘留行程清理
+#   - port 3000 / 8000 佔用者（含 Docker container）自動終止
 #   - 孤兒 / 死亡 Docker 容器自動移除
 #   - PostgreSQL 資料庫不存在自動建立
 #   - Meilisearch 不在線時自動以 Docker 啟動（已有 native 7700 則沿用）
@@ -299,6 +299,21 @@ _pids_on_port() {
 
 _kill_port() {
     local port="$1"; local name="$2"
+    local containers=""
+    containers=$(docker ps --filter "publish=${port}" --format '{{.ID}} {{.Names}}' 2>/dev/null)
+    if [[ -n "$containers" ]]; then
+        local container_names
+        container_names=$(echo "$containers" | awk '{print $2}' | tr '\n' ' ')
+        warn "Port ${port} (${name}) 被 Docker container 佔用：${container_names}→ 停止"
+        echo "$containers" | awk '{print $1}' | xargs -r docker stop --time 10 >/dev/null 2>&1 || true
+        sleep 1
+        containers=$(docker ps --filter "publish=${port}" --format '{{.ID}} {{.Names}}' 2>/dev/null)
+        if [[ -n "$containers" ]]; then
+            error "Port ${port} 的 Docker container 無法停止：$(echo "$containers" | awk '{print $2}')"
+            return 1
+        fi
+    fi
+
     local pids; pids=$(_pids_on_port "$port")
     [[ -z "$pids" ]] && return 0
     local procinfo; procinfo=$(ps -o pid=,comm= -p $pids 2>/dev/null | tr -s ' ' | tr '\n' ';' | sed 's/;$//')
@@ -322,9 +337,9 @@ _kill_port() {
 _kill_port 3000 "Next.js" || exit 1
 _kill_port 8000 "FastAPI" || exit 1
 
-# 2.3 清理孤兒 uvicorn / next-server / next dev / celery worker / discord_worker
+# 2.3 清理孤兒 uvicorn / next-server / next dev / celery worker / Discord Bot
 # Celery 重點：殘留 worker 會跟新 worker 共用 -n nodename，造成 DuplicateNodenameWarning。
-ORPHAN_PATTERN="uvicorn[[:space:]]+api(\\.main)?:app|next-server|next[[:space:]]+dev|celery.*worker|api\\.discord_worker"
+ORPHAN_PATTERN="uvicorn[[:space:]]+api(\\.main)?:app|next-server|next[[:space:]]+dev|celery.*worker|hcca_discord_bot"
 ORPHAN=$(pgrep -f "$ORPHAN_PATTERN" 2>/dev/null || true)
 if [[ -n "$ORPHAN" ]]; then
     warn "終止孤兒行程：$(echo $ORPHAN | tr '\n' ' ')"
@@ -670,11 +685,18 @@ success "FastAPI 已啟動 PID=${API_PID} → http://localhost:8000/docs"
 # ──────────────────────────────────────────────────────────────────────────
 if [[ -n "${DISCORD_BOT_TOKEN:-}" ]]; then
     step "7.5/8 啟動 Discord Bot"
+    DISCORD_API_KEY="${HCCA_DISCORD_BOT_API_KEY:-${HCCA_API_KEY:-}}"
+    if [[ -z "$DISCORD_API_KEY" ]]; then
+        error "Discord Bot 需要 HCCA_DISCORD_BOT_API_KEY（API Key scope: discord:bot）"
+        error "請在平台後台建立 API Key，寫入 .env 後重新執行 bash dev.sh"
+        exit 1
+    fi
     : > "$DISCORD_LOG"
     (
-        cd "${REPO_ROOT}/apps/api"
-        export PYTHONPATH="${REPO_ROOT}/apps/api/src"
-        exec uv run --project "${REPO_ROOT}/apps/api" python -m api.discord_worker \
+        cd "${REPO_ROOT}/apps/discord-bot"
+        export HCCA_API_KEY="$DISCORD_API_KEY"
+        export HCCA_API_URL="${HCCA_DISCORD_BOT_API_URL:-http://localhost:8000}"
+        exec uv run --project "${REPO_ROOT}/apps/discord-bot" python -m hcca_discord_bot \
             > >(_stream_log "discord" "$DISCORD_LOG" "$C_CYAN") 2>&1
     ) &
     DISCORD_PID=$!
