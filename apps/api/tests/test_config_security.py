@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from api.core.config import _DEFAULT_SECRET, Settings
+from api.core.config import _FALLBACK_SIGNING_KEY as _DEFAULT_SECRET, Settings
 
 
 def _make(**overrides: object) -> Settings:
