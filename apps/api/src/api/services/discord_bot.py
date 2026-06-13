@@ -32,6 +32,7 @@ from api.models.petition import PetitionCase
 from api.models.user import User
 from api.services.discord_embeds import (
     Domain,
+    EmbedField,
     Severity,
     build_embed,
     default_action_row,
@@ -447,7 +448,7 @@ async def emit_public_document_notice(db: AsyncSession, doc: Document) -> None:
         if doc.visibility_level == DocumentVisibility.PUBLICLY_OPEN
         else f"/documents/{doc.id}"
     )
-    fields: list[dict[str, Any]] = []
+    fields: list[EmbedField] = []
     if doc.serial_number:
         fields.append({"name": "字號", "value": str(doc.serial_number), "inline": True})
     body = doc.subject[:1500] if doc.subject else None
@@ -582,7 +583,7 @@ async def _emit_org_channels(
 
 async def emit_meeting_invited(db: AsyncSession, meeting: Any) -> None:
     """新會議建立/發布；推 org channel + 與會者 DM（在 dispatcher 端套 preference）。"""
-    fields: list[dict[str, Any]] = []
+    fields: list[EmbedField] = []
     if dt := _fmt_dt(getattr(meeting, "starts_at", None)):
         fields.append({"name": "開會時間", "value": dt, "inline": True})
     if loc := getattr(meeting, "location", None):
@@ -650,7 +651,7 @@ async def emit_meeting_minutes_published(db: AsyncSession, meeting: Any) -> None
 
 
 async def emit_calendar_event_published(db: AsyncSession, event: Any) -> None:
-    fields: list[dict[str, Any]] = []
+    fields: list[EmbedField] = []
     if dt := _fmt_dt(getattr(event, "starts_at", None)):
         fields.append({"name": "開始時間", "value": dt, "inline": True})
     if dt := _fmt_dt(getattr(event, "ends_at", None)):
@@ -679,7 +680,7 @@ async def emit_calendar_event_reminder(
     db: AsyncSession, event: Any, user_id: uuid.UUID, lead: str = "即將開始"
 ) -> None:
     """提醒個別參與者；dispatcher 套 preference + quiet hours。"""
-    fields: list[dict[str, Any]] = []
+    fields: list[EmbedField] = []
     if dt := _fmt_dt(getattr(event, "starts_at", None)):
         fields.append({"name": "開始時間", "value": dt, "inline": True})
     if loc := getattr(event, "location", None):
@@ -709,7 +710,7 @@ async def emit_survey_opened(
     db: AsyncSession, survey: Any, org_ids: set[uuid.UUID] | None = None
 ) -> None:
     link = f"/surveys/{survey.id}"
-    fields: list[dict[str, Any]] = []
+    fields: list[EmbedField] = []
     if dt := _fmt_dt(getattr(survey, "closes_at", None)):
         fields.append({"name": "截止時間", "value": dt, "inline": True})
     if getattr(survey, "is_anonymous", False):
@@ -733,7 +734,7 @@ async def emit_survey_opened(
 
 async def emit_survey_closing_soon(db: AsyncSession, survey: Any, user_id: uuid.UUID) -> None:
     link = f"/surveys/{survey.id}"
-    fields: list[dict[str, Any]] = []
+    fields: list[EmbedField] = []
     if dt := _fmt_dt(getattr(survey, "closes_at", None)):
         fields.append({"name": "截止時間", "value": dt, "inline": True})
     embed = build_embed(
@@ -780,7 +781,7 @@ async def emit_survey_closed(
 async def emit_meal_order_open(
     db: AsyncSession, schedule: Any, vendor_org_id: uuid.UUID, vendor_name: str
 ) -> None:
-    fields: list[dict[str, Any]] = [
+    fields: list[EmbedField] = [
         {"name": "商家", "value": vendor_name, "inline": True},
         {"name": "供餐日期", "value": str(getattr(schedule, "date", "—")), "inline": True},
     ]
@@ -807,7 +808,7 @@ async def emit_meal_order_closing_soon(
     db: AsyncSession, schedule: Any, user_id: uuid.UUID, vendor_name: str
 ) -> None:
     link = f"/meal/schedules/{schedule.id}"
-    fields: list[dict[str, Any]] = [{"name": "商家", "value": vendor_name, "inline": True}]
+    fields: list[EmbedField] = [{"name": "商家", "value": vendor_name, "inline": True}]
     if dt := _fmt_dt(getattr(schedule, "order_deadline", None)):
         fields.append({"name": "結單時間", "value": dt, "inline": True})
     embed = build_embed(
@@ -852,7 +853,7 @@ async def emit_meal_order_closed(
 
 
 async def emit_shop_item_listed(db: AsyncSession, product: Any) -> None:
-    fields: list[dict[str, Any]] = []
+    fields: list[EmbedField] = []
     if price := getattr(product, "price", None):
         fields.append({"name": "售價", "value": f"NT$ {price}", "inline": True})
     if dt := _fmt_dt(getattr(product, "sale_end", None)):
@@ -878,7 +879,7 @@ async def emit_shop_item_listed(db: AsyncSession, product: Any) -> None:
 
 async def emit_shop_order_ready(db: AsyncSession, order: Any, *, user_id: uuid.UUID) -> None:
     link = f"/shop/orders/{order.id}"
-    fields: list[dict[str, Any]] = []
+    fields: list[EmbedField] = []
     if serial := getattr(order, "serial_number", None):
         fields.append({"name": "訂單字號", "value": str(serial), "inline": True})
     embed = build_embed(
@@ -905,7 +906,7 @@ async def emit_shop_order_ready(db: AsyncSession, order: Any, *, user_id: uuid.U
 async def emit_regulation_workflow_changed(
     db: AsyncSession, regulation: Any, *, from_status: str | None = None
 ) -> None:
-    fields: list[dict[str, Any]] = [
+    fields: list[EmbedField] = [
         {"name": "目前狀態", "value": str(regulation.workflow_status), "inline": True}
     ]
     if from_status:
@@ -929,7 +930,7 @@ async def emit_regulation_workflow_changed(
 
 
 async def emit_regulation_published(db: AsyncSession, regulation: Any) -> None:
-    fields: list[dict[str, Any]] = [
+    fields: list[EmbedField] = [
         {"name": "版本", "value": str(getattr(regulation, "version", 1)), "inline": True}
     ]
     if dt := _fmt_dt(getattr(regulation, "effective_date", None)):
@@ -958,7 +959,7 @@ async def emit_regulation_published(db: AsyncSession, regulation: Any) -> None:
 async def emit_document_pending_to_approver(
     db: AsyncSession, document: Any, approver_user_id: uuid.UUID
 ) -> None:
-    fields: list[dict[str, Any]] = []
+    fields: list[EmbedField] = []
     if serial := getattr(document, "serial_number", None):
         fields.append({"name": "字號", "value": str(serial), "inline": True})
     if subject := getattr(document, "subject", None):
