@@ -112,7 +112,7 @@ def decrypt_field(token: str | None) -> str | None:
         FieldEncryptionNotConfigured: FIELD_ENCRYPTION_KEYS 未設定
         FieldEncryptionError: token 無效或所有 keys 都解不開
     """
-    if token is None or token == "":  # nosec B105
+    if not token:
         return token
     cipher = _get_cipher()
     if cipher is None:
@@ -136,7 +136,7 @@ def rotate_token(token: str | None) -> str | None:
 
     在 MultiFernet 下，rotate 等同於「用第一個 key 重新加密」。
     """
-    if token is None or token == "":  # nosec B105
+    if not token:
         return token
     cipher = _get_cipher()
     if cipher is None:

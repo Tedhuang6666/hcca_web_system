@@ -475,7 +475,7 @@ async def render_document_print_html(
     classification = {
         "normal": "",
         "confidential": "密",
-        "secret": "機密",  # nosec B105
+        "secret": "機密",
     }.get(_enum_value(doc.classification), "")
 
     main_recipients = _recipient_names(doc, "main")

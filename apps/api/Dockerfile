@@ -1,10 +1,10 @@
 # ==============================================================================
 # Stage 1: builder — 安裝依賴並建立虛擬環境
 # ==============================================================================
-FROM python:3.12-slim AS builder
+FROM python:3.12-slim@sha256:a39549e211a16149edf74e5fdc9ef03a6767e46cd987c5048b6659b6c9904c94 AS builder
 
 # 安裝 uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+COPY --from=ghcr.io/astral-sh/uv:0.7.13@sha256:6c1e19020ec221986a210027040044a5df8de762eb36d5240e382bc41d7a9043 /uv /uvx /usr/local/bin/
 
 WORKDIR /build
 
@@ -20,7 +20,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # ==============================================================================
 # Stage 2: runtime — 最小化生產映像檔
 # ==============================================================================
-FROM python:3.12-slim AS runtime
+FROM python:3.12-slim@sha256:a39549e211a16149edf74e5fdc9ef03a6767e46cd987c5048b6659b6c9904c94 AS runtime
 
 # WeasyPrint needs native text/layout libraries; Noto CJK keeps generated PDFs readable.
 RUN apt-get update && \

@@ -58,10 +58,10 @@ async def generate_pickup_code(session: AsyncSession, max_attempts: int = 10) ->
     生成唯一 5 位數取餐代碼（10000–99999）。
     碰撞機率極低（每日訂單 << 90000），最多重試 10 次後拋出例外。
     """
-    import random
+    import secrets
 
     for _ in range(max_attempts):
-        code = str(random.randint(10000, 99999))  # nosec B311  # noqa: S311 (非密碼學用途)
+        code = str(secrets.randbelow(90000) + 10000)
         exists = await session.execute(
             select(MealOrder.id).where(MealOrder.pickup_code == code).limit(1)
         )

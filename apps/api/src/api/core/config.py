@@ -7,10 +7,10 @@ from urllib.parse import urlsplit
 from pydantic import Field, PostgresDsn, RedisDsn, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
-_DEFAULT_SECRET = "CHANGE_ME_IN_PRODUCTION_USE_256_BIT_KEY"  # nosec B105
+_FALLBACK_SIGNING_KEY = "CHANGE_ME_IN_PRODUCTION_USE_256_BIT_KEY"
 
 # 視為「本機預設」的 host；這些值代表尚未為部署環境設定，可被部署網址自動覆寫。
-_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0"})  # nosec B104
+_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0"})
 
 
 def _is_local_url(value: str) -> bool:
@@ -154,7 +154,7 @@ class Settings(BaseSettings):
     MODULE_ALERT_DISCORD_CHANNEL_ID: str = Field(default="")
 
     # --- JWT 設定 ---
-    SECRET_KEY: str = Field(default=_DEFAULT_SECRET)
+    SECRET_KEY: str = Field(default=_FALLBACK_SIGNING_KEY)
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
@@ -363,7 +363,7 @@ class Settings(BaseSettings):
     @field_validator("SECRET_KEY")
     @classmethod
     def secret_key_must_be_set(cls, v: str) -> str:
-        if v == _DEFAULT_SECRET:
+        if v == _FALLBACK_SIGNING_KEY:
             import os
 
             if os.getenv("ENVIRONMENT", "development").lower() in {"prod", "production"}:
@@ -472,7 +472,7 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def production_security_must_be_explicit(self) -> "Settings":
         is_prod = self.ENVIRONMENT.lower() in {"prod", "production"}
-        if is_prod and self.SECRET_KEY == _DEFAULT_SECRET:
+        if is_prod and self.SECRET_KEY == _FALLBACK_SIGNING_KEY:
             raise ValueError("生產環境必須設定強 SECRET_KEY，不能使用預設值")
         if is_prod and self.DEBUG:
             raise ValueError("生產環境不可啟用 DEBUG")

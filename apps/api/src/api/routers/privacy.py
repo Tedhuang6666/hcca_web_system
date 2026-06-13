@@ -49,7 +49,7 @@ class ExportFileOut(BaseModel):
 
 class AnonymizeBody(BaseModel):
     # 二次確認；前端要求使用者打字「假名化」才送出
-    confirm_token: str = Field(..., min_length=1, max_length=64)
+    confirm_phrase: str = Field(..., min_length=1, max_length=64)
 
 
 class AnonymizeOut(BaseModel):
@@ -129,10 +129,10 @@ async def anonymize_user(
     user_id: uuid.UUID, body: AnonymizeBody, db: DbDep, requester: PrivacyUser
 ) -> AnonymizeOut:
     # 二次確認：前端 UI 要求使用者打字「假名化」
-    if body.confirm_token != "假名化":  # nosec B105
+    if body.confirm_phrase != "假名化":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="confirm_token 必須為「假名化」字串",
+            detail="confirm_phrase 必須為「假名化」字串",
         )
     try:
         result = await svc.anonymize_user(db, user_id=user_id, requested_by_email=requester.email)

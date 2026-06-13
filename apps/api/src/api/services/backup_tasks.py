@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import subprocess  # nosec B404
+import subprocess
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -125,7 +125,7 @@ def backup_database(self) -> dict:  # type: ignore[type-arg]
 
     try:
         with target.open("wb") as out:
-            proc = subprocess.run(  # nosec B603  # noqa: S603
+            proc = subprocess.run(
                 cmd,
                 env=env,
                 stdout=out,

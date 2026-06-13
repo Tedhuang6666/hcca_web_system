@@ -50,8 +50,8 @@ class SecurityAuditMiddleware(BaseHTTPMiddleware):
             if hasattr(request.state, "user"):
                 user_id = str(request.state.user.id)
                 user_email = request.state.user.email
-        except Exception:  # nosec B110
-            pass
+        except Exception:
+            logger.debug("audit middleware 取得 user context 失敗", exc_info=True)
 
         client_ip = request.client.host if request.client else "unknown"
 

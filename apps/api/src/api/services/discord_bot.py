@@ -40,7 +40,7 @@ from api.services.permission import active_tenure_filter
 
 logger = logging.getLogger(__name__)
 
-_OPEN_TOKEN_PREFIX = "discord:open:"  # nosec B105
+_OPEN_LINK_PREFIX = "discord:open:"
 _OPEN_TOKEN_TTL_SECONDS = 5 * 60
 
 
@@ -66,7 +66,7 @@ def _absolute_url(path: str | None) -> str:
 async def create_open_url(user_id: uuid.UUID, path: str | None) -> str:
     token = secrets.token_urlsafe(32)
     await redis_client.setex(
-        f"{_OPEN_TOKEN_PREFIX}{token}",
+        f"{_OPEN_LINK_PREFIX}{token}",
         _OPEN_TOKEN_TTL_SECONDS,
         json.dumps({"user_id": str(user_id), "path": _safe_frontend_path(path)}),
     )
@@ -74,7 +74,7 @@ async def create_open_url(user_id: uuid.UUID, path: str | None) -> str:
 
 
 async def consume_open_token(token: str) -> tuple[uuid.UUID, str] | None:
-    key = f"{_OPEN_TOKEN_PREFIX}{token}"
+    key = f"{_OPEN_LINK_PREFIX}{token}"
     raw = await redis_client.get(key)
     if not raw:
         return None

@@ -720,7 +720,7 @@ async def logout(
                 _ph.capture(
                     distinct_id=_tok_payload.get("sub", "anonymous"), event="user_logged_out"
                 )
-            except Exception:  # nosec B110
-                pass
+            except Exception:
+                logger.debug("PostHog logout 事件發送失敗（non-critical）", exc_info=True)
 
     return {"message": "已成功登出"}

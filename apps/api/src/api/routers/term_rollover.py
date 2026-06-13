@@ -43,7 +43,7 @@ class DryRunBody(BaseModel):
 
 
 class ExecuteBody(DryRunBody):
-    confirm_token: str = Field(..., min_length=1)
+    confirm_phrase: str = Field(..., min_length=1)
 
 
 class TerminationOut(BaseModel):
@@ -124,10 +124,10 @@ async def dry_run(body: DryRunBody, db: DbDep, _u: RolloverUser) -> DryRunOut:
 
 @router.post("/execute", response_model=ExecuteOut, summary="實際執行換屆")
 async def execute_rollover(body: ExecuteBody, db: DbDep, user: RolloverUser) -> ExecuteOut:
-    if body.confirm_token != "換屆":  # nosec B105
+    if body.confirm_phrase != "換屆":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="confirm_token 必須為「換屆」字串",
+            detail="confirm_phrase 必須為「換屆」字串",
         )
     try:
         result, snapshot = await svc.execute(
@@ -165,17 +165,17 @@ async def execute_rollover(body: ExecuteBody, db: DbDep, user: RolloverUser) -> 
 
 
 class RollbackBody(BaseModel):
-    confirm_token: str = Field(..., min_length=1)
+    confirm_phrase: str = Field(..., min_length=1)
 
 
 @router.post("/rollback/{batch_id}", response_model=RollbackOut, summary="復原某次換屆")
 async def rollback_rollover(
     batch_id: str, body: RollbackBody, db: DbDep, user: RolloverUser
 ) -> RollbackOut:
-    if body.confirm_token != "復原":  # nosec B105
+    if body.confirm_phrase != "復原":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="confirm_token 必須為「復原」字串",
+            detail="confirm_phrase 必須為「復原」字串",
         )
     try:
         result: dict[str, Any] = await svc.rollback(db, batch_id=batch_id)

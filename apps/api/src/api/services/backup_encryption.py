@@ -17,7 +17,7 @@ import hashlib
 import logging
 import os
 import shutil
-import subprocess  # nosec B404
+import subprocess
 from pathlib import Path
 
 from api.core.config import settings
@@ -87,7 +87,7 @@ def encrypt_file(
         str(src),
     ]
     try:
-        subprocess.run(  # nosec B603
+        subprocess.run(
             cmd,
             input=settings.BACKUP_GPG_PASSPHRASE.encode("utf-8"),
             check=True,
@@ -147,7 +147,7 @@ def decrypt_file(
         str(src),
     ]
     try:
-        subprocess.run(  # nosec B603
+        subprocess.run(
             cmd,
             input=settings.BACKUP_GPG_PASSPHRASE.encode("utf-8"),
             check=True,

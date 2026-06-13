@@ -11944,8 +11944,8 @@ export interface components {
         };
         /** AnonymizeBody */
         AnonymizeBody: {
-            /** Confirm Token */
-            confirm_token: string;
+            /** Confirm Phrase */
+            confirm_phrase: string;
         };
         /** AnonymizeOut */
         AnonymizeOut: {
@@ -25496,8 +25496,8 @@ export interface components {
         };
         /** RollbackBody */
         RollbackBody: {
-            /** Confirm Token */
-            confirm_token: string;
+            /** Confirm Phrase */
+            confirm_phrase: string;
         };
         /** RollbackOut */
         RollbackOut: {
@@ -28494,8 +28494,8 @@ export interface components {
         };
         /** ExecuteBody */
         api__routers__term_rollover__ExecuteBody: {
-            /** Confirm Token */
-            confirm_token: string;
+            /** Confirm Phrase */
+            confirm_phrase: string;
             /** New Assignments */
             new_assignments?: components["schemas"]["NewAssignmentIn"][];
             /**

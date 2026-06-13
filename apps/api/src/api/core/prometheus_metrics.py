@@ -158,7 +158,8 @@ def render_metrics() -> bytes:
     """渲染最新 metrics 為 prometheus text format。"""
     if _registry is None:
         init_metrics()
-    assert _registry is not None  # nosec B101
+    if _registry is None:
+        raise RuntimeError("Prometheus registry 初始化失敗")
     return generate_latest(_registry)
 
 
@@ -174,7 +175,8 @@ def start_metrics_server_from_env() -> bool:
     from prometheus_client import start_http_server
 
     init_metrics()
-    assert _registry is not None  # nosec B101
+    if _registry is None:
+        raise RuntimeError("Prometheus registry 初始化失敗")
     start_http_server(int(raw_port), registry=_registry)
     _metrics_server_started = True
     logger.info("Prometheus worker metrics listening on port %s", raw_port)
@@ -281,8 +283,8 @@ class PrometheusMetricsMiddleware:
                 query_count, _slow_count, _query_ms = get_request_counters()
                 if _db_query_count is not None:
                     _db_query_count.labels(method=method).observe(query_count)
-            except Exception:  # nosec B110
-                pass
+            except Exception:
+                logger.debug("Prometheus query counter 更新失敗", exc_info=True)
 
 
 __all__ = [

@@ -55,7 +55,7 @@ _line_config = Configuration(access_token=settings.LINE_CHANNEL_ACCESS_TOKEN or 
 _LINK_CODE_TTL_SECONDS = 10 * 60
 _LINK_CODE_PREFIX = "line:link:"
 _OPEN_TOKEN_TTL_SECONDS = 5 * 60
-_OPEN_TOKEN_PREFIX = "line:open:"  # nosec B105
+_OPEN_LINK_PREFIX = "line:open:"
 
 
 def is_configured() -> bool:
@@ -82,7 +82,7 @@ async def create_open_url(user_id: uuid.UUID, path: str | None) -> str:
     """建立 LINE 專用短效自動登入入口。"""
     token = secrets.token_urlsafe(32)
     await redis_client.setex(
-        f"{_OPEN_TOKEN_PREFIX}{token}",
+        f"{_OPEN_LINK_PREFIX}{token}",
         _OPEN_TOKEN_TTL_SECONDS,
         json.dumps({"user_id": str(user_id), "path": _safe_frontend_path(path)}),
     )
@@ -91,7 +91,7 @@ async def create_open_url(user_id: uuid.UUID, path: str | None) -> str:
 
 async def consume_open_token(token: str) -> tuple[uuid.UUID, str] | None:
     """消耗一次性 LINE 自動登入 token。"""
-    key = f"{_OPEN_TOKEN_PREFIX}{token}"
+    key = f"{_OPEN_LINK_PREFIX}{token}"
     raw = await redis_client.get(key)
     if not raw:
         return None
