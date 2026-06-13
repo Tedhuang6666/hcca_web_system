@@ -2,39 +2,102 @@ name: Semgrep
 
 on:
   push:
-    branches: ["main"]
+    branches: [main]
+    paths:
+      - "apps/api/src/**"
+      - "apps/discord-bot/src/**"
+      - "apps/web/src/**"
+      - "libs/shared/src/**"
+      - ".github/workflows/semgrep.yml"
   pull_request:
-    branches: ["main"]
+    branches: [main]
+    paths:
+      - "apps/api/src/**"
+      - "apps/discord-bot/src/**"
+      - "apps/web/src/**"
+      - "libs/shared/src/**"
+      - ".github/workflows/semgrep.yml"
   schedule:
     - cron: "15 3 * * 2"
+  workflow_dispatch:
 
 permissions:
   contents: read
   security-events: write
 
+concurrency:
+  group: semgrep-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   semgrep:
-    name: Scan
+    name: SAST scan
     runs-on: ubuntu-latest
-
+    timeout-minutes: 20
     container:
-      image: semgrep/semgrep
+      image: "semgrep/semgrep:1.166.0@sha256:c180f0c93a17b420c0af5006214a29d3c747c5459c732b740191adf657dd0068"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Run Semgrep
+        env:
+          BASELINE_COMMIT: ${{ github.event.pull_request.base.sha }}
         run: |
+          baseline_args=()
+          if [ -n "$BASELINE_COMMIT" ]; then
+            baseline_args=(--baseline-commit "$BASELINE_COMMIT")
+          fi
+
           semgrep scan \
             --config p/security-audit \
             --config p/secrets \
             --config p/python \
             --config p/javascript \
+            "${baseline_args[@]}" \
+            --exclude "apps/api/alembic/versions/**" \
+            --exclude "apps/api/src/api/email/compiled/**" \
+            --exclude "apps/api/tests/**" \
+            --exclude "**/.next/**" \
+            --exclude "**/node_modules/**" \
+            --metrics=off \
             --sarif \
             --output semgrep.sarif \
+            apps/api/src apps/discord-bot/src apps/web/src libs/shared/src
 
       - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@v4
-        if: always()
+        if: always() && hashFiles('semgrep.sarif') != ''
+        uses: github/codeql-action/upload-sarif@1a818fd5f97ed0ee9a823421bd5b171add01227f # v4.36.2
         with:
           sarif_file: semgrep.sarif
+          category: semgrep
+
+      - name: Fail on error-level findings
+        if: github.event_name == 'pull_request' && hashFiles('semgrep.sarif') != ''
+        run: |
+          python - <<'PY'
+          import json
+
+          with open("semgrep.sarif", encoding="utf-8") as report:
+              sarif = json.load(report)
+
+          count = 0
+          for run in sarif.get("runs", []):
+              rules = {
+                  rule["id"]: rule
+                  for rule in run.get("tool", {}).get("driver", {}).get("rules", [])
+              }
+              for result in run.get("results", []):
+                  rule = rules.get(result.get("ruleId"), {})
+                  level = result.get("level") or rule.get("defaultConfiguration", {}).get(
+                      "level"
+                  )
+                  count += level == "error"
+
+          if count:
+              print(f"::error::Semgrep found {count} new error-level finding(s)")
+              raise SystemExit(1)
+          PY

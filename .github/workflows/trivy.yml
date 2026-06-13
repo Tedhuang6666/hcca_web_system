@@ -2,36 +2,119 @@ name: Trivy
 
 on:
   push:
-    branches: ["main"]
+    branches: [main]
+    paths:
+      - "apps/**"
+      - "libs/**"
+      - "docker-compose.yml"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "package-lock.json"
+      - ".github/workflows/trivy.yml"
   pull_request:
-    branches: ["main"]
+    branches: [main]
+    paths:
+      - "apps/**"
+      - "libs/**"
+      - "docker-compose.yml"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "package-lock.json"
+      - ".github/workflows/trivy.yml"
   schedule:
     - cron: "37 6 * * 5"
+  workflow_dispatch:
 
 permissions:
   contents: read
-  security-events: write
+
+concurrency:
+  group: trivy-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  fs-scan:
-    name: Filesystem Scan
+  repository:
+    name: Repository misconfiguration and secret scan
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
 
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Run Trivy filesystem scan
-        uses: aquasecurity/trivy-action@0.28.0
+      - uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
         with:
-          scan-type: "fs"
-          scan-ref: "."
-          format: "sarif"
-          output: "trivy-results.sarif"
-          severity: "CRITICAL,HIGH"
+          persist-credentials: false
+
+      - name: Scan repository
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: misconfig,secret
+          format: sarif
+          output: trivy-repository.sarif
+          severity: HIGH,CRITICAL
+          limit-severities-for-sarif: true
+          exit-code: "1"
+          timeout: 10m
+          skip-dirs: ".git,**/.next,**/node_modules,apps/api/alembic/versions"
+
+      - name: Upload repository results
+        if: always() && hashFiles('trivy-repository.sarif') != ''
+        uses: github/codeql-action/upload-sarif@1a818fd5f97ed0ee9a823421bd5b171add01227f # v4.36.2
+        with:
+          sarif_file: trivy-repository.sarif
+          category: trivy-repository
+
+  image:
+    name: Image scan (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: api
+            dockerfile: apps/api/Dockerfile
+          - name: web
+            dockerfile: apps/web/Dockerfile
+          - name: discord-bot
+            dockerfile: apps/discord-bot/Dockerfile
+
+    steps:
+      - uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Build image
+        run: |
+          docker build \
+            --file "${{ matrix.dockerfile }}" \
+            --tag "hcca-${{ matrix.name }}:scan" \
+            .
+
+      - name: Scan image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: hcca-${{ matrix.name }}:scan
+          scanners: vuln,secret
+          vuln-type: os,library
+          format: sarif
+          output: trivy-image-${{ matrix.name }}.sarif
+          severity: HIGH,CRITICAL
+          limit-severities-for-sarif: true
           ignore-unfixed: true
+          exit-code: "1"
+          timeout: 15m
 
-      - name: Upload Trivy results
-        uses: github/codeql-action/upload-sarif@v4
-        if: always()
+      - name: Upload image results
+        if: always() && hashFiles(format('trivy-image-{0}.sarif', matrix.name)) != ''
+        uses: github/codeql-action/upload-sarif@1a818fd5f97ed0ee9a823421bd5b171add01227f # v4.36.2
         with:
-          sarif_file: "trivy-results.sarif"
+          sarif_file: trivy-image-${{ matrix.name }}.sarif
+          category: trivy-image-${{ matrix.name }}
