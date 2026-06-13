@@ -69,6 +69,9 @@ async def test_legacy_api_key_is_upgraded_after_successful_auth(
         display_name="Legacy Key",
         is_verified=True,
     )
+    db_session.add(owner)
+    await db_session.flush()
+
     row = ApiKey(
         name="legacy",
         key_prefix=raw[:13],
@@ -78,7 +81,7 @@ async def test_legacy_api_key_is_upgraded_after_successful_auth(
         rate_limit_per_minute=60,
         is_active=True,
     )
-    db_session.add_all([owner, row])
+    db_session.add(row)
     await db_session.flush()
 
     authenticated = await api_key.find_active_by_raw(db_session, raw)
