@@ -12,6 +12,7 @@ from api.email.renderer import (
     parse_unsubscribe_token,
     render_email,
     render_personalized_text,
+    safe_link_url,
     sanitize_html,
     validate_variable_definitions,
 )
@@ -121,6 +122,19 @@ def test_absolutize_url_uses_api_base_for_uploads() -> None:
     assert absolutize_url("/brand/hcca-emblem.png") == (
         f"{settings.FRONTEND_BASE_URL.rstrip('/')}/brand/hcca-emblem.png"
     )
+
+
+def test_safe_link_url_rejects_script_protocol_after_personalization() -> None:
+    assert safe_link_url("https://example.com/path") == "https://example.com/path"
+    assert safe_link_url("javascript:alert(1)") == ""
+
+    html = render_generic_message(
+        "測試",
+        "內容",
+        {"cta_url": "{{ target }}", "cta_label": "查看"},
+        {"target": "javascript:alert(1)"},
+    )
+    assert "javascript:" not in html
 
 
 def test_personalization_context_uses_email_link_base_for_unsubscribe() -> None:

@@ -48,6 +48,13 @@ def _build_docx(lines: list[str]) -> bytes:
     return buf.getvalue()
 
 
+def _build_docx_xml(document_xml: str) -> bytes:
+    buf = BytesIO()
+    with ZipFile(buf, "w") as docx:
+        docx.writestr("word/document.xml", document_xml)
+    return buf.getvalue()
+
+
 def test_create_article_with_legacy_type_rejected() -> None:
     with pytest.raises(ValueError):
         RegulationArticleCreate(
@@ -91,6 +98,19 @@ def test_parse_regulation_docx_maps_legal_document_to_articles() -> None:
     assert draft.articles[3].parent_key == draft.articles[2].key
     assert draft.articles[3].legal_number == "1"
     assert draft.articles[4].content == "提出建議。"
+
+
+def test_parse_regulation_docx_rejects_xml_entity_declarations() -> None:
+    raw = _build_docx_xml(
+        """<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE document [<!ENTITY payload "expanded">]>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body><w:p><w:r><w:t>&payload;</w:t></w:r></w:p></w:body>
+</w:document>"""
+    )
+
+    with pytest.raises(ValueError, match="不安全的 XML"):
+        parse_regulation_docx(raw, "malicious.docx")
 
 
 def test_parse_regulation_pdf_maps_text_pdf_to_articles(monkeypatch: pytest.MonkeyPatch) -> None:

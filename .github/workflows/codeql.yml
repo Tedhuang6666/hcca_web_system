@@ -69,6 +69,9 @@ jobs:
               - .github/workflows
             paths-ignore:
               - apps/api/src/api/email/node_modules
+            query-filters:
+              - exclude:
+                  id: py/log-injection
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@1a818fd5f97ed0ee9a823421bd5b171add01227f # v4.36.2

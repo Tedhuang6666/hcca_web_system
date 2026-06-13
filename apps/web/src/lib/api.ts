@@ -3097,7 +3097,7 @@ export const emailApi = {
   cloneMessage: (id: string, audience: "all" | "unopened" | "undelivered") =>
     post<{ id: string }>(`/email/messages/${id}/clone?audience=${audience}`),
   exportUrl: (id: string, format: "csv" | "xlsx") =>
-    `${BASE}/email/messages/${id}/export?format=${format}`,
+    `${BASE}/email/messages/${encodeURIComponent(id)}/export?format=${format}`,
   orgPositions: (orgId: string) => get<EmailPosition[]>(`/orgs/${orgId}/positions`),
 };
 

@@ -6,6 +6,7 @@ from api.email.renderer import (
     absolutize_url,
     render_email,
     render_personalized_text,
+    safe_link_url,
     sanitize_html,
 )
 from api.services.mail import enqueue_email
@@ -92,10 +93,10 @@ def render_generic_message(
         }
         for row in context.get("card_rows", [])
     ]
-    rendered_cta_url = (
+    rendered_cta_url = safe_link_url(
         render_personalized_text(str(context.get("cta_url") or ""), personal)
         if personal
-        else context.get("cta_url", "")
+        else str(context.get("cta_url", ""))
     )
     rendered_cta_label = (
         render_personalized_text(str(context.get("cta_label") or ""), personal)
@@ -105,11 +106,11 @@ def render_generic_message(
     rendered_buttons = [
         {
             "label": _text(str(btn.get("label", ""))),
-            "url": _text(str(btn.get("url", ""))),
+            "url": safe_link_url(_text(str(btn.get("url", "")))),
             "style": str(btn.get("style") or "primary"),
         }
         for btn in context.get("buttons", [])
-        if str(btn.get("url", "")).strip()
+        if safe_link_url(_text(str(btn.get("url", ""))))
     ]
     rendered_blocks = []
     paragraph_spacing = int(context.get("paragraph_spacing", 18))

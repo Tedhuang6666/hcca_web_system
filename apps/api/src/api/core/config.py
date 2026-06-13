@@ -10,7 +10,7 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 _DEFAULT_SECRET = "CHANGE_ME_IN_PRODUCTION_USE_256_BIT_KEY"
 
 # 視為「本機預設」的 host；這些值代表尚未為部署環境設定，可被部署網址自動覆寫。
-_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0"})
+_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0"})  # nosec B104
 
 
 def _is_local_url(value: str) -> bool:
