@@ -61,28 +61,30 @@ export default function AnalyticsPage() {
       return;
     }
     setLoading(true);
-    const failedSections: string[] = [];
-    const noteFailure = (label: string) => () => failedSections.push(label); // lgtm[js/xss-through-dom]
-    const [eff, ranks, insightRows, ann, survey, alerts] = await Promise.all([ // lgtm[js/xss-through-dom]
-      withFallback(analyticsApi.documentEfficiency(filterParams), null, noteFailure("公文效率")),
-      withFallback(analyticsApi.deptRanking(filterParams), [], noteFailure("部門排行")),
+    let hasFailure = false;
+    const noteFailure = () => {
+      hasFailure = true;
+    };
+    const [eff, ranks, insightRows, ann, survey, alerts] = await Promise.all([
+      withFallback(analyticsApi.documentEfficiency(filterParams), null, noteFailure),
+      withFallback(analyticsApi.deptRanking(filterParams), [], noteFailure),
       withFallback(
         analyticsApi.insights(12).then((res) => res.items),
         [],
-        noteFailure("治理洞察"),
+        noteFailure,
       ),
       withFallback(
         analyticsApi.announcementParticipation({ ...filterParams, limit: 8 }),
         [],
-        noteFailure("公告閱讀"),
+        noteFailure,
       ),
       withFallback(
         analyticsApi.surveyParticipation({ ...filterParams, limit: 8 }),
         [],
-        noteFailure("問卷回應"),
+        noteFailure,
       ),
       canViewPending
-        ? withFallback(analyticsApi.pendingAlerts(48), [], noteFailure("待簽核警告"))
+        ? withFallback(analyticsApi.pendingAlerts(48), [], noteFailure)
         : Promise.resolve([]),
     ]);
     setEfficiency(eff);
@@ -91,8 +93,8 @@ export default function AnalyticsPage() {
     setAnnouncements(ann);
     setSurveys(survey);
     setPending(alerts);
-    if (failedSections.length) {
-      toast.warning(`${failedSections.join("、")}暫時無法載入，其餘資料已更新`);
+    if (hasFailure) {
+      toast.warning("部分分析資料暫時無法載入，其餘資料已更新");
     }
     setLoading(false);
   }, [canView, canViewPending, filterParams]);

@@ -2,7 +2,7 @@
 
 責任：
 - 產生密碼學安全的 raw key（一次性回給呼叫端、不存明文）
-- 存 HMAC-SHA256 digest + key_prefix
+- 存 keyed BLAKE2b digest + key_prefix
 - 透過 hash 反查、驗證有效性（active / not revoked / not expired）
 - revoke / list / 統計
 
@@ -27,18 +27,12 @@ _PREFIX = "hcca_"
 
 
 def _hash_key(raw: str) -> str:
-    # HMAC-SHA256 keyed by SECRET_KEY — not a "weak hash", CodeQL false positive.
-    digest = hmac.new(  # lgtm[py/weak-sensitive-data-hashing]
-        settings.SECRET_KEY.encode("utf-8"),
+    digest = hashlib.blake2b(
         raw.encode("utf-8"),
-        hashlib.sha256,
+        key=settings.SECRET_KEY.encode("utf-8"),
+        digest_size=48,
     ).hexdigest()
-    return f"hmac-sha256:{digest}"
-
-
-def _legacy_hash_key(raw: str) -> str:
-    # Existing keys contain 256 bits of random entropy; this is compatibility verification only.
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()  # lgtm[py/weak-sensitive-data-hashing]
+    return f"blake2b-keyed:{digest}"
 
 
 def generate_raw_key() -> tuple[str, str]:
@@ -126,10 +120,6 @@ async def find_active_by_raw(db: AsyncSession, raw_key: str) -> ApiKey | None:
             candidate
             for candidate in candidates
             if hmac.compare_digest(candidate.key_hash, key_hash)
-            or (
-                not candidate.key_hash.startswith("hmac-sha256:")
-                and hmac.compare_digest(candidate.key_hash, _legacy_hash_key(raw_key))
-            )
         ),
         None,
     )
@@ -140,9 +130,6 @@ async def find_active_by_raw(db: AsyncSession, raw_key: str) -> ApiKey | None:
     now = datetime.now(UTC)
     if row.expires_at is not None and row.expires_at < now:
         return None
-    if not row.key_hash.startswith("hmac-sha256:"):
-        row.key_hash = key_hash
-        await db.flush()
     return row
 
 

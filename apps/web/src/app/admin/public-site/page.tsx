@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import {
   ArrowDown,
   ArrowUp,
@@ -168,6 +169,7 @@ function ImageField({
   onChange: (url: string) => void;
 }) {
   const [uploading, setUploading] = useState(false);
+  const previewUrl = safeImageUrl(value);
   const handleFile = async (file: File) => {
     setUploading(true);
     try {
@@ -202,11 +204,13 @@ function ImageField({
         </div>
       </Field>
       <div className="grid h-28 place-items-center rounded-lg" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-        {value ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={safeImageUrl(value)} // codeql[js/xss-through-dom] safeImageUrl blocks javascript: and protocol-relative URLs
+        {previewUrl ? (
+          <Image
+            src={previewUrl}
             alt={alt || `${label}預覽`}
+            width={192}
+            height={96}
+            unoptimized
             className="max-h-24 max-w-full object-contain"
           />
         ) : (
