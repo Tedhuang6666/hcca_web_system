@@ -208,7 +208,7 @@ async def test_create_document_generates_serial() -> None:
     async def return_created_document(*_: object) -> Document:
         return session.add.call_args_list[0].args[0]
 
-    with patch("api.services.document.get_document", side_effect=return_created_document):
+    with patch("api.services.document._lifecycle.get_document", side_effect=return_created_document):
         doc = await create_document(
             session,
             data=_make_create_payload(manual_serial_number="DOC-2026-000001"),
@@ -342,7 +342,7 @@ async def test_submit_document_creates_approval_steps() -> None:
     doc = _make_draft_doc()
     approvers = [uuid.uuid4(), uuid.uuid4(), uuid.uuid4()]
 
-    with patch("api.services.document._resolve_active_delegate_assignment", return_value=None):
+    with patch("api.services.document._access._resolve_active_delegate_assignment", return_value=None):
         await submit_document(session, doc, approver_ids=approvers)
 
     assert doc.status == DocumentStatus.PENDING
@@ -469,7 +469,7 @@ async def test_get_current_approval_allows_active_assignment_delegate() -> None:
     assignment.delegate_user_id = delegate_id
 
     with patch(
-        "api.services.document._resolve_active_delegate_assignment", return_value=assignment
+        "api.services.document._lifecycle._resolve_active_delegate_assignment", return_value=assignment
     ):
         current, is_acting = await _get_current_approval(session, doc, delegate_id)
 
@@ -495,7 +495,7 @@ async def test_get_current_approval_blocks_expired_assignment_delegate() -> None
     result.scalar_one_or_none.return_value = approval
     session.execute = AsyncMock(return_value=result)
 
-    with patch("api.services.document._resolve_active_delegate_assignment", return_value=None):
+    with patch("api.services.document._lifecycle._resolve_active_delegate_assignment", return_value=None):
         current, is_acting = await _get_current_approval(session, doc, delegate_id)
 
     assert current is None

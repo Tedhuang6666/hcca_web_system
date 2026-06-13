@@ -66,7 +66,7 @@ async def test_document_template_crud_and_create_draft(
     async def fake_serial(_session: AsyncSession, _template: object) -> str:
         return "DOC-2026-000777"
 
-    monkeypatch.setattr(doc_svc, "generate_serial_from_template", fake_serial)
+    monkeypatch.setattr("api.services.document._lifecycle", "generate_serial_from_template", fake_serial)
     draft = await doc_svc.create_document_from_template(
         db_session,
         template=template,
