@@ -43,7 +43,7 @@ function MemberAvatars({ candidate, size = 44 }: { candidate: CandidateTally; si
         // eslint-disable-next-line @next/next/no-img-element
         <img
           key={member.id}
-          src={uploadUrl(member.photo_url)}
+          src={uploadUrl(member.photo_url)} // lgtm[js/client-side-unvalidated-url-redirection] uploadUrl→safeImageUrl blocks javascript:
           alt={member.name}
           className="rounded-full object-cover ring-2 ring-[#173654]"
           style={{ width: size, height: size, background: "#0d1f31" }}

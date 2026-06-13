@@ -215,6 +215,8 @@ def archive_root() -> Path:
 
 
 def _archive_path_for(rule_id: str, batch_id: str, when: datetime) -> Path:
+    if rule_id not in RULES_BY_ID:  # guard against path traversal via untrusted rule_id
+        raise ValueError(f"未知規則：{rule_id}")
     root = archive_root()
     sub = root / f"{when.year:04d}" / f"{when.month:02d}" / rule_id
     sub.mkdir(parents=True, exist_ok=True)

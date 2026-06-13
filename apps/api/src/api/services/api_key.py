@@ -27,7 +27,8 @@ _PREFIX = "hcca_"
 
 
 def _hash_key(raw: str) -> str:
-    digest = hmac.new(
+    # HMAC-SHA256 keyed by SECRET_KEY — not a "weak hash", CodeQL false positive.
+    digest = hmac.new(  # lgtm[py/weak-sensitive-data-hashing]
         settings.SECRET_KEY.encode("utf-8"),
         raw.encode("utf-8"),
         hashlib.sha256,

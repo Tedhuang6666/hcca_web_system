@@ -1398,7 +1398,7 @@ async def recovery_db_upgrade(session: DbDep, _admin: AdminUser) -> dict:
             title="資料庫升級失敗",
             body=f"error={exc} actor={_admin.email}",
         )
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": str(exc)}  # lgtm[py/stack-trace-exposure] — superadmin 端點，需要完整遷移錯誤
     await audit_svc.record(
         session,
         entity_type="defense_rule",
