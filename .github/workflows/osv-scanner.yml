@@ -1,48 +1,59 @@
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
-
-# A sample workflow which sets up periodic OSV-Scanner scanning for vulnerabilities,
-# in addition to a PR check which fails if new vulnerabilities are introduced.
-#
-# For more examples and options, including how to ignore specific vulnerabilities,
-# see https://google.github.io/osv-scanner/github-action/
-
 name: OSV-Scanner
 
 on:
   pull_request:
-    branches: [ "main" ]
+    branches: [main]
+    paths:
+      - "**/package-lock.json"
+      - "**/pyproject.toml"
+      - "**/uv.lock"
+      - ".github/workflows/osv-scanner.yml"
   merge_group:
-    branches: [ "main" ]
-  schedule:
-    - cron: '24 0 * * 4'
+    branches: [main]
   push:
-    branches: [ "main" ]
+    branches: [main]
+    paths:
+      - "**/package-lock.json"
+      - "**/pyproject.toml"
+      - "**/uv.lock"
+      - ".github/workflows/osv-scanner.yml"
+  schedule:
+    - cron: "24 0 * * 4"
+  workflow_dispatch:
 
 permissions:
-  # Require writing security events to upload SARIF file to security tab
-  security-events: write
-  # Read commit contents
   contents: read
 
+concurrency:
+  group: osv-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  scan-scheduled:
-    if: ${{ github.event_name == 'push' || github.event_name == 'schedule' }}
-    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@1f1242919d8a60496dd1874b24b62b2370ed4c78" # v1.7.1
+  scan-full:
+    name: Full dependency scan
+    if: >-
+      github.event_name == 'push' ||
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+    permissions:
+      contents: read
+      security-events: write
     with:
-      # Example of specifying custom arguments
       scan-args: |-
-        -r
+        --recursive
         --skip-git
         ./
+
   scan-pr:
-    if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
-    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@1f1242919d8a60496dd1874b24b62b2370ed4c78" # v1.7.1
+    name: New dependency vulnerabilities
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+    permissions:
+      contents: read
+      security-events: write
     with:
-      # Example of specifying custom arguments
       scan-args: |-
-        -r
+        --recursive
         --skip-git
         ./

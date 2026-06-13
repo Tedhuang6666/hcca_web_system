@@ -18,16 +18,21 @@ on:
   pull_request:
     paths:
       - "apps/web/**"
+      - ".lighthouseci/**"
       - ".github/workflows/a11y.yml"
   push:
     branches: [main]
     paths:
       - "apps/web/**"
+      - ".lighthouseci/**"
       - ".github/workflows/a11y.yml"
 
 permissions:
   contents: read
-  pull-requests: write
+
+concurrency:
+  group: a11y-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   axe:
@@ -35,10 +40,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Set up Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: "20"
           cache: "npm"
@@ -64,7 +71,7 @@ jobs:
           cp -r .next/static .next/standalone/.next/static
           cp -r public .next/standalone/public
           HOSTNAME=127.0.0.1 PORT=3000 node .next/standalone/server.js &
-          for i in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             if curl -sf http://127.0.0.1:3000/ > /dev/null; then
               echo "Next.js is up"; exit 0;
             fi
@@ -75,7 +82,7 @@ jobs:
       - name: Install axe-core CLI + Chrome-matched ChromeDriver
         run: |
           set -e
-          npm install -g @axe-core/cli@4.9
+          npm install -g @axe-core/cli@4.11.3
           # @axe-core/cli 內建的 chromedriver 版本會比 runner 上（會自動更新的）Chrome
           # 還新，造成 "session not created" → 退出碼 2。改裝一支對應已安裝 Chrome
           # 版本的 chromedriver（DETECT_CHROMEDRIVER_VERSION 會自動偵測），稍後用
@@ -100,7 +107,7 @@ jobs:
 
       - name: Upload axe report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: axe-report
           path: axe-report.json
@@ -111,10 +118,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Set up Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: "20"
           cache: "npm"
@@ -137,7 +146,7 @@ jobs:
           cp -r .next/static .next/standalone/.next/static
           cp -r public .next/standalone/public
           HOSTNAME=127.0.0.1 PORT=3000 node .next/standalone/server.js &
-          for i in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             if curl -sf http://127.0.0.1:3000/ > /dev/null; then
               echo "Next.js is up"; exit 0;
             fi
@@ -146,7 +155,7 @@ jobs:
           echo "::error::Next.js failed to start within 60s"; exit 1
 
       - name: Lighthouse CI
-        uses: treosh/lighthouse-ci-action@v12
+        uses: treosh/lighthouse-ci-action@3e7e23fb74242897f95c0ba9cabad3d0227b9b18 # 12.6.2
         with:
           urls: |
             http://127.0.0.1:3000/
