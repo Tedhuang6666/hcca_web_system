@@ -26,7 +26,7 @@ dependencies = [
     "psycopg2-binary>=2.9.11",
     "pyjwt[crypto]>=2.12.1",
     "pyotp>=2.9.0",
-    "pypdf>=6.11.0",
+    "pypdf>=6.12.0",
     "pywebpush>=2.1.2",
     "python-dotenv>=1.2.2",
     # redis-py 客戶端版本（非 Redis 伺服器版本）。務必鎖 <6：
