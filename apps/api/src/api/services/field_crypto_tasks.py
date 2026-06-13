@@ -69,7 +69,7 @@ async def _rotate_model_async(
             except FieldEncryptionNotConfigured:
                 return {"status": "skipped", "reason": "keys cleared during run"}
             except Exception:
-                logger.exception("rotate token failed for %s.id=%s", model_class.__name__, row.id)
+                logger.exception("rotate token failed for %s.id=%s", model_class.__name__, row.id)  # nosemgrep: python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure
                 continue
             if new_token != current:
                 setattr(row, enc_attr, new_token)

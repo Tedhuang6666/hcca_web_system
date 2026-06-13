@@ -21,7 +21,7 @@ oauth.register(
     name="discord",
     client_id=settings.DISCORD_CLIENT_ID,
     client_secret=settings.DISCORD_CLIENT_SECRET,
-    access_token_url="https://discord.com/api/oauth2/token",
+    access_token_url="https://discord.com/api/oauth2/token",  # nosec B106
     authorize_url="https://discord.com/api/oauth2/authorize",
     api_base_url="https://discord.com/api/",
     client_kwargs={"scope": "identify"},

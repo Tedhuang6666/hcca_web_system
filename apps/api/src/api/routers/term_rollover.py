@@ -124,7 +124,7 @@ async def dry_run(body: DryRunBody, db: DbDep, _u: RolloverUser) -> DryRunOut:
 
 @router.post("/execute", response_model=ExecuteOut, summary="實際執行換屆")
 async def execute_rollover(body: ExecuteBody, db: DbDep, user: RolloverUser) -> ExecuteOut:
-    if body.confirm_token != "換屆":
+    if body.confirm_token != "換屆":  # nosec B105
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="confirm_token 必須為「換屆」字串",
@@ -172,7 +172,7 @@ class RollbackBody(BaseModel):
 async def rollback_rollover(
     batch_id: str, body: RollbackBody, db: DbDep, user: RolloverUser
 ) -> RollbackOut:
-    if body.confirm_token != "復原":
+    if body.confirm_token != "復原":  # nosec B105
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="confirm_token 必須為「復原」字串",

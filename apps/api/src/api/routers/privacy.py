@@ -129,7 +129,7 @@ async def anonymize_user(
     user_id: uuid.UUID, body: AnonymizeBody, db: DbDep, requester: PrivacyUser
 ) -> AnonymizeOut:
     # 二次確認：前端 UI 要求使用者打字「假名化」
-    if body.confirm_token != "假名化":
+    if body.confirm_token != "假名化":  # nosec B105
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="confirm_token 必須為「假名化」字串",

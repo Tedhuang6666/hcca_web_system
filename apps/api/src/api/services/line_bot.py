@@ -55,7 +55,7 @@ _line_config = Configuration(access_token=settings.LINE_CHANNEL_ACCESS_TOKEN or 
 _LINK_CODE_TTL_SECONDS = 10 * 60
 _LINK_CODE_PREFIX = "line:link:"
 _OPEN_TOKEN_TTL_SECONDS = 5 * 60
-_OPEN_TOKEN_PREFIX = "line:open:"
+_OPEN_TOKEN_PREFIX = "line:open:"  # nosec B105
 
 
 def is_configured() -> bool:

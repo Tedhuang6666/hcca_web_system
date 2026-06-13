@@ -40,7 +40,7 @@ from api.services.permission import active_tenure_filter
 
 logger = logging.getLogger(__name__)
 
-_OPEN_TOKEN_PREFIX = "discord:open:"
+_OPEN_TOKEN_PREFIX = "discord:open:"  # nosec B105
 _OPEN_TOKEN_TTL_SECONDS = 5 * 60
 
 

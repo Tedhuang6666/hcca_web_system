@@ -303,7 +303,7 @@ class _RedisBroker:
                 await self._mgr._local_broadcast_all(message)
 
     async def _listen(self) -> None:
-        assert self._pubsub is not None
+        assert self._pubsub is not None  # nosec B101
         try:
             while not self._stopping.is_set():
                 msg = await self._pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)

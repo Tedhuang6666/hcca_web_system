@@ -62,7 +62,7 @@ def _vote_tally(vote: MeetingVote, eligible_count: int, present_voters: int = 0)
             "abstain": 0,
             "total": present_voters,
             "eligible": eligible_count,
-            "pass_threshold": 0,
+            "pass_threshold": 0,  # nosec B105
             "threshold_type": threshold_type,
             "passed": True,
             "option_counts": {},
@@ -86,7 +86,7 @@ def _vote_tally(vote: MeetingVote, eligible_count: int, present_voters: int = 0)
             "abstain": 0,
             "total": total,
             "eligible": eligible_count,
-            "pass_threshold": 0,
+            "pass_threshold": 0,  # nosec B105
             "threshold_type": threshold_type,
             "passed": bool(vote.result_label),
             "option_counts": option_counts,
