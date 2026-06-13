@@ -1095,23 +1095,23 @@ export default function DocumentDetailPage() {
             const previews: Array<{ key: string; label: string; src: string }> = [];
 
             // Google Drive 連結
-            doc.attachments
-              .filter(a => {
-                if (!a.link_url) return false;
-                const m = a.link_url.match(/drive\.google\.com\/file\/d\/([^/]+)/);
-                return Boolean(m);
-              })
-              .slice(0, 2)
-              .forEach(a => {
-                const m = a.link_url!.match(/drive\.google\.com\/file\/d\/([^/]+)/);
-                if (m) {
-                  previews.push({
-                    key: `gdrive-${a.id}`,
-                    label: `Google Drive 預覽：${a.filename}`,
-                    src: `https://drive.google.com/file/d/${m[1]}/preview`,
-                  });
-                }
-              });
+            for (const attachment of doc.attachments) {
+              if (previews.length >= 2) break;
+              if (!attachment.link_url) continue;
+              try {
+                const url = new URL(attachment.link_url);
+                if (url.protocol !== "https:" || url.hostname !== "drive.google.com") continue;
+                const match = url.pathname.match(/^\/file\/d\/([^/]+)(?:\/|$)/);
+                if (!match) continue;
+                previews.push({
+                  key: `gdrive-${attachment.id}`,
+                  label: `Google Drive 預覽：${attachment.filename}`,
+                  src: `https://drive.google.com/file/d/${encodeURIComponent(match[1])}/preview`,
+                });
+              } catch {
+                // 無效網址不提供預覽。
+              }
+            }
 
             return previews.map(p => (
               <div key={p.key} className="card p-4">

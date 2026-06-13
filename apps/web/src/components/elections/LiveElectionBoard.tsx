@@ -108,12 +108,14 @@ export default function LiveElectionBoard({
   );
 
   // 加票閃光 + 超前偵測
-  const prevVotes = useRef<Record<string, number>>({});
-  const prevRank = useRef<Record<string, number>>({});
+  const prevVotes = useRef<Map<string, number>>(new Map());
+  const prevRank = useRef<Map<string, number>>(new Map());
   const [flashIds, setFlashIds] = useState<Set<string>>(new Set());
   const [surgeIds, setSurgeIds] = useState<Set<string>>(new Set());
   // 每位候選人最近一次加票：key 用於重播動畫、count 決定飄入的選票張數
-  const [flyIns, setFlyIns] = useState<Record<string, { key: number; count: number; gain: number }>>({});
+  const [flyIns, setFlyIns] = useState<Map<string, { key: number; count: number; gain: number }>>(
+    new Map(),
+  );
   // 飄票排程計時器存在 ref，不隨每次開票更新被取消（否則清除排程被砍 → 殘留節點重播）
   const flyTimers = useRef<number[]>([]);
   useEffect(() => () => flyTimers.current.forEach((t) => window.clearTimeout(t)), []);
@@ -123,22 +125,22 @@ export default function LiveElectionBoard({
     const flash = new Set<string>();
     const surge = new Set<string>();
     type Fly = { key: number; count: number; gain: number };
-    const flyNow: Record<string, Fly> = {};
-    const flyAfterMove: Record<string, Fly> = {};
+    const flyNow = new Map<string, Fly>();
+    const flyAfterMove = new Map<string, Fly>();
     sortedCandidates.forEach((candidate, index) => {
-      const pv = prevVotes.current[candidate.candidate_id];
-      const pr = prevRank.current[candidate.candidate_id];
+      const pv = prevVotes.current.get(candidate.candidate_id);
+      const pr = prevRank.current.get(candidate.candidate_id);
       if (pv !== undefined && candidate.votes > pv) {
         flash.add(candidate.candidate_id);
         const gain = candidate.votes - pv;
         const entry: Fly = { key: performance.now() + index, count: Math.min(gain, 6), gain };
         // 若同時換位，等候列滑動完再播選票，避免動畫橫跨新舊兩個位置
-        if (pr !== undefined && pr !== index) flyAfterMove[candidate.candidate_id] = entry;
-        else flyNow[candidate.candidate_id] = entry;
+        if (pr !== undefined && pr !== index) flyAfterMove.set(candidate.candidate_id, entry);
+        else flyNow.set(candidate.candidate_id, entry);
       }
       if (pr !== undefined && index < pr) surge.add(candidate.candidate_id);
-      prevVotes.current[candidate.candidate_id] = candidate.votes;
-      prevRank.current[candidate.candidate_id] = index;
+      prevVotes.current.set(candidate.candidate_id, candidate.votes);
+      prevRank.current.set(candidate.candidate_id, index);
     });
     const timers: number[] = [];
     if (flash.size) {
@@ -159,20 +161,20 @@ export default function LiveElectionBoard({
       }, ms);
       flyTimers.current.push(t);
     };
-    const cleanup = (batch: Record<string, Fly>) =>
+    const cleanup = (batch: Map<string, Fly>) =>
       setFlyIns((prev) => {
-        const next = { ...prev };
-        for (const cid of Object.keys(batch)) {
-          if (next[cid]?.key === batch[cid].key) delete next[cid];
+        const next = new Map(prev);
+        for (const [candidateId, entry] of batch) {
+          if (next.get(candidateId)?.key === entry.key) next.delete(candidateId);
         }
         return next;
       });
-    if (Object.keys(flyNow).length) {
-      setFlyIns((prev) => ({ ...prev, ...flyNow }));
+    if (flyNow.size) {
+      setFlyIns((prev) => new Map([...prev, ...flyNow]));
       persist(() => cleanup(flyNow), FLY_LIFE);
     }
-    if (Object.keys(flyAfterMove).length) {
-      persist(() => setFlyIns((prev) => ({ ...prev, ...flyAfterMove })), 680);
+    if (flyAfterMove.size) {
+      persist(() => setFlyIns((prev) => new Map([...prev, ...flyAfterMove])), 680);
       persist(() => cleanup(flyAfterMove), 680 + FLY_LIFE);
     }
     return () => timers.forEach((t) => window.clearTimeout(t));
@@ -514,7 +516,7 @@ export default function LiveElectionBoard({
               const barWidth = summary.valid_votes > 0 ? candidate.percentage : 0;
               const flashing = flashIds.has(candidate.candidate_id);
               const surging = surgeIds.has(candidate.candidate_id);
-              const fly = flyIns[candidate.candidate_id];
+              const fly = flyIns.get(candidate.candidate_id);
               const medal = index === 0 ? "#e8c970" : index === 1 ? "#cbd5e1" : index === 2 ? "#d8a06a" : null;
               return (
                 <article

@@ -35,6 +35,13 @@ class RequestContextFilter(logging.Filter):
         return True
 
 
+class SingleLineMessageFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.msg = record.getMessage().replace("\r", "\\r").replace("\n", "\\n")
+        record.args = ()
+        return True
+
+
 class JsonLogFormatter(logging.Formatter):
     _reserved = frozenset(
         {
@@ -114,7 +121,8 @@ def configure_logging() -> None:
             "version": 1,
             "disable_existing_loggers": False,
             "filters": {
-                "request_context": {"()": "api.core.structured_logging.RequestContextFilter"}
+                "single_line": {"()": "api.core.structured_logging.SingleLineMessageFilter"},
+                "request_context": {"()": "api.core.structured_logging.RequestContextFilter"},
             },
             "formatters": {"default": formatter},
             "handlers": {
@@ -122,7 +130,7 @@ def configure_logging() -> None:
                     "class": "logging.StreamHandler",
                     "stream": sys.stdout,
                     "formatter": "default",
-                    "filters": ["request_context"],
+                    "filters": ["single_line", "request_context"],
                 }
             },
             "root": {
@@ -145,6 +153,7 @@ def configure_logging() -> None:
 __all__ = [
     "JsonLogFormatter",
     "RequestContextFilter",
+    "SingleLineMessageFilter",
     "configure_logging",
     "get_request_id",
     "reset_request_id",

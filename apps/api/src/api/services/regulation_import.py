@@ -10,9 +10,10 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from io import BytesIO
-from xml.etree import ElementTree as ET
 from zipfile import BadZipFile, ZipFile
 
+from defusedxml import ElementTree as ET
+from defusedxml.common import DefusedXmlException
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 
@@ -304,12 +305,10 @@ def _extract_docx_paragraphs(file_bytes: bytes, *, filename: str | None = None) 
     if len(document_xml) > _MAX_DOCUMENT_XML_BYTES:
         raise ValueError("DOCX 內容過大，無法處理")
 
-    # 防 XML 實體展開攻擊（billion laughs / quadratic blowup）：合法 OOXML 正文絕不含
-    # DOCTYPE 或實體宣告，出現即視為惡意而拒絕（stdlib ElementTree 會展開內部實體）。
-    if b"<!DOCTYPE" in document_xml or b"<!ENTITY" in document_xml:
-        raise ValueError("DOCX 內含不被允許的 XML 宣告")
-
-    root = ET.fromstring(document_xml)
+    try:
+        root = ET.fromstring(document_xml)
+    except (DefusedXmlException, ET.ParseError) as exc:
+        raise ValueError("DOCX 內含無效或不安全的 XML") from exc
     paragraphs: list[str] = []
     for paragraph in root.findall(".//w:p", _WORD_NS):
         parts = [text.text or "" for text in paragraph.findall(".//w:t", _WORD_NS)]

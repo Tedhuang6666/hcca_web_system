@@ -10,6 +10,7 @@ import uuid
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import bleach
 from itsdangerous import URLSafeTimedSerializer
@@ -104,9 +105,20 @@ def absolutize_url(url: str | None) -> str:
     return ""
 
 
+def safe_link_url(url: str | None) -> str:
+    """只保留 email 連結允許的絕對 URL 協定。"""
+    value = (url or "").strip()
+    if not value:
+        return ""
+    return value if urlparse(value).scheme.lower() in _ALLOWED_PROTOCOLS else ""
+
+
 def _nl2br(value: str | None) -> Markup:
     """純文字換行轉 <br>（先逐行 escape 再以 <br> 連接，輸出 safe Markup）。"""
-    return Markup("<br>".join(escape(line) for line in (value or "").splitlines()))
+    # 所有不受信任片段都先 escape，Markup 只標記固定的 <br> 分隔符。
+    return Markup(  # nosec B704
+        "<br>".join(escape(line) for line in (value or "").splitlines())
+    )
 
 
 @lru_cache(maxsize=1)
