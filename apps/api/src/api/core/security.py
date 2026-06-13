@@ -135,7 +135,9 @@ async def register_active_token(user_id: str, jti: str | None, ttl_seconds: int)
         # 用 refresh token 期限作為集合的存活上限
         await redis_client.expire(key, settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400)
     except Exception:
-        logger.warning("register_active_token failed user=%s", user_id, exc_info=True)  # nosemgrep: python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure
+        logger.warning(
+            "register_active_token failed user=%s", user_id, exc_info=True
+        )  # nosemgrep: python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure
 
 
 async def revoke_user(user_id: str, *, ttl_seconds: int | None = None) -> int:
@@ -159,5 +161,7 @@ async def revoke_user(user_id: str, *, ttl_seconds: int | None = None) -> int:
         pipe.setex(f"{BLACKLIST_JTI_PREFIX}{j}", ttl, "1")
     pipe.delete(key)
     await pipe.execute()
-    logger.info("revoked %d tokens for user=%s", len(jtis), user_id)  # nosemgrep: python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure
+    logger.info(
+        "revoked %d tokens for user=%s", len(jtis), user_id
+    )  # nosemgrep: python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure
     return len(jtis)
