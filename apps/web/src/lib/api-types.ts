@@ -1162,7 +1162,7 @@ export interface paths {
         put?: never;
         /**
          * 升級資料庫到最新版本
-         * @description 執行 alembic upgrade head。失敗時以 ok=False + error 回傳完整訊息供超管除錯。
+         * @description 執行 alembic upgrade head。
          */
         post: operations["recovery_db_upgrade_admin_system_recovery_db_upgrade_post"];
         delete?: never;
