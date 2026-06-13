@@ -50,7 +50,11 @@ from api.services.meeting._session import (
 )
 from api.services.meeting._voting import (
     _format_resolution as _format_resolution,
+)
+from api.services.meeting._voting import (
     _vote_tally as _vote_tally,
+)
+from api.services.meeting._voting import (
     add_recusal,
     attendance_summary,
     cast_ballot,

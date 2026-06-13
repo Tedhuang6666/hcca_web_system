@@ -4,7 +4,6 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { mealApi } from "@/lib/api";
-import { today } from "@/lib/dateUtils";
 import type {
   MealOrderOut,
   MealOrderStatus,
