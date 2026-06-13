@@ -4,7 +4,7 @@ import warnings
 from typing import Annotated
 from urllib.parse import urlsplit
 
-from pydantic import Field, PostgresDsn, RedisDsn, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 _FALLBACK_SIGNING_KEY = "CHANGE_ME_IN_PRODUCTION_USE_256_BIT_KEY"
@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     ACCESS_LOG_ENABLED: bool = True
 
     # --- 資料庫設定 ---
-    DATABASE_URL: PostgresDsn = Field(
+    DATABASE_URL: str = Field(
         default="postgresql+asyncpg://postgres:password@localhost:5432/campus_platform"
     )
     DATABASE_URL_SYNC: str = Field(
@@ -65,7 +65,7 @@ class Settings(BaseSettings):
     SLOW_REQUEST_THRESHOLD_MS: int = Field(default=1000, ge=1)
 
     # --- Redis 設定 ---
-    REDIS_URL: RedisDsn = Field(default="redis://localhost:6379/0")
+    REDIS_URL: str = Field(default="redis://localhost:6379/0")
     REDIS_MAX_CONNECTIONS: int = Field(default=50, ge=1)
     REDIS_SOCKET_TIMEOUT: float = Field(default=2.0, gt=0)
     REDIS_HEALTH_CHECK_INTERVAL: int = Field(default=30, ge=1)
