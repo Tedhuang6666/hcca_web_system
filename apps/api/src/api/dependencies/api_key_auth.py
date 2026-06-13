@@ -19,13 +19,13 @@ import logging
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
-
-logger = logging.getLogger(__name__)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.models.api_key import ApiKey
 from api.services import api_key as api_key_svc
+
+logger = logging.getLogger(__name__)
 
 
 async def api_key_required(

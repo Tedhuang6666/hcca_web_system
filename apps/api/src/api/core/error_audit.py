@@ -14,11 +14,11 @@ import time
 import traceback
 from collections import deque
 from dataclasses import dataclass
-
-logger = logging.getLogger(__name__)
 from typing import Any
 
 from api.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 _RING_MAX = 100
 _MESSAGE_MAX = 300
