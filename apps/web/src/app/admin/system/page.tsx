@@ -1040,6 +1040,59 @@ function ModulesPanel() {
   const severityLabel = (sev: string) =>
     sev === "CRITICAL" ? "🔴 嚴重" : sev === "HIGH" ? "🟠 高" : "🟡 一般";
 
+  const stateControls = (mod: ModuleStatus) => (
+    <div
+      className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--bg-hover)] p-1"
+      role="group"
+      aria-label={`${mod.label}模組狀態`}
+    >
+      {(
+        [
+          { label: "正常", on: false, mode: "maintenance" },
+          { label: "維護", on: true, mode: "maintenance" },
+          { label: "關閉", on: true, mode: "closed" },
+        ] as const
+      ).map((option) => {
+        const selected =
+          option.on === mod.on && (!option.on || option.mode === mod.mode);
+        return (
+          <button
+            key={option.label}
+            type="button"
+            onClick={() => setMaintenance(mod, option.on, option.mode)}
+            disabled={busy === mod.id || selected}
+            aria-pressed={selected}
+            className="rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors disabled:cursor-default"
+            style={{
+              background: selected
+                ? option.mode === "closed"
+                  ? "var(--danger)"
+                  : option.on
+                    ? "var(--warning)"
+                    : "var(--success)"
+                : "transparent",
+              color: selected ? "#fff" : "var(--text-secondary)",
+            }}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  const reasonInput = (mod: ModuleStatus) => (
+    <input
+      type="text"
+      value={reasons[mod.id] ?? mod.reason ?? ""}
+      onChange={(e) =>
+        setReasons((prev) => ({ ...prev, [mod.id]: e.target.value }))
+      }
+      placeholder="例如：資料異常修復中"
+      className="input w-full"
+    />
+  );
+
   return (
     <Panel
       title="模組維護"
@@ -1059,7 +1112,55 @@ function ModulesPanel() {
       {modules.length === 0 ? (
         <EmptyRow text={loading ? "載入中…" : "沒有可管理的模組。"} />
       ) : (
-        <div className="overflow-x-auto">
+        <>
+          <div className="grid gap-3 md:hidden">
+            {modules.map((mod) => (
+              <article
+                key={mod.id}
+                className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-medium text-[var(--text-primary)]">{mod.label}</h3>
+                    <p className="mt-1 text-xs text-[var(--text-muted)]">{sourceLabel(mod)}</p>
+                  </div>
+                  <StatusPill active={!mod.on}>{sourceLabel(mod)}</StatusPill>
+                </div>
+                <div className="mt-4">{stateControls(mod)}</div>
+                <div className="mt-3">{reasonInput(mod)}</div>
+                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-[var(--text-muted)]">
+                  <span>近 60s 5xx：{mod.recent_5xx_count}</span>
+                  <span>1h 跳閘：{mod.trip_count}</span>
+                  <span>
+                    嚴重度：{mod.trip_count > 0 ? severityLabel(mod.max_severity) : "—"}
+                  </span>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {mod.on && mod.mode !== "closed" && (
+                    <button
+                      type="button"
+                      onClick={() => recover(mod)}
+                      disabled={busy === mod.id}
+                      className="btn-sm btn-primary"
+                    >
+                      <RotateCcw size={14} aria-hidden />
+                      嘗試恢復
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => restart(mod)}
+                    disabled={busy === mod.id}
+                    className="btn-sm btn-ghost"
+                  >
+                    <RotateCcw size={14} aria-hidden />
+                    重啟
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+          <div className="hidden overflow-x-auto md:block">
           <table className="w-full min-w-[760px] text-sm">
             <thead className="text-xs text-[var(--text-muted)]">
               <tr className="border-b border-[var(--border)]">
@@ -1077,7 +1178,10 @@ function ModulesPanel() {
                 <tr key={mod.id} className="border-b border-[var(--border)] last:border-0 align-middle">
                   <td className="py-2 text-[var(--text-primary)]">{mod.label}</td>
                   <td>
-                    <StatusPill active={!mod.on}>{sourceLabel(mod)}</StatusPill>
+                    <div className="flex flex-col items-start gap-2 py-2">
+                      <StatusPill active={!mod.on}>{sourceLabel(mod)}</StatusPill>
+                      {stateControls(mod)}
+                    </div>
                   </td>
                   <td className="text-right tabular-nums text-[var(--text-secondary)]">
                     {mod.recent_5xx_count}
@@ -1089,49 +1193,10 @@ function ModulesPanel() {
                     {mod.trip_count > 0 ? severityLabel(mod.max_severity) : "—"}
                   </td>
                   <td className="pr-3">
-                    <input
-                      type="text"
-                      value={reasons[mod.id] ?? mod.reason ?? ""}
-                      onChange={(e) =>
-                        setReasons((prev) => ({ ...prev, [mod.id]: e.target.value }))
-                      }
-                      placeholder="例如：資料異常修復中"
-                      className="input w-full"
-                    />
+                    {reasonInput(mod)}
                   </td>
                   <td className="text-right">
                     <div className="inline-flex gap-2">
-                      {mod.on ? (
-                        <button
-                          type="button"
-                          onClick={() => setMaintenance(mod, false)}
-                          disabled={busy === mod.id}
-                          className="btn-sm btn-secondary"
-                        >
-                          恢復正常
-                        </button>
-                      ) : (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => setMaintenance(mod, true, "maintenance")}
-                            disabled={busy === mod.id}
-                            className="btn-sm btn-danger-ghost"
-                          >
-                            <Power size={14} aria-hidden />
-                            開啟維護
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setMaintenance(mod, true, "closed")}
-                            disabled={busy === mod.id}
-                            className="btn-sm btn-danger-ghost"
-                          >
-                            <Ban size={14} aria-hidden />
-                            關閉模組
-                          </button>
-                        </>
-                      )}
                       {mod.on && mod.mode !== "closed" && (
                         <button
                           type="button"
@@ -1159,7 +1224,8 @@ function ModulesPanel() {
               ))}
             </tbody>
           </table>
-        </div>
+          </div>
+        </>
       )}
     </Panel>
   );
