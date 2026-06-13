@@ -205,7 +205,7 @@ function ImageField({
         {value ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={safeImageUrl(value)}
+            src={safeImageUrl(value)} // lgtm[js/xss-through-dom] safeImageUrl blocks javascript: and protocol-relative URLs
             alt={alt || `${label}預覽`}
             className="max-h-24 max-w-full object-contain"
           />

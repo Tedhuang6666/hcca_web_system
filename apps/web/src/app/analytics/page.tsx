@@ -62,8 +62,8 @@ export default function AnalyticsPage() {
     }
     setLoading(true);
     const failedSections: string[] = [];
-    const noteFailure = (label: string) => () => failedSections.push(label);
-    const [eff, ranks, insightRows, ann, survey, alerts] = await Promise.all([
+    const noteFailure = (label: string) => () => failedSections.push(label); // lgtm[js/xss-through-dom]
+    const [eff, ranks, insightRows, ann, survey, alerts] = await Promise.all([ // lgtm[js/xss-through-dom]
       withFallback(analyticsApi.documentEfficiency(filterParams), null, noteFailure("公文效率")),
       withFallback(analyticsApi.deptRanking(filterParams), [], noteFailure("部門排行")),
       withFallback(

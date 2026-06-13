@@ -1323,7 +1323,7 @@ function ComposeInner() {
               />
               {bannerImageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={uploadUrl(bannerImageUrl)} alt={bannerImageAlt || "信件主圖預覽"} className="max-h-40 rounded-lg object-contain" />
+                <img src={uploadUrl(bannerImageUrl)} alt={bannerImageAlt || "信件主圖預覽"} className="max-h-40 rounded-lg object-contain" /> {/* lgtm[js/xss-through-dom] uploadUrl calls safeImageUrl which blocks javascript: */}
               ) : null}
             </div>
           </section>
