@@ -2,7 +2,7 @@
 
 責任：
 - 產生密碼學安全的 raw key（一次性回給呼叫端、不存明文）
-- 存 keyed BLAKE2b digest + key_prefix
+- 存 salted scrypt digest + key_prefix
 - 透過 hash 反查、驗證有效性（active / not revoked / not expired）
 - revoke / list / 統計
 
@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import secrets
@@ -20,23 +21,46 @@ from datetime import UTC, datetime
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.config import settings
 from api.models.api_key import ApiKey
 
 _PREFIX = "hcca_"
+_SCRYPT_SALT_BYTES = 16
 
 
 def _hash_key(raw: str) -> str:
-    digest = hashlib.blake2b(
+    salt = secrets.token_bytes(_SCRYPT_SALT_BYTES)
+    digest = hashlib.scrypt(
         raw.encode("utf-8"),
-        key=settings.SECRET_KEY.encode("utf-8"),
-        digest_size=48,
-    ).hexdigest()
-    return f"blake2b-keyed:{digest}"
+        salt=salt,
+        n=2**14,
+        r=8,
+        p=1,
+        dklen=32,
+    )
+    return f"scrypt:{salt.hex()}:{digest.hex()}"
+
+
+def _verify_key(raw: str, stored: str) -> bool:
+    try:
+        algorithm, salt_hex, digest_hex = stored.split(":", 2)
+        if algorithm != "scrypt":
+            return False
+        candidate = hashlib.scrypt(
+            raw.encode("utf-8"),
+            salt=bytes.fromhex(salt_hex),
+            n=2**14,
+            r=8,
+            p=1,
+            dklen=32,
+        )
+        expected = bytes.fromhex(digest_hex)
+    except (ValueError, TypeError):
+        return False
+    return hmac.compare_digest(candidate, expected)
 
 
 def generate_raw_key() -> tuple[str, str]:
-    """產生 raw key 字串並計算 keyed digest；回傳 (raw, digest)。"""
+    """產生 raw key 字串並計算 salted password hash；回傳 (raw, hash)。"""
     raw = _PREFIX + secrets.token_urlsafe(32)
     return raw, _hash_key(raw)
 
@@ -51,7 +75,7 @@ async def create_api_key(
     expires_at: datetime | None,
 ) -> tuple[ApiKey, str]:
     """建立一把 key；回傳 (model row, 一次性明文)。"""
-    raw, key_hash = generate_raw_key()
+    raw, key_hash = await asyncio.to_thread(generate_raw_key)
     row = ApiKey(
         name=name,
         key_prefix=raw[: len(_PREFIX) + 8],
@@ -111,18 +135,14 @@ async def find_active_by_raw(db: AsyncSession, raw_key: str) -> ApiKey | None:
     """API auth dependency 用。回傳通過所有 active 檢查的 ApiKey；否則 None。"""
     if not raw_key or not raw_key.startswith(_PREFIX):
         return None
-    key_hash = _hash_key(raw_key)
     key_prefix = raw_key[: len(_PREFIX) + 8]
     stmt = select(ApiKey).where(ApiKey.key_prefix == key_prefix)
     candidates = (await db.execute(stmt)).scalars().all()
-    row = next(
-        (
-            candidate
-            for candidate in candidates
-            if hmac.compare_digest(candidate.key_hash, key_hash)
-        ),
-        None,
-    )
+    row = None
+    for candidate in candidates:
+        if await asyncio.to_thread(_verify_key, raw_key, candidate.key_hash):
+            row = candidate
+            break
     if row is None:
         return None
     if not row.is_active or row.revoked_at is not None:

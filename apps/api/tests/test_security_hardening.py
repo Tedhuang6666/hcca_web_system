@@ -69,9 +69,39 @@ def test_sensitive_tokens_use_keyed_or_password_hashes() -> None:
     backup_hash = mfa._hash_backup_code("ABCD-EFGH")
 
     assert raw.startswith("hcca_")
-    assert key_hash.startswith("blake2b-keyed:")
+    assert key_hash.startswith("scrypt:")
+    assert api_key._verify_key(raw, key_hash)
+    assert not api_key._verify_key(f"{raw}x", key_hash)
     assert backup_hash.startswith("scrypt:")
     assert "ABCD" not in backup_hash
+
+
+@pytest.mark.asyncio
+async def test_scrypt_api_key_authenticates(
+    db_session: AsyncSession,
+) -> None:
+    raw = "hcca_" + "b" * 43
+    owner = User(
+        id=uuid.uuid4(),
+        email="scrypt-key@example.com",
+        display_name="Scrypt Key",
+        is_verified=True,
+    )
+    row = ApiKey(
+        name="scrypt",
+        key_prefix=raw[:13],
+        key_hash=api_key._hash_key(raw),
+        owner_user_id=owner.id,
+        scopes=[],
+        rate_limit_per_minute=60,
+        is_active=True,
+    )
+    db_session.add_all([owner, row])
+    await db_session.flush()
+
+    authenticated = await api_key.find_active_by_raw(db_session, raw)
+
+    assert authenticated is row
 
 
 @pytest.mark.asyncio

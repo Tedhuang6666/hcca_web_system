@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { analyticsApi, withFallback } from "@/lib/api";
+import { analyticsApi } from "@/lib/api";
 import { safeInternalHref } from "@/lib/config";
 import type {
   AnalyticsInsightItem,
@@ -14,6 +14,10 @@ import type {
   SurveyParticipationItem,
 } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
+
+function settledValue<T>(result: PromiseSettledResult<T>, fallback: T): T {
+  return result.status === "fulfilled" ? result.value : fallback;
+}
 
 function fmtHours(value: number | null) {
   if (value === null) return "尚無資料";
@@ -61,39 +65,31 @@ export default function AnalyticsPage() {
       return;
     }
     setLoading(true);
-    let hasFailure = false;
-    const noteFailure = () => {
-      hasFailure = true;
-    };
-    const [eff, ranks, insightRows, ann, survey, alerts] = await Promise.all([
-      withFallback(analyticsApi.documentEfficiency(filterParams), null, noteFailure),
-      withFallback(analyticsApi.deptRanking(filterParams), [], noteFailure),
-      withFallback(
-        analyticsApi.insights(12).then((res) => res.items),
-        [],
-        noteFailure,
-      ),
-      withFallback(
-        analyticsApi.announcementParticipation({ ...filterParams, limit: 8 }),
-        [],
-        noteFailure,
-      ),
-      withFallback(
-        analyticsApi.surveyParticipation({ ...filterParams, limit: 8 }),
-        [],
-        noteFailure,
-      ),
+    const results = await Promise.allSettled([
+      analyticsApi.documentEfficiency(filterParams),
+      analyticsApi.deptRanking(filterParams),
+      analyticsApi.insights(12).then((res) => res.items),
+      analyticsApi.announcementParticipation({ ...filterParams, limit: 8 }),
+      analyticsApi.surveyParticipation({ ...filterParams, limit: 8 }),
       canViewPending
-        ? withFallback(analyticsApi.pendingAlerts(48), [], noteFailure)
+        ? analyticsApi.pendingAlerts(48)
         : Promise.resolve([]),
-    ]);
+    ] as const);
+    const [effResult, ranksResult, insightsResult, annResult, surveyResult, alertsResult] =
+      results;
+    const eff = settledValue(effResult, null);
+    const ranks = settledValue(ranksResult, []);
+    const insightRows = settledValue(insightsResult, []);
+    const ann = settledValue(annResult, []);
+    const survey = settledValue(surveyResult, []);
+    const alerts = settledValue(alertsResult, []);
     setEfficiency(eff);
     setRanking(ranks);
     setInsights(insightRows);
     setAnnouncements(ann);
     setSurveys(survey);
     setPending(alerts);
-    if (hasFailure) {
+    if (results.some((result) => result.status === "rejected")) {
       toast.warning("部分分析資料暫時無法載入，其餘資料已更新");
     }
     setLoading(false);
