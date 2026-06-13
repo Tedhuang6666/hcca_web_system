@@ -1400,8 +1400,8 @@ async def recovery_db_upgrade(session: DbDep, _admin: AdminUser) -> dict:
         )
         return {
             "ok": False,
-            "error": str(exc),
-        }  # lgtm[py/stack-trace-exposure] — superadmin 端點，需要完整遷移錯誤
+            "error": str(exc),  # codeql[py/stack-trace-exposure] superadmin endpoint, full migration error needed
+        }
     await audit_svc.record(
         session,
         entity_type="defense_rule",
