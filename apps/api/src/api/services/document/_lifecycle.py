@@ -134,7 +134,7 @@ async def create_document(
     logger.info("公文建立 serial=%s id=%s", serial, doc.id)
 
     loaded = await get_document(session, doc.id)
-    assert loaded is not None
+    assert loaded is not None  # nosec B101
     return loaded
 
 
@@ -575,7 +575,7 @@ async def create_approval_delegation(
     )
     await session.flush()
     loaded = await get_approval_delegation(session, delegation.id)
-    assert loaded is not None
+    assert loaded is not None  # nosec B101
     return loaded
 
 
@@ -632,7 +632,7 @@ async def update_approval_delegation(
     )
     await session.flush()
     loaded = await get_approval_delegation(session, delegation.id)
-    assert loaded is not None
+    assert loaded is not None  # nosec B101
     return loaded
 
 

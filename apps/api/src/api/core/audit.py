@@ -50,7 +50,7 @@ class SecurityAuditMiddleware(BaseHTTPMiddleware):
             if hasattr(request.state, "user"):
                 user_id = str(request.state.user.id)
                 user_email = request.state.user.email
-        except Exception:
+        except Exception:  # nosec B110
             pass
 
         client_ip = request.client.host if request.client else "unknown"

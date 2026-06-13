@@ -147,7 +147,7 @@ def _persist_error_event(sample: ErrorSample) -> None:
         pipe.ltrim(settings.ERROR_REPORT_REDIS_KEY, 0, settings.ERROR_REPORT_RETENTION_ITEMS - 1)
         pipe.execute()
         client.close()
-    except Exception:
+    except Exception:  # nosec B110
         # Error reporting must never affect the original error response.
         pass
 

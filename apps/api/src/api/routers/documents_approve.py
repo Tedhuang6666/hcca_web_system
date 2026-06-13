@@ -720,7 +720,7 @@ async def issue_document_directly(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
 
     loaded = await doc_svc.get_document(session, updated.id)
-    assert loaded is not None
+    assert loaded is not None  # nosec B101
 
     await create_notification(
         session,

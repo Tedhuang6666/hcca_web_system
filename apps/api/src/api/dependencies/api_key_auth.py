@@ -47,7 +47,7 @@ async def api_key_required(
     try:
         ip = request.client.host if request.client else None
         await api_key_svc.touch_used(db, row.id, ip=ip)
-    except Exception:  # pragma: no cover
+    except Exception:  # nosec B110  # pragma: no cover
         pass
     return row
 

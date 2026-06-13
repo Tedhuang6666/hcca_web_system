@@ -61,7 +61,7 @@ async def generate_pickup_code(session: AsyncSession, max_attempts: int = 10) ->
     import random
 
     for _ in range(max_attempts):
-        code = str(random.randint(10000, 99999))  # noqa: S311 (非密碼學用途)
+        code = str(random.randint(10000, 99999))  # nosec B311  # noqa: S311 (非密碼學用途)
         exists = await session.execute(
             select(MealOrder.id).where(MealOrder.pickup_code == code).limit(1)
         )

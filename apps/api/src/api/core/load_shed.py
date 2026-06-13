@@ -142,7 +142,7 @@ async def _should_shed_by_signals() -> tuple[bool, str]:
         db_stats = get_db_pool_stats(engine)
         if db_stats.utilization > settings.LOAD_SHED_DB_POOL_THRESHOLD:
             return True, f"db_pool={db_stats.utilization:.2%}"
-    except Exception:  # pool stats 失敗不該影響服務
+    except Exception:  # nosec B110 - pool stats 失敗不該影響服務
         pass
 
     return False, ""
@@ -272,7 +272,7 @@ class LoadShedMiddleware:
     async def _respond_shed(self, scope: Scope, send: Send, reason: str) -> None:
         # 加上隨機 jitter 避免雷鳴效應
         base = settings.LOAD_SHED_RETRY_AFTER_BASE_SECONDS
-        retry_after = base + random.randint(0, base * 2)
+        retry_after = base + random.randint(0, base * 2)  # nosec B311
         logger.info(
             "Load shed: path=%s ip=%s reason=%s retry_after=%d",
             scope.get("path"),
