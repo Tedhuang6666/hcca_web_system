@@ -371,6 +371,22 @@ class Settings(BaseSettings):
             warnings.warn("SECRET_KEY 使用預設值，僅允許本機開發環境使用。", stacklevel=2)
         return v
 
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def database_url_must_be_postgres(cls, v: str) -> str:
+        scheme = urlsplit(v).scheme.lower()
+        if not scheme.startswith("postgres"):
+            raise ValueError("DATABASE_URL 必須使用 postgresql:// 或 postgresql+asyncpg:// 協定")
+        return v
+
+    @field_validator("REDIS_URL")
+    @classmethod
+    def redis_url_must_be_redis(cls, v: str) -> str:
+        scheme = urlsplit(v).scheme.lower()
+        if scheme not in {"redis", "rediss", "redis+sentinel"}:
+            raise ValueError("REDIS_URL 必須使用 redis:// 協定")
+        return v
+
     @field_validator("COOKIE_SAMESITE")
     @classmethod
     def cookie_samesite_must_be_valid(cls, v: str) -> str:
