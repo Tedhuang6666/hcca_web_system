@@ -3744,10 +3744,10 @@ export const privacyApi = {
       `/admin/privacy/users/${encodeURIComponent(user_id)}/export`,
       {},
     ),
-  anonymizeUser: (user_id: string, confirm_token: string) =>
+  anonymizeUser: (user_id: string, confirm_phrase: string) =>
     post<PrivacyAnonymizeResult>(
       `/admin/privacy/users/${encodeURIComponent(user_id)}/anonymize`,
-      { confirm_token },
+      { confirm_phrase },
     ),
   listExports: () => get<PrivacyExportFile[]>("/admin/privacy/exports"),
   exportDownloadUrl: (filename: string) =>
@@ -3814,12 +3814,12 @@ export interface RollbackOut {
 
 export const termRolloverApi = {
   dryRun: (body: DryRunBody) => post<DryRunOut>("/admin/term-rollover/dry-run", body),
-  execute: (body: DryRunBody, confirm_token: string) =>
-    post<ExecuteRolloverOut>("/admin/term-rollover/execute", { ...body, confirm_token }),
-  rollback: (batch_id: string, confirm_token: string) =>
+  execute: (body: DryRunBody, confirm_phrase: string) =>
+    post<ExecuteRolloverOut>("/admin/term-rollover/execute", { ...body, confirm_phrase }),
+  rollback: (batch_id: string, confirm_phrase: string) =>
     post<RollbackOut>(
       `/admin/term-rollover/rollback/${encodeURIComponent(batch_id)}`,
-      { confirm_token },
+      { confirm_phrase },
     ),
 };
 

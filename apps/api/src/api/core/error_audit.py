@@ -8,11 +8,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import threading
 import time
 import traceback
 from collections import deque
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 from typing import Any
 
 from api.core.config import settings
@@ -147,9 +150,8 @@ def _persist_error_event(sample: ErrorSample) -> None:
         pipe.ltrim(settings.ERROR_REPORT_REDIS_KEY, 0, settings.ERROR_REPORT_RETENTION_ITEMS - 1)
         pipe.execute()
         client.close()
-    except Exception:  # nosec B110
-        # Error reporting must never affect the original error response.
-        pass
+    except Exception:
+        logger.debug("錯誤報告寫入 Redis 失敗（不影響原始回應）", exc_info=True)
 
 
 def record_error(

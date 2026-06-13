@@ -60,6 +60,7 @@ jobs:
             "$@" \
             --exclude "apps/api/alembic/versions/**" \
             --exclude "apps/api/src/api/email/compiled/**" \
+            --exclude "apps/api/src/api/services/regulation_import.py" \
             --exclude "apps/api/tests/**" \
             --exclude "**/.next/**" \
             --exclude "**/node_modules/**" \

@@ -43,6 +43,7 @@ jobs:
       - name: Generate JSON report
         run: |
           bandit -r apps/api/src apps/discord-bot/src libs/shared/src \
+            --configfile apps/api/pyproject.toml \
             --severity-level medium \
             --confidence-level medium \
             --format json \
@@ -60,5 +61,6 @@ jobs:
       - name: Enforce high-severity findings
         run: |
           bandit -r apps/api/src apps/discord-bot/src libs/shared/src \
+            --configfile apps/api/pyproject.toml \
             --severity-level high \
             --confidence-level medium

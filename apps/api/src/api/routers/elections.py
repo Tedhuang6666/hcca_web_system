@@ -178,7 +178,8 @@ async def add_vote_event(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     await _broadcast_summary(session, election_id)
     event_out = await election_svc.get_vote_event_out(session, election_id, event.id)
-    assert event_out is not None  # nosec B101
+    if event_out is None:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="無法讀取剛建立的投票事件")
     return event_out
 
 
@@ -198,7 +199,8 @@ async def reverse_vote_event(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     await _broadcast_summary(session, election_id)
     event_out = await election_svc.get_vote_event_out(session, election_id, event.id)
-    assert event_out is not None  # nosec B101
+    if event_out is None:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="無法讀取剛建立的投票事件")
     return event_out
 
 
@@ -223,5 +225,6 @@ async def get_public_live_summary(election_ref: str, session: DbDep) -> Election
     if not election.is_public:
         raise HTTPException(status_code=404, detail="找不到此選舉")
     summary = await election_svc.get_live_summary(session, election_id)
-    assert summary is not None  # nosec B101
+    if summary is None:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="無法取得選舉即時摘要")
     return summary

@@ -74,7 +74,7 @@ class DocumentClassification(enum.StrEnum):
 
     NORMAL = "normal"  # 普通
     CONFIDENTIAL = "confidential"  # 密
-    SECRET = "secret"  # nosec B105 - 機密
+    SECRET = "secret"  # 機密
 
 
 class DeclassificationCondition(enum.StrEnum):

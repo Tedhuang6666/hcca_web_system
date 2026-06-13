@@ -1,7 +1,7 @@
 # ==============================================================================
 # Stage 1: deps — 安裝 Node.js 依賴
 # ==============================================================================
-FROM node:24-alpine AS deps
+FROM node:24-alpine@sha256:fb71d01345f11b708a3553c66e7c74074f2d506400ea81973343d915cb64eef0 AS deps
 
 WORKDIR /app
 
@@ -11,7 +11,7 @@ RUN npm ci --omit=dev
 # ==============================================================================
 # Stage 2: builder — 建置 Next.js 生產版本
 # ==============================================================================
-FROM node:24-alpine AS builder
+FROM node:24-alpine@sha256:fb71d01345f11b708a3553c66e7c74074f2d506400ea81973343d915cb64eef0 AS builder
 
 WORKDIR /app
 
@@ -33,7 +33,7 @@ RUN npm run build
 # ==============================================================================
 # Stage 3: runtime — 最小化生產映像檔
 # ==============================================================================
-FROM node:24-alpine AS runtime
+FROM node:24-alpine@sha256:fb71d01345f11b708a3553c66e7c74074f2d506400ea81973343d915cb64eef0 AS runtime
 
 # Runtime only needs the Node.js binary. Upgrade Alpine security fixes and remove bundled npm.
 RUN apk upgrade --no-cache && \

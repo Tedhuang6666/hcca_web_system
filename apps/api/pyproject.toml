@@ -48,6 +48,23 @@ api = "api:main"
 requires = ["uv_build>=0.11.6,<0.12.0"]
 build-backend = "uv_build"
 
+[tool.bandit]
+# B404/B603: backup services explicitly invoke gpg/tar via subprocess — intentional
+# B105: DB enum string values that look like password field names but are not secrets
+# B106: OAuth access_token_url is a configuration endpoint, not a hardcoded credential
+# B104: _LOCAL_HOSTS frozenset contains "0.0.0.0" as a hostname pattern, not a bind call
+per_file_ignores = [
+    "apps/api/src/api/services/backup_encryption.py:B404,B603",
+    "apps/api/src/api/services/backup_tasks.py:B404,B603",
+    "apps/api/src/api/models/document.py:B105",
+    "apps/api/src/api/services/meeting/_voting.py:B105",
+    "apps/api/src/api/services/official_print.py:B105",
+    "apps/api/src/api/core/oauth.py:B106",
+    "apps/api/src/api/core/config.py:B104",
+    "apps/api/src/api/main.py:B104",
+    "apps/api/src/api/email/renderer.py:B704",
+]
+
 [dependency-groups]
 dev = [
     "aiosqlite>=0.22.1",

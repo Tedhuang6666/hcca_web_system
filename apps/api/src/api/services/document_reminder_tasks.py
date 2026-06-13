@@ -130,8 +130,8 @@ async def _process_overdue_async() -> dict:
             try:
                 actor = await db.get(User, doc.author_id) if doc.author_id else None
                 actor_email = actor.email if actor else None
-            except Exception:  # nosec B110
-                pass
+            except Exception:
+                logger.debug("audit log actor 查詢失敗，略過", exc_info=True)
             await audit_chain.write_audit_log_with_chain(
                 db,
                 entity_type="document",

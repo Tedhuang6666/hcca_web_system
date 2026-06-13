@@ -15,9 +15,12 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
+
+logger = logging.getLogger(__name__)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
@@ -47,8 +50,8 @@ async def api_key_required(
     try:
         ip = request.client.host if request.client else None
         await api_key_svc.touch_used(db, row.id, ip=ip)
-    except Exception:  # nosec B110  # pragma: no cover
-        pass
+    except Exception:  # pragma: no cover
+        logger.debug("API key last_used 更新失敗（non-critical）", exc_info=True)
     return row
 
 

@@ -72,8 +72,8 @@ def _before_send(event: Event, _hint: dict[str, Any]) -> Event | None:
                 qs = str(request["query_string"])
                 if any(key in qs.lower() for key in ("token=", "secret=", "password=")):
                     request["query_string"] = "[Filtered]"
-            except Exception:  # nosec B110
-                pass
+            except Exception:
+                logger.debug("Sentry query_string 過濾失敗", exc_info=True)
     extra = event.get("extra")
     if isinstance(extra, dict):
         event["extra"] = _scrub(extra)
