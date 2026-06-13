@@ -1322,8 +1322,9 @@ function ComposeInner() {
                 placeholder="圖片替代文字（選填）"
               />
               {bannerImageUrl ? (
+                // lgtm[js/xss-through-dom] uploadUrl calls safeImageUrl which blocks javascript:
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={uploadUrl(bannerImageUrl)} alt={bannerImageAlt || "信件主圖預覽"} className="max-h-40 rounded-lg object-contain" /> {/* lgtm[js/xss-through-dom] uploadUrl calls safeImageUrl which blocks javascript: */}
+                <img src={uploadUrl(bannerImageUrl)} alt={bannerImageAlt || "信件主圖預覽"} className="max-h-40 rounded-lg object-contain" />
               ) : null}
             </div>
           </section>
