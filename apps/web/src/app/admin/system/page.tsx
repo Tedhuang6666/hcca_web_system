@@ -531,7 +531,22 @@ export default function SystemDefensePage() {
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_0.9fr]">
         <Panel title="全站模式" icon={<Shield size={18} aria-hidden />} wide>
-          <div className="grid gap-3 lg:grid-cols-[1fr_16rem_auto]">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-medium text-[var(--text-primary)]">維護模式</p>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
+              <StatusPill active={snapshot.maintenance.enabled}>
+                {snapshot.maintenance.enabled ? "維護中" : "正常開放"}
+              </StatusPill>
+              {maintenanceDirty && <StatusPill active={false}>尚未套用</StatusPill>}
+              <span>
+                {snapshot.maintenance.until
+                  ? `預計恢復：${fmtTime(snapshot.maintenance.until)}`
+                  : "未設定恢復時間"}
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-3 grid min-w-0 gap-3 md:grid-cols-[minmax(0,1fr)_16rem]">
             <Field label="維護模式訊息">
               <input
                 type="text"
@@ -541,7 +556,7 @@ export default function SystemDefensePage() {
                   setMaintenanceDirty(true);
                   setMaintenanceMessage(e.target.value);
                 }}
-                className="input"
+                className="input w-full min-w-0"
                 placeholder="系統維護中，請稍後再試"
               />
             </Field>
@@ -554,10 +569,12 @@ export default function SystemDefensePage() {
                   setMaintenanceDirty(true);
                   setMaintenanceUntil(e.target.value);
                 }}
-                className="input"
+                className="input w-full min-w-0"
               />
             </Field>
-            <div className="flex items-end gap-2">
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => setMaintenance(true)}
@@ -583,35 +600,29 @@ export default function SystemDefensePage() {
               >
                 推送更新
               </button>
-            </div>
-          </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
-            <StatusPill active={snapshot.maintenance.enabled}>
-              {snapshot.maintenance.enabled ? "維護中" : "正常開放"}
-            </StatusPill>
-            {maintenanceDirty && (
-              <StatusPill active={false}>
-                尚未套用
-              </StatusPill>
-            )}
-            <span>
-              {snapshot.maintenance.until
-                ? `預計恢復：${fmtTime(snapshot.maintenance.until)}`
-                : "未設定恢復時間"}
-            </span>
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {(["auto", "off", "on", "bypass"] as LoadShedMode[]).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setShedMode(mode)}
-                className={`btn ${snapshot.load_shed_mode === mode ? "btn-primary" : "btn-ghost"}`}
-              >
-                {modeLabel(mode)}
-              </button>
-            ))}
+          <div className="mt-5 border-t border-[var(--border)] pt-4">
+            <div className="mb-2">
+              <p className="text-sm font-medium text-[var(--text-primary)]">負載防護模式</p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">
+                控制高負載時的一般流量策略，不影響管理員緊急通道。
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {(["auto", "off", "on", "bypass"] as LoadShedMode[]).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setShedMode(mode)}
+                  className={`btn w-full ${
+                    snapshot.load_shed_mode === mode ? "btn-primary" : "btn-ghost"
+                  }`}
+                >
+                  {modeLabel(mode)}
+                </button>
+              ))}
+            </div>
           </div>
         </Panel>
 
