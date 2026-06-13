@@ -22,7 +22,6 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-      id-token: write
       security-events: write
 
     steps:
@@ -31,21 +30,16 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Run analysis
-        uses: ossf/scorecard-action@99c09fe975337306107572b4fdf4db224cf8e2f2 # v2.4.3
+      - name: Run OSSF Scorecard
+        uses: ossf/scorecard-action@v2.4.1
         with:
-          results_file: results.sarif
-          results_format: sarif
-          publish_results: true
+          results_file: results.json
+          results_format: json
+          publish_results: false
 
       - name: Upload artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: scorecard-sarif
-          path: results.sarif
+          name: scorecard-results
+          path: results.json
           retention-days: 30
-
-      - name: Upload to code scanning
-        uses: github/codeql-action/upload-sarif@1a818fd5f97ed0ee9a823421bd5b171add01227f # v4.36.2
-        with:
-          sarif_file: results.sarif
