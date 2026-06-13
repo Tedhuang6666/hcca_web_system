@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import gzip
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -34,6 +35,21 @@ def test_archive_lookup_only_returns_listed_archive(
         data_lifecycle.resolve_archive_file("../../secret.jsonl.gz")
 
 
+def test_archive_path_uses_internal_safe_segments(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _set_storage_root(monkeypatch, tmp_path)
+    when = datetime(2026, 6, 13, tzinfo=UTC)
+
+    archive, batch_id = data_lifecycle._archive_path_for("audit_logs_old", when)
+
+    assert archive.parent == tmp_path / "archives" / "2026" / "06" / "audit_logs_old"
+    assert archive.name == f"{batch_id}.jsonl.gz"
+    with pytest.raises(ValueError):
+        data_lifecycle._archive_path_for("../../secret", when)
+
+
 def test_privacy_export_lookup_rejects_path_traversal(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -53,13 +69,13 @@ def test_sensitive_tokens_use_keyed_or_password_hashes() -> None:
     backup_hash = mfa._hash_backup_code("ABCD-EFGH")
 
     assert raw.startswith("hcca_")
-    assert key_hash.startswith("hmac-sha256:")
+    assert key_hash.startswith("blake2b-keyed:")
     assert backup_hash.startswith("scrypt:")
     assert "ABCD" not in backup_hash
 
 
 @pytest.mark.asyncio
-async def test_legacy_api_key_is_upgraded_after_successful_auth(
+async def test_legacy_api_key_is_rejected(
     db_session: AsyncSession,
 ) -> None:
     raw = "hcca_" + "a" * 43
@@ -72,7 +88,7 @@ async def test_legacy_api_key_is_upgraded_after_successful_auth(
     row = ApiKey(
         name="legacy",
         key_prefix=raw[:13],
-        key_hash=api_key._legacy_hash_key(raw),
+        key_hash="legacy-digest",
         owner_user_id=owner.id,
         scopes=[],
         rate_limit_per_minute=60,
@@ -83,5 +99,5 @@ async def test_legacy_api_key_is_upgraded_after_successful_auth(
 
     authenticated = await api_key.find_active_by_raw(db_session, raw)
 
-    assert authenticated is row
-    assert row.key_hash.startswith("hmac-sha256:")
+    assert authenticated is None
+    assert row.key_hash == "legacy-digest"

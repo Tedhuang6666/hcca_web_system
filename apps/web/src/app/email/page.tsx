@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import DOMPurify from "dompurify";
@@ -26,6 +27,31 @@ import type {
   EmailVariableDefinition,
   RecipientSelector,
 } from "@/lib/types";
+
+function SafeImagePreview({
+  url,
+  alt,
+  className,
+  height,
+}: {
+  url: string;
+  alt: string;
+  className: string;
+  height: number;
+}) {
+  const src = uploadUrl(url);
+  if (!src) return null;
+  return (
+    <Image
+      src={src}
+      alt={alt}
+      width={640}
+      height={height}
+      unoptimized
+      className={className}
+    />
+  );
+}
 import {
   AUTOSAVE_KEY,
   BUTTON_STYLE_OPTIONS,
@@ -1322,9 +1348,12 @@ function ComposeInner() {
                 placeholder="圖片替代文字（選填）"
               />
               {bannerImageUrl ? (
-                // lgtm[js/xss-through-dom] uploadUrl calls safeImageUrl which blocks javascript:
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={uploadUrl(bannerImageUrl)} alt={bannerImageAlt || "信件主圖預覽"} className="max-h-40 rounded-lg object-contain" />
+                <SafeImagePreview
+                  url={bannerImageUrl}
+                  alt={bannerImageAlt || "信件主圖預覽"}
+                  height={160}
+                  className="max-h-40 rounded-lg object-contain"
+                />
               ) : null}
             </div>
           </section>
@@ -1884,8 +1913,12 @@ function ComposeInner() {
                         onChange={(e) => updateBlock(i, { alt: e.target.value })}
                       />
                       {blk.url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={uploadUrl(blk.url)} alt={blk.alt || "圖片預覽"} className="max-h-32 rounded-lg object-contain" />
+                        <SafeImagePreview
+                          url={blk.url}
+                          alt={blk.alt || "圖片預覽"}
+                          height={128}
+                          className="max-h-32 rounded-lg object-contain"
+                        />
                       ) : null}
                     </div>
                   )}

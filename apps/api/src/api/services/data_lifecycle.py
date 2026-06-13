@@ -214,13 +214,15 @@ def archive_root() -> Path:
     return root
 
 
-def _archive_path_for(rule_id: str, batch_id: str, when: datetime) -> Path:
-    if rule_id not in RULES_BY_ID:  # guard against path traversal via untrusted rule_id
+def _archive_path_for(rule_id: str, when: datetime) -> tuple[Path, str]:
+    rule = RULES_BY_ID.get(rule_id)
+    if rule is None:
         raise ValueError(f"未知規則：{rule_id}")
+    batch_id = uuid.uuid4().hex[:12]
     root = archive_root()
-    sub = root / f"{when.year:04d}" / f"{when.month:02d}" / rule_id
+    sub = root / f"{when.year:04d}" / f"{when.month:02d}" / rule.id
     sub.mkdir(parents=True, exist_ok=True)
-    return sub / f"{batch_id}.jsonl.gz"
+    return sub / f"{batch_id}.jsonl.gz", batch_id
 
 
 def list_archives() -> list[dict[str, Any]]:
@@ -354,8 +356,7 @@ async def execute(
 
     fh = None
     if chosen_action in ("archive", "archive_then_purge") and matched_total > 0:
-        batch_id = uuid.uuid4().hex[:12]
-        archive_file = _archive_path_for(rule_id, batch_id, started)
+        archive_file, batch_id = _archive_path_for(rule_id, started)
         fh = gzip.open(archive_file, "wt", encoding="utf-8")  # noqa: SIM115 closed in finally
         header = {
             "_metadata": True,

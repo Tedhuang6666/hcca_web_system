@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -35,16 +36,20 @@ function AnimatedNumber({ value, className }: { value: number; className?: strin
 }
 
 function MemberAvatars({ candidate, size = 44 }: { candidate: CandidateTally; size?: number }) {
-  const withPhotos = candidate.members.filter((member) => member.photo_url);
+  const withPhotos = candidate.members
+    .map((member) => ({ ...member, photoSrc: uploadUrl(member.photo_url) }))
+    .filter((member) => member.photoSrc);
   if (withPhotos.length === 0) return null;
   return (
     <div className="flex shrink-0 -space-x-3">
       {withPhotos.map((member) => (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <Image
           key={member.id}
-          src={uploadUrl(member.photo_url)} // codeql[js/client-side-unvalidated-url-redirection] uploadUrl→safeImageUrl blocks javascript:
+          src={member.photoSrc}
           alt={member.name}
+          width={size}
+          height={size}
+          unoptimized
           className="rounded-full object-cover ring-2 ring-[#173654]"
           style={{ width: size, height: size, background: "#0d1f31" }}
         />

@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 import uuid
 from datetime import datetime
@@ -76,6 +77,7 @@ from api.services.discord_bot import emit_security_alert
 
 router = APIRouter(prefix="/admin/system", tags=["管理員 / 系統"])
 public_router = APIRouter(prefix="/system", tags=["系統"])
+logger = logging.getLogger(__name__)
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 
@@ -1389,18 +1391,19 @@ async def recovery_clear_cache(session: DbDep, _admin: AdminUser) -> dict:
 
 @router.post("/recovery/db-upgrade", response_model=dict, summary="升級資料庫到最新版本")
 async def recovery_db_upgrade(session: DbDep, _admin: AdminUser) -> dict:
-    """執行 alembic upgrade head。失敗時以 ok=False + error 回傳完整訊息供超管除錯。"""
+    """執行 alembic upgrade head。"""
     try:
         result = await recovery.run_db_upgrade()
-    except Exception as exc:  # noqa: BLE001 — 超管需要看到完整遷移錯誤
+    except Exception:  # noqa: BLE001
+        logger.exception("Database upgrade failed")
         await emit_security_alert(
             session,
             title="資料庫升級失敗",
-            body=f"error={exc} actor={_admin.email}",
+            body=f"actor={_admin.email}",
         )
         return {
             "ok": False,
-            "error": str(exc),  # codeql[py/stack-trace-exposure] superadmin endpoint, full migration error needed
+            "error": "資料庫升級失敗，詳細資訊已記錄於伺服器日誌",
         }
     await audit_svc.record(
         session,
