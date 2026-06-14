@@ -562,11 +562,11 @@ export default function PublicSiteAdminPage() {
       </section>
 
       <nav
-        className="sticky top-[56px] z-20 flex gap-2 overflow-x-auto rounded-xl p-2"
+        className="flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl p-1.5"
         style={{
-          background: "color-mix(in srgb, var(--bg-surface) 92%, transparent)",
+          background: "var(--bg-surface)",
           border: "1px solid var(--border)",
-          backdropFilter: "blur(14px)",
+          boxShadow: "var(--shadow-xs)",
         }}
         aria-label="公開網站設定分頁"
       >
@@ -578,7 +578,7 @@ export default function PublicSiteAdminPage() {
             className="inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-lg px-4 text-sm font-medium transition-colors"
             style={{
               background: tab === item.id ? "var(--primary-dim)" : "transparent",
-              color: tab === item.id ? "var(--primary)" : "var(--text-secondary)",
+              color: tab === item.id ? "var(--primary-text)" : "var(--text-secondary)",
             }}>
             {item.icon}
             {item.label}
@@ -828,7 +828,9 @@ export default function PublicSiteAdminPage() {
       )}
 
       {tab === "officers" && (
-        <section className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+        <section
+          className={`grid gap-4 ${profiles.length > 0 ? "lg:grid-cols-[0.9fr_1.1fr]" : ""}`}
+        >
           <div className="card space-y-4 p-5">
             <h2 className="font-semibold">幹部覆寫 / 隱藏設定</h2>
             <p className="text-xs text-[var(--text-muted)]">
