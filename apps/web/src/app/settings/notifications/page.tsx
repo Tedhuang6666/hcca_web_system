@@ -7,6 +7,7 @@ import { discordApi, lineApi, notificationsApi, apiErrorMessage } from "@/lib/ap
 import type { ChannelPref, NotificationPreferences } from "@/lib/types";
 import { enableWebPush } from "@/lib/web-push";
 import { SectionSkeleton } from "@/components/ui/Skeleton";
+import { useModuleStatus } from "@/contexts/ModuleStatusContext";
 
 const OPTIONS: { key: keyof NotificationPreferences; label: string; desc: string }[] = [
   { key: "document_pending", label: "公文待審", desc: "有公文需要您審核或處理時提醒" },
@@ -67,6 +68,9 @@ function Switch({
 }
 
 export default function NotificationSettingsPage() {
+  const { isModuleClosed } = useModuleStatus();
+  const lineClosed = isModuleClosed("line");
+  const discordClosed = isModuleClosed("discord");
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
   const [lineLinked, setLineLinked] = useState(false);
   const [discordLinked, setDiscordLinked] = useState(false);
@@ -260,15 +264,22 @@ export default function NotificationSettingsPage() {
             <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
               {loading
                 ? "載入中"
-                : `站內 ${counts.inapp} 項、Email ${counts.email} 項、LINE ${counts.line} 項、Discord ${counts.discord} 項已啟用`}
+                : [
+                    `站內 ${counts.inapp} 項`,
+                    `Email ${counts.email} 項`,
+                    !lineClosed && `LINE ${counts.line} 項`,
+                    !discordClosed && `Discord ${counts.discord} 項`,
+                  ]
+                    .filter(Boolean)
+                    .join("、") + " 已啟用"}
               {saving ? "，儲存中" : ""}
             </p>
-            {!lineLinked && (
+            {!lineClosed && !lineLinked && (
               <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
                 LINE 通知需先至個人資料完成綁定。
               </p>
             )}
-            {!discordLinked && (
+            {!discordClosed && !discordLinked && (
               <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
                 Discord 通知需先至個人資料完成綁定。
               </p>
@@ -317,18 +328,22 @@ export default function NotificationSettingsPage() {
               >
                 Email
               </div>
-              <div
-                className="w-12 text-center text-[11px] font-semibold"
-                style={{ color: "var(--text-muted)" }}
-              >
-                LINE
-              </div>
-              <div
-                className="w-16 text-center text-[11px] font-semibold"
-                style={{ color: "var(--text-muted)" }}
-              >
-                Discord
-              </div>
+              {!lineClosed && (
+                <div
+                  className="w-12 text-center text-[11px] font-semibold"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  LINE
+                </div>
+              )}
+              {!discordClosed && (
+                <div
+                  className="w-16 text-center text-[11px] font-semibold"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  Discord
+                </div>
+              )}
             </div>
             <ul>
               {OPTIONS.map((item) => (
@@ -361,22 +376,26 @@ export default function NotificationSettingsPage() {
                       label={`${item.label} Email 通知`}
                     />
                   </div>
-                  <div className="flex w-12 justify-center">
-                    <Switch
-                      on={prefs[item.key].line}
-                      disabled={saving || !lineLinked}
-                      onClick={() => toggle(item.key, "line")}
-                      label={`${item.label} LINE 通知`}
-                    />
-                  </div>
-                  <div className="flex w-16 justify-center">
-                    <Switch
-                      on={prefs[item.key].discord}
-                      disabled={saving || !discordLinked}
-                      onClick={() => toggle(item.key, "discord")}
-                      label={`${item.label} Discord 通知`}
-                    />
-                  </div>
+                  {!lineClosed && (
+                    <div className="flex w-12 justify-center">
+                      <Switch
+                        on={prefs[item.key].line}
+                        disabled={saving || !lineLinked}
+                        onClick={() => toggle(item.key, "line")}
+                        label={`${item.label} LINE 通知`}
+                      />
+                    </div>
+                  )}
+                  {!discordClosed && (
+                    <div className="flex w-16 justify-center">
+                      <Switch
+                        on={prefs[item.key].discord}
+                        disabled={saving || !discordLinked}
+                        onClick={() => toggle(item.key, "discord")}
+                        label={`${item.label} Discord 通知`}
+                      />
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>

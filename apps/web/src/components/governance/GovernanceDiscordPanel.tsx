@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ApiError, discordApi, governanceApi } from "@/lib/api";
+import { useModuleStatus } from "@/contexts/ModuleStatusContext";
 import type {
   DiscordChannelOptionOut,
   DiscordGuildOptionOut,
@@ -52,6 +53,7 @@ interface Props {
 }
 
 export default function GovernanceDiscordPanel({ matterId, initial }: Props) {
+  const { isModuleClosed } = useModuleStatus();
   const [guilds, setGuilds] = useState<DiscordGuildOptionOut[]>([]);
   const [channels, setChannels] = useState<DiscordChannelOptionOut[]>([]);
   const [roles, setRoles] = useState<DiscordRoleOptionOut[]>([]);
@@ -139,6 +141,8 @@ export default function GovernanceDiscordPanel({ matterId, initial }: Props) {
       setBusy(false);
     }
   };
+
+  if (isModuleClosed("discord")) return null;
 
   return (
     <section className="rounded-lg p-5" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>

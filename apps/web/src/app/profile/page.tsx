@@ -4,6 +4,7 @@ import Image from "next/image";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { usersApi, classApi, lineApi, discordApi, apiErrorMessage } from "@/lib/api";
+import { useModuleStatus } from "@/contexts/ModuleStatusContext";
 import type {
   DiscordBindingOut,
   LineBindingOut,
@@ -93,6 +94,7 @@ function EditableField({
 /* ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function ProfilePage() {
+  const { isModuleClosed } = useModuleStatus();
   const [user, setUser] = useState<UserRead | null>(null);
   const [positions, setPositions] = useState<UserPositionRead[]>([]);
   const [permissions, setPermissions] = useState<string[]>([]);
@@ -461,7 +463,7 @@ export default function ProfilePage() {
         </div>
       </section>
 
-      <section className="card p-5 space-y-4" aria-labelledby="line-heading">
+      {!isModuleClosed("line") && <section className="card p-5 space-y-4" aria-labelledby="line-heading">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h2 id="line-heading" className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
@@ -504,9 +506,9 @@ export default function ProfilePage() {
             </div>
           )}
         </div>
-      </section>
+      </section>}
 
-      <section className="card p-5 space-y-4" aria-labelledby="discord-heading">
+      {!isModuleClosed("discord") && <section className="card p-5 space-y-4" aria-labelledby="discord-heading">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h2 id="discord-heading" className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
@@ -538,7 +540,7 @@ export default function ProfilePage() {
             </p>
           )}
         </div>
-      </section>
+      </section>}
 
       {/* 現職職位 */}
       <section className="card overflow-hidden" aria-labelledby="positions-heading">
