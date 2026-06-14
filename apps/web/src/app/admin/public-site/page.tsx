@@ -563,7 +563,7 @@ export default function PublicSiteAdminPage() {
       </section>
 
       <nav
-        className="sticky top-[60px] z-20 flex gap-2 overflow-x-auto rounded-xl p-2"
+        className="sticky top-[56px] z-20 flex gap-2 overflow-x-auto rounded-xl p-2"
         style={{
           background: "color-mix(in srgb, var(--bg-surface) 92%, transparent)",
           border: "1px solid var(--border)",
@@ -749,7 +749,12 @@ export default function PublicSiteAdminPage() {
             <button type="button" onClick={createPage} className="btn btn-primary"><Plus size={16} aria-hidden /> 新增頁面</button>
           </div>
           <div className="space-y-3">
-            {pages.map((page) => (
+            {pages.length === 0 ? (
+              <div className="card flex min-h-40 flex-col items-center justify-center gap-2 p-6 text-center">
+                <FileText size={28} className="text-[var(--text-muted)]" aria-hidden />
+                <p className="text-sm text-[var(--text-muted)]">尚未新增任何頁面，請填寫左側表單後按「新增頁面」。</p>
+              </div>
+            ) : pages.map((page) => (
               <div key={page.id} className="card p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
