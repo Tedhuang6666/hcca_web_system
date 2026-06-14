@@ -1,23 +1,12 @@
 import type { ReactNode } from "react";
 
 import PublicSiteShell from "@/components/site/PublicSiteShell";
-import { serverApiUrl } from "@/lib/config";
+import { fetchPublicBundle } from "@/lib/serverFetch";
 
 export const dynamic = "force-dynamic";
-import type { PublicSiteBundleOut } from "@/lib/types";
-
-async function fetchPublicSite(): Promise<PublicSiteBundleOut | null> {
-  try {
-    const res = await fetch(serverApiUrl("/site/public"), { next: { revalidate: 60 } });
-    if (!res.ok) return null;
-    return res.json();
-  } catch {
-    return null;
-  }
-}
 
 export default async function PublicDatabaseLayout({ children }: { children: ReactNode }) {
-  const bundle = await fetchPublicSite();
+  const bundle = await fetchPublicBundle();
 
   return (
     <PublicSiteShell navPages={bundle?.nav_pages ?? []} settings={bundle?.settings}>

@@ -14,6 +14,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 
 import BrandEmblem from "@/components/brand/BrandEmblem";
+import { useScrollReveal } from "@/hooks/useScrollReveal";
 import LiveElectionBanner from "@/components/site/LiveElectionBanner";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { BRANDING } from "@/lib/branding";
@@ -73,6 +74,7 @@ export default function PublicSiteShell({
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const { theme, toggleTheme } = useTheme();
   const pathname = usePathname();
+  useScrollReveal([]);
   const back = getPublicBack(pathname);
   const menuRef = useRef<HTMLDetailsElement>(null);
   const headerRef = useRef<HTMLElement>(null);
