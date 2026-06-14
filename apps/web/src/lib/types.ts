@@ -477,6 +477,17 @@ export type SeatAssignmentStatus = "active" | "released";
 /** 使用者選位畫面每個座位的即時狀態 */
 export type SeatStateKind = "available" | "disabled" | "blocked" | "held" | "mine" | "taken";
 
+export type DecorationKind = "screen" | "door" | "aisle_h" | "aisle_v" | "label" | "box";
+export interface LayoutDecoration {
+  id: string;
+  type: DecorationKind;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  label: string;
+}
+
 export interface SeatInput {
   id?: string | null;
   label: string; block?: string | null; row_label?: string | null;
