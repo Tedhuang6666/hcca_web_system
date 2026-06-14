@@ -133,7 +133,6 @@ async def test_admin_can_pre_register_external_email_with_login_permission(
         json={
             "display_name": "外部顧問",
             "email": "advisor@gmail.com",
-            "allow_external_login": True,
             "position_ids": [str(position.id)],
             "custom_permission_org_id": str(org.id),
             "custom_permission_codes": [],
@@ -143,7 +142,6 @@ async def test_admin_can_pre_register_external_email_with_login_permission(
     assert response.status_code == 201
     payload = response.json()
     assert payload["email"] == "advisor@gmail.com"
-    assert payload["allow_external_login"] is True
     assert payload["positions"][0]["id"] == str(position.id)
 
 
@@ -171,7 +169,6 @@ async def test_pre_register_school_email_extracts_student_id_and_links_aliases(
         "g0112040103@hchs.hc.edu.tw",
         "student.private@gmail.com",
     ]
-    assert payload["allow_external_login"] is True
 
 
 @pytest.mark.asyncio
@@ -185,7 +182,6 @@ async def test_google_login_with_linked_email_uses_existing_user(
         student_id="112040104",
         is_active=True,
         is_verified=False,
-        allow_external_login=True,
     )
     db_session.add(user)
     await db_session.flush()
@@ -251,29 +247,11 @@ async def test_admin_can_link_school_email_to_existing_user_and_extract_student_
     assert response.status_code == 200
     payload = response.json()
     assert payload["student_id"] == "112040105"
-    assert payload["allow_external_login"] is True
     assert set(payload["linked_emails"]) == {
         "g0112040105@hchs.hc.edu.tw",
         "member@school.edu",
         "member.private@gmail.com",
     }
-
-
-@pytest.mark.asyncio
-async def test_admin_can_toggle_external_login_permission(
-    client: AsyncClient,
-    db_session: AsyncSession,
-) -> None:
-    admin, member, _, _, _ = await _seed_admin_data(db_session)
-    _override_user(admin)
-
-    response = await client.patch(
-        f"/admin/users/{member.id}",
-        json={"allow_external_login": True},
-    )
-
-    assert response.status_code == 200
-    assert response.json()["allow_external_login"] is True
 
 
 @pytest.mark.asyncio

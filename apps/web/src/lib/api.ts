@@ -1222,7 +1222,6 @@ export const authApi = {
     display_name: string;
     email: string;
     avatar_url?: string | null;
-    allow_external_login?: boolean;
     is_superuser?: boolean;
     is_owner?: boolean;
     permissions: string[];
@@ -1237,7 +1236,6 @@ export const authApi = {
         display_name: string;
         email: string;
         avatar_url?: string | null;
-        allow_external_login?: boolean;
         is_superuser?: boolean;
         is_owner?: boolean;
         permissions: string[];
@@ -1746,7 +1744,6 @@ export const adminApi = {
   preRegister: (body: {
     student_id?: string | null; email?: string | null; display_name: string;
     linked_emails?: string[];
-    allow_external_login?: boolean;
     position_ids?: string[]; start_date?: string; end_date?: string | null;
     custom_permission_org_id?: string | null;
     custom_permission_codes?: string[];
@@ -1755,7 +1752,6 @@ export const adminApi = {
     users: {
       student_id?: string | null; email?: string | null; display_name: string;
       linked_emails?: string[];
-      allow_external_login?: boolean;
       position_ids?: string[]; start_date?: string; end_date?: string | null;
     }[];
   }) => post<UserBatchPreRegisterResult>("/admin/users/pre-register/batch", body),
@@ -1764,7 +1760,6 @@ export const adminApi = {
   updateUser: (id: string, body: {
     display_name?: string;
     is_active?: boolean;
-    allow_external_login?: boolean;
     is_superuser?: boolean;
   }) =>
     patch<AdminUserDetail>(`/admin/users/${id}`, body),

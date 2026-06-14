@@ -145,7 +145,7 @@ def _email_can_login(email: str, existing_user: User | None = None) -> bool:
         or normalized in settings.LOGIN_EMAIL_ALLOWLIST
         or normalized in settings.OWNER_EMAILS
         or normalized in settings.SUPERUSER_EMAILS
-        or bool(existing_user and existing_user.is_active and existing_user.allow_external_login)
+        or False
     )
 
 
@@ -158,7 +158,6 @@ async def _auth_user_payload(db: AsyncSession, user: User) -> dict:
         "email": user.email,
         "display_name": user.display_name,
         "avatar_url": user.avatar_url,
-        "allow_external_login": user.allow_external_login,
         "is_superuser": user.is_superuser,
         "is_owner": user.email.lower() in settings.OWNER_EMAILS,
         "permissions": sorted(codes),

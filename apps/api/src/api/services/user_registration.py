@@ -42,7 +42,6 @@ async def pre_register_user(
     email: str | None,
     linked_emails: list[str],
     display_name: str,
-    allow_external_login: bool,
     position_ids: list[uuid.UUID],
     custom_permission_org_id: uuid.UUID | None,
     custom_permission_codes: list[str],
@@ -127,8 +126,6 @@ async def pre_register_user(
         student_id=normalized_student_id,
         is_verified=False,
         is_active=True,
-        allow_external_login=allow_external_login
-        or any(not address.endswith(f"@{SCHOOL_EMAIL_DOMAIN}") for address in all_emails),
         is_superuser=False,
     )
     db.add(user)
@@ -273,9 +270,6 @@ async def link_user_emails(
                     linked_at=now,
                 )
             )
-    if any(not address.endswith(f"@{SCHOOL_EMAIL_DOMAIN}") for address in normalized_emails):
-        user.allow_external_login = True
-
     await db.flush()
     await audit_svc.record(
         db,

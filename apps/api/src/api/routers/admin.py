@@ -70,7 +70,6 @@ class UserDetail(BaseModel):
     student_id: str | None
     avatar_url: str | None
     is_active: bool
-    allow_external_login: bool
     is_superuser: bool
     # Owner 為環境變數 OWNER_EMAILS 驅動的最高權限角色，由路由層注入
     is_owner: bool = False
@@ -88,10 +87,6 @@ class UserPreRegister(BaseModel):
         default_factory=list,
         max_length=10,
         description="可登入同一帳戶的其他 Email",
-    )
-    allow_external_login: bool = Field(
-        False,
-        description="允許校外信箱繞過 LOGIN_ALLOWED_EMAIL_DOMAINS 登入",
     )
     display_name: str = Field(..., min_length=1, max_length=100, description="姓名")
     position_ids: list[uuid.UUID] = Field(
@@ -152,7 +147,6 @@ class UpdateUserPositionRequest(BaseModel):
 class UpdateUserRequest(BaseModel):
     display_name: str | None = Field(None, max_length=100)
     is_active: bool | None = None
-    allow_external_login: bool | None = None
     is_superuser: bool | None = None
 
 
@@ -235,7 +229,6 @@ async def _enrich_user(db: AsyncSession, user: User) -> UserDetail:
         student_id=user.student_id,
         avatar_url=user.avatar_url,
         is_active=user.is_active,
-        allow_external_login=user.allow_external_login,
         is_superuser=user.is_superuser,
         is_owner=user.email.lower() in settings.OWNER_EMAILS,
         created_at=user.created_at.isoformat(),
@@ -416,7 +409,6 @@ async def update_user(
     before = {
         "display_name": user.display_name,
         "is_active": user.is_active,
-        "allow_external_login": user.allow_external_login,
         "is_superuser": user.is_superuser,
     }
     is_owner = user.email.lower() in settings.OWNER_EMAILS
@@ -449,15 +441,12 @@ async def update_user(
         user.display_name = body.display_name
     if body.is_active is not None:
         user.is_active = body.is_active
-    if body.allow_external_login is not None:
-        user.allow_external_login = body.allow_external_login
     if body.is_superuser is not None:
         user.is_superuser = body.is_superuser
     await db.flush()
     after = {
         "display_name": user.display_name,
         "is_active": user.is_active,
-        "allow_external_login": user.allow_external_login,
         "is_superuser": user.is_superuser,
     }
     await audit_svc.record(

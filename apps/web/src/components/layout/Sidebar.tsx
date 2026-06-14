@@ -86,7 +86,6 @@ export default function Sidebar() {
   const [userEmail, setUserEmail] = useState("");
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [isExternal, setIsExternal] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [desktopPrefs, setDesktopPrefs] = useState(() => readNavPreferences());
   const [hasCustomNav, setHasCustomNav] = useState(false);
@@ -96,7 +95,6 @@ export default function Sidebar() {
   useEffect(() => {
     const userId = localStorage.getItem("user_id");
     setIsLoggedIn(!!userId);
-    setIsExternal(localStorage.getItem("is_external") === "true");
     setUserName(localStorage.getItem("user_name") ?? "使用者");
     setUserEmail(localStorage.getItem("user_email") ?? "");
     setUserAvatar(localStorage.getItem("user_avatar"));
@@ -154,7 +152,6 @@ export default function Sidebar() {
   const itemVisible = (item: NavItem): boolean => {
     if (isModuleClosed(NAV_ID_TO_MODULE[item.id] ?? null)) return false;
     if (item.id === "systemDefense" && !isAdmin) return false;
-    if (item.schoolOnly && isExternal && !isAdmin) return false;
     // 議事系統：會議管理者（meeting:*）與管理員一律可見；
     // 一般使用者需掃描現場簽到連結解鎖後才顯示。
     if (item.id === "meetings") return meetingsUnlocked || hasPrefix("meeting:");

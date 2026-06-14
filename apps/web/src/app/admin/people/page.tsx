@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import AdminWorkbenchTabs from "@/components/admin/AdminWorkbenchTabs";
 import {
   BadgeCheck,
   BookUser,
@@ -252,7 +253,9 @@ export default function PeopleAdminPage() {
   }
 
   return (
-    <div className="mx-auto flex h-[calc(100vh-5rem)] max-w-7xl flex-col gap-4 p-4 md:p-5">
+    <>
+      <AdminWorkbenchTabs />
+      <div className="mx-auto flex h-[calc(100vh-8rem)] max-w-7xl flex-col gap-4 p-4 md:p-5">
       <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase" style={{ color: "var(--primary)" }}>
@@ -412,6 +415,7 @@ export default function PeopleAdminPage() {
         />
       )}
     </div>
+    </>
   );
 }
 

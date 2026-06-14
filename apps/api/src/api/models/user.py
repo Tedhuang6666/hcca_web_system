@@ -37,8 +37,6 @@ class User(Base, TimestampMixin):
     # 帳號狀態
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    # 是否允許校外信箱繞過 LOGIN_ALLOWED_EMAIL_DOMAINS 登入
-    allow_external_login: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # 超級管理員（繞過所有 RBAC 檢查，由 SUPERUSER_EMAILS 環境變數自動授予）
     is_superuser: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 

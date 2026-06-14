@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import AdminWorkbenchTabs from "@/components/admin/AdminWorkbenchTabs";
 
 import { ensurePermissionCatalog, PermCheckboxes } from "@/components/admin/PermissionCatalog";
 import { today } from "@/lib/dateUtils";
@@ -239,6 +240,7 @@ export default function PermissionsAdminPage() {
 
   return (
     <div className="h-full flex flex-col" style={{ maxHeight: "calc(100vh - 4rem)" }}>
+      <AdminWorkbenchTabs />
       <header className="flex flex-col items-stretch gap-3 px-4 py-4 flex-shrink-0 sm:flex-row sm:items-center sm:justify-between sm:px-5" style={{ borderBottom: "1px solid var(--border)" }}>
         <div className="min-w-0">
           <h1 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>自治管理工作台</h1>
@@ -467,7 +469,6 @@ function WorkbenchList({
                 <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{u.display_name}</p>
                 {u.is_owner && <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold" style={{ color: "#dc2626", background: "rgba(220,38,38,0.12)" }}>擁有者</span>}
                 {u.is_superuser && !u.is_owner && <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ color: "#f59e0b", background: "rgba(245,158,11,0.12)" }}>超管</span>}
-                {u.allow_external_login && <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ color: "var(--primary)", background: "var(--primary-dim)" }}>校外登入</span>}
                 {!u.is_active && <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ color: "#f87171", background: "rgba(248,113,113,0.1)" }}>停用</span>}
               </div>
               <p className="text-xs truncate" style={{ color: "var(--text-muted)" }}>{u.email}</p>
@@ -1095,11 +1096,6 @@ function UserPanel({
             </p>
             <p>學號：{user.student_id ?? "未設定"}</p>
           </div>
-          {user.allow_external_login && (
-            <p className="text-[11px] mt-1" style={{ color: "var(--primary)" }}>
-              已允許校外信箱登入
-            </p>
-          )}
         </div>
         <div className="flex flex-wrap gap-2 sm:justify-end">
           <SmallButton
@@ -1113,18 +1109,6 @@ function UserPanel({
             })}
           >
             {user.is_active ? "停用" : "啟用"}
-          </SmallButton>
-          <SmallButton
-            tone={user.allow_external_login ? "warning" : "primary"}
-            onClick={() => onConfirm({
-              title: user.allow_external_login ? "取消校外登入" : "允許校外登入",
-              body: `確定要${user.allow_external_login ? "取消" : "允許"}「${user.display_name}」使用校外信箱登入？這只影響登入門禁，不會改變任何 RBAC 權限。`,
-              action: () => adminApi.updateUser(user.id, {
-                allow_external_login: !user.allow_external_login,
-              }),
-            })}
-          >
-            {user.allow_external_login ? "禁校外登入" : "允許校外登入"}
           </SmallButton>
           <SmallButton
             tone="warning"
@@ -1315,7 +1299,6 @@ function OnboardingWizard({
   const [studentId, setStudentId] = useState("");
   const [email, setEmail] = useState("");
   const [linkedEmails, setLinkedEmails] = useState("");
-  const [allowExternalLogin, setAllowExternalLogin] = useState(false);
   const [name, setName] = useState("");
   const [positionId, setPositionId] = useState("");
   const [start, setStart] = useState(today());
@@ -1349,7 +1332,6 @@ function OnboardingWizard({
           student_id: studentId.trim() || null,
           email: email.trim() || null,
           linked_emails: linkedEmails.split(/[,，;\s]+/).map((value) => value.trim()).filter(Boolean),
-          allow_external_login: allowExternalLogin,
           position_ids: positionId ? [positionId] : [],
           start_date: start,
           end_date: end || null,
@@ -1375,9 +1357,6 @@ function OnboardingWizard({
             student_id: user.identifiers[0]?.includes("@") ? null : user.identifiers[0],
             email: user.identifiers[0]?.includes("@") ? user.identifiers[0] : null,
             linked_emails: user.identifiers.slice(1),
-            allow_external_login: user.identifiers.some(
-              (identifier) => identifier.includes("@") && !identifier.endsWith("@hchs.hc.edu.tw"),
-            ),
             position_ids: positionId ? [positionId] : [],
             start_date: start,
             end_date: end || null,
@@ -1429,17 +1408,6 @@ function OnboardingWizard({
                 placeholder="其他登入 Email（選填，可用逗號分隔）"
                 className="sm:col-span-2"
               />
-              <label
-                className="sm:col-span-2 flex items-center gap-2 text-xs"
-                style={{ color: "var(--text-secondary)" }}
-              >
-                <input
-                  type="checkbox"
-                  checked={allowExternalLogin}
-                  onChange={(e) => setAllowExternalLogin(e.target.checked)}
-                />
-                允許此帳號以校外信箱登入（僅登入門禁，不影響下方職位與權限）
-              </label>
             </div>
           ) : (
             <div className="space-y-2">
