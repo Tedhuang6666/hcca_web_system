@@ -177,12 +177,11 @@ async def upload_image(_: CurrentUser, file: UploadFile = File(...)) -> ImageUpl
 async def list_categories(
     session: DbDep,
     _: CurrentUser,
-    org_id: uuid.UUID | None = Query(None),
     activity_id: uuid.UUID | None = Query(None),
     include_inactive: bool = Query(True),
 ) -> list[ProductCategory]:
     return await shop_svc.list_categories(
-        session, org_id=org_id, activity_id=activity_id, include_inactive=include_inactive
+        session, activity_id=activity_id, include_inactive=include_inactive
     )
 
 
@@ -294,10 +293,9 @@ async def delete_series(series_id: uuid.UUID, session: DbDep, current_user: Curr
 async def get_catalog(
     session: DbDep,
     _: CurrentUser,
-    org_id: uuid.UUID | None = Query(None),
     activity_id: uuid.UUID | None = Query(None),
 ) -> list[CatalogCategoryOut]:
-    return await shop_svc.build_catalog_tree(session, org_id=org_id, activity_id=activity_id)
+    return await shop_svc.build_catalog_tree(session, activity_id=activity_id)
 
 
 # ── 商品 ──────────────────────────────────────────────────────────────────────
@@ -307,7 +305,6 @@ async def get_catalog(
 async def list_products(
     session: DbDep,
     _: CurrentUser,
-    org_id: uuid.UUID | None = Query(None),
     activity_id: uuid.UUID | None = Query(None),
     series_id: uuid.UUID | None = Query(None),
     status_filter: ProductStatus | None = Query(None, alias="status"),
@@ -316,7 +313,6 @@ async def list_products(
 ) -> list[Product]:
     return await shop_svc.list_products(
         session,
-        org_id=org_id,
         activity_id=activity_id,
         series_id=series_id,
         status=status_filter,
@@ -634,7 +630,6 @@ async def checkout(
 async def list_orders(
     session: DbDep,
     current_user: CurrentUser,
-    org_id: uuid.UUID | None = Query(None),
     activity_id: uuid.UUID | None = Query(None),
     status_filter: OrderStatus | None = Query(None, alias="status"),
     my_only: bool = Query(True, description="僅顯示我的訂單"),
@@ -654,7 +649,6 @@ async def list_orders(
     orders = await shop_svc.list_orders(
         session,
         user_id=current_user.id if my_only else None,
-        org_id=org_id,
         activity_id=activity_id,
         status=status_filter,
         limit=limit,
@@ -745,7 +739,6 @@ async def order_summary(
     session: DbDep,
     _: CurrentUser,
     group_by: str = Query("class", pattern="^(class|grade|user)$"),
-    org_id: uuid.UUID | None = Query(None),
     product_id: uuid.UUID | None = Query(None),
     grade: int | None = Query(None, ge=0),
     class_id: uuid.UUID | None = Query(None),
@@ -758,7 +751,6 @@ async def order_summary(
     return await shop_svc.order_summary(
         session,
         group_by=group_by,
-        org_id=org_id,
         product_id=product_id,
         grade=grade,
         class_id=class_id,
@@ -884,7 +876,6 @@ async def update_order_payment(
 async def export_orders_excel(
     session: DbDep,
     current_user: CurrentUser,
-    org_id: uuid.UUID | None = Query(None, description="過濾組織（留空匯出全部）"),
     activity_id: uuid.UUID | None = Query(None, description="過濾活動"),
 ) -> Response:
     if activity_id:
@@ -895,7 +886,7 @@ async def export_orders_excel(
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="需要權限：finance:view"
             )
-    xlsx_bytes = await shop_svc.export_orders_excel(session, org_id=org_id, activity_id=activity_id)
+    xlsx_bytes = await shop_svc.export_orders_excel(session, activity_id=activity_id)
     filename = f"orders_{local_today()}.xlsx"
     return Response(
         content=xlsx_bytes,
@@ -912,7 +903,6 @@ async def export_orders_excel(
 async def export_orders_csv(
     session: DbDep,
     current_user: CurrentUser,
-    org_id: uuid.UUID | None = Query(None, description="過濾組織"),
     activity_id: uuid.UUID | None = Query(None, description="過濾活動"),
 ) -> Response:
     if activity_id:
@@ -923,7 +913,7 @@ async def export_orders_csv(
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="需要權限：finance:view"
             )
-    csv_str = await shop_svc.export_orders_csv(session, org_id=org_id, activity_id=activity_id)
+    csv_str = await shop_svc.export_orders_csv(session, activity_id=activity_id)
     filename = f"orders_{local_today()}.csv"
     return Response(
         content=csv_str.encode("utf-8-sig"),

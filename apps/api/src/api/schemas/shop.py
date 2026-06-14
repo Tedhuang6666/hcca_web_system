@@ -64,7 +64,6 @@ class ProductVariantGroupOut(BaseModel):
 
 
 class ProductCategoryCreate(BaseModel):
-    org_id: uuid.UUID = Field(..., description="所屬組織 ID")
     activity_id: uuid.UUID | None = Field(None, description="所屬活動 ID")
     name: str = Field(..., min_length=1, max_length=200, description="主題名稱，如「校商」")
     description: str | None = None
@@ -85,7 +84,6 @@ class ProductCategoryOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    org_id: uuid.UUID
     activity_id: uuid.UUID | None = None
     name: str
     description: str | None
@@ -175,7 +173,6 @@ class ProductOut(BaseModel):
     status: ProductStatus
     version: int
     series_id: uuid.UUID
-    org_id: uuid.UUID
     created_by: uuid.UUID
     sale_start: datetime | None
     sale_end: datetime | None
@@ -300,7 +297,6 @@ class OrderOut(BaseModel):
     id: uuid.UUID
     serial_number: str
     user_id: uuid.UUID
-    org_id: uuid.UUID
     activity_id: uuid.UUID | None = None
     status: OrderStatus
     total_price: int
@@ -321,7 +317,6 @@ class OrderListItem(BaseModel):
     serial_number: str
     user_id: uuid.UUID
     user_name: str | None = None
-    org_id: uuid.UUID
     activity_id: uuid.UUID | None = None
     status: OrderStatus
     total_price: int

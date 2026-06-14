@@ -54,13 +54,10 @@ async def get_category(session: AsyncSession, category_id: uuid.UUID) -> Product
 async def list_categories(
     session: AsyncSession,
     *,
-    org_id: uuid.UUID | None = None,
     activity_id: uuid.UUID | None = None,
     include_inactive: bool = True,
 ) -> list[ProductCategory]:
     q = select(ProductCategory)
-    if org_id:
-        q = q.where(ProductCategory.org_id == org_id)
     if activity_id:
         q = q.where(ProductCategory.activity_id == activity_id)
     if not include_inactive:
@@ -74,7 +71,6 @@ async def create_category(
     session: AsyncSession, *, data: ProductCategoryCreate, created_by: uuid.UUID
 ) -> ProductCategory:
     category = ProductCategory(
-        org_id=data.org_id,
         activity_id=data.activity_id,
         name=data.name,
         description=data.description,
@@ -175,7 +171,6 @@ async def get_product(session: AsyncSession, product_id: uuid.UUID) -> Product |
 async def list_products(
     session: AsyncSession,
     *,
-    org_id: uuid.UUID | None = None,
     activity_id: uuid.UUID | None = None,
     series_id: uuid.UUID | None = None,
     status: ProductStatus | None = None,
@@ -185,8 +180,6 @@ async def list_products(
     q = select(Product).options(
         selectinload(Product.variant_groups).selectinload(ProductVariantGroup.options)
     )
-    if org_id:
-        q = q.where(Product.org_id == org_id)
     if activity_id:
         q = q.join(ProductSeries, Product.series_id == ProductSeries.id).join(
             ProductCategory, ProductSeries.category_id == ProductCategory.id
@@ -219,7 +212,6 @@ async def create_product(
         stock_quantity=data.stock_quantity,
         is_unlimited=data.is_unlimited,
         series_id=series.id,
-        org_id=category.org_id,
         created_by=created_by,
         sale_start=data.sale_start,
         sale_end=data.sale_end,
@@ -263,9 +255,6 @@ async def update_product(
         series = await get_series(session, payload["series_id"])
         if series is None:
             raise ValueError("找不到目標系列")
-        category = await get_category(session, series.category_id)
-        if category is not None:
-            product.org_id = category.org_id
     for field, value in payload.items():
         setattr(product, field, value)
     await session.flush()
@@ -378,7 +367,6 @@ async def delete_variant_option(session: AsyncSession, option: ProductVariantOpt
 async def build_catalog_tree(
     session: AsyncSession,
     *,
-    org_id: uuid.UUID | None = None,
     activity_id: uuid.UUID | None = None,
 ) -> list[CatalogCategoryOut]:
     q = (
@@ -391,8 +379,6 @@ async def build_catalog_tree(
         .where(ProductCategory.is_active.is_(True))
         .order_by(ProductCategory.sort_order, ProductCategory.created_at)
     )
-    if org_id:
-        q = q.where(ProductCategory.org_id == org_id)
     if activity_id:
         q = q.where(ProductCategory.activity_id == activity_id)
     categories = (await session.execute(q)).scalars().unique().all()

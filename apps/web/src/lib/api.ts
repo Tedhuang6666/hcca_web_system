@@ -623,9 +623,8 @@ export const documentsApi = {
 
 export const shopApi = {
   // 瀏覽
-  catalog: (orgId?: string, activityId?: string) => {
+  catalog: (activityId?: string) => {
     const q = new URLSearchParams();
-    if (orgId) q.set("org_id", orgId);
     if (activityId) q.set("activity_id", activityId);
     const qs = q.toString();
     return get<CatalogCategoryOut[]>(`/shop/catalog${qs ? `?${qs}` : ""}`);
@@ -657,7 +656,6 @@ export const shopApi = {
   },
   orderSummary: (params: {
     group_by: "class" | "grade" | "user";
-    org_id?: string;
     activity_id?: string;
     product_id?: string;
     grade?: string;
@@ -689,9 +687,8 @@ export const shopApi = {
     post<OrderOut>(`/shop/orders/${id}/cancel`, { reason }),
   setOrderPaid: (id: string, isPaid: boolean) =>
     patch<OrderOut>(`/shop/orders/${id}/payment`, { is_paid: isPaid }),
-  downloadReport: (format: "xlsx" | "csv", params?: { org_id?: string; activity_id?: string }) => {
+  downloadReport: (format: "xlsx" | "csv", params?: { activity_id?: string }) => {
     const q = new URLSearchParams();
-    if (params?.org_id) q.set("org_id", params.org_id);
     if (params?.activity_id) q.set("activity_id", params.activity_id);
     const qs = q.toString();
     return fetch(`${BASE}/shop/reports/orders.${format}${qs ? `?${qs}` : ""}`, {

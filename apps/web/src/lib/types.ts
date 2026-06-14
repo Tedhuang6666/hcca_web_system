@@ -391,14 +391,14 @@ export interface ProductOut {
   image_url: string | null;
   price: number; stock_quantity: number; is_unlimited: boolean;
   status: ProductStatus; version: number;
-  series_id: string; org_id: string; created_by: string;
+  series_id: string; created_by: string;
   sale_start: string | null; sale_end: string | null;
   requires_seating: boolean; seating_mode: SeatingMode | null;
   created_at: string; updated_at: string;
   variant_groups: ProductVariantGroupOut[];
 }
 export interface ProductCategoryOut {
-  id: string; org_id: string; activity_id: string | null; name: string;
+  id: string; activity_id: string | null; name: string;
   description: string | null; image_url: string | null;
   sort_order: number; is_active: boolean;
   created_by: string; created_at: string; updated_at: string;
@@ -445,7 +445,7 @@ export interface OrderItemOut {
   selected_options: SelectedOption[];
 }
 export interface OrderOut {
-  id: string; serial_number: string; user_id: string; org_id: string; activity_id: string | null;
+  id: string; serial_number: string; user_id: string; activity_id: string | null;
   status: OrderStatus; total_price: number; notes: string | null;
   class_id: string | null; class_label: string | null;
   assistance_scope: string; assisted_by_id: string | null;
@@ -454,7 +454,7 @@ export interface OrderOut {
 }
 export interface OrderListItem {
   id: string; serial_number: string; user_id: string;
-  user_name: string | null; org_id: string; activity_id: string | null;
+  user_name: string | null; activity_id: string | null;
   status: OrderStatus; total_price: number;
   class_id: string | null; class_label: string | null;
   assistance_scope: string; assisted_by_id: string | null;

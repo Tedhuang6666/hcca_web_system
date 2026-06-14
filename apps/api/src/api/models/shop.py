@@ -26,7 +26,6 @@ from api.models.types import JSONDict
 
 if TYPE_CHECKING:
     from api.models.activity import Activity
-    from api.models.org import Org
     from api.models.school_class import SchoolClass
     from api.models.seating import SeatAssignment, SeatingZone
     from api.models.user import User
@@ -58,9 +57,6 @@ class ProductCategory(Base, TimestampMixin):
     __tablename__ = "product_categories"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("orgs.id", ondelete="RESTRICT"), nullable=False, index=True
-    )
     activity_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("activities.id", ondelete="SET NULL"),
@@ -78,7 +74,6 @@ class ProductCategory(Base, TimestampMixin):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
 
-    org: Mapped[Org] = relationship("Org")
     activity: Mapped[Activity | None] = relationship("Activity")
     series: Mapped[list[ProductSeries]] = relationship(
         "ProductSeries", back_populates="category", cascade="all, delete-orphan"
@@ -159,12 +154,6 @@ class Product(Base, TimestampMixin):
         nullable=False,
         index=True,
     )
-    org_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("orgs.id", ondelete="RESTRICT"),
-        nullable=False,
-        index=True,
-    )
     created_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="RESTRICT"),
@@ -172,7 +161,6 @@ class Product(Base, TimestampMixin):
         index=True,
     )
 
-    org: Mapped[Org] = relationship("Org")
     creator: Mapped[User] = relationship("User")
     series: Mapped[ProductSeries] = relationship("ProductSeries", back_populates="products")
     variant_groups: Mapped[list[ProductVariantGroup]] = relationship(
@@ -316,12 +304,6 @@ class Order(Base, TimestampMixin, ClassConsolidationMixin):
         nullable=False,
         index=True,
     )
-    org_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("orgs.id", ondelete="RESTRICT"),
-        nullable=False,
-        index=True,
-    )
     assistance_scope: Mapped[str] = mapped_column(
         String(30), nullable=False, default="self", server_default="self", index=True
     )
@@ -340,7 +322,6 @@ class Order(Base, TimestampMixin, ClassConsolidationMixin):
 
     user: Mapped[User] = relationship("User", foreign_keys=[user_id])
     assisted_by: Mapped[User | None] = relationship("User", foreign_keys=[assisted_by_id])
-    org: Mapped[Org] = relationship("Org")
     school_class: Mapped[SchoolClass | None] = relationship(
         "SchoolClass", foreign_keys="Order.class_id"
     )

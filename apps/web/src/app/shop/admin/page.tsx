@@ -2,13 +2,12 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { activitiesApi, shopApi, orgsApi, classApi, apiErrorMessage } from "@/lib/api";
+import { activitiesApi, shopApi, classApi, apiErrorMessage } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
 import { usePermissions } from "@/hooks/usePermissions";
 import Modal from "@/components/ui/Modal";
 import ActivitySelect from "@/components/activities/ActivitySelect";
 import type {
-  OrgRead,
   SchoolClassListItem,
   ProductCategoryOut,
   ProductSeriesOut,
@@ -102,16 +101,13 @@ function MiniBtn({
 function EntityModal({
   kind,
   initial,
-  orgs,
   onClose,
   onSaved,
 }: {
   kind: "category" | "series";
   initial: ProductCategoryOut | ProductSeriesOut | null; // null = 新增
-  orgs: OrgRead[];
   onClose: () => void;
   onSaved: () => void;
-  // 新增時的父層 id（category 用 org_id、series 用 category_id 由呼叫端帶在 initial-less 情況）
 }) {
   const editing = initial !== null;
   const [name, setName] = useState(initial?.name ?? "");
@@ -119,9 +115,6 @@ function EntityModal({
   const [imageUrl, setImageUrl] = useState<string | null>(initial?.image_url ?? null);
   const [sortOrder, setSortOrder] = useState(String(initial?.sort_order ?? 0));
   const [isActive, setIsActive] = useState(initial?.is_active ?? true);
-  const [orgId, setOrgId] = useState(
-    kind === "category" ? ((initial as ProductCategoryOut | null)?.org_id ?? orgs[0]?.id ?? "") : "",
-  );
   const [activityId, setActivityId] = useState(
     kind === "category" ? ((initial as ProductCategoryOut | null)?.activity_id ?? "") : "",
   );
@@ -142,13 +135,6 @@ function EntityModal({
         <Field label="圖片">
           <ImageField value={imageUrl} onChange={setImageUrl} />
         </Field>
-        {kind === "category" && !editing && (
-          <Field label="所屬組織">
-            <select value={orgId} onChange={(e) => setOrgId(e.target.value)} className="input w-full">
-              {orgs.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
-            </select>
-          </Field>
-        )}
         {kind === "category" && (
           <ActivitySelect value={activityId} onChange={setActivityId} />
         )}
@@ -178,8 +164,7 @@ function EntityModal({
                 if (kind === "category") {
                   if (editing) await shopApi.updateCategory(initial!.id, { ...body, activity_id: activityId || null });
                   else {
-                    if (!orgId) { toast.error("請選擇組織"); setBusy(false); return; }
-                    await shopApi.createCategory({ ...body, org_id: orgId, activity_id: activityId || null });
+                    await shopApi.createCategory({ ...body, activity_id: activityId || null });
                   }
                 } else {
                   await shopApi.updateSeries(initial!.id, body);
@@ -820,11 +805,9 @@ function StatsView({ activityId }: { activityId: string }) {
   const [data, setData] = useState<OrderSummaryOut | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [orgs, setOrgs] = useState<OrgRead[]>([]);
   const [products, setProducts] = useState<ProductOut[]>([]);
   const [classes, setClasses] = useState<SchoolClassListItem[]>([]);
   const [userOptions, setUserOptions] = useState<{ id: string; label: string }[]>([]);
-  const [orgId, setOrgId] = useState("");
   const [productId, setProductId] = useState("");
   const [grade, setGrade] = useState("");
   const [classId, setClassId] = useState("");
@@ -837,12 +820,10 @@ function StatsView({ activityId }: { activityId: string }) {
 
   useEffect(() => {
     Promise.all([
-      orgsApi.list({ active_only: true }).catch(() => []),
       shopApi.listProducts({ limit: "100", activity_id: activityId }).catch(() => []),
       classApi.list({ limit: "500" }).catch(() => []),
       shopApi.orderSummary({ group_by: "user", activity_id: activityId }).catch(() => null),
-    ]).then(([loadedOrgs, loadedProducts, loadedClasses, userSummary]) => {
-      setOrgs(loadedOrgs);
+    ]).then(([loadedProducts, loadedClasses, userSummary]) => {
       setProducts(loadedProducts);
       setClasses(loadedClasses);
       setUserOptions(
@@ -858,7 +839,6 @@ function StatsView({ activityId }: { activityId: string }) {
     setError(null);
     shopApi.orderSummary({
       group_by: groupBy,
-      org_id: orgId,
       activity_id: activityId,
       product_id: productId,
       grade,
@@ -875,7 +855,7 @@ function StatsView({ activityId }: { activityId: string }) {
         setError(apiErrorMessage(e, "統計載入失敗"));
       })
       .finally(() => setLoading(false));
-  }, [activityId, classId, dateFrom, dateTo, grade, groupBy, orgId, paid, productId, statusFilter, userId]);
+  }, [activityId, classId, dateFrom, dateTo, grade, groupBy, paid, productId, statusFilter, userId]);
 
   const groupOptions = [
     ["class", "依班級"],
@@ -889,7 +869,6 @@ function StatsView({ activityId }: { activityId: string }) {
     (!grade || String(schoolClass.grade) === grade)
   );
   const resetFilters = () => {
-    setOrgId("");
     setProductId("");
     setGrade("");
     setClassId("");
@@ -900,7 +879,7 @@ function StatsView({ activityId }: { activityId: string }) {
     setDateTo("");
   };
   const hasAdvancedFilters = Boolean(
-    orgId || productId || grade || classId || userId || paid || statusFilter || dateFrom || dateTo
+    productId || grade || classId || userId || paid || statusFilter || dateFrom || dateTo
   );
 
   return (
@@ -952,12 +931,6 @@ function StatsView({ activityId }: { activityId: string }) {
             <Field label="彙總方式">
               <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as "class" | "grade" | "user")} className="input w-full">
                 {groupOptions.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
-              </select>
-            </Field>
-            <Field label="組織">
-              <select value={orgId} onChange={(e) => setOrgId(e.target.value)} className="input w-full">
-                <option value="">全部組織</option>
-                {orgs.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
               </select>
             </Field>
             <Field label="商品">
@@ -1125,7 +1098,6 @@ export default function ShopAdminPage() {
   const { can } = usePermissions();
 
   const [tab, setTab] = useState<"catalog" | "stats">("catalog");
-  const [orgs, setOrgs] = useState<OrgRead[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [activityId, setActivityId] = useState("");
   const allowed = can("shop:manage") || activities.length > 0;
@@ -1176,7 +1148,6 @@ export default function ShopAdminPage() {
     if (!allowed) return;
     loadCategories();
     loadAllProducts();
-    orgsApi.list({ active_only: true }).then(setOrgs).catch(() => setOrgs([]));
   }, [activityId, allowed, loadAllProducts, loadCategories]);
 
   useEffect(() => { if (cat) loadSeries(cat.id); }, [cat, loadSeries]);
@@ -1458,13 +1429,13 @@ export default function ShopAdminPage() {
 
       {/* Modals */}
       {catModal && (
-        <EntityModal kind="category" initial={catModal.initial} orgs={orgs}
+        <EntityModal kind="category" initial={catModal.initial}
           onClose={() => setCatModal(null)}
           onSaved={() => { setCatModal(null); loadCategories(); }} />
       )}
       {seriesModal && cat && (
         seriesModal.initial
-          ? <EntityModal kind="series" initial={seriesModal.initial} orgs={orgs}
+          ? <EntityModal kind="series" initial={seriesModal.initial}
               onClose={() => setSeriesModal(null)}
               onSaved={() => { setSeriesModal(null); loadSeries(cat.id); }} />
           : <NewSeriesModal categoryId={cat.id}
