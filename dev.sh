@@ -728,6 +728,8 @@ step "7.6/8 啟動 Email Worker（Celery email queue）"
         --loglevel=info \
         --concurrency=1 \
         --queues=email \
+        --without-gossip \
+        --without-mingle \
         -n email-dev@%h \
         > >(_stream_log "email" "$EMAIL_WORKER_LOG" "$C_CYAN") 2>&1
 ) &
