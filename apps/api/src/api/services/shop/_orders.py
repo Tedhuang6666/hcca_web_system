@@ -214,7 +214,6 @@ async def _create_order_from_items(
     session: AsyncSession,
     *,
     user_id: uuid.UUID,
-    org_id: uuid.UUID,
     class_id: uuid.UUID | None,
     cart_items: list[CartItem],
     notes: str | None,
@@ -273,7 +272,6 @@ async def _create_order_from_items(
     order = Order(
         serial_number=serial,
         user_id=user_id,
-        org_id=org_id,
         class_id=class_id,
         assistance_scope=assistance_scope,
         assisted_by_id=assisted_by_id,
@@ -319,28 +317,17 @@ async def create_direct_order(
     assisted_by_id: uuid.UUID | None = None,
 ) -> list[Order]:
     cart_items = await _order_items_to_cart_items(session, data.items)
-    by_org: dict[uuid.UUID, list[CartItem]] = {}
-    for item in cart_items:
-        product = await get_product(session, item.product_id)
-        if product is None:
-            raise ValueError("找不到此商品")
-        by_org.setdefault(product.org_id, []).append(item)
-
-    orders: list[Order] = []
-    for org_id, grouped_items in by_org.items():
-        order = await _create_order_from_items(
-            session,
-            user_id=user_id,
-            org_id=org_id,
-            class_id=class_id,
-            cart_items=grouped_items,
-            notes=data.notes,
-            assistance_scope=assistance_scope,
-            assisted_by_id=assisted_by_id,
-        )
-        await receivable_svc.sync_shop_order(session, order)
-        orders.append(order)
-    return orders
+    order = await _create_order_from_items(
+        session,
+        user_id=user_id,
+        class_id=class_id,
+        cart_items=cart_items,
+        notes=data.notes,
+        assistance_scope=assistance_scope,
+        assisted_by_id=assisted_by_id,
+    )
+    await receivable_svc.sync_shop_order(session, order)
+    return [order]
 
 
 async def checkout(session: AsyncSession, user, *, notes: str | None = None) -> list[Order]:
@@ -351,22 +338,15 @@ async def checkout(session: AsyncSession, user, *, notes: str | None = None) -> 
     school_class = await class_svc.resolve_user_class(session, user)
     class_id = school_class.id if school_class else None
 
-    by_org: dict[uuid.UUID, list[CartItem]] = {}
-    for item in cart.items:
-        by_org.setdefault(item.product.org_id, []).append(item)
-
-    orders: list[Order] = []
-    for org_id, items in by_org.items():
-        order = await _create_order_from_items(
-            session,
-            user_id=user.id,
-            org_id=org_id,
-            class_id=class_id,
-            cart_items=items,
-            notes=notes,
-        )
-        await receivable_svc.sync_shop_order(session, order)
-        orders.append(order)
+    order = await _create_order_from_items(
+        session,
+        user_id=user.id,
+        class_id=class_id,
+        cart_items=list(cart.items),
+        notes=notes,
+    )
+    await receivable_svc.sync_shop_order(session, order)
+    orders = [order]
 
     cart.items.clear()
     await session.flush()
@@ -393,7 +373,6 @@ async def list_orders(
     session: AsyncSession,
     *,
     user_id: uuid.UUID | None = None,
-    org_id: uuid.UUID | None = None,
     activity_id: uuid.UUID | None = None,
     class_ids: list[uuid.UUID] | None = None,
     assistance_scope: str | None = None,
@@ -416,8 +395,6 @@ async def list_orders(
     )
     if user_id:
         q = q.where(Order.user_id == user_id)
-    if org_id:
-        q = q.where(Order.org_id == org_id)
     if activity_id:
         q = q.where(
             Order.items.any(
@@ -460,7 +437,6 @@ def serialize_order(order: Order) -> OrderOut:
         id=order.id,
         serial_number=order.serial_number,
         user_id=order.user_id,
-        org_id=order.org_id,
         activity_id=_order_activity_id(order),
         status=order.status,
         total_price=order.total_price,
@@ -483,7 +459,6 @@ def serialize_order_list_item(order: Order) -> OrderListItem:
         serial_number=order.serial_number,
         user_id=order.user_id,
         user_name=order.user.display_name if order.user else None,
-        org_id=order.org_id,
         activity_id=_order_activity_id(order),
         status=order.status,
         total_price=order.total_price,
@@ -532,12 +507,6 @@ async def replace_order_items(
 ) -> Order:
     if order.status not in (OrderStatus.PENDING, OrderStatus.CONFIRMED):
         raise ValueError(f"訂單狀態 {order.status} 無法修改")
-    for requested_item in data.items:
-        product = await get_product(session, requested_item.product_id)
-        if product is None:
-            raise ValueError("找不到此商品")
-        if product.org_id != order.org_id:
-            raise ValueError("修改訂單不可跨商品組織，請另外建立新訂單")
 
     for item in list(order.items):
         product = await session.get(Product, item.product_id)
@@ -552,7 +521,6 @@ async def replace_order_items(
     specs_order = await _create_order_from_items(
         session,
         user_id=order.user_id,
-        org_id=order.org_id,
         class_id=order.class_id,
         cart_items=temp_items,
         notes=data.notes,
@@ -592,7 +560,6 @@ async def order_summary(
     session: AsyncSession,
     *,
     group_by: str,
-    org_id: uuid.UUID | None = None,
     product_id: uuid.UUID | None = None,
     grade: int | None = None,
     class_id: uuid.UUID | None = None,
@@ -614,8 +581,6 @@ async def order_summary(
         q = q.where(Order.status == status)
     else:
         q = q.where(Order.status != OrderStatus.CANCELLED)
-    if org_id:
-        q = q.where(Order.org_id == org_id)
     if product_id:
         q = q.where(Order.items.any(OrderItem.product_id == product_id))
     if grade is not None:
