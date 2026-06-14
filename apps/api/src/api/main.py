@@ -333,6 +333,9 @@ def create_app() -> FastAPI:
     attach_module_health(documents.router, module_id="documents")
     attach_module_health(regulations.router, module_id="regulations")
     attach_module_health(meetings.router, module_id="meetings")
+    attach_module_health(calendar.router, module_id="calendar")
+    attach_module_health(council_proposals.router, module_id="councilProposals")
+    attach_module_health(judicial_petitions.router, module_id="judicialPetitions")
     attach_module_health(announcements.router, module_id="announcements")
     attach_module_health(shop.router, module_id="shop")
     attach_module_health(meal.router, module_id="meal")
@@ -340,6 +343,11 @@ def create_app() -> FastAPI:
     attach_module_health(petitions.router, module_id="petitions")
     attach_module_health(exam_papers.router, module_id="examPapers")
     attach_module_health(partner_map.router, module_id="partnerMap")
+    attach_module_health(discord.router, module_id="discord")
+    attach_module_health(governance.router, module_id="governance")
+    attach_module_health(activities.router, module_id="activities")
+    attach_module_health(elections.router, module_id="elections")
+    attach_module_health(seating.router, module_id="seating")
 
     # lifespan 會併發執行模組自檢；
     # 預設 check 只 ping DB，足以偵測「資料庫斷線」「該模組表不存在」這類致命狀態。
@@ -350,6 +358,9 @@ def create_app() -> FastAPI:
         "documents",
         "regulations",
         "meetings",
+        "calendar",
+        "councilProposals",
+        "judicialPetitions",
         "announcements",
         "shop",
         "meal",
@@ -357,6 +368,11 @@ def create_app() -> FastAPI:
         "petitions",
         "examPapers",
         "partnerMap",
+        "discord",
+        "governance",
+        "activities",
+        "elections",
+        "seating",
     ):
         _register_module(_mid, startup_check=_module_default_check)
 
