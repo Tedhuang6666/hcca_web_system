@@ -47,7 +47,7 @@ export default function PublicHomePage() {
             </h1>
             <p className="mt-5 max-w-2xl text-sm leading-7 text-[var(--public-secondary)] sm:text-base sm:leading-8">
               這裡集中提供法規、公文與自治參與服務。查詢公開資料不需要帳號，
-              只有建立內部文件、審核與管理操作才需要登入。
+              議會提案、評議聲請與內部操作則需要登入。
             </p>
           </div>
           <div className="rounded-2xl border border-[var(--public-border)] bg-[var(--public-soft)] p-3 sm:p-4">
@@ -57,8 +57,8 @@ export default function PublicHomePage() {
             <div className="divide-y divide-[var(--public-border)]">
               {[
                 ["01", "公開資料", "查詢法規、公文與附件"],
-                ["02", "自治資訊", "閱讀公告與議會提案"],
-                ["03", "公共參與", "提出陳情或評議聲請"],
+                ["02", "自治資訊", "閱讀公開公告"],
+                ["03", "公共參與", "提出陳情或查詢進度"],
               ].map(([number, title, description]) => (
                 <div key={number} className="grid grid-cols-[2rem_1fr] gap-3 px-2 py-3.5">
                   <span className="text-xs font-semibold text-[var(--public-accent)]">{number}</span>

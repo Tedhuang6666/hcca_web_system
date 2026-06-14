@@ -43,7 +43,7 @@ export const PUBLIC_NAV_GROUP_META: Record<
   primary: { label: "主要導覽" },
   info: { label: "資訊與組織" },
   data: { label: "公開資料查詢" },
-  participation: { label: "公共參與", hint: "免登入也能直接使用" },
+  participation: { label: "公共參與" },
 };
 
 /** 顯示順序＝陣列順序（同組內）。後台 order 覆寫只調整同組相對位置。 */
@@ -61,12 +61,10 @@ export const PUBLIC_NAV_ITEMS: PublicNavItemDef[] = [
   { key: "partner-map", href: "/partner-map", label: "特約地圖", description: "合作店家與學生優惠", icon: MapPinned, group: "data" },
   { key: "surveys", href: "/surveys", label: "公開問卷", description: "參與目前開放的校園調查", icon: ListChecks, group: "data", guestUsable: true },
 
-  // 公共參與全組皆可免登入使用（提案／陳情／評議都接受訪客送件，陳情中心可用案號查詢），
-  // 由群組層級 hint 統一標示，個別項目不再重複掛 badge。
-  { key: "council-proposals", href: "/council-proposals", label: "議會提案", description: "向學生代表大會提案", icon: Landmark, group: "participation", guestUsable: true },
+  { key: "council-proposals", href: "/council-proposals", label: "議會提案", description: "向學生代表大會提案", icon: Landmark, group: "participation" },
   { key: "petition-new", href: "/petitions/new", label: "提出陳情", description: "反映校園問題與建議", icon: MessageSquareText, group: "participation", guestUsable: true },
   { key: "petitions", href: "/petitions", label: "陳情中心", description: "用案號查詢陳情進度", icon: MessageSquareText, group: "participation", guestUsable: true },
-  { key: "judicial-petitions", href: "/judicial-petitions", label: "評議聲請", description: "提出審查與爭議事項", icon: Scale, group: "participation", guestUsable: true },
+  { key: "judicial-petitions", href: "/judicial-petitions", label: "評議聲請", description: "提出審查與爭議事項", icon: Scale, group: "participation" },
 ];
 
 /** 後台存進 settings.theme_config.nav 的覆寫形狀。 */
