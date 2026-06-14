@@ -6,7 +6,7 @@ import type { DecorationKind, LayoutDecoration, SeatInput, SeatOut, SeatStatus, 
 import { seatingApi, apiErrorMessage } from "@/lib/api";
 
 const GRID = 16;
-const SEAT = 34;
+const SEAT = 32; // = 2×GRID，對齊格點後座位可完美貼合或留走道
 
 type EditSeat = SeatInput & { key: string };
 
@@ -31,10 +31,12 @@ const DECO_TYPES: { value: DecorationKind; label: string; defaultW: number; defa
   { value: "box",    label: "區塊框",       defaultW: 160, defaultH: 100, defaultLabel: "VIP 區" },
 ];
 
-function seatColor(s: EditSeat, selected: boolean): React.CSSProperties {
+function seatColor(s: EditSeat, selected: boolean, colorMap: Record<string, string>): React.CSSProperties {
   if (selected) return { background: "var(--primary)", color: "#1a1a2e", borderColor: "var(--primary)" };
   if (s.status === "disabled") return { background: "transparent", color: "var(--text-muted)", borderStyle: "dashed", borderColor: "var(--border)" };
   if (s.status === "blocked") return { background: "var(--bg-elevated)", color: "var(--text-muted)", borderColor: "var(--danger, #c0392b)" };
+  const c = colorMap[s.seat_type];
+  if (c) return { background: `${c}2a`, color: "var(--text-primary)", borderColor: c };
   if (s.seat_type === "vip") return { background: "rgba(212,175,55,0.18)", color: "var(--text-primary)", borderColor: "var(--primary)" };
   return { background: "var(--bg-elevated)", color: "var(--text-primary)", borderColor: "var(--border)" };
 }
@@ -58,6 +60,16 @@ function decoStyle(d: LayoutDecoration, selected: boolean): React.CSSProperties 
     outlineOffset: selected ? 2 : undefined,
     zIndex: 1,
   };
+  const c = d.color; // 自訂色（#rrggbb）
+  if (c) {
+    const bg = `${c}18`; // ~9% alpha
+    switch (d.type) {
+      case "aisle_h": return { ...base, background: bg, borderTop: `1px dashed ${c}`, borderBottom: `1px dashed ${c}`, color: c };
+      case "aisle_v": return { ...base, background: bg, borderLeft: `1px dashed ${c}`, borderRight: `1px dashed ${c}`, color: c, fontSize: 10, writingMode: "vertical-rl" };
+      case "label":   return { ...base, background: "transparent", border: "none", color: c, fontWeight: 600, textAlign: "center" };
+      default:        return { ...base, background: bg, border: `1px dashed ${c}`, color: c, borderRadius: 4 };
+    }
+  }
   switch (d.type) {
     case "screen":
       return { ...base, background: "var(--bg-elevated)", border: "2px solid var(--border)", color: "var(--text-secondary)", borderRadius: 4 };
@@ -113,6 +125,9 @@ export default function SeatMapEditor({
   const [height, setHeight] = useState<number>((layout.height as number) || 460);
   const [seats, setSeats] = useState<EditSeat[]>(() => toEdit(zone.seats));
   const [decorations, setDecorations] = useState<LayoutDecoration[]>(() => parseDeco(layout));
+  const [seatTypeColors, setSeatTypeColors] = useState<Record<string, string>>(
+    () => ((layout.seat_type_colors as Record<string, string>) || {})
+  );
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [selectedDeco, setSelectedDeco] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -154,7 +169,7 @@ export default function SeatMapEditor({
         label: `${prefix}${i + 1}`,
         block: null,
         row_label: prefix,
-        x: snap(40 + i * (SEAT + 6)),
+        x: snap(40 + i * SEAT),
         y: baseY,
         seat_type: "normal",
         price_delta: 0,
@@ -266,6 +281,72 @@ export default function SeatMapEditor({
     );
   };
 
+  // ── 靠攏 / 拆分走道 ───────────────────────────────────────────────────────
+  const packTight = () => {
+    if (selected.size < 2) return;
+    const list = selectedSeats;
+    const spanX = Math.max(...list.map((s) => s.x)) - Math.min(...list.map((s) => s.x));
+    const spanY = Math.max(...list.map((s) => s.y)) - Math.min(...list.map((s) => s.y));
+    if (spanX >= spanY) {
+      const sorted = [...list].sort((a, b) => a.x - b.x);
+      const startX = sorted[0].x;
+      mutateSeats((prev) =>
+        prev.map((s) => {
+          const idx = sorted.findIndex((x) => x.key === s.key);
+          return idx < 0 ? s : { ...s, x: startX + idx * SEAT };
+        }),
+      );
+    } else {
+      const sorted = [...list].sort((a, b) => a.y - b.y);
+      const startY = sorted[0].y;
+      mutateSeats((prev) =>
+        prev.map((s) => {
+          const idx = sorted.findIndex((x) => x.key === s.key);
+          return idx < 0 ? s : { ...s, y: startY + idx * SEAT };
+        }),
+      );
+    }
+  };
+
+  const insertAisle = () => {
+    if (selected.size < 2) return;
+    const list = selectedSeats;
+    const spanX = Math.max(...list.map((s) => s.x)) - Math.min(...list.map((s) => s.x));
+    const spanY = Math.max(...list.map((s) => s.y)) - Math.min(...list.map((s) => s.y));
+    if (spanX >= spanY) {
+      const sorted = [...list].sort((a, b) => a.x - b.x);
+      const half = Math.ceil(sorted.length / 2);
+      const secondKeys = new Set(sorted.slice(half).map((s) => s.key));
+      mutateSeats((prev) => prev.map((s) => (secondKeys.has(s.key) ? { ...s, x: s.x + SEAT } : s)));
+    } else {
+      const sorted = [...list].sort((a, b) => a.y - b.y);
+      const half = Math.ceil(sorted.length / 2);
+      const secondKeys = new Set(sorted.slice(half).map((s) => s.key));
+      mutateSeats((prev) => prev.map((s) => (secondKeys.has(s.key) ? { ...s, y: s.y + SEAT } : s)));
+    }
+  };
+
+  // ── 方向鍵微移 ────────────────────────────────────────────────────────────
+  const onCanvasKeyDown = (e: React.KeyboardEvent) => {
+    if (!selected.size) return;
+    const dirs: Record<string, { dx: number; dy: number }> = {
+      ArrowLeft:  { dx: -GRID, dy: 0 },
+      ArrowRight: { dx:  GRID, dy: 0 },
+      ArrowUp:    { dx: 0, dy: -GRID },
+      ArrowDown:  { dx: 0, dy:  GRID },
+    };
+    const dir = dirs[e.key];
+    if (!dir) return;
+    e.preventDefault();
+    mutateSeats((prev) =>
+      prev.map((s) =>
+        selected.has(s.key)
+          ? { ...s, x: Math.max(0, s.x + dir.dx), y: Math.max(0, s.y + dir.dy) }
+          : s,
+      ),
+    );
+  };
+
   // ── 裝飾元素 屬性 ──────────────────────────────────────────────────────────
   const activeDeco = decorations.find((d) => d.id === selectedDeco) ?? null;
   const patchDeco = (patch: Partial<LayoutDecoration>) => {
@@ -286,7 +367,7 @@ export default function SeatMapEditor({
     setSaving(true);
     try {
       const payload = {
-        layout: { ...layout, width, height, decorations },
+        layout: { ...layout, width, height, decorations, seat_type_colors: seatTypeColors },
         seats: seats.map((s): SeatInput => ({
           id: s.id, label: s.label, block: s.block, row_label: s.row_label,
           x: s.x, y: s.y, seat_type: s.seat_type, price_delta: s.price_delta, status: s.status,
@@ -294,7 +375,9 @@ export default function SeatMapEditor({
       };
       const updated = await seatingApi.saveSeats(zone.id, payload);
       setSeats(toEdit(updated.seats));
-      setDecorations(parseDeco((updated.layout || {}) as Record<string, unknown>));
+      const ul = (updated.layout || {}) as Record<string, unknown>;
+      setDecorations(parseDeco(ul));
+      setSeatTypeColors((ul.seat_type_colors as Record<string, string>) || {});
       setDirty(false);
       setSelected(new Set());
       toast.success(`已儲存 ${updated.seats.length} 個座位`);
@@ -358,10 +441,25 @@ export default function SeatMapEditor({
           style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
           <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>座位</span>
           <button type="button" className="btn btn-ghost text-xs" onClick={relabelSelected}>設定代號</button>
+          {selected.size >= 2 && <>
+            <button type="button" className="btn btn-ghost text-xs" onClick={packTight} title="貼齊排列，消除座位間空隙">靠攏</button>
+            <button type="button" className="btn btn-ghost text-xs" onClick={insertAisle} title="從中間插入走道（後半段向外移一個座位寬）">拆分走道</button>
+          </>}
           <select className="input text-xs" value={selectedSeats[0]?.seat_type ?? "normal"}
             onChange={(e) => applyToSelected({ seat_type: e.target.value })}>
             {SEAT_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
           </select>
+          <label className="text-xs flex items-center gap-1" style={{ color: "var(--text-muted)" }} title="此座位類型的顏色">
+            色
+            <input type="color"
+              value={seatTypeColors[selectedSeats[0]?.seat_type ?? "normal"] || "#888888"}
+              onChange={(e) => {
+                setSeatTypeColors((prev) => ({ ...prev, [selectedSeats[0]?.seat_type ?? "normal"]: e.target.value }));
+                setDirty(true);
+              }}
+              className="w-8 h-6 rounded cursor-pointer border-0 p-0"
+              style={{ background: "none" }} />
+          </label>
           <select className="input text-xs" value={selectedSeats[0]?.status ?? "available"}
             onChange={(e) => applyToSelected({ status: e.target.value as SeatStatus })}>
             {(["available", "disabled", "blocked"] as SeatStatus[]).map((s) => (
@@ -413,6 +511,18 @@ export default function SeatMapEditor({
             <input type="number" className="input w-16 text-xs" step={GRID} value={activeDeco.y}
               onChange={(e) => patchDeco({ y: snap(Number(e.target.value)) })} />
           </label>
+          <label className="text-xs flex items-center gap-1" style={{ color: "var(--text-muted)" }} title="自訂顏色">
+            色
+            <input type="color"
+              value={activeDeco.color || "#888888"}
+              onChange={(e) => patchDeco({ color: e.target.value })}
+              className="w-8 h-6 rounded cursor-pointer border-0 p-0"
+              style={{ background: "none" }} />
+            {activeDeco.color && (
+              <button type="button" className="text-xs" style={{ color: "var(--text-muted)" }}
+                onClick={() => patchDeco({ color: undefined })} title="還原預設色">✕</button>
+            )}
+          </label>
           <button type="button" className="btn btn-ghost text-xs" style={{ color: "var(--danger, #c0392b)" }}
             onClick={deleteDeco}>刪除</button>
         </div>
@@ -422,15 +532,23 @@ export default function SeatMapEditor({
       <div className="overflow-auto rounded-lg" style={{ border: "1px solid var(--border)", maxHeight: 560 }}>
         <div
           ref={canvasRef}
+          tabIndex={0}
+          onKeyDown={onCanvasKeyDown}
           onPointerMove={onCanvasPointerMove}
           onPointerUp={onCanvasPointerUp}
           onPointerDown={() => { setSelected(new Set()); setSelectedDeco(null); setShowDecoMenu(false); }}
-          className="relative"
+          className="relative outline-none"
           style={{
             width,
             height,
-            background:
-              "var(--bg-base) repeating-linear-gradient(0deg, transparent, transparent 15px, rgba(127,127,127,0.08) 15px, rgba(127,127,127,0.08) 16px), repeating-linear-gradient(90deg, transparent, transparent 15px, rgba(127,127,127,0.08) 15px, rgba(127,127,127,0.08) 16px)",
+            // 雙層格線：粗線每 32px（= 1 座位寬），細線每 16px（= 半格）
+            backgroundImage: [
+              "repeating-linear-gradient(0deg, transparent, transparent 31px, rgba(127,127,127,0.22) 31px, rgba(127,127,127,0.22) 32px)",
+              "repeating-linear-gradient(90deg, transparent, transparent 31px, rgba(127,127,127,0.22) 31px, rgba(127,127,127,0.22) 32px)",
+              "repeating-linear-gradient(0deg, transparent, transparent 15px, rgba(127,127,127,0.07) 15px, rgba(127,127,127,0.07) 16px)",
+              "repeating-linear-gradient(90deg, transparent, transparent 15px, rgba(127,127,127,0.07) 15px, rgba(127,127,127,0.07) 16px)",
+            ].join(", "),
+            backgroundColor: "var(--bg-base)",
           }}
         >
           {/* 裝飾元素（在座位下層，以免遮住點擊） */}
@@ -461,7 +579,7 @@ export default function SeatMapEditor({
                 border: "1px solid",
                 cursor: "grab",
                 zIndex: 2,
-                ...seatColor(s, selected.has(s.key)),
+                ...seatColor(s, selected.has(s.key), seatTypeColors),
               }}
             >
               {s.label}
@@ -470,7 +588,8 @@ export default function SeatMapEditor({
         </div>
       </div>
       <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-        座位：點選可選取（Shift/Ctrl 多選），拖曳移動；空白處點一下取消選取。走道座位設為「走道」即不可被劃。
+        座位：點選可選取（Shift/Ctrl 多選），拖曳移動；選取後可用方向鍵微移（每次 16px）。
+        多選後「靠攏」使座位緊密貼合，「拆分走道」在中間插入走道空隙。
         裝飾元素：點選後可拖曳移動，或在屬性列調整尺寸與標籤。
       </p>
     </div>
