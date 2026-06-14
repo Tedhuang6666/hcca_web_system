@@ -55,8 +55,8 @@ export const PUBLIC_NAV_ITEMS: PublicNavItemDef[] = [
   { key: "links", href: "/links", label: "平台連結", description: "常用服務與外部連結", icon: Link2, group: "info", guestUsable: true },
 
   { key: "public-db", href: "/public", label: "公開資料庫", description: "所有公開資料與參與入口", icon: BookOpenText, group: "data", guestUsable: true },
-  { key: "regulations", href: "/public/regulations", label: "法規查詢", description: "現行條文、沿革與版本", icon: Scale, group: "data", guestUsable: true },
-  { key: "documents", href: "/public/documents", label: "公文查詢", description: "公開公文、字號與附件", icon: FileSearch, group: "data", guestUsable: true },
+  { key: "regulations", href: "/regulations", label: "法規查詢", description: "現行條文、沿革與版本", icon: Scale, group: "data", guestUsable: true },
+  { key: "documents", href: "/documents", label: "公文查詢", description: "公開公文、字號與附件", icon: FileSearch, group: "data", guestUsable: true },
   { key: "elections", href: "/public/elections", label: "即時開票", description: "公開選舉票數與進度", icon: Radio, group: "data", guestUsable: true },
   { key: "partner-map", href: "/partner-map", label: "特約地圖", description: "合作店家與學生優惠", icon: MapPinned, group: "data", guestUsable: true },
   { key: "surveys", href: "/surveys", label: "公開問卷", description: "參與目前開放的校園調查", icon: ListChecks, group: "data", guestUsable: true },
