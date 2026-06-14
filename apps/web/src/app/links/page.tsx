@@ -1,30 +1,23 @@
-"use client";
-
 import { ArrowUpRight } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
 
 import PublicSiteShell from "@/components/site/PublicSiteShell";
-import { siteApi } from "@/lib/api";
-import type { PublicLinkOut, PublicSiteBundleOut } from "@/lib/types";
+import { fetchPublicBundle } from "@/lib/serverFetch";
+import type { PublicLinkOut } from "@/lib/types";
 
-export default function LinksPage() {
-  const [data, setData] = useState<PublicSiteBundleOut | null>(null);
+export const dynamic = "force-dynamic";
 
-  useEffect(() => {
-    siteApi.public().then(setData).catch(() => setData(null));
-  }, []);
+export default async function LinksPage() {
+  const bundle = await fetchPublicBundle();
 
-  const grouped = useMemo(() => {
-    const map = new Map<string, PublicLinkOut[]>();
-    for (const link of data?.links ?? []) {
-      const key = link.category?.title ?? "其他連結";
-      map.set(key, [...(map.get(key) ?? []), link]);
-    }
-    return Array.from(map.entries());
-  }, [data]);
+  const grouped = new Map<string, PublicLinkOut[]>();
+  for (const link of bundle?.links ?? []) {
+    const key = link.category?.title ?? "其他連結";
+    grouped.set(key, [...(grouped.get(key) ?? []), link]);
+  }
+  const groupEntries = Array.from(grouped.entries());
 
   return (
-    <PublicSiteShell navPages={data?.nav_pages ?? []} settings={data?.settings}>
+    <PublicSiteShell navPages={bundle?.nav_pages ?? []} settings={bundle?.settings}>
       <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
         <header className="mb-8 text-center">
           <p className="text-sm font-semibold text-[var(--primary)]">Linktree</p>
@@ -34,7 +27,7 @@ export default function LinksPage() {
           </p>
         </header>
         <div className="space-y-6">
-          {grouped.map(([category, links]) => (
+          {groupEntries.map(([category, links]) => (
             <section key={category}>
               <h2 className="mb-3 text-sm font-semibold text-[var(--text-muted)]">{category}</h2>
               <div className="space-y-3">
@@ -61,7 +54,7 @@ export default function LinksPage() {
               </div>
             </section>
           ))}
-          {grouped.length === 0 && (
+          {groupEntries.length === 0 && (
             <div className="card p-10 text-center text-sm text-[var(--text-muted)]">
               目前尚未設定公開連結
             </div>

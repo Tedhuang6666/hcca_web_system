@@ -1,26 +1,15 @@
-"use client";
-
-import { useEffect, useState } from "react";
-
-import MarkdownBlock from "@/components/site/MarkdownBlock";
 import PublicSiteShell from "@/components/site/PublicSiteShell";
-import { useScrollReveal } from "@/hooks/useScrollReveal";
-import { siteApi } from "@/lib/api";
-import type { PublicSiteBundleOut } from "@/lib/types";
+import MarkdownBlock from "@/components/site/MarkdownBlock";
+import { fetchPublicBundle } from "@/lib/serverFetch";
 
-export default function AboutPage() {
-  const [data, setData] = useState<PublicSiteBundleOut | null>(null);
+export const dynamic = "force-dynamic";
 
-  useEffect(() => {
-    siteApi.public().then(setData).catch(() => setData(null));
-  }, []);
-
-  const settings = data?.settings;
-
-  useScrollReveal([data]);
+export default async function AboutPage() {
+  const bundle = await fetchPublicBundle();
+  const settings = bundle?.settings;
 
   return (
-    <PublicSiteShell navPages={data?.nav_pages ?? []} settings={data?.settings}>
+    <PublicSiteShell navPages={bundle?.nav_pages ?? []} settings={settings}>
       <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
         <header className="public-page-head mb-8">
           <p className="public-section-kicker">About HCCA</p>

@@ -1,13 +1,11 @@
-"use client";
-
 import Image from "next/image";
 import { Mail, UserRound } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
 
 import PublicSiteShell from "@/components/site/PublicSiteShell";
-import { useScrollReveal } from "@/hooks/useScrollReveal";
-import { siteApi } from "@/lib/api";
-import type { PublicOfficerOut, PublicSiteBundleOut } from "@/lib/types";
+import { fetchPublicBundle, fetchPublicOfficers } from "@/lib/serverFetch";
+import type { PublicOfficerOut } from "@/lib/types";
+
+export const dynamic = "force-dynamic";
 
 function OfficerCard({ officer, index = 0 }: { officer: PublicOfficerOut; index?: number }) {
   return (
@@ -64,31 +62,17 @@ function OfficerCard({ officer, index = 0 }: { officer: PublicOfficerOut; index?
   );
 }
 
-export default function OfficersPage() {
-  const [bundle, setBundle] = useState<PublicSiteBundleOut | null>(null);
-  const [officers, setOfficers] = useState<PublicOfficerOut[]>([]);
+export default async function OfficersPage() {
+  const [bundle, officers] = await Promise.all([
+    fetchPublicBundle(),
+    fetchPublicOfficers(),
+  ]);
 
-  useEffect(() => {
-    Promise.all([siteApi.public(), siteApi.publicOfficers(true)])
-      .then(([nextBundle, nextOfficers]) => {
-        setBundle(nextBundle);
-        setOfficers(nextOfficers);
-      })
-      .catch(() => {
-        setBundle(null);
-        setOfficers([]);
-      });
-  }, []);
-
-  const grouped = useMemo(() => {
-    const map = new Map<string, PublicOfficerOut[]>();
-    for (const officer of officers) {
-      map.set(officer.org_name, [...(map.get(officer.org_name) ?? []), officer]);
-    }
-    return Array.from(map.entries());
-  }, [officers]);
-
-  useScrollReveal([grouped]);
+  const groupMap = new Map<string, PublicOfficerOut[]>();
+  for (const officer of officers) {
+    groupMap.set(officer.org_name, [...(groupMap.get(officer.org_name) ?? []), officer]);
+  }
+  const grouped = Array.from(groupMap.entries());
 
   return (
     <PublicSiteShell navPages={bundle?.nav_pages ?? []} settings={bundle?.settings}>

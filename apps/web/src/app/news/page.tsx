@@ -1,37 +1,19 @@
-"use client";
-
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
 
 import PublicSiteShell from "@/components/site/PublicSiteShell";
-import { useScrollReveal } from "@/hooks/useScrollReveal";
-import { announcementsApi, siteApi } from "@/lib/api";
-import type { AnnouncementListItem, PublicSiteBundleOut } from "@/lib/types";
+import { fetchAnnouncements, fetchPublicBundle } from "@/lib/serverFetch";
 
-export default function NewsPage() {
-  const [bundle, setBundle] = useState<PublicSiteBundleOut | null>(null);
-  const [items, setItems] = useState<AnnouncementListItem[]>([]);
+export const dynamic = "force-dynamic";
 
-  useEffect(() => {
-    Promise.all([siteApi.public(), announcementsApi.list({ limit: 100 })])
-      .then(([nextBundle, nextItems]) => {
-        setBundle(nextBundle);
-        setItems(nextItems);
-      })
-      .catch(() => {
-        setBundle(null);
-        setItems([]);
-      });
-  }, []);
+export default async function NewsPage() {
+  const [bundle, items] = await Promise.all([
+    fetchPublicBundle(),
+    fetchAnnouncements(100),
+  ]);
 
-  const sorted = useMemo(
-    () => [...items].sort((a, b) => (
-      (b.published_at ?? b.created_at).localeCompare(a.published_at ?? a.created_at)
-    )),
-    [items],
+  const sorted = [...items].sort((a, b) =>
+    (b.published_at ?? b.created_at).localeCompare(a.published_at ?? a.created_at),
   );
-
-  useScrollReveal([sorted]);
 
   return (
     <PublicSiteShell navPages={bundle?.nav_pages ?? []} settings={bundle?.settings}>
