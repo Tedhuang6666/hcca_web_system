@@ -8,6 +8,7 @@ import { ArrowLeft, ArrowRight, ShieldCheck } from "lucide-react";
 import BrandEmblem from "@/components/brand/BrandEmblem";
 import { BRANDING } from "@/lib/branding";
 import { apiUrl } from "@/lib/config";
+import { useModuleStatus } from "@/contexts/ModuleStatusContext";
 
 const GOVERNANCE_POINTS = [
   { number: "01", title: "資訊透明", description: "讓公告、法規與議事紀錄清楚可查" },
@@ -21,6 +22,8 @@ export default function LoginPage() {
   const [mounted, setMounted] = useState(false);
   const [googleLoginHref, setGoogleLoginHref] = useState(apiUrl("/auth/google/login"));
   const [discordLoginHref, setDiscordLoginHref] = useState(apiUrl("/auth/discord/login"));
+  const { isModuleClosed } = useModuleStatus();
+  const discordClosed = isModuleClosed("discord");
 
   useEffect(() => {
     setMounted(true);
@@ -236,38 +239,42 @@ export default function LoginPage() {
               />
             </a>
 
-            <div className="my-7 flex items-center gap-4">
-              <div className="h-px flex-1" style={{ background: "var(--border)" }} />
-              <span className="text-[11px] tracking-[0.12em]" style={{ color: "var(--text-muted)" }}>
-                或使用 DISCORD
-              </span>
-              <div className="h-px flex-1" style={{ background: "var(--border)" }} />
-            </div>
+            {!discordClosed && (
+              <>
+                <div className="my-7 flex items-center gap-4">
+                  <div className="h-px flex-1" style={{ background: "var(--border)" }} />
+                  <span className="text-[11px] tracking-[0.12em]" style={{ color: "var(--text-muted)" }}>
+                    或使用 DISCORD
+                  </span>
+                  <div className="h-px flex-1" style={{ background: "var(--border)" }} />
+                </div>
 
-            <a
-              href={discordLoginHref}
-              className="login-oauth group flex h-13 w-full cursor-pointer items-center justify-between rounded-xl px-4 text-sm font-semibold text-white transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2"
-              style={{
-                background: "#5865f2",
-                boxShadow: "0 8px 24px rgba(88, 101, 242, 0.24)",
-                textDecoration: "none",
-              }}
-            >
-              <span className="flex items-center gap-3">
-                <svg width="20" height="16" viewBox="0 0 24 18" fill="currentColor" aria-hidden="true">
-                  <path d="M20.3 1.5A18.4 18.4 0 0 0 15.8.1l-.6 1.2a16.8 16.8 0 0 0-6.4 0L8.2.1a18.7 18.7 0 0 0-4.5 1.4C.9 5.6.1 9.6.5 13.5a18.2 18.2 0 0 0 5.6 2.8l1.4-1.9a11.8 11.8 0 0 1-2.1-1l.5-.4a13.1 13.1 0 0 0 12.2 0l.5.4a13 13 0 0 1-2.1 1l1.4 1.9a18.2 18.2 0 0 0 5.6-2.8c.5-4.5-.8-8.5-3.2-12ZM8.2 11.1c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.1 1.1 2.1 2.4-.9 2.4-2.1 2.4Zm7.6 0c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.1 1.1 2.1 2.4-.9 2.4-2.1 2.4Z" />
-                </svg>
-                使用 Discord 帳號登入
-              </span>
-              <ArrowRight
-                size={17}
-                className="transition-transform duration-200 group-hover:translate-x-0.5"
-                aria-hidden="true"
-              />
-            </a>
-            <p className="mt-3 text-center text-xs" style={{ color: "var(--text-muted)" }}>
-              Discord 帳號須先在個人資料完成綁定。
-            </p>
+                <a
+                  href={discordLoginHref}
+                  className="login-oauth group flex h-13 w-full cursor-pointer items-center justify-between rounded-xl px-4 text-sm font-semibold text-white transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2"
+                  style={{
+                    background: "#5865f2",
+                    boxShadow: "0 8px 24px rgba(88, 101, 242, 0.24)",
+                    textDecoration: "none",
+                  }}
+                >
+                  <span className="flex items-center gap-3">
+                    <svg width="20" height="16" viewBox="0 0 24 18" fill="currentColor" aria-hidden="true">
+                      <path d="M20.3 1.5A18.4 18.4 0 0 0 15.8.1l-.6 1.2a16.8 16.8 0 0 0-6.4 0L8.2.1a18.7 18.7 0 0 0-4.5 1.4C.9 5.6.1 9.6.5 13.5a18.2 18.2 0 0 0 5.6 2.8l1.4-1.9a11.8 11.8 0 0 1-2.1-1l.5-.4a13.1 13.1 0 0 0 12.2 0l.5.4a13 13 0 0 1-2.1 1l1.4 1.9a18.2 18.2 0 0 0 5.6-2.8c.5-4.5-.8-8.5-3.2-12ZM8.2 11.1c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.1 1.1 2.1 2.4-.9 2.4-2.1 2.4Zm7.6 0c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.1 1.1 2.1 2.4-.9 2.4-2.1 2.4Z" />
+                    </svg>
+                    使用 Discord 帳號登入
+                  </span>
+                  <ArrowRight
+                    size={17}
+                    className="transition-transform duration-200 group-hover:translate-x-0.5"
+                    aria-hidden="true"
+                  />
+                </a>
+                <p className="mt-3 text-center text-xs" style={{ color: "var(--text-muted)" }}>
+                  Discord 帳號須先在個人資料完成綁定。
+                </p>
+              </>
+            )}
 
             <p className="mt-8 text-center text-xs leading-6" style={{ color: "var(--text-muted)" }}>
               登入即表示你同意

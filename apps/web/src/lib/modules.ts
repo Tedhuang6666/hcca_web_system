@@ -5,6 +5,7 @@ export type ModuleId =
   | "documents"
   | "regulations"
   | "meetings"
+  | "calendar"
   | "councilProposals"
   | "judicialPetitions"
   | "announcements"
@@ -14,6 +15,8 @@ export type ModuleId =
   | "petitions"
   | "examPapers"
   | "partnerMap"
+  | "line"
+  | "discord"
   | "governance"
   | "activities"
   | "elections"
@@ -34,8 +37,13 @@ export const FE_MODULES: Record<ModuleId, FeModuleSpec> = {
   regulations: { label: "法規系統", routePrefixes: ["/regulations"], navIds: ["regulations"] },
   meetings: {
     label: "議事系統",
-    routePrefixes: ["/meetings", "/calendar"],
-    navIds: ["meetings", "calendar"],
+    routePrefixes: ["/meetings"],
+    navIds: ["meetings"],
+  },
+  calendar: {
+    label: "行事曆",
+    routePrefixes: ["/calendar"],
+    navIds: ["calendar"],
   },
   councilProposals: {
     label: "議會提案",
@@ -73,6 +81,16 @@ export const FE_MODULES: Record<ModuleId, FeModuleSpec> = {
     label: "特約地圖",
     routePrefixes: ["/partner-map"],
     navIds: ["partnerMap", "partnerMapAdmin"],
+  },
+  line: {
+    label: "LINE 通知",
+    routePrefixes: ["/line"],
+    navIds: [],
+  },
+  discord: {
+    label: "Discord 機器人",
+    routePrefixes: ["/discord"],
+    navIds: ["discordAdmin"],
   },
   governance: {
     label: "治理中樞",
