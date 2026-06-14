@@ -136,7 +136,7 @@ export default function OrderDetailPage() {
                           </p>
                         )}
                       </div>
-                      <Link href={`/shop/seating/${z.id}?order_id=${order.id}`} className="btn btn-primary text-xs">
+                      <Link href={`/seating/${z.id}?order_id=${order.id}`} className="btn btn-primary text-xs">
                         {seated.length > 0 ? "調整座位" : "選擇座位"}
                       </Link>
                     </div>
