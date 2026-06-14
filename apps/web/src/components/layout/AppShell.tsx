@@ -49,6 +49,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
   const [redirecting, setRedirecting] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
   // 記住已對哪個 pathname 觸發過導向，避免同一路徑重複呼叫 router.replace
   // 造成 effect ↔ 導航無限互相觸發。
   const redirectedFrom = useRef<string | null>(null);
@@ -77,6 +78,14 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setSidebarOpen(false);
   }, [pathname]);
+
+  const toggleSidebar = () => {
+    if (window.matchMedia("(min-width: 768px)").matches) {
+      setDesktopSidebarOpen((open) => !open);
+      return;
+    }
+    setSidebarOpen((open) => !open);
+  };
 
   if (!authReady || redirecting) {
     return <div className="min-h-screen" style={{ background: "var(--bg-base)" }} />;
@@ -111,8 +120,9 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
         <div
           className={`
             fixed inset-y-0 left-0 z-50 transition-transform duration-300
-            md:relative md:translate-x-0 md:z-auto
+            md:relative md:z-auto
             ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+            ${desktopSidebarOpen ? "md:block md:translate-x-0" : "md:hidden"}
           `}
           style={{ width: "var(--sidebar-w, 240px)" }}>
           <Sidebar />
@@ -120,7 +130,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
 
         {/* 主內容區 */}
         <div className="flex flex-col flex-1 overflow-hidden min-w-0">
-          <Topbar onMenuClick={() => setSidebarOpen((p) => !p)} />
+          <Topbar onMenuClick={toggleSidebar} />
           <main
             id="main-content"
             className={`app-main flex-1 overflow-y-auto p-5 pb-20 md:p-6 md:pb-6 ${

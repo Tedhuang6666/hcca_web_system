@@ -204,8 +204,8 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
       <div className="flex items-center gap-2 min-w-0 flex-1">
         <button
           onClick={onMenuClick}
-          className="topbar-icon-btn md:hidden"
-          aria-label="開啟側邊選單">
+          className="topbar-icon-btn"
+          aria-label="切換側邊選單">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             strokeWidth="2" strokeLinecap="round" aria-hidden="true">
             <line x1="3" y1="6"  x2="21" y2="6" />
