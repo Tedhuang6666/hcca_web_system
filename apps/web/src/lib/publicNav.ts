@@ -48,8 +48,8 @@ export const PUBLIC_NAV_GROUP_META: Record<
 
 /** 顯示順序＝陣列順序（同組內）。後台 order 覆寫只調整同組相對位置。 */
 export const PUBLIC_NAV_ITEMS: PublicNavItemDef[] = [
-  { key: "news", href: "/news", label: "最新公告", description: "公開消息與重要通知", icon: Megaphone, group: "primary", guestUsable: true },
-  { key: "about", href: "/about", label: "關於班聯會", description: "任務、沿革與公共角色", icon: Landmark, group: "primary", guestUsable: true },
+  { key: "news", href: "/news", label: "最新公告", description: "公開消息與重要通知", icon: Megaphone, group: "primary" },
+  { key: "about", href: "/about", label: "關於班聯會", description: "任務、沿革與公共角色", icon: Landmark, group: "primary" },
 
   { key: "officers", href: "/officers", label: "班聯會幹部", description: "當屆幹部與公開資料", icon: UsersRound, group: "info", guestUsable: true },
   { key: "links", href: "/links", label: "平台連結", description: "常用服務與外部連結", icon: Link2, group: "info", guestUsable: true },
