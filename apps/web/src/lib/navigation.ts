@@ -5,8 +5,6 @@ export type NavItem = {
   label: string;
   end?: boolean;
   perm?: string;
-  /** 僅本校成員可見（外部 allow_external_login 使用者隱藏）。 */
-  schoolOnly?: boolean;
 };
 
 export type NavSection = {
@@ -29,12 +27,12 @@ export type NavPreferences = {
 export const NAV_ITEMS: NavItem[] = [
   { id: "dashboard", href: "/dashboard", iconKey: "dashboard", label: "平台首頁", end: true },
   { id: "tasks", href: "/tasks", iconKey: "tasks", label: "我的待辦" },
-  { id: "governanceHub", href: "/governance", iconKey: "governance", label: "治理中樞", schoolOnly: true },
+  { id: "governanceHub", href: "/governance", iconKey: "governance", label: "治理中樞" },
   { id: "announcements", href: "/announcements", iconKey: "announcement", label: "校內公告" },
   { id: "documents", href: "/documents", iconKey: "documents", label: "公文系統" },
   { id: "calendar", href: "/calendar", iconKey: "calendar", label: "行事曆" },
   { id: "meetings", href: "/meetings", iconKey: "meetings", label: "議事系統" },
-  { id: "councilProposals", href: "/council-proposals", iconKey: "meetings", label: "議會提案", schoolOnly: true },
+  { id: "councilProposals", href: "/council-proposals", iconKey: "meetings", label: "議會提案" },
   { id: "regulations", href: "/regulations", iconKey: "regulations", label: "法規查詢" },
   { id: "meal", href: "/meal", iconKey: "meal", label: "學餐訂購" },
   { id: "shop", href: "/shop", iconKey: "shop", label: "校商訂購" },
@@ -48,7 +46,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "partnerMap", href: "/partner-map", iconKey: "partnerMap", label: "特約地圖" },
   { id: "surveys", href: "/surveys", iconKey: "survey", label: "問卷專區" },
   { id: "petitions", href: "/petitions", iconKey: "petition", label: "陳情中心" },
-  { id: "judicialPetitions", href: "/judicial-petitions", iconKey: "shield", label: "評議訴訟", schoolOnly: true },
+  { id: "judicialPetitions", href: "/judicial-petitions", iconKey: "shield", label: "評議訴訟" },
   { id: "examPapers", href: "/exam-papers", iconKey: "examPapers", label: "段考題庫" },
   { id: "about", href: "/about", iconKey: "info", label: "關於本系統" },
   { id: "analytics", href: "/analytics", iconKey: "analytics", label: "績效統計", perm: "analytics:view" },
@@ -75,17 +73,10 @@ export const NAV_ITEMS: NavItem[] = [
     perm: "announcement:create",
   },
   {
-    id: "permissions",
-    href: "/admin/permissions",
-    iconKey: "permissions",
-    label: "權限管理",
-    perm: "admin:all",
-  },
-  {
     id: "peopleAdmin",
     href: "/admin/people",
     iconKey: "people",
-    label: "人員身分",
+    label: "人員管理",
     perm: "admin:users",
   },
   {
@@ -257,7 +248,6 @@ export const NAV_DEF: NavEntry[] = [
       "activitiesAdmin",
       "receivables",
       "publications",
-      "peopleAdmin",
       "email",
     ]),
   },
@@ -283,7 +273,7 @@ export const NAV_DEF: NavEntry[] = [
     collapsible: true,
     defaultCollapsed: true,
     items: byIds([
-      "permissions",
+      "peopleAdmin",
       "systemDefense",
       "modulesMaintenance",
       "systemSettings",

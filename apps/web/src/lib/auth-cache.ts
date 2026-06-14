@@ -5,7 +5,6 @@ export interface CurrentUserCache {
   email?: string | null;
   display_name?: string | null;
   avatar_url?: string | null;
-  allow_external_login?: boolean;
   is_superuser?: boolean;
   is_owner?: boolean;
   permissions?: string[];
@@ -16,7 +15,6 @@ export function cacheCurrentUser(me: CurrentUserCache): void {
   localStorage.setItem("user_email", me.email ?? "");
   localStorage.setItem("user_name", me.display_name ?? "");
   localStorage.setItem("user_avatar", me.avatar_url ?? "");
-  localStorage.setItem("is_external", String(me.allow_external_login ?? false));
   localStorage.setItem("is_superuser", String(me.is_superuser ?? false));
   localStorage.setItem("is_owner", String(me.is_owner ?? false));
   localStorage.setItem("permissions", JSON.stringify(me.permissions ?? []));
@@ -27,7 +25,6 @@ export function clearAuthCache(): void {
   localStorage.removeItem("user_email");
   localStorage.removeItem("user_name");
   localStorage.removeItem("user_avatar");
-  localStorage.removeItem("is_external");
   localStorage.removeItem("is_superuser");
   localStorage.removeItem("is_owner");
   localStorage.removeItem("permissions");
