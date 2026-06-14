@@ -611,18 +611,16 @@ async def stats(
                 else_=0,
             )
         ).label("pending_assignment"),
-        func.sum(
-            case((PetitionCase.assigned_to_id == user_id, 1), else_=0)
-        ).label("my_assigned"),
-        func.sum(
-            case((PetitionCase.status == PetitionStatus.NEEDS_INFO, 1), else_=0)
-        ).label("needs_info"),
-        func.sum(
-            case((PetitionCase.status == PetitionStatus.IN_PROGRESS, 1), else_=0)
-        ).label("in_progress"),
-        func.sum(
-            case((PetitionCase.status == PetitionStatus.RESOLVED, 1), else_=0)
-        ).label("resolved"),
+        func.sum(case((PetitionCase.assigned_to_id == user_id, 1), else_=0)).label("my_assigned"),
+        func.sum(case((PetitionCase.status == PetitionStatus.NEEDS_INFO, 1), else_=0)).label(
+            "needs_info"
+        ),
+        func.sum(case((PetitionCase.status == PetitionStatus.IN_PROGRESS, 1), else_=0)).label(
+            "in_progress"
+        ),
+        func.sum(case((PetitionCase.status == PetitionStatus.RESOLVED, 1), else_=0)).label(
+            "resolved"
+        ),
         func.sum(
             case(
                 (
