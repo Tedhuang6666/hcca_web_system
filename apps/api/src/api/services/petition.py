@@ -583,37 +583,68 @@ async def stats(
     user_id: uuid.UUID,
     include_by_org: bool,
 ) -> PetitionStatsOut:
-    base = select(PetitionCase)
-    if org_ids is not None:
-        if not org_ids:
-            return PetitionStatsOut(
-                total=0,
-                pending_assignment=0,
-                my_assigned=0,
-                needs_info=0,
-                in_progress=0,
-                resolved=0,
-                closed_this_month=0,
-            )
-        base = base.where(PetitionCase.current_org_id.in_(org_ids))
+    if org_ids is not None and not org_ids:
+        return PetitionStatsOut(
+            total=0,
+            pending_assignment=0,
+            my_assigned=0,
+            needs_info=0,
+            in_progress=0,
+            resolved=0,
+            closed_this_month=0,
+        )
 
-    result = await session.execute(base)
-    cases = list(result.scalars().all())
     now = datetime.now(UTC)
+    base_filter = []
+    if org_ids is not None:
+        base_filter.append(PetitionCase.current_org_id.in_(org_ids))
+
+    stmt = select(
+        func.count().label("total"),
+        func.sum(
+            case(
+                (
+                    (PetitionCase.assigned_to_id.is_(None))
+                    & (PetitionCase.status == PetitionStatus.SUBMITTED),
+                    1,
+                ),
+                else_=0,
+            )
+        ).label("pending_assignment"),
+        func.sum(
+            case((PetitionCase.assigned_to_id == user_id, 1), else_=0)
+        ).label("my_assigned"),
+        func.sum(
+            case((PetitionCase.status == PetitionStatus.NEEDS_INFO, 1), else_=0)
+        ).label("needs_info"),
+        func.sum(
+            case((PetitionCase.status == PetitionStatus.IN_PROGRESS, 1), else_=0)
+        ).label("in_progress"),
+        func.sum(
+            case((PetitionCase.status == PetitionStatus.RESOLVED, 1), else_=0)
+        ).label("resolved"),
+        func.sum(
+            case(
+                (
+                    (PetitionCase.closed_at.isnot(None))
+                    & (extract("year", PetitionCase.closed_at) == now.year)
+                    & (extract("month", PetitionCase.closed_at) == now.month),
+                    1,
+                ),
+                else_=0,
+            )
+        ).label("closed_this_month"),
+    ).where(*base_filter)
+
+    row = (await session.execute(stmt)).one()
     out = PetitionStatsOut(
-        total=len(cases),
-        pending_assignment=sum(
-            1 for c in cases if c.assigned_to_id is None and c.status == PetitionStatus.SUBMITTED
-        ),
-        my_assigned=sum(1 for c in cases if c.assigned_to_id == user_id),
-        needs_info=sum(1 for c in cases if c.status == PetitionStatus.NEEDS_INFO),
-        in_progress=sum(1 for c in cases if c.status == PetitionStatus.IN_PROGRESS),
-        resolved=sum(1 for c in cases if c.status == PetitionStatus.RESOLVED),
-        closed_this_month=sum(
-            1
-            for c in cases
-            if c.closed_at and c.closed_at.year == now.year and c.closed_at.month == now.month
-        ),
+        total=int(row.total or 0),
+        pending_assignment=int(row.pending_assignment or 0),
+        my_assigned=int(row.my_assigned or 0),
+        needs_info=int(row.needs_info or 0),
+        in_progress=int(row.in_progress or 0),
+        resolved=int(row.resolved or 0),
+        closed_this_month=int(row.closed_this_month or 0),
     )
     if include_by_org:
         out.by_org = await org_stats(session, org_ids=org_ids)

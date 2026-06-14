@@ -343,6 +343,7 @@ def create_app() -> FastAPI:
     attach_module_health(petitions.router, module_id="petitions")
     attach_module_health(exam_papers.router, module_id="examPapers")
     attach_module_health(partner_map.router, module_id="partnerMap")
+    attach_module_health(line_webhook.router, module_id="line")
     attach_module_health(discord.router, module_id="discord")
     attach_module_health(governance.router, module_id="governance")
     attach_module_health(activities.router, module_id="activities")
@@ -368,6 +369,7 @@ def create_app() -> FastAPI:
         "petitions",
         "examPapers",
         "partnerMap",
+        "line",
         "discord",
         "governance",
         "activities",
