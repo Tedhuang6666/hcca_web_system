@@ -8,6 +8,7 @@ export interface CurrentUserCache {
   is_superuser?: boolean;
   is_owner?: boolean;
   permissions?: string[];
+  allow_external_login?: boolean;
 }
 
 export function cacheCurrentUser(me: CurrentUserCache): void {
@@ -18,6 +19,7 @@ export function cacheCurrentUser(me: CurrentUserCache): void {
   localStorage.setItem("is_superuser", String(me.is_superuser ?? false));
   localStorage.setItem("is_owner", String(me.is_owner ?? false));
   localStorage.setItem("permissions", JSON.stringify(me.permissions ?? []));
+  localStorage.setItem("is_external", String(me.allow_external_login ?? false));
 }
 
 export function clearAuthCache(): void {
@@ -28,6 +30,7 @@ export function clearAuthCache(): void {
   localStorage.removeItem("is_superuser");
   localStorage.removeItem("is_owner");
   localStorage.removeItem("permissions");
+  localStorage.removeItem("is_external");
 }
 
 export type CachedUserSummary = Pick<UserSummary, "id" | "email" | "display_name">;

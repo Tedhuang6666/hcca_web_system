@@ -161,6 +161,7 @@ async def _auth_user_payload(db: AsyncSession, user: User) -> dict:
         "is_superuser": user.is_superuser,
         "is_owner": user.email.lower() in settings.OWNER_EMAILS,
         "permissions": sorted(codes),
+        "allow_external_login": user.allow_external_login,
     }
 
 
