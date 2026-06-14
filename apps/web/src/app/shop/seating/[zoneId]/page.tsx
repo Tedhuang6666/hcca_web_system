@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { seatingApi, apiErrorMessage } from "@/lib/api";
-import type { SeatMapOut, SeatState, SeatStateKind } from "@/lib/types";
+import type { LayoutDecoration, SeatMapOut, SeatState, SeatStateKind } from "@/lib/types";
 
 const SEAT = 34;
 
@@ -141,7 +141,8 @@ export default function SeatSelectionPage() {
   if (loading) return <div className="p-6 text-sm" style={{ color: "var(--text-muted)" }}>載入座位圖…</div>;
   if (!map) return <div className="p-6">找不到座位圖。<Link href="/shop" className="btn btn-ghost text-sm ml-2">返回商店</Link></div>;
 
-  const layout = (map.layout || {}) as { width?: number; height?: number };
+  const layout = (map.layout || {}) as { width?: number; height?: number; decorations?: LayoutDecoration[] };
+  const decorations: LayoutDecoration[] = Array.isArray(layout.decorations) ? layout.decorations : [];
   const pickedSeats = [...picked].map((id) => seatById.get(id)).filter(Boolean) as SeatState[];
   const extraTotal = pickedSeats.reduce((sum, s) => sum + (s.price_delta || 0), 0);
 
@@ -179,10 +180,15 @@ export default function SeatSelectionPage() {
       {/* 座位圖 */}
       <div className="overflow-auto rounded-lg" style={{ border: "1px solid var(--border)" }}>
         <div className="relative mx-auto" style={{ width: layout.width || 760, height: layout.height || 460, background: "var(--bg-base)" }}>
-          <div className="absolute left-1/2 -translate-x-1/2 rounded text-center text-xs"
-            style={{ top: 6, width: Math.min((layout.width || 760) - 40, 260), padding: "4px 0", background: "var(--bg-elevated)", color: "var(--text-muted)", border: "1px solid var(--border)" }}>
-            舞台 / 螢幕
-          </div>
+          {decorations.map((d) => (
+            <DecorationView key={d.id} d={d} />
+          ))}
+          {decorations.length === 0 && (
+            <div className="absolute left-1/2 -translate-x-1/2 rounded text-center text-xs"
+              style={{ top: 6, width: Math.min((layout.width || 760) - 40, 260), padding: "4px 0", background: "var(--bg-elevated)", color: "var(--text-muted)", border: "1px solid var(--border)" }}>
+              舞台 / 螢幕
+            </div>
+          )}
           {map.seats.map((s) => {
             const isPicked = picked.has(s.id);
             const kind: SeatStateKind = isPicked && s.state !== "taken" ? "mine" : s.state;
@@ -229,4 +235,44 @@ function Legend({ label, style }: { label: string; style: React.CSSProperties })
       {label}
     </span>
   );
+}
+
+function DecorationView({ d }: { d: LayoutDecoration }) {
+  const base: React.CSSProperties = {
+    position: "absolute",
+    left: d.x,
+    top: d.y,
+    width: d.width,
+    height: d.height,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 11,
+    fontWeight: 500,
+    pointerEvents: "none",
+    boxSizing: "border-box",
+    zIndex: 1,
+  };
+  let style: React.CSSProperties;
+  switch (d.type) {
+    case "screen":
+      style = { ...base, background: "var(--bg-elevated)", border: "2px solid var(--border)", color: "var(--text-secondary)", borderRadius: 4 };
+      break;
+    case "door":
+      style = { ...base, background: "rgba(39,174,96,0.12)", border: "1px dashed #27ae60", color: "#27ae60", borderRadius: 4 };
+      break;
+    case "aisle_h":
+      style = { ...base, background: "rgba(127,127,127,0.08)", borderTop: "1px dashed var(--border)", borderBottom: "1px dashed var(--border)", color: "var(--text-muted)" };
+      break;
+    case "aisle_v":
+      style = { ...base, background: "rgba(127,127,127,0.08)", borderLeft: "1px dashed var(--border)", borderRight: "1px dashed var(--border)", color: "var(--text-muted)", fontSize: 10, writingMode: "vertical-rl" };
+      break;
+    case "label":
+      style = { ...base, background: "transparent", color: "var(--text-muted)", fontWeight: 600 };
+      break;
+    case "box":
+    default:
+      style = { ...base, background: "rgba(127,127,127,0.06)", border: "1px dashed var(--border)", color: "var(--text-secondary)", borderRadius: 6, alignItems: "flex-start", justifyContent: "flex-start", padding: "4px 6px" };
+  }
+  return <div style={style}>{d.label}</div>;
 }
