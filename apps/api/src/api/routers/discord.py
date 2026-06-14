@@ -435,6 +435,8 @@ async def send_discord_test_message(
     summary="列出 Bot 已加入的 Discord 伺服器",
 )
 async def available_guilds() -> list[DiscordGuildOptionOut]:
+    if not is_configured():
+        raise HTTPException(status_code=503, detail="Discord 模組尚未啟用")
     guilds = await discord_gateway.inventory_guilds()
     if not guilds:
         raise HTTPException(status_code=503, detail="Discord Bot 離線或尚未回報伺服器清單")
