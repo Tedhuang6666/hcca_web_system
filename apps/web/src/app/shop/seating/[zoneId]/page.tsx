@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { seatingApi, apiErrorMessage } from "@/lib/api";
 import type { LayoutDecoration, SeatMapOut, SeatState, SeatStateKind } from "@/lib/types";
 
-const SEAT = 34;
+const SEAT = 32;
 
 const STATE_STYLE: Record<SeatStateKind, React.CSSProperties> = {
   available: { background: "var(--bg-elevated)", color: "var(--text-primary)", borderColor: "var(--border)", cursor: "pointer" },
@@ -141,8 +141,9 @@ export default function SeatSelectionPage() {
   if (loading) return <div className="p-6 text-sm" style={{ color: "var(--text-muted)" }}>載入座位圖…</div>;
   if (!map) return <div className="p-6">找不到座位圖。<Link href="/shop" className="btn btn-ghost text-sm ml-2">返回商店</Link></div>;
 
-  const layout = (map.layout || {}) as { width?: number; height?: number; decorations?: LayoutDecoration[] };
+  const layout = (map.layout || {}) as { width?: number; height?: number; decorations?: LayoutDecoration[]; seat_type_colors?: Record<string, string> };
   const decorations: LayoutDecoration[] = Array.isArray(layout.decorations) ? layout.decorations : [];
+  const seatTypeColors: Record<string, string> = layout.seat_type_colors || {};
   const pickedSeats = [...picked].map((id) => seatById.get(id)).filter(Boolean) as SeatState[];
   const extraTotal = pickedSeats.reduce((sum, s) => sum + (s.price_delta || 0), 0);
 
@@ -193,10 +194,15 @@ export default function SeatSelectionPage() {
             const isPicked = picked.has(s.id);
             const kind: SeatStateKind = isPicked && s.state !== "taken" ? "mine" : s.state;
             if (s.state === "disabled") return null;
+            // 套用自訂座位類型顏色（只在 available 狀態）
+            const customColor = kind === "available" ? seatTypeColors[s.seat_type] : undefined;
+            const customStyle: React.CSSProperties = customColor
+              ? { background: `${customColor}2a`, borderColor: customColor }
+              : {};
             return (
               <button key={s.id} type="button" onClick={() => toggle(s)} title={`${s.label}${s.price_delta ? ` (+$${s.price_delta})` : ""}`}
                 className="absolute flex items-center justify-center rounded text-[10px] font-medium"
-                style={{ left: s.x, top: s.y, width: SEAT, height: SEAT, border: "1px solid", ...STATE_STYLE[kind] }}>
+                style={{ left: s.x, top: s.y, width: SEAT, height: SEAT, border: "1px solid", ...STATE_STYLE[kind], ...customStyle }}>
                 {s.label}
               </button>
             );

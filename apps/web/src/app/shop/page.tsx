@@ -277,7 +277,7 @@ export default function ShopPage() {
   const loadCatalog = useCallback(() => {
     setLoading(true);
     shopApi
-      .catalog(undefined, activityId)
+      .catalog(activityId)
       .then((data) => {
         setCatalog(data);
         setSelectedCategoryId((current) => current ?? data[0]?.id ?? null);

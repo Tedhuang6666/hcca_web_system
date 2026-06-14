@@ -486,6 +486,7 @@ export interface LayoutDecoration {
   width: number;
   height: number;
   label: string;
+  color?: string;  // 自訂 CSS 顏色（hex / rgba）
 }
 
 export interface SeatInput {
