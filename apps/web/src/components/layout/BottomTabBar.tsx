@@ -46,6 +46,7 @@ const CADRE_PREFIXES = ["document:", "regulation:", "audit:"] as const;
 export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
   const pathname = usePathname();
   const [role, setRole] = useState<Role>("guest");
+  const [isExternal, setIsExternal] = useState(false);
   const [roleResolved, setRoleResolved] = useState(false);
   const [userRoom, setUserRoom] = useState<string | null>(null);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
@@ -64,6 +65,7 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
     if (typeof window === "undefined") return;
     const userId = localStorage.getItem("user_id");
     setUserRoom(userId ? `user:${userId}` : null);
+    setIsExternal(localStorage.getItem("is_external") === "true");
     if (!userId) {
       setRole("guest");
       setRoleResolved(true);
@@ -142,10 +144,13 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
       orderedItems(navPrefs.mobileOrder, navPrefs.mobileHidden),
       can,
       hasPrefix,
-    ).filter((item) => !isModuleClosed(NAV_ID_TO_MODULE[item.id] ?? null));
+    ).filter((item) =>
+      !isModuleClosed(NAV_ID_TO_MODULE[item.id] ?? null)
+      && !(item.schoolOnly && isExternal),
+    );
     const topTabs = available.slice(0, 4).map(navItemToTab);
     return [...topTabs, { label: "更多", icon: (p) => <MoreHorizontal {...p} />, onClick: onMoreClick }];
-  }, [navPrefs, role, onMoreClick, isModuleClosed]);
+  }, [navPrefs, role, isExternal, onMoreClick, isModuleClosed]);
 
   if (keyboardOpen) return null;
   if (!roleResolved) return null;
