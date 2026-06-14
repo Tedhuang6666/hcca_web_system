@@ -214,9 +214,9 @@ async def _dispatch_all_channels(
                 "module_id": module_id,
             },
         )
-    # 2. Email 給 SUPERUSER_EMAILS
-    if settings.SUPERUSER_EMAILS:
-        for addr in settings.SUPERUSER_EMAILS:
+    # 2. Email 給 OWNER_EMAILS
+    if settings.OWNER_EMAILS:
+        for addr in settings.OWNER_EMAILS:
             await outbox.emit(
                 session,
                 event_type="email.send",
