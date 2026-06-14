@@ -5,13 +5,19 @@ export type ModuleId =
   | "documents"
   | "regulations"
   | "meetings"
+  | "councilProposals"
+  | "judicialPetitions"
   | "announcements"
   | "shop"
   | "meal"
   | "surveys"
   | "petitions"
   | "examPapers"
-  | "partnerMap";
+  | "partnerMap"
+  | "governance"
+  | "activities"
+  | "elections"
+  | "seating";
 
 export interface FeModuleSpec {
   label: string;
@@ -28,8 +34,18 @@ export const FE_MODULES: Record<ModuleId, FeModuleSpec> = {
   regulations: { label: "法規系統", routePrefixes: ["/regulations"], navIds: ["regulations"] },
   meetings: {
     label: "議事系統",
-    routePrefixes: ["/meetings", "/calendar", "/council-proposals", "/judicial-petitions"],
-    navIds: ["meetings", "calendar", "councilProposals", "judicialPetitions"],
+    routePrefixes: ["/meetings", "/calendar"],
+    navIds: ["meetings", "calendar"],
+  },
+  councilProposals: {
+    label: "議會提案",
+    routePrefixes: ["/council-proposals"],
+    navIds: ["councilProposals"],
+  },
+  judicialPetitions: {
+    label: "評議訴訟",
+    routePrefixes: ["/judicial-petitions"],
+    navIds: ["judicialPetitions"],
   },
   announcements: {
     label: "校內公告",
@@ -57,6 +73,26 @@ export const FE_MODULES: Record<ModuleId, FeModuleSpec> = {
     label: "特約地圖",
     routePrefixes: ["/partner-map"],
     navIds: ["partnerMap", "partnerMapAdmin"],
+  },
+  governance: {
+    label: "治理中樞",
+    routePrefixes: ["/governance"],
+    navIds: ["governanceHub"],
+  },
+  activities: {
+    label: "活動管理",
+    routePrefixes: ["/activities"],
+    navIds: ["activitiesAdmin"],
+  },
+  elections: {
+    label: "選舉開票",
+    routePrefixes: ["/elections"],
+    navIds: ["electionsAdmin"],
+  },
+  seating: {
+    label: "票務劃位",
+    routePrefixes: ["/seating"],
+    navIds: [],
   },
 };
 
