@@ -104,12 +104,18 @@ export default function PublicSiteShell({
     resolvePublicNav(settings?.theme_config as Record<string, unknown> | undefined),
   );
   const topLevel = [
-    { key: "__home", href: "/", label: "首頁" },
-    ...groups.primary.map((item) => ({ key: item.key, href: item.href, label: item.label })),
+    { key: "__home", href: "/", label: "首頁", guestUsable: false },
+    ...groups.primary.map((item) => ({
+      key: item.key,
+      href: item.href,
+      label: item.label,
+      guestUsable: item.guestUsable === true,
+    })),
     ...navPages.map((page) => ({
       key: `page-${page.slug}`,
       href: `/pages/${page.slug}`,
       label: page.nav_label || page.title,
+      guestUsable: true,
     })),
   ];
   const menuGroups = MENU_GROUP_ORDER
@@ -168,6 +174,7 @@ export default function PublicSiteShell({
                 href={item.href}
                 className="public-nav-link">
                 {item.label}
+                {item.guestUsable && <span className="public-nav-badge">免登入</span>}
               </Link>
             ))}
             {menuGroups.length > 0 && (
@@ -259,6 +266,7 @@ export default function PublicSiteShell({
                   onClick={() => setOpen(false)}
                   className="public-mobile-link">
                   {item.label}
+                  {item.guestUsable && <span className="public-nav-badge">免登入</span>}
                 </Link>
               ))}
             </div>
