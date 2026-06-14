@@ -687,27 +687,27 @@ if [[ -n "${DISCORD_BOT_TOKEN:-}" ]]; then
     step "7.5/8 啟動 Discord Bot"
     DISCORD_API_KEY="${HCCA_DISCORD_BOT_API_KEY:-${HCCA_API_KEY:-}}"
     if [[ -z "$DISCORD_API_KEY" ]]; then
-        error "Discord Bot 需要 HCCA_DISCORD_BOT_API_KEY（API Key scope: discord:bot）"
-        error "請在平台後台建立 API Key，寫入 .env 後重新執行 bash dev.sh"
-        exit 1
-    fi
-    : > "$DISCORD_LOG"
-    (
-        cd "${REPO_ROOT}/apps/discord-bot"
-        export HCCA_API_KEY="$DISCORD_API_KEY"
-        export HCCA_API_URL="${HCCA_DISCORD_BOT_API_URL:-http://localhost:8000}"
-        exec uv run --project "${REPO_ROOT}/apps/discord-bot" python -m hcca_discord_bot \
-            > >(_stream_log "discord" "$DISCORD_LOG" "$C_CYAN") 2>&1
-    ) &
-    DISCORD_PID=$!
-
-    sleep 2
-    if kill -0 "$DISCORD_PID" 2>/dev/null; then
-        success "Discord Bot 已啟動 PID=${DISCORD_PID} → log: ${DISCORD_LOG}"
+        warn "HCCA_DISCORD_BOT_API_KEY 未設定，略過 Discord Bot 啟動"
+        warn "可在平台後台建立具 discord:bot scope 的 API Key 後寫入 .env"
     else
-        error "Discord Bot 啟動後立即退出，最後 40 行 log："
-        tail -n 40 "$DISCORD_LOG" >&2
-        exit 1
+        : > "$DISCORD_LOG"
+        (
+            cd "${REPO_ROOT}/apps/discord-bot"
+            export HCCA_API_KEY="$DISCORD_API_KEY"
+            export HCCA_API_URL="${HCCA_DISCORD_BOT_API_URL:-http://localhost:8000}"
+            exec uv run --project "${REPO_ROOT}/apps/discord-bot" python -m hcca_discord_bot \
+                > >(_stream_log "discord" "$DISCORD_LOG" "$C_CYAN") 2>&1
+        ) &
+        DISCORD_PID=$!
+
+        sleep 2
+        if kill -0 "$DISCORD_PID" 2>/dev/null; then
+            success "Discord Bot 已啟動 PID=${DISCORD_PID} → log: ${DISCORD_LOG}"
+        else
+            error "Discord Bot 啟動後立即退出，最後 40 行 log："
+            tail -n 40 "$DISCORD_LOG" >&2
+            exit 1
+        fi
     fi
 else
     info "DISCORD_BOT_TOKEN 未設定，略過 Discord Bot 啟動"
