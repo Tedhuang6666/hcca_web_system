@@ -188,7 +188,6 @@ export default function Sidebar() {
       hydrated,
       isLoggedIn,
       isAdmin,
-      isExternal,
       permissions,
       meetingsUnlocked,
       isModuleClosed,
