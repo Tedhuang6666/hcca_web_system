@@ -94,6 +94,13 @@ export const NAV_ITEMS: NavItem[] = [
     perm: "admin:all",
   },
   {
+    id: "modulesMaintenance",
+    href: "/admin/modules",
+    iconKey: "modules",
+    label: "模組維護",
+    perm: "admin:all",
+  },
+  {
     id: "systemDiagnostics",
     href: "/admin/diagnostics",
     iconKey: "analytics",
@@ -276,6 +283,7 @@ export const NAV_DEF: NavEntry[] = [
     items: byIds([
       "permissions",
       "systemDefense",
+      "modulesMaintenance",
       "systemSettings",
       "publicSiteAdmin",
       "discordAdmin",

@@ -42,6 +42,9 @@ MODULES: dict[str, ModuleSpec] = {
     "petitions": ModuleSpec("陳情中心", ("/petitions",)),
     "examPapers": ModuleSpec("段考題庫", ("/exam-papers",)),
     "partnerMap": ModuleSpec("特約地圖", ("/partner-map",)),
+    "activities": ModuleSpec("活動管理", ("/activities",)),
+    "elections": ModuleSpec("選舉開票", ("/elections",)),
+    "seating": ModuleSpec("票務劃位", ("/seating",)),
 }
 
 MODULE_IDS: tuple[str, ...] = tuple(MODULES.keys())
