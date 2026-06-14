@@ -10,7 +10,7 @@ import Modal from "@/components/ui/Modal";
 import MultiCombobox from "@/components/ui/MultiCombobox";
 import { ModeTabs, useOrgOptions, usePositionOptions, useUserSearch } from "@/components/ui/targeting";
 import type { ComboboxOption } from "@/components/ui/Combobox";
-import SeatMapEditor from "@/components/shop/SeatMapEditor";
+import SeatMapEditor from "@/components/seating/SeatMapEditor";
 import type { SeatBookingOut, ProductOut, WaveInput, WaveOut, ZoneListItem, ZoneOut } from "@/lib/types";
 
 type Tab = "seats" | "waves" | "assignments";

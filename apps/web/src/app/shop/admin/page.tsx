@@ -311,7 +311,7 @@ function ProductFormModal({
                 </select>
               </Field>
               {editing && (
-                <Link href={`/shop/admin/seating/${initial!.id}`} className="btn btn-ghost text-xs">
+                <Link href={`/seating/admin/${initial!.id}`} className="btn btn-ghost text-xs">
                   → 管理場次與座位圖
                 </Link>
               )}
