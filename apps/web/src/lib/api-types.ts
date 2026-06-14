@@ -20507,11 +20507,6 @@ export interface components {
              * @default false
              */
             is_paid: boolean;
-            /**
-             * Org Id
-             * Format: uuid
-             */
-            org_id: string;
             /** Serial Number */
             serial_number: string;
             status: components["schemas"]["OrderStatus"];
@@ -20562,11 +20557,6 @@ export interface components {
             items: components["schemas"]["OrderItemOut"][];
             /** Notes */
             notes?: string | null;
-            /**
-             * Org Id
-             * Format: uuid
-             */
-            org_id: string;
             /** Paid At */
             paid_at?: string | null;
             /** Serial Number */
@@ -23037,12 +23027,6 @@ export interface components {
              */
             name: string;
             /**
-             * Org Id
-             * Format: uuid
-             * @description 所屬組織 ID
-             */
-            org_id: string;
-            /**
              * Sort Order
              * @default 0
              */
@@ -23075,11 +23059,6 @@ export interface components {
             is_active: boolean;
             /** Name */
             name: string;
-            /**
-             * Org Id
-             * Format: uuid
-             */
-            org_id: string;
             /** Sort Order */
             sort_order: number;
             /**
@@ -23185,11 +23164,6 @@ export interface components {
             is_unlimited: boolean;
             /** Name */
             name: string;
-            /**
-             * Org Id
-             * Format: uuid
-             */
-            org_id: string;
             /** Price */
             price: number;
             /**
@@ -27073,8 +27047,6 @@ export interface components {
         };
         /** UpdateUserRequest */
         UpdateUserRequest: {
-            /** Allow External Login */
-            allow_external_login?: boolean | null;
             /** Display Name */
             display_name?: string | null;
             /** Is Active */
@@ -27197,8 +27169,6 @@ export interface components {
         };
         /** UserDetail */
         UserDetail: {
-            /** Allow External Login */
-            allow_external_login: boolean;
             /** Avatar Url */
             avatar_url: string | null;
             /** Created At */
@@ -27316,12 +27286,6 @@ export interface components {
          */
         UserPreRegister: {
             /**
-             * Allow External Login
-             * @description 允許校外信箱繞過 LOGIN_ALLOWED_EMAIL_DOMAINS 登入
-             * @default false
-             */
-            allow_external_login: boolean;
-            /**
              * Custom Permission Codes
              * @description 自訂權限碼清單
              */
@@ -27373,11 +27337,6 @@ export interface components {
          * @description 當前使用者資訊回應
          */
         UserRead: {
-            /**
-             * Allow External Login
-             * @default false
-             */
-            allow_external_login: boolean;
             /** Avatar Url */
             avatar_url?: string | null;
             /** Display Name */
@@ -50676,7 +50635,6 @@ export interface operations {
     get_catalog_shop_catalog_get: {
         parameters: {
             query?: {
-                org_id?: string | null;
                 activity_id?: string | null;
             };
             header?: never;
@@ -50708,7 +50666,6 @@ export interface operations {
     list_categories_shop_categories_get: {
         parameters: {
             query?: {
-                org_id?: string | null;
                 activity_id?: string | null;
                 include_inactive?: boolean;
             };
@@ -50871,7 +50828,6 @@ export interface operations {
     list_orders_shop_orders_get: {
         parameters: {
             query?: {
-                org_id?: string | null;
                 activity_id?: string | null;
                 status?: components["schemas"]["OrderStatus"] | null;
                 /** @description 僅顯示我的訂單 */
@@ -50978,7 +50934,6 @@ export interface operations {
         parameters: {
             query?: {
                 group_by?: string;
-                org_id?: string | null;
                 product_id?: string | null;
                 grade?: number | null;
                 class_id?: string | null;
@@ -51153,7 +51108,6 @@ export interface operations {
     list_products_shop_products_get: {
         parameters: {
             query?: {
-                org_id?: string | null;
                 activity_id?: string | null;
                 series_id?: string | null;
                 status?: components["schemas"]["ProductStatus"] | null;
@@ -51385,8 +51339,6 @@ export interface operations {
     export_orders_csv_shop_reports_orders_csv_get: {
         parameters: {
             query?: {
-                /** @description 過濾組織 */
-                org_id?: string | null;
                 /** @description 過濾活動 */
                 activity_id?: string | null;
             };
@@ -51417,8 +51369,6 @@ export interface operations {
     export_orders_excel_shop_reports_orders_xlsx_get: {
         parameters: {
             query?: {
-                /** @description 過濾組織（留空匯出全部） */
-                org_id?: string | null;
                 /** @description 過濾活動 */
                 activity_id?: string | null;
             };
