@@ -948,7 +948,9 @@ export default function SystemDefensePage() {
       <section className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[0.8fr_1.2fr]">
         <RecoveryToolsPanel onChanged={refresh} />
         <RecentErrorsPanel />
-        <DeadLetterPanel />
+        <div className="xl:col-span-2">
+          <DeadLetterPanel />
+        </div>
       </section>
     </main>
   );
