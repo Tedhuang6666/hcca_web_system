@@ -1,8 +1,12 @@
 import * as Sentry from "@sentry/nextjs";
 
-if (process.env.NEXT_PUBLIC_SENTRY_DSN) {
+import { getPublicSentryDsn } from "./src/lib/sentry-config";
+
+const dsn = getPublicSentryDsn();
+
+if (dsn) {
   Sentry.init({
-    dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
+    dsn,
     environment: process.env.NEXT_PUBLIC_ENVIRONMENT || process.env.NODE_ENV,
     tracesSampleRate: Number(process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE || "0.05"),
     sendDefaultPii: false,

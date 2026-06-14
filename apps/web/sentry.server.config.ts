@@ -4,9 +4,13 @@
 
 import * as Sentry from "@sentry/nextjs";
 
-if (process.env.NEXT_PUBLIC_SENTRY_DSN) {
+import { getServerSentryDsn } from "./src/lib/sentry-config";
+
+const dsn = getServerSentryDsn();
+
+if (dsn) {
   Sentry.init({
-    dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
+    dsn,
     environment: process.env.NEXT_PUBLIC_ENVIRONMENT || process.env.NODE_ENV,
 
     // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
