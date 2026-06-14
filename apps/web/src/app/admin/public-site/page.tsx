@@ -510,15 +510,17 @@ export default function PublicSiteAdminPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-5">
-      <header className="overflow-hidden rounded-2xl bg-[#eef3f8] text-[#173654] dark:bg-[#173654] dark:text-[#f8f3e5]">
+      <header className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-sm">
         <div className="grid gap-8 px-6 py-7 lg:grid-cols-[1fr_auto] lg:items-center lg:px-8">
           <div>
-            <div className="flex items-center gap-2 text-xs font-semibold tracking-[0.16em] text-[#2a6496] dark:text-[#e8c970]">
+            <div className="flex items-center gap-2 text-xs font-semibold tracking-[0.16em] text-[var(--primary-text)]">
               <Globe2 size={15} aria-hidden />
               PUBLIC SITE CONTROL
             </div>
-            <h1 className="mt-3 text-2xl font-semibold">公開網站工作台</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-[#4a6f8a] dark:text-[#cdd8e0]">
+            <h1 className="mt-3 text-2xl font-semibold text-[var(--text-primary)]">
+              公開網站工作台
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--text-secondary)]">
               管理首頁內容、公開頁面、常用連結與幹部資料。發布前可先開啟官網確認實際呈現。
             </p>
           </div>
@@ -526,7 +528,7 @@ export default function PublicSiteAdminPage() {
             <button
               type="button"
               onClick={load}
-              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[#173654]/20 px-4 text-sm font-medium transition-colors hover:bg-[#173654]/10 dark:border-white/20 dark:hover:bg-white/10"
+              className="btn btn-ghost min-h-11 px-4 text-sm"
             >
               <RefreshCw size={16} aria-hidden /> 同步資料
             </button>
@@ -534,7 +536,7 @@ export default function PublicSiteAdminPage() {
               href="/"
               target="_blank"
               rel="noreferrer"
-              className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[#173654] px-4 text-sm font-semibold text-[#e8c970] transition-colors hover:bg-[#1e4570] dark:bg-[#e8c970] dark:text-[#173654] dark:hover:bg-[#f2dc95]"
+              className="btn btn-primary min-h-11 px-4 text-sm font-semibold"
             >
               <Eye size={16} aria-hidden /> 預覽官網
               <ArrowUpRight size={15} aria-hidden />
