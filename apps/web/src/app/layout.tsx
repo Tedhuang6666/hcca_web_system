@@ -25,6 +25,9 @@ export const metadata: Metadata = {
   creator: BRANDING.orgShortName,
   publisher: BRANDING.orgShortName,
   category: "education",
+  other: {
+    google: "notranslate",
+  },
   keywords: [
     BRANDING.orgShortName,
     BRANDING.acronym,
