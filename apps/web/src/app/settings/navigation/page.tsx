@@ -49,9 +49,10 @@ export default function NavigationSettingsPage() {
   );
 
   const permissionHelpers = useMemo(() => {
-    if (typeof window === "undefined") return { can: () => false, hasPrefix: () => false };
+    if (typeof window === "undefined") return { can: () => false, hasPrefix: () => false, isExternal: false, isAdmin: false };
     const superuser =
       localStorage.getItem("is_superuser") === "true" || localStorage.getItem("is_owner") === "true";
+    const isExternal = localStorage.getItem("is_external") === "true";
     let permissions = new Set<string>();
     try {
       permissions = new Set(JSON.parse(localStorage.getItem("permissions") || "[]"));
@@ -60,6 +61,8 @@ export default function NavigationSettingsPage() {
       can: (code: string) => superuser || permissions.has("admin:all") || permissions.has(code),
       hasPrefix: (prefix: string) =>
         superuser || permissions.has("admin:all") || Array.from(permissions).some((p) => p.startsWith(prefix)),
+      isExternal,
+      isAdmin: superuser,
     };
     // ready 翻 true（掛載後）刻意觸發重算，從 localStorage 取得真正權限；body 未直接引用故停用規則。
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -73,7 +76,7 @@ export default function NavigationSettingsPage() {
         prefs[orderKey].map((id) => NAV_ITEMS_BY_ID[id]).filter((item): item is NavItem => !!item),
         permissionHelpers.can,
         permissionHelpers.hasPrefix,
-      ),
+      ).filter((item) => !(item.schoolOnly && permissionHelpers.isExternal && !permissionHelpers.isAdmin)),
     [orderKey, permissionHelpers, prefs],
   );
   const hidden = new Set(prefs[hiddenKey]);
