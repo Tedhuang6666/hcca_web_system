@@ -53,7 +53,12 @@ async def start_impersonation(
     request: Request,
     db: DbDep,
     actor: Annotated[User, Depends(require_permission(PermissionCode.ADMIN_IMPERSONATE))],
-    minutes: int = Body(default=impersonation_svc.IMPERSONATION_DEFAULT_MINUTES, embed=True),
+    minutes: int = Body(
+        default=impersonation_svc.IMPERSONATION_DEFAULT_MINUTES,
+        ge=1,
+        le=impersonation_svc.IMPERSONATION_MAX_MINUTES,
+        embed=True,
+    ),
 ) -> ImpersonationStartResponse:
     target = await db.get(User, target_user_id)
     if target is None:

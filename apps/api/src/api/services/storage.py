@@ -9,6 +9,7 @@ import re
 import uuid
 from pathlib import Path
 
+import anyio.to_thread
 from fastapi import UploadFile
 
 logger = logging.getLogger(__name__)
@@ -111,6 +112,34 @@ _ALLOWED_TYPES: frozenset[str] = frozenset(_MIME_TO_EXT)
 
 MAX_FILE_SIZE = 20 * 1024 * 1024  # 20 MB
 
+# Magic bytes 白名單：防止攻擊者宣告合法 Content-Type 但上傳偽裝內容（polyglot 攻擊）。
+# ZIP 系列（docx/xlsx/pptx）共享 PK\x03\x04 簽章；legacy Office 共享 D0CF 簽章。
+_MAGIC: dict[str, bytes | tuple[bytes, ...]] = {
+    "application/pdf": b"%PDF",
+    "image/jpeg": b"\xff\xd8\xff",
+    "image/png": b"\x89PNG\r\n\x1a\n",
+    "image/gif": (b"GIF87a", b"GIF89a"),
+    "image/webp": b"RIFF",  # 需另驗 offset 8 == b"WEBP"
+    "application/msword": b"\xd0\xcf\x11\xe0",
+    "application/vnd.ms-excel": b"\xd0\xcf\x11\xe0",
+    "application/vnd.ms-powerpoint": b"\xd0\xcf\x11\xe0",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": b"PK\x03\x04",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": b"PK\x03\x04",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": b"PK\x03\x04",
+}
+
+
+def _validate_magic_bytes(content: bytes, mime: str) -> bool:
+    """驗證檔案開頭 magic bytes 與宣告的 MIME 是否相符。"""
+    sig = _MAGIC.get(mime)
+    if sig is None:
+        return True
+    if isinstance(sig, tuple):
+        return any(content[: len(s)] == s for s in sig)
+    if mime == "image/webp":
+        return content[:4] == b"RIFF" and len(content) >= 12 and content[8:12] == b"WEBP"
+    return content[: len(sig)] == sig
+
 
 def _sanitize_filename(filename: str) -> str:
     """移除文件名中 Windows 不允許的字符"""
@@ -152,6 +181,10 @@ class LocalStorageBackend(StorageBackend):
         content_type = file.content_type or guessed_type or "application/octet-stream"
         if content_type not in _ALLOWED_TYPES:
             msg = f"不支援的檔案類型：{content_type}"
+            raise ValueError(msg)
+
+        if not _validate_magic_bytes(content, content_type):
+            msg = f"檔案內容與宣告的類型 {content_type} 不符"
             raise ValueError(msg)
 
         # 產生唯一 storage_key。副檔名一律由「通過驗證的 MIME」決定，不採用用戶端
@@ -222,17 +255,31 @@ class S3StorageBackend(StorageBackend):
             msg = "檔案超過最大限制"
             raise ValueError(msg)
 
+        # 與 LocalStorageBackend 一致：驗證 MIME 白名單 + magic bytes
+        guessed_type, _ = mimetypes.guess_type(file.filename or "")
+        content_type = file.content_type or guessed_type or "application/octet-stream"
+        if content_type not in _ALLOWED_TYPES:
+            msg = f"不支援的檔案類型：{content_type}"
+            raise ValueError(msg)
+
+        if not _validate_magic_bytes(content, content_type):
+            msg = f"檔案內容與宣告的類型 {content_type} 不符"
+            raise ValueError(msg)
+
         original_filename = file.filename or "file"
         sanitized = _sanitize_filename(original_filename)
-        ext = Path(sanitized).suffix or ""
+        # 副檔名由白名單推導（與 LocalStorageBackend 一致），防止副檔名混淆
+        ext = _MIME_TO_EXT[content_type]
         key = f"{prefix}/{uuid.uuid4().hex}{ext}".lstrip("/")
-        content_type = file.content_type or "application/octet-stream"
 
-        self._client.put_object(
-            Bucket=self._bucket,
-            Key=key,
-            Body=content,
-            ContentType=content_type,
+        client = self._client
+        await anyio.to_thread.run_sync(
+            lambda: client.put_object(
+                Bucket=self._bucket,
+                Key=key,
+                Body=content,
+                ContentType=content_type,
+            )
         )
         return StoredFile(
             storage_key=key,
@@ -243,7 +290,11 @@ class S3StorageBackend(StorageBackend):
         )
 
     async def delete(self, storage_key: str) -> None:
-        self._client.delete_object(Bucket=self._bucket, Key=storage_key)
+        client = self._client
+        bucket = self._bucket
+        await anyio.to_thread.run_sync(
+            lambda: client.delete_object(Bucket=bucket, Key=storage_key)
+        )
 
     async def get_url(
         self,
@@ -262,10 +313,15 @@ class S3StorageBackend(StorageBackend):
                 encoded = quote(download_name.encode("utf-8"))
                 value = f"{disposition}; filename*=UTF-8''{encoded}"
             params["ResponseContentDisposition"] = value
-        return self._client.generate_presigned_url(
-            "get_object",
-            Params=params,
-            ExpiresIn=expires,
+        client = self._client
+        _expires = expires
+        _params = params
+        return await anyio.to_thread.run_sync(
+            lambda: client.generate_presigned_url(
+                "get_object",
+                Params=_params,
+                ExpiresIn=_expires,
+            )
         )
 
 

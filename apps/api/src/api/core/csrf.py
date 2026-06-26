@@ -45,7 +45,6 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             "/auth/google/login",
             "/auth/google/callback",
             "/auth/google/one-tap",
-            "/auth/refresh",
             "/line/webhook",
             "/email/resend/webhook",
             # 內部服務使用 API key，不依賴瀏覽器 cookie。

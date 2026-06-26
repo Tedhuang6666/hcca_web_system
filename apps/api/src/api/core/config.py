@@ -502,6 +502,12 @@ class Settings(BaseSettings):
             raise ValueError("ALLOWED_ORIGINS 不可包含 '*'；請明確列出允許來源")
         if is_prod and "*" in self.ALLOWED_HOSTS:
             raise ValueError("生產環境 ALLOWED_HOSTS 不可包含 '*'；請明確列出允許 Host")
+        if is_prod and self.VAPID_PRIVATE_KEY and len(self.VAPID_PRIVATE_KEY) > 20:
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "VAPID_PRIVATE_KEY 以明文存在環境變數中；建議改用 Secrets Manager 或加密 vault 管理，"
+                "避免透過 /admin/settings 或 env dump 洩漏此金鑰（洩漏後可偽造推播通知給所有使用者）"
+            )
         return self
 
 
