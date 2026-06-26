@@ -161,7 +161,6 @@ async def _auth_user_payload(db: AsyncSession, user: User) -> dict:
         "is_superuser": user.is_superuser,
         "is_owner": user.email.lower() in settings.OWNER_EMAILS,
         "permissions": sorted(codes),
-        "allow_external_login": user.allow_external_login,
     }
 
 
@@ -429,7 +428,8 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
 
     if user.mfa_enabled:
         challenge_token = create_mfa_challenge_token(subject=str(user.id))
-        challenge_qs = urlencode({"challenge": challenge_token, "next": login_next})
+        request.session["mfa_challenge"] = challenge_token
+        challenge_qs = urlencode({"next": login_next})
         return RedirectResponse(url=f"{frontend_origin}/auth/mfa?{challenge_qs}")
 
     access_token = create_access_token(
@@ -531,7 +531,8 @@ async def discord_callback(
 
     if user.mfa_enabled:
         challenge_token = create_mfa_challenge_token(subject=str(user.id))
-        challenge_qs = urlencode({"challenge": challenge_token, "next": login_next})
+        request.session["mfa_challenge"] = challenge_token
+        challenge_qs = urlencode({"next": login_next})
         return RedirectResponse(url=f"{frontend_origin}/auth/mfa?{challenge_qs}")
 
     access_token = create_access_token(
@@ -600,7 +601,8 @@ async def google_one_tap(
     login_next = _safe_next_path(body.next)
     if user.mfa_enabled:
         challenge_token = create_mfa_challenge_token(subject=str(user.id))
-        return {"mfa_required": True, "challenge": challenge_token, "next": login_next}
+        request.session["mfa_challenge"] = challenge_token
+        return {"mfa_required": True, "next": login_next}
 
     access_token = create_access_token(
         subject=str(user.id),

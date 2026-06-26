@@ -1244,7 +1244,7 @@ async def add_ip_block(body: IpBlockBody, session: DbDep, _admin: AdminUser) -> 
     return IpBlockedItem(ip=body.ip, reason=body.reason, expires_at=expires_at)
 
 
-@router.delete("/ip-blocklist/{ip}", response_model=dict)
+@router.delete("/ip-blocklist/{ip}", response_model=dict, dependencies=[Depends(require_admin_mfa)])
 async def remove_ip_block(ip: str, session: DbDep, _admin: AdminUser) -> dict:
     ok = await ip_unblock(ip)
     if not ok:
@@ -1270,7 +1270,7 @@ async def remove_ip_block(ip: str, session: DbDep, _admin: AdminUser) -> dict:
 # ── 強制登出 ────────────────────────────────────────────────────────────────
 
 
-@router.post("/revoke-user-tokens", response_model=dict)
+@router.post("/revoke-user-tokens", response_model=dict, dependencies=[Depends(require_admin_mfa)])
 async def force_logout_user(body: RevokeUserBody, session: DbDep, _admin: AdminUser) -> dict:
     count = await revoke_user(str(body.user_id))
     await audit_svc.record(
@@ -1389,7 +1389,7 @@ async def recovery_clear_cache(session: DbDep, _admin: AdminUser) -> dict:
     return {"ok": True, **result}
 
 
-@router.post("/recovery/db-upgrade", response_model=dict, summary="升級資料庫到最新版本")
+@router.post("/recovery/db-upgrade", response_model=dict, summary="升級資料庫到最新版本", dependencies=[Depends(require_admin_mfa)])
 async def recovery_db_upgrade(session: DbDep, _admin: AdminUser) -> dict:
     """執行 alembic upgrade head。"""
     try:
@@ -1424,7 +1424,7 @@ async def recovery_db_upgrade(session: DbDep, _admin: AdminUser) -> dict:
     return {"ok": True, **result}
 
 
-@router.post("/recovery/restart", response_model=dict, summary="重啟服務")
+@router.post("/recovery/restart", response_model=dict, summary="重啟服務", dependencies=[Depends(require_admin_mfa)])
 async def recovery_restart(background: BackgroundTasks, session: DbDep, _admin: AdminUser) -> dict:
     """依環境觸發重啟（dev 熱重載 / prod SIGHUP gunicorn master）。回應送出後才執行。"""
     await audit_svc.record(

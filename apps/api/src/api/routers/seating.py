@@ -13,7 +13,9 @@ from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_permission
 from api.models.seating import SeatingZone
+from api.models.shop import Order
 from api.models.user import User
+from api.services.permission import get_user_permission_codes
 from api.schemas.seating import (
     AdminAssignRequest,
     AssignmentOut,
@@ -237,5 +239,12 @@ async def select_seats(
 async def order_assignments(
     order_id: uuid.UUID, session: DbDep, current_user: CurrentUser
 ) -> list[AssignmentOut]:
+    order = await session.get(Order, order_id)
+    if order is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="訂單不存在")
+    if order.user_id != current_user.id and not current_user.is_superuser:
+        codes = await get_user_permission_codes(session, current_user.id)
+        if PermissionCode.SEATING_MANAGE not in codes:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權查閱他人訂單的劃位結果")
     rows = await seating_svc.list_assignments(session, order_id=order_id)
     return [seating_svc.serialize_assignment(a) for a in rows]

@@ -47,6 +47,8 @@ class SimpleRateLimitMiddleware:
             ("/auth/refresh", 20, 60),
             ("/auth/google/login", 20, 60),
             ("/auth/google/callback", 20, 60),
+            ("/auth/google/one-tap", 5, 60),
+            ("/auth/mfa", 10, 60),
             ("/admin/", 90, 60),
             ("/notifications/email", 10, 60),
             ("/email", 20, 60),

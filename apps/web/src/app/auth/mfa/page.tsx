@@ -10,16 +10,19 @@ import { safeNextPath } from "@/lib/safe-redirect";
 
 export default function MFALoginPage() {
   const searchParams = useSearchParams();
-  const challenge = searchParams.get("challenge") ?? "";
   const next = safeNextPath(searchParams.get("next"));
+  const [challenge, setChallenge] = useState<string>("");
   const [code, setCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!challenge) {
-      window.location.replace("/login?error=缺少 2FA 登入挑戰，請重新登入");
-    }
-  }, [challenge]);
+    // challenge token 存放在 server session（不暴露在 URL），需 exchange 取出
+    mfaApi.exchangeChallenge()
+      .then((data) => setChallenge(data.challenge))
+      .catch(() => {
+        window.location.replace("/login?error=" + encodeURIComponent("缺少 2FA 登入挑戰，請重新登入"));
+      });
+  }, []);
 
   const submit = async () => {
     setSubmitting(true);
@@ -59,7 +62,7 @@ export default function MFALoginPage() {
             value={code}
             onChange={(e) => setCode(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && code.trim().length >= 6) void submit();
+              if (e.key === "Enter" && code.trim().length >= 6 && challenge) void submit();
             }}
             placeholder="000000"
           />
@@ -67,7 +70,7 @@ export default function MFALoginPage() {
 
         <button
           className="btn btn-primary mt-5 w-full"
-          disabled={submitting || code.trim().length < 6}
+          disabled={submitting || !challenge || code.trim().length < 6}
           onClick={submit}>
           {submitting ? "驗證中" : "完成登入"}
         </button>
