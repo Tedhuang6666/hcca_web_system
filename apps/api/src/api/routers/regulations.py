@@ -1301,33 +1301,40 @@ async def regulation_diff(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此法規")
     reg = await _get_reg_or_404(reg_id, session)
 
+    from sqlalchemy import func as _func
+
+    # Resolve version defaults without loading all revisions
+    if to_version is None or from_version is None:
+        bounds = (
+            await session.execute(
+                _sel(
+                    _func.min(RegulationRevision.version),
+                    _func.max(RegulationRevision.version),
+                ).where(RegulationRevision.regulation_id == reg.id)
+            )
+        ).one()
+        min_ver, max_ver = bounds
+        if max_ver is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="此法規尚無修訂歷程可比對",
+            )
+        target_ver = to_version if to_version is not None else max_ver
+        source_ver = from_version if from_version is not None else max(target_ver - 1, min_ver)
+    else:
+        target_ver = to_version
+        source_ver = from_version
+
+    # Fetch only the two needed revisions
     revs_result = await session.execute(
-        _sel(RegulationRevision)
-        .where(RegulationRevision.regulation_id == reg.id)
-        .order_by(RegulationRevision.version)
-    )
-    revisions = list(revs_result.scalars().all())
-
-    if not revisions:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="此法規尚無修訂歷程可比對",
+        _sel(RegulationRevision).where(
+            RegulationRevision.regulation_id == reg.id,
+            RegulationRevision.version.in_([source_ver, target_ver]),
         )
-
-    def _find_rev(ver: int) -> RegulationRevision | None:
-        for r in revisions:
-            if r.version == ver:
-                return r
-        return None
-
-    latest = revisions[-1]
-    target_ver = to_version if to_version is not None else latest.version
-    source_ver = (
-        from_version if from_version is not None else max(target_ver - 1, revisions[0].version)
     )
-
-    src_rev = _find_rev(source_ver)
-    tgt_rev = _find_rev(target_ver)
+    rev_map = {r.version: r for r in revs_result.scalars().all()}
+    src_rev = rev_map.get(source_ver)
+    tgt_rev = rev_map.get(target_ver)
 
     if src_rev is None or tgt_rev is None:
         raise HTTPException(
