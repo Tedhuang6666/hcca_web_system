@@ -8,9 +8,11 @@
   - 反斜線變體 ``/\\host``（瀏覽器會把 ``\\`` 正規化成 ``/``）
   - 上述的百分比編碼（``/%2f``、``/%5c``）
   - 內嵌控制字元（``\\r \\n \\t \\0``）——瀏覽器可能去除後形成繞過
+  - Unicode 全形斜線等（NFKC 正規化後再比對）
 """
 
 from __future__ import annotations
+import unicodedata
 
 _UNSAFE_PREFIXES = ("//", "/\\", "/%2f", "/%5c")
 _CONTROL_CHARS = ("\\", "\r", "\n", "\t", "\x00")
@@ -20,8 +22,10 @@ def safe_next_path(value: str | None, *, default: str = "/") -> str:
     """回傳安全的站內相對路徑；不安全時回傳 ``default``。"""
     if not value or not value.startswith("/"):
         return default
-    if value.lower().startswith(_UNSAFE_PREFIXES):
+    # NFKC 正規化消除全形斜線（U+FF0F → /）等 Unicode 繞過手法
+    normalized = unicodedata.normalize("NFKC", value)
+    if normalized.lower().startswith(_UNSAFE_PREFIXES):
         return default
-    if any(ch in value for ch in _CONTROL_CHARS):
+    if any(ch in normalized for ch in _CONTROL_CHARS):
         return default
     return value

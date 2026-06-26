@@ -1245,6 +1245,7 @@ export const mfaApi = {
   setup: () => post<MFASetupOut>("/auth/mfa/setup", {}),
   confirm: (code: string) => post<{ message: string }>("/auth/mfa/confirm", { code }),
   verify: (code: string) => post<{ verified: boolean }>("/auth/mfa/verify", { code }),
+  exchangeChallenge: () => get<{ challenge: string }>("/auth/mfa/exchange-challenge"),
   verifyLogin: (challenge_token: string, code: string) =>
     post<{ message: string }>("/auth/mfa/login/verify", { challenge_token, code }),
   regenerateBackupCodes: (code: string) =>

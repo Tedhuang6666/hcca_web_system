@@ -55,9 +55,9 @@ export default function GoogleOneTap() {
 
       try {
         const result = await authApi.googleOneTap(response.credential, nextPath);
-        if (result.mfa_required && result.challenge) {
+        if (result.mfa_required) {
           const next = encodeURIComponent(result.next || nextPath || "/");
-          router.replace(`/auth/mfa?challenge=${encodeURIComponent(result.challenge)}&next=${next}`);
+          router.replace(`/auth/mfa?next=${next}`);
           return;
         }
         if (result.user) {

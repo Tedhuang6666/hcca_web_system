@@ -3,7 +3,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from jwt.exceptions import InvalidTokenError
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -125,6 +125,20 @@ async def verify_mfa(payload: MFAVerifyIn, db: DbDep, user: CurrentUser) -> dict
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="2FA 驗證碼錯誤")
     await record_success(lockout_key)
     return {"verified": True}
+
+
+@router.get("/exchange-challenge", summary="從 session 取出 MFA challenge token（一次性）")
+async def exchange_mfa_challenge(request: Request) -> dict[str, str]:
+    """OAuth / One Tap 登入後，challenge token 存在 server session 而非 URL。
+    前端 MFA 頁面呼叫此端點取得 token，取出後 session 中的值即清除（one-time use）。
+    """
+    challenge = request.session.pop("mfa_challenge", None)
+    if not challenge:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="無待處理的 MFA 挑戰，請重新登入",
+        )
+    return {"challenge": challenge}
 
 
 @router.post("/login/verify", summary="完成登入 2FA 挑戰")

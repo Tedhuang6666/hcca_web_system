@@ -12,7 +12,9 @@
  */
 export function safeNextPath(value: string | null | undefined, fallback = "/"): string {
   if (!value || !value.startsWith("/")) return fallback;
-  const lowered = value.toLowerCase();
+  // 正規化 Unicode 以防全形斜線（U+FF0F）等字元繞過前置檢查
+  const normalized = value.normalize("NFKC");
+  const lowered = normalized.toLowerCase();
   if (
     lowered.startsWith("//") ||
     lowered.startsWith("/\\") ||
@@ -21,6 +23,6 @@ export function safeNextPath(value: string | null | undefined, fallback = "/"): 
   ) {
     return fallback;
   }
-  if (/[\\\r\n\t ]/.test(value)) return fallback;
+  if (/[\\\r\n\t ]/.test(normalized)) return fallback;
   return value;
 }
