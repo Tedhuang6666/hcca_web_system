@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import stat
 import subprocess
+import tempfile
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -106,7 +109,6 @@ def backup_database(self) -> dict:  # type: ignore[type-arg]
     stamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     target = backup_dir / f"hcca_backup_{db}_{stamp}.dump"
 
-    env = {"PGPASSWORD": password}
     cmd = [
         "pg_dump",
         "-h",
@@ -123,11 +125,25 @@ def backup_database(self) -> dict:  # type: ignore[type-arg]
         "-Fc",
     ]
 
+    # 用 .pgpass 暫存檔傳遞密碼，避免密碼暴露在程序環境變數（/proc/<pid>/environ）。
+    pgpass_fd, pgpass_path = tempfile.mkstemp(suffix=".pgpass")
+    try:
+        with os.fdopen(pgpass_fd, "w") as pf:
+            pf.write(f"{host}:{port}:{db}:{user}:{password}\n")
+        os.chmod(pgpass_path, stat.S_IRUSR | stat.S_IWUSR)  # 600，pgpass 規範要求
+        run_env = {"PGPASSFILE": pgpass_path}
+    except OSError:
+        try:
+            os.unlink(pgpass_path)
+        except OSError:
+            pass
+        raise
+
     try:
         with target.open("wb") as out:
-            proc = subprocess.run(
+            proc = subprocess.run(  # noqa: F841
                 cmd,
-                env=env,
+                env=run_env,
                 stdout=out,
                 stderr=subprocess.PIPE,
                 check=True,
@@ -166,6 +182,11 @@ def backup_database(self) -> dict:  # type: ignore[type-arg]
                 body="原因：pg_dump 連續逾時（>600s）。資料庫可能負載過高或磁碟極慢。",
             )
             raise
+    finally:
+        try:
+            os.unlink(pgpass_path)
+        except OSError:
+            pass
 
     # 可選用 GPG 加密，並寫入 sha256 與 BackupRecord。
     final_path = target

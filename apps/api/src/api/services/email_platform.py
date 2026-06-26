@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import io
 import math
+import time
 import uuid
 from datetime import UTC, datetime
 
@@ -419,6 +420,9 @@ async def export_recipients(db: AsyncSession, message_id: uuid.UUID, fmt: str) -
     return output_text.getvalue().encode("utf-8-sig"), "text/csv; charset=utf-8"
 
 
+_WEBHOOK_TIMESTAMP_TOLERANCE = 300  # 5 分鐘
+
+
 def verify_resend_signature(body: bytes, headers: dict[str, str]) -> None:
     secret = settings.RESEND_WEBHOOK_SECRET
     if not secret:
@@ -426,6 +430,19 @@ def verify_resend_signature(body: bytes, headers: dict[str, str]) -> None:
     message_id = headers.get("svix-id", "")
     timestamp = headers.get("svix-timestamp", "")
     signatures = headers.get("svix-signature", "")
+
+    # 驗證時戳在 5 分鐘容忍窗口內，防止 replay attack
+    try:
+        ts = int(timestamp)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Webhook 時戳格式錯誤"
+        ) from exc
+    if abs(int(time.time()) - ts) > _WEBHOOK_TIMESTAMP_TOLERANCE:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Webhook 時戳已過期或超前"
+        )
+
     try:
         secret_bytes = base64.b64decode(secret.removeprefix("whsec_"))
     except ValueError as exc:
