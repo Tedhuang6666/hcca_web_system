@@ -655,6 +655,8 @@ async def update_user_position(
 async def list_all_positions(
     db: DbDep,
     _: AdminUser,
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
 ) -> list[PositionSummary]:
     result = await db.execute(
         select(Position)
@@ -663,6 +665,8 @@ async def list_all_positions(
             selectinload(Position.org),
         )
         .order_by(Position.name)
+        .limit(limit)
+        .offset(offset)
     )
     positions = result.scalars().all()
     return [

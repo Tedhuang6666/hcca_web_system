@@ -19,11 +19,12 @@ from api.core.clock import local_today
 from api.core.permission_codes import PermissionCode
 from api.core.ws_manager import manager as ws_manager
 from api.models.document import Document
-from api.models.org import Position, UserPosition
+from api.models.org import Org, Permission, Position, UserPosition
 from api.models.user import User
 from api.schemas.document import BatchDocumentOperationOut, BatchDocumentResult
 from api.services import document as doc_svc
 from api.services.permission import (
+    active_tenure_filter,
     get_user_permission_codes,
     get_user_permission_codes_for_org,
     user_is_org_leader,
@@ -132,22 +133,56 @@ async def org_ids_with_document_permissions(session: AsyncSession, user: User) -
     if user.is_superuser:
         return []
     today = local_today()
-    result = await session.execute(
-        select(Position.org_id)
-        .join(UserPosition, UserPosition.position_id == Position.id)
-        .where(
-            UserPosition.user_id == user.id,
-            UserPosition.start_date <= today,
-            or_(UserPosition.end_date.is_(None), UserPosition.end_date >= today),
+    doc_codes = {"document:draft", "document:create", "document:admin", "admin:all"}
+
+    # Batch: (org_id, code) for all of user's active positions — single query
+    rows = (
+        await session.execute(
+            select(Position.org_id, Permission.code)
+            .join(Permission, Permission.position_id == Position.id)
+            .join(UserPosition, UserPosition.position_id == Position.id)
+            .where(UserPosition.user_id == user.id, *active_tenure_filter(today))
         )
-        .distinct()
-    )
-    org_ids: list[uuid.UUID] = []
-    for org_id in result.scalars().all():
-        codes = await get_user_permission_codes_for_org(session, user.id, org_id)
-        if {"document:draft", "document:create", "document:admin", "admin:all"} & set(codes):
-            org_ids.append(org_id)
-    return org_ids
+    ).all()
+
+    org_direct_codes: dict[uuid.UUID, set[str]] = {}
+    for org_id, code in rows:
+        org_direct_codes.setdefault(org_id, set()).add(code)
+
+    qualified: set[uuid.UUID] = {oid for oid, codes in org_direct_codes.items() if doc_codes & codes}
+    remaining = [oid for oid in org_direct_codes if oid not in qualified]
+
+    if remaining:
+        # Explicit org leaders inherit all org permissions
+        explicit_leader_ids = list(
+            (
+                await session.execute(
+                    select(Org.id).where(Org.id.in_(remaining), Org.leader_user_id == user.id)
+                )
+            ).scalars().all()
+        )
+        # Auto-leaders (no explicit leader_user_id set) — typically very few
+        auto_candidates = [oid for oid in remaining if oid not in explicit_leader_ids]
+        for org_id in auto_candidates:
+            if await user_is_org_leader(session, user.id, org_id):
+                explicit_leader_ids.append(org_id)
+
+        if explicit_leader_ids:
+            # Leader gets all org permissions — qualify if org has any doc codes
+            leader_qualified = (
+                await session.execute(
+                    select(Position.org_id)
+                    .join(Permission, Permission.position_id == Position.id)
+                    .where(
+                        Position.org_id.in_(explicit_leader_ids),
+                        Permission.code.in_(doc_codes),
+                    )
+                    .distinct()
+                )
+            ).scalars().all()
+            qualified.update(leader_qualified)
+
+    return list(qualified)
 
 
 async def require_document_template_manage(
