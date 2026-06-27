@@ -3,8 +3,6 @@ import type { ReactNode } from "react";
 import PublicSiteShell from "@/components/site/PublicSiteShell";
 import { fetchPublicBundle } from "@/lib/serverFetch";
 
-export const dynamic = "force-dynamic";
-
 export default async function PublicDatabaseLayout({ children }: { children: ReactNode }) {
   const bundle = await fetchPublicBundle();
 

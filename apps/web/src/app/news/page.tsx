@@ -3,8 +3,6 @@ import Link from "next/link";
 import PublicSiteShell from "@/components/site/PublicSiteShell";
 import { fetchAnnouncements, fetchPublicBundle } from "@/lib/serverFetch";
 
-export const dynamic = "force-dynamic";
-
 export default async function NewsPage() {
   const [bundle, items] = await Promise.all([
     fetchPublicBundle(),

@@ -2,8 +2,6 @@ import PublicSiteShell from "@/components/site/PublicSiteShell";
 import MarkdownBlock from "@/components/site/MarkdownBlock";
 import { fetchPublicBundle } from "@/lib/serverFetch";
 
-export const dynamic = "force-dynamic";
-
 export default async function AboutPage() {
   const bundle = await fetchPublicBundle();
   const settings = bundle?.settings;

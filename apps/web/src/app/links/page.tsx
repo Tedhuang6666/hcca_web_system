@@ -4,8 +4,6 @@ import PublicSiteShell from "@/components/site/PublicSiteShell";
 import { fetchPublicBundle } from "@/lib/serverFetch";
 import type { PublicLinkOut } from "@/lib/types";
 
-export const dynamic = "force-dynamic";
-
 export default async function LinksPage() {
   const bundle = await fetchPublicBundle();
 

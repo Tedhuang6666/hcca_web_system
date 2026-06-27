@@ -4,8 +4,6 @@ import AnnouncementMarkdown from "@/components/announcements/AnnouncementMarkdow
 import PublicSiteShell from "@/components/site/PublicSiteShell";
 import { fetchAnnouncement, fetchPublicBundle } from "@/lib/serverFetch";
 
-export const dynamic = "force-dynamic";
-
 export default async function PublicNewsDetailPage({
   params,
 }: {
