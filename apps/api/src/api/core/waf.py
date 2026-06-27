@@ -166,6 +166,18 @@ def _client_ip(scope: Scope) -> str:
     return client[0] if client else "unknown"
 
 
+_JSON_BODY_SCAN_LIMIT = 64 * 1024  # 只讀前 64 KB，避免大 body 佔用記憶體
+_HIGH_SEVERITY_RULES = tuple(r for r in _RULES if r[1] == "high")
+
+
+def _scan_body_text(text: str) -> tuple[str, Severity] | None:
+    """僅對高信心規則掃描 body 文字（低誤判率）。"""
+    for name, severity, pattern, _ in _HIGH_SEVERITY_RULES:
+        if pattern.search(text):
+            return name, severity
+    return None
+
+
 class WAFMiddleware:
     """純 ASGI 特徵式 WAF。掛在 TrustedProxy 之後（看得到真實 IP）、LoadShed 之前。"""
 
@@ -195,35 +207,80 @@ class WAFMiddleware:
             await self._reject(scope, send, "oversized_url", "high")
             return
 
-        # 2. 特徵掃描
+        # 2. URL / header 特徵掃描
         hit = scan_request(
             path,
             query,
             _header(scope, b"user-agent"),
             _header(scope, b"referer"),
         )
-        if hit is None:
+        if hit is not None:
+            name, severity = hit
+            should_block = severity == "high" or (severity == "medium" and settings.WAF_BLOCK_MEDIUM)
+            if settings.WAF_BLOCK_MODE and should_block:
+                await self._reject(scope, send, name, severity)
+                if severity == "high":
+                    await self._record_offender(_client_ip(scope))
+                return
+            logger.warning(
+                "WAF detect-only hit rule=%s severity=%s ip=%s method=%s path=%s",
+                name,
+                severity,
+                _client_ip(scope),
+                scope.get("method"),
+                path,
+            )
             await self.app(scope, receive, send)
             return
 
-        name, severity = hit
-        should_block = severity == "high" or (severity == "medium" and settings.WAF_BLOCK_MEDIUM)
-        if settings.WAF_BLOCK_MODE and should_block:
-            await self._reject(scope, send, name, severity)
-            if severity == "high":
-                await self._record_offender(_client_ip(scope))
-            return
+        # 3. JSON body 掃描（opt-in，僅高信心規則，限前 64 KB）
+        if settings.WAF_SCAN_JSON_BODY and _header(scope, b"content-type").startswith(
+            "application/json"
+        ):
+            body, receive = await self._buffer_body(receive)
+            body_text = body.decode("utf-8", "replace")
+            body_hit = _scan_body_text(body_text)
+            if body_hit is not None:
+                name, severity = body_hit
+                if settings.WAF_BLOCK_MODE:
+                    await self._reject(scope, send, f"body:{name}", severity)
+                    await self._record_offender(_client_ip(scope))
+                    return
+                logger.warning(
+                    "WAF body detect-only rule=%s ip=%s path=%s",
+                    name,
+                    _client_ip(scope),
+                    path,
+                )
 
-        # detect-only（或 medium 在不攔截設定下）：放行但留痕
-        logger.warning(
-            "WAF detect-only hit rule=%s severity=%s ip=%s method=%s path=%s",
-            name,
-            severity,
-            _client_ip(scope),
-            scope.get("method"),
-            path,
-        )
         await self.app(scope, receive, send)
+
+    async def _buffer_body(
+        self, receive: Receive
+    ) -> tuple[bytes, Receive]:
+        """讀取並緩衝 request body（最多 64 KB），回傳 body bytes 與可重播的 receive callable。"""
+        chunks: list[bytes] = []
+        total = 0
+        more_body = True
+        while more_body and total < _JSON_BODY_SCAN_LIMIT:
+            message = await receive()
+            chunk = message.get("body", b"")
+            chunks.append(chunk)
+            total += len(chunk)
+            more_body = message.get("more_body", False)
+        body = b"".join(chunks)[:_JSON_BODY_SCAN_LIMIT]
+
+        # 重建可重播的 receive：先回放已讀內容，再繼續原始 stream
+        replayed = False
+
+        async def _replayed_receive() -> dict:
+            nonlocal replayed
+            if not replayed:
+                replayed = True
+                return {"type": "http.request", "body": body, "more_body": more_body}
+            return await receive()
+
+        return body, _replayed_receive
 
     async def _reject(self, scope: Scope, send: Send, rule: str, severity: Severity) -> None:
         ip = _client_ip(scope)

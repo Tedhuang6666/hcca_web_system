@@ -115,7 +115,12 @@ async def is_blacklisted(token: str) -> bool:
     try:
         return bool(await redis_client.exists(f"{BLACKLIST_JTI_PREFIX}{jti}"))
     except (RedisError, TimeoutError):
-        logger.warning("is_blacklisted: Redis 不可用，降級放行（fail-open）jti=%s", jti)
+        logger.error(
+            "is_blacklisted: Redis 不可用，fail-open 放行已撤銷 token jti=%s type=%s",
+            jti,
+            payload.get("type"),
+            extra={"alert": "blacklist_fail_open"},
+        )
         return False
 
 

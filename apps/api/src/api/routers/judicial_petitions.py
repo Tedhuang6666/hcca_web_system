@@ -121,7 +121,7 @@ async def get_judicial_petition(
         str(PermissionCode.ADMIN_ALL),
     }:
         return petition
-    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權查看此評議聲請")
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此評議聲請")
 
 
 @router.patch(

@@ -40,7 +40,14 @@ async def _meili_request(method: str, path: str, json: Any | None = None) -> dic
         return res.json() if res.content else {}
 
 
-async def search(db: AsyncSession, query: str, *, limit: int = 10) -> list[dict[str, Any]]:
+def _escape_like(value: str) -> str:
+    """Escape LIKE/ILIKE metacharacters to prevent wildcard injection."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+async def search(
+    db: AsyncSession, query: str, *, limit: int = 10, is_superuser: bool = False
+) -> list[dict[str, Any]]:
     # 去除 NUL：0x00 進到 PostgreSQL ILIKE 後備查詢會丟 CharacterNotInRepertoireError → 500。
     q = query.replace("\x00", "").strip()
     if meili_enabled():
@@ -54,22 +61,27 @@ async def search(db: AsyncSession, query: str, *, limit: int = 10) -> list[dict[
         except Exception:
             logger.warning("Meilisearch query failed; falling back to SQL", exc_info=True)
 
-    return await _sql_fallback(db, q, limit=limit)
+    return await _sql_fallback(db, q, limit=limit, is_superuser=is_superuser)
 
 
-async def _sql_fallback(db: AsyncSession, query: str, *, limit: int) -> list[dict[str, Any]]:
+async def _sql_fallback(
+    db: AsyncSession, query: str, *, limit: int, is_superuser: bool = False
+) -> list[dict[str, Any]]:
     if not query:
         return []
-    pattern = f"%{query}%"
+    escaped = _escape_like(query)
+    pattern = f"%{escaped}%"
     results: list[dict[str, Any]] = []
 
-    docs = (
-        await db.execute(
-            select(Document)
-            .where(or_(Document.title.ilike(pattern), Document.content.ilike(pattern)))
-            .limit(limit)
+    doc_q = select(Document).where(
+        or_(
+            Document.title.ilike(pattern, escape="\\"),
+            Document.content.ilike(pattern, escape="\\"),
         )
-    ).scalars()
+    )
+    if not is_superuser:
+        doc_q = doc_q.where(Document.is_public == True)  # noqa: E712
+    docs = (await db.execute(doc_q.limit(limit))).scalars()
     results.extend(
         {
             "id": str(doc.id),
@@ -81,13 +93,15 @@ async def _sql_fallback(db: AsyncSession, query: str, *, limit: int) -> list[dic
         for doc in docs
     )
 
-    regs = (
-        await db.execute(
-            select(Regulation)
-            .where(or_(Regulation.title.ilike(pattern), Regulation.content.ilike(pattern)))
-            .limit(limit)
+    reg_q = select(Regulation).where(
+        or_(
+            Regulation.title.ilike(pattern, escape="\\"),
+            Regulation.content.ilike(pattern, escape="\\"),
         )
-    ).scalars()
+    )
+    if not is_superuser:
+        reg_q = reg_q.where(Regulation.published_at.is_not(None))
+    regs = (await db.execute(reg_q.limit(limit))).scalars()
     results.extend(
         {
             "id": str(reg.id),
@@ -100,7 +114,7 @@ async def _sql_fallback(db: AsyncSession, query: str, *, limit: int) -> list[dic
     )
 
     meetings = (
-        await db.execute(select(Meeting).where(Meeting.title.ilike(pattern)).limit(limit))
+        await db.execute(select(Meeting).where(Meeting.title.ilike(pattern, escape="\\")).limit(limit))
     ).scalars()
     results.extend(
         {
@@ -113,9 +127,13 @@ async def _sql_fallback(db: AsyncSession, query: str, *, limit: int) -> list[dic
         for meeting in meetings
     )
 
-    anns = (
-        await db.execute(select(Announcement).where(Announcement.title.ilike(pattern)).limit(limit))
-    ).scalars()
+    ann_q = select(Announcement).where(Announcement.title.ilike(pattern, escape="\\"))
+    if not is_superuser:
+        ann_q = ann_q.where(
+            Announcement.is_published == True,  # noqa: E712
+            Announcement.audience_type == "all",
+        )
+    anns = (await db.execute(ann_q.limit(limit))).scalars()
     results.extend(
         {
             "id": str(ann.id),

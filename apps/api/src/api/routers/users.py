@@ -92,18 +92,19 @@ async def list_users(
     cleaned = (search or "").replace("\x00", "").strip()
     if len(cleaned) < 2:
         return []
+    escaped = cleaned.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     q = select(User).where(User.is_active == True)  # noqa: E712
-    pattern = f"%{cleaned}%"
+    pattern = f"%{escaped}%"
     if allow_sensitive_search:
         q = q.where(
             or_(
-                User.display_name.ilike(pattern),
-                User.email.ilike(pattern),
-                User.student_id.ilike(pattern),
+                User.display_name.ilike(pattern, escape="\\"),
+                User.email.ilike(pattern, escape="\\"),
+                User.student_id.ilike(pattern, escape="\\"),
             )
         )
     else:
-        q = q.where(User.display_name.ilike(pattern))
+        q = q.where(User.display_name.ilike(pattern, escape="\\"))
     q = q.order_by(User.display_name).limit(limit)
     result = await db.execute(q)
     users = list(result.scalars().all())
