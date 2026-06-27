@@ -1916,20 +1916,20 @@ select.input-field {
   display: flex;
   align-items: center;
   gap: 0.625rem;
-  padding: 0.45rem 0.75rem;
-  border-radius: var(--radius-md);
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
   font-size: 0.8125rem;
   font-weight: 500;
   font-family: inherit;
   color: var(--sidebar-text);
   text-decoration: none;
-  border-left: 2px solid transparent;
+  border: 1px solid transparent;
   cursor: pointer;
   transition:
     background var(--transition),
     color var(--transition),
     border-color var(--transition);
-  min-height: 36px;
+  min-height: 38px;
 }
 .sidebar-nav-item:hover {
   background: var(--sidebar-hover);
@@ -1938,17 +1938,40 @@ select.input-field {
 .sidebar-nav-item[aria-current="page"] {
   background: var(--sidebar-active);
   color: var(--sidebar-text-active);
-  border-left-color: var(--sidebar-active-border);
-  padding-left: calc(0.75rem - 2px);
+  border-color: color-mix(in srgb, var(--sidebar-active-border) 42%, transparent);
   font-weight: 600;
 }
 
-/* ── Section 標籤（大字距，大氣感） ──────────────────────────────────── */
+/* ── Section 標籤 ─────────────────────────────────────────────────────── */
+.sidebar-section + .sidebar-section {
+  border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 72%, transparent);
+  margin-top: 0.75rem;
+}
+
+.sidebar-section-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.25rem 0.75rem 0.375rem;
+  margin-bottom: 0.25rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.sidebar-section-toggle:hover,
+.sidebar-section-toggle:focus-visible {
+  background: var(--sidebar-hover);
+  outline: none;
+}
+
 .sidebar-section-label {
-  font-size: 0.625rem;
+  font-size: 0.6875rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 3.5px;
+  letter-spacing: 0;
   color: var(--sidebar-section-label);
 }
 
