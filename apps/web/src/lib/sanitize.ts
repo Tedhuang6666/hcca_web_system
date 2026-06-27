@@ -21,11 +21,18 @@
 export function sanitizeCustomCss(css: string | null | undefined): string {
   if (!css) return "";
   const NUL = String.fromCharCode(0);
-  return css
-    .split("<").join("")
-    .split(NUL).join("")
-    // 移除 CSS unicode escapes（\nn 形式）再做後續過濾，防止 \75 rl( 繞過 url( 過濾
-    .replace(/\\[0-9a-fA-F]{1,6}\s?/g, "")
+  let result = css.split("<").join("").split(NUL).join("");
+
+  // 迴圈移除 CSS unicode escapes（\nn 形式），直到結果穩定後才套用阻擋規則。
+  // 單次移除無法防止多層編碼繞過：ur\6C( 第一輪變 ur(，此時 url( 過濾已過執行，
+  // 迴圈確保所有層次全部展開後才進入後續比對。
+  let prev = "";
+  while (prev !== result) {
+    prev = result;
+    result = result.replace(/\\[0-9a-fA-F]{1,6}\s?/g, "");
+  }
+
+  return result
     .replace(/@import\b/gi, "/* @import blocked */")
     .replace(/@charset\b/gi, "/* @charset blocked */")
     .replace(/@supports\b/gi, "/* @supports blocked */")

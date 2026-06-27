@@ -12,6 +12,7 @@ import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from urllib.parse import unquote
 
 from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.messaging import (
@@ -73,9 +74,13 @@ def _absolute_url(path: str | None) -> str:
 
 
 def _safe_frontend_path(path: str | None) -> str:
-    if not path or not path.startswith("/") or path.startswith("//"):
+    if not path:
         return "/"
-    return path
+    # 解碼 URL encoding 後再驗證，防止 /%2f%2fevil.com 繞過 // 前綴檢查
+    decoded = unquote(path)
+    if not decoded.startswith("/") or decoded.startswith("//"):
+        return "/"
+    return decoded
 
 
 async def create_open_url(user_id: uuid.UUID, path: str | None) -> str:

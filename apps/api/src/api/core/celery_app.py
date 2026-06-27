@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import logging
 import os
@@ -286,9 +288,22 @@ def _task_payload(sender, **kwargs) -> dict:
     else:
         replay_args = raw_args
         replay_kwargs = raw_kwargs
+    task_name = getattr(sender, "name", None)
+    replay_sig: str | None = None
+    if replay_args is not None and replay_kwargs is not None:
+        sig_body = json.dumps(
+            {"task": task_name, "replay_args": replay_args, "replay_kwargs": replay_kwargs},
+            sort_keys=True,
+            ensure_ascii=False,
+        ).encode()
+        replay_sig = hmac.new(
+            settings.SECRET_KEY.encode(),
+            sig_body,
+            hashlib.sha256,
+        ).hexdigest()
     return {
         "timestamp": datetime.now(UTC).isoformat(),
-        "task": getattr(sender, "name", None),
+        "task": task_name,
         "task_id": getattr(request, "id", None),
         "queue": delivery_info.get("routing_key") if isinstance(delivery_info, dict) else None,
         "retries": getattr(request, "retries", None),
@@ -296,6 +311,7 @@ def _task_payload(sender, **kwargs) -> dict:
         "kwargs": {str(key): str(value)[:200] for key, value in raw_kwargs.items()},
         "replay_args": replay_args,
         "replay_kwargs": replay_kwargs,
+        "replay_sig": replay_sig,
         **kwargs,
     }
 

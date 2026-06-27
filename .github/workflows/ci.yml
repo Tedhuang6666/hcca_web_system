@@ -202,6 +202,20 @@ jobs:
       - name: Verify generated contract is current
         run: git diff --exit-code -- apps/web/src/lib/api-types.ts
 
+  secret-scan:
+    name: Secret Scanning (gitleaks)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@ff98106e4c7b1a98c9c5e825e6c9f75a87c9c4f # v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
   security:
     name: Dependency Security Audit
     runs-on: ubuntu-latest
