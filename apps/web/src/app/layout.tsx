@@ -10,6 +10,7 @@ import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import TelemetryProvider from "@/components/providers/TelemetryProvider";
 import AccessBlockGuard from "@/components/security/AccessBlockGuard";
 import ScrollProgressBar from "@/components/ui/ScrollProgressBar";
+import NavigationProgress from "@/components/layout/NavigationProgress";
 import { BRANDING } from "@/lib/branding";
 import { SOCIAL_IMAGE, SOCIAL_SHARE_TITLE, SOCIAL_SITE_NAME } from "@/lib/social-metadata";
 import { SITE_URL } from "@/lib/seo";
@@ -112,6 +113,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="antialiased">
         <ThemeProvider>
           <AccessBlockGuard />
+          <NavigationProgress />
           <ScrollProgressBar />
           <Suspense fallback={null}>
             <TelemetryProvider />

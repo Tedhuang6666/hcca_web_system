@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { PermissionProvider } from "@/contexts/PermissionContext";
@@ -58,7 +58,9 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
   // 造成 effect ↔ 導航無限互相觸發。
   const redirectedFrom = useRef<string | null>(null);
 
-  useEffect(() => {
+  // useLayoutEffect 在 DOM 更新後、瀏覽器繪圖前同步執行，
+  // 讓 authReady 在首次繪圖前完成，消除空白幕閃爍。
+  useLayoutEffect(() => {
     const loggedIn = Boolean(localStorage.getItem("user_id"));
     setIsLoggedIn(loggedIn);
 
@@ -91,12 +93,13 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
     setSidebarOpen((open) => !open);
   };
 
-  if (!authReady || redirecting) {
-    return <div className="min-h-screen" style={{ background: "var(--bg-base)" }} />;
-  }
-
+  // 公開頁（login、官網、維護頁等）不需要等 authReady，立即渲染
   if (isBare(pathname)) {
     return <>{children}</>;
+  }
+
+  if (!authReady || redirecting) {
+    return <div className="min-h-screen" style={{ background: "var(--bg-base)" }} />;
   }
 
   return (
