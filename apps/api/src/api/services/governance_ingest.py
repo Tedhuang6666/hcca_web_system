@@ -56,7 +56,7 @@ ENTITY_LABEL: dict[str, str] = {
     "petition": "陳情",
     "judicial_petition": "評議",
     "council_proposal": "議會提案",
-    "order": "校商訂單",
+    "order": "商品訂單",
     "meal_order": "學餐訂單",
     "meal_schedule": "學餐結單",
     "org": "組織",

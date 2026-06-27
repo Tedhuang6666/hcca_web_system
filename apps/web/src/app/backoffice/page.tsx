@@ -54,7 +54,7 @@ const TOOLS = [
   {
     href: "/shop/admin",
     icon: Store,
-    label: "校商後台",
+    label: "商品後台",
     desc: "商品、庫存、訂單與停售管理",
     prefixes: ["shop:"],
   },

@@ -1,4 +1,4 @@
-"""校商訂購系統 Pydantic Schemas - 分類 / 變體 / 商品 / 購物車 / 訂單 / 統計"""
+"""商品訂購系統 Pydantic Schemas - 分類 / 變體 / 商品 / 購物車 / 訂單 / 統計"""
 
 from __future__ import annotations
 
@@ -65,7 +65,7 @@ class ProductVariantGroupOut(BaseModel):
 
 class ProductCategoryCreate(BaseModel):
     activity_id: uuid.UUID | None = Field(None, description="所屬活動 ID")
-    name: str = Field(..., min_length=1, max_length=200, description="主題名稱，如「校商」")
+    name: str = Field(..., min_length=1, max_length=200, description="主題名稱，如「商品」")
     description: str | None = None
     image_url: str | None = None
     sort_order: int = 0

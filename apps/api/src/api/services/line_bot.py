@@ -352,7 +352,7 @@ async def _handle_text_command(*, line_user_id: str, user_text: str) -> str:
                 return await _module_tasks_text(db, user, "survey", "問卷", "/surveys")
             if text == "陳情":
                 return await _module_tasks_text(db, user, "petition", "陳情", "/petitions")
-            if text in {"購票", "校商"}:
+            if text in {"購票", "商品"}:
                 return f"開啟購票系統：\n{await create_open_url(user.id, '/shop')}"
             if text == "未讀通知":
                 return await _unread_notifications_text(db, user)

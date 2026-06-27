@@ -1,4 +1,4 @@
-"""校商分類 / 變體 / 購物車 / 結單 與 班級系統測試（服務層）。"""
+"""商品分類 / 變體 / 購物車 / 結單 與 班級系統測試（服務層）。"""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ async def _make_user(db: AsyncSession, *, student_id: str | None = None) -> User
     return user
 
 
-async def _make_org(db: AsyncSession, *, name: str = "校商組織") -> Org:
+async def _make_org(db: AsyncSession, *, name: str = "商品組織") -> Org:
     org = Org(name=name)
     db.add(org)
     await db.flush()
@@ -77,7 +77,7 @@ async def _make_product(
     org = await _make_org(db)
     creator = await _make_actor(db)
     category = await shop_svc.create_category(
-        db, data=ProductCategoryCreate(org_id=org.id, name="校商"), created_by=creator
+        db, data=ProductCategoryCreate(org_id=org.id, name="商品"), created_by=creator
     )
     series = await shop_svc.create_series(
         db, data=ProductSeriesCreate(category_id=category.id, name="衣服系列")
@@ -249,7 +249,7 @@ async def test_build_catalog_tree_includes_active_product_with_variants(
     product = await _make_product(db_session)
     tree = await shop_svc.build_catalog_tree(db_session, org_id=product.org_id)
     assert len(tree) == 1
-    assert tree[0].name == "校商"
+    assert tree[0].name == "商品"
     assert tree[0].series[0].products[0].has_variants is True
 
 
@@ -476,7 +476,7 @@ async def test_draft_product_not_in_catalog_tree(db_session: AsyncSession) -> No
     org = await _make_org(db_session)
     creator = await _make_actor(db_session)
     category = await shop_svc.create_category(
-        db_session, data=ProductCategoryCreate(org_id=org.id, name="校商"), created_by=creator
+        db_session, data=ProductCategoryCreate(org_id=org.id, name="商品"), created_by=creator
     )
     series = await shop_svc.create_series(
         db_session, data=ProductSeriesCreate(category_id=category.id, name="文具系列")

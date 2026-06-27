@@ -61,7 +61,7 @@ export const FE_MODULES: Record<ModuleId, FeModuleSpec> = {
     navIds: ["announcements"],
   },
   shop: {
-    label: "校商訂購",
+    label: "商品訂購",
     routePrefixes: ["/shop"],
     navIds: ["shop", "shopOrders", "shopAdmin"],
   },

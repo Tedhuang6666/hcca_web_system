@@ -42,7 +42,7 @@ const MODULE_LABEL: Record<TaskModule, string> = {
   regulation: "法規",
   petition: "陳情",
   survey: "問卷",
-  shop: "校商",
+  shop: "商品",
   meal: "學餐",
   announcement: "公告",
   calendar: "行事曆",

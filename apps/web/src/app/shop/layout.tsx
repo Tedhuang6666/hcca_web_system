@@ -20,7 +20,7 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <ModuleBoundary id="shop" skeleton={<ListPageSkeleton />}>
-      <ModuleTabs label="校商分頁" tabs={tabs} />
+      <ModuleTabs label="商品分頁" tabs={tabs} />
       {children}
     </ModuleBoundary>
   );

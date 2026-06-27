@@ -160,7 +160,7 @@ celery_app.conf.beat_schedule = {
         "task": "api.services.email_tasks.process_scheduled_emails",
         "schedule": 60.0,
     },
-    # 每 5 分鐘檢查剛截止的校商商品，通知班級幹部結單
+    # 每 5 分鐘檢查剛截止的商品商品，通知班級幹部結單
     "notify-class-cadres-on-deadline-every-5min": {
         "task": "api.services.shop_tasks.notify_class_cadres_on_deadline",
         "schedule": 300.0,

@@ -118,7 +118,7 @@ export default function ClassOrdersPage() {
           <button type="button" onClick={load} className="btn btn-ghost" aria-label="重新整理">
             <RefreshCw size={15} /> 重新整理
           </button>
-          <Link href="/shop" className="btn btn-ghost">校商訂購</Link>
+          <Link href="/shop" className="btn btn-ghost">商品訂購</Link>
         </div>
       </div>
 
