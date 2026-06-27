@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
-  BarChart3,
   BookUser,
   ClipboardList,
   Database,
@@ -12,7 +11,6 @@ import {
   Settings,
   Shield,
   Users,
-  WrenchIcon,
 } from "lucide-react";
 import { adminApi, auditLogsApi, systemApi, type ModuleStatus } from "@/lib/api";
 import { usePermissions } from "@/hooks/usePermissions";
