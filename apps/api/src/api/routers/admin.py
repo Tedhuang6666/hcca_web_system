@@ -8,7 +8,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
+from collections import defaultdict
 from datetime import date
 from typing import Annotated, Literal
 
@@ -237,6 +239,84 @@ async def _enrich_user(db: AsyncSession, user: User) -> UserDetail:
     )
 
 
+async def _enrich_users_batch(db: AsyncSession, users: list[User]) -> list[UserDetail]:
+    """批量組裝 UserDetail，避免 N+1：UserPosition/UserIdentity 各一次查詢，permission codes 並行。"""
+    if not users:
+        return []
+
+    user_ids = [u.id for u in users]
+
+    # 一次拿所有人的 UserPosition（含 position.permissions + position.org）
+    up_result = await db.execute(
+        select(UserPosition)
+        .options(
+            selectinload(UserPosition.position).selectinload(Position.permissions),
+            selectinload(UserPosition.position).selectinload(Position.org),
+        )
+        .where(UserPosition.user_id.in_(user_ids))
+        .order_by(UserPosition.start_date)
+    )
+    ups_by_user: dict[uuid.UUID, list[UserPosition]] = defaultdict(list)
+    for up in up_result.scalars().all():
+        ups_by_user[up.user_id].append(up)
+
+    # 一次拿所有人的 linked email
+    id_result = await db.execute(
+        select(UserIdentity.user_id, UserIdentity.email)
+        .where(UserIdentity.user_id.in_(user_ids), UserIdentity.email.is_not(None))
+        .distinct()
+    )
+    emails_by_user: dict[uuid.UUID, set[str]] = defaultdict(set)
+    for uid, email in id_result.all():
+        if email:
+            emails_by_user[uid].add(email)
+
+    # 並行取 permission codes（大多命中 Redis 快取，剩餘也只是 SELECT）
+    perm_results = await asyncio.gather(
+        *[get_user_permission_codes(db, u.id) for u in users]
+    )
+
+    details: list[UserDetail] = []
+    for user, effective in zip(users, perm_results):
+        user_ups = ups_by_user.get(user.id, [])
+        positions = []
+        for up in user_ups:
+            pos = up.position
+            positions.append(
+                PositionSummary(
+                    id=pos.id,
+                    name=pos.name,
+                    org_id=pos.org_id,
+                    org_name=pos.org.name if pos.org else "",
+                    org_is_active=pos.org.is_active if pos.org else True,
+                    description=pos.description,
+                    category=pos.category,
+                    weight=pos.weight,
+                    parent_id=pos.parent_id,
+                    permission_codes=[p.code for p in pos.permissions],
+                    user_position_id=up.id,
+                )
+            )
+        linked = emails_by_user.get(user.id, set())
+        details.append(
+            UserDetail(
+                id=user.id,
+                email=user.email,
+                linked_emails=sorted({user.email, *linked}),
+                display_name=user.display_name,
+                student_id=user.student_id,
+                avatar_url=user.avatar_url,
+                is_active=user.is_active,
+                is_superuser=user.is_superuser,
+                is_owner=user.email.lower() in settings.OWNER_EMAILS,
+                created_at=user.created_at.isoformat(),
+                positions=positions,
+                effective_permissions=sorted(effective),
+            )
+        )
+    return details
+
+
 # ── 使用者管理 ────────────────────────────────────────────────────────────────
 
 
@@ -271,7 +351,7 @@ async def list_users(
         )
     result = await db.execute(q)
     users = result.scalars().all()
-    return [await _enrich_user(db, u) for u in users]
+    return await _enrich_users_batch(db, list(users))
 
 
 @router.post(

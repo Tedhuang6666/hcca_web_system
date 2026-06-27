@@ -92,7 +92,10 @@ async def set_maintenance_mode(
 ) -> dict[str, Any]:
     payload = json.dumps({"enabled": enabled, "message": message, "until": until})
     try:
-        await redis_client.set(MAINTENANCE_KEY, payload)
+        # 有 until 時設 Redis TTL，讓 key 在到期後 60 秒自動消失，
+        # 60 秒緩衝確保末次讀取仍能正確取得「已關閉」狀態。
+        ex = int(until - time.time()) + 60 if until and until > time.time() else None
+        await redis_client.set(MAINTENANCE_KEY, payload, ex=ex)
     except RedisError:
         logger.error("set_maintenance_mode failed", exc_info=True)
     _cache.pop(MAINTENANCE_KEY, None)

@@ -31,15 +31,19 @@ _QUEUES = ("default", "email", "meal", "backup", "documents", "recovery")
 @celery_app.task(
     name="api.services.error_report_tasks.send_owner_error_report",
     bind=True,
-    max_retries=0,
+    max_retries=3,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
 )
 def send_owner_error_report(self) -> dict[str, Any]:  # type: ignore[type-arg]
     """Periodic task: send an owner report when new server errors are detected."""
     try:
         return asyncio.run(_run())
     except Exception:
-        logger.exception("owner error report task failed")
-        return {"ok": False}
+        logger.exception("owner error report task failed (attempt %d)", self.request.retries + 1)
+        raise
 
 
 async def _run() -> dict[str, Any]:
