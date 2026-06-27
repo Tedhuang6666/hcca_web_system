@@ -25,9 +25,11 @@ export function useInboxCounts(enabled: boolean) {
 
   const poll = useCallback(async () => {
     try {
-      const inbox = await tasksApi.list();
+      const [inbox, { unread }] = await Promise.all([
+        tasksApi.list(),
+        notificationsApi.count(),
+      ]);
       setTaskCount(inbox.total);
-      const { unread } = await notificationsApi.count();
       setUnreadCount(unread);
       return "ok" as const;
     } catch (e) {

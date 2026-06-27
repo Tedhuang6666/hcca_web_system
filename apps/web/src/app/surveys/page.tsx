@@ -49,6 +49,7 @@ export default function SurveysPage() {
     [activityId, tab],
     "載入失敗",
     [] as SurveyListItem[],
+    "surveys/list",
   );
 
   const activityNameById = new Map(activities.map((activity) => [activity.id, activity.name]));
