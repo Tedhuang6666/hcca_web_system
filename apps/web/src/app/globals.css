@@ -2548,6 +2548,36 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 .animate-slide-in { animation: slide-in-up 0.24s ease-out both; }
 
+@keyframes app-page-transition {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+    filter: saturate(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: saturate(1);
+  }
+}
+
+.app-page-transition {
+  animation: app-page-transition 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.motion-enter {
+  animation: app-page-transition 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.motion-fade {
+  animation: fade-in 220ms ease-out both;
+}
+
+.motion-stagger > * {
+  animation: app-page-transition 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--stagger-index, 0) * 42ms);
+}
+
 @keyframes fade-in {
   from { opacity: 0; }
   to   { opacity: 1; }
@@ -2564,6 +2594,99 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
   to { transform: rotate(360deg); }
 }
 .animate-spin { animation: spin 0.8s linear infinite; }
+
+.loading-state {
+  display: inline-flex;
+  max-width: min(100%, 32rem);
+  align-items: center;
+  gap: 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 74%, transparent);
+  border-radius: var(--radius-lg);
+  padding: 0.9rem 1rem;
+  background: color-mix(in srgb, var(--bg-elevated) 84%, transparent);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(14px);
+  animation: scale-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.loading-state-compact {
+  gap: 0.55rem;
+  border-radius: var(--radius-md);
+  padding: 0.45rem 0.65rem;
+}
+
+.loading-orbit {
+  position: relative;
+  display: grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary-dim) 76%, transparent);
+  color: var(--primary);
+}
+
+.loading-state-compact .loading-orbit {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.loading-orbit::after {
+  position: absolute;
+  inset: -3px;
+  border: 1px solid color-mix(in srgb, var(--primary) 40%, transparent);
+  border-top-color: var(--primary);
+  border-radius: inherit;
+  content: "";
+  animation: spin 880ms linear infinite;
+}
+
+.loading-orbit svg {
+  animation: spin 1.2s linear infinite reverse;
+}
+
+.loading-state-copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.15rem;
+}
+
+.loading-state-title {
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.loading-state-description {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.btn[aria-busy="true"],
+.btn-sm[aria-busy="true"],
+.btn-lg[aria-busy="true"],
+.is-loading {
+  cursor: wait;
+  opacity: 0.78;
+  pointer-events: none;
+}
+
+.btn[aria-busy="true"]::before,
+.btn-sm[aria-busy="true"]::before,
+.btn-lg[aria-busy="true"]::before,
+.is-loading::before {
+  width: 0.85em;
+  height: 0.85em;
+  border: 1.5px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 999px;
+  content: "";
+  animation: spin 700ms linear infinite;
+}
 
 /* ── App atmosphere and dashboard ─────────────────────────────────────── */
 .app-shell {
@@ -2941,6 +3064,24 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
 [data-skeleton="true"] { pointer-events: none; user-select: none; }
 @media (prefers-reduced-motion: reduce) {
   [data-skeleton="true"] { animation: none !important; opacity: 0.5; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-page-transition,
+  .motion-enter,
+  .motion-fade,
+  .motion-stagger > *,
+  .loading-state,
+  .loading-orbit,
+  .loading-orbit::after,
+  .loading-orbit svg,
+  .btn[aria-busy="true"]::before,
+  .btn-sm[aria-busy="true"]::before,
+  .btn-lg[aria-busy="true"]::before,
+  .is-loading::before {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* Instagram 風格呼吸跳動（懸浮球） */

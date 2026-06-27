@@ -1,9 +1,5 @@
-import { ListPageSkeleton } from "@/components/ui/Skeleton";
+import { PageLoading } from "@/components/ui/LoadingState";
 
 export default function PetitionsLoading() {
-  return (
-    <div className="max-w-5xl mx-auto p-6">
-      <ListPageSkeleton rows={5} />
-    </div>
-  );
+  return <PageLoading title="陳情載入中" description="正在整理陳情案件與處理狀態。" rows={5} />;
 }

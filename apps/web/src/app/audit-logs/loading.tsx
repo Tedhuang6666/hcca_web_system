@@ -1,9 +1,5 @@
-import { ListPageSkeleton } from "@/components/ui/Skeleton";
+import { PageLoading } from "@/components/ui/LoadingState";
 
 export default function AuditLogsLoading() {
-  return (
-    <div className="max-w-6xl mx-auto p-6">
-      <ListPageSkeleton rows={8} />
-    </div>
-  );
+  return <PageLoading title="稽核紀錄載入中" description="正在查詢操作紀錄與追蹤資訊。" rows={8} />;
 }

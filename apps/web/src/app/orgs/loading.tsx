@@ -1,9 +1,7 @@
-import { ListPageSkeleton } from "@/components/ui/Skeleton";
+import { PageLoading } from "@/components/ui/LoadingState";
 
 export default function OrgsLoading() {
   return (
-    <div className="max-w-3xl mx-auto p-6">
-      <ListPageSkeleton rows={6} showFilters={false} />
-    </div>
+    <PageLoading title="組織載入中" description="正在讀取組織樹與職位資訊。" rows={6} showFilters={false} />
   );
 }

@@ -1,10 +1,5 @@
-import { SectionSkeleton } from "@/components/ui/Skeleton";
+import { DetailPageLoading } from "@/components/ui/LoadingState";
 
 export default function DocumentDetailLoading() {
-  return (
-    <div className="space-y-4">
-      <SectionSkeleton lines={2} />
-      <SectionSkeleton lines={4} />
-    </div>
-  );
+  return <DetailPageLoading title="公文詳情載入中" description="正在取得簽核、附件與版本紀錄。" />;
 }

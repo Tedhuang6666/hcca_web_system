@@ -1,10 +1,5 @@
-import { SectionSkeleton } from "@/components/ui/Skeleton";
+import { DetailPageLoading } from "@/components/ui/LoadingState";
 
 export default function RegulationDetailLoading() {
-  return (
-    <div className="space-y-4">
-      <SectionSkeleton lines={3} />
-      <SectionSkeleton lines={5} />
-    </div>
-  );
+  return <DetailPageLoading title="法規詳情載入中" description="正在準備條文、版本與修正紀錄。" />;
 }

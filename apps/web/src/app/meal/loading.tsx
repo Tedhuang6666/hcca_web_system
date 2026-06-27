@@ -1,9 +1,5 @@
-import { ListPageSkeleton } from "@/components/ui/Skeleton";
+import { PageLoading } from "@/components/ui/LoadingState";
 
 export default function MealLoading() {
-  return (
-    <div className="max-w-5xl mx-auto p-6">
-      <ListPageSkeleton rows={4} />
-    </div>
-  );
+  return <PageLoading title="學餐載入中" description="正在同步菜單、訂單與供應商資訊。" rows={4} />;
 }
