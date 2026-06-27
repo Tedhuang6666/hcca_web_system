@@ -89,7 +89,7 @@ GOVERNANCE_EVENT_MAP: dict[tuple[str, str], EventSpec] = {
     ("announcement", "announcement.publish"): EventSpec(
         "announcement.published", "announcement", "公告發布"
     ),
-    # ── 校商訂單 ───────────────────────────────────────────
+    # ── 商品訂單 ───────────────────────────────────────────
     ("order", "shop.order_create"): EventSpec("order.created", "order", "訂單成立"),
     ("order", "shop.order_payment"): EventSpec("order.paid", "order", "訂單付款"),
     ("order", "shop.order_cancel"): EventSpec("order.canceled", "order", "訂單取消"),
@@ -160,7 +160,7 @@ ENTITY_LABELS: dict[str, str] = {
     "council_proposal": "議會提案",
     "activity": "活動",
     "announcement": "公告",
-    "order": "校商訂單",
+    "order": "商品訂單",
     "meal_order": "學餐訂單",
     "meal_schedule": "學餐排程",
     "org": "組織",

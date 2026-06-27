@@ -172,7 +172,7 @@ async def sync_shop_order(db: AsyncSession, order: Order) -> Receivable:
         item = Receivable(
             source_type=ReceivableSource.SHOP_ORDER.value,
             source_id=order.id,
-            title=f"校商訂單 {order.serial_number}",
+            title=f"商品訂單 {order.serial_number}",
         )
         db.add(item)
     item.user_id = order.user_id

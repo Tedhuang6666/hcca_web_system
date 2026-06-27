@@ -25,7 +25,7 @@ const OPTIONS: { key: keyof NotificationPreferences; label: string; desc: string
   { key: "petition_status_updated", label: "陳情狀態", desc: "陳情轉派、結案或狀態改變時提醒" },
   { key: "meal_class_collecting", label: "學餐收單", desc: "班級收款、結單或訂購管理提醒" },
   { key: "meal_pickup_ready", label: "學餐取餐", desc: "取餐時段、未取餐與核銷提醒" },
-  { key: "shop_order_paid", label: "校商訂單", desc: "訂單、付款、停售與取貨相關提醒" },
+  { key: "shop_order_paid", label: "商品訂單", desc: "訂單、付款、停售與取貨相關提醒" },
   { key: "survey_invitation", label: "問卷邀請", desc: "問卷開放、填答與截止提醒" },
   { key: "announcement", label: "公告通知", desc: "重要公告、緊急公告與公告更新提醒" },
   { key: "calendar_event_invited", label: "行事曆邀請", desc: "活動、彩排、跨校會議與一般行程邀請" },

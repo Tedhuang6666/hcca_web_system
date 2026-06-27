@@ -26,7 +26,7 @@ NOTIFICATION_TYPES: tuple[str, ...] = (
     "petition_assigned",
     "petition_replied",
     "petition_status_updated",
-    # 學餐 / 校商
+    # 學餐 / 商品
     "meal_class_collecting",
     "meal_pickup_ready",
     "shop_order_paid",
@@ -69,7 +69,7 @@ TYPE_LABELS: dict[str, str] = {
     "petition_status_updated": "陳情狀態更新",
     "meal_class_collecting": "班級開始收單",
     "meal_pickup_ready": "取餐通知",
-    "shop_order_paid": "校商訂單付款",
+    "shop_order_paid": "商品訂單付款",
     "survey_invitation": "問卷邀請",
     "announcement": "公告通知",
     "calendar_event_invited": "行事曆邀請",

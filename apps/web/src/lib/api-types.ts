@@ -9751,7 +9751,7 @@ export interface paths {
         /** 班級幹部檢視本班訂單 */
         get: operations["list_class_orders_shop_orders_class_get"];
         put?: never;
-        /** 班級幹部替本班學生建立校商訂單 */
+        /** 班級幹部替本班學生建立商品訂單 */
         post: operations["create_class_order_shop_orders_class_post"];
         delete?: never;
         options?: never;
@@ -23023,7 +23023,7 @@ export interface components {
             image_url?: string | null;
             /**
              * Name
-             * @description 主題名稱，如「校商」
+             * @description 主題名稱，如「商品」
              */
             name: string;
             /**

@@ -127,7 +127,7 @@ function EntityModal({
       <div className="space-y-3">
         <Field label="名稱">
           <input value={name} onChange={(e) => setName(e.target.value)} className="input w-full"
-            placeholder={kind === "category" ? "如：校商" : "如：衣服系列"} />
+            placeholder={kind === "category" ? "如：商品" : "如：衣服系列"} />
         </Field>
         <Field label="描述（選填）">
           <input value={description} onChange={(e) => setDescription(e.target.value)} className="input w-full" />
@@ -1283,7 +1283,7 @@ export default function ShopAdminPage() {
     <div className="space-y-5 max-w-4xl mx-auto">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>校商後台</h1>
+          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>商品後台</h1>
           <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
             逐層管理主題 → 系列 → 商品 → 變體
           </p>

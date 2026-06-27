@@ -68,7 +68,7 @@ const MODULE_LABEL: Record<TaskModule, string> = {
   regulation: "法規",
   petition: "陳情",
   survey: "問卷",
-  shop: "校商",
+  shop: "商品",
   meal: "學餐",
   announcement: "公告",
   calendar: "行事曆",
@@ -528,7 +528,7 @@ function getQuickActions(
     { href: "/announcements", label: "最新公告", detail: "校內訊息與公開事項", icon: Bell },
     { href: "/surveys", label: "問卷專區", detail: "快速填寫與查看結果", icon: PenLine },
     { href: "/meal", label: "學餐訂購", detail: "菜單、訂單與取餐資訊", icon: Utensils },
-    { href: "/shop", label: "校商訂購", detail: "活動票券與班級訂單", icon: ShoppingCart },
+    { href: "/shop", label: "商品訂購", detail: "活動票券與班級訂單", icon: ShoppingCart },
     { href: "/search", label: "全站搜尋", detail: "找公文、法規與公告", icon: Search },
   ];
 
@@ -555,7 +555,7 @@ function getAdminActions(
     actions.push({ href: "/publications", label: "發布中心", detail: "公告與電子郵件", icon: Megaphone });
   }
   if (can("shop:manage")) {
-    actions.push({ href: "/shop/admin", label: "校商後台", detail: "商品、訂單與結單", icon: ShoppingCart });
+    actions.push({ href: "/shop/admin", label: "商品後台", detail: "商品、訂單與結單", icon: ShoppingCart });
   }
   if (can("meal:manage")) {
     actions.push({ href: "/meal/vendor", label: "餐商管理", detail: "菜單、取餐與供應商", icon: Utensils });
@@ -640,7 +640,7 @@ function EmptyState() {
   const links = [
     { href: "/announcements", label: "看公告" },
     { href: "/regulations", label: "查法規" },
-    { href: "/shop", label: "校商訂購" },
+    { href: "/shop", label: "商品訂購" },
     { href: "/meal", label: "學餐訂購" },
     { href: "/surveys", label: "問卷" },
   ];

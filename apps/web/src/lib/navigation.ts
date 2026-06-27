@@ -35,7 +35,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "councilProposals", href: "/council-proposals", iconKey: "meetings", label: "議會提案" },
   { id: "regulations", href: "/regulations", iconKey: "regulations", label: "法規查詢" },
   { id: "meal", href: "/meal", iconKey: "meal", label: "學餐訂購" },
-  { id: "shop", href: "/shop", iconKey: "shop", label: "校商訂購" },
+  { id: "shop", href: "/shop", iconKey: "shop", label: "商品訂購" },
   {
     id: "shopOrders",
     href: "/shop/class-orders",
@@ -171,7 +171,7 @@ export const NAV_ITEMS: NavItem[] = [
   },
   { id: "email", href: "/email", iconKey: "email", label: "電子郵件", perm: "email:*" },
   { id: "examPaperAdmin", href: "/exam-papers/admin", iconKey: "examPaperAdmin", label: "題庫管理", perm: "exam:manage" },
-  { id: "shopAdmin", href: "/shop/admin", iconKey: "shopAdmin", label: "校商後台", perm: "shop:manage" },
+  { id: "shopAdmin", href: "/shop/admin", iconKey: "shopAdmin", label: "商品後台", perm: "shop:manage" },
   { id: "mealVendor", href: "/meal/vendor", iconKey: "mealVendor", label: "餐商管理", perm: "meal:manage" },
   {
     id: "partnerMapAdmin",

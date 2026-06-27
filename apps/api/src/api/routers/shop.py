@@ -1,4 +1,4 @@
-"""校商訂購系統 Router - 分類 / 變體 / 商品 / 購物車 / 結單 / 統計 / 報表"""
+"""商品訂購系統 Router - 分類 / 變體 / 商品 / 購物車 / 結單 / 統計 / 報表"""
 
 from __future__ import annotations
 
@@ -63,7 +63,7 @@ from api.services import shop as shop_svc
 from api.services.permission import get_user_permission_codes
 from api.services.storage import get_storage
 
-router = APIRouter(prefix="/shop", tags=["校商訂購"])
+router = APIRouter(prefix="/shop", tags=["商品訂購"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
@@ -686,7 +686,7 @@ async def list_class_orders(
     "/orders/class",
     response_model=list[OrderOut],
     status_code=status.HTTP_201_CREATED,
-    summary="班級幹部替本班學生建立校商訂單",
+    summary="班級幹部替本班學生建立商品訂單",
 )
 async def create_class_order(
     payload: ClassOrderUpsert,

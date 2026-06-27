@@ -1,4 +1,4 @@
-"""校商訂購系統 ORM 模型 - 分類階層 / 商品 / 變體 / 購物車 / 訂單"""
+"""商品訂購系統 ORM 模型 - 分類階層 / 商品 / 變體 / 購物車 / 訂單"""
 
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ class OrderStatus(enum.StrEnum):
 
 
 class ProductCategory(Base, TimestampMixin):
-    """商品主題（最上層分類，如「校商」）"""
+    """商品主題（最上層分類，如「商品」）"""
 
     __tablename__ = "product_categories"
 

@@ -1,4 +1,4 @@
-"""校商系統 Celery 定時任務 - 商品截止後通知班級幹部結單"""
+"""商品系統 Celery 定時任務 - 商品截止後通知班級幹部結單"""
 
 from __future__ import annotations
 
@@ -84,9 +84,9 @@ def notify_class_cadres_on_deadline(self) -> dict:  # noqa: ANN001
                                 Notification(
                                     user_id=user_id,
                                     type="system",
-                                    title="班級校商訂單已結單",
+                                    title="班級商品訂單已結單",
                                     body=(
-                                        f"貴班有 {order_count} 筆校商訂單已截止，"
+                                        f"貴班有 {order_count} 筆商品訂單已截止，"
                                         "請協助核對訂購情形與收費。"
                                     ),
                                     link="/shop/class-orders",

@@ -264,7 +264,7 @@ from api.models.school_class import (  # noqa: F401
     SchoolClass,
 )
 
-# 劃位 / 票券系統（校商票種延伸）
+# 劃位 / 票券系統（商品票種延伸）
 from api.models.seating import (  # noqa: F401
     Seat,
     SeatAssignment,
@@ -276,7 +276,7 @@ from api.models.seating import (  # noqa: F401
     SeatStatus,
 )
 
-# 校商訂購系統 [M-23]
+# 商品訂購系統 [M-23]
 from api.models.shop import (  # noqa: F401
     Cart,
     CartItem,

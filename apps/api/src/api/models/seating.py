@@ -1,6 +1,6 @@
 """劃位系統 ORM 模型 - 場次(座位圖) / 座位 / 劃位結果 / 暫時保留鎖 / 分批開放時段
 
-設計概念（與校商系統整合）：
+設計概念（與商品系統整合）：
     Activity → ProductCategory(activity_id) → ProductSeries → Product(票種)
         └─ SeatingZone(場次，含座位圖)
              ├─ Seat(單一座位)

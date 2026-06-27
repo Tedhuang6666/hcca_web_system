@@ -40,7 +40,7 @@ const CADRE_PREFIXES = ["document:", "regulation:", "audit:"] as const;
  * 手機底部 tab bar（< md 顯示）。
  * 依使用者身分顯示三套不同 tab：
  *  - guest：法規/公告/特約/陳情/登入（皆公開可讀）
- *  - student：首頁/學餐/校商/問卷/更多
+ *  - student：首頁/學餐/商品/問卷/更多
  *  - cadre：首頁/待辦/公文/法規/更多（有公文、法規或審計權限者）
  */
 export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
