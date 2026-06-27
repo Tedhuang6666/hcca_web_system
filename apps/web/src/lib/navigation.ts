@@ -49,6 +49,12 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "judicialPetitions", href: "/judicial-petitions", iconKey: "shield", label: "評議訴訟" },
   { id: "examPapers", href: "/exam-papers", iconKey: "examPapers", label: "段考題庫" },
   { id: "about", href: "/about", iconKey: "info", label: "關於本系統" },
+  {
+    id: "settings",
+    href: "/settings",
+    iconKey: "settings",
+    label: "個人設定",
+  },
   { id: "analytics", href: "/analytics", iconKey: "analytics", label: "績效統計", perm: "analytics:view" },
   { id: "orgs", href: "/orgs", iconKey: "org", label: "組織管理", perm: "org:*" },
   {
@@ -293,14 +299,7 @@ export const NAV_DEF: NavEntry[] = [
     heading: "設定",
     collapsible: true,
     defaultCollapsed: true,
-    items: byIds([
-      "settingsNavigation",
-      "settingsNotifications",
-      "settingsDataSaver",
-      "settingsPrivacy",
-      "settingsSecurity",
-      "about",
-    ]),
+    items: byIds(["settings", "about"]),
   },
 ];
 
@@ -339,9 +338,7 @@ export const DEFAULT_MOBILE_ORDER = [
   "announcements",
   "partnerMap",
   "petitions",
-  "settingsNavigation",
-  "settingsDataSaver",
-  "settingsPrivacy",
+  "settings",
 ];
 
 export const DEFAULT_NAV_PREFERENCES: NavPreferences = {
