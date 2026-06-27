@@ -136,7 +136,7 @@ export default function Sidebar() {
       window.removeEventListener(NAV_PREF_EVENT, syncPrefs);
       window.removeEventListener("storage", syncPrefs);
     };
-  }, []);
+  }, [pathname]);
 
   const toggleSection = (heading: string) => {
     setCollapsed((prev) => {
@@ -257,15 +257,14 @@ export default function Sidebar() {
             const isCollapsed = hydrated && collapsed.has(entry.heading);
             const sectionId = `nav-section-${i}`;
             return (
-              <div key={entry.heading + i} className="pt-4 first:pt-0">
+              <div key={entry.heading + i} className="sidebar-section pt-4 first:pt-0">
                 {entry.collapsible ? (
                   <button
                     type="button"
                     onClick={() => toggleSection(entry.heading)}
-                    className="w-full flex items-center justify-between px-3 mb-1.5 cursor-pointer"
+                    className="sidebar-section-toggle"
                     aria-expanded={!isCollapsed}
-                    aria-controls={sectionId}
-                    style={{ background: "transparent", border: "none" }}>
+                    aria-controls={sectionId}>
                     <span className="sidebar-section-label">{entry.heading}</span>
                     <ChevronDown
                       size={12}
@@ -278,7 +277,7 @@ export default function Sidebar() {
                     />
                   </button>
                 ) : (
-                  <p className="sidebar-section-label px-3 mb-1.5">{entry.heading}</p>
+                  <p className="sidebar-section-label px-3 pb-1">{entry.heading}</p>
                 )}
                 {!isCollapsed && (
                   <div id={sectionId} className="space-y-0.5">
