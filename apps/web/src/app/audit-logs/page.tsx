@@ -6,6 +6,7 @@ import { auditLogsApi, usersApi, type UserSummary, apiErrorMessage } from "@/lib
 import type { AuditLogOut } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
 import Modal from "@/components/ui/Modal";
+import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
 
 const PAGE_SIZE = 50;
 
@@ -321,12 +322,14 @@ function EmptyState({ loading }: { loading: boolean }) {
   );
 }
 
+const AUDIT_LIST_KEY = "audit-logs/list";
+
 export default function AuditLogsPage() {
   const { can } = usePermissions();
   const canView = can("audit:view_org") || can("audit:view_all") || can("admin:all");
 
-  const [logs, setLogs] = useState<AuditLogOut[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [logs, setLogs] = useState<AuditLogOut[]>(() => cacheGet<AuditLogOut[]>(AUDIT_LIST_KEY) ?? []);
+  const [loading, setLoading] = useState(!cacheHas(AUDIT_LIST_KEY));
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [offset, setOffset] = useState(0);
@@ -361,8 +364,10 @@ export default function AuditLogsPage() {
       setLoading(false);
       return;
     }
+    const hasFilters = !!(action || system || entityType || actorId || dateFrom || dateTo);
+    const hasCached = cacheHas(AUDIT_LIST_KEY);
     if (append) setLoadingMore(true);
-    else setLoading(true);
+    else if (!hasCached || hasFilters) setLoading(true);
 
     try {
       const data = await auditLogsApi.list({
@@ -378,6 +383,9 @@ export default function AuditLogsPage() {
       setLogs((prev) => (append ? [...prev, ...data] : data));
       setOffset(nextOffset);
       setHasMore(data.length === PAGE_SIZE);
+      if (!append && !hasFilters && nextOffset === 0) {
+        cacheSet(AUDIT_LIST_KEY, data);
+      }
     } catch (e) {
       toast.error(apiErrorMessage(e, "載入稽核日誌失敗"));
     } finally {

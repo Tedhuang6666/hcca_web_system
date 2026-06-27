@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { receivablesApi } from "@/lib/api";
 import type { ReceivableOut, ReceivableSummaryOut } from "@/lib/types";
+import { cacheGet, cacheHas, cacheSet, cachePurge } from "@/lib/api-cache";
 
 const STATUS_LABEL: Record<string, string> = {
   unpaid: "未收",
@@ -19,8 +20,10 @@ const STATUS_LABEL: Record<string, string> = {
 export default function ReceivablesPage() {
   const search = useSearchParams();
   const activityId = search.get("activity_id") || undefined;
-  const [rows, setRows] = useState<ReceivableOut[]>([]);
-  const [summary, setSummary] = useState<ReceivableSummaryOut | null>(null);
+  const cacheKey = `finance/receivables/${activityId ?? "all"}`;
+  const summaryKey = `finance/receivables-summary/${activityId ?? "all"}`;
+  const [rows, setRows] = useState<ReceivableOut[]>(() => cacheGet<ReceivableOut[]>(cacheKey) ?? []);
+  const [summary, setSummary] = useState<ReceivableSummaryOut | null>(() => cacheGet<ReceivableSummaryOut>(summaryKey) ?? null);
   const [status, setStatus] = useState("");
 
   const reload = useCallback(async () => {
@@ -31,19 +34,24 @@ export default function ReceivablesPage() {
       ]);
       setRows(items);
       setSummary(sum);
+      if (!status) {
+        cacheSet(cacheKey, items);
+        cacheSet(summaryKey, sum);
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "載入收款資料失敗");
     }
-  }, [activityId, status]);
+  }, [activityId, status, cacheKey, summaryKey]);
 
   useEffect(() => {
-    void reload();
-  }, [reload]);
+    if (!cacheHas(cacheKey) || status) void reload();
+  }, [reload, cacheKey, status]);
 
   const markPaid = async (id: string) => {
     try {
       await receivablesApi.markPaid(id);
       toast.success("已標記收款");
+      cachePurge("finance/receivables");
       await reload();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "標記收款失敗");

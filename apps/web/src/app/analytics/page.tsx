@@ -14,6 +14,7 @@ import type {
   SurveyParticipationItem,
 } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
+import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
 
 function settledValue<T>(result: PromiseSettledResult<T>, fallback: T): T {
   return result.status === "fulfilled" ? result.value : fallback;
@@ -39,6 +40,8 @@ const SURVEY_STATUS_LABEL: Record<string, string> = {
   archived: "已封存",
 };
 
+const ANALYTICS_KEY = "analytics/data";
+
 export default function AnalyticsPage() {
   const { can } = usePermissions();
   const canView = can("analytics:view") || can("admin:all");
@@ -46,13 +49,13 @@ export default function AnalyticsPage() {
 
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [efficiency, setEfficiency] = useState<DocumentEfficiencyOut | null>(null);
-  const [ranking, setRanking] = useState<DeptRankingItem[]>([]);
-  const [pending, setPending] = useState<PendingAlertItem[]>([]);
-  const [insights, setInsights] = useState<AnalyticsInsightItem[]>([]);
-  const [announcements, setAnnouncements] = useState<AnnouncementParticipationItem[]>([]);
-  const [surveys, setSurveys] = useState<SurveyParticipationItem[]>([]);
+  const [loading, setLoading] = useState(!cacheHas(ANALYTICS_KEY));
+  const [efficiency, setEfficiency] = useState<DocumentEfficiencyOut | null>(() => cacheGet<DocumentEfficiencyOut>(ANALYTICS_KEY + "/efficiency") ?? null);
+  const [ranking, setRanking] = useState<DeptRankingItem[]>(() => cacheGet<DeptRankingItem[]>(ANALYTICS_KEY + "/ranking") ?? []);
+  const [pending, setPending] = useState<PendingAlertItem[]>(() => cacheGet<PendingAlertItem[]>(ANALYTICS_KEY + "/pending") ?? []);
+  const [insights, setInsights] = useState<AnalyticsInsightItem[]>(() => cacheGet<AnalyticsInsightItem[]>(ANALYTICS_KEY + "/insights") ?? []);
+  const [announcements, setAnnouncements] = useState<AnnouncementParticipationItem[]>(() => cacheGet<AnnouncementParticipationItem[]>(ANALYTICS_KEY + "/announcements") ?? []);
+  const [surveys, setSurveys] = useState<SurveyParticipationItem[]>(() => cacheGet<SurveyParticipationItem[]>(ANALYTICS_KEY + "/surveys") ?? []);
 
   const filterParams = useMemo(() => ({
     date_from: dateFrom ? `${dateFrom}T00:00:00` : undefined,
@@ -64,7 +67,9 @@ export default function AnalyticsPage() {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    // 有 filter 條件時強制 loading；無條件且有快取時靜默更新
+    const hasCached = cacheHas(ANALYTICS_KEY) && !dateFrom && !dateTo;
+    if (!hasCached) setLoading(true);
     const results = await Promise.allSettled([
       analyticsApi.documentEfficiency(filterParams),
       analyticsApi.deptRanking(filterParams),
@@ -89,11 +94,21 @@ export default function AnalyticsPage() {
     setAnnouncements(ann);
     setSurveys(survey);
     setPending(alerts);
+    if (!dateFrom && !dateTo) {
+      // 只在無篩選條件時快取（有條件的結果不適合快取為預設值）
+      cacheSet(ANALYTICS_KEY, true);
+      cacheSet(ANALYTICS_KEY + "/efficiency", eff);
+      cacheSet(ANALYTICS_KEY + "/ranking", ranks);
+      cacheSet(ANALYTICS_KEY + "/insights", insightRows);
+      cacheSet(ANALYTICS_KEY + "/announcements", ann);
+      cacheSet(ANALYTICS_KEY + "/surveys", survey);
+      cacheSet(ANALYTICS_KEY + "/pending", alerts);
+    }
     if (results.some((result) => result.status === "rejected")) {
       toast.warning("部分分析資料暫時無法載入，其餘資料已更新");
     }
     setLoading(false);
-  }, [canView, canViewPending, filterParams]);
+  }, [canView, canViewPending, filterParams, dateFrom, dateTo]);
 
   useEffect(() => {
     load();

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { activitiesApi, adminApi, discordApi, orgsApi } from "@/lib/api";
+import { cacheGet, cacheHas, cacheSet, cachePurge } from "@/lib/api-cache";
 import type {
   Activity,
   ActivityConvener,
@@ -24,17 +25,21 @@ const STATUS_LABEL: Record<Activity["status"], string> = {
   archived: "已封存",
 };
 
+const ACT_LIST_KEY = "admin/activities/list";
+const ACT_ORGS_KEY = "admin/activities/orgs";
+const ACT_USERS_KEY = "admin/activities/users";
+
 export default function AdminActivitiesPage() {
-  const [activities, setActivities] = useState<Activity[]>([]);
-  const [orgs, setOrgs] = useState<OrgRead[]>([]);
-  const [users, setUsers] = useState<AdminUserDetail[]>([]);
+  const [activities, setActivities] = useState<Activity[]>(() => cacheGet<Activity[]>(ACT_LIST_KEY) ?? []);
+  const [orgs, setOrgs] = useState<OrgRead[]>(() => cacheGet<OrgRead[]>(ACT_ORGS_KEY) ?? []);
+  const [users, setUsers] = useState<AdminUserDetail[]>(() => cacheGet<AdminUserDetail[]>(ACT_USERS_KEY) ?? []);
   const [selectedId, setSelectedId] = useState("");
   const [conveners, setConveners] = useState<ActivityConvener[]>([]);
   const [roles, setRoles] = useState<ActivityRole[]>([]);
   const [members, setMembers] = useState<ActivityMember[]>([]);
   const [discordGuilds, setDiscordGuilds] = useState<DiscordGuildOptionOut[]>([]);
   const [discordWorkspace, setDiscordWorkspace] = useState<DiscordActivityWorkspace | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!cacheHas(ACT_LIST_KEY));
   const [form, setForm] = useState({ name: "", org_id: "", description: "", starts_at: "", ends_at: "" });
   const [appoint, setAppoint] = useState({ user_id: "", start_date: today(), end_date: "" });
   const [workspaceDraft, setWorkspaceDraft] = useState({ guild_id: "", auto_sync: true });
@@ -52,7 +57,7 @@ export default function AdminActivitiesPage() {
   );
 
   const reload = useCallback(async () => {
-    setLoading(true);
+    if (!cacheHas(ACT_LIST_KEY)) setLoading(true);
     try {
       const [activityRows, orgRows, userRows] = await Promise.all([
         activitiesApi.list(),
@@ -60,8 +65,11 @@ export default function AdminActivitiesPage() {
         adminApi.listUsers({ active_only: true, limit: 200 }),
       ]);
       setActivities(activityRows);
+      cacheSet(ACT_LIST_KEY, activityRows);
       setOrgs(orgRows);
+      cacheSet(ACT_ORGS_KEY, orgRows);
       setUsers(userRows);
+      cacheSet(ACT_USERS_KEY, userRows);
       discordApi.availableGuilds().then(setDiscordGuilds).catch(() => setDiscordGuilds([]));
       if (!selectedId && activityRows[0]) setSelectedId(activityRows[0].id);
     } catch (error) {
@@ -111,6 +119,7 @@ export default function AdminActivitiesPage() {
         status: "active",
       });
       toast.success("已建立活動");
+      cachePurge("admin/activities");
       setForm({ name: "", org_id: "", description: "", starts_at: "", ends_at: "" });
       setSelectedId(created.id);
       await reload();
@@ -124,6 +133,7 @@ export default function AdminActivitiesPage() {
     try {
       await activitiesApi.archive(selected.id);
       toast.success("已封存活動");
+      cachePurge("admin/activities");
       await reload();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "封存活動失敗");

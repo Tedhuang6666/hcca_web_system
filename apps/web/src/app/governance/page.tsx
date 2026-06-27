@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { governanceApi } from "@/lib/api";
 import type { GovernanceDashboardOut, MatterListItem, MatterPriority, MatterType } from "@/lib/types";
+import { cacheGet, cacheHas, cacheSet, cachePurge } from "@/lib/api-cache";
 
 const TYPE_LABEL: Record<string, string> = {
   activity: "活動",
@@ -57,11 +58,14 @@ function isOverdue(matter: MatterListItem) {
   );
 }
 
+const GOV_DASHBOARD_KEY = "governance/dashboard";
+const GOV_LIST_KEY = "governance/list";
+
 export default function GovernancePage() {
   const router = useRouter();
-  const [dashboard, setDashboard] = useState<GovernanceDashboardOut | null>(null);
-  const [matters, setMatters] = useState<MatterListItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [dashboard, setDashboard] = useState<GovernanceDashboardOut | null>(() => cacheGet<GovernanceDashboardOut>(GOV_DASHBOARD_KEY) ?? null);
+  const [matters, setMatters] = useState<MatterListItem[]>(() => cacheGet<MatterListItem[]>(GOV_LIST_KEY) ?? []);
+  const [loading, setLoading] = useState(!cacheHas(GOV_DASHBOARD_KEY));
   const [creating, setCreating] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [query, setQuery] = useState("");
@@ -72,7 +76,7 @@ export default function GovernancePage() {
   const [dueAt, setDueAt] = useState("");
 
   const load = async () => {
-    setLoading(true);
+    if (!cacheHas(GOV_DASHBOARD_KEY) || query || status) setLoading(true);
     try {
       const [summary, list] = await Promise.all([
         governanceApi.dashboard(),
@@ -84,6 +88,10 @@ export default function GovernancePage() {
       ]);
       setDashboard(summary);
       setMatters(list);
+      if (!query && !status) {
+        cacheSet(GOV_DASHBOARD_KEY, summary);
+        cacheSet(GOV_LIST_KEY, list);
+      }
     } catch (error) {
       toast.error("無法載入治理事項");
       console.error(error);
@@ -131,6 +139,7 @@ export default function GovernancePage() {
         status: "active",
         meta: {},
       });
+      cachePurge("governance");
       setMatters((items) => [
         { ...matter, case_count: 0, open_task_count: 0, link_count: 0 },
         ...items,

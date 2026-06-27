@@ -15,6 +15,7 @@ import {
 import { adminApi, auditLogsApi, systemApi, type ModuleStatus } from "@/lib/api";
 import { usePermissions } from "@/hooks/usePermissions";
 import type { AuditLogOut } from "@/lib/types";
+import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
 
 /* ── 小元件 ──────────────────────────────────────────────────────────────── */
 
@@ -99,15 +100,17 @@ const QUICK_ACTIONS = [
 
 /* ── 主頁面 ──────────────────────────────────────────────────────────────── */
 
+const ADMIN_CACHE_KEY = "admin/dashboard";
+
 export default function AdminDashboardPage() {
   const { isAdmin, can } = usePermissions();
 
-  const [userCount, setUserCount] = useState<number | null>(null);
-  const [downModules, setDownModules] = useState<number | null>(null);
-  const [positionCount, setPositionCount] = useState<number | null>(null);
-  const [recentLogs, setRecentLogs] = useState<AuditLogOut[]>([]);
+  const [userCount, setUserCount] = useState<number | null>(() => cacheGet<number>(ADMIN_CACHE_KEY + "/userCount") ?? null);
+  const [downModules, setDownModules] = useState<number | null>(() => cacheGet<number>(ADMIN_CACHE_KEY + "/downModules") ?? null);
+  const [positionCount, setPositionCount] = useState<number | null>(() => cacheGet<number>(ADMIN_CACHE_KEY + "/positionCount") ?? null);
+  const [recentLogs, setRecentLogs] = useState<AuditLogOut[]>(() => cacheGet<AuditLogOut[]>(ADMIN_CACHE_KEY + "/logs") ?? []);
   const [maintenance, setMaintenance] = useState<{ enabled: boolean; message: string } | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!cacheHas(ADMIN_CACHE_KEY + "/userCount"));
 
   useEffect(() => {
     if (!isAdmin && !can("admin:users")) return;
@@ -118,12 +121,23 @@ export default function AdminDashboardPage() {
       auditLogsApi.list({ limit: 6 }),
       systemApi.status(),
     ]).then(([users, modules, positions, logs, status]) => {
-      if (users.status === "fulfilled") setUserCount(users.value.length);
-      if (modules.status === "fulfilled") {
-        setDownModules((modules.value as ModuleStatus[]).filter((m) => !m.on).length);
+      if (users.status === "fulfilled") {
+        setUserCount(users.value.length);
+        cacheSet(ADMIN_CACHE_KEY + "/userCount", users.value.length);
       }
-      if (positions.status === "fulfilled") setPositionCount(positions.value.length);
-      if (logs.status === "fulfilled") setRecentLogs(logs.value as AuditLogOut[]);
+      if (modules.status === "fulfilled") {
+        const count = (modules.value as ModuleStatus[]).filter((m) => !m.on).length;
+        setDownModules(count);
+        cacheSet(ADMIN_CACHE_KEY + "/downModules", count);
+      }
+      if (positions.status === "fulfilled") {
+        setPositionCount(positions.value.length);
+        cacheSet(ADMIN_CACHE_KEY + "/positionCount", positions.value.length);
+      }
+      if (logs.status === "fulfilled") {
+        setRecentLogs(logs.value as AuditLogOut[]);
+        cacheSet(ADMIN_CACHE_KEY + "/logs", logs.value);
+      }
       if (status.status === "fulfilled") setMaintenance(status.value.maintenance);
       setLoading(false);
     });

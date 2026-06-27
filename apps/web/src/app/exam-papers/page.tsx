@@ -5,6 +5,7 @@ import { Download, Filter } from "lucide-react";
 import { toast } from "sonner";
 import { ApiError, examPapersApi } from "@/lib/api";
 import type { ExamGradeTrack, ExamPaperListItem } from "@/lib/types";
+import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
 
 const TRACK_LABEL: Record<ExamGradeTrack, string> = {
   first: "一類",
@@ -30,10 +31,13 @@ function fileSize(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
+const EXAM_CATALOG_KEY = "exam-papers/catalog";
+const EXAM_PAPERS_KEY = "exam-papers/list";
+
 export default function ExamPapersPage() {
-  const [catalog, setCatalog] = useState<ExamPaperListItem[]>([]);
-  const [papers, setPapers] = useState<ExamPaperListItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [catalog, setCatalog] = useState<ExamPaperListItem[]>(() => cacheGet<ExamPaperListItem[]>(EXAM_CATALOG_KEY) ?? []);
+  const [papers, setPapers] = useState<ExamPaperListItem[]>(() => cacheGet<ExamPaperListItem[]>(EXAM_PAPERS_KEY) ?? []);
+  const [loading, setLoading] = useState(!cacheHas(EXAM_PAPERS_KEY));
   const [filters, setFilters] = useState({
     grade: "",
     semester: "",
@@ -68,17 +72,24 @@ export default function ExamPapersPage() {
   }, [catalog, filters.grade, filters.semester, filters.grade_track]);
 
   const loadCatalog = async () => {
+    if (cacheHas(EXAM_CATALOG_KEY)) return;
     try {
-      setCatalog(await examPapersApi.list());
+      const data = await examPapersApi.list();
+      setCatalog(data);
+      cacheSet(EXAM_CATALOG_KEY, data);
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : "讀取段考題失敗");
     }
   };
 
   const load = async () => {
-    setLoading(true);
+    if (!cacheHas(EXAM_PAPERS_KEY)) setLoading(true);
     try {
-      setPapers(await examPapersApi.list(params));
+      const data = await examPapersApi.list(params);
+      setPapers(data);
+      // 只有無篩選條件時才快取
+      const hasFilters = Object.values(params).some((v) => v !== undefined);
+      if (!hasFilters) cacheSet(EXAM_PAPERS_KEY, data);
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : "讀取段考題失敗");
     } finally {
@@ -88,7 +99,7 @@ export default function ExamPapersPage() {
 
   useEffect(() => {
     void loadCatalog();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     void load();
