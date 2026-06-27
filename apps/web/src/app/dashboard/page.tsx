@@ -5,12 +5,17 @@ import { toast } from "sonner";
 import {
   FileText, ListChecks, Landmark, Scale, Megaphone, MessageSquare,
   CheckSquare, ChevronRight, Plus, Loader2, Sparkles, Clock, ArrowUpRight,
-  Layers3, Zap,
+  Layers3, Zap, ShoppingCart, Utensils, CalendarDays, Inbox, ShieldCheck,
+  Settings, Users, Bell, Search, PenLine, Send, Wrench, AlertCircle,
 } from "lucide-react";
 import {
   dashboardApi,
+  tasksApi,
   type DashboardResponse,
   type DashboardWidget,
+  type TaskInboxResponse,
+  type TaskItem,
+  type TaskModule,
 } from "@/lib/api";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useRecentItems } from "@/hooks/useRecentItems";
@@ -56,9 +61,49 @@ const HINT_LABEL: Record<string, string> = {
   leader: "領導視角",
 };
 
+const MODULE_LABEL: Record<TaskModule, string> = {
+  document: "公文",
+  meeting: "議事",
+  regulation: "法規",
+  petition: "陳情",
+  survey: "問卷",
+  shop: "校商",
+  meal: "學餐",
+  announcement: "公告",
+  calendar: "行事曆",
+  work_item: "工作",
+};
+
+const TASK_ICONS: Record<TaskModule, React.ComponentType<IconProps>> = {
+  document: (p) => <FileText {...p} />,
+  meeting: (p) => <Landmark {...p} />,
+  regulation: (p) => <Scale {...p} />,
+  petition: (p) => <MessageSquare {...p} />,
+  survey: (p) => <CheckSquare {...p} />,
+  shop: (p) => <ShoppingCart {...p} />,
+  meal: (p) => <Utensils {...p} />,
+  announcement: (p) => <Megaphone {...p} />,
+  calendar: (p) => <CalendarDays {...p} />,
+  work_item: (p) => <ListChecks {...p} />,
+};
+
 function formatDate(s?: string | null) {
   if (!s) return "";
   const d = new Date(s);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+function formatTaskDue(s?: string | null) {
+  if (!s) return "無期限";
+  const d = new Date(s);
+  const today = new Date();
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  const dueDay = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const diffDays = Math.round((dueDay - start) / 86_400_000);
+  if (diffDays < 0) return `已逾期 ${Math.abs(diffDays)} 天`;
+  if (diffDays === 0) return "今天";
+  if (diffDays === 1) return "明天";
+  if (diffDays <= 7) return `${diffDays} 天內`;
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
@@ -216,8 +261,9 @@ export default function DashboardPage() {
   const [userName, setUserName] = useState("");
   const [greeting, setGreeting] = useState("歡迎回來");
   const [data, setData] = useState<DashboardResponse | null>(null);
+  const [tasks, setTasks] = useState<TaskInboxResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const { can } = usePermissions();
+  const { can, canAny, isAdmin, permissions } = usePermissions();
   const recents = useRecentItems(6);
 
   useEffect(() => {
@@ -232,8 +278,12 @@ export default function DashboardPage() {
   useEffect(() => {
     const userId = localStorage.getItem("user_id");
     if (!userId) { setLoading(false); return; }
-    dashboardApi.get()
-      .then((res) => setData(res))
+    Promise.allSettled([dashboardApi.get(), tasksApi.list()])
+      .then(([dashboardRes, tasksRes]) => {
+        if (dashboardRes.status === "fulfilled") setData(dashboardRes.value);
+        else throw dashboardRes.reason;
+        if (tasksRes.status === "fulfilled") setTasks(tasksRes.value);
+      })
       .catch((e) => {
         toast.error("無法載入儀表板");
         console.error(e);
@@ -245,9 +295,18 @@ export default function DashboardPage() {
   const layoutHint = data?.layout_hint ?? "student";
   const hasAny = widgets.length > 0;
   const visibleItems = widgets.reduce((sum, widget) => sum + widget.items.length, 0);
+  const priorityTasks = (tasks?.items ?? [])
+    .slice()
+    .sort((a, b) => b.priority_score - a.priority_score)
+    .slice(0, 5);
+  const urgentCount = (tasks?.items ?? []).filter((task) => task.severity === "critical").length;
+  const isOperator = isAdmin || permissions.size > 0 || layoutHint !== "student";
+  const primaryAction = getPrimaryAction(can, isOperator);
+  const quickActions = getQuickActions(can, canAny, isOperator);
+  const adminActions = getAdminActions(can, canAny, isAdmin);
 
   return (
-    <div className="dashboard-page max-w-6xl mx-auto space-y-6">
+    <div className="dashboard-page max-w-7xl mx-auto space-y-5">
 
       {/* 一次性引導：首次進站時提示 */}
       <OnboardingHint id="hint.dashboard.first-visit">
@@ -263,9 +322,9 @@ export default function DashboardPage() {
           <div className="min-w-0">
             <div className="dashboard-kicker">
               <span className="dashboard-kicker-icon">
-                <Sparkles size={12} aria-hidden={true} />
+                <Inbox size={12} aria-hidden={true} />
               </span>
-              今日治理脈動
+              今日工作入口
             </div>
             <div className="mt-4 flex items-center gap-2 flex-wrap">
               <h1 className="dashboard-title">
@@ -280,9 +339,9 @@ export default function DashboardPage() {
             )}
             </div>
             <p className="dashboard-subtitle">
-              {hasAny
-                ? "重要進度、待辦與校園動態，已為你整理在同一個視野裡。"
-                : "今天沒有急迫事項，可以從常用入口開始探索。"}
+              {priorityTasks.length > 0
+                ? "需要你動作的事項已排在最前面，點進去就能處理。"
+                : "今天沒有急迫待辦，可以從常用入口快速進入公告、問卷與校園服務。"}
             </p>
           </div>
           <div className="dashboard-pulse" aria-hidden="true">
@@ -297,24 +356,81 @@ export default function DashboardPage() {
         <div className="dashboard-hero-footer">
           <div className="dashboard-stat">
             <Layers3 size={16} aria-hidden={true} />
-            <span><strong>{widgets.length}</strong> 個智慧摘要</span>
+            <span><strong>{tasks?.total ?? 0}</strong> 件待辦</span>
           </div>
           <div className="dashboard-stat">
             <ListChecks size={16} aria-hidden={true} />
-            <span><strong>{visibleItems}</strong> 筆重點項目</span>
+            <span><strong>{urgentCount}</strong> 件緊急</span>
           </div>
           <p className="dashboard-updated">
             內容依權限與角色即時彙整
           </p>
-          {can("document:draft") && (
-            <Link href="/documents/new" className="dashboard-primary-action">
-              <Plus size={14} aria-hidden={true} />
-              新增公文
-              <ArrowUpRight size={14} aria-hidden={true} />
-            </Link>
-          )}
+          <Link href={primaryAction.href} className="dashboard-primary-action">
+            <primaryAction.icon size={14} aria-hidden={true} />
+            {primaryAction.label}
+            <ArrowUpRight size={14} aria-hidden={true} />
+          </Link>
         </div>
       </section>
+
+      <section className="dashboard-focus-grid" aria-label="今日重點">
+        <div className="dashboard-focus-main">
+          <div className="dashboard-section-heading">
+            <div>
+              <p className="dashboard-eyebrow">下一步</p>
+              <h2>先處理這些</h2>
+            </div>
+            <Link href="/tasks" className="dashboard-text-link">
+              全部待辦 <ChevronRight size={14} aria-hidden={true} />
+            </Link>
+          </div>
+          {loading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => <TaskSkeleton key={i} />)}
+            </div>
+          ) : priorityTasks.length > 0 ? (
+            <ul className="space-y-2">
+              {priorityTasks.map((task) => <PriorityTaskRow key={task.id} task={task} />)}
+            </ul>
+          ) : (
+            <div className="dashboard-quiet-state">
+              <ShieldCheck size={24} aria-hidden={true} />
+              <div>
+                <p>目前沒有需要立即處理的事項</p>
+                <span>有新簽核、問卷、訂單或通知時會出現在這裡。</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <aside className="dashboard-actions-panel" aria-label={isOperator ? "管理快捷" : "常用快捷"}>
+          <div className="dashboard-section-heading">
+            <div>
+              <p className="dashboard-eyebrow">{isOperator ? "管理捷徑" : "常用入口"}</p>
+              <h2>{isOperator ? "少走幾層選單" : "直接開始"}</h2>
+            </div>
+          </div>
+          <div className="dashboard-action-list">
+            {quickActions.map((action) => (
+              <QuickActionCard key={action.href} action={action} />
+            ))}
+          </div>
+        </aside>
+      </section>
+
+      {adminActions.length > 0 && (
+        <section className="dashboard-admin-strip" aria-label="管理員工作台">
+          <div>
+            <p className="dashboard-eyebrow">後台工作台</p>
+            <h2>管理員常用操作</h2>
+          </div>
+          <div className="dashboard-admin-actions">
+            {adminActions.map((action) => (
+              <QuickActionCard key={action.href} action={action} compact />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* 最近開啟：個人化捷徑，少翻選單 */}
       {recents.length > 0 && (
@@ -336,6 +452,15 @@ export default function DashboardPage() {
       )}
 
       {/* Widget Grid */}
+      <div className="dashboard-section-heading">
+        <div>
+          <p className="dashboard-eyebrow">智慧摘要</p>
+          <h2>跨模組動態</h2>
+        </div>
+        <span className="dashboard-mini-meta">
+          {widgets.length} 個摘要 · {visibleItems} 筆項目
+        </span>
+      </div>
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
@@ -357,6 +482,148 @@ export default function DashboardPage() {
           載入儀表板…
         </p>
       )}
+    </div>
+  );
+}
+
+type DashboardAction = {
+  href: string;
+  label: string;
+  detail: string;
+  icon: React.ComponentType<IconProps>;
+  tone?: "primary" | "warning" | "danger" | "neutral";
+};
+
+function getPrimaryAction(
+  can: (code: string) => boolean,
+  isOperator: boolean,
+): DashboardAction {
+  if (can("document:draft")) {
+    return { href: "/documents/new", label: "新增公文", detail: "建立草稿", icon: Plus };
+  }
+  if (can("announcement:create")) {
+    return { href: "/publications", label: "發布公告", detail: "前往發布中心", icon: Send };
+  }
+  if (isOperator) {
+    return { href: "/tasks", label: "查看待辦", detail: "統一工作佇列", icon: ListChecks };
+  }
+  return { href: "/surveys", label: "填寫問卷", detail: "參與校園決策", icon: PenLine };
+}
+
+function getQuickActions(
+  can: (code: string) => boolean,
+  canAny: (...codes: string[]) => boolean,
+  isOperator: boolean,
+): DashboardAction[] {
+  const actions: DashboardAction[] = [
+    { href: "/tasks", label: "我的待辦", detail: "簽核、問卷、訂單集中處理", icon: ListChecks, tone: "primary" },
+    { href: "/announcements", label: "最新公告", detail: "校內訊息與公開事項", icon: Bell },
+    { href: "/surveys", label: "問卷專區", detail: "快速填寫與查看結果", icon: PenLine },
+    { href: "/meal", label: "學餐訂購", detail: "菜單、訂單與取餐資訊", icon: Utensils },
+    { href: "/shop", label: "校商訂購", detail: "活動票券與班級訂單", icon: ShoppingCart },
+    { href: "/search", label: "全站搜尋", detail: "找公文、法規與公告", icon: Search },
+  ];
+
+  if (isOperator || can("document:draft")) {
+    actions.unshift({ href: "/documents/new", label: "建立公文", detail: "套範本、送簽核", icon: FileText, tone: "primary" });
+  }
+  if (canAny("meeting:manage", "meeting:create")) {
+    actions.splice(1, 0, { href: "/meetings", label: "議事管理", detail: "議程、出席、決議", icon: Landmark });
+  }
+  return actions.slice(0, 6);
+}
+
+function getAdminActions(
+  can: (code: string) => boolean,
+  canAny: (...codes: string[]) => boolean,
+  isAdmin: boolean,
+): DashboardAction[] {
+  const actions: DashboardAction[] = [];
+  if (isAdmin || can("admin:users")) {
+    actions.push({ href: "/admin", label: "管理後台", detail: "人員、權限與系統總覽", icon: Settings });
+    actions.push({ href: "/admin/people", label: "人員管理", detail: "帳號與身分資料", icon: Users });
+  }
+  if (canAny("announcement:create", "email:*")) {
+    actions.push({ href: "/publications", label: "發布中心", detail: "公告與電子郵件", icon: Megaphone });
+  }
+  if (can("shop:manage")) {
+    actions.push({ href: "/shop/admin", label: "校商後台", detail: "商品、訂單與結單", icon: ShoppingCart });
+  }
+  if (can("meal:manage")) {
+    actions.push({ href: "/meal/vendor", label: "餐商管理", detail: "菜單、取餐與供應商", icon: Utensils });
+  }
+  if (isAdmin || can("admin:all")) {
+    actions.push({ href: "/admin/modules", label: "模組維護", detail: "開關、維護與公告", icon: Wrench, tone: "warning" });
+  }
+  return actions.slice(0, 6);
+}
+
+function PriorityTaskRow({ task }: { task: TaskItem }) {
+  const sev = SEVERITY_STYLES[task.severity] ?? SEVERITY_STYLES.info;
+  const Icon = TASK_ICONS[task.module] ?? FallbackWidgetIcon;
+  return (
+    <li>
+      <Link
+        href={task.href}
+        className="dashboard-task-row"
+        style={{ borderLeftColor: sev.color }}
+      >
+        <span
+          className="dashboard-task-icon"
+          style={{ color: sev.color, background: sev.bg, borderColor: sev.border }}
+          aria-hidden="true"
+        >
+          <Icon size={16} aria-hidden={true} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="dashboard-task-title">{task.title}</span>
+          <span className="dashboard-task-meta">
+            <span>{MODULE_LABEL[task.module]}</span>
+            {task.subtitle && <span className="truncate">{task.subtitle}</span>}
+          </span>
+          {task.recommended_action && (
+            <span className="dashboard-task-recommend">{task.recommended_action}</span>
+          )}
+        </span>
+        <span className="dashboard-task-due" style={{ color: task.severity === "critical" ? sev.color : "var(--text-muted)" }}>
+          {task.severity === "critical" && <AlertCircle size={12} aria-hidden={true} />}
+          {formatTaskDue(task.due_at)}
+        </span>
+        <ChevronRight size={16} aria-hidden={true} style={{ color: "var(--text-disabled)" }} />
+      </Link>
+    </li>
+  );
+}
+
+function QuickActionCard({
+  action,
+  compact = false,
+}: {
+  action: DashboardAction;
+  compact?: boolean;
+}) {
+  const tone = action.tone ?? "neutral";
+  return (
+    <Link href={action.href} className={`dashboard-action-card ${compact ? "is-compact" : ""} tone-${tone}`}>
+      <span className="dashboard-action-icon" aria-hidden="true">
+        <action.icon size={16} aria-hidden={true} />
+      </span>
+      <span className="min-w-0">
+        <span className="dashboard-action-label">{action.label}</span>
+        <span className="dashboard-action-detail">{action.detail}</span>
+      </span>
+    </Link>
+  );
+}
+
+function TaskSkeleton() {
+  return (
+    <div className="dashboard-task-row animate-pulse" aria-hidden="true">
+      <span className="dashboard-task-icon" style={{ background: "var(--bg-hover)" }} />
+      <span className="flex-1 space-y-2">
+        <span className="block h-3 w-2/3 rounded" style={{ background: "var(--bg-hover)" }} />
+        <span className="block h-2 w-1/2 rounded" style={{ background: "var(--bg-hover)" }} />
+      </span>
     </div>
   );
 }
