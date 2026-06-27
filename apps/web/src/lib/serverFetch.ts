@@ -10,7 +10,7 @@ const REVALIDATE = 30;
 
 export async function fetchPublicBundle(): Promise<PublicSiteBundleOut | null> {
   try {
-    const res = await fetch(serverApiUrl("/site/public"), { next: { revalidate: REVALIDATE } });
+    const res = await fetch(serverApiUrl("/site/public"), { cache: "no-store" });
     if (!res.ok) return null;
     return res.json();
   } catch {

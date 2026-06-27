@@ -39,7 +39,14 @@ export default function HomeContent({
   const recentlyUpdatedPages = [...(bundle?.nav_pages ?? [])]
     .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
     .slice(0, 2);
-  const emblemAlt = settings?.site_logo_alt || `${settings?.site_title ?? "班聯會"}會徽`;
+  const siteTitle = settings?.site_title?.trim() ?? "";
+  const heroTitle = settings?.hero_title?.trim() || siteTitle;
+  const heroSubtitle = settings?.hero_subtitle?.trim() ?? "";
+  const ctaHref = settings?.cta_href?.trim() || "/links";
+  const ctaLabel = settings?.cta_label?.trim() || "查看連結";
+  const publicDatabaseDescription = settings?.public_database_description?.trim();
+  const aboutTitle = settings?.about_title?.trim();
+  const emblemAlt = settings?.site_logo_alt?.trim() || (siteTitle ? `${siteTitle}會徽` : "網站會徽");
 
   return (
     <>
@@ -50,13 +57,11 @@ export default function HomeContent({
         <div className="public-hero-inner">
           <div className="public-hero-copy">
             <p className="public-eyebrow">學生自治公開網站</p>
-            <h1>{settings?.hero_title ?? settings?.site_title ?? "新竹高中班聯會"}</h1>
-            <p className="public-hero-subtitle">
-              {settings?.hero_subtitle ?? "連結學生、整理公共資訊，讓校園自治被更多人看見。"}
-            </p>
+            <h1>{heroTitle}</h1>
+            {heroSubtitle && <p className="public-hero-subtitle">{heroSubtitle}</p>}
             <div className="public-hero-actions">
-              <Link href={settings?.cta_href ?? "/links"} className="public-cta-primary">
-                {settings?.cta_label ?? "查看平台連結"}
+              <Link href={ctaHref} className="public-cta-primary">
+                {ctaLabel}
                 <ArrowRight size={16} aria-hidden />
               </Link>
               <Link href="/news" className="public-cta-secondary">
@@ -75,7 +80,7 @@ export default function HomeContent({
               )}
             </div>
             <div className="public-signboard-copy">
-              <p>{settings?.site_title ?? "新竹高中班聯會"}</p>
+              <p>{siteTitle}</p>
               <span>Campus Self-Governance</span>
             </div>
           </div>
@@ -211,7 +216,7 @@ export default function HomeContent({
           {
             href: "/public",
             title: "公開資料庫",
-            desc: settings?.public_database_description ?? "查詢公開法規、公文與治理資料。",
+            desc: publicDatabaseDescription || "公開法規、公文與治理資料。",
             icon: Database,
           },
           { href: "/about", title: "關於班聯會", desc: "理解本會任務、沿革與公共角色。", icon: Landmark },
@@ -240,10 +245,8 @@ export default function HomeContent({
       <section className="public-editorial">
         <div className="public-panel public-about-panel" data-reveal>
           <p className="public-section-kicker">About</p>
-          <h2>
-            {settings?.about_title ?? "關於班聯會"}
-          </h2>
-          <MarkdownBlock markdown={settings?.about_body_md} />
+          {aboutTitle && <h2>{aboutTitle}</h2>}
+          <MarkdownBlock markdown={settings?.about_body_md ?? ""} />
         </div>
         <aside className="public-side-stack">
           {officers.length > 0 && (
