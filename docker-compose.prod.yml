@@ -180,12 +180,14 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
       DB_BACKUP_DIR: ${DB_BACKUP_DIR:-/app/backups}
       PROMETHEUS_METRICS_PORT: "9101"
-    # 不設 healthcheck：先前用 `celery inspect ping` 會每 30s 起重量級 python 行程
-    # 堆積吃光 CPU；改成 `python -c 'import api.core.celery_app'` 雖輕量，但 import
-    # 整個 app 仍非零成本，且 Docker 一旦判 unhealthy 會自動重啟，反而把忙碌的 worker
-    # 打掉重練。worker 活著與否交由 restart: unless-stopped 與 mem_limit 守，不再 healthcheck。
+    # file-based heartbeat：beat 每 60s 寫 /tmp/celery-heartbeat；healthcheck 檢查檔案
+    # 存在且不超過 180s，避免 inspect ping 帶起重量級 Python 行程的舊問題。
     healthcheck:
-      disable: true
+      test: ["CMD-SHELL", "test -f /tmp/celery-heartbeat && [ $(( $(date +%s) - $(cat /tmp/celery-heartbeat | cut -d. -f1) )) -lt 180 ]"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
 
   # 寄信專責 worker：只吃 email queue、concurrency=1，與背景任務隔離。
   # 獨立 "email" profile：需要寄信時才開（建議常駐）
@@ -430,6 +432,53 @@ services:
     depends_on:
       - prometheus
 
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.67.0
+    restart: unless-stopped
+    profiles: ["monitoring"]
+    mem_limit: 64m
+    mem_reservation: 16m
+    logging: *default-logging
+    environment:
+      REDIS_ADDR: redis://redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
+    depends_on:
+      - redis
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.16.0
+    restart: unless-stopped
+    profiles: ["monitoring"]
+    mem_limit: 64m
+    mem_reservation: 16m
+    logging: *default-logging
+    environment:
+      DATA_SOURCE_NAME: postgresql://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?set POSTGRES_DB}?sslmode=disable
+    depends_on:
+      db:
+        condition: service_healthy
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.14.0
+    restart: unless-stopped
+    profiles: ["search"]
+    mem_limit: 512m
+    mem_reservation: 128m
+    cpus: 0.5
+    logging: *default-logging
+    environment:
+      MEILI_MASTER_KEY: ${MEILISEARCH_API_KEY}
+      MEILI_ENV: production
+      MEILI_NO_ANALYTICS: "true"
+    volumes:
+      - meilisearchdata:/meili_data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7700/health | grep -q '\"status\":\"available\"'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
 volumes:
   pgdata:
   redisdata:
@@ -440,3 +489,4 @@ volumes:
   caddyconfig:
   prometheusdata:
   grafanadata:
+  meilisearchdata:

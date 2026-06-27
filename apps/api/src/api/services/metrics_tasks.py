@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+from pathlib import Path
 from typing import cast
 
 from redis import Redis
@@ -9,6 +11,8 @@ from redis import Redis
 from api.core.celery_app import celery_app
 from api.core.config import settings
 from api.core.prometheus_metrics import set_queue_depth
+
+_HEARTBEAT_PATH = Path("/tmp/celery-heartbeat")
 
 _QUEUES = ("default", "email", "meal", "documents", "backup", "recovery", "celery")
 
@@ -31,4 +35,13 @@ def collect_queue_depth(self) -> dict[str, int]:  # type: ignore[type-arg]
     return depths
 
 
-__all__ = ["collect_queue_depth"]
+@celery_app.task(
+    name="api.services.metrics_tasks.write_heartbeat",
+    bind=True,
+    max_retries=0,
+)
+def write_heartbeat(self) -> None:  # type: ignore[type-arg]
+    _HEARTBEAT_PATH.write_text(str(time.time()))
+
+
+__all__ = ["collect_queue_depth", "write_heartbeat"]

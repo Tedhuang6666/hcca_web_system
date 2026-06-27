@@ -101,7 +101,7 @@ async def get_org_summary(
         "org_name": org.name,
         "document_count": doc_count,
     }
-    await cache_set(cache_key, result, ttl=600)
+    await cache_set(cache_key, result, ttl=300)
     return result
 
 

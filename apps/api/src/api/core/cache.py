@@ -58,6 +58,7 @@ async def cache_invalidate_user_permissions(user_id: str) -> None:
     await cache_invalidate(f"perm:{user_id}*")
 
 
-async def cache_invalidate_doc_list() -> None:
-    """清除公文列表快取"""
-    await cache_invalidate("doc:list:*")
+async def cache_invalidate_doc_list(org_id: str | None = None) -> None:
+    """清除公文列表快取；指定 org_id 只清該組織的，否則清全部。"""
+    pattern = f"doc:list:{org_id}:*" if org_id else "doc:list:*"
+    await cache_invalidate(pattern)

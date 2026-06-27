@@ -292,11 +292,11 @@ export default function LawTreeEditor({
   );
 
   // 6) 拖拉事件
-  const onDragStart = (event: DragStartEvent) => {
+  const onDragStart = useCallback((event: DragStartEvent) => {
     setActiveId(String(event.active.id));
-  };
+  }, []);
 
-  const onDragEnd = async (event: DragEndEvent) => {
+  const onDragEnd = useCallback(async (event: DragEndEvent) => {
     setActiveId(null);
     const activeIdStr = String(event.active.id);
     const overId = event.over ? String(event.over.id) : null;
@@ -372,7 +372,7 @@ export default function LawTreeEditor({
       }
     });
     if (blockMsg) toast.error(blockMsg);
-  };
+  }, [visibleIds, operateTree]);
 
   // 7) 鍵盤快捷
   const handleRowKeyDown = (id: string, event: React.KeyboardEvent) => {
@@ -405,9 +405,9 @@ export default function LawTreeEditor({
     }
   };
 
-  const onDragMove = () => {
+  const onDragMove = useCallback(() => {
     // 預留：將來可在 DragOverlay 顯示 nesting hint
-  };
+  }, []);
 
   if (visibleItems.length === 0) {
     return (

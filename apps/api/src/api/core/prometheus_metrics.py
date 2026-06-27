@@ -58,6 +58,7 @@ _outbox_delivery_total = None
 _backup_runs_total = None
 _backup_last_success = None
 _websocket_connections = None
+_rate_limit_blocked_total = None
 _metrics_server_started = False
 
 
@@ -67,7 +68,7 @@ def init_metrics() -> None:
     global _http_in_flight, _db_query_count, _celery_queue_depth
     global _celery_tasks_total, _document_approval_total, _email_delivery_total
     global _webhook_delivery_total, _outbox_delivery_total, _backup_runs_total
-    global _backup_last_success, _websocket_connections
+    global _backup_last_success, _websocket_connections, _rate_limit_blocked_total
 
     if _registry is not None:
         return
@@ -152,6 +153,12 @@ def init_metrics() -> None:
         "Current WebSocket connections in this API process",
         registry=_registry,
     )
+    _rate_limit_blocked_total = Counter(
+        "hcca_rate_limit_blocked_total",
+        "Requests blocked by rate limiter",
+        labelnames=["source"],
+        registry=_registry,
+    )
 
 
 def render_metrics() -> bytes:
@@ -227,6 +234,11 @@ def set_websocket_connections(count: int) -> None:
         _websocket_connections.set(count)
 
 
+def record_rate_limit_blocked(source: str) -> None:
+    if _rate_limit_blocked_total is not None:
+        _rate_limit_blocked_total.labels(source=source).inc()
+
+
 def _route_template(request: Request) -> str:
     """從 request 拿 path template（如 /users/{id}）；無 match 時用原 path。"""
     route = request.scope.get("route")
@@ -297,6 +309,7 @@ __all__ = [
     "record_document_approval",
     "record_email_delivery",
     "record_outbox_delivery",
+    "record_rate_limit_blocked",
     "record_webhook_delivery",
     "render_metrics",
     "set_queue_depth",

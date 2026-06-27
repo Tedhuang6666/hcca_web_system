@@ -32,13 +32,13 @@ scrape_configs:
         labels:
           worker: email
 
-  # 若有 redis_exporter / postgres_exporter（建議 Phase A2 結束時補）
-  # - job_name: redis
-  #   static_configs:
-  #     - targets: ["redis-exporter:9121"]
-  # - job_name: postgres
-  #   static_configs:
-  #     - targets: ["postgres-exporter:9187"]
+  - job_name: redis
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
 
 rule_files:
   - /etc/prometheus/rules/*.yml

@@ -175,8 +175,23 @@ async def _sync_pending_approval_delegations(
         )
     )
     approvals = list(result.scalars().all())
+    if not approvals:
+        return
+
+    # 所有 approval 的 principal 相同，只需一次查詢取得當前有效代理人
+    assignment = await _resolve_active_delegate_assignment(
+        session,
+        principal_user_id=principal_user_id,
+        org_id=org_id,
+    )
     for approval in approvals:
-        await _apply_assignment_delegate_to_approval(session, approval, org_id=org_id)
+        if assignment is None:
+            if approval.delegate_source == DelegateSource.ASSIGNMENT:
+                approval.delegate_id = None
+                approval.delegate_source = None
+        else:
+            approval.delegate_id = assignment.delegate_user_id
+            approval.delegate_source = DelegateSource.ASSIGNMENT
 
 
 async def get_document(session: AsyncSession, doc_id: uuid.UUID) -> Document | None:
