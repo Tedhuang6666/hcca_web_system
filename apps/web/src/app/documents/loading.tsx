@@ -1,9 +1,5 @@
-import { ListPageSkeleton } from "@/components/ui/Skeleton";
+import { PageLoading } from "@/components/ui/LoadingState";
 
 export default function DocumentsLoading() {
-  return (
-    <div className="max-w-6xl mx-auto p-6">
-      <ListPageSkeleton rows={6} />
-    </div>
-  );
+  return <PageLoading title="公文載入中" description="正在整理公文清單與簽核狀態。" rows={6} />;
 }

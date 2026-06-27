@@ -1,9 +1,7 @@
-import { ListPageSkeleton } from "@/components/ui/Skeleton";
+import { PageLoading } from "@/components/ui/LoadingState";
 
 export default function TasksLoading() {
   return (
-    <div className="max-w-5xl mx-auto p-6">
-      <ListPageSkeleton rows={5} showFilters={false} />
-    </div>
+    <PageLoading title="任務載入中" description="正在同步待辦與處理狀態。" rows={5} showFilters={false} />
   );
 }

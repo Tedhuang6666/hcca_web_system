@@ -11,7 +11,9 @@ import { moduleForPath } from "@/lib/modules";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 import BottomTabBar from "./BottomTabBar";
+import PageTransition from "./PageTransition";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
+import { LoadingState } from "@/components/ui/LoadingState";
 import ModuleMaintenance from "@/components/ui/ModuleMaintenance";
 import UrgentAnnouncementPopup from "@/components/announcements/UrgentAnnouncementPopup";
 const CommandMenu = dynamic(() => import("./CommandMenu"), { ssr: false });
@@ -99,7 +101,17 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
   }
 
   if (!authReady || redirecting) {
-    return <div className="min-h-screen" style={{ background: "var(--bg-base)" }} />;
+    return (
+      <div
+        className="grid min-h-screen place-items-center px-6"
+        style={{ background: "var(--bg-base)" }}
+      >
+        <LoadingState
+          title={redirecting ? "正在前往登入頁" : "正在確認登入狀態"}
+          description="系統正在確認身分與頁面權限。"
+        />
+      </div>
+    );
   }
 
   return (
@@ -141,14 +153,12 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
           <Topbar onMenuClick={toggleSidebar} />
           <main
             id="main-content"
-            className={`app-main flex-1 overflow-y-auto p-5 pb-20 md:p-6 md:pb-6 ${
-              pathname.startsWith("/legal") ? "" : "animate-slide-in"
-            }`}
+            className="app-main flex-1 overflow-y-auto p-5 pb-20 md:p-6 md:pb-6"
           >
             {moduleDown && moduleId && (!isAdmin || moduleInfo?.mode === "closed") ? (
               <ModuleMaintenance moduleId={moduleId} />
             ) : (
-              <>
+              <PageTransition>
                 {moduleDown && moduleId && isAdmin && (
                   <div
                     className="mb-4 flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium"
@@ -162,7 +172,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
                   </div>
                 )}
                 {children}
-              </>
+              </PageTransition>
             )}
           </main>
         </div>

@@ -1,9 +1,5 @@
-import { ListPageSkeleton } from "@/components/ui/Skeleton";
+import { PageLoading } from "@/components/ui/LoadingState";
 
 export default function MeetingsLoading() {
-  return (
-    <div className="max-w-6xl mx-auto p-6">
-      <ListPageSkeleton rows={5} />
-    </div>
-  );
+  return <PageLoading title="會議載入中" description="正在整理會議、議程與出席資訊。" rows={5} />;
 }

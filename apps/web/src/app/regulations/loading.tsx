@@ -1,9 +1,5 @@
-import { ListPageSkeleton } from "@/components/ui/Skeleton";
+import { PageLoading } from "@/components/ui/LoadingState";
 
 export default function RegulationsLoading() {
-  return (
-    <div className="max-w-6xl mx-auto p-6">
-      <ListPageSkeleton rows={6} />
-    </div>
-  );
+  return <PageLoading title="法規載入中" description="正在載入法規索引與版本資訊。" rows={6} />;
 }

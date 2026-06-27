@@ -1,9 +1,5 @@
-import { ListPageSkeleton } from "@/components/ui/Skeleton";
+import { PageLoading } from "@/components/ui/LoadingState";
 
 export default function AnnouncementsLoading() {
-  return (
-    <div className="max-w-5xl mx-auto p-6">
-      <ListPageSkeleton rows={5} />
-    </div>
-  );
+  return <PageLoading title="公告載入中" description="正在取得最新公告與發布狀態。" rows={5} />;
 }
