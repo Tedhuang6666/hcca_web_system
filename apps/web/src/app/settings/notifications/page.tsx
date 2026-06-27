@@ -80,6 +80,7 @@ export default function NotificationSettingsPage() {
   const [digest, setDigest] = useState<"off" | "daily" | "weekly">("off");
   const [digestSaving, setDigestSaving] = useState(false);
   const [pushPermission, setPushPermission] = useState<NotificationPermission | null>(null);
+  const [pushSubscribed, setPushSubscribed] = useState(false);
 
   useEffect(() => {
     if (typeof Notification !== "undefined") {
@@ -93,10 +94,12 @@ export default function NotificationSettingsPage() {
       lineApi.me().catch(() => ({ linked: false })),
       discordApi.me().catch(() => ({ linked: false })),
       notificationsApi.getDigestFrequency().catch(() => ({ frequency: "off" as const })),
+      notificationsApi.listWebPushSubscriptions().catch(() => [] as { id: string; endpoint: string; device_label: string | null; is_active: boolean }[]),
     ])
-      .then(([nextPrefs, line, discord, digestPref]) => {
+      .then(([nextPrefs, line, discord, digestPref, subs]) => {
         setPrefs(nextPrefs);
         setLineLinked(Boolean(line.linked));
+        setPushSubscribed(Array.isArray(subs) && subs.some((s) => s.is_active));
         setDiscordLinked(Boolean(discord.linked));
         setDigest(digestPref.frequency);
       })
@@ -183,6 +186,7 @@ export default function NotificationSettingsPage() {
     try {
       await enableWebPush();
       setPushPermission("granted");
+      setPushSubscribed(true);
       toast.success("瀏覽器推播已啟用");
     } catch (e) {
       if (typeof Notification !== "undefined") setPushPermission(Notification.permission);
@@ -441,10 +445,13 @@ export default function NotificationSettingsPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button className="btn btn-primary btn-sm" disabled={pushBusy || pushPermission === "denied"} onClick={enablePush}>
-              啟用推播
+            <button
+              className={pushSubscribed ? "btn btn-ghost btn-sm" : "btn btn-primary btn-sm"}
+              disabled={pushBusy || pushPermission === "denied"}
+              onClick={enablePush}>
+              {pushSubscribed ? "重新訂閱" : "啟用推播"}
             </button>
-            <button className="btn btn-secondary btn-sm" disabled={pushBusy || pushPermission !== "granted"} onClick={testPush}>
+            <button className="btn btn-secondary btn-sm" disabled={pushBusy || !pushSubscribed} onClick={testPush}>
               測試推播
             </button>
           </div>
