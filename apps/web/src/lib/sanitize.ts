@@ -23,6 +23,7 @@ export function sanitizeCustomCss(css: string | null | undefined): string {
     .replace(/\\[0-9a-fA-F]{1,6}\s?/g, "")
     .replace(/@import\b/gi, "/* @import blocked */")
     .replace(/@charset\b/gi, "/* @charset blocked */")
+    .replace(/@supports\b/gi, "/* @supports blocked */")
     .replace(/\burl\s*\(/gi, "/* url( blocked */")
     .replace(/\bexpression\s*\(/gi, "/* expression( blocked */")
     .replace(/\bbehavior\s*:/gi, "/* behavior blocked */")

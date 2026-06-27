@@ -17,7 +17,9 @@ from api.core.trust import request_is_trusted
 
 logger = logging.getLogger(__name__)
 
-# 簡單的內存降級 rate limit（當 Redis 不可用時使用）
+# 內存降級 rate limit（Redis 不可用時的最後防線）。
+# 警告：此計數器為 per-process，多 worker 部署時每個 worker 各自計數，
+# 等效上限為 N × requests；攻擊者可輪詢不同 worker 繞過。Redis 恢復後立即失效。
 _memory_buckets: dict[str, list[float]] = defaultdict(list)
 
 
@@ -130,11 +132,12 @@ class SimpleRateLimitMiddleware:
                 return
         except RedisError:
             logger.error(
-                "Rate limit Redis connection failed, degrading to memory-based limit",
+                "Rate limit Redis 不可用，降級至 per-process 內存限流"
+                "（多 worker 環境下有效上限為 N×%d，請立即修復 Redis）",
+                req_limit,
                 exc_info=True,
                 extra={"client_ip": client_host, "path": request.url.path},
             )
-            # 降級到內存 rate limit
             if self._check_memory_rate_limit(key, req_limit, win):
                 response = JSONResponse(
                     {"detail": "請求過於頻繁，請稍後再試"},
@@ -144,8 +147,8 @@ class SimpleRateLimitMiddleware:
                 await response(scope, receive, send)
                 return
         except Exception:
-            logger.warning(
-                "Unexpected rate limit failure, degrading to memory-based limit",
+            logger.error(
+                "Rate limit 意外失敗，降級至 per-process 內存限流",
                 exc_info=True,
                 extra={"client_ip": client_host, "path": request.url.path},
             )

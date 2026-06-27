@@ -286,6 +286,9 @@ class Settings(BaseSettings):
     WAF_AUTOBLOCK_TTL_SECONDS: int = Field(default=3600, ge=60)
     # 整條 URL（path + query）長度上限，防超長 URL 灌爆 / 規避。
     WAF_MAX_URL_LENGTH: int = Field(default=8192, ge=256)
+    # 是否對 application/json POST body 掃描高信心規則（JNDI / 路徑穿越 / null byte）。
+    # 僅讀前 64 KB，不影響 streaming 端點。預設關閉（opt-in）。
+    WAF_SCAN_JSON_BODY: bool = False
     # 主動弱掃繞過 token：請求帶 `X-Security-Scan: <token>` 時完全繞過 WAF / rate limit /
     # IP 黑名單，供 Nuclei 等掃描器對自家站台施測。須夠長（>= 16 字元）；未設定 / 過短時
     # header 一律無效（避免空 token 漏洞）。比對採 constant-time。

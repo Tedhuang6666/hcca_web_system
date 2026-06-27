@@ -247,8 +247,8 @@ def make_unsubscribe_token(user_id: uuid.UUID, notification_type: str) -> str:
 def parse_unsubscribe_token(token: str) -> tuple[uuid.UUID, str]:
     """驗證並解析退訂 token，回傳 (user_id, notification_type)。
 
-    token 無效時拋 itsdangerous.BadSignature。退訂連結不設過期。
+    token 無效或超過 90 天時拋 itsdangerous.BadSignature / SignatureExpired。
     """
     serializer = URLSafeTimedSerializer(settings.SECRET_KEY, salt=_UNSUBSCRIBE_SALT)
-    data = serializer.loads(token)
+    data = serializer.loads(token, max_age=90 * 86400)
     return uuid.UUID(data["uid"]), str(data["type"])

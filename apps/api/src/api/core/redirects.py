@@ -28,4 +28,4 @@ def safe_next_path(value: str | None, *, default: str = "/") -> str:
         return default
     if any(ch in normalized for ch in _CONTROL_CHARS):
         return default
-    return value
+    return normalized
