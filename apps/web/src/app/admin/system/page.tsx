@@ -27,7 +27,7 @@ import {
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
-import { useResilientPoll } from "@/hooks/useResilientPoll";
+import { useResilientPoll, type PollOutcome } from "@/hooks/useResilientPoll";
 import {
   ApiError,
   systemApi,
@@ -243,8 +243,8 @@ export default function SystemDefensePage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const refresh = useCallback(async () => {
-    if (!isAdmin) return;
+  const refresh = useCallback(async (): Promise<PollOutcome> => {
+    if (!isAdmin) return "stop";
     setLoading(true);
     try {
       const s = await systemApi.status();
@@ -276,9 +276,11 @@ export default function SystemDefensePage() {
       const message = apiErrorMessage(e, "讀取防護狀態失敗");
       setLoadError(message);
       if (e instanceof ApiError && e.status !== 503) toast.error(message);
+      if (e instanceof ApiError && [401, 403, 522].includes(e.status)) return "stop";
     } finally {
       setLoading(false);
     }
+    return "ok";
   }, [isAdmin]);
 
   useEffect(() => { void refresh(); }, [refresh]);

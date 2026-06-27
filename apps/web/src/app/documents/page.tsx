@@ -527,11 +527,11 @@ export default function DocumentListPage() {
     });
   };
 
-  const delegateTimer = useRef<ReturnType<typeof setTimeout>>();
+  const delegateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchDelegate = useCallback((q: string) => {
     setDelegateQuery(q);
     setDelegateId(null);
-    clearTimeout(delegateTimer.current);
+    if (delegateTimer.current) clearTimeout(delegateTimer.current);
     if (!q.trim()) {
       setDelegateSuggestions([]);
       return;
