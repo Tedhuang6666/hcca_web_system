@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
 import { usersApi, classApi, lineApi, discordApi, apiErrorMessage } from "@/lib/api";
+import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
 import { useModuleStatus } from "@/contexts/ModuleStatusContext";
 import { SectionSkeleton } from "@/components/ui/Skeleton";
 import type {
@@ -102,28 +103,33 @@ function EditableField({
 
 /* ═══════════════════════════════════════════════════════════════════════════ */
 
+const PROFILE_ME_KEY = "profile/me";
+const PROFILE_POSITIONS_KEY = "profile/positions";
+const PROFILE_EMAILS_KEY = "profile/emails";
+const PROFILE_CLASS_KEY = "profile/class";
+
 export default function ProfilePage() {
   const { isModuleClosed } = useModuleStatus();
   const [activeTab, setActiveTab] = useState<ProfileTab>("account");
-  const [user, setUser] = useState<UserRead | null>(null);
-  const [positions, setPositions] = useState<UserPositionRead[]>([]);
+  const [user, setUser] = useState<UserRead | null>(() => cacheGet<UserRead>(PROFILE_ME_KEY) ?? null);
+  const [positions, setPositions] = useState<UserPositionRead[]>(() => cacheGet<UserPositionRead[]>(PROFILE_POSITIONS_KEY) ?? []);
   const [permissions, setPermissions] = useState<string[]>([]);
-  const [myClass, setMyClass] = useState<SchoolClassListItem | null>(null);
+  const [myClass, setMyClass] = useState<SchoolClassListItem | null>(() => cacheGet<SchoolClassListItem>(PROFILE_CLASS_KEY) ?? null);
   const [lineBinding, setLineBinding] = useState<LineBindingOut | null>(null);
   const [discordBinding, setDiscordBinding] = useState<DiscordBindingOut | null>(null);
   const [lineCode, setLineCode] = useState<LineLinkCodeOut | null>(null);
   const [lineBusy, setLineBusy] = useState(false);
   const [discordBusy, setDiscordBusy] = useState(false);
-  const [linkedEmails, setLinkedEmails] = useState<string[]>([]);
+  const [linkedEmails, setLinkedEmails] = useState<string[]>(() => cacheGet<string[]>(PROFILE_EMAILS_KEY) ?? []);
   const [newEmail, setNewEmail] = useState("");
   const [emailCode, setEmailCode] = useState("");
   const [emailVerificationPending, setEmailVerificationPending] = useState(false);
   const [emailBusy, setEmailBusy] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!cacheHas(PROFILE_ME_KEY));
   const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
-    setLoading(true);
+    if (!cacheHas(PROFILE_ME_KEY)) setLoading(true);
     setLoadError("");
     Promise.all([
       usersApi.me().catch((e) => {
@@ -133,12 +139,15 @@ export default function ProfilePage() {
       usersApi.myPositions(false).catch(() => []),
       usersApi.myEmails().catch(() => ({ emails: [] })),
     ]).then(([u, pos, emailResult]) => {
-      if (u) setUser(u);
-      setPositions(pos as UserPositionRead[]);
+      if (u) { setUser(u); cacheSet(PROFILE_ME_KEY, u); }
+      const posArr = pos as UserPositionRead[];
+      setPositions(posArr);
+      cacheSet(PROFILE_POSITIONS_KEY, posArr);
       setLinkedEmails(emailResult.emails);
+      cacheSet(PROFILE_EMAILS_KEY, emailResult.emails);
     }).finally(() => setLoading(false));
 
-    classApi.myClass().then(setMyClass).catch(() => setMyClass(null));
+    classApi.myClass().then((cls) => { setMyClass(cls); cacheSet(PROFILE_CLASS_KEY, cls); }).catch(() => setMyClass(null));
     lineApi.me().then(setLineBinding).catch(() => setLineBinding({ linked: false, line_display_name: null, linked_at: null }));
     discordApi.me().then(setDiscordBinding).catch(() => setDiscordBinding({
       linked: false,

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { CalendarDays, Plus, Radio, ScreenShare, Settings } from "lucide-react";
 import { meetingsApi, orgsApi } from "@/lib/api";
 import type { MeetingListItem, MeetingWorkspaceOut, OrgRead } from "@/lib/types";
+import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
 import { orgDisplayName } from "@/lib/orgs";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import { usePersistedState } from "@/hooks/usePersistedState";
@@ -57,15 +58,18 @@ const MeetingCard = memo(function MeetingCard({ meeting }: { meeting: MeetingLis
   );
 });
 
+const MTG_LIST_KEY = "meetings/list";
+const MTG_ORGS_KEY = "meetings/orgs";
+
 export default function MeetingsPage() {
   const router = useRouter();
-  const [items, setItems] = useState<MeetingListItem[]>([]);
-  const [orgs, setOrgs] = useState<OrgRead[]>([]);
+  const [items, setItems] = useState<MeetingListItem[]>(() => cacheGet<MeetingListItem[]>(MTG_LIST_KEY) ?? []);
+  const [orgs, setOrgs] = useState<OrgRead[]>(() => cacheGet<OrgRead[]>(MTG_ORGS_KEY) ?? []);
   const [workspace, setWorkspace] = useState<MeetingWorkspaceOut | null>(null);
   const [title, setTitle] = useState("");
   // 記住上次建立會議所選的組織，常為同一組織辦會議者免每次重選。
   const [orgId, setOrgId] = usePersistedState<string>("hcca:pref:meetings:org:v1", "");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!cacheHas(MTG_LIST_KEY));
   const [error, setError] = useState("");
   const [permissions, setPermissions] = useState<Set<string>>(new Set());
   const [isSuperuser, setIsSuperuser] = useState(false);
@@ -85,7 +89,7 @@ export default function MeetingsPage() {
   );
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!cacheHas(MTG_LIST_KEY)) setLoading(true);
     setError("");
     try {
       const [meetings, orgList, ws] = await Promise.all([
@@ -97,7 +101,9 @@ export default function MeetingsPage() {
       ]);
       setWorkspace(ws);
       setItems(meetings);
+      cacheSet(MTG_LIST_KEY, meetings);
       setOrgs(orgList);
+      cacheSet(MTG_ORGS_KEY, orgList);
       setOrgId((current) => current || orgList[0]?.id || "");
     } catch (err) {
       setError(err instanceof Error ? err.message : "載入會議失敗");

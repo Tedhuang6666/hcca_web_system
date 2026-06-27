@@ -4,6 +4,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { notificationsApi, apiErrorMessage } from "@/lib/api";
 import type { NotificationItem } from "@/lib/api";
+import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
 import { useWS } from "@/hooks/useWS";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import SmartEmptyState from "@/components/ui/SmartEmptyState";
@@ -144,9 +145,11 @@ function NotificationCard({
 
 // ── 主頁面 ────────────────────────────────────────────────────────────────────
 
+const NOTIF_KEY = "notifications/list";
+
 export default function NotificationsPage() {
-  const [items, setItems] = useState<NotificationItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState<NotificationItem[]>(() => cacheGet<NotificationItem[]>(NOTIF_KEY) ?? []);
+  const [loading, setLoading] = useState(!cacheHas(NOTIF_KEY));
   const [loadError, setLoadError] = useState(false);
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [dateFrom, setDateFrom] = useState("");
@@ -163,7 +166,7 @@ export default function NotificationsPage() {
   }, []);
 
   const fetchAll = useCallback(async () => {
-    setLoading(true);
+    if (!cacheHas(NOTIF_KEY) || unreadOnly || dateFrom || dateTo) setLoading(true);
     setLoadError(false);
     try {
       const [list, counts] = await Promise.all([
@@ -175,6 +178,9 @@ export default function NotificationsPage() {
       ]);
       setItems(list);
       setUnreadCount(counts.unread);
+      if (!unreadOnly && !dateFrom && !dateTo) {
+        cacheSet(NOTIF_KEY, list);
+      }
     } catch (e) {
       setLoadError(true);
       toast.error(apiErrorMessage(e, "載入失敗"));

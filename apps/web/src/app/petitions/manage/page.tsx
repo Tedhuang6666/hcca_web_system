@@ -5,6 +5,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { ApiError, orgsApi, petitionsApi } from "@/lib/api";
 import type { PetitionCaseListItem, PetitionCaseOut, PetitionStatsOut, PetitionStatus } from "@/lib/types";
+import { cacheGet, cacheHas, cacheSet, cachePurge } from "@/lib/api-cache";
 import { PetitionStatusBadge } from "@/components/ui/StatusBadge";
 import { orgDisplayName } from "@/lib/orgs";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -43,10 +44,14 @@ function queueStatus(queue: QueueKey): PetitionStatus | undefined {
   return undefined;
 }
 
+const PET_LIST_KEY = "petitions/manage/list";
+const PET_STATS_KEY = "petitions/manage/stats";
+const PET_ORGS_KEY = "petitions/manage/orgs";
+
 export default function PetitionManagePage() {
-  const [items, setItems] = useState<PetitionCaseListItem[]>([]);
+  const [items, setItems] = useState<PetitionCaseListItem[]>(() => cacheGet<PetitionCaseListItem[]>(PET_LIST_KEY) ?? []);
   const [selected, setSelected] = useState<PetitionCaseOut | null>(null);
-  const [stats, setStats] = useState<PetitionStatsOut | null>(null);
+  const [stats, setStats] = useState<PetitionStatsOut | null>(() => cacheGet<PetitionStatsOut>(PET_STATS_KEY) ?? null);
   const [queue, setQueue] = useState<QueueKey>("all");
   const [status, setStatus] = useState<PetitionStatus | "">("");
   const [keyword, setKeyword] = useState("");
@@ -74,11 +79,22 @@ export default function PetitionManagePage() {
       petitionsApi.stats().catch(() => null),
     ]);
     setItems(list);
-    if (s) setStats(s);
+    if (s) {
+      setStats(s);
+      // 只在無篩選時快取
+      if (!effectiveStatus && !keyword && !assignedToMe) {
+        cacheSet(PET_LIST_KEY, list);
+        cacheSet(PET_STATS_KEY, s);
+      }
+    }
   }, [assignedToMe, effectiveStatus, keyword]);
 
   useEffect(() => { load().catch(() => toast.error("載入陳情工作台失敗")); }, [load]);
-  useEffect(() => { orgsApi.list({ active_only: true }).then(setOrgs).catch(() => null); }, []);
+  useEffect(() => {
+    const cached = cacheGet<typeof orgs>(PET_ORGS_KEY);
+    if (cached) { setOrgs(cached); return; }
+    orgsApi.list({ active_only: true }).then((list) => { setOrgs(list); cacheSet(PET_ORGS_KEY, list); }).catch(() => null);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const resetForm = () => {
     setPublicText("");
@@ -160,6 +176,7 @@ export default function PetitionManagePage() {
       } else {
         updated = await petitionsApi.addNote(selected.id, internalNote || publicText);
       }
+      cachePurge("petitions/manage");
       await refreshSelected(updated);
       toast.success("案件已更新");
     } catch (err) {

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { documentsApi, orgsApi, savedFiltersApi, usersApi, withFallback, apiErrorMessage } from "@/lib/api";
+import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
 import type { OrgRead, UserSummary } from "@/lib/api";
 import type { Activity, BatchDocumentOperationOut, DocumentListItem, DocumentStatus, SavedFilterOut } from "@/lib/types";
 import { orgDisplayName } from "@/lib/orgs";
@@ -171,7 +172,7 @@ export default function DocumentListPage() {
       activityId:       searchParams.get("activity_id") ?? "",
     })
   );
-  const [orgs, setOrgs] = useState<OrgRead[]>([]);
+  const [orgs, setOrgs] = useState<OrgRead[]>(() => cacheGet<OrgRead[]>("documents/orgs") ?? []);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [savedFilters, setSavedFilters] = useState<SavedFilterOut[]>([]);
   const [offset, setOffset] = useState(0);
@@ -216,11 +217,14 @@ export default function DocumentListPage() {
     if (filters.activityId) initialParams.activity_id = filters.activityId;
 
     Promise.all([
-      withFallback(orgsApi.list({ active_only: true }), []),
+      cacheHas("documents/orgs")
+        ? Promise.resolve(cacheGet<OrgRead[]>("documents/orgs")!)
+        : withFallback(orgsApi.list({ active_only: true }), []),
       userId ? withFallback(savedFiltersApi.list("documents"), []) : Promise.resolve([]),
       documentsApi.list(initialParams).catch(() => null),
     ]).then(([orgsRes, savedFiltersRes, docsRes]) => {
       setOrgs(orgsRes as OrgRead[]);
+      if (!cacheHas("documents/orgs")) cacheSet("documents/orgs", orgsRes);
       setSavedFilters(savedFiltersRes as SavedFilterOut[]);
       if (docsRes !== null) {
         setDocs(docsRes as DocumentListItem[]);

@@ -21,6 +21,7 @@ import type {
 import { usePermissions } from "@/hooks/usePermissions";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { today, addDays } from "@/lib/dateUtils";
+import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
 
 const RANGE_DAYS = 14;
 
@@ -217,16 +218,18 @@ export default function MealPage() {
   const isManager = can("meal:manage");
   const allDates = useMemo(() => dateOptions(), []);
 
-  const [vendors, setVendors] = useState<MealVendorOut[]>([]);
-  const [availabilities, setAvailabilities] = useState<MealAvailabilityOut[]>([]);
+  const MEAL_VENDORS_KEY = "meal/vendors";
+  const MEAL_AVAIL_KEY = "meal/availabilities";
+  const [vendors, setVendors] = useState<MealVendorOut[]>(() => cacheGet<MealVendorOut[]>(MEAL_VENDORS_KEY) ?? []);
+  const [availabilities, setAvailabilities] = useState<MealAvailabilityOut[]>(() => cacheGet<MealAvailabilityOut[]>(MEAL_AVAIL_KEY) ?? []);
   const [holidays, setHolidays] = useState<Map<string, TaiwanCalendarDay>>(new Map());
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!cacheHas(MEAL_VENDORS_KEY));
   const [vendorFilter, setVendorFilter] = usePersistedState<string>("hcca:pref:meal:vendor:v1", "all");
   const [dateFilter, setDateFilter] = usePersistedState<string>("hcca:pref:meal:date:v1", "all");
   const [ordering, setOrdering] = useState<MealAvailabilityOut | null>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!cacheHas(MEAL_VENDORS_KEY)) setLoading(true);
     try {
       const [vendorItems, availabilityItems] = await Promise.all([
         mealApi.listVendors({ active_only: true }),
@@ -239,12 +242,14 @@ export default function MealPage() {
       ]);
       setVendors(vendorItems);
       setAvailabilities(availabilityItems);
+      cacheSet(MEAL_VENDORS_KEY, vendorItems);
+      cacheSet(MEAL_AVAIL_KEY, availabilityItems);
     } catch (error: unknown) {
       toast.error(error instanceof ApiError ? error.message : "載入失敗");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
 

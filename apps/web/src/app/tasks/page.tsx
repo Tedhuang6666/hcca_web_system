@@ -18,6 +18,7 @@ import {
 } from "@/lib/api";
 import type { RegulationWorkflowStatus } from "@/lib/types";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
+import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
 
 type IconProps = { size: number; "aria-hidden": boolean };
 function FallbackModuleIcon(p: IconProps) { return <FileText {...p} />; }
@@ -78,11 +79,17 @@ function formatDueAt(s?: string | null) {
   return `${Math.round(diffH / 24)} 天後`;
 }
 
+const CACHE_KEYS = {
+  tasks: "tasks/inbox",
+  docStats: "tasks/doc-stats",
+  regCounts: "tasks/reg-counts",
+} as const;
+
 export default function TasksPage() {
-  const [data, setData] = useState<TaskInboxResponse | null>(null);
-  const [docStats, setDocStats] = useState<DocumentStats | null>(null);
-  const [regCounts, setRegCounts] = useState<Record<string, number>>({});
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<TaskInboxResponse | null>(() => cacheGet<TaskInboxResponse>(CACHE_KEYS.tasks) ?? null);
+  const [docStats, setDocStats] = useState<DocumentStats | null>(() => cacheGet<DocumentStats>(CACHE_KEYS.docStats) ?? null);
+  const [regCounts, setRegCounts] = useState<Record<string, number>>(() => cacheGet<Record<string, number>>(CACHE_KEYS.regCounts) ?? {});
+  const [loading, setLoading] = useState(!cacheHas(CACHE_KEYS.tasks));
   const [tab, setTab] = useState<TaskModule | "all">("all");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
 
@@ -96,14 +103,21 @@ export default function TasksPage() {
     ])
       .then(([tasksRes, statsRes, underReviewRes, scheduledRes, councilApprovedRes]) => {
         if (!mounted) return;
-        if (tasksRes.status === "fulfilled") setData(tasksRes.value);
-        else throw tasksRes.reason;
-        if (statsRes.status === "fulfilled") setDocStats(statsRes.value);
-        setRegCounts({
+        if (tasksRes.status === "fulfilled") {
+          setData(tasksRes.value);
+          cacheSet(CACHE_KEYS.tasks, tasksRes.value);
+        } else throw tasksRes.reason;
+        if (statsRes.status === "fulfilled") {
+          setDocStats(statsRes.value);
+          cacheSet(CACHE_KEYS.docStats, statsRes.value);
+        }
+        const counts = {
           under_review: underReviewRes.status === "fulfilled" ? underReviewRes.value.length : 0,
           scheduled: scheduledRes.status === "fulfilled" ? scheduledRes.value.length : 0,
           council_approved: councilApprovedRes.status === "fulfilled" ? councilApprovedRes.value.length : 0,
-        });
+        };
+        setRegCounts(counts);
+        cacheSet(CACHE_KEYS.regCounts, counts);
       })
       .catch((e: unknown) => {
         toast.error("無法載入待辦中心");
