@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { activitiesApi, receivablesApi } from "@/lib/api";
@@ -23,7 +23,7 @@ export default function ActivityWorkspacePage() {
   const [receivables, setReceivables] = useState<ReceivableOut[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
     setLoading(true);
     try {
       const [activityData, workspaceData, receivableRows] = await Promise.all([
@@ -39,12 +39,11 @@ export default function ActivityWorkspacePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [activityId]);
 
   useEffect(() => {
     void reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activityId]);
+  }, [reload]);
 
   const finance = useMemo(() => {
     const total = receivables.reduce((sum, item) => sum + item.amount, 0);

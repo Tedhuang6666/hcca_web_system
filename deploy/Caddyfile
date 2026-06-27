@@ -16,12 +16,20 @@
 		reverse_proxy api:8000
 	}
 
+	# 使用者上傳檔案（公告圖、問卷圖等公開素材）：快取 1 天
 	handle /uploads/* {
+		header Cache-Control "public, max-age=86400"
 		reverse_proxy api:8000
 	}
 
 	handle /auth/google/* {
 		reverse_proxy api:8000
+	}
+
+	# Next.js 靜態資源（hashed 檔名，永久快取）
+	handle /_next/static/* {
+		header Cache-Control "public, max-age=31536000, immutable"
+		reverse_proxy web:3000
 	}
 
 	handle {

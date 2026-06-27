@@ -52,6 +52,14 @@ services:
     logging: *default-logging
     labels:
       autoheal: "true"
+    command: >
+      postgres
+      -c max_connections=200
+      -c shared_buffers=256MB
+      -c effective_cache_size=512MB
+      -c work_mem=16MB
+      -c maintenance_work_mem=64MB
+      -c log_min_duration_statement=1000
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
@@ -75,7 +83,8 @@ services:
       autoheal: "true"
     # noeviction（Redis 預設）：broker 任務絕不可被 evict 掉；queue-routing 修正後
     # 佇列不再無限成長，mem_limit 僅作 backstop。
-    command: ["sh", "-c", "redis-server --appendonly yes --requirepass \"$${REDIS_PASSWORD}\""]
+    # maxmemory 設為 mem_limit 的 80%（200mb），讓 Redis 主動拋 OOM 而非等 Docker 強殺。
+    command: ["sh", "-c", "redis-server --appendonly yes --maxmemory 200mb --requirepass \"$${REDIS_PASSWORD}\""]
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
     volumes:
