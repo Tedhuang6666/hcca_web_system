@@ -79,6 +79,12 @@ export const NAV_ITEMS: NavItem[] = [
     perm: "announcement:create",
   },
   {
+    id: "operations",
+    href: "/operations",
+    iconKey: "analytics",
+    label: "營運中心",
+  },
+  {
     id: "adminDashboard",
     href: "/admin",
     iconKey: "dashboard",
@@ -251,21 +257,14 @@ export const NAV_DEF: NavEntry[] = [
   {
     id: "campusServices",
     heading: "校園生活",
-    items: byIds(["meal", "shop", "shopOrders", "partnerMap", "examPapers"]),
+    items: byIds(["meal", "shop", "partnerMap", "examPapers"]),
   },
   {
     id: "contentOps",
     heading: "內容與營運",
     collapsible: true,
     defaultCollapsed: true,
-    items: byIds([
-      "publications",
-      "email",
-      "activitiesAdmin",
-      "publicSiteAdmin",
-      "analytics",
-      "receivables",
-    ]),
+    items: byIds(["operations"]),
   },
   {
     id: "serviceBackoffice",

@@ -177,6 +177,17 @@ export default function Sidebar() {
         || hasPrefix("org:")
       );
     }
+    if (item.id === "operations") {
+      return (
+        isAdmin
+        || hasPrefix("announcement:")
+        || hasPrefix("email:")
+        || hasPrefix("activity:")
+        || hasPrefix("site:")
+        || hasPrefix("analytics:")
+        || hasPrefix("finance:")
+      );
+    }
     // 議事系統：會議管理者（meeting:*）與管理員一律可見；
     // 一般使用者需掃描現場簽到連結解鎖後才顯示。
     if (item.id === "meetings") return meetingsUnlocked || hasPrefix("meeting:");
