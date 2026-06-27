@@ -1029,7 +1029,7 @@ export default function DocumentListPage() {
           </div>
         ) : (
           /* 桌機版表格 / 手機版卡片列表 */
-          <>
+          <div className="data-reveal">
             {/* 桌機表格（md 以上顯示） */}
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm" role="table" aria-label="公文列表">
@@ -1262,7 +1262,7 @@ export default function DocumentListPage() {
                 );
               })}
             </ul>
-          </>
+          </div>
         )}
       </div>
 

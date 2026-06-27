@@ -48,13 +48,7 @@ export default function NavigationProgress() {
 
   // 導航開始：監聽內部連結點擊
   useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      const anchor = (e.target as Element).closest("a[href]") as HTMLAnchorElement | null;
-      if (!anchor) return;
-      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-      const href = internalPathFromAnchor(anchor);
-      if (!href) return;
-
+    const startNavigation = () => {
       const bar = barRef.current;
       if (!bar) return;
       if (s.current.timer !== null) { clearTimeout(s.current.timer); s.current.timer = null; }
@@ -71,8 +65,28 @@ export default function NavigationProgress() {
       });
     };
 
+    const handlePointerDown = (e: PointerEvent) => {
+      const anchor = (e.target as Element).closest("a[href]") as HTMLAnchorElement | null;
+      if (!anchor || e.button !== 0) return;
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const href = internalPathFromAnchor(anchor);
+      if (!href) return;
+      startNavigation();
+    };
+
+    const handleClick = (e: MouseEvent) => {
+      const anchor = (e.target as Element).closest("a[href]") as HTMLAnchorElement | null;
+      if (!anchor) return;
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const href = internalPathFromAnchor(anchor);
+      if (!href) return;
+      startNavigation();
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown, true);
     document.addEventListener("click", handleClick, true);
     return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
       document.removeEventListener("click", handleClick, true);
       document.documentElement.removeAttribute("data-navigation");
     };
