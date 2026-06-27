@@ -126,8 +126,8 @@ export default function LawTreeEditor({
     }));
   }, [articles, collapsed]);
 
-  const visibleItems = sortableItems.filter((item) => !item.hidden);
-  const visibleIds = visibleItems.map((item) => item.node.id);
+  const visibleItems = useMemo(() => sortableItems.filter((item) => !item.hidden), [sortableItems]);
+  const visibleIds = useMemo(() => visibleItems.map((item) => item.node.id), [visibleItems]);
 
   // 2) Sensors：滑鼠（8px 觸發）+ 觸控（200ms delay 避免 scroll 衝突）+ 鍵盤
   const sensors = useSensors(

@@ -162,6 +162,21 @@ export default function Sidebar() {
   const itemVisible = (item: NavItem): boolean => {
     if (isModuleClosed(NAV_ID_TO_MODULE[item.id] ?? null)) return false;
     if (item.id === "systemDefense" && !isAdmin) return false;
+    if (item.id === "moduleBackoffice") {
+      return (
+        isAdmin
+        || hasPrefix("class:")
+        || hasPrefix("document:")
+        || hasPrefix("serial:")
+        || hasPrefix("exam:")
+        || hasPrefix("shop:")
+        || hasPrefix("meal:")
+        || hasPrefix("partner_map:")
+        || hasPrefix("election:")
+        || hasPrefix("petition:")
+        || hasPrefix("org:")
+      );
+    }
     // 議事系統：會議管理者（meeting:*）與管理員一律可見；
     // 一般使用者需掃描現場簽到連結解鎖後才顯示。
     if (item.id === "meetings") return meetingsUnlocked || hasPrefix("meeting:");
