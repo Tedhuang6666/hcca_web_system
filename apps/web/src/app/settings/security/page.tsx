@@ -1,14 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import QRCode from "qrcode";
 import { toast } from "sonner";
 import { discordApi, mfaApi, apiErrorMessage } from "@/lib/api";
 import type { DiscordBindingOut, MFASetupOut, MFAStatusOut } from "@/lib/types";
 import { SectionSkeleton } from "@/components/ui/Skeleton";
+import { safeNextPath } from "@/lib/safe-redirect";
 
 export default function SecuritySettingsPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const mfaRequired = searchParams.get("mfa_required") === "1";
+  const nextPath = safeNextPath(searchParams.get("next"), "/dashboard");
+  const autoStarted = useRef(false);
+
   const [status, setStatus] = useState<MFAStatusOut | null>(null);
   const [setup, setSetup] = useState<MFASetupOut | null>(null);
   const [confirmCode, setConfirmCode] = useState("");
@@ -28,6 +36,14 @@ export default function SecuritySettingsPage() {
       .catch((e) => toast.error(apiErrorMessage(e, "載入安全設定失敗")))
       .finally(() => setLoading(false));
   };
+
+  // 被 MFA 守衛攔截後自動展開設定流程
+  useEffect(() => {
+    if (mfaRequired && !autoStarted.current && status !== null && !status.mfa_enabled && !setup) {
+      autoStarted.current = true;
+      startSetup();
+    }
+  }, [mfaRequired, status, setup]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     loadStatus();
@@ -83,7 +99,12 @@ export default function SecuritySettingsPage() {
       setRecoveryCodes(setup?.backup_codes ?? []);
       setSetup(null);
       setConfirmCode("");
-      loadStatus();
+      if (mfaRequired) {
+        // 從 MFA 守衛引導而來：設定完畢後回原頁
+        setTimeout(() => router.replace(nextPath), 1200);
+      } else {
+        loadStatus();
+      }
     } catch (e) {
       toast.error(apiErrorMessage(e, "驗證碼錯誤"));
     } finally {
@@ -145,6 +166,26 @@ export default function SecuritySettingsPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
+      {/* MFA 守衛引導橫幅 */}
+      {mfaRequired && (
+        <div
+          className="flex items-start gap-3 rounded-md px-4 py-3 text-sm"
+          style={{
+            background: "var(--warning-dim)",
+            border: "1px solid var(--warning-border)",
+            color: "var(--warning)",
+          }}
+        >
+          <span className="text-base leading-none flex-shrink-0">🔐</span>
+          <div>
+            <p className="font-semibold">需要設定雙重驗證（2FA）才能繼續</p>
+            <p className="mt-0.5 text-xs opacity-80">
+              您嘗試存取的功能需要管理員啟用 2FA 保護。請依下方步驟完成設定，完成後將自動返回。
+            </p>
+          </div>
+        </div>
+      )}
+
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--primary)" }}>

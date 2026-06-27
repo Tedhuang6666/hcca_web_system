@@ -37,6 +37,7 @@ const SEGMENT_LABELS: Record<string, string> = {
 
 const PATH_OVERRIDES: Record<string, string> = {
   "/":                            "平台首頁",
+  "/admin":                       "管理後台",
   "/documents/new":               "新增公文",
   "/documents/delegations":       "簽核代理",
   "/regulations/new":             "新增法規",
@@ -67,7 +68,6 @@ const PATH_OVERRIDES: Record<string, string> = {
  * 麵包屑中應顯示為「文字標籤」而非可點擊連結，避免 404。
  */
 const LABEL_ONLY_PATHS: Set<string> = new Set([
-  "/admin",
   "/settings",
   "/meetings/join",
   "/meetings/screen",
