@@ -2,9 +2,9 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
 import { usersApi, classApi, lineApi, discordApi, apiErrorMessage } from "@/lib/api";
 import { useModuleStatus } from "@/contexts/ModuleStatusContext";
+import { SectionSkeleton } from "@/components/ui/Skeleton";
 import type {
   DiscordBindingOut,
   LineBindingOut,
@@ -19,6 +19,15 @@ const POSITION_CATEGORY_LABEL = {
   class: "班級職位",
   system: "系統職位",
 } as const;
+
+type ProfileTab = "account" | "connections" | "positions" | "permissions";
+
+const PROFILE_TABS: { key: ProfileTab; label: string }[] = [
+  { key: "account", label: "帳號" },
+  { key: "connections", label: "連結" },
+  { key: "positions", label: "職位" },
+  { key: "permissions", label: "權限" },
+];
 
 /* ─── Inline edit field ─────────────────────────────────────────────────────── */
 function EditableField({
@@ -95,6 +104,7 @@ function EditableField({
 
 export default function ProfilePage() {
   const { isModuleClosed } = useModuleStatus();
+  const [activeTab, setActiveTab] = useState<ProfileTab>("account");
   const [user, setUser] = useState<UserRead | null>(null);
   const [positions, setPositions] = useState<UserPositionRead[]>([]);
   const [permissions, setPermissions] = useState<string[]>([]);
@@ -110,11 +120,16 @@ export default function ProfilePage() {
   const [emailVerificationPending, setEmailVerificationPending] = useState(false);
   const [emailBusy, setEmailBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
     setLoading(true);
+    setLoadError("");
     Promise.all([
-      usersApi.me().catch(() => null),
+      usersApi.me().catch((e) => {
+        setLoadError(apiErrorMessage(e, "無法載入個人資料"));
+        return null;
+      }),
       usersApi.myPositions(false).catch(() => []),
       usersApi.myEmails().catch(() => ({ emails: [] })),
     ]).then(([u, pos, emailResult]) => {
@@ -274,10 +289,50 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
-      <div className="py-24 text-center" style={{ color: "var(--text-muted)" }}>
-        <Loader2 size={32} className="mx-auto mb-3 animate-spin" style={{ color: "var(--primary)" }}
-          role="status" aria-label="載入中" />
-        <p className="text-sm">載入中…</p>
+      <div className="space-y-5 max-w-2xl mx-auto">
+        <div>
+          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>個人資料</h1>
+          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>管理您的帳號資訊與職位記錄</p>
+        </div>
+        <div
+          className="flex gap-1 rounded-lg border p-1"
+          style={{ borderColor: "var(--border)", background: "var(--bg-surface)" }}
+          aria-hidden="true">
+          {PROFILE_TABS.map((tab) => (
+            <span
+              key={tab.key}
+              className="flex-1 rounded-md px-3 py-2 text-center text-xs font-medium"
+              style={{
+                background: tab.key === "account" ? "var(--primary-dim)" : "transparent",
+                color: tab.key === "account" ? "var(--primary)" : "var(--text-muted)",
+              }}>
+              {tab.label}
+            </span>
+          ))}
+        </div>
+        <SectionSkeleton lines={6} />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="space-y-5 max-w-2xl mx-auto">
+        <div>
+          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>個人資料</h1>
+          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>管理您的帳號資訊與職位記錄</p>
+        </div>
+        <section className="card p-6 text-center">
+          <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+            個人資料載入失敗
+          </p>
+          <p className="mt-2 text-sm" style={{ color: "var(--text-muted)" }}>
+            {loadError || "目前無法取得帳號資料，請稍後再試。"}
+          </p>
+          <button className="btn btn-primary mt-4" onClick={() => window.location.reload()}>
+            重新載入
+          </button>
+        </section>
       </div>
     );
   }
@@ -290,8 +345,33 @@ export default function ProfilePage() {
         <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>管理您的帳號資訊與職位記錄</p>
       </div>
 
+      <div
+        className="flex gap-1 rounded-lg border p-1"
+        style={{ borderColor: "var(--border)", background: "var(--bg-surface)" }}
+        role="tablist"
+        aria-label="個人資料頁籤">
+        {PROFILE_TABS.map((tab) => {
+          const active = activeTab === tab.key;
+          return (
+            <button
+              key={tab.key}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setActiveTab(tab.key)}
+              className="flex-1 rounded-md px-3 py-2 text-xs font-medium transition-colors"
+              style={{
+                background: active ? "var(--primary-dim)" : "transparent",
+                color: active ? "var(--primary)" : "var(--text-muted)",
+              }}>
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
       {/* 帳號資訊卡片 */}
-      <section className="card p-6 space-y-5" aria-labelledby="profile-heading">
+      {activeTab === "account" && <section className="card p-6 space-y-5" aria-labelledby="profile-heading">
         <div className="flex items-center gap-4">
           {/* 頭像 */}
           {user?.avatar_url ? (
@@ -461,9 +541,9 @@ export default function ProfilePage() {
             </div>
           </div>
         </div>
-      </section>
+      </section>}
 
-      {!isModuleClosed("line") && <section className="card p-5 space-y-4" aria-labelledby="line-heading">
+      {activeTab === "connections" && !isModuleClosed("line") && <section className="card p-5 space-y-4" aria-labelledby="line-heading">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h2 id="line-heading" className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
@@ -508,7 +588,7 @@ export default function ProfilePage() {
         </div>
       </section>}
 
-      {!isModuleClosed("discord") && <section className="card p-5 space-y-4" aria-labelledby="discord-heading">
+      {activeTab === "connections" && !isModuleClosed("discord") && <section className="card p-5 space-y-4" aria-labelledby="discord-heading">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h2 id="discord-heading" className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
@@ -541,9 +621,16 @@ export default function ProfilePage() {
           )}
         </div>
       </section>}
+      {activeTab === "connections" && isModuleClosed("line") && isModuleClosed("discord") && (
+        <section className="card p-6 text-center">
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+            目前沒有可用的外部帳號連結服務。
+          </p>
+        </section>
+      )}
 
       {/* 現職職位 */}
-      <section className="card overflow-hidden" aria-labelledby="positions-heading">
+      {activeTab === "positions" && <section className="card overflow-hidden" aria-labelledby="positions-heading">
         <div className="px-5 py-4" style={{ borderBottom: "1px solid var(--border)" }}>
           <h2 id="positions-heading" className="text-sm font-semibold"
             style={{ color: "var(--text-primary)" }}>
@@ -599,10 +686,10 @@ export default function ProfilePage() {
             ))}
           </div>
         )}
-      </section>
+      </section>}
 
       {/* 有效權限 */}
-      {permissions.length > 0 && (
+      {activeTab === "permissions" && permissions.length > 0 && (
         <section className="card p-5" aria-labelledby="perms-heading">
           <h2 id="perms-heading" className="text-sm font-semibold mb-3"
             style={{ color: "var(--text-primary)" }}>
@@ -618,9 +705,16 @@ export default function ProfilePage() {
           </div>
         </section>
       )}
+      {activeTab === "permissions" && permissions.length === 0 && (
+        <section className="card p-6 text-center">
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+            目前沒有可顯示的有效權限。
+          </p>
+        </section>
+      )}
 
       {/* 歷史職位（折疊） */}
-      {pastPositions.length > 0 && (
+      {activeTab === "positions" && pastPositions.length > 0 && (
         <section className="card overflow-hidden" aria-labelledby="past-positions-heading">
           <div className="px-5 py-4" style={{ borderBottom: "1px solid var(--border)" }}>
             <h2 id="past-positions-heading" className="text-sm font-semibold"
