@@ -13,6 +13,7 @@ export default function NavigationProgress() {
   const barRef = useRef<HTMLDivElement>(null);
   const s = useRef({ active: false, raf: null as number | null, timer: null as ReturnType<typeof setTimeout> | null });
   const prefetched = useRef(new Set<string>());
+  const lastStart = useRef<{ href: string; at: number } | null>(null);
 
   const internalPathFromAnchor = useCallback((anchor: HTMLAnchorElement): string | null => {
     const href = anchor.getAttribute("href") ?? "";
@@ -48,7 +49,12 @@ export default function NavigationProgress() {
 
   // 導航開始：監聽內部連結點擊
   useEffect(() => {
-    const startNavigation = () => {
+    const startNavigation = (href: string) => {
+      const now = Date.now();
+      const recent = lastStart.current;
+      if (recent?.href === href && now - recent.at < 600) return;
+      lastStart.current = { href, at: now };
+
       const bar = barRef.current;
       if (!bar) return;
       if (s.current.timer !== null) { clearTimeout(s.current.timer); s.current.timer = null; }
@@ -71,7 +77,7 @@ export default function NavigationProgress() {
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
       const href = internalPathFromAnchor(anchor);
       if (!href) return;
-      startNavigation();
+      startNavigation(href);
     };
 
     const handleClick = (e: MouseEvent) => {
@@ -80,7 +86,7 @@ export default function NavigationProgress() {
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
       const href = internalPathFromAnchor(anchor);
       if (!href) return;
-      startNavigation();
+      startNavigation(href);
     };
 
     document.addEventListener("pointerdown", handlePointerDown, true);

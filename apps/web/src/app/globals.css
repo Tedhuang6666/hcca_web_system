@@ -2670,37 +2670,6 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
   animation: app-page-transition 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.app-main {
-  position: relative;
-}
-
-.app-main::before {
-  position: sticky;
-  top: -1.25rem;
-  z-index: 20;
-  display: block;
-  height: 2px;
-  margin: -2px 0 0;
-  border-radius: 999px;
-  background:
-    linear-gradient(
-      90deg,
-      transparent,
-      color-mix(in srgb, var(--primary) 58%, transparent),
-      transparent
-    );
-  opacity: 0;
-  transform: translateX(-18%);
-  transition: opacity 140ms ease;
-  content: "";
-  pointer-events: none;
-}
-
-[data-navigation="pending"] .app-main::before {
-  opacity: 1;
-  animation: navigation-pending-sheen 900ms ease-in-out infinite;
-}
-
 .motion-enter {
   animation: app-page-transition 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -2770,11 +2739,6 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
   to { transform: rotate(360deg); }
 }
 .animate-spin { animation: spin 0.8s linear infinite; }
-
-@keyframes navigation-pending-sheen {
-  0% { transform: translateX(-28%); }
-  100% { transform: translateX(28%); }
-}
 
 .loading-state {
   display: inline-flex;
@@ -2891,27 +2855,6 @@ details[open] > :not(summary) {
     radial-gradient(circle at 88% 4%, color-mix(in srgb, var(--info) 13%, transparent), transparent 30rem),
     radial-gradient(circle at 12% 92%, color-mix(in srgb, var(--primary) 10%, transparent), transparent 34rem),
     var(--bg-base);
-}
-
-.app-shell::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 80;
-  pointer-events: none;
-  opacity: 0;
-  background:
-    linear-gradient(115deg, transparent 0 38%, color-mix(in srgb, var(--primary) 10%, transparent) 46%, transparent 58%),
-    color-mix(in srgb, var(--bg-base) 5%, transparent);
-  transform: translateX(-8%);
-  transition:
-    opacity 180ms ease,
-    transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-html[data-navigation="pending"] .app-shell::after {
-  opacity: 1;
-  transform: translateX(0);
 }
 
 .app-main {
@@ -3550,7 +3493,6 @@ html[data-navigation="pending"] .app-shell::after {
   .btn-sm[aria-busy="true"]::before,
   .btn-lg[aria-busy="true"]::before,
   .is-loading::before,
-  [data-navigation="pending"] .app-main::before,
   .card-hover:hover::after,
   .btn:hover:not(:disabled)::after,
   .btn-sm:hover:not(:disabled)::after,
