@@ -277,7 +277,7 @@ async def _enrich_users_batch(db: AsyncSession, users: list[User]) -> list[UserD
     )
 
     details: list[UserDetail] = []
-    for user, effective in zip(users, perm_results):
+    for user, effective in zip(users, perm_results, strict=False):
         user_ups = ups_by_user.get(user.id, [])
         positions = []
         for up in user_ups:

@@ -12,6 +12,7 @@
 """
 
 from __future__ import annotations
+
 import unicodedata
 
 _UNSAFE_PREFIXES = ("//", "/\\", "/%2f", "/%5c")
