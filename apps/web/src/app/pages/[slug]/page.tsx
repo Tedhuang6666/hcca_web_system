@@ -5,8 +5,6 @@ import MarkdownBlock from "@/components/site/MarkdownBlock";
 import PublicSiteShell from "@/components/site/PublicSiteShell";
 import { fetchPublicBundle, fetchPublicPage } from "@/lib/serverFetch";
 
-export const dynamic = "force-dynamic";
-
 export default async function CmsPage({
   params,
 }: {

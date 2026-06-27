@@ -5,8 +5,6 @@ import PublicSiteShell from "@/components/site/PublicSiteShell";
 import { fetchPublicBundle, fetchPublicOfficers } from "@/lib/serverFetch";
 import type { PublicOfficerOut } from "@/lib/types";
 
-export const dynamic = "force-dynamic";
-
 function OfficerCard({ officer, index = 0 }: { officer: PublicOfficerOut; index?: number }) {
   return (
     <article
