@@ -231,15 +231,14 @@ export const NAV_ITEMS_BY_ID: Record<string, NavItem> = Object.fromEntries(
 );
 
 export const NAV_DEF: NavEntry[] = [
-  NAV_ITEMS[0],
   {
-    id: "daily",
-    heading: "常用",
-    items: byIds(["tasks", "announcements", "calendar"]),
+    id: "main",
+    heading: "主要",
+    items: byIds(["dashboard", "tasks", "announcements", "calendar"]),
   },
   {
-    id: "governance",
-    heading: "治理工作",
+    id: "platform",
+    heading: "自治與服務",
     items: byIds([
       "governanceHub",
       "documents",
@@ -247,45 +246,21 @@ export const NAV_DEF: NavEntry[] = [
       "regulations",
       "meetings",
       "judicialPetitions",
+      "surveys",
+      "petitions",
+      "meal",
+      "shop",
+      "shopOrders",
+      "partnerMap",
+      "examPapers",
     ]),
   },
   {
-    id: "participation",
-    heading: "參與服務",
-    items: byIds(["surveys", "petitions"]),
-  },
-  {
-    id: "campusServices",
-    heading: "校園生活",
-    items: byIds(["meal", "shop", "partnerMap", "examPapers"]),
-  },
-  {
-    id: "contentOps",
-    heading: "內容與營運",
+    id: "workbench",
+    heading: "工作後台",
     collapsible: true,
     defaultCollapsed: true,
-    items: byIds(["operations"]),
-  },
-  {
-    id: "serviceBackoffice",
-    heading: "模組管理",
-    collapsible: true,
-    defaultCollapsed: true,
-    items: byIds(["moduleBackoffice"]),
-  },
-  {
-    id: "systemAdmin",
-    heading: "系統管理",
-    collapsible: true,
-    defaultCollapsed: true,
-    items: byIds(["adminDashboard"]),
-  },
-  {
-    id: "settings",
-    heading: "設定",
-    collapsible: true,
-    defaultCollapsed: true,
-    items: byIds(["settings", "about"]),
+    items: byIds(["operations", "moduleBackoffice", "adminDashboard", "settings", "about"]),
   },
 ];
 
