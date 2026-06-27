@@ -9,7 +9,11 @@
 	}
 
 	handle_path /api/* {
-		reverse_proxy api:8000
+		reverse_proxy api:8000 {
+			health_uri /ready
+			health_interval 15s
+			health_timeout 3s
+		}
 	}
 
 	handle /ws/* {

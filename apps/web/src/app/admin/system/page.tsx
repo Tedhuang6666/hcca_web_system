@@ -27,6 +27,7 @@ import {
 import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
+import { useResilientPoll } from "@/hooks/useResilientPoll";
 import {
   ApiError,
   systemApi,
@@ -280,11 +281,8 @@ export default function SystemDefensePage() {
     }
   }, [isAdmin]);
 
-  useEffect(() => {
-    refresh();
-    const timer = setInterval(refresh, POLL_INTERVAL_MS);
-    return () => clearInterval(timer);
-  }, [refresh]);
+  useEffect(() => { void refresh(); }, [refresh]);
+  useResilientPoll(refresh, { enabled: isAdmin, intervalMs: POLL_INTERVAL_MS });
 
   const activeRules = useMemo(() => rules.filter((rule) => rule.is_active), [rules]);
   const defenseHits = useMemo(() => {

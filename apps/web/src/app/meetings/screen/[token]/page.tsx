@@ -40,6 +40,7 @@ export default function MeetingScreenPage({ params }: { params: Promise<{ token:
   const [now, setNow] = useState(Date.now());
   const readingRef = useRef<HTMLDivElement | null>(null);
   const hasScreenRef = useRef(false);
+  const wsHealthy = useRef(false);
 
   useEffect(() => {
     void params.then(({ token: nextToken }) => setToken(nextToken));
@@ -67,8 +68,13 @@ export default function MeetingScreenPage({ params }: { params: Promise<{ token:
   useEffect(() => {
     if (!token) return;
     void loadScreen(token);
-    const refreshTimer = window.setInterval(() => void loadScreen(token), 3000);
+    // 僅在 WS 斷線時降回 HTTP 輪詢（fallback），避免 WS 已連通時雙重請求
+    const refreshTimer = window.setInterval(() => {
+      if (!wsHealthy.current) void loadScreen(token);
+    }, 3000);
     const ws = new WebSocket(`${wsBase()}/public/meetings/screen/${encodeURIComponent(token)}/ws`);
+    ws.onopen = () => { wsHealthy.current = true; };
+    ws.onclose = () => { wsHealthy.current = false; };
     ws.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data) as { data?: MeetingScreenOut };
@@ -82,6 +88,7 @@ export default function MeetingScreenPage({ params }: { params: Promise<{ token:
     };
     return () => {
       window.clearInterval(refreshTimer);
+      wsHealthy.current = false;
       ws.close(1000, "screen unmounted");
     };
   }, [loadScreen, token]);

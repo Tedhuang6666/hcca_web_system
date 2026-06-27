@@ -1,8 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 
-import LawTreeEditor, { inferParentIdByPrevious } from "@/components/regulations/LawTreeEditor";
+import { inferParentIdByPrevious } from "@/lib/articleTree";
+const LawTreeEditor = dynamic(() => import("@/components/regulations/LawTreeEditor"), {
+  ssr: false,
+  loading: () => <div className="flex h-48 items-center justify-center text-sm" style={{ color: "var(--text-muted)" }}>載入編輯器…</div>,
+});
 import type { ArticleType, RegulationArticleOut } from "@/lib/types";
 import {
   ARTICLE_TYPE_LABEL,

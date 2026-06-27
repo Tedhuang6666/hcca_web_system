@@ -4,7 +4,12 @@ import { useCallback, useMemo, useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import LawTreeEditor, { inferParentIdByPrevious } from "@/components/regulations/LawTreeEditor";
+import dynamic from "next/dynamic";
+import { inferParentIdByPrevious } from "@/lib/articleTree";
+const LawTreeEditor = dynamic(() => import("@/components/regulations/LawTreeEditor"), {
+  ssr: false,
+  loading: () => <div className="flex h-48 items-center justify-center text-sm" style={{ color: "var(--text-muted)" }}>載入編輯器…</div>,
+});
 import SmartTextarea from "@/components/ui/SmartTextarea";
 import { orgsApi, regulationsApi, regulationHref, type OrgRead, apiErrorMessage } from "@/lib/api";
 import type { ArticleType, RegulationArticleOut, RegulationCategory } from "@/lib/types";

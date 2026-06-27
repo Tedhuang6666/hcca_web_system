@@ -16,7 +16,12 @@ import {
   flattenTree,
   type LawNode,
   type NewArtForm } from "@/components/regulations/RegulationEditParts";
-import LawTreeEditor, { inferParentIdByPrevious } from "@/components/regulations/LawTreeEditor";
+import dynamic from "next/dynamic";
+import { inferParentIdByPrevious } from "@/lib/articleTree";
+const LawTreeEditor = dynamic(() => import("@/components/regulations/LawTreeEditor"), {
+  ssr: false,
+  loading: () => <div className="flex h-48 items-center justify-center text-sm" style={{ color: "var(--text-muted)" }}>載入編輯器…</div>,
+});
 import { ArticleDrawer } from "@/components/regulations/ArticleDrawer";
 import SmartTextarea from "@/components/ui/SmartTextarea";
 import { usePermissions } from "@/hooks/usePermissions";

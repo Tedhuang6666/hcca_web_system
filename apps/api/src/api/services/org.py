@@ -149,12 +149,18 @@ async def delete_org(db: AsyncSession, org: Org) -> None:
 
 
 def build_org_tree(orgs: list[Org], parent_id: uuid.UUID | None = None) -> list[OrgTree]:
-    """從扁平清單遞迴建構樹狀結構。O(n²) 複雜度：每層遍歷所有節點。"""
-    return [
-        OrgTree.model_validate(org).model_copy(update={"children": build_org_tree(orgs, org.id)})
-        for org in orgs
-        if org.parent_id == parent_id
-    ]
+    """從扁平清單建構樹狀結構。O(n) adjacency map 一次 pass。"""
+    children_map: dict[uuid.UUID | None, list[Org]] = {}
+    for org in orgs:
+        children_map.setdefault(org.parent_id, []).append(org)
+
+    def _recurse(pid: uuid.UUID | None) -> list[OrgTree]:
+        return [
+            OrgTree.model_validate(o).model_copy(update={"children": _recurse(o.id)})
+            for o in children_map.get(pid, [])
+        ]
+
+    return _recurse(parent_id)
 
 
 # ── Position ─────────────────────────────────────────────────────────────────

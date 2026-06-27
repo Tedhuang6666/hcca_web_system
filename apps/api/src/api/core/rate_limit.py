@@ -12,6 +12,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from api.core.defense import get_rate_limit_config
+from api.core.prometheus_metrics import record_rate_limit_blocked
 from api.core.security import redis_client
 from api.core.trust import request_is_trusted
 
@@ -123,6 +124,7 @@ class SimpleRateLimitMiddleware:
             pipe.expire(key, win + 5)
             count, _ttl_set = await pipe.execute()
             if int(count) > req_limit:
+                record_rate_limit_blocked("redis")
                 response = JSONResponse(
                     {"detail": "請求過於頻繁，請稍後再試"},
                     status_code=429,
@@ -139,6 +141,7 @@ class SimpleRateLimitMiddleware:
                 extra={"client_ip": client_host, "path": request.url.path},
             )
             if self._check_memory_rate_limit(key, req_limit, win):
+                record_rate_limit_blocked("memory")
                 response = JSONResponse(
                     {"detail": "請求過於頻繁，請稍後再試"},
                     status_code=429,
@@ -153,6 +156,7 @@ class SimpleRateLimitMiddleware:
                 extra={"client_ip": client_host, "path": request.url.path},
             )
             if self._check_memory_rate_limit(key, req_limit, win):
+                record_rate_limit_blocked("memory")
                 response = JSONResponse(
                     {"detail": "請求過於頻繁，請稍後再試"},
                     status_code=429,

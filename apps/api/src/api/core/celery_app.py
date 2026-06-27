@@ -248,6 +248,11 @@ celery_app.conf.beat_schedule = {
         "task": "api.services.metrics_tasks.collect_queue_depth",
         "schedule": 60.0,
     },
+    # worker 心跳：每 60s 寫 /tmp/celery-heartbeat，供 Docker healthcheck 判活
+    "celery-heartbeat-every-60s": {
+        "task": "api.services.metrics_tasks.write_heartbeat",
+        "schedule": 60.0,
+    },
     # Discord 個人摘要 DM（每日 08:00 / 週日 20:00 台北）
     # 注意：celery timezone 已設為 Asia/Taipei，crontab 的 hour 直接是台北時間，勿再手動偏移 UTC。
     "discord-daily-digest-at-8am-taipei": {
