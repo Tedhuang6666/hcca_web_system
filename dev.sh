@@ -398,7 +398,7 @@ done
 info "等待 Redis 健康..."
 for i in $(seq 1 30); do
     if docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T redis \
-            redis-cli ping 2>/dev/null | grep -q PONG; then
+            redis-cli -a "${REDIS_PASSWORD:-dev-redis-change-in-prod}" --no-auth-warning ping 2>/dev/null | grep -q PONG; then
         success "Redis 已就緒"
         break
     fi
