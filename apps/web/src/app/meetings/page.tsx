@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CalendarDays, Plus, Radio, ScreenShare, Settings } from "lucide-react";
@@ -16,6 +16,46 @@ const statusLabel: Record<string, string> = {
   paused: "暫停",
   closed: "已結束",
 };
+
+const MeetingCard = memo(function MeetingCard({ meeting }: { meeting: MeetingListItem }) {
+  return (
+    <article key={meeting.id} className="rounded-lg border border-[var(--border)] p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <Link href={`/meetings/${meeting.id}`} className="text-lg font-semibold hover:underline">
+            {meeting.title}
+          </Link>
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            {statusLabel[meeting.status]} · {meeting.location || "未填地點"} · 主席{" "}
+            {meeting.chair_name || "未填"}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {meeting.status === "draft" && (
+            <Link
+              href={`/meetings/${meeting.id}/edit`}
+              className="inline-flex items-center gap-2 rounded-md border border-[var(--border)] px-3 py-2 text-sm">
+              <Settings size={15} aria-hidden="true" />
+              設定
+            </Link>
+          )}
+          <Link
+            href={`/meetings/${meeting.id}/control`}
+            className="inline-flex items-center gap-2 rounded-md border border-[var(--border)] px-3 py-2 text-sm">
+            <Radio size={15} aria-hidden="true" />
+            控制台
+          </Link>
+          <Link
+            href={`/meetings/${meeting.id}`}
+            className="inline-flex items-center gap-2 rounded-md border border-[var(--border)] px-3 py-2 text-sm">
+            <ScreenShare size={15} aria-hidden="true" />
+            大屏連結
+          </Link>
+        </div>
+      </div>
+    </article>
+  );
+});
 
 export default function MeetingsPage() {
   const router = useRouter();
@@ -44,17 +84,18 @@ export default function MeetingsPage() {
     [isSuperuser, permissions],
   );
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const [meetings, orgList] = await Promise.all([
+      const [meetings, orgList, ws] = await Promise.all([
         meetingsApi.list(),
         orgsApi.list({ active_only: true }).then(async (activeOrgs) =>
           activeOrgs.length > 0 ? activeOrgs : orgsApi.list()
         ),
+        meetingsApi.workspace().catch(() => null),
       ]);
-      meetingsApi.workspace().then(setWorkspace).catch(() => setWorkspace(null));
+      setWorkspace(ws);
       setItems(meetings);
       setOrgs(orgList);
       setOrgId((current) => current || orgList[0]?.id || "");
@@ -63,13 +104,11 @@ export default function MeetingsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [setOrgId]);
 
   useEffect(() => {
     void load();
-    // 僅在掛載時載入一次；load 為元件內函式，刻意不列入相依。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [load]);
 
   async function createMeeting() {
     if (!title.trim() || !orgId.trim()) return;
@@ -169,41 +208,7 @@ export default function MeetingsPage() {
             </div>
           )}
           {items.map((meeting) => (
-            <article key={meeting.id} className="rounded-lg border border-[var(--border)] p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <Link href={`/meetings/${meeting.id}`} className="text-lg font-semibold hover:underline">
-                    {meeting.title}
-                  </Link>
-                  <p className="mt-1 text-sm text-[var(--muted)]">
-                    {statusLabel[meeting.status]} · {meeting.location || "未填地點"} · 主席{" "}
-                    {meeting.chair_name || "未填"}
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {meeting.status === "draft" && (
-                    <Link
-                      href={`/meetings/${meeting.id}/edit`}
-                      className="inline-flex items-center gap-2 rounded-md border border-[var(--border)] px-3 py-2 text-sm">
-                      <Settings size={15} aria-hidden="true" />
-                      設定
-                    </Link>
-                  )}
-                  <Link
-                    href={`/meetings/${meeting.id}/control`}
-                    className="inline-flex items-center gap-2 rounded-md border border-[var(--border)] px-3 py-2 text-sm">
-                    <Radio size={15} aria-hidden="true" />
-                    控制台
-                  </Link>
-                  <Link
-                    href={`/meetings/${meeting.id}`}
-                    className="inline-flex items-center gap-2 rounded-md border border-[var(--border)] px-3 py-2 text-sm">
-                    <ScreenShare size={15} aria-hidden="true" />
-                    大屏連結
-                  </Link>
-                </div>
-              </div>
-            </article>
+            <MeetingCard key={meeting.id} meeting={meeting} />
           ))}
         </div>
       )}

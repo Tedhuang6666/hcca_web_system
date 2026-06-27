@@ -12,6 +12,7 @@ from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from redis.exceptions import RedisError
 from sqlalchemy import text
@@ -270,6 +271,9 @@ def create_app() -> FastAPI:
     # Middleware 注意：Starlette 是 LIFO 包裝，最後 add 的最外層先執行。
     # 所以「越早」需要的（信任代理 / payload 上限）應該「最後」add，
     # 「越晚」需要的（CORS / Session）應該「最早」add。
+    # GZip 壓縮回應：最早 add（最內層），在 response path 最先執行，
+    # 把 app 輸出的 JSON 壓縮後再向外傳給其他 middleware。minimum_size=500 避免壓縮小回應。
+    app.add_middleware(GZipMiddleware, minimum_size=500)
     app.add_middleware(
         SecurityHeadersMiddleware,
         enabled=settings.SECURITY_HEADERS_ENABLED,

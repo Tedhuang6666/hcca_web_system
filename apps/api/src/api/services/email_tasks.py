@@ -54,9 +54,18 @@ async def _dispatch_scheduled() -> dict:
                 .scalars()
                 .all()
             )
+            # 批次載入所有 sender，避免迴圈內 N+1 查詢
+            sender_ids = {msg.sender_id for msg in rows if msg.sender_id}
+            senders: dict = {}
+            if sender_ids:
+                sender_rows = (
+                    await session.execute(select(User).where(User.id.in_(sender_ids)))
+                ).scalars().all()
+                senders = {u.id: u for u in sender_rows}
+
             for msg in rows:
                 try:
-                    sender = await session.get(User, msg.sender_id) if msg.sender_id else None
+                    sender = senders.get(msg.sender_id) if msg.sender_id else None
                     if sender is None:
                         msg.status = EmailStatus.FAILED
                         msg.error_detail = "找不到寄件者"

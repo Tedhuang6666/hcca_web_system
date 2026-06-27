@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import date
 
@@ -138,10 +139,15 @@ async def get_user_org_ids_with_permission(
         .distinct()
     )
     org_ids = set(result.scalars().all())
-    for org_id in await get_user_org_ids(db, user_id, on_date=check_date):
-        codes = await get_user_permission_codes_for_org(db, user_id, org_id, on_date=check_date)
-        if permission_code in codes:
-            org_ids.add(org_id)
+    all_org_ids = await get_user_org_ids(db, user_id, on_date=check_date)
+    if all_org_ids:
+        per_org_codes = await asyncio.gather(
+            *[get_user_permission_codes_for_org(db, user_id, oid, on_date=check_date)
+              for oid in all_org_ids]
+        )
+        for oid, codes in zip(all_org_ids, per_org_codes):
+            if permission_code in codes:
+                org_ids.add(oid)
     return list(org_ids)
 
 
@@ -168,10 +174,15 @@ async def get_user_org_ids_with_any_permission(
         .distinct()
     )
     org_ids = set(result.scalars().all())
-    for org_id in await get_user_org_ids(db, user_id, on_date=check_date):
-        codes = await get_user_permission_codes_for_org(db, user_id, org_id, on_date=check_date)
-        if permission_codes & set(codes):
-            org_ids.add(org_id)
+    all_org_ids = await get_user_org_ids(db, user_id, on_date=check_date)
+    if all_org_ids:
+        per_org_codes = await asyncio.gather(
+            *[get_user_permission_codes_for_org(db, user_id, oid, on_date=check_date)
+              for oid in all_org_ids]
+        )
+        for oid, codes in zip(all_org_ids, per_org_codes):
+            if permission_codes & set(codes):
+                org_ids.add(oid)
     return list(org_ids)
 
 

@@ -51,6 +51,7 @@ services:
       -c effective_cache_size=512MB
       -c work_mem=16MB
       -c maintenance_work_mem=64MB
+      -c log_min_duration_statement=1000
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { receivablesApi } from "@/lib/api";
@@ -23,7 +23,7 @@ export default function ReceivablesPage() {
   const [summary, setSummary] = useState<ReceivableSummaryOut | null>(null);
   const [status, setStatus] = useState("");
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
     try {
       const [items, sum] = await Promise.all([
         receivablesApi.list({ activity_id: activityId, status: status || undefined, limit: 300 }),
@@ -34,12 +34,11 @@ export default function ReceivablesPage() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "載入收款資料失敗");
     }
-  };
+  }, [activityId, status]);
 
   useEffect(() => {
     void reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activityId, status]);
+  }, [reload]);
 
   const markPaid = async (id: string) => {
     try {
