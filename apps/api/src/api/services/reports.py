@@ -269,9 +269,12 @@ async def _r_superuser_list(session: AsyncSession) -> list[dict[str, Any]]:
 
 async def _r_orgs_position_summary(session: AsyncSession) -> list[dict[str, Any]]:
     """各組織職位數 / 現任人數摘要。"""
+    from sqlalchemy import text
+
     from api.models.org import Org, Position, UserPosition
 
     today = local_today()
+    await session.execute(text("SET LOCAL statement_timeout = '5s'"))
     stmt = (
         select(
             Org.id,

@@ -1,5 +1,5 @@
 "use client";
-import { createContext, useContext, ReactNode } from "react";
+import { createContext, useContext, useMemo, ReactNode } from "react";
 
 export interface PermissionContextType {
   can: (permission: string, orgId?: string) => boolean;
@@ -14,8 +14,9 @@ export function PermissionProvider({
   children: ReactNode;
   can: (permission: string, orgId?: string) => boolean;
 }) {
+  const value = useMemo(() => ({ can }), [can]);
   return (
-    <PermissionContext.Provider value={{ can }}>
+    <PermissionContext.Provider value={value}>
       {children}
     </PermissionContext.Provider>
   );

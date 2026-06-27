@@ -23,13 +23,10 @@ def auto_close_meal_schedules(self) -> dict:  # noqa: ANN001
     """
 
     async def _run() -> int:
-        from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-
-        from api.core.config import settings
+        from api.core.database import task_session
         from api.services.meal import auto_close_expired_schedules
 
-        engine = create_async_engine(str(settings.DATABASE_URL), echo=False)
-        async with AsyncSession(engine, expire_on_commit=False) as session:
+        async with task_session() as session:
             try:
                 count = await auto_close_expired_schedules(session)
                 await session.commit()
@@ -37,8 +34,6 @@ def auto_close_meal_schedules(self) -> dict:  # noqa: ANN001
             except Exception:
                 await session.rollback()
                 raise
-            finally:
-                await engine.dispose()
 
     try:
         count = asyncio.run(_run())
@@ -64,13 +59,10 @@ def check_meal_no_shows(self) -> dict:  # noqa: ANN001
     """
 
     async def _run() -> dict:
-        from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-
-        from api.core.config import settings
+        from api.core.database import task_session
         from api.services.meal import check_and_handle_no_shows
 
-        engine = create_async_engine(str(settings.DATABASE_URL), echo=False)
-        async with AsyncSession(engine, expire_on_commit=False) as session:
+        async with task_session() as session:
             try:
                 result = await check_and_handle_no_shows(session)
                 await session.commit()
@@ -78,8 +70,6 @@ def check_meal_no_shows(self) -> dict:  # noqa: ANN001
             except Exception:
                 await session.rollback()
                 raise
-            finally:
-                await engine.dispose()
 
     try:
         result = asyncio.run(_run())

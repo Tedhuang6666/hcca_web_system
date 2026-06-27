@@ -27,16 +27,14 @@ def notify_class_cadres_on_deadline(self) -> dict:  # noqa: ANN001
 
     async def _run() -> int:
         from sqlalchemy import func, select
-        from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-        from api.core.config import settings
+        from api.core.database import task_session
         from api.models.notification import Notification
         from api.models.school_class import ClassCadre
         from api.models.shop import Order, OrderItem, OrderStatus, Product
 
-        engine = create_async_engine(str(settings.DATABASE_URL), echo=False)
         notified = 0
-        async with AsyncSession(engine, expire_on_commit=False) as session:
+        async with task_session() as session:
             try:
                 now = datetime.now(UTC)
                 window_start = now - timedelta(minutes=6)
@@ -101,8 +99,6 @@ def notify_class_cadres_on_deadline(self) -> dict:  # noqa: ANN001
             except Exception:
                 await session.rollback()
                 raise
-            finally:
-                await engine.dispose()
 
     try:
         count = asyncio.run(_run())
@@ -126,13 +122,10 @@ def cleanup_expired_seat_holds(self) -> dict:  # noqa: ANN001
     """
 
     async def _run() -> int:
-        from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-
-        from api.core.config import settings
+        from api.core.database import task_session
         from api.services import seating as seating_svc
 
-        engine = create_async_engine(str(settings.DATABASE_URL), echo=False)
-        async with AsyncSession(engine, expire_on_commit=False) as session:
+        async with task_session() as session:
             try:
                 removed = await seating_svc.cleanup_expired_holds(session)
                 await session.commit()
@@ -140,8 +133,6 @@ def cleanup_expired_seat_holds(self) -> dict:  # noqa: ANN001
             except Exception:
                 await session.rollback()
                 raise
-            finally:
-                await engine.dispose()
 
     try:
         count = asyncio.run(_run())

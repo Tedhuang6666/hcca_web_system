@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogIn, MoreHorizontal } from "lucide-react";
 import { useWS } from "@/hooks/useWS";
-import { useInboxCounts } from "@/hooks/useInboxCounts";
+import { useInboxCountsContext } from "@/contexts/InboxCountsContext";
 import { useModuleStatus } from "@/contexts/ModuleStatusContext";
 import { NAV_ID_TO_MODULE, moduleForPath } from "@/lib/modules";
 import {
@@ -51,13 +51,12 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [navPrefs, setNavPrefs] = useState(() => readNavPreferences());
   const { isModuleClosed } = useModuleStatus();
-  // 待辦／未讀計數輪詢：訪客（未登入）不請求；致命狀態會自動停止。
   const {
     taskCount,
     unreadCount: notifCount,
     setUnreadCount: setNotifCount,
     refresh: refreshCounts,
-  } = useInboxCounts(role !== "guest");
+  } = useInboxCountsContext();
 
   // 解析身分（依登入狀態與權限分桶）
   useEffect(() => {
