@@ -92,6 +92,7 @@ export default function Sidebar() {
   const [meetingsUnlocked, setMeetingsUnlocked] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
+  // 初始化：讀 localStorage、設定 event listener，僅在 mount 時執行一次
   useEffect(() => {
     const userId = localStorage.getItem("user_id");
     setIsLoggedIn(!!userId);
@@ -112,16 +113,6 @@ export default function Sidebar() {
         })()
       : new Set(persisted);
 
-    // 自動展開當前路徑所在分組，不寫回 localStorage，不覆蓋用戶手動設定
-    for (const entry of NAV_DEF) {
-      if (isSection(entry) && startCollapsed.has(entry.heading)) {
-        if (entry.items.some(
-          (item) => pathname === item.href || pathname.startsWith(item.href + "/"),
-        )) {
-          startCollapsed.delete(entry.heading);
-        }
-      }
-    }
     setCollapsed(startCollapsed);
     setHydrated(true);
 
@@ -136,6 +127,25 @@ export default function Sidebar() {
       window.removeEventListener(NAV_PREF_EVENT, syncPrefs);
       window.removeEventListener("storage", syncPrefs);
     };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 切頁時自動展開當前路徑所在分組（不寫 localStorage、不覆蓋手動設定）
+  useEffect(() => {
+    setCollapsed((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const entry of NAV_DEF) {
+        if (isSection(entry) && next.has(entry.heading)) {
+          if (entry.items.some(
+            (item) => pathname === item.href || pathname.startsWith(item.href + "/"),
+          )) {
+            next.delete(entry.heading);
+            changed = true;
+          }
+        }
+      }
+      return changed ? next : prev;
+    });
   }, [pathname]);
 
   const toggleSection = (heading: string) => {

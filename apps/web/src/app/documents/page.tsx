@@ -142,8 +142,8 @@ export default function DocumentListPage() {
   const searchParams = useSearchParams();
   const initialStatus = searchParams.get("status") as DocumentStatus | null;
 
-  const [docs, setDocs] = useState<DocumentListItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [docs, setDocs] = useState<DocumentListItem[]>(() => cacheGet<DocumentListItem[]>("documents/list") ?? []);
+  const [loading, setLoading] = useState(!cacheHas("documents/list"));
   const [now, setNow] = useState<number | null>(null);
   const isMountedFetch = useRef(false);
   const [activeTab, setActiveTab] = useState<DocumentStatus | "all">(
@@ -228,6 +228,7 @@ export default function DocumentListPage() {
       setSavedFilters(savedFiltersRes as SavedFilterOut[]);
       if (docsRes !== null) {
         setDocs(docsRes as DocumentListItem[]);
+        cacheSet("documents/list", docsRes);
         setHasMore((docsRes as DocumentListItem[]).length === PAGE_SIZE);
       }
       setLoading(false);
