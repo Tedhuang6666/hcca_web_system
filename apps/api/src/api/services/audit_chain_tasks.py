@@ -108,8 +108,16 @@ def _upload_anchor_to_s3(anchor: AuditLogAnchor) -> str:
     return ""
 
 
-@celery_app.task(name="api.services.audit_chain_tasks.compute_daily_audit_anchor")
-def compute_daily_audit_anchor() -> dict:
+@celery_app.task(
+    name="api.services.audit_chain_tasks.compute_daily_audit_anchor",
+    bind=True,
+    max_retries=3,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+)
+def compute_daily_audit_anchor(self) -> dict:  # type: ignore[type-arg]
     """每日 00:05 跑（建議）。產生昨日 anchor。"""
     return asyncio.run(_compute_anchor_async())
 
@@ -147,8 +155,16 @@ async def _verify_chain_async(days: int) -> dict:
     return summary
 
 
-@celery_app.task(name="api.services.audit_chain_tasks.verify_audit_chain_integrity")
-def verify_audit_chain_integrity(days: int = 7) -> dict:
+@celery_app.task(
+    name="api.services.audit_chain_tasks.verify_audit_chain_integrity",
+    bind=True,
+    max_retries=3,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+)
+def verify_audit_chain_integrity(self, days: int = 7) -> dict:  # type: ignore[type-arg]
     """每週六 03:00 跑（建議）。重算最近 N 天 chain。"""
     return asyncio.run(_verify_chain_async(days))
 

@@ -4,10 +4,11 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import DOMPurify from "dompurify";
+import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import Modal from "@/components/ui/Modal";
-import RichTextarea, { type RichTextareaHandle } from "@/components/ui/RichTextarea";
+import type { RichTextareaHandle } from "@/components/ui/RichTextarea";
+const RichTextarea = dynamic(() => import("@/components/ui/RichTextarea"), { ssr: false });
 import RecipientPicker from "@/components/email/RecipientPicker";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import { ApiError, emailApi, apiErrorMessage } from "@/lib/api";
@@ -133,16 +134,21 @@ function ComposeInner() {
   const [trackOpens, setTrackOpens] = useState(true);
   const [trackClicks, setTrackClicks] = useState(true);
   const [preflightResult, setPreflightResult] = useState<EmailPreflightOut | null>(null);
-  const sanitizedPreviewHtml = useMemo(
-    () =>
-      typeof window === "undefined"
-        ? ""
-        : DOMPurify.sanitize(previewHtml, {
-            WHOLE_DOCUMENT: true,
-            FORBID_TAGS: ["base", "embed", "form", "iframe", "meta", "object", "script"],
-          }),
-    [previewHtml],
-  );
+  const [sanitizedPreviewHtml, setSanitizedPreviewHtml] = useState("");
+  useEffect(() => {
+    if (!previewHtml || typeof window === "undefined") {
+      setSanitizedPreviewHtml("");
+      return;
+    }
+    import("dompurify").then(({ default: DOMPurify }) => {
+      setSanitizedPreviewHtml(
+        DOMPurify.sanitize(previewHtml, {
+          WHOLE_DOCUMENT: true,
+          FORBID_TAGS: ["base", "embed", "form", "iframe", "meta", "object", "script"],
+        }),
+      );
+    });
+  }, [previewHtml]);
 
   const loadPlatformResources = useCallback(() => {
     Promise.all([

@@ -12,7 +12,11 @@ from api.services.discord_bot import enqueue_all_role_sync
 @celery_app.task(
     name="api.services.discord_sync_tasks.reconcile_members",
     bind=True,
-    max_retries=0,
+    max_retries=3,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
 )
 def reconcile_members(self) -> dict:  # type: ignore[type-arg]
     return asyncio.run(_reconcile_members())

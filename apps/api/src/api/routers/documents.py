@@ -29,8 +29,11 @@ from fastapi.responses import Response
 from sqlalchemy import and_, extract, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import json
+
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
+from api.core.security import redis_client
 from api.core.posthog import get_posthog_client
 from api.dependencies.auth import get_current_active_user, get_optional_user
 from api.models.document import (
@@ -91,6 +94,14 @@ async def get_document_stats(session: DbDep, current_user: CurrentUser) -> dict:
     """回傳當前使用者相關的公文計數，供儀表板顯示（計數限制以避免 full table scan）。"""
     from datetime import UTC, datetime
 
+    cache_key = f"doc_stats:{current_user.id}"
+    try:
+        raw = await redis_client.get(cache_key)
+        if raw:
+            return json.loads(raw)
+    except Exception:
+        pass
+
     now = datetime.now(UTC)
     base = select(Document.id).where(Document.created_by == current_user.id)
     COUNT_THRESHOLD = 100  # 限制計數至 100；超過則返回 "99+"
@@ -141,13 +152,18 @@ async def get_document_stats(session: DbDep, current_user: CurrentUser) -> dict:
         )
     )
 
-    return {
+    result = {
         "draft": draft_count,
         "pending_submitted": pending_count,
         "pending_my_approval": my_pending,
         "approved_this_month": approved_month,
         "rejected": rejected_count,
     }
+    try:
+        await redis_client.set(cache_key, json.dumps(result), ex=60)
+    except Exception:
+        pass
+    return result
 
 
 # ── CRUD ──────────────────────────────────────────────────────────────────────

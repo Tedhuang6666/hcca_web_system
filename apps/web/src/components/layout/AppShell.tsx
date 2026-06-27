@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { PermissionProvider } from "@/contexts/PermissionContext";
 import { ModuleStatusProvider, useModuleStatus } from "@/contexts/ModuleStatusContext";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -11,7 +12,7 @@ import BottomTabBar from "./BottomTabBar";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import ModuleMaintenance from "@/components/ui/ModuleMaintenance";
 import UrgentAnnouncementPopup from "@/components/announcements/UrgentAnnouncementPopup";
-import CommandMenu from "./CommandMenu";
+const CommandMenu = dynamic(() => import("./CommandMenu"), { ssr: false });
 import { PolicyConsentBanner } from "@/components/legal/PolicyConsentBanner";
 import { isPublicRoute, requiresAuthentication } from "@/lib/route-access";
 

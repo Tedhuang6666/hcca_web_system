@@ -621,6 +621,12 @@ class DocumentApprovalDelegation(Base, TimestampMixin):
     """公文簽核代理授權（請假代行職權）。"""
 
     __tablename__ = "document_approval_delegations"
+    __table_args__ = (
+        Index(
+            "ix_doc_approval_delegation_lookup",
+            "principal_user_id", "org_id", "is_active", "start_at",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     org_id: Mapped[uuid.UUID] = mapped_column(
@@ -662,6 +668,7 @@ class DocumentRecipient(Base, TimestampMixin):
     __table_args__ = (
         Index("ix_document_recipients_target_user", "target_user_id"),
         Index("ix_document_recipients_target_org", "target_org_id"),
+        Index("ix_document_recipients_doc_type", "document_id", "recipient_type"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

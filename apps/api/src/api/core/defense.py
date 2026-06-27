@@ -56,7 +56,7 @@ async def publish_rules(rules: list[dict[str, Any]]) -> None:
     global _rate_config_cache, _rules_cache
     try:
         await asyncio.wait_for(
-            redis_client.set(DEFENSE_RULES_KEY, json.dumps(rules, ensure_ascii=False)),
+            redis_client.set(DEFENSE_RULES_KEY, json.dumps(rules, ensure_ascii=False), ex=86400),
             timeout=_REDIS_TIMEOUT_SECONDS,
         )
     except (RedisError, TimeoutError):
