@@ -9,6 +9,15 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 _FALLBACK_SIGNING_KEY = "CHANGE_ME_IN_PRODUCTION_USE_256_BIT_KEY"
 
+# 已知不安全金鑰清單：dev/CI 環境使用的固定字串，生產環境必須拒絕。
+_KNOWN_INSECURE_KEYS: frozenset[str] = frozenset({
+    _FALLBACK_SIGNING_KEY,
+    "ci-test-secret-key-32-characters-min",
+    "test-secret-key",
+    "secret",
+    "dev",
+})
+
 # 視為「本機預設」的 host；這些值代表尚未為部署環境設定，可被部署網址自動覆寫。
 _LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0"})
 
@@ -366,12 +375,20 @@ class Settings(BaseSettings):
     @field_validator("SECRET_KEY")
     @classmethod
     def secret_key_must_be_set(cls, v: str) -> str:
-        if v == _FALLBACK_SIGNING_KEY:
-            import os
+        import os
 
-            if os.getenv("ENVIRONMENT", "development").lower() in {"prod", "production"}:
-                raise ValueError("生產環境必須設定非預設的 SECRET_KEY")
-            warnings.warn("SECRET_KEY 使用預設值，僅允許本機開發環境使用。", stacklevel=2)
+        is_prod = os.getenv("ENVIRONMENT", "development").lower() in {"prod", "production"}
+        if v in _KNOWN_INSECURE_KEYS:
+            if is_prod:
+                raise ValueError(
+                    "生產環境禁止使用已知不安全的 SECRET_KEY（dev/CI 固定字串），"
+                    "請使用 openssl rand -hex 32 產生專屬金鑰。"
+                )
+            warnings.warn("SECRET_KEY 使用已知不安全值，僅允許本機開發/CI 環境。", stacklevel=2)
+        elif len(v) < 32:
+            if is_prod:
+                raise ValueError("生產環境 SECRET_KEY 長度必須 ≥ 32 字元")
+            warnings.warn("SECRET_KEY 長度過短，建議使用 256-bit（64 hex chars）。", stacklevel=2)
         return v
 
     @field_validator("DATABASE_URL")
@@ -491,8 +508,8 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def production_security_must_be_explicit(self) -> "Settings":
         is_prod = self.ENVIRONMENT.lower() in {"prod", "production"}
-        if is_prod and self.SECRET_KEY == _FALLBACK_SIGNING_KEY:
-            raise ValueError("生產環境必須設定強 SECRET_KEY，不能使用預設值")
+        if is_prod and self.SECRET_KEY in _KNOWN_INSECURE_KEYS:
+            raise ValueError("生產環境必須設定強 SECRET_KEY，不能使用已知不安全值（dev/CI 固定字串）")
         if is_prod and self.DEBUG:
             raise ValueError("生產環境不可啟用 DEBUG")
         if is_prod and self.ENABLE_API_DOCS:

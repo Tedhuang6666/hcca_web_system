@@ -57,10 +57,20 @@ export function clearAuthCache(): void {
   ss()?.removeItem("permissions");
 }
 
-/** 讀取 auth cache 項目；優先 sessionStorage（敏感欄位），fallback localStorage（識別欄位）。 */
+/**
+ * 讀取識別用 auth cache 項目（只讀 localStorage）。
+ * 敏感欄位（is_superuser / is_owner / permissions）請直接讀 sessionStorage，
+ * 避免攻擊者在未登入時向 localStorage 注入偽造值。
+ */
 export function getAuthItem(key: string): string | null {
   if (typeof window === "undefined") return null;
-  return window.sessionStorage.getItem(key) ?? window.localStorage.getItem(key);
+  return window.localStorage.getItem(key);
+}
+
+/** 讀取敏感欄位（只讀 sessionStorage，不 fallback localStorage）。 */
+export function getSecureAuthItem(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  return window.sessionStorage.getItem(key);
 }
 
 export type CachedUserSummary = Pick<UserSummary, "id" | "email" | "display_name">;

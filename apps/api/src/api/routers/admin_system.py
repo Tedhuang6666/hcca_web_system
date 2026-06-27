@@ -11,6 +11,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import logging
 import time
@@ -428,6 +430,7 @@ class DeadLetterItem(BaseModel):
     kwargs: dict[str, str] = Field(default_factory=dict)
     replay_args: list[Any] | None = None
     replay_kwargs: dict[str, Any] | None = None
+    replay_sig: str | None = None
 
 
 class DeadLetterResponse(BaseModel):
@@ -638,6 +641,23 @@ async def replay_dead_letter(
     if not isinstance(replay_args, list) or not isinstance(replay_kwargs, dict):
         raise HTTPException(status_code=409, detail="此舊項目未保存可安全重放的原始參數")
 
+    # 驗證 HMAC 簽名，防止 Redis 內容遭篡改後注入惡意 args
+    replay_sig = payload.get("replay_sig") if isinstance(payload, dict) else None
+    if not replay_sig:
+        raise HTTPException(status_code=409, detail="此項目缺少驗簽資料（舊格式），請清除後重試")
+    expected_sig_body = json.dumps(
+        {"task": task, "replay_args": replay_args, "replay_kwargs": replay_kwargs},
+        sort_keys=True,
+        ensure_ascii=False,
+    ).encode()
+    expected_sig = hmac.new(
+        settings.SECRET_KEY.encode(),
+        expected_sig_body,
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(expected_sig, replay_sig):
+        raise HTTPException(status_code=409, detail="Dead letter 驗簽失敗，可能遭篡改，拒絕執行")
+
     from api.core.celery_app import celery_app
 
     result = celery_app.send_task(task, args=replay_args, kwargs=replay_kwargs)
@@ -664,7 +684,7 @@ async def get_maintenance(_admin: AdminUser) -> MaintenanceView:
     return MaintenanceView(**state)
 
 
-@router.put("/maintenance", response_model=MaintenanceView)
+@router.put("/maintenance", response_model=MaintenanceView, dependencies=[Depends(require_admin_mfa)])
 async def update_maintenance(
     body: MaintenanceBody, session: DbDep, _admin: AdminUser
 ) -> MaintenanceView:
@@ -696,7 +716,7 @@ async def list_flags(_admin: AdminUser) -> list[FeatureFlagItem]:
     return [FeatureFlagItem(**i) for i in items]
 
 
-@router.patch("/feature-flags/{key:path}", response_model=FeatureFlagItem)
+@router.patch("/feature-flags/{key:path}", response_model=FeatureFlagItem, dependencies=[Depends(require_admin_mfa)])
 async def update_flag(
     key: str, body: SetFlagBody, session: DbDep, _admin: AdminUser
 ) -> FeatureFlagItem:
@@ -721,7 +741,7 @@ async def update_flag(
 # ── Load Shed Mode ───────────────────────────────────────────────────────────
 
 
-@router.put("/load-shed", response_model=dict)
+@router.put("/load-shed", response_model=dict, dependencies=[Depends(require_admin_mfa)])
 async def update_load_shed_mode(body: LoadShedBody, session: DbDep, _admin: AdminUser) -> dict:
     mode = await set_load_shed_force_mode(body.mode)
     await audit_svc.record(
@@ -776,7 +796,7 @@ async def list_modules(_admin: AdminUser) -> list[ModuleStatusOut]:
     return out
 
 
-@router.put("/modules/{module_id}/maintenance", response_model=ModuleStatusOut)
+@router.put("/modules/{module_id}/maintenance", response_model=ModuleStatusOut, dependencies=[Depends(require_admin_mfa)])
 async def update_module_maintenance(
     module_id: str, body: ModuleMaintenanceBody, session: DbDep, _admin: AdminUser
 ) -> ModuleStatusOut:
@@ -1084,7 +1104,7 @@ async def list_defense_rules(
     return [DefenseRuleOut(**defense_svc.rule_to_dict(row)) for row in rows]
 
 
-@router.post("/defense/rules", response_model=DefenseRuleOut, status_code=status.HTTP_201_CREATED)
+@router.post("/defense/rules", response_model=DefenseRuleOut, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_admin_mfa)])
 async def create_defense_rule(
     body: DefenseRuleCreate, session: DbDep, _admin: AdminUser
 ) -> DefenseRuleOut:
@@ -1105,7 +1125,7 @@ async def create_defense_rule(
     return DefenseRuleOut(**defense_svc.rule_to_dict(rule))
 
 
-@router.patch("/defense/rules/{rule_id}", response_model=DefenseRuleOut)
+@router.patch("/defense/rules/{rule_id}", response_model=DefenseRuleOut, dependencies=[Depends(require_admin_mfa)])
 async def update_defense_rule(
     rule_id: uuid.UUID, body: DefenseRuleUpdate, session: DbDep, _admin: AdminUser
 ) -> DefenseRuleOut:
@@ -1119,7 +1139,7 @@ async def update_defense_rule(
     return DefenseRuleOut(**defense_svc.rule_to_dict(rule))
 
 
-@router.delete("/defense/rules/{rule_id}", response_model=DefenseRuleOut)
+@router.delete("/defense/rules/{rule_id}", response_model=DefenseRuleOut, dependencies=[Depends(require_admin_mfa)])
 async def deactivate_defense_rule(
     rule_id: uuid.UUID, session: DbDep, _admin: AdminUser
 ) -> DefenseRuleOut:
@@ -1152,6 +1172,7 @@ async def preview_user_block(
     "/defense/user-blocks",
     response_model=UserBlockResult,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_admin_mfa)],
 )
 async def block_user(
     body: UserBlockBody,
@@ -1208,7 +1229,7 @@ async def get_rate_limit(_admin: AdminUser) -> dict:
     return await get_rate_limit_config()
 
 
-@router.put("/rate-limit", response_model=dict)
+@router.put("/rate-limit", response_model=dict, dependencies=[Depends(require_admin_mfa)])
 async def update_rate_limit(body: RateLimitConfigBody, session: DbDep, _admin: AdminUser) -> dict:
     config = body.model_dump()
     return await defense_svc.set_rate_limit_config(session, actor=_admin, config=config)
@@ -1222,7 +1243,7 @@ async def get_ip_blocklist(_admin: AdminUser) -> list[IpBlockedItem]:
     return [IpBlockedItem(**i) for i in await ip_list_blocked()]
 
 
-@router.post("/ip-blocklist", response_model=IpBlockedItem, status_code=status.HTTP_201_CREATED)
+@router.post("/ip-blocklist", response_model=IpBlockedItem, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_admin_mfa)])
 async def add_ip_block(body: IpBlockBody, session: DbDep, _admin: AdminUser) -> IpBlockedItem:
     await ip_block(body.ip, reason=body.reason, ttl_seconds=body.ttl_seconds)
     expires_at = (time.time() + body.ttl_seconds) if body.ttl_seconds else None
@@ -1368,7 +1389,7 @@ async def clear_recent_errors(_admin: AdminUser) -> dict:
 # ── 復原工具（清快取 / 升級資料庫 / 重啟） ──────────────────────────────────
 
 
-@router.post("/recovery/clear-cache", response_model=dict, summary="清除應用層快取")
+@router.post("/recovery/clear-cache", response_model=dict, summary="清除應用層快取", dependencies=[Depends(require_admin_mfa)])
 async def recovery_clear_cache(session: DbDep, _admin: AdminUser) -> dict:
     result = await recovery.clear_app_cache()
     await audit_svc.record(
