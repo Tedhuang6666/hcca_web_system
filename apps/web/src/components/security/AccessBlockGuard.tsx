@@ -1,18 +1,21 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 
 import { apiUrl } from "@/lib/config";
 
 export default function AccessBlockGuard() {
   const pathname = usePathname();
+  const pathnameRef = useRef(pathname);
+  pathnameRef.current = pathname;
 
   useEffect(() => {
-    if (pathname === "/blocked") return;
+    if (pathnameRef.current === "/blocked") return;
     let cancelled = false;
 
     async function checkAccess() {
+      if (pathnameRef.current === "/blocked") return;
       try {
         const response = await fetch(apiUrl("/system/access-status"), {
           credentials: "include",
@@ -40,7 +43,7 @@ export default function AccessBlockGuard() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [pathname]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return null;
 }
