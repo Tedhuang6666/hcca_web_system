@@ -108,95 +108,92 @@ function SearchInner() {
       </form>
 
       {searched && (
-        <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="搜尋分類">
-          {TABS.map(({ key, label }) => {
-            const active = tab === key;
-            const count = counts[key] ?? 0;
-            return (
-              <button
-                key={key}
-                role="tab"
-                aria-selected={active}
-                onClick={() => setTab(key)}
-                className="px-3 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer hover:opacity-80"
-                style={
-                  active
-                    ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
-                    : { color: "var(--text-muted)", border: "1px solid var(--border)", background: "var(--bg-surface)" }
-                }
-              >
-                {label}
-                {count > 0 && (
-                  <span className="ml-1 opacity-70">({count})</span>
-                )}
-              </button>
-            );
-          })}
-        </div>
+        <nav className="module-tabs-scroll max-w-full overflow-x-auto" aria-label="搜尋分類">
+          <div className="module-tabs-list" role="tablist">
+            {TABS.map(({ key, label }) => {
+              const active = tab === key;
+              const count = counts[key] ?? 0;
+              return (
+                <button
+                  key={key}
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setTab(key)}
+                  className={`module-tab-link cursor-pointer${active ? " is-active" : ""}`}
+                >
+                  <span>{label}</span>
+                  {count > 0 && <span className="text-xs opacity-70">({count})</span>}
+                </button>
+              );
+            })}
+          </div>
+        </nav>
       )}
 
-      {loading ? (
-        <ListPageSkeleton rows={5} showHeader={false} showFilters={false} />
-      ) : !searched ? (
-        <div className="py-16 text-center" style={{ color: "var(--text-muted)" }}>
-          <SearchIcon size={36} aria-hidden style={{ color: "var(--text-disabled)" }} className="mx-auto mb-3" />
-          <p className="text-sm">輸入關鍵字開始搜尋</p>
-        </div>
-      ) : filtered.length === 0 ? (
-        <SmartEmptyState
-          reason="filtered"
-          subject="結果"
-          message={`找不到符合「${activeQ}」的${tab === "all" ? "" : KIND_META[tab as Exclude<Kind, "all">].label}結果，試試其他關鍵字`}
-          onClearFilters={() => setTab("all")}
-        />
-      ) : (
-        <ul className="space-y-2 list-none p-0 m-0">
-          {filtered.map((r) => {
-            const meta = KIND_META[r.kind as Exclude<Kind, "all">];
-            const Icon = meta?.Icon ?? FileText;
-            const color = meta?.color ?? "var(--text-muted)";
-            return (
-              <li key={`${r.kind}-${r.id}`}>
-                <Link
-                  href={r.href}
-                  className="card card-hover flex items-start gap-3 p-4"
-                  style={{ textDecoration: "none" }}
-                >
-                  <span
-                    className="flex-shrink-0 rounded-lg p-2"
-                    style={{ background: "var(--bg-elevated)", color }}
+      <div key={tab} className="tab-panel-transition">
+        {loading ? (
+          <ListPageSkeleton rows={5} showHeader={false} showFilters={false} />
+        ) : !searched ? (
+          <div className="py-16 text-center" style={{ color: "var(--text-muted)" }}>
+            <SearchIcon size={36} aria-hidden style={{ color: "var(--text-disabled)" }} className="mx-auto mb-3" />
+            <p className="text-sm">輸入關鍵字開始搜尋</p>
+          </div>
+        ) : filtered.length === 0 ? (
+          <SmartEmptyState
+            reason="filtered"
+            subject="結果"
+            message={`找不到符合「${activeQ}」的${tab === "all" ? "" : KIND_META[tab as Exclude<Kind, "all">].label}結果，試試其他關鍵字`}
+            onClearFilters={() => setTab("all")}
+          />
+        ) : (
+          <ul className="space-y-2 list-none p-0 m-0">
+            {filtered.map((r) => {
+              const meta = KIND_META[r.kind as Exclude<Kind, "all">];
+              const Icon = meta?.Icon ?? FileText;
+              const color = meta?.color ?? "var(--text-muted)";
+              return (
+                <li key={`${r.kind}-${r.id}`}>
+                  <Link
+                    href={r.href}
+                    className="card card-hover flex items-start gap-3 p-4"
+                    style={{ textDecoration: "none" }}
                   >
-                    <Icon size={16} aria-hidden />
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>
-                        {r.title}
-                      </h3>
-                      {meta && (
-                        <span
-                          className="text-[10px] font-medium px-1.5 py-0.5 rounded"
-                          style={{ color, background: `${color}15`, border: `1px solid ${color}33` }}
+                    <span
+                      className="flex-shrink-0 rounded-lg p-2"
+                      style={{ background: "var(--bg-elevated)", color }}
+                    >
+                      <Icon size={16} aria-hidden />
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>
+                          {r.title}
+                        </h3>
+                        {meta && (
+                          <span
+                            className="text-[10px] font-medium px-1.5 py-0.5 rounded"
+                            style={{ color, background: `${color}15`, border: `1px solid ${color}33` }}
+                          >
+                            {meta.label}
+                          </span>
+                        )}
+                      </div>
+                      {r.summary && (
+                        <p
+                          className="text-xs mt-1 line-clamp-2"
+                          style={{ color: "var(--text-muted)" }}
                         >
-                          {meta.label}
-                        </span>
+                          {r.summary}
+                        </p>
                       )}
                     </div>
-                    {r.summary && (
-                      <p
-                        className="text-xs mt-1 line-clamp-2"
-                        style={{ color: "var(--text-muted)" }}
-                      >
-                        {r.summary}
-                      </p>
-                    )}
-                  </div>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }

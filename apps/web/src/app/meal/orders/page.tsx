@@ -493,26 +493,24 @@ export default function MealOrdersPage() {
 
       {/* 分頁（僅 meal:manage 才有「商家管理」tab） */}
       {isManager && (
-        <div className="flex gap-1 p-1 rounded-lg"
-          style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
-          {([
+        <nav className="module-tabs-scroll max-w-full overflow-x-auto" aria-label="訂單分頁">
+          <div className="module-tabs-list w-full sm:w-auto">
+            {([
             { key: "my",     label: "我的訂單" },
             { key: "vendor", label: "商家管理" },
-          ] as { key: PageTab; label: string }[]).map(({ key, label }) => (
+            ] as { key: PageTab; label: string }[]).map(({ key, label }) => (
             <button key={key} onClick={() => setTab(key)}
-              className="flex-1 px-4 py-1.5 rounded-md text-xs font-medium transition-all"
-              style={tab === key
-                ? { background: "var(--primary-dim)", border: "1px solid var(--border-strong)", color: "var(--primary)" }
-                : { color: "var(--text-muted)" }}>
-              {label}
+              className={`module-tab-link flex-1 cursor-pointer${tab === key ? " is-active" : ""}`}>
+              <span>{label}</span>
             </button>
-          ))}
-        </div>
+            ))}
+          </div>
+        </nav>
       )}
 
       {/* ── 我的訂單 ─────────────────────────────────────────────────────── */}
       {tab === "my" && (
-        <>
+        <div key="my" className="tab-panel-transition space-y-5">
           {/* 統計 */}
           {orders.length > 0 && (
             <div className="grid grid-cols-3 gap-3">
@@ -558,11 +556,15 @@ export default function MealOrdersPage() {
               </ul>
             )}
           </div>
-        </>
+        </div>
       )}
 
       {/* ── 商家管理 ─────────────────────────────────────────────────────── */}
-      {tab === "vendor" && isManager && <VendorDashboard />}
+      {tab === "vendor" && isManager && (
+        <div key="vendor" className="tab-panel-transition">
+          <VendorDashboard />
+        </div>
+      )}
     </div>
   );
 }
