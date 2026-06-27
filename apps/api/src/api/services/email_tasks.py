@@ -28,18 +28,15 @@ async def _dispatch_scheduled() -> dict:
     from datetime import UTC, datetime
 
     from sqlalchemy import select
-    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-    from sqlalchemy.pool import NullPool
 
-    from api.core.config import settings
+    from api.core.database import task_session
     from api.models.email_message import EmailMessage, EmailStatus
     from api.models.user import User
     from api.routers.email import _send_now
 
-    engine = create_async_engine(str(settings.DATABASE_URL), poolclass=NullPool)
     dispatched = 0
-    try:
-        async with AsyncSession(engine) as session:
+    async with task_session() as session:
+        try:
             now = datetime.now(UTC)
             rows = (
                 (
@@ -79,6 +76,7 @@ async def _dispatch_scheduled() -> dict:
                     msg.error_detail = str(exc)[:500]
                     logger.warning("預約郵件 %s 寄送失敗: %s", msg.id, exc)
             await session.commit()
-    finally:
-        await engine.dispose()
+        except Exception:
+            await session.rollback()
+            raise
     return {"status": "ok", "dispatched": dispatched}

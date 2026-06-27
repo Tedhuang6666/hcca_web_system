@@ -20,35 +20,12 @@ from pathlib import Path
 from typing import Any
 
 import redis.asyncio as aioredis
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.celery_app import celery_app
 from api.core.config import settings
+from api.core.database import task_session as _task_session
 
 logger = logging.getLogger(__name__)
-
-
-@asynccontextmanager
-async def _task_session() -> AsyncIterator[AsyncSession]:
-    """每次 asyncio.run() 以新 loop 專屬 engine 開 session 並 dispose。
-
-    watchdog 由 Celery worker 同步 task 內的 asyncio.run() 驅動，每次都是新的
-    event loop。若沿用模組層級共享的 AsyncSessionLocal，其 pooled asyncpg 連線會
-    綁定到上一個（已關閉的）loop，再次使用時拋 "Event loop is closed" /
-    "got Future attached to a different loop"。故每次開新 engine 並用後即 dispose。
-    """
-    from sqlalchemy.ext.asyncio import create_async_engine
-    from sqlalchemy.pool import NullPool
-
-    # NullPool：連線一還回（session 結束）就硬關，不留在 pool 裡跨 loop。
-    # 否則預設 AsyncAdaptedQueuePool 會留住 asyncpg 連線，下個 asyncio.run() 的
-    # 新 loop 觸發其 finaliser 時拋 "Event loop is closed"。
-    engine = create_async_engine(str(settings.DATABASE_URL), echo=False, poolclass=NullPool)
-    try:
-        async with AsyncSession(engine, expire_on_commit=False) as session:
-            yield session
-    finally:
-        await engine.dispose()
 
 
 @asynccontextmanager

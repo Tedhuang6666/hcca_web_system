@@ -11,7 +11,7 @@ import type { NotificationItem, TaskItem } from "@/lib/api";
 import { apiUrl } from "@/lib/config";
 import { useWS } from "@/hooks/useWS";
 import { useLowDataMode } from "@/hooks/useLowDataMode";
-import { useInboxCounts } from "@/hooks/useInboxCounts";
+import { useInboxCountsContext } from "@/contexts/InboxCountsContext";
 import { getBreadcrumbs, getCompactCrumbs, getPageTitle } from "@/lib/breadcrumb";
 import type { Crumb } from "@/lib/breadcrumb";
 import { OPEN_COMMAND_MENU_EVENT } from "./CommandMenu";
@@ -86,10 +86,8 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
   const [previewTasks, setPreviewTasks] = useState<TaskItem[]>([]);
   const [userRoom, setUserRoom] = useState<string | null>(null);
   const lowDataMode = useLowDataMode();
-  // 待辦／未讀計數輪詢：未登入（userRoom 為 null）前完全不請求；
-  // 命中 401/522 等致命狀態會自動停止，不再每分鐘空打。
   const { taskCount, unreadCount, setTaskCount, setUnreadCount, refresh: refreshCounts } =
-    useInboxCounts(Boolean(userRoom));
+    useInboxCountsContext();
   const menuRef = useRef<HTMLDivElement>(null);
   const bellRef = useRef<HTMLDivElement>(null);
 

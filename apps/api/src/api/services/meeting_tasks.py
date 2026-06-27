@@ -33,16 +33,14 @@ def send_meeting_start_reminders(self) -> dict:  # noqa: ANN001
 
     async def _run() -> int:
         from sqlalchemy import select
-        from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
         from sqlalchemy.orm import selectinload
 
-        from api.core.config import settings
+        from api.core.database import task_session
         from api.models.meeting import Meeting, MeetingStatus
         from api.models.notification import Notification
 
-        engine = create_async_engine(str(settings.DATABASE_URL), echo=False)
         reminded = 0
-        async with AsyncSession(engine, expire_on_commit=False) as session:
+        async with task_session() as session:
             try:
                 now = datetime.now(UTC)
                 meetings = (
@@ -87,8 +85,6 @@ def send_meeting_start_reminders(self) -> dict:  # noqa: ANN001
             except Exception:
                 await session.rollback()
                 raise
-            finally:
-                await engine.dispose()
 
     try:
         count = asyncio.run(_run())

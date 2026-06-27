@@ -17,13 +17,10 @@ def audit_regulation_consistency(self) -> dict:  # noqa: ANN001
     """每日巡檢法規狀態與公布令一致性。"""
 
     async def _run() -> dict:
-        from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-
-        from api.core.config import settings
+        from api.core.database import task_session
         from api.services.regulation_consistency import audit_regulation_document_consistency
 
-        engine = create_async_engine(str(settings.DATABASE_URL), echo=False)
-        async with AsyncSession(engine, expire_on_commit=False) as session:
+        async with task_session() as session:
             try:
                 result = await audit_regulation_document_consistency(session)
                 await session.commit()
@@ -31,8 +28,6 @@ def audit_regulation_consistency(self) -> dict:  # noqa: ANN001
             except Exception:
                 await session.rollback()
                 raise
-            finally:
-                await engine.dispose()
 
     try:
         result = asyncio.run(_run())

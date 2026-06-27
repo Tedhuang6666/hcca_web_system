@@ -30,18 +30,20 @@ async def cache_set(key: str, value: Any, ttl: int = 60) -> None:
         logger.error("cache_set failed key=%s ttl=%d", key, ttl, exc_info=True)
 
 
-async def cache_invalidate(pattern: str) -> None:
+async def cache_invalidate(pattern: str, max_iterations: int = 500) -> None:
     """清除符合 glob pattern 的所有快取鍵；Redis 異常時記錄但不中斷。"""
     try:
-        keys = []
+        keys: list[str] = []
         cursor = 0
-        while True:
+        for _ in range(max_iterations):
             cursor, batch = await redis_client.scan(cursor, match=pattern, count=100)
             keys.extend(batch)
             if cursor == 0:
                 break
+        else:
+            logger.warning("cache_invalidate iteration limit reached pattern=%s keys_so_far=%d", pattern, len(keys))
         if keys:
-            await redis_client.delete(*keys)
+            await redis_client.unlink(*keys)
     except Exception:
         logger.error("cache_invalidate failed pattern=%s", pattern, exc_info=True)
 

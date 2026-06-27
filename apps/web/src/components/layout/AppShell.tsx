@@ -3,8 +3,10 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { PermissionProvider } from "@/contexts/PermissionContext";
+import { InboxCountsProvider } from "@/contexts/InboxCountsContext";
 import { ModuleStatusProvider, useModuleStatus } from "@/contexts/ModuleStatusContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useInboxCounts } from "@/hooks/useInboxCounts";
 import { moduleForPath } from "@/lib/modules";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
@@ -49,6 +51,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
   const [authReady, setAuthReady] = useState(false);
   const [redirecting, setRedirecting] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const inboxCounts = useInboxCounts(isLoggedIn);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
   // 記住已對哪個 pathname 觸發過導向，避免同一路徑重複呼叫 router.replace
@@ -98,6 +101,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
 
   return (
     <PermissionProvider can={can}>
+      <InboxCountsProvider value={inboxCounts}>
       <ConfirmProvider>
       <div className="app-shell flex h-screen overflow-hidden">
         <a
@@ -167,6 +171,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
         />
       </div>
       </ConfirmProvider>
+      </InboxCountsProvider>
     </PermissionProvider>
   );
 }

@@ -6,12 +6,11 @@ import asyncio
 import logging
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from api.core.cache import cache_invalidate_user_permissions
 from api.core.celery_app import celery_app
 from api.core.clock import local_today
-from api.core.config import settings
+from api.core.database import task_session
 from api.models.org import UserPosition
 
 logger = logging.getLogger(__name__)
@@ -29,25 +28,21 @@ def invalidate_expired_user_caches(self) -> dict:  # type: ignore[type-arg]
 
 async def _invalidate_async() -> dict:
     today = local_today()
-    engine = create_async_engine(str(settings.DATABASE_URL))
     user_ids: set[str] = set()
-    try:
-        async with AsyncSession(engine) as session:
-            rows = (
-                (
-                    await session.execute(
-                        select(UserPosition.user_id).where(
-                            UserPosition.end_date.is_not(None),
-                            UserPosition.end_date < today,
-                        )
+    async with task_session() as session:
+        rows = (
+            (
+                await session.execute(
+                    select(UserPosition.user_id).where(
+                        UserPosition.end_date.is_not(None),
+                        UserPosition.end_date < today,
                     )
                 )
-                .scalars()
-                .all()
             )
-            user_ids = {str(uid) for uid in rows}
-    finally:
-        await engine.dispose()
+            .scalars()
+            .all()
+        )
+        user_ids = {str(uid) for uid in rows}
 
     for uid in user_ids:
         await cache_invalidate_user_permissions(uid)
