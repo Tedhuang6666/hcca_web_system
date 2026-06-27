@@ -28,8 +28,8 @@ export default function LoginPage() {
   useEffect(() => {
     setMounted(true);
     const frontendOrigin = encodeURIComponent(window.location.origin);
-    const next = searchParams.get("next");
-    const nextParam = next ? `&next=${encodeURIComponent(next)}` : "";
+    const next = searchParams.get("next") ?? "/dashboard";
+    const nextParam = `&next=${encodeURIComponent(next)}`;
     setGoogleLoginHref(
       apiUrl(`/auth/google/login?frontend_origin=${frontendOrigin}${nextParam}`),
     );
@@ -37,7 +37,7 @@ export default function LoginPage() {
       apiUrl(`/auth/discord/login?frontend_origin=${frontendOrigin}${nextParam}`),
     );
     if (localStorage.getItem("user_id")) {
-      window.location.replace("/");
+      window.location.replace(next);
     }
   }, [searchParams]);
 

@@ -1302,7 +1302,7 @@ export const lineApi = {
 
 export const discordApi = {
   me: () => get<DiscordBindingOut>("/discord/me"),
-  loginUrl: (next = "/profile") => `${BASE}/discord/login?next=${encodeURIComponent(next)}`,
+  loginUrl: (next = "/dashboard") => `${BASE}/discord/login?next=${encodeURIComponent(next)}`,
   unlink: () => del<void>("/discord/me"),
   syncMe: () => post<void>("/discord/me/sync", {}),
   health: () => get<DiscordBotHealthOut>("/discord/health"),
