@@ -128,6 +128,7 @@ export default function RegulationsPage() {
     [category, search, showAll, canManage, workflow],
     "載入失敗",
     [] as Array<RegulationListItem | RegulationSearchResult>,
+    "regulations/list",
   );
 
   const sorted = useMemo(
@@ -259,7 +260,10 @@ export default function RegulationsPage() {
           }}
         />
       ) : (
-        <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))" }}>
+        <div
+          className="data-reveal grid gap-3"
+          style={{ gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))" }}
+        >
           {sorted.map((reg) => (
             <RegCard key={reg.id} reg={reg} keyword={search.trim()} />
           ))}

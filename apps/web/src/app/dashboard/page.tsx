@@ -17,6 +17,7 @@ import {
   type TaskItem,
   type TaskModule,
 } from "@/lib/api";
+import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useRecentItems } from "@/hooks/useRecentItems";
 import OnboardingHint from "@/components/ui/OnboardingHint";
@@ -260,9 +261,9 @@ function SkeletonCard() {
 export default function DashboardPage() {
   const [userName, setUserName] = useState("");
   const [greeting, setGreeting] = useState("歡迎回來");
-  const [data, setData] = useState<DashboardResponse | null>(null);
-  const [tasks, setTasks] = useState<TaskInboxResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<DashboardResponse | null>(() => cacheGet("dashboard/data") ?? null);
+  const [tasks, setTasks] = useState<TaskInboxResponse | null>(() => cacheGet("dashboard/tasks") ?? null);
+  const [loading, setLoading] = useState(!cacheHas("dashboard/data"));
   const { can, canAny, isAdmin, permissions } = usePermissions();
   const recents = useRecentItems(6);
 
@@ -278,11 +279,18 @@ export default function DashboardPage() {
   useEffect(() => {
     const userId = localStorage.getItem("user_id");
     if (!userId) { setLoading(false); return; }
+    // 有快取時背景靜默更新，不顯示 loading
+    if (!cacheHas("dashboard/data")) setLoading(true);
     Promise.allSettled([dashboardApi.get(), tasksApi.list()])
       .then(([dashboardRes, tasksRes]) => {
-        if (dashboardRes.status === "fulfilled") setData(dashboardRes.value);
-        else throw dashboardRes.reason;
-        if (tasksRes.status === "fulfilled") setTasks(tasksRes.value);
+        if (dashboardRes.status === "fulfilled") {
+          setData(dashboardRes.value);
+          cacheSet("dashboard/data", dashboardRes.value);
+        } else throw dashboardRes.reason;
+        if (tasksRes.status === "fulfilled") {
+          setTasks(tasksRes.value);
+          cacheSet("dashboard/tasks", tasksRes.value);
+        }
       })
       .catch((e) => {
         toast.error("無法載入儀表板");

@@ -64,6 +64,7 @@ export default function AnnouncementsPage() {
     [activityId, showDrafts, canListDrafts],
     "載入公告失敗",
     [] as AnnouncementListItem[],
+    "announcements/list",
   );
 
   const activityNameById = useMemo(
