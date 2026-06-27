@@ -59,10 +59,6 @@ async def get_user_permission_codes(
         .distinct()
     )
     codes = set(result.scalars().all())
-    org_ids = await get_user_org_ids(db, user_id, on_date=check_date)
-    for org_id in org_ids:
-        if await user_is_org_leader(db, user_id, org_id, on_date=check_date):
-            codes.update(await get_org_permission_codes(db, org_id))
 
     # 快取今天的權限結果（180 秒 TTL）
     if on_date is None:
@@ -98,8 +94,6 @@ async def get_user_permission_codes_for_org(
         .distinct()
     )
     codes = set(result.scalars().all())
-    if await user_is_org_leader(db, user_id, org_id, on_date=check_date):
-        codes.update(await get_org_permission_codes(db, org_id))
     return frozenset(codes)
 
 
