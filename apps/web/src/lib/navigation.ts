@@ -73,6 +73,14 @@ export const NAV_ITEMS: NavItem[] = [
     perm: "announcement:create",
   },
   {
+    id: "adminDashboard",
+    href: "/admin",
+    iconKey: "dashboard",
+    label: "管理後台",
+    perm: "admin:users",
+    end: true,
+  },
+  {
     id: "peopleAdmin",
     href: "/admin/people",
     iconKey: "people",
@@ -273,6 +281,7 @@ export const NAV_DEF: NavEntry[] = [
     collapsible: true,
     defaultCollapsed: true,
     items: byIds([
+      "adminDashboard",
       "peopleAdmin",
       "systemDefense",
       "modulesMaintenance",
