@@ -1,6 +1,6 @@
 "use client";
-import { useEffect, useRef } from "react";
-import { usePathname } from "next/navigation";
+import { useCallback, useEffect, useRef } from "react";
+import { usePathname, useRouter } from "next/navigation";
 
 /**
  * 全域導航進度條。
@@ -9,8 +9,27 @@ import { usePathname } from "next/navigation";
  */
 export default function NavigationProgress() {
   const pathname = usePathname();
+  const router = useRouter();
   const barRef = useRef<HTMLDivElement>(null);
   const s = useRef({ active: false, raf: null as number | null, timer: null as ReturnType<typeof setTimeout> | null });
+  const prefetched = useRef(new Set<string>());
+
+  const internalPathFromAnchor = useCallback((anchor: HTMLAnchorElement): string | null => {
+    const href = anchor.getAttribute("href") ?? "";
+    if (!href || href.startsWith("#")) return null;
+    if (anchor.target === "_blank") return null;
+
+    try {
+      const url = new URL(href, window.location.origin);
+      if (url.origin !== window.location.origin) return null;
+      if (url.pathname === window.location.pathname && url.search === window.location.search) {
+        return null;
+      }
+      return `${url.pathname}${url.search}`;
+    } catch {
+      return null;
+    }
+  }, []);
 
   // 導航完成：pathname 改變時觸發
   useEffect(() => {
@@ -32,11 +51,9 @@ export default function NavigationProgress() {
     const handleClick = (e: MouseEvent) => {
       const anchor = (e.target as Element).closest("a[href]") as HTMLAnchorElement | null;
       if (!anchor) return;
-      const href = anchor.getAttribute("href") ?? "";
-      // 只處理內部路徑
-      if (!href.startsWith("/") && !href.startsWith(window.location.origin)) return;
-      if (anchor.target === "_blank") return;
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const href = internalPathFromAnchor(anchor);
+      if (!href) return;
 
       const bar = barRef.current;
       if (!bar) return;
@@ -59,7 +76,32 @@ export default function NavigationProgress() {
       document.removeEventListener("click", handleClick, true);
       document.documentElement.removeAttribute("data-navigation");
     };
-  }, []);
+  }, [internalPathFromAnchor]);
+
+  // 預熱高頻導航：使用者 hover / focus / touch 到內部連結時先載入 RSC payload。
+  useEffect(() => {
+    const warmup = (target: EventTarget | null) => {
+      const anchor = (target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+      if (!anchor) return;
+      const href = internalPathFromAnchor(anchor);
+      if (!href || prefetched.current.has(href)) return;
+      prefetched.current.add(href);
+      router.prefetch(href);
+    };
+
+    const handlePointerOver = (e: PointerEvent) => warmup(e.target);
+    const handleFocusIn = (e: FocusEvent) => warmup(e.target);
+    const handleTouchStart = (e: TouchEvent) => warmup(e.target);
+
+    document.addEventListener("pointerover", handlePointerOver, { passive: true });
+    document.addEventListener("focusin", handleFocusIn);
+    document.addEventListener("touchstart", handleTouchStart, { passive: true });
+    return () => {
+      document.removeEventListener("pointerover", handlePointerOver);
+      document.removeEventListener("focusin", handleFocusIn);
+      document.removeEventListener("touchstart", handleTouchStart);
+    };
+  }, [internalPathFromAnchor, router]);
 
   return (
     <div
