@@ -79,6 +79,13 @@ export default function NotificationSettingsPage() {
   const [pushBusy, setPushBusy] = useState(false);
   const [digest, setDigest] = useState<"off" | "daily" | "weekly">("off");
   const [digestSaving, setDigestSaving] = useState(false);
+  const [pushPermission, setPushPermission] = useState<NotificationPermission | null>(null);
+
+  useEffect(() => {
+    if (typeof Notification !== "undefined") {
+      setPushPermission(Notification.permission);
+    }
+  }, []);
 
   useEffect(() => {
     Promise.all([
@@ -175,8 +182,10 @@ export default function NotificationSettingsPage() {
     setPushBusy(true);
     try {
       await enableWebPush();
+      setPushPermission("granted");
       toast.success("瀏覽器推播已啟用");
     } catch (e) {
+      if (typeof Notification !== "undefined") setPushPermission(Notification.permission);
       toast.error(e instanceof Error ? e.message : "啟用推播失敗");
     } finally {
       setPushBusy(false);
@@ -403,23 +412,52 @@ export default function NotificationSettingsPage() {
         )}
       </section>
 
-      <section className="card p-5">
+      <section className="card p-5 space-y-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-sm font-semibold">瀏覽器推播</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold">瀏覽器推播</h2>
+              {pushPermission === "granted" && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                  style={{ background: "color-mix(in srgb, var(--success) 12%, transparent)", color: "var(--success)" }}>
+                  已允許
+                </span>
+              )}
+              {pushPermission === "denied" && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                  style={{ background: "color-mix(in srgb, var(--danger) 12%, transparent)", color: "var(--danger)" }}>
+                  已封鎖
+                </span>
+              )}
+              {pushPermission === "default" && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                  style={{ background: "color-mix(in srgb, var(--warning) 12%, transparent)", color: "var(--warning)" }}>
+                  未設定
+                </span>
+              )}
+            </div>
             <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
               用於待審、公文狀態、公告與會議提醒。
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button className="btn btn-primary btn-sm" disabled={pushBusy} onClick={enablePush}>
+            <button className="btn btn-primary btn-sm" disabled={pushBusy || pushPermission === "denied"} onClick={enablePush}>
               啟用推播
             </button>
-            <button className="btn btn-secondary btn-sm" disabled={pushBusy} onClick={testPush}>
+            <button className="btn btn-secondary btn-sm" disabled={pushBusy || pushPermission !== "granted"} onClick={testPush}>
               測試推播
             </button>
           </div>
         </div>
+        {pushPermission === "denied" && (
+          <div className="rounded-lg px-4 py-3 text-xs space-y-1"
+            style={{ background: "color-mix(in srgb, var(--danger) 8%, transparent)", border: "1px solid color-mix(in srgb, var(--danger) 25%, transparent)", color: "var(--danger)" }}>
+            <p className="font-medium">通知權限已被瀏覽器封鎖，無法彈出授權視窗。</p>
+            <p style={{ color: "var(--text-muted)" }}>
+              請點擊瀏覽器網址列左側的「鎖頭」或「資訊」圖示 → 通知 → 改為「允許」，然後重新整理頁面再點「啟用推播」。
+            </p>
+          </div>
+        )}
       </section>
     </div>
   );
