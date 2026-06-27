@@ -7,6 +7,7 @@ import { seatingApi, apiErrorMessage } from "@/lib/api";
 
 const GRID = 16;
 const SEAT = 32; // = 2×GRID，對齊格點後座位可完美貼合或留走道
+const SNAP_DISTANCE = 6;
 
 type EditSeat = SeatInput & { key: string };
 
@@ -110,8 +111,33 @@ function parseDeco(layout: Record<string, unknown>): LayoutDecoration[] {
 }
 
 type DragTarget =
-  | { target: "seat"; origins: Map<string, { x: number; y: number }> }
-  | { target: "deco"; id: string; ox: number; oy: number };
+  | {
+      target: "move";
+      seatOrigins: Map<string, { x: number; y: number }>;
+      decoOrigins: Map<string, { x: number; y: number }>;
+    }
+  | { target: "select"; x: number; y: number; additive: boolean };
+
+type EditorSnapshot = {
+  width: number;
+  height: number;
+  seats: EditSeat[];
+  decorations: LayoutDecoration[];
+  seatTypeColors: Record<string, string>;
+};
+
+type ElementBox = {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+type GuideLine = { axis: "x" | "y"; value: number };
+
+const cloneSeats = (items: EditSeat[]) => items.map((s) => ({ ...s }));
+const cloneDecorations = (items: LayoutDecoration[]) => items.map((d) => ({ ...d }));
 
 export default function SeatMapEditor({
   zone,
@@ -129,30 +155,169 @@ export default function SeatMapEditor({
     () => ((layout.seat_type_colors as Record<string, string>) || {})
   );
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [selectedDeco, setSelectedDeco] = useState<string | null>(null);
+  const [selectedDecos, setSelectedDecos] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [showDecoMenu, setShowDecoMenu] = useState(false);
+  const [selectionBox, setSelectionBox] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const [guideLines, setGuideLines] = useState<GuideLine[]>([]);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const dragState = useRef<{ startX: number; startY: number; info: DragTarget } | null>(null);
   const seatCounter = useRef(0);
   const decoCounter = useRef(0);
+  const undoStack = useRef<EditorSnapshot[]>([]);
+
+  const snapshot = useCallback(
+    (): EditorSnapshot => ({
+      width,
+      height,
+      seats: cloneSeats(seats),
+      decorations: cloneDecorations(decorations),
+      seatTypeColors: { ...seatTypeColors },
+    }),
+    [decorations, height, seatTypeColors, seats, width],
+  );
+
+  const pushUndo = useCallback(() => {
+    undoStack.current = [...undoStack.current.slice(-39), snapshot()];
+  }, [snapshot]);
+
+  const undo = () => {
+    const prev = undoStack.current.pop();
+    if (!prev) return;
+    setWidth(prev.width);
+    setHeight(prev.height);
+    setSeats(prev.seats);
+    setDecorations(prev.decorations);
+    setSeatTypeColors(prev.seatTypeColors);
+    setSelected(new Set());
+    setSelectedDecos(new Set());
+    setSelectionBox(null);
+    setGuideLines([]);
+    setDirty(true);
+  };
 
   const mutateSeats = useCallback((fn: (prev: EditSeat[]) => EditSeat[]) => { setSeats(fn); setDirty(true); }, []);
   const mutateDeco = useCallback((fn: (prev: LayoutDecoration[]) => LayoutDecoration[]) => { setDecorations(fn); setDirty(true); }, []);
 
   const snap = (n: number) => Math.max(0, Math.round(n / GRID) * GRID);
+  const snapSize = (n: number) => Math.max(GRID, Math.round(n / GRID) * GRID);
+  const boundsOf = (boxes: ElementBox[]) => {
+    const left = Math.min(...boxes.map((b) => b.x));
+    const top = Math.min(...boxes.map((b) => b.y));
+    const right = Math.max(...boxes.map((b) => b.x + b.width));
+    const bottom = Math.max(...boxes.map((b) => b.y + b.height));
+    return { x: left, y: top, width: right - left, height: bottom - top };
+  };
+  const collectMovingBoxes = (
+    seatOrigins: Map<string, { x: number; y: number }>,
+    decoOrigins: Map<string, { x: number; y: number }>,
+  ) => [
+    ...seats
+      .filter((s) => seatOrigins.has(s.key))
+      .map((s): ElementBox => {
+        const origin = seatOrigins.get(s.key)!;
+        return { id: `seat:${s.key}`, x: origin.x, y: origin.y, width: SEAT, height: SEAT };
+      }),
+    ...decorations
+      .filter((d) => decoOrigins.has(d.id))
+      .map((d): ElementBox => {
+        const origin = decoOrigins.get(d.id)!;
+        return { id: `deco:${d.id}`, x: origin.x, y: origin.y, width: d.width, height: d.height };
+      }),
+  ];
+  const collectStaticBoxes = (moving: ElementBox[]) => {
+    const movingIds = new Set(moving.map((b) => b.id));
+    return [
+      ...seats.map((s): ElementBox => ({
+        id: `seat:${s.key}`,
+        x: s.x,
+        y: s.y,
+        width: SEAT,
+        height: SEAT,
+      })),
+      ...decorations.map((d): ElementBox => ({
+        id: `deco:${d.id}`,
+        x: d.x,
+        y: d.y,
+        width: d.width,
+        height: d.height,
+      })),
+    ].filter((b) => !movingIds.has(b.id));
+  };
+  const smartSnap = (
+    seatOrigins: Map<string, { x: number; y: number }>,
+    decoOrigins: Map<string, { x: number; y: number }>,
+    dx: number,
+    dy: number,
+  ) => {
+    const moving = collectMovingBoxes(seatOrigins, decoOrigins);
+    if (!moving.length) return { dx: snap(dx), dy: snap(dy), guides: [] as GuideLine[] };
+
+    const rawDx = snap(dx);
+    const rawDy = snap(dy);
+    const box = boundsOf(moving);
+    const moved = { x: box.x + rawDx, y: box.y + rawDy, width: box.width, height: box.height };
+    const xAnchors = [moved.x, moved.x + moved.width / 2, moved.x + moved.width];
+    const yAnchors = [moved.y, moved.y + moved.height / 2, moved.y + moved.height];
+    const targets = [{ x: 0, y: 0, width, height }, ...collectStaticBoxes(moving)];
+    const xTargets = targets.flatMap((b) => [b.x, b.x + b.width / 2, b.x + b.width]);
+    const yTargets = targets.flatMap((b) => [b.y, b.y + b.height / 2, b.y + b.height]);
+    let snapDx = rawDx;
+    let snapDy = rawDy;
+    let bestX: { distance: number; delta: number; value: number } | null = null;
+    let bestY: { distance: number; delta: number; value: number } | null = null;
+
+    for (const anchor of xAnchors) {
+      for (const target of xTargets) {
+        const delta = target - anchor;
+        const distance = Math.abs(delta);
+        if (distance <= SNAP_DISTANCE && (!bestX || distance < bestX.distance)) {
+          bestX = { distance, delta, value: target };
+        }
+      }
+    }
+    for (const anchor of yAnchors) {
+      for (const target of yTargets) {
+        const delta = target - anchor;
+        const distance = Math.abs(delta);
+        if (distance <= SNAP_DISTANCE && (!bestY || distance < bestY.distance)) {
+          bestY = { distance, delta, value: target };
+        }
+      }
+    }
+    if (bestX) snapDx += bestX.delta;
+    if (bestY) snapDy += bestY.delta;
+    return {
+      dx: snapDx,
+      dy: snapDy,
+      guides: [
+        ...(bestX ? [{ axis: "x" as const, value: bestX.value }] : []),
+        ...(bestY ? [{ axis: "y" as const, value: bestY.value }] : []),
+      ],
+    };
+  };
+  const canvasPoint = (e: React.PointerEvent) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    return { x: snap(e.clientX - (rect?.left ?? 0)), y: snap(e.clientY - (rect?.top ?? 0)) };
+  };
 
   // ── 座位 新增 ──────────────────────────────────────────────────────────────
   const addSeat = () => {
+    pushUndo();
     const key = `new-${seatCounter.current++}`;
     mutateSeats((prev) => [
       ...prev,
       { key, id: null, label: `S${prev.length + 1}`, block: null, row_label: null, x: snap(width / 2), y: snap(height / 2), seat_type: "normal", price_delta: 0, status: "available" },
     ]);
     setSelected(new Set([key]));
-    setSelectedDeco(null);
+    setSelectedDecos(new Set());
   };
 
   const addRow = () => {
@@ -160,6 +325,7 @@ export default function SeatMapEditor({
     if (prefix === null) return;
     const count = Number(window.prompt("此排座位數", "10"));
     if (!Number.isFinite(count) || count <= 0) return;
+    pushUndo();
     const baseY = seats.length ? snap(Math.max(...seats.map((s) => s.y)) + SEAT + GRID) : snap(60);
     const added: EditSeat[] = [];
     for (let i = 0; i < count; i++) {
@@ -178,11 +344,12 @@ export default function SeatMapEditor({
     }
     mutateSeats((prev) => [...prev, ...added]);
     setSelected(new Set(added.map((s) => s.key)));
-    setSelectedDeco(null);
+    setSelectedDecos(new Set());
   };
 
   // ── 裝飾元素 新增 ──────────────────────────────────────────────────────────
   const addDeco = (kind: DecorationKind) => {
+    pushUndo();
     const meta = DECO_TYPES.find((t) => t.value === kind)!;
     const id = `deco-${decoCounter.current++}`;
     const newDeco: LayoutDecoration = {
@@ -190,19 +357,19 @@ export default function SeatMapEditor({
       type: kind,
       x: snap((width - meta.defaultW) / 2),
       y: snap(kind === "screen" ? 6 : height / 2 - meta.defaultH / 2),
-      width: meta.defaultW,
-      height: meta.defaultH,
+      width: snapSize(meta.defaultW),
+      height: snapSize(meta.defaultH),
       label: meta.defaultLabel,
     };
     mutateDeco((prev) => [...prev, newDeco]);
-    setSelectedDeco(id);
+    setSelectedDecos(new Set([id]));
     setSelected(new Set());
     setShowDecoMenu(false);
   };
 
   // ── 座位 選取 ──────────────────────────────────────────────────────────────
   const toggleSelect = (key: string, additive: boolean) => {
-    setSelectedDeco(null);
+    if (!additive) setSelectedDecos(new Set());
     setSelected((prev) => {
       const next = new Set(additive ? prev : []);
       if (prev.has(key) && additive) next.delete(key);
@@ -217,19 +384,37 @@ export default function SeatMapEditor({
     const additive = e.shiftKey || e.ctrlKey || e.metaKey;
     if (!selected.has(key)) toggleSelect(key, additive);
     const keys = selected.has(key) && selected.size ? selected : new Set([key]);
-    const origins = new Map<string, { x: number; y: number }>();
-    seats.forEach((s) => { if (keys.has(s.key)) origins.set(s.key, { x: s.x, y: s.y }); });
-    dragState.current = { startX: e.clientX, startY: e.clientY, info: { target: "seat", origins } };
+    const seatOrigins = new Map<string, { x: number; y: number }>();
+    const decoOrigins = new Map<string, { x: number; y: number }>();
+    seats.forEach((s) => { if (keys.has(s.key)) seatOrigins.set(s.key, { x: s.x, y: s.y }); });
+    decorations.forEach((d) => {
+      if (selectedDecos.has(d.id) && selected.has(key)) decoOrigins.set(d.id, { x: d.x, y: d.y });
+    });
+    pushUndo();
+    dragState.current = { startX: e.clientX, startY: e.clientY, info: { target: "move", seatOrigins, decoOrigins } };
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
   };
 
   // ── 拖移：裝飾元素 ─────────────────────────────────────────────────────────
   const onDecoPointerDown = (e: React.PointerEvent, id: string) => {
     e.stopPropagation();
-    setSelectedDeco(id);
-    setSelected(new Set());
-    const d = decorations.find((x) => x.id === id)!;
-    dragState.current = { startX: e.clientX, startY: e.clientY, info: { target: "deco", id, ox: d.x, oy: d.y } };
+    const additive = e.shiftKey || e.ctrlKey || e.metaKey;
+    setSelectedDecos((prev) => {
+      const next = new Set(additive ? prev : []);
+      if (prev.has(id) && additive) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+    if (!additive) setSelected(new Set());
+    const decoKeys = selectedDecos.has(id) ? selectedDecos : new Set([id]);
+    const seatOrigins = new Map<string, { x: number; y: number }>();
+    const decoOrigins = new Map<string, { x: number; y: number }>();
+    decorations.forEach((d) => { if (decoKeys.has(d.id)) decoOrigins.set(d.id, { x: d.x, y: d.y }); });
+    seats.forEach((s) => {
+      if (selected.has(s.key) && selectedDecos.has(id)) seatOrigins.set(s.key, { x: s.x, y: s.y });
+    });
+    pushUndo();
+    dragState.current = { startX: e.clientX, startY: e.clientY, info: { target: "move", seatOrigins, decoOrigins } };
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
   };
 
@@ -238,39 +423,74 @@ export default function SeatMapEditor({
     if (!ds) return;
     const dx = e.clientX - ds.startX;
     const dy = e.clientY - ds.startY;
-    if (ds.info.target === "seat") {
-      const { origins } = ds.info;
+    if (ds.info.target === "move") {
+      const { seatOrigins, decoOrigins } = ds.info;
+      const snapped = smartSnap(seatOrigins, decoOrigins, dx, dy);
+      setGuideLines(snapped.guides);
       mutateSeats((prev) =>
         prev.map((s) => {
-          const o = origins.get(s.key);
+          const o = seatOrigins.get(s.key);
           if (!o) return s;
-          return { ...s, x: snap(o.x + dx), y: snap(o.y + dy) };
+          return { ...s, x: Math.max(0, o.x + snapped.dx), y: Math.max(0, o.y + snapped.dy) };
         }),
       );
-    } else {
-      const { id, ox, oy } = ds.info;
       mutateDeco((prev) =>
-        prev.map((d) => d.id === id ? { ...d, x: snap(ox + dx), y: snap(oy + dy) } : d)
+        prev.map((d) => {
+          const o = decoOrigins.get(d.id);
+          return o ? { ...d, x: Math.max(0, o.x + snapped.dx), y: Math.max(0, o.y + snapped.dy) } : d;
+        })
       );
+    } else {
+      const point = canvasPoint(e);
+      const x1 = Math.min(ds.info.x, point.x);
+      const y1 = Math.min(ds.info.y, point.y);
+      const x2 = Math.max(ds.info.x, point.x);
+      const y2 = Math.max(ds.info.y, point.y);
+      setSelectionBox({ x: x1, y: y1, width: x2 - x1, height: y2 - y1 });
     }
   };
 
-  const onCanvasPointerUp = () => { dragState.current = null; };
+  const onCanvasPointerUp = () => {
+    const ds = dragState.current;
+    if (ds?.info.target === "select" && selectionBox) {
+      const info = ds.info;
+      const x2 = selectionBox.x + selectionBox.width;
+      const y2 = selectionBox.y + selectionBox.height;
+      const pickedSeats = seats
+        .filter((s) => s.x < x2 && s.x + SEAT > selectionBox.x && s.y < y2 && s.y + SEAT > selectionBox.y)
+        .map((s) => s.key);
+      const pickedDecos = decorations
+        .filter((d) =>
+          d.x < x2 && d.x + d.width > selectionBox.x && d.y < y2 && d.y + d.height > selectionBox.y
+        )
+        .map((d) => d.id);
+      setSelected((prev) => new Set(info.additive ? [...prev, ...pickedSeats] : pickedSeats));
+      setSelectedDecos((prev) => new Set(info.additive ? [...prev, ...pickedDecos] : pickedDecos));
+    }
+    dragState.current = null;
+    setSelectionBox(null);
+    setGuideLines([]);
+  };
 
   // ── 座位 批次屬性 ──────────────────────────────────────────────────────────
   const selectedSeats = useMemo(() => seats.filter((s) => selected.has(s.key)), [seats, selected]);
   const applyToSelected = (patch: Partial<EditSeat>) => {
     if (!selected.size) return;
+    pushUndo();
     mutateSeats((prev) => prev.map((s) => (selected.has(s.key) ? { ...s, ...patch } : s)));
   };
   const deleteSelected = () => {
-    if (!selected.size) return;
+    if (!selected.size && !selectedDecos.size) return;
+    pushUndo();
     mutateSeats((prev) => prev.filter((s) => !selected.has(s.key)));
+    mutateDeco((prev) => prev.filter((d) => !selectedDecos.has(d.id)));
     setSelected(new Set());
+    setSelectedDecos(new Set());
   };
   const relabelSelected = () => {
     const v = window.prompt("套用代號（多選時自動加序號，如 A → A1 A2 …）", selectedSeats[0]?.label ?? "");
     if (v === null) return;
+    pushUndo();
     const list = selectedSeats;
     mutateSeats((prev) =>
       prev.map((s) => {
@@ -282,13 +502,19 @@ export default function SeatMapEditor({
   };
 
   // ── 靠攏 / 拆分走道 ───────────────────────────────────────────────────────
-  const packTight = () => {
-    if (selected.size < 2) return;
-    const list = selectedSeats;
+  const inferAxis = (list: EditSeat[]) => {
     const spanX = Math.max(...list.map((s) => s.x)) - Math.min(...list.map((s) => s.x));
     const spanY = Math.max(...list.map((s) => s.y)) - Math.min(...list.map((s) => s.y));
-    if (spanX >= spanY) {
-      const sorted = [...list].sort((a, b) => a.x - b.x);
+    return spanX >= spanY ? "x" : "y";
+  };
+
+  const packTight = () => {
+    if (selected.size < 2) return;
+    pushUndo();
+    const list = selectedSeats;
+    const axis = inferAxis(list);
+    if (axis === "x") {
+      const sorted = [...list].sort((a, b) => a.x - b.x || a.y - b.y);
       const startX = sorted[0].x;
       mutateSeats((prev) =>
         prev.map((s) => {
@@ -297,7 +523,7 @@ export default function SeatMapEditor({
         }),
       );
     } else {
-      const sorted = [...list].sort((a, b) => a.y - b.y);
+      const sorted = [...list].sort((a, b) => a.y - b.y || a.x - b.x);
       const startY = sorted[0].y;
       mutateSeats((prev) =>
         prev.map((s) => {
@@ -310,16 +536,16 @@ export default function SeatMapEditor({
 
   const insertAisle = () => {
     if (selected.size < 2) return;
+    pushUndo();
     const list = selectedSeats;
-    const spanX = Math.max(...list.map((s) => s.x)) - Math.min(...list.map((s) => s.x));
-    const spanY = Math.max(...list.map((s) => s.y)) - Math.min(...list.map((s) => s.y));
-    if (spanX >= spanY) {
-      const sorted = [...list].sort((a, b) => a.x - b.x);
+    const axis = inferAxis(list);
+    if (axis === "x") {
+      const sorted = [...list].sort((a, b) => a.x - b.x || a.y - b.y);
       const half = Math.ceil(sorted.length / 2);
       const secondKeys = new Set(sorted.slice(half).map((s) => s.key));
       mutateSeats((prev) => prev.map((s) => (secondKeys.has(s.key) ? { ...s, x: s.x + SEAT } : s)));
     } else {
-      const sorted = [...list].sort((a, b) => a.y - b.y);
+      const sorted = [...list].sort((a, b) => a.y - b.y || a.x - b.x);
       const half = Math.ceil(sorted.length / 2);
       const secondKeys = new Set(sorted.slice(half).map((s) => s.key));
       mutateSeats((prev) => prev.map((s) => (secondKeys.has(s.key) ? { ...s, y: s.y + SEAT } : s)));
@@ -328,7 +554,12 @@ export default function SeatMapEditor({
 
   // ── 方向鍵微移 ────────────────────────────────────────────────────────────
   const onCanvasKeyDown = (e: React.KeyboardEvent) => {
-    if (!selected.size) return;
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+      e.preventDefault();
+      undo();
+      return;
+    }
+    if (!selected.size && !selectedDecos.size) return;
     const dirs: Record<string, { dx: number; dy: number }> = {
       ArrowLeft:  { dx: -GRID, dy: 0 },
       ArrowRight: { dx:  GRID, dy: 0 },
@@ -338,6 +569,7 @@ export default function SeatMapEditor({
     const dir = dirs[e.key];
     if (!dir) return;
     e.preventDefault();
+    pushUndo();
     mutateSeats((prev) =>
       prev.map((s) =>
         selected.has(s.key)
@@ -345,19 +577,55 @@ export default function SeatMapEditor({
           : s,
       ),
     );
+    mutateDeco((prev) =>
+      prev.map((d) =>
+        selectedDecos.has(d.id)
+          ? { ...d, x: Math.max(0, d.x + dir.dx), y: Math.max(0, d.y + dir.dy) }
+          : d,
+      ),
+    );
   };
 
   // ── 裝飾元素 屬性 ──────────────────────────────────────────────────────────
-  const activeDeco = decorations.find((d) => d.id === selectedDeco) ?? null;
+  const activeDecoId = selectedDecos.size === 1 ? [...selectedDecos][0] : null;
+  const activeDeco = decorations.find((d) => d.id === activeDecoId) ?? null;
   const patchDeco = (patch: Partial<LayoutDecoration>) => {
-    if (!selectedDeco) return;
-    mutateDeco((prev) => prev.map((d) => d.id === selectedDeco ? { ...d, ...patch } : d));
+    if (!activeDecoId) return;
+    pushUndo();
+    mutateDeco((prev) => prev.map((d) => d.id === activeDecoId ? { ...d, ...patch } : d));
   };
   const deleteDeco = () => {
-    if (!selectedDeco) return;
-    mutateDeco((prev) => prev.filter((d) => d.id !== selectedDeco));
-    setSelectedDeco(null);
+    if (!selectedDecos.size) return;
+    pushUndo();
+    mutateDeco((prev) => prev.filter((d) => !selectedDecos.has(d.id)));
+    setSelectedDecos(new Set());
   };
+
+  const alignSelectedSeats = (mode: "left" | "centerX" | "right" | "top" | "centerY" | "bottom") => {
+    if (selected.size < 2) return;
+    pushUndo();
+    const xs = selectedSeats.map((s) => s.x);
+    const ys = selectedSeats.map((s) => s.y);
+    const left = Math.min(...xs);
+    const top = Math.min(...ys);
+    const right = Math.max(...xs) + SEAT;
+    const bottom = Math.max(...ys) + SEAT;
+    const centerX = snap((left + right - SEAT) / 2);
+    const centerY = snap((top + bottom - SEAT) / 2);
+    mutateSeats((prev) =>
+      prev.map((s) => {
+        if (!selected.has(s.key)) return s;
+        if (mode === "left") return { ...s, x: left };
+        if (mode === "centerX") return { ...s, x: centerX };
+        if (mode === "right") return { ...s, x: right - SEAT };
+        if (mode === "top") return { ...s, y: top };
+        if (mode === "centerY") return { ...s, y: centerY };
+        return { ...s, y: bottom - SEAT };
+      }),
+    );
+  };
+
+  const hasGroupSelection = selected.size + selectedDecos.size > 1;
 
   // ── 儲存 ──────────────────────────────────────────────────────────────────
   const save = async () => {
@@ -417,17 +685,20 @@ export default function SeatMapEditor({
         </div>
 
         <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-          已選 {selected.size} / 共 {seats.length} 座位｜{decorations.length} 裝飾
+          已選 {selected.size} / 共 {seats.length} 座位｜已選 {selectedDecos.size} / 共 {decorations.length} 裝飾
         </span>
         <div className="flex-1" />
+        <button type="button" className="btn btn-ghost text-xs" onClick={undo} disabled={!undoStack.current.length} title="撤銷上一步（Ctrl/⌘+Z）">
+          ↶ 撤銷
+        </button>
         <label className="text-xs flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
           畫布
           <input type="number" value={width} min={200} step={20}
-            onChange={(e) => { setWidth(Number(e.target.value) || 200); setDirty(true); }}
+            onChange={(e) => { pushUndo(); setWidth(Number(e.target.value) || 200); setDirty(true); }}
             className="input w-20 text-xs" />
           ×
           <input type="number" value={height} min={200} step={20}
-            onChange={(e) => { setHeight(Number(e.target.value) || 200); setDirty(true); }}
+            onChange={(e) => { pushUndo(); setHeight(Number(e.target.value) || 200); setDirty(true); }}
             className="input w-20 text-xs" />
         </label>
         <button type="button" className="btn btn-primary text-xs" onClick={save} disabled={saving || !dirty}>
@@ -444,6 +715,12 @@ export default function SeatMapEditor({
           {selected.size >= 2 && <>
             <button type="button" className="btn btn-ghost text-xs" onClick={packTight} title="貼齊排列，消除座位間空隙">靠攏</button>
             <button type="button" className="btn btn-ghost text-xs" onClick={insertAisle} title="從中間插入走道（後半段向外移一個座位寬）">拆分走道</button>
+            <button type="button" className="btn btn-ghost text-xs" onClick={() => alignSelectedSeats("left")}>左齊</button>
+            <button type="button" className="btn btn-ghost text-xs" onClick={() => alignSelectedSeats("centerX")}>垂中</button>
+            <button type="button" className="btn btn-ghost text-xs" onClick={() => alignSelectedSeats("right")}>右齊</button>
+            <button type="button" className="btn btn-ghost text-xs" onClick={() => alignSelectedSeats("top")}>上齊</button>
+            <button type="button" className="btn btn-ghost text-xs" onClick={() => alignSelectedSeats("centerY")}>橫中</button>
+            <button type="button" className="btn btn-ghost text-xs" onClick={() => alignSelectedSeats("bottom")}>下齊</button>
           </>}
           <select className="input text-xs" value={selectedSeats[0]?.seat_type ?? "normal"}
             onChange={(e) => applyToSelected({ seat_type: e.target.value })}>
@@ -454,6 +731,7 @@ export default function SeatMapEditor({
             <input type="color"
               value={seatTypeColors[selectedSeats[0]?.seat_type ?? "normal"] || "#888888"}
               onChange={(e) => {
+                pushUndo();
                 setSeatTypeColors((prev) => ({ ...prev, [selectedSeats[0]?.seat_type ?? "normal"]: e.target.value }));
                 setDirty(true);
               }}
@@ -478,6 +756,18 @@ export default function SeatMapEditor({
         </div>
       )}
 
+      {hasGroupSelection && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg p-2"
+          style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+          <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>群組選取</span>
+          <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+            已成組選取 {selected.size + selectedDecos.size} 個元素，可一起拖曳或用方向鍵移動。
+          </span>
+          <button type="button" className="btn btn-ghost text-xs" style={{ color: "var(--danger, #c0392b)" }}
+            onClick={deleteSelected}>刪除群組</button>
+        </div>
+      )}
+
       {/* 裝飾元素屬性列 */}
       {activeDeco && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg p-2"
@@ -494,12 +784,12 @@ export default function SeatMapEditor({
           <label className="text-xs flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
             寬
             <input type="number" className="input w-16 text-xs" min={10} step={GRID} value={activeDeco.width}
-              onChange={(e) => patchDeco({ width: Number(e.target.value) || 10 })} />
+              onChange={(e) => patchDeco({ width: snapSize(Number(e.target.value) || 10) })} />
           </label>
           <label className="text-xs flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
             高
             <input type="number" className="input w-16 text-xs" min={10} step={GRID} value={activeDeco.height}
-              onChange={(e) => patchDeco({ height: Number(e.target.value) || 10 })} />
+              onChange={(e) => patchDeco({ height: snapSize(Number(e.target.value) || 10) })} />
           </label>
           <label className="text-xs flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
             X
@@ -536,7 +826,17 @@ export default function SeatMapEditor({
           onKeyDown={onCanvasKeyDown}
           onPointerMove={onCanvasPointerMove}
           onPointerUp={onCanvasPointerUp}
-          onPointerDown={() => { setSelected(new Set()); setSelectedDeco(null); setShowDecoMenu(false); }}
+          onPointerDown={(e) => {
+            const point = canvasPoint(e);
+            const additive = e.shiftKey || e.ctrlKey || e.metaKey;
+            if (!additive) {
+              setSelected(new Set());
+              setSelectedDecos(new Set());
+            }
+            setShowDecoMenu(false);
+            dragState.current = { startX: e.clientX, startY: e.clientY, info: { target: "select", ...point, additive } };
+            setSelectionBox({ ...point, width: 0, height: 0 });
+          }}
           className="relative outline-none"
           style={{
             width,
@@ -556,12 +856,44 @@ export default function SeatMapEditor({
             <div
               key={d.id}
               onPointerDown={(e) => onDecoPointerDown(e, d.id)}
-              style={decoStyle(d, selectedDeco === d.id)}
+              style={decoStyle(d, selectedDecos.has(d.id))}
               title={`${DECO_TYPES.find((t) => t.value === d.type)?.label}：${d.label}`}
             >
               {d.label}
             </div>
           ))}
+
+          {guideLines.map((line) => (
+            <div
+              key={`${line.axis}-${line.value}`}
+              className="absolute pointer-events-none"
+              style={{
+                left: line.axis === "x" ? line.value : 0,
+                top: line.axis === "y" ? line.value : 0,
+                width: line.axis === "x" ? 0 : width,
+                height: line.axis === "y" ? 0 : height,
+                borderLeft: line.axis === "x" ? "1px solid var(--primary)" : undefined,
+                borderTop: line.axis === "y" ? "1px solid var(--primary)" : undefined,
+                boxShadow: "0 0 0 1px rgba(212, 175, 55, 0.18)",
+                zIndex: 4,
+              }}
+            />
+          ))}
+
+          {selectionBox && (
+            <div
+              className="absolute pointer-events-none"
+              style={{
+                left: selectionBox.x,
+                top: selectionBox.y,
+                width: selectionBox.width,
+                height: selectionBox.height,
+                border: "1px solid var(--primary)",
+                background: "rgba(212, 175, 55, 0.08)",
+                zIndex: 3,
+              }}
+            />
+          )}
 
           {/* 座位 */}
           {seats.map((s) => (
@@ -588,9 +920,9 @@ export default function SeatMapEditor({
         </div>
       </div>
       <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-        座位：點選可選取（Shift/Ctrl 多選），拖曳移動；選取後可用方向鍵微移（每次 16px）。
-        多選後「靠攏」使座位緊密貼合，「拆分走道」在中間插入走道空隙。
-        裝飾元素：點選後可拖曳移動，或在屬性列調整尺寸與標籤。
+        座位與裝飾元素可框選、Shift/Ctrl 多選並成組拖曳；拖曳時會自動吸附格線、元素邊緣與中心並顯示輔助線。
+        方向鍵每次移動 16px，Ctrl/⌘+Z 可撤銷。
+        多選座位後可對齊、靠攏，或依主要排列方向拆分走道。
       </p>
     </div>
   );
