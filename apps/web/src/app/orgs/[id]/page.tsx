@@ -27,7 +27,7 @@ export default function OrgDetailPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const superuser = typeof window !== "undefined" && localStorage.getItem("is_superuser") === "true";
+    const superuser = typeof window !== "undefined" && sessionStorage.getItem("is_superuser") === "true";
     setIsAdmin(superuser);
 
     Promise.all([

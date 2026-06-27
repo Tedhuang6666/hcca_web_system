@@ -29,6 +29,21 @@ step() { printf '\n\033[1;36m▶ %s\033[0m\n' "$1"; }
 if [[ "${SKIP_GIT:-0}" != "1" && -d .git ]]; then
   step "git pull"
   git pull --ff-only
+
+  # SECURITY: 驗證 HEAD commit 的 GPG 簽章，防止未簽名的惡意 commit 被自動部署。
+  # 若 commit 未簽名，預設發出警告但不中止（REQUIRE_GPG_VERIFY=1 可升為硬性要求）。
+  # 若您的倉庫尚未啟用 commit signing，請參考 docs/OPERATIONS_GUIDE.md 設定。
+  if [[ "${SKIP_GPG_VERIFY:-0}" != "1" ]]; then
+    if git verify-commit HEAD 2>/dev/null; then
+      echo "✓ GPG 簽章驗證通過"
+    else
+      echo "⚠️  WARNING: HEAD commit 無有效 GPG 簽章（未啟用 commit signing 或金鑰未受信任）"
+      if [[ "${REQUIRE_GPG_VERIFY:-0}" == "1" ]]; then
+        echo "❌ REQUIRE_GPG_VERIFY=1：簽章驗證失敗，中止部署"
+        exit 1
+      fi
+    fi
+  fi
 fi
 
 step "docker compose pull（拉最新映像）"

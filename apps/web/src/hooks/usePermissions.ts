@@ -2,7 +2,7 @@
 import { useCallback, useMemo } from "react";
 
 /**
- * 讀取 localStorage 中儲存的使用者權限列表（由 /auth/me 在登入時寫入）。
+ * 讀取使用者權限列表（由 /auth/me 在登入時寫入 sessionStorage）。
  * 超級管理員（is_superuser=true）視為擁有所有權限。
  *
  * 用法：
@@ -12,9 +12,10 @@ import { useCallback, useMemo } from "react";
 export function usePermissions() {
   const { permissions, isAdmin, isOwner } = useMemo(() => {
     if (typeof window === "undefined") return { permissions: new Set<string>(), isAdmin: false, isOwner: false };
-    const raw = localStorage.getItem("permissions");
-    const superuser = localStorage.getItem("is_superuser") === "true";
-    const owner = localStorage.getItem("is_owner") === "true";
+    // SECURITY: 敏感欄位改存 sessionStorage（由 auth-cache.ts 負責寫入）
+    const raw = sessionStorage.getItem("permissions");
+    const superuser = sessionStorage.getItem("is_superuser") === "true";
+    const owner = sessionStorage.getItem("is_owner") === "true";
     let perms: string[] = [];
     try { perms = raw ? JSON.parse(raw) : []; } catch { /* ignore */ }
     // Owner 視為超管：自動擁有所有權限

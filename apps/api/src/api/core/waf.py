@@ -20,6 +20,8 @@ from __future__ import annotations
 import contextlib
 import logging
 import re
+import threading
+import time
 from collections.abc import Awaitable, Callable
 from urllib.parse import unquote, unquote_plus
 
@@ -33,6 +35,13 @@ from api.core.security import redis_client
 from api.core.trust import has_scan_bypass_token, is_trusted_ip
 
 logger = logging.getLogger(__name__)
+
+# SECURITY: Redis 故障時的 in-memory fallback 計數器。
+# 每個 worker process 獨立計數（不跨 worker 共享），但已足夠防止同一 worker 被同一 IP 持續轟炸。
+# TTL 以最後命中時間為基準；鎖保護 dict 操作避免 threading 競態。
+_local_hit_counts: dict[str, int] = {}
+_local_hit_times: dict[str, float] = {}
+_local_hit_lock = threading.Lock()
 
 # 不掃這些路徑：健檢 / 探活高頻打、靜態檔由其它層把關。
 _EXEMPT_PATHS = frozenset({"/health", "/live", "/ready"})
@@ -313,9 +322,13 @@ class WAFMiddleware:
             pipe.incr(key)
             pipe.expire(key, settings.WAF_AUTOBLOCK_WINDOW_SECONDS)
             count, _ = await pipe.execute()
+            count = int(count)
         except (RedisError, TimeoutError):
-            return
-        if int(count) >= settings.WAF_AUTOBLOCK_THRESHOLD:
+            # SECURITY: Redis 故障時 fallback 到 in-memory 計數，
+            # 避免 autoblock 在 Redis 不可用時完全失效（fail-open 攻擊面）。
+            count = self._local_incr(ip)
+            logger.warning("WAF offender counter using local fallback for ip=%s count=%s", ip, count)
+        if count >= settings.WAF_AUTOBLOCK_THRESHOLD:
             with contextlib.suppress(Exception):
                 await ip_block(
                     ip,
@@ -323,3 +336,17 @@ class WAFMiddleware:
                     ttl_seconds=settings.WAF_AUTOBLOCK_TTL_SECONDS,
                 )
                 logger.warning("WAF auto-blocked IP=%s after %s hits", ip, count)
+
+    @staticmethod
+    def _local_incr(ip: str) -> int:
+        """Thread-safe in-memory 命中計數，附 TTL 清理（基於 WAF_AUTOBLOCK_WINDOW_SECONDS）。"""
+        now = time.monotonic()
+        window = settings.WAF_AUTOBLOCK_WINDOW_SECONDS
+        with _local_hit_lock:
+            # 若上次命中已超過 window，重置計數
+            last = _local_hit_times.get(ip, 0.0)
+            if now - last > window:
+                _local_hit_counts[ip] = 0
+            _local_hit_counts[ip] = _local_hit_counts.get(ip, 0) + 1
+            _local_hit_times[ip] = now
+            return _local_hit_counts[ip]

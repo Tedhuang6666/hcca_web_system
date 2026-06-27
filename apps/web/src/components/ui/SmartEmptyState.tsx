@@ -58,8 +58,8 @@ export default function SmartEmptyState({
   let canCreate = true;
   if (createPerm && typeof window !== "undefined") {
     try {
-      const raw = window.localStorage.getItem("permissions");
-      const isAdmin = window.localStorage.getItem("is_superuser") === "true";
+      const raw = window.sessionStorage.getItem("permissions");
+      const isAdmin = window.sessionStorage.getItem("is_superuser") === "true";
       const perms: string[] = raw ? JSON.parse(raw) : [];
       canCreate = isAdmin || perms.includes("admin:all") || perms.includes(createPerm);
     } catch {

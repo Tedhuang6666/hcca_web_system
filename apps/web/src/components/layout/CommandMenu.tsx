@@ -49,11 +49,11 @@ const MEETINGS_ACTION: CommandAction = { label: "會議系統", href: "/meetings
 function canSeeMeetings(): boolean {
   if (typeof window === "undefined") return false;
   if (isMeetingsUnlocked()) return true;
-  if (localStorage.getItem("is_superuser") === "true" || localStorage.getItem("is_owner") === "true") {
+  if (sessionStorage.getItem("is_superuser") === "true" || sessionStorage.getItem("is_owner") === "true") {
     return true;
   }
   try {
-    const perms: string[] = JSON.parse(localStorage.getItem("permissions") || "[]");
+    const perms: string[] = JSON.parse(sessionStorage.getItem("permissions") || "[]");
     return perms.includes("admin:all") || perms.some((p) => p.startsWith("meeting:"));
   } catch {
     return false;

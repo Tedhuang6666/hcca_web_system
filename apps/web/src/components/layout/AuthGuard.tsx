@@ -37,12 +37,10 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     };
   }, [pathname, router]);
 
-  if (!ready) {
-    // 閃爍防護：顯示空白直到 auth 確認完成
-    return (
-      <div className="min-h-screen" style={{ background: "var(--primary-fg)" }} />
-    );
-  }
+  // SECURITY: 回傳 null（不渲染 children），避免受保護頁面在 auth 確認前出現在 DOM。
+  // 若需防止畫面閃爍，在父層 layout 使用 CSS skeleton 或 loading spinner，
+  // 不要在此回傳含 children 的 wrapper。
+  if (!ready) return null;
 
   return <>{children}</>;
 }

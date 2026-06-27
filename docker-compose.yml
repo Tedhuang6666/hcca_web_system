@@ -71,12 +71,17 @@ services:
     image: redis:7-alpine
     container_name: campus_redis
     restart: unless-stopped
+    # SECURITY: 開發環境也啟用密碼認證，避免 container 逃脫後可無認證存取 session/queue。
+    # 正式環境請在 .env 設定 REDIS_PASSWORD（prod compose 已強制 :?）。
+    command: redis-server --appendonly yes --requirepass "${REDIS_PASSWORD:-dev-redis-change-in-prod}"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-dev-redis-change-in-prod}
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
       - redisdata:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"${REDIS_PASSWORD:-dev-redis-change-in-prod}\" ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -88,7 +93,9 @@ services:
     restart: unless-stopped
     environment:
       MEILI_ENV: development
-      MEILI_MASTER_KEY: ${MEILISEARCH_API_KEY:-}
+      # SECURITY: 即使在開發環境也設定 master key，避免 container 逃脫後可無認證存取搜尋索引。
+      # 未設定時使用開發用預設值；正式環境請在 .env 明確覆寫。
+      MEILI_MASTER_KEY: ${MEILISEARCH_API_KEY:-dev-meili-key-change-in-prod}
     ports:
       - "127.0.0.1:7700:7700"
     volumes:
@@ -113,7 +120,7 @@ services:
       DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
       DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: redis://:${REDIS_PASSWORD:-dev-redis-change-in-prod}@redis:6379/0
       REDIS_MAX_CONNECTIONS: ${REDIS_MAX_CONNECTIONS:-50}
       REDIS_SOCKET_TIMEOUT: ${REDIS_SOCKET_TIMEOUT:-2.0}
       REDIS_HEALTH_CHECK_INTERVAL: ${REDIS_HEALTH_CHECK_INTERVAL:-30}
@@ -170,7 +177,7 @@ services:
       DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}
       DB_POOL_SIZE: ${ADMIN_DB_POOL_SIZE:-5}
       DB_MAX_OVERFLOW: ${ADMIN_DB_MAX_OVERFLOW:-5}
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: redis://:${REDIS_PASSWORD:-dev-redis-change-in-prod}@redis:6379/0
       REDIS_MAX_CONNECTIONS: ${REDIS_MAX_CONNECTIONS:-50}
       TRUST_CLOUDFLARE_PROXY: ${TRUST_CLOUDFLARE_PROXY:-false}
       CF_TRUSTED_PROXIES: ${CF_TRUSTED_PROXIES:-[]}
@@ -216,7 +223,7 @@ services:
       DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
       DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: redis://:${REDIS_PASSWORD:-dev-redis-change-in-prod}@redis:6379/0
     # 不設 healthcheck：`inspect ping` 每 30s 起重量級 python 行程、等 broker 回覆，
     # 忙時 ping 卡住會堆積吃光 CPU；且 Docker 判 unhealthy 自動重啟反而打掉忙碌 worker。
     # 存活交給 restart: unless-stopped。
@@ -243,7 +250,7 @@ services:
       DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
       DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: redis://:${REDIS_PASSWORD:-dev-redis-change-in-prod}@redis:6379/0
     # 同 worker：不設 healthcheck，避免 inspect ping 堆積與 unhealthy 自動重啟。
     healthcheck:
       disable: true
@@ -268,7 +275,7 @@ services:
       DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
       DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: redis://:${REDIS_PASSWORD:-dev-redis-change-in-prod}@redis:6379/0
     # 同 worker：不設 healthcheck，避免 inspect ping 堆積與 unhealthy 自動重啟。
     healthcheck:
       disable: true
@@ -302,7 +309,7 @@ services:
       DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
       DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: redis://:${REDIS_PASSWORD:-dev-redis-change-in-prod}@redis:6379/0
     volumes:
       - celerybeat:/tmp  # 持久化 beat schedule 狀態
     # beat 不設 healthcheck：pidfile 存在不代表排程仍在運作，且判 unhealthy 自動重啟
@@ -378,7 +385,7 @@ services:
       celery --broker=redis://redis:6379/0 flower
       --port=5555
       --url-prefix=flower
-      --basic-auth=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-changeme}
+      --basic-auth=${FLOWER_USER:?FLOWER_USER must be set}:${FLOWER_PASSWORD:?FLOWER_PASSWORD must be set}
     ports:
       - "127.0.0.1:5555:5555"
     depends_on:

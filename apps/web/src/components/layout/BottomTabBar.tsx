@@ -69,11 +69,11 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
       setRoleResolved(true);
       return;
     }
-    const superuser = localStorage.getItem("is_superuser") === "true";
-    const owner = localStorage.getItem("is_owner") === "true";
+    const superuser = sessionStorage.getItem("is_superuser") === "true";
+    const owner = sessionStorage.getItem("is_owner") === "true";
     let perms: string[] = [];
     try {
-      const raw = localStorage.getItem("permissions");
+      const raw = sessionStorage.getItem("permissions");
       perms = raw ? JSON.parse(raw) : [];
     } catch { /* ignore */ }
     const isCadre =
@@ -129,11 +129,11 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
       );
     }
     const superuser = typeof window !== "undefined" && (
-      localStorage.getItem("is_superuser") === "true" || localStorage.getItem("is_owner") === "true"
+      sessionStorage.getItem("is_superuser") === "true" || sessionStorage.getItem("is_owner") === "true"
     );
     let perms = new Set<string>();
     try {
-      perms = new Set(JSON.parse(localStorage.getItem("permissions") || "[]"));
+      perms = new Set(JSON.parse(sessionStorage.getItem("permissions") || "[]"));
     } catch { /* ignore */ }
     const can = (code: string) => superuser || perms.has("admin:all") || perms.has(code);
     const hasPrefix = (prefix: string) =>

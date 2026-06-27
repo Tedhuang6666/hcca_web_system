@@ -150,16 +150,17 @@ async def update_me(
         await db.flush()
     except IntegrityError as exc:
         await db.rollback()
-        constraint_hint = str(exc.orig)
-        if "student_id" in constraint_hint:
+        # SECURITY: 以 from None 截斷 exception chain，避免原始 constraint 名稱
+        # 透過 debug middleware 或錯誤框架意外洩漏至 HTTP 回應。
+        if "student_id" in str(exc.orig):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="此學號已被其他帳號使用，請確認學號是否正確",
-            ) from exc
+            ) from None
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="資料衝突，請確認填入的資料是否唯一",
-        ) from exc
+        ) from None
     return current_user
 
 

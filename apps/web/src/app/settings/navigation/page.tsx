@@ -51,10 +51,10 @@ export default function NavigationSettingsPage() {
   const permissionHelpers = useMemo(() => {
     if (typeof window === "undefined") return { can: () => false, hasPrefix: () => false, isAdmin: false };
     const superuser =
-      localStorage.getItem("is_superuser") === "true" || localStorage.getItem("is_owner") === "true";
+      sessionStorage.getItem("is_superuser") === "true" || sessionStorage.getItem("is_owner") === "true";
     let permissions = new Set<string>();
     try {
-      permissions = new Set(JSON.parse(localStorage.getItem("permissions") || "[]"));
+      permissions = new Set(JSON.parse(sessionStorage.getItem("permissions") || "[]"));
     } catch { /* ignore */ }
     return {
       can: (code: string) => superuser || permissions.has("admin:all") || permissions.has(code),
