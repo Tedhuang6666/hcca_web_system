@@ -175,7 +175,6 @@ async def sync_shop_order(db: AsyncSession, order: Order) -> Receivable:
             title=f"校商訂單 {order.serial_number}",
         )
         db.add(item)
-    item.org_id = order.org_id
     item.user_id = order.user_id
     item.class_id = order.class_id
     item.amount = order.total_price
