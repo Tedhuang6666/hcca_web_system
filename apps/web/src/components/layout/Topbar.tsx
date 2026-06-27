@@ -147,7 +147,10 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
         setPreviewNtfs(items);
         setPreviewTasks(inbox.items.slice(0, 5));
         setTaskCount(inbox.total);
-      } catch { /* ignore */ }
+      } catch {
+        setPreviewNtfs([]);
+        setPreviewTasks([]);
+      }
     }
   };
 

@@ -527,19 +527,23 @@ export default function DocumentListPage() {
     });
   };
 
-  const searchDelegate = async (q: string) => {
+  const delegateTimer = useRef<ReturnType<typeof setTimeout>>();
+  const searchDelegate = useCallback((q: string) => {
     setDelegateQuery(q);
     setDelegateId(null);
+    clearTimeout(delegateTimer.current);
     if (!q.trim()) {
       setDelegateSuggestions([]);
       return;
     }
-    try {
-      setDelegateSuggestions((await usersApi.listForSearch(q)).slice(0, 5));
-    } catch {
-      setDelegateSuggestions([]);
-    }
-  };
+    delegateTimer.current = setTimeout(async () => {
+      try {
+        setDelegateSuggestions((await usersApi.listForSearch(q)).slice(0, 5));
+      } catch {
+        setDelegateSuggestions([]);
+      }
+    }, 300);
+  }, []);
 
   const applyQuickFilter = (
     nextTab: DocumentStatus | "all",
@@ -1054,9 +1058,8 @@ export default function DocumentListPage() {
                   {sorted.map((doc, idx) => (
                     <tr
                       key={doc.id}
-                      style={idx < docs.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+                      className="hover:[background:var(--bg-hover)]"
+                      style={idx < docs.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}}>
                       <td className="px-5 py-4">
                         <input
                           type="checkbox"
@@ -1176,9 +1179,7 @@ export default function DocumentListPage() {
                 const isSoon = urg === "soon";
                 return (
                   <li key={doc.id}>
-                    <div className="flex items-start justify-between gap-2 px-4 py-4 transition-colors"
-                      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-hover)")}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+                    <div className="flex items-start justify-between gap-2 px-4 py-4 transition-colors hover:[background:var(--bg-hover)]">
                     <input
                       type="checkbox"
                       checked={selectedIds.has(doc.id)}

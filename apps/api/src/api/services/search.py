@@ -147,60 +147,88 @@ async def _sql_fallback(
     return results[:limit]
 
 
+_REBUILD_BATCH_SIZE = 500
+
+
 async def rebuild_index(db: AsyncSession) -> dict[str, Any]:
     documents: list[dict[str, Any]] = []
 
-    for doc in (await db.execute(select(Document))).scalars():
-        documents.append(
-            {
-                "id": f"document-{doc.id}",
-                "kind": "document",
-                "title": doc.title,
-                "summary": doc.content[:300],
-                "href": f"/documents/{doc.id}",
-                "content": doc.content,
-                "updated_at": doc.updated_at.isoformat() if doc.updated_at else None,
-            }
-        )
+    # 分批載入避免 OOM：每次最多 _REBUILD_BATCH_SIZE 筆
+    for offset in range(0, 10_000_000, _REBUILD_BATCH_SIZE):
+        batch = (
+            await db.execute(select(Document).offset(offset).limit(_REBUILD_BATCH_SIZE))
+        ).scalars().all()
+        for doc in batch:
+            documents.append(
+                {
+                    "id": f"document-{doc.id}",
+                    "kind": "document",
+                    "title": doc.title,
+                    "summary": doc.content[:300],
+                    "href": f"/documents/{doc.id}",
+                    "content": doc.content,
+                    "updated_at": doc.updated_at.isoformat() if doc.updated_at else None,
+                }
+            )
+        if len(batch) < _REBUILD_BATCH_SIZE:
+            break
 
-    for reg in (await db.execute(select(Regulation))).scalars():
-        documents.append(
-            {
-                "id": f"regulation-{reg.id}",
-                "kind": "regulation",
-                "title": reg.title,
-                "summary": reg.content[:300],
-                "href": f"/regulations/{reg.id}",
-                "content": reg.content,
-                "updated_at": reg.updated_at.isoformat() if reg.updated_at else None,
-            }
-        )
+    for offset in range(0, 10_000_000, _REBUILD_BATCH_SIZE):
+        batch = (
+            await db.execute(select(Regulation).offset(offset).limit(_REBUILD_BATCH_SIZE))
+        ).scalars().all()
+        for reg in batch:
+            documents.append(
+                {
+                    "id": f"regulation-{reg.id}",
+                    "kind": "regulation",
+                    "title": reg.title,
+                    "summary": reg.content[:300],
+                    "href": f"/regulations/{reg.id}",
+                    "content": reg.content,
+                    "updated_at": reg.updated_at.isoformat() if reg.updated_at else None,
+                }
+            )
+        if len(batch) < _REBUILD_BATCH_SIZE:
+            break
 
-    for meeting in (await db.execute(select(Meeting))).scalars():
-        documents.append(
-            {
-                "id": f"meeting-{meeting.id}",
-                "kind": "meeting",
-                "title": meeting.title,
-                "summary": meeting.description or "",
-                "href": f"/meetings/{meeting.id}",
-                "content": meeting.description or "",
-                "updated_at": meeting.updated_at.isoformat() if meeting.updated_at else None,
-            }
-        )
+    for offset in range(0, 10_000_000, _REBUILD_BATCH_SIZE):
+        batch = (
+            await db.execute(select(Meeting).offset(offset).limit(_REBUILD_BATCH_SIZE))
+        ).scalars().all()
+        for meeting in batch:
+            documents.append(
+                {
+                    "id": f"meeting-{meeting.id}",
+                    "kind": "meeting",
+                    "title": meeting.title,
+                    "summary": meeting.description or "",
+                    "href": f"/meetings/{meeting.id}",
+                    "content": meeting.description or "",
+                    "updated_at": meeting.updated_at.isoformat() if meeting.updated_at else None,
+                }
+            )
+        if len(batch) < _REBUILD_BATCH_SIZE:
+            break
 
-    for ann in (await db.execute(select(Announcement))).scalars():
-        documents.append(
-            {
-                "id": f"announcement-{ann.id}",
-                "kind": "announcement",
-                "title": ann.title,
-                "summary": "",
-                "href": f"/announcements/{ann.id}",
-                "content": str(ann.content or ""),
-                "updated_at": ann.updated_at.isoformat() if ann.updated_at else None,
-            }
-        )
+    for offset in range(0, 10_000_000, _REBUILD_BATCH_SIZE):
+        batch = (
+            await db.execute(select(Announcement).offset(offset).limit(_REBUILD_BATCH_SIZE))
+        ).scalars().all()
+        for ann in batch:
+            documents.append(
+                {
+                    "id": f"announcement-{ann.id}",
+                    "kind": "announcement",
+                    "title": ann.title,
+                    "summary": "",
+                    "href": f"/announcements/{ann.id}",
+                    "content": str(ann.content or ""),
+                    "updated_at": ann.updated_at.isoformat() if ann.updated_at else None,
+                }
+            )
+        if len(batch) < _REBUILD_BATCH_SIZE:
+            break
 
     if not meili_enabled():
         return {"enabled": False, "indexed": len(documents)}

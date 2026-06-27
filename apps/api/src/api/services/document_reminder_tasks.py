@@ -160,8 +160,16 @@ async def _process_overdue_async() -> dict:
     }
 
 
-@celery_app.task(name="api.services.document_reminder_tasks.send_document_reminders")
-def send_document_reminders() -> dict:
+@celery_app.task(
+    name="api.services.document_reminder_tasks.send_document_reminders",
+    bind=True,
+    max_retries=3,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+)
+def send_document_reminders(self) -> dict:  # type: ignore[type-arg]
     """每日 08:00 跑（建議）。對 overdue 公文催辦 + 視次數升級。"""
     return asyncio.run(_process_overdue_async())
 

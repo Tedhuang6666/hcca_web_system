@@ -29,13 +29,14 @@ async def _dispatch_scheduled() -> dict:
 
     from sqlalchemy import select
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+    from sqlalchemy.pool import NullPool
 
     from api.core.config import settings
     from api.models.email_message import EmailMessage, EmailStatus
     from api.models.user import User
     from api.routers.email import _send_now
 
-    engine = create_async_engine(str(settings.DATABASE_URL))
+    engine = create_async_engine(str(settings.DATABASE_URL), poolclass=NullPool)
     dispatched = 0
     try:
         async with AsyncSession(engine) as session:

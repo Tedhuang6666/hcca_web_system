@@ -179,6 +179,7 @@ class Regulation(Base, TimestampMixin):
         UUID(as_uuid=True),
         ForeignKey("documents.id", ondelete="SET NULL"),
         nullable=True,
+        index=True,
     )
     # 是否已廢止
     is_repealed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

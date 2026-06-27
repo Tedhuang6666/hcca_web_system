@@ -86,8 +86,16 @@ async def _rotate_model_async(
     }
 
 
-@celery_app.task(name="api.services.field_crypto_tasks.rotate_user_mfa_secrets")
-def rotate_user_mfa_secrets(batch_size: int = BATCH_SIZE) -> dict:
+@celery_app.task(
+    name="api.services.field_crypto_tasks.rotate_user_mfa_secrets",
+    bind=True,
+    max_retries=3,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+)
+def rotate_user_mfa_secrets(self, batch_size: int = BATCH_SIZE) -> dict:  # type: ignore[type-arg]
     """Batch rotate User.mfa_secret 欄位。"""
     from api.models.user import User
 
