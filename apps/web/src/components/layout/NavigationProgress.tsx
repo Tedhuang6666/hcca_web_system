@@ -23,6 +23,7 @@ export default function NavigationProgress() {
     bar.style.width = "100%";
     s.current.timer = setTimeout(() => {
       if (barRef.current) barRef.current.style.opacity = "0";
+      document.documentElement.removeAttribute("data-navigation");
     }, 200);
   }, [pathname]);
 
@@ -42,6 +43,7 @@ export default function NavigationProgress() {
       if (s.current.timer !== null) { clearTimeout(s.current.timer); s.current.timer = null; }
       if (s.current.raf !== null) { cancelAnimationFrame(s.current.raf); s.current.raf = null; }
       s.current.active = true;
+      document.documentElement.setAttribute("data-navigation", "pending");
       bar.style.transition = "none";
       bar.style.opacity = "1";
       bar.style.width = "0%";
@@ -53,7 +55,10 @@ export default function NavigationProgress() {
     };
 
     document.addEventListener("click", handleClick, true);
-    return () => document.removeEventListener("click", handleClick, true);
+    return () => {
+      document.removeEventListener("click", handleClick, true);
+      document.documentElement.removeAttribute("data-navigation");
+    };
   }, []);
 
   return (
