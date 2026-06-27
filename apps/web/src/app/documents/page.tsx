@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useReducer, useMemo, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -47,6 +47,57 @@ const DOC_VISIBILITIES: { key: string; label: string }[] = [
 
 type SortKey = "created_desc" | "created_asc" | "title_asc" | "due_asc" | "urgency_desc";
 
+type FilterState = {
+  category: string;
+  classification: string;
+  visibility: string;
+  dateFrom: string;
+  dateTo: string;
+  issuedFrom: string;
+  issuedTo: string;
+  rocYear: string;
+  serialPrefix: string;
+  handlerKeyword: string;
+  recipientKeyword: string;
+  myOnly: boolean;
+  orgId: string;
+  activityId: string;
+};
+
+const EMPTY_FILTERS: FilterState = {
+  category: "",
+  classification: "",
+  visibility: "",
+  dateFrom: "",
+  dateTo: "",
+  issuedFrom: "",
+  issuedTo: "",
+  rocYear: "",
+  serialPrefix: "",
+  handlerKeyword: "",
+  recipientKeyword: "",
+  myOnly: false,
+  orgId: "",
+  activityId: "",
+};
+
+type FilterAction =
+  | { type: "set"; key: keyof Omit<FilterState, "myOnly">; value: string }
+  | { type: "setMyOnly"; value: boolean }
+  | { type: "toggleMyOnly" }
+  | { type: "clear" }
+  | { type: "apply"; state: FilterState };
+
+function filterReducer(state: FilterState, action: FilterAction): FilterState {
+  switch (action.type) {
+    case "set":    return { ...state, [action.key]: action.value };
+    case "setMyOnly": return { ...state, myOnly: action.value };
+    case "toggleMyOnly": return { ...state, myOnly: !state.myOnly };
+    case "clear":  return EMPTY_FILTERS;
+    case "apply":  return action.state;
+  }
+}
+
 const URGENCY_ORDER: Record<string, number> = { express: 2, priority: 1, normal: 0 };
 
 function dueDateUrgency(
@@ -93,28 +144,33 @@ export default function DocumentListPage() {
   const [docs, setDocs] = useState<DocumentListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState<number | null>(null);
+  const isMountedFetch = useRef(false);
   const [activeTab, setActiveTab] = useState<DocumentStatus | "all">(
     initialStatus && TABS.some(t => t.key === initialStatus) ? initialStatus : "all"
   );
   const [search, setSearch] = useState(searchParams.get("keyword") ?? "");
   const [sortKey, setSortKey] = useState<SortKey>("created_desc");
   const [showFilters, setShowFilters] = useState(false);
-  const [filterCategory, setFilterCategory] = useState<string>(searchParams.get("category") ?? "");
-  const [filterClassification, setFilterClassification] = useState<string>(
-    searchParams.get("classification") ?? ""
+  const [filters, dispatchFilter] = useReducer(
+    filterReducer,
+    undefined,
+    () => ({
+      category:         searchParams.get("category") ?? "",
+      classification:   searchParams.get("classification") ?? "",
+      visibility:       searchParams.get("visibility") ?? "",
+      dateFrom:         searchParams.get("date_from") ?? "",
+      dateTo:           searchParams.get("date_to") ?? "",
+      issuedFrom:       searchParams.get("issued_from") ?? "",
+      issuedTo:         searchParams.get("issued_to") ?? "",
+      rocYear:          searchParams.get("roc_year") ?? "",
+      serialPrefix:     searchParams.get("serial_prefix") ?? "",
+      handlerKeyword:   searchParams.get("handler_keyword") ?? "",
+      recipientKeyword: searchParams.get("recipient_keyword") ?? "",
+      myOnly:           searchParams.get("my_only") === "true",
+      orgId:            searchParams.get("org_id") ?? "",
+      activityId:       searchParams.get("activity_id") ?? "",
+    })
   );
-  const [filterVisibility, setFilterVisibility] = useState<string>(searchParams.get("visibility") ?? "");
-  const [filterDateFrom, setFilterDateFrom] = useState(searchParams.get("date_from") ?? "");
-  const [filterDateTo, setFilterDateTo] = useState(searchParams.get("date_to") ?? "");
-  const [filterIssuedFrom, setFilterIssuedFrom] = useState(searchParams.get("issued_from") ?? "");
-  const [filterIssuedTo, setFilterIssuedTo] = useState(searchParams.get("issued_to") ?? "");
-  const [filterRocYear, setFilterRocYear] = useState(searchParams.get("roc_year") ?? "");
-  const [filterSerialPrefix, setFilterSerialPrefix] = useState(searchParams.get("serial_prefix") ?? "");
-  const [filterHandlerKeyword, setFilterHandlerKeyword] = useState(searchParams.get("handler_keyword") ?? "");
-  const [filterRecipientKeyword, setFilterRecipientKeyword] = useState(searchParams.get("recipient_keyword") ?? "");
-  const [filterMyOnly, setFilterMyOnly] = useState(searchParams.get("my_only") === "true");
-  const [filterOrgId, setFilterOrgId] = useState(searchParams.get("org_id") ?? "");
-  const [filterActivityId, setFilterActivityId] = useState(searchParams.get("activity_id") ?? "");
   const [orgs, setOrgs] = useState<OrgRead[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [savedFilters, setSavedFilters] = useState<SavedFilterOut[]>([]);
@@ -130,75 +186,92 @@ export default function DocumentListPage() {
   const { can } = usePermissions();
 
   const hasActiveFilters = Boolean(
-    filterCategory || filterClassification || filterVisibility ||
-    filterDateFrom || filterDateTo ||
-    filterIssuedFrom || filterIssuedTo ||
-    filterRocYear || filterSerialPrefix || filterHandlerKeyword || filterRecipientKeyword ||
-    filterMyOnly || filterOrgId || filterActivityId
+    filters.category || filters.classification || filters.visibility ||
+    filters.dateFrom || filters.dateTo ||
+    filters.issuedFrom || filters.issuedTo ||
+    filters.rocYear || filters.serialPrefix || filters.handlerKeyword || filters.recipientKeyword ||
+    filters.myOnly || filters.orgId || filters.activityId
   );
 
   useEffect(() => {
     setNow(Date.now());
     const userId = typeof window !== "undefined" ? localStorage.getItem("user_id") : null;
 
-    const loadInitialData = async () => {
-      const [orgsRes, savedFiltersRes] = await Promise.all([
-        withFallback(orgsApi.list({ active_only: true }), []),
-        userId ? withFallback(savedFiltersApi.list("documents"), []) : Promise.resolve([]),
-      ]);
-      setOrgs(orgsRes);
-      setSavedFilters(savedFiltersRes);
-    };
+    const initialParams: Record<string, string> = { limit: String(PAGE_SIZE), offset: "0" };
+    if (activeTab !== "all") initialParams.status = activeTab;
+    if (search.trim()) initialParams.keyword = search.trim();
+    if (filters.category) initialParams.category = filters.category;
+    if (filters.classification) initialParams.classification = filters.classification;
+    if (filters.visibility) initialParams.visibility = filters.visibility;
+    if (filters.dateFrom) initialParams.date_from = filters.dateFrom;
+    if (filters.dateTo) initialParams.date_to = filters.dateTo;
+    if (filters.issuedFrom) initialParams.issued_from = filters.issuedFrom;
+    if (filters.issuedTo) initialParams.issued_to = filters.issuedTo;
+    if (filters.rocYear) initialParams.roc_year = filters.rocYear;
+    if (filters.serialPrefix) initialParams.serial_prefix = filters.serialPrefix;
+    if (filters.handlerKeyword) initialParams.handler_keyword = filters.handlerKeyword;
+    if (filters.recipientKeyword) initialParams.recipient_keyword = filters.recipientKeyword;
+    if (filters.myOnly) initialParams.my_only = "true";
+    if (filters.orgId) initialParams.org_id = filters.orgId;
+    if (filters.activityId) initialParams.activity_id = filters.activityId;
 
-    loadInitialData();
-  }, []);
+    Promise.all([
+      withFallback(orgsApi.list({ active_only: true }), []),
+      userId ? withFallback(savedFiltersApi.list("documents"), []) : Promise.resolve([]),
+      documentsApi.list(initialParams).catch(() => null),
+    ]).then(([orgsRes, savedFiltersRes, docsRes]) => {
+      setOrgs(orgsRes as OrgRead[]);
+      setSavedFilters(savedFiltersRes as SavedFilterOut[]);
+      if (docsRes !== null) {
+        setDocs(docsRes as DocumentListItem[]);
+        setHasMore((docsRes as DocumentListItem[]).length === PAGE_SIZE);
+      }
+      setLoading(false);
+      isMountedFetch.current = true;
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const q = new URLSearchParams();
     if (activeTab !== "all") q.set("status", activeTab);
     if (search.trim()) q.set("keyword", search.trim());
-    if (filterCategory) q.set("category", filterCategory);
-    if (filterClassification) q.set("classification", filterClassification);
-    if (filterVisibility) q.set("visibility", filterVisibility);
-    if (filterDateFrom) q.set("date_from", filterDateFrom);
-    if (filterDateTo) q.set("date_to", filterDateTo);
-    if (filterIssuedFrom) q.set("issued_from", filterIssuedFrom);
-    if (filterIssuedTo) q.set("issued_to", filterIssuedTo);
-    if (filterRocYear) q.set("roc_year", filterRocYear);
-    if (filterSerialPrefix) q.set("serial_prefix", filterSerialPrefix);
-    if (filterHandlerKeyword) q.set("handler_keyword", filterHandlerKeyword);
-    if (filterRecipientKeyword) q.set("recipient_keyword", filterRecipientKeyword);
-    if (filterMyOnly) q.set("my_only", "true");
-    if (filterOrgId) q.set("org_id", filterOrgId);
-    if (filterActivityId) q.set("activity_id", filterActivityId);
+    if (filters.category) q.set("category", filters.category);
+    if (filters.classification) q.set("classification", filters.classification);
+    if (filters.visibility) q.set("visibility", filters.visibility);
+    if (filters.dateFrom) q.set("date_from", filters.dateFrom);
+    if (filters.dateTo) q.set("date_to", filters.dateTo);
+    if (filters.issuedFrom) q.set("issued_from", filters.issuedFrom);
+    if (filters.issuedTo) q.set("issued_to", filters.issuedTo);
+    if (filters.rocYear) q.set("roc_year", filters.rocYear);
+    if (filters.serialPrefix) q.set("serial_prefix", filters.serialPrefix);
+    if (filters.handlerKeyword) q.set("handler_keyword", filters.handlerKeyword);
+    if (filters.recipientKeyword) q.set("recipient_keyword", filters.recipientKeyword);
+    if (filters.myOnly) q.set("my_only", "true");
+    if (filters.orgId) q.set("org_id", filters.orgId);
+    if (filters.activityId) q.set("activity_id", filters.activityId);
     const next = q.toString() ? `/documents?${q}` : "/documents";
     router.replace(next, { scroll: false });
-  }, [
-    activeTab, search, filterCategory, filterClassification, filterVisibility,
-    filterDateFrom, filterDateTo,
-    filterIssuedFrom, filterIssuedTo, filterRocYear,
-    filterSerialPrefix, filterHandlerKeyword, filterRecipientKeyword,
-    filterMyOnly, filterOrgId, filterActivityId, router,
-  ]);
+  }, [activeTab, search, filters, router]);
 
   useEffect(() => {
+    if (!isMountedFetch.current) return; // mount effect already handled first load
     const params: Record<string, string> = { limit: String(PAGE_SIZE), offset: "0" };
     if (activeTab !== "all") params.status = activeTab;
     if (search.trim()) params.keyword = search.trim();
-    if (filterCategory) params.category = filterCategory;
-    if (filterClassification) params.classification = filterClassification;
-    if (filterVisibility) params.visibility = filterVisibility;
-    if (filterDateFrom) params.date_from = filterDateFrom;
-    if (filterDateTo) params.date_to = filterDateTo;
-    if (filterIssuedFrom) params.issued_from = filterIssuedFrom;
-    if (filterIssuedTo) params.issued_to = filterIssuedTo;
-    if (filterRocYear) params.roc_year = filterRocYear;
-    if (filterSerialPrefix) params.serial_prefix = filterSerialPrefix;
-    if (filterHandlerKeyword) params.handler_keyword = filterHandlerKeyword;
-    if (filterRecipientKeyword) params.recipient_keyword = filterRecipientKeyword;
-    if (filterMyOnly) params.my_only = "true";
-    if (filterOrgId) params.org_id = filterOrgId;
-    if (filterActivityId) params.activity_id = filterActivityId;
+    if (filters.category) params.category = filters.category;
+    if (filters.classification) params.classification = filters.classification;
+    if (filters.visibility) params.visibility = filters.visibility;
+    if (filters.dateFrom) params.date_from = filters.dateFrom;
+    if (filters.dateTo) params.date_to = filters.dateTo;
+    if (filters.issuedFrom) params.issued_from = filters.issuedFrom;
+    if (filters.issuedTo) params.issued_to = filters.issuedTo;
+    if (filters.rocYear) params.roc_year = filters.rocYear;
+    if (filters.serialPrefix) params.serial_prefix = filters.serialPrefix;
+    if (filters.handlerKeyword) params.handler_keyword = filters.handlerKeyword;
+    if (filters.recipientKeyword) params.recipient_keyword = filters.recipientKeyword;
+    if (filters.myOnly) params.my_only = "true";
+    if (filters.orgId) params.org_id = filters.orgId;
+    if (filters.activityId) params.activity_id = filters.activityId;
 
     setLoading(true);
     setOffset(0);
@@ -211,50 +284,36 @@ export default function DocumentListPage() {
       })
       .catch((e) => toast.error(apiErrorMessage(e, "載入失敗")))
       .finally(() => setLoading(false));
-  }, [
-    activeTab, search, filterCategory, filterClassification, filterVisibility,
-    filterDateFrom, filterDateTo,
-    filterIssuedFrom, filterIssuedTo, filterRocYear,
-    filterSerialPrefix, filterHandlerKeyword, filterRecipientKeyword,
-    filterMyOnly, filterOrgId, filterActivityId,
-  ]);
+  }, [activeTab, search, filters]);
 
-  const clearFilters = () => {
-    setFilterCategory("");
-    setFilterClassification("");
-    setFilterVisibility("");
-    setFilterDateFrom("");
-    setFilterDateTo("");
-    setFilterIssuedFrom("");
-    setFilterIssuedTo("");
-    setFilterRocYear("");
-    setFilterSerialPrefix("");
-    setFilterHandlerKeyword("");
-    setFilterRecipientKeyword("");
-    setFilterMyOnly(false);
-    setFilterOrgId("");
-    setFilterActivityId("");
-  };
+  const clearFilters = useCallback(() => {
+    dispatchFilter({ type: "clear" });
+  }, []);
 
   const applySavedFilter = (sf: SavedFilterOut) => {
     const p = (sf.params ?? {}) as Record<string, unknown>;
     const s = (k: string) => (typeof p[k] === "string" ? (p[k] as string) : "");
     setActiveTab((s("status") as DocumentStatus) || "all");
     setSearch(s("keyword"));
-    setFilterCategory(s("category"));
-    setFilterClassification(s("classification"));
-    setFilterVisibility(s("visibility"));
-    setFilterDateFrom(s("date_from"));
-    setFilterDateTo(s("date_to"));
-    setFilterIssuedFrom(s("issued_from"));
-    setFilterIssuedTo(s("issued_to"));
-    setFilterRocYear(s("roc_year"));
-    setFilterSerialPrefix(s("serial_prefix"));
-    setFilterHandlerKeyword(s("handler_keyword"));
-    setFilterRecipientKeyword(s("recipient_keyword"));
-    setFilterMyOnly(s("my_only") === "true");
-    setFilterOrgId(s("org_id"));
-    setFilterActivityId(s("activity_id"));
+    dispatchFilter({
+      type: "apply",
+      state: {
+        category:         s("category"),
+        classification:   s("classification"),
+        visibility:       s("visibility"),
+        dateFrom:         s("date_from"),
+        dateTo:           s("date_to"),
+        issuedFrom:       s("issued_from"),
+        issuedTo:         s("issued_to"),
+        rocYear:          s("roc_year"),
+        serialPrefix:     s("serial_prefix"),
+        handlerKeyword:   s("handler_keyword"),
+        recipientKeyword: s("recipient_keyword"),
+        myOnly:           s("my_only") === "true",
+        orgId:            s("org_id"),
+        activityId:       s("activity_id"),
+      },
+    });
     setShowFilters(true);
   };
 
@@ -264,20 +323,20 @@ export default function DocumentListPage() {
     const params: Record<string, unknown> = {};
     if (activeTab !== "all") params.status = activeTab;
     if (search.trim()) params.keyword = search.trim();
-    if (filterCategory) params.category = filterCategory;
-    if (filterClassification) params.classification = filterClassification;
-    if (filterVisibility) params.visibility = filterVisibility;
-    if (filterDateFrom) params.date_from = filterDateFrom;
-    if (filterDateTo) params.date_to = filterDateTo;
-    if (filterIssuedFrom) params.issued_from = filterIssuedFrom;
-    if (filterIssuedTo) params.issued_to = filterIssuedTo;
-    if (filterRocYear) params.roc_year = filterRocYear;
-    if (filterSerialPrefix) params.serial_prefix = filterSerialPrefix;
-    if (filterHandlerKeyword) params.handler_keyword = filterHandlerKeyword;
-    if (filterRecipientKeyword) params.recipient_keyword = filterRecipientKeyword;
-    if (filterMyOnly) params.my_only = "true";
-    if (filterOrgId) params.org_id = filterOrgId;
-    if (filterActivityId) params.activity_id = filterActivityId;
+    if (filters.category) params.category = filters.category;
+    if (filters.classification) params.classification = filters.classification;
+    if (filters.visibility) params.visibility = filters.visibility;
+    if (filters.dateFrom) params.date_from = filters.dateFrom;
+    if (filters.dateTo) params.date_to = filters.dateTo;
+    if (filters.issuedFrom) params.issued_from = filters.issuedFrom;
+    if (filters.issuedTo) params.issued_to = filters.issuedTo;
+    if (filters.rocYear) params.roc_year = filters.rocYear;
+    if (filters.serialPrefix) params.serial_prefix = filters.serialPrefix;
+    if (filters.handlerKeyword) params.handler_keyword = filters.handlerKeyword;
+    if (filters.recipientKeyword) params.recipient_keyword = filters.recipientKeyword;
+    if (filters.myOnly) params.my_only = "true";
+    if (filters.orgId) params.org_id = filters.orgId;
+    if (filters.activityId) params.activity_id = filters.activityId;
     const share_path = (() => {
       const q = new URLSearchParams(params as Record<string, string>);
       return q.toString() ? `/documents?${q.toString()}` : "/documents";
@@ -309,20 +368,20 @@ export default function DocumentListPage() {
       const params: Record<string, string> = { limit: String(PAGE_SIZE), offset: String(nextOffset) };
       if (activeTab !== "all") params.status = activeTab;
       if (search.trim()) params.keyword = search.trim();
-      if (filterCategory) params.category = filterCategory;
-      if (filterClassification) params.classification = filterClassification;
-      if (filterVisibility) params.visibility = filterVisibility;
-      if (filterDateFrom) params.date_from = filterDateFrom;
-      if (filterDateTo) params.date_to = filterDateTo;
-      if (filterIssuedFrom) params.issued_from = filterIssuedFrom;
-      if (filterIssuedTo) params.issued_to = filterIssuedTo;
-      if (filterRocYear) params.roc_year = filterRocYear;
-      if (filterSerialPrefix) params.serial_prefix = filterSerialPrefix;
-      if (filterHandlerKeyword) params.handler_keyword = filterHandlerKeyword;
-      if (filterRecipientKeyword) params.recipient_keyword = filterRecipientKeyword;
-      if (filterMyOnly) params.my_only = "true";
-      if (filterOrgId) params.org_id = filterOrgId;
-      if (filterActivityId) params.activity_id = filterActivityId;
+      if (filters.category) params.category = filters.category;
+      if (filters.classification) params.classification = filters.classification;
+      if (filters.visibility) params.visibility = filters.visibility;
+      if (filters.dateFrom) params.date_from = filters.dateFrom;
+      if (filters.dateTo) params.date_to = filters.dateTo;
+      if (filters.issuedFrom) params.issued_from = filters.issuedFrom;
+      if (filters.issuedTo) params.issued_to = filters.issuedTo;
+      if (filters.rocYear) params.roc_year = filters.rocYear;
+      if (filters.serialPrefix) params.serial_prefix = filters.serialPrefix;
+      if (filters.handlerKeyword) params.handler_keyword = filters.handlerKeyword;
+      if (filters.recipientKeyword) params.recipient_keyword = filters.recipientKeyword;
+      if (filters.myOnly) params.my_only = "true";
+      if (filters.orgId) params.org_id = filters.orgId;
+      if (filters.activityId) params.activity_id = filters.activityId;
       const more = await documentsApi.list(params);
       setDocs(prev => [...prev, ...more]);
       setOffset(nextOffset);
@@ -334,10 +393,12 @@ export default function DocumentListPage() {
     }
   };
 
-  const filteredDocs = docs;
-  const activityNameById = new Map(activities.map((activity) => [activity.id, activity.name]));
+  const activityNameById = useMemo(
+    () => new Map(activities.map((a) => [a.id, a.name])),
+    [activities]
+  );
 
-  const sorted = [...filteredDocs].sort((a, b) => {
+  const sorted = useMemo(() => [...docs].sort((a, b) => {
     switch (sortKey) {
       case "created_asc": return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
       case "title_asc":   return a.title.localeCompare(b.title, "zh-TW");
@@ -350,7 +411,7 @@ export default function DocumentListPage() {
         return (URGENCY_ORDER[b.urgency] ?? 0) - (URGENCY_ORDER[a.urgency] ?? 0);
       default: return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     }
-  });
+  }), [docs, sortKey]);
 
   const selectableDocs = sorted.filter((doc) => !doc.is_redacted);
   const selectedList = selectableDocs.filter((doc) => selectedIds.has(doc.id));
@@ -384,20 +445,20 @@ export default function DocumentListPage() {
     const params: Record<string, string> = { limit: String(PAGE_SIZE), offset: "0" };
     if (activeTab !== "all") params.status = activeTab;
     if (search.trim()) params.keyword = search.trim();
-    if (filterCategory) params.category = filterCategory;
-    if (filterClassification) params.classification = filterClassification;
-    if (filterVisibility) params.visibility = filterVisibility;
-    if (filterDateFrom) params.date_from = filterDateFrom;
-    if (filterDateTo) params.date_to = filterDateTo;
-    if (filterIssuedFrom) params.issued_from = filterIssuedFrom;
-    if (filterIssuedTo) params.issued_to = filterIssuedTo;
-    if (filterRocYear) params.roc_year = filterRocYear;
-    if (filterSerialPrefix) params.serial_prefix = filterSerialPrefix;
-    if (filterHandlerKeyword) params.handler_keyword = filterHandlerKeyword;
-    if (filterRecipientKeyword) params.recipient_keyword = filterRecipientKeyword;
-    if (filterMyOnly) params.my_only = "true";
-    if (filterOrgId) params.org_id = filterOrgId;
-    if (filterActivityId) params.activity_id = filterActivityId;
+    if (filters.category) params.category = filters.category;
+    if (filters.classification) params.classification = filters.classification;
+    if (filters.visibility) params.visibility = filters.visibility;
+    if (filters.dateFrom) params.date_from = filters.dateFrom;
+    if (filters.dateTo) params.date_to = filters.dateTo;
+    if (filters.issuedFrom) params.issued_from = filters.issuedFrom;
+    if (filters.issuedTo) params.issued_to = filters.issuedTo;
+    if (filters.rocYear) params.roc_year = filters.rocYear;
+    if (filters.serialPrefix) params.serial_prefix = filters.serialPrefix;
+    if (filters.handlerKeyword) params.handler_keyword = filters.handlerKeyword;
+    if (filters.recipientKeyword) params.recipient_keyword = filters.recipientKeyword;
+    if (filters.myOnly) params.my_only = "true";
+    if (filters.orgId) params.org_id = filters.orgId;
+    if (filters.activityId) params.activity_id = filters.activityId;
     const data = await documentsApi.list(params);
     setDocs(data);
     setOffset(0);
@@ -484,10 +545,11 @@ export default function DocumentListPage() {
     nextTab: DocumentStatus | "all",
     options: { myOnly?: boolean; visibility?: string; sort?: SortKey } = {},
   ) => {
-    clearFilters();
+    dispatchFilter({
+      type: "apply",
+      state: { ...EMPTY_FILTERS, myOnly: Boolean(options.myOnly), visibility: options.visibility ?? "" },
+    });
     setActiveTab(nextTab);
-    setFilterMyOnly(Boolean(options.myOnly));
-    setFilterVisibility(options.visibility ?? "");
     if (options.sort) setSortKey(options.sort);
     setShowFilters(false);
   };
@@ -663,8 +725,8 @@ export default function DocumentListPage() {
               <div className="space-y-1.5">
                 <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>字號前綴</p>
                 <input
-                  value={filterSerialPrefix}
-                  onChange={e => setFilterSerialPrefix(e.target.value)}
+                  value={filters.serialPrefix}
+                  onChange={e => dispatchFilter({ type: "set", key: "serialPrefix", value: e.target.value })}
                   placeholder="例：嶺代生字第"
                   className="text-xs px-2 py-1.5 rounded-lg outline-none w-56"
                   style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
@@ -675,17 +737,17 @@ export default function DocumentListPage() {
               <div className="space-y-1.5">
                 <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>公文類別</p>
                 <div className="flex flex-wrap gap-1.5">
-                  <button onClick={() => setFilterCategory("")}
+                  <button onClick={() => dispatchFilter({ type: "set", key: "category", value: "" })}
                     className="text-xs px-2.5 py-1 rounded-full transition-all"
-                    style={!filterCategory
+                    style={!filters.category
                       ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
                       : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
                     全部
                   </button>
                   {DOC_CATEGORIES.map(c => (
-                    <button key={c.key} onClick={() => setFilterCategory(c.key === filterCategory ? "" : c.key)}
+                    <button key={c.key} onClick={() => dispatchFilter({ type: "set", key: "category", value: c.key === filters.category ? "" : c.key })}
                       className="text-xs px-2.5 py-1 rounded-full transition-all"
-                      style={filterCategory === c.key
+                      style={filters.category === c.key
                         ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
                         : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
                       {c.label}
@@ -698,17 +760,17 @@ export default function DocumentListPage() {
               <div className="space-y-1.5">
                 <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>密等</p>
                 <div className="flex flex-wrap gap-1.5">
-                  <button onClick={() => setFilterClassification("")}
+                  <button onClick={() => dispatchFilter({ type: "set", key: "classification", value: "" })}
                     className="text-xs px-2.5 py-1 rounded-full transition-all"
-                    style={!filterClassification
+                    style={!filters.classification
                       ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
                       : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
                     全部
                   </button>
                   {DOC_CLASSIFICATIONS.map(c => (
-                    <button key={c.key} onClick={() => setFilterClassification(c.key === filterClassification ? "" : c.key)}
+                    <button key={c.key} onClick={() => dispatchFilter({ type: "set", key: "classification", value: c.key === filters.classification ? "" : c.key })}
                       className="text-xs px-2.5 py-1 rounded-full transition-all"
-                      style={filterClassification === c.key
+                      style={filters.classification === c.key
                         ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
                         : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
                       {c.label}
@@ -721,17 +783,17 @@ export default function DocumentListPage() {
               <div className="space-y-1.5">
                 <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>可見度</p>
                 <div className="flex flex-wrap gap-1.5">
-                  <button onClick={() => setFilterVisibility("")}
+                  <button onClick={() => dispatchFilter({ type: "set", key: "visibility", value: "" })}
                     className="text-xs px-2.5 py-1 rounded-full transition-all"
-                    style={!filterVisibility
+                    style={!filters.visibility
                       ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
                       : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
                     全部
                   </button>
                   {DOC_VISIBILITIES.map(v => (
-                    <button key={v.key} onClick={() => setFilterVisibility(v.key === filterVisibility ? "" : v.key)}
+                    <button key={v.key} onClick={() => dispatchFilter({ type: "set", key: "visibility", value: v.key === filters.visibility ? "" : v.key })}
                       className="text-xs px-2.5 py-1 rounded-full transition-all"
-                      style={filterVisibility === v.key
+                      style={filters.visibility === v.key
                         ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
                         : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
                       {v.label}
@@ -744,11 +806,11 @@ export default function DocumentListPage() {
               <div className="space-y-1.5">
                 <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>建立日期</p>
                 <div className="flex items-center gap-2">
-                  <input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)}
+                  <input type="date" value={filters.dateFrom} onChange={e => dispatchFilter({ type: "set", key: "dateFrom", value: e.target.value })}
                     className="text-xs px-2 py-1.5 rounded-lg outline-none"
                     style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
                   <span className="text-xs" style={{ color: "var(--text-muted)" }}>至</span>
-                  <input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)}
+                  <input type="date" value={filters.dateTo} onChange={e => dispatchFilter({ type: "set", key: "dateTo", value: e.target.value })}
                     className="text-xs px-2 py-1.5 rounded-lg outline-none"
                     style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
                 </div>
@@ -758,11 +820,11 @@ export default function DocumentListPage() {
               <div className="space-y-1.5">
                 <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>發文日期</p>
                 <div className="flex items-center gap-2">
-                  <input type="date" value={filterIssuedFrom} onChange={e => setFilterIssuedFrom(e.target.value)}
+                  <input type="date" value={filters.issuedFrom} onChange={e => dispatchFilter({ type: "set", key: "issuedFrom", value: e.target.value })}
                     className="text-xs px-2 py-1.5 rounded-lg outline-none"
                     style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
                   <span className="text-xs" style={{ color: "var(--text-muted)" }}>至</span>
-                  <input type="date" value={filterIssuedTo} onChange={e => setFilterIssuedTo(e.target.value)}
+                  <input type="date" value={filters.issuedTo} onChange={e => dispatchFilter({ type: "set", key: "issuedTo", value: e.target.value })}
                     className="text-xs px-2 py-1.5 rounded-lg outline-none"
                     style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
                 </div>
@@ -773,8 +835,8 @@ export default function DocumentListPage() {
                 <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>民國年（發文）</p>
                 <input
                   inputMode="numeric"
-                  value={filterRocYear}
-                  onChange={e => setFilterRocYear(e.target.value.replace(/[^\d]/g, "").slice(0, 3))}
+                  value={filters.rocYear}
+                  onChange={e => dispatchFilter({ type: "set", key: "rocYear", value: e.target.value.replace(/[^\d]/g, "").slice(0, 3) })}
                   placeholder="例：115"
                   className="text-xs px-2 py-1.5 rounded-lg outline-none w-28"
                   style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
@@ -785,8 +847,8 @@ export default function DocumentListPage() {
               <div className="space-y-1.5">
                 <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>受文者</p>
                 <input
-                  value={filterRecipientKeyword}
-                  onChange={e => setFilterRecipientKeyword(e.target.value)}
+                  value={filters.recipientKeyword}
+                  onChange={e => dispatchFilter({ type: "set", key: "recipientKeyword", value: e.target.value })}
                   placeholder="搜尋受文者名稱"
                   className="text-xs px-2 py-1.5 rounded-lg outline-none w-56"
                   style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
@@ -797,8 +859,8 @@ export default function DocumentListPage() {
               <div className="space-y-1.5">
                 <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>承辦人/單位</p>
                 <input
-                  value={filterHandlerKeyword}
-                  onChange={e => setFilterHandlerKeyword(e.target.value)}
+                  value={filters.handlerKeyword}
+                  onChange={e => dispatchFilter({ type: "set", key: "handlerKeyword", value: e.target.value })}
                   placeholder="姓名/單位/Email"
                   className="text-xs px-2 py-1.5 rounded-lg outline-none w-56"
                   style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
@@ -810,8 +872,8 @@ export default function DocumentListPage() {
                 <div className="space-y-1.5">
                   <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>發文組織</p>
                   <select
-                    value={filterOrgId}
-                    onChange={e => setFilterOrgId(e.target.value)}
+                    value={filters.orgId}
+                    onChange={e => dispatchFilter({ type: "set", key: "orgId", value: e.target.value })}
                     className="text-xs px-2 py-1.5 rounded-lg outline-none"
                     style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
                     <option value="">全部組織</option>
@@ -822,8 +884,8 @@ export default function DocumentListPage() {
 
               <div className="w-56 space-y-1.5">
                 <ActivitySelect
-                  value={filterActivityId}
-                  onChange={setFilterActivityId}
+                  value={filters.activityId}
+                  onChange={v => dispatchFilter({ type: "set", key: "activityId", value: v })}
                   label="活動"
                   noneLabel="全部活動"
                   scope="all"
@@ -834,14 +896,14 @@ export default function DocumentListPage() {
               {/* 僅顯示我的 */}
               <div className="space-y-1.5">
                 <p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>其他</p>
-                <button onClick={() => setFilterMyOnly(m => !m)}
+                <button onClick={() => dispatchFilter({ type: "toggleMyOnly" })}
                   className="text-xs px-3 py-1.5 rounded-full inline-flex items-center gap-1.5 transition-all"
-                  style={filterMyOnly
+                  style={filters.myOnly
                     ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
                     : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
-                  <span className={`w-3 h-3 rounded border flex items-center justify-center flex-shrink-0 ${filterMyOnly ? "bg-primary border-primary" : "border-muted"}`}
-                    style={filterMyOnly ? { background: "var(--primary)", borderColor: "var(--primary)" } : { borderColor: "var(--border-strong)" }}>
-                    {filterMyOnly && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
+                  <span className={`w-3 h-3 rounded border flex items-center justify-center flex-shrink-0 ${filters.myOnly ? "bg-primary border-primary" : "border-muted"}`}
+                    style={filters.myOnly ? { background: "var(--primary)", borderColor: "var(--primary)" } : { borderColor: "var(--border-strong)" }}>
+                    {filters.myOnly && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
                   </span>
                   僅顯示我的公文
                 </button>

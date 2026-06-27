@@ -17,34 +17,53 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.create_index(
-        "ix_documents_updated_by",
-        "documents",
-        ["updated_by"],
-        if_not_exists=True,
-    )
-    op.create_index(
-        "ix_document_revisions_changed_by",
-        "document_revisions",
-        ["changed_by"],
-        if_not_exists=True,
-    )
-    op.create_index(
-        "ix_meetings_created_by",
-        "meetings",
-        ["created_by"],
-        if_not_exists=True,
-    )
-    op.create_index(
-        "ix_meeting_agenda_items_regulation_id",
-        "meeting_agenda_items",
-        ["regulation_id"],
-        if_not_exists=True,
-    )
+    # CONCURRENTLY 不鎖表，但不能在 transaction 裡執行，需要 autocommit_block
+    with op.get_context().autocommit_block():
+        op.create_index(
+            "ix_documents_updated_by",
+            "documents",
+            ["updated_by"],
+            if_not_exists=True,
+            postgresql_concurrently=True,
+        )
+        op.create_index(
+            "ix_document_revisions_changed_by",
+            "document_revisions",
+            ["changed_by"],
+            if_not_exists=True,
+            postgresql_concurrently=True,
+        )
+        op.create_index(
+            "ix_meetings_created_by",
+            "meetings",
+            ["created_by"],
+            if_not_exists=True,
+            postgresql_concurrently=True,
+        )
+        op.create_index(
+            "ix_meeting_agenda_items_regulation_id",
+            "meeting_agenda_items",
+            ["regulation_id"],
+            if_not_exists=True,
+            postgresql_concurrently=True,
+        )
 
 
 def downgrade() -> None:
-    op.drop_index("ix_documents_updated_by", table_name="documents", if_exists=True)
-    op.drop_index("ix_document_revisions_changed_by", table_name="document_revisions", if_exists=True)
-    op.drop_index("ix_meetings_created_by", table_name="meetings", if_exists=True)
-    op.drop_index("ix_meeting_agenda_items_regulation_id", table_name="meeting_agenda_items", if_exists=True)
+    with op.get_context().autocommit_block():
+        op.drop_index(
+            "ix_documents_updated_by", table_name="documents", if_exists=True,
+            postgresql_concurrently=True,
+        )
+        op.drop_index(
+            "ix_document_revisions_changed_by", table_name="document_revisions", if_exists=True,
+            postgresql_concurrently=True,
+        )
+        op.drop_index(
+            "ix_meetings_created_by", table_name="meetings", if_exists=True,
+            postgresql_concurrently=True,
+        )
+        op.drop_index(
+            "ix_meeting_agenda_items_regulation_id", table_name="meeting_agenda_items", if_exists=True,
+            postgresql_concurrently=True,
+        )

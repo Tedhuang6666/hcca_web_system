@@ -113,13 +113,29 @@ async def _process_digest(frequency: str, window_hours: int) -> dict[str, int]:
     return {"sent": sent, "skipped": skipped}
 
 
-@celery_app.task(name="api.services.digest_tasks.send_daily_digest", bind=True, max_retries=0)
+@celery_app.task(
+    name="api.services.digest_tasks.send_daily_digest",
+    bind=True,
+    max_retries=3,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=600,
+    retry_jitter=True,
+)
 def send_daily_digest(self) -> dict:  # noqa: ARG001
     """每日 08:00 聚合過去 24 小時未讀通知。"""
     return asyncio.run(_process_digest("daily", window_hours=24))
 
 
-@celery_app.task(name="api.services.digest_tasks.send_weekly_digest", bind=True, max_retries=0)
+@celery_app.task(
+    name="api.services.digest_tasks.send_weekly_digest",
+    bind=True,
+    max_retries=3,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=600,
+    retry_jitter=True,
+)
 def send_weekly_digest(self) -> dict:  # noqa: ARG001
     """每週一 08:00 聚合過去 7 天未讀通知。"""
     return asyncio.run(_process_digest("weekly", window_hours=24 * 7))
