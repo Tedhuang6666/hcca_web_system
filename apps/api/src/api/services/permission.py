@@ -139,7 +139,7 @@ async def get_user_org_ids_with_permission(
             *[get_user_permission_codes_for_org(db, user_id, oid, on_date=check_date)
               for oid in all_org_ids]
         )
-        for oid, codes in zip(all_org_ids, per_org_codes):
+        for oid, codes in zip(all_org_ids, per_org_codes, strict=False):
             if permission_code in codes:
                 org_ids.add(oid)
     return list(org_ids)
@@ -174,7 +174,7 @@ async def get_user_org_ids_with_any_permission(
             *[get_user_permission_codes_for_org(db, user_id, oid, on_date=check_date)
               for oid in all_org_ids]
         )
-        for oid, codes in zip(all_org_ids, per_org_codes):
+        for oid, codes in zip(all_org_ids, per_org_codes, strict=False):
             if permission_codes & set(codes):
                 org_ids.add(oid)
     return list(org_ids)

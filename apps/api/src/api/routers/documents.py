@@ -12,6 +12,8 @@ BackgroundTasks 在狀態變更時非同步推送 Email 與 WebSocket 通知。
 
 from __future__ import annotations
 
+import contextlib
+import json
 import uuid
 from datetime import date
 from typing import Annotated
@@ -29,12 +31,10 @@ from fastapi.responses import Response
 from sqlalchemy import and_, extract, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import json
-
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
-from api.core.security import redis_client
 from api.core.posthog import get_posthog_client
+from api.core.security import redis_client
 from api.dependencies.auth import get_current_active_user, get_optional_user
 from api.models.document import (
     ApprovalStepStatus,
@@ -48,15 +48,9 @@ from api.models.document import (
     DocumentVisibility,
 )
 from api.models.user import User
-from api.routers.documents_helpers import (
-    assert_access as _assert_access,
-)
-from api.routers.documents_helpers import (
-    attach_approval_titles as _attach_approval_titles,
-)
-from api.routers.documents_helpers import (
-    get_doc_or_404 as _get_doc_or_404,
-)
+from api.routers.documents_helpers import assert_access as _assert_access
+from api.routers.documents_helpers import attach_approval_titles as _attach_approval_titles
+from api.routers.documents_helpers import get_doc_or_404 as _get_doc_or_404
 from api.schemas.context import DocumentApprovalContextOut
 from api.schemas.document import (
     DocumentCreate,
@@ -159,10 +153,8 @@ async def get_document_stats(session: DbDep, current_user: CurrentUser) -> dict:
         "approved_this_month": approved_month,
         "rejected": rejected_count,
     }
-    try:
+    with contextlib.suppress(Exception):
         await redis_client.set(cache_key, json.dumps(result), ex=60)
-    except Exception:
-        pass
     return result
 
 

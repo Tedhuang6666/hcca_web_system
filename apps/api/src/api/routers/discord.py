@@ -6,7 +6,6 @@ import logging
 import uuid
 from datetime import datetime
 from typing import Annotated
-
 from urllib.parse import urlencode
 
 from authlib.integrations.base_client import OAuthError

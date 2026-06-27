@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
 import stat
@@ -133,10 +134,8 @@ def backup_database(self) -> dict:  # type: ignore[type-arg]
         os.chmod(pgpass_path, stat.S_IRUSR | stat.S_IWUSR)  # 600，pgpass 規範要求
         run_env = {"PGPASSFILE": pgpass_path}
     except OSError:
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(pgpass_path)
-        except OSError:
-            pass
         raise
 
     try:
@@ -183,10 +182,8 @@ def backup_database(self) -> dict:  # type: ignore[type-arg]
             )
             raise
     finally:
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(pgpass_path)
-        except OSError:
-            pass
 
     # 可選用 GPG 加密，並寫入 sha256 與 BackupRecord。
     final_path = target

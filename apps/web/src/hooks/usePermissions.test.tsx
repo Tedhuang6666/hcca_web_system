@@ -5,7 +5,7 @@ import { usePermissions } from "./usePermissions";
 
 describe("usePermissions", () => {
   it("supports direct and compatibility permissions", () => {
-    localStorage.setItem(
+    sessionStorage.setItem(
       "permissions",
       JSON.stringify(["document:create", "audit:view"]),
     );
@@ -19,7 +19,7 @@ describe("usePermissions", () => {
   });
 
   it("treats owners as administrators", () => {
-    localStorage.setItem("is_owner", "true");
+    sessionStorage.setItem("is_owner", "true");
 
     const { result } = renderHook(() => usePermissions());
 
@@ -29,7 +29,7 @@ describe("usePermissions", () => {
   });
 
   it("ignores malformed cached permission JSON", () => {
-    localStorage.setItem("permissions", "{broken");
+    sessionStorage.setItem("permissions", "{broken");
 
     const { result } = renderHook(() => usePermissions());
 

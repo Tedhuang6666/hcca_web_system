@@ -15,7 +15,6 @@ from api.dependencies.permissions import require_permission
 from api.models.seating import SeatingZone
 from api.models.shop import Order
 from api.models.user import User
-from api.services.permission import get_user_permission_codes
 from api.schemas.seating import (
     AdminAssignRequest,
     AssignmentOut,
@@ -31,6 +30,7 @@ from api.schemas.seating import (
     ZoneUpdate,
 )
 from api.services import seating as seating_svc
+from api.services.permission import get_user_permission_codes
 
 router = APIRouter(prefix="/seating", tags=["劃位"])
 
