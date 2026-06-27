@@ -14,6 +14,7 @@ import {
   RefreshCcw,
   Search,
   ShieldCheck,
+  SlidersHorizontal,
   Upload,
   UserRound,
   UsersRound,
@@ -163,6 +164,7 @@ export default function PeopleAdminPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [showAffiliation, setShowAffiliation] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
 
   const loadReference = useCallback(async () => {
     const [classRows, orgRows, positionRows, userRows] = await Promise.all([
@@ -287,18 +289,34 @@ export default function PeopleAdminPage() {
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-[24rem_1fr]">
         <Panel className={`min-h-[420px] flex-col overflow-hidden ${mobileDetailOpen ? "hidden xl:flex" : "flex"}`}>
-          <div className="space-y-3 p-3" style={{ borderBottom: "1px solid var(--border)" }}>
-            <div className="flex items-center gap-2 rounded-md px-3 py-2" style={{ border: "1px solid var(--border)" }}>
-              <Search size={15} style={{ color: "var(--text-muted)" }} />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                className="w-full bg-transparent text-sm outline-none"
-                placeholder="搜尋姓名、學號、Email"
-                style={{ color: "var(--text-primary)" }}
-              />
+          <div className="space-y-2 p-3" style={{ borderBottom: "1px solid var(--border)" }}>
+            <div className="flex items-center gap-2">
+              <div className="flex flex-1 items-center gap-2 rounded-md px-3 py-2" style={{ border: "1px solid var(--border)" }}>
+                <Search size={15} style={{ color: "var(--text-muted)" }} />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  className="w-full bg-transparent text-sm outline-none"
+                  placeholder="搜尋姓名、學號、Email"
+                  style={{ color: "var(--text-primary)" }}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setFilterOpen((v) => !v)}
+                className="md:hidden inline-flex flex-shrink-0 items-center gap-1 rounded-md px-2.5 py-2 text-xs font-medium"
+                style={{
+                  border: "1px solid var(--border)",
+                  color: (status || classId) ? "var(--primary)" : "var(--text-muted)",
+                  background: (status || classId) ? "var(--primary-dim)" : "transparent",
+                }}
+                aria-expanded={filterOpen}
+              >
+                <SlidersHorizontal size={13} />
+                {(status || classId) ? "篩選中" : "篩選"}
+              </button>
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className={`grid grid-cols-2 gap-2 ${filterOpen ? "" : "hidden md:grid"}`}>
               <SelectInput value={status} onChange={(event) => setStatus(event.target.value as PersonStatus | "")}>
                 <option value="">全部狀態</option>
                 {Object.entries(STATUS_LABEL).map(([value, label]) => (
@@ -661,7 +679,7 @@ function AffiliationRow({
         </p>
       </div>
       {!muted && (
-        <div className="flex items-center justify-end">
+        <div className="flex min-h-[44px] items-center justify-end">
           <IconButton onClick={end} tone="danger">
             <X size={14} /> 結束
           </IconButton>

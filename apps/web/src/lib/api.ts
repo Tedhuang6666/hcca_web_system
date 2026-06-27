@@ -399,6 +399,14 @@ async function request<T>(
     if (res.status === 412 && typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("hcca:policy-consent-required"));
     }
+    if (res.status === 403 && typeof window !== "undefined") {
+      const mfaRequired = res.headers.get("X-MFA-Required");
+      if (mfaRequired === "true") {
+        const next = encodeURIComponent(window.location.pathname + window.location.search);
+        window.location.replace(`/settings/security?mfa_required=1&next=${next}`);
+        throw new ApiError(403, "需要設定雙重驗證才能存取此功能");
+      }
+    }
     throw await apiErrorFromResponse(res);
   }
   if (res.status === 204) return undefined as T;

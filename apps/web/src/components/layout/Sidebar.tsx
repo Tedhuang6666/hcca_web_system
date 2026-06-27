@@ -102,17 +102,27 @@ export default function Sidebar() {
     setMeetingsUnlocked(isMeetingsUnlocked());
 
     const persisted = readCollapsed();
-    if (persisted.size === 0) {
-      const defaults = new Set<string>();
-      for (const entry of NAV_DEF) {
-        if (isSection(entry) && entry.collapsible && entry.defaultCollapsed) {
-          defaults.add(entry.heading);
+    const startCollapsed = persisted.size === 0
+      ? (() => {
+          const d = new Set<string>();
+          for (const entry of NAV_DEF) {
+            if (isSection(entry) && entry.collapsible && entry.defaultCollapsed) d.add(entry.heading);
+          }
+          return d;
+        })()
+      : new Set(persisted);
+
+    // 自動展開當前路徑所在分組，不寫回 localStorage，不覆蓋用戶手動設定
+    for (const entry of NAV_DEF) {
+      if (isSection(entry) && startCollapsed.has(entry.heading)) {
+        if (entry.items.some(
+          (item) => pathname === item.href || pathname.startsWith(item.href + "/"),
+        )) {
+          startCollapsed.delete(entry.heading);
         }
       }
-      setCollapsed(defaults);
-    } else {
-      setCollapsed(persisted);
     }
+    setCollapsed(startCollapsed);
     setHydrated(true);
 
     const syncPrefs = () => {

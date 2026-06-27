@@ -3,48 +3,24 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Command } from "cmdk";
-import {
-  CalendarDays,
-  CheckSquare,
-  Clock,
-  FilePlus2,
-  FileText,
-  FolderKanban,
-  Gavel,
-  Megaphone,
-  Search,
-  Settings,
-  Users,
-} from "lucide-react";
+import { Clock, Search } from "lucide-react";
 import { searchApi } from "@/lib/api";
 import type { SearchResultOut } from "@/lib/types";
-import { isMeetingsUnlocked } from "@/lib/navigation";
+import {
+  filterNavItems,
+  isMeetingsUnlocked,
+  isSection,
+  NAV_DEF,
+  type NavItem,
+} from "@/lib/navigation";
+import { usePermissions } from "@/hooks/usePermissions";
 import { useRecentItems } from "@/hooks/useRecentItems";
-
-type CommandAction = {
-  label: string;
-  href: string;
-  icon: typeof Search;
-  keywords?: string;
-};
-
-const STATIC_ACTIONS: CommandAction[] = [
-  { label: "治理中樞", href: "/governance", icon: FolderKanban, keywords: "事情 matter 專案 案件" },
-  { label: "建立事情", href: "/governance#quick-create", icon: FilePlus2, keywords: "新增 matter 專案 活動" },
-  { label: "我的待辦", href: "/tasks", icon: CheckSquare, keywords: "任務 工作 task" },
-  { label: "行政行事曆", href: "/calendar", icon: CalendarDays, keywords: "日期 期限 日程" },
-  { label: "公文列表", href: "/documents", icon: FileText },
-  { label: "法規資料庫", href: "/regulations", icon: Gavel },
-  { label: "公告中心", href: "/announcements", icon: Megaphone },
-  { label: "介面設定", href: "/settings/navigation", icon: Settings },
-  { label: "通知設定", href: "/settings/notifications", icon: Settings },
-  { label: "安全設定", href: "/settings/security", icon: Settings },
-];
+import NavIcon from "./NavIcon";
 
 export const OPEN_COMMAND_MENU_EVENT = "hcca:open-command-menu";
 
 // 議事系統：與側邊欄一致，僅會議管理者/管理員或已掃描簽到連結解鎖者可見。
-const MEETINGS_ACTION: CommandAction = { label: "會議系統", href: "/meetings", icon: Users };
+const MEETINGS_ITEM: NavItem = { id: "meetings", href: "/meetings", iconKey: "meetings", label: "議事系統" };
 
 function canSeeMeetings(): boolean {
   if (typeof window === "undefined") return false;
@@ -72,6 +48,7 @@ function kindLabel(kind: string) {
 
 export default function CommandMenu() {
   const router = useRouter();
+  const { can, isAdmin, permissions } = usePermissions();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResultOut[]>([]);
@@ -110,18 +87,32 @@ export default function CommandMenu() {
     return () => window.clearTimeout(timer);
   }, [open, query]);
 
+  const hasPrefix = useMemo(() => (prefix: string): boolean => {
+    if (isAdmin) return true;
+    if (permissions.has("admin:all")) return true;
+    for (const p of permissions) {
+      if (p.startsWith(prefix)) return true;
+    }
+    return false;
+  }, [isAdmin, permissions]);
+
+  const allNavActions = useMemo(() => {
+    const items: NavItem[] = [];
+    for (const entry of NAV_DEF) {
+      const candidates = isSection(entry) ? entry.items : [entry];
+      // meetings 由 canSeeMeetings() 單獨控制，此處先排除
+      const filtered = filterNavItems(candidates, can, hasPrefix).filter((i) => i.id !== "meetings");
+      items.push(...filtered);
+    }
+    if (meetingsVisible) items.unshift(MEETINGS_ITEM);
+    return items;
+  }, [can, hasPrefix, meetingsVisible]);
+
   const filteredActions = useMemo(() => {
-    const actions = meetingsVisible
-      ? [STATIC_ACTIONS[0], STATIC_ACTIONS[1], MEETINGS_ACTION, ...STATIC_ACTIONS.slice(2)]
-      : STATIC_ACTIONS;
     const q = query.trim().toLowerCase();
-    if (!q) return actions;
-    return actions.filter(
-      (item) =>
-        item.label.toLowerCase().includes(q) ||
-        item.keywords?.toLowerCase().includes(q),
-    );
-  }, [query, meetingsVisible]);
+    if (!q) return allNavActions;
+    return allNavActions.filter((item) => item.label.toLowerCase().includes(q));
+  }, [query, allNavActions]);
 
   const go = (href: string) => {
     setOpen(false);
@@ -191,20 +182,19 @@ export default function CommandMenu() {
 
           {filteredActions.length > 0 && (
             <Command.Group heading="快速前往">
-              {filteredActions.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <Command.Item
-                    key={item.href}
-                    value={`action-${item.label}`}
-                    onSelect={() => go(item.href)}
-                    className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm"
-                  >
-                    <Icon size={16} aria-hidden={true} />
-                    <span>{item.label}</span>
-                  </Command.Item>
-                );
-              })}
+              {filteredActions.map((item) => (
+                <Command.Item
+                  key={item.href}
+                  value={`action-${item.label}`}
+                  onSelect={() => go(item.href)}
+                  className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm"
+                >
+                  <span className="flex-shrink-0" style={{ color: "var(--text-muted)" }}>
+                    <NavIcon iconKey={item.iconKey} size={16} />
+                  </span>
+                  <span>{item.label}</span>
+                </Command.Item>
+              ))}
             </Command.Group>
           )}
 
