@@ -7,7 +7,7 @@ import { seatingApi, apiErrorMessage } from "@/lib/api";
 
 const GRID = 16;
 const SEAT = 32; // = 2×GRID，對齊格點後座位可完美貼合或留走道
-const SNAP_DISTANCE = 6;
+const SNAP_DISTANCE = 10;
 
 type EditSeat = SeatInput & { key: string };
 
@@ -559,12 +559,19 @@ export default function SeatMapEditor({
       undo();
       return;
     }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d") {
+      e.preventDefault();
+      duplicateSelected();
+      return;
+    }
     if (!selected.size && !selectedDecos.size) return;
+    // Shift+方向鍵 = 1px 精細移動；一般方向鍵 = 16px 格點移動
+    const step = e.shiftKey ? 1 : GRID;
     const dirs: Record<string, { dx: number; dy: number }> = {
-      ArrowLeft:  { dx: -GRID, dy: 0 },
-      ArrowRight: { dx:  GRID, dy: 0 },
-      ArrowUp:    { dx: 0, dy: -GRID },
-      ArrowDown:  { dx: 0, dy:  GRID },
+      ArrowLeft:  { dx: -step, dy: 0 },
+      ArrowRight: { dx:  step, dy: 0 },
+      ArrowUp:    { dx: 0, dy: -step },
+      ArrowDown:  { dx: 0, dy:  step },
     };
     const dir = dirs[e.key];
     if (!dir) return;
@@ -623,6 +630,93 @@ export default function SeatMapEditor({
         return { ...s, y: bottom - SEAT };
       }),
     );
+  };
+
+  // ── 複製 ──────────────────────────────────────────────────────────────────
+  const duplicateSelected = () => {
+    if (!selected.size && !selectedDecos.size) return;
+    pushUndo();
+    const offset = SEAT;
+    const newKeys: string[] = [];
+    const newIds: string[] = [];
+    const addedSeats: EditSeat[] = [];
+    const addedDecos: LayoutDecoration[] = [];
+    seats.forEach((s) => {
+      if (!selected.has(s.key)) return;
+      const key = `new-${seatCounter.current++}`;
+      newKeys.push(key);
+      addedSeats.push({ ...s, key, id: null, x: s.x + offset, y: s.y + offset });
+    });
+    decorations.forEach((d) => {
+      if (!selectedDecos.has(d.id)) return;
+      const id = `deco-${decoCounter.current++}`;
+      newIds.push(id);
+      addedDecos.push({ ...d, id, x: d.x + offset, y: d.y + offset });
+    });
+    if (addedSeats.length) mutateSeats((prev) => [...prev, ...addedSeats]);
+    if (addedDecos.length) mutateDeco((prev) => [...prev, ...addedDecos]);
+    setSelected(new Set(newKeys));
+    setSelectedDecos(new Set(newIds));
+  };
+
+  // ── 混合對齊（座位 + 裝飾一起） ──────────────────────────────────────────
+  const alignAll = (mode: "left" | "centerX" | "right" | "top" | "centerY" | "bottom") => {
+    if (!selected.size && !selectedDecos.size) return;
+    pushUndo();
+    const allBoxes = [
+      ...seats.filter((s) => selected.has(s.key)).map((s) => ({ id: `seat:${s.key}`, x: s.x, y: s.y, w: SEAT, h: SEAT })),
+      ...decorations.filter((d) => selectedDecos.has(d.id)).map((d) => ({ id: `deco:${d.id}`, x: d.x, y: d.y, w: d.width, h: d.height })),
+    ];
+    if (allBoxes.length < 2) return;
+    const left   = Math.min(...allBoxes.map((b) => b.x));
+    const top    = Math.min(...allBoxes.map((b) => b.y));
+    const right  = Math.max(...allBoxes.map((b) => b.x + b.w));
+    const bottom = Math.max(...allBoxes.map((b) => b.y + b.h));
+    const cx = (left + right) / 2;
+    const cy = (top + bottom) / 2;
+    const tx = (b: { x: number; w: number }) => {
+      if (mode === "left")    return snap(left);
+      if (mode === "right")   return snap(right - b.w);
+      if (mode === "centerX") return snap(cx - b.w / 2);
+      return b.x;
+    };
+    const ty = (b: { y: number; h: number }) => {
+      if (mode === "top")     return snap(top);
+      if (mode === "bottom")  return snap(bottom - b.h);
+      if (mode === "centerY") return snap(cy - b.h / 2);
+      return b.y;
+    };
+    mutateSeats((prev) => prev.map((s) => {
+      if (!selected.has(s.key)) return s;
+      return { ...s, x: tx({ x: s.x, w: SEAT }), y: ty({ y: s.y, h: SEAT }) };
+    }));
+    mutateDeco((prev) => prev.map((d) => {
+      if (!selectedDecos.has(d.id)) return d;
+      return { ...d, x: tx({ x: d.x, w: d.width }), y: ty({ y: d.y, h: d.height }) };
+    }));
+  };
+
+  // ── 置中至畫布 ────────────────────────────────────────────────────────────
+  const alignToCanvas = (mode: "centerX" | "centerY") => {
+    if (!selected.size && !selectedDecos.size) return;
+    pushUndo();
+    const allBoxes = [
+      ...seats.filter((s) => selected.has(s.key)).map((s) => ({ x: s.x, y: s.y, w: SEAT, h: SEAT })),
+      ...decorations.filter((d) => selectedDecos.has(d.id)).map((d) => ({ x: d.x, y: d.y, w: d.width, h: d.height })),
+    ];
+    if (!allBoxes.length) return;
+    const left   = Math.min(...allBoxes.map((b) => b.x));
+    const top    = Math.min(...allBoxes.map((b) => b.y));
+    const right  = Math.max(...allBoxes.map((b) => b.x + b.w));
+    const bottom = Math.max(...allBoxes.map((b) => b.y + b.h));
+    const dx = mode === "centerX" ? snap(width / 2 - (left + right) / 2) : 0;
+    const dy = mode === "centerY" ? snap(height / 2 - (top + bottom) / 2) : 0;
+    mutateSeats((prev) => prev.map((s) =>
+      selected.has(s.key) ? { ...s, x: Math.max(0, s.x + dx), y: Math.max(0, s.y + dy) } : s
+    ));
+    mutateDeco((prev) => prev.map((d) =>
+      selectedDecos.has(d.id) ? { ...d, x: Math.max(0, d.x + dx), y: Math.max(0, d.y + dy) } : d
+    ));
   };
 
   const hasGroupSelection = selected.size + selectedDecos.size > 1;
@@ -712,6 +806,9 @@ export default function SeatMapEditor({
           style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
           <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>座位</span>
           <button type="button" className="btn btn-ghost text-xs" onClick={relabelSelected}>設定代號</button>
+          <button type="button" className="btn btn-ghost text-xs" onClick={duplicateSelected} title="複製所選（Ctrl/⌘+D）">複製</button>
+          <button type="button" className="btn btn-ghost text-xs" onClick={() => alignToCanvas("centerX")} title="整組水平置中於畫布">置中X</button>
+          <button type="button" className="btn btn-ghost text-xs" onClick={() => alignToCanvas("centerY")} title="整組垂直置中於畫布">置中Y</button>
           {selected.size >= 2 && <>
             <button type="button" className="btn btn-ghost text-xs" onClick={packTight} title="貼齊排列，消除座位間空隙">靠攏</button>
             <button type="button" className="btn btn-ghost text-xs" onClick={insertAisle} title="從中間插入走道（後半段向外移一個座位寬）">拆分走道</button>
@@ -759,10 +856,20 @@ export default function SeatMapEditor({
       {hasGroupSelection && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg p-2"
           style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-          <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>群組選取</span>
-          <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-            已成組選取 {selected.size + selectedDecos.size} 個元素，可一起拖曳或用方向鍵移動。
+          <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
+            群組 {selected.size + selectedDecos.size} 個
           </span>
+          <button type="button" className="btn btn-ghost text-xs" onClick={duplicateSelected} title="Ctrl/⌘+D">複製</button>
+          <span className="text-xs" style={{ color: "var(--text-muted)", borderLeft: "1px solid var(--border)", paddingLeft: 6 }}>對齊:</span>
+          <button type="button" className="btn btn-ghost text-xs" onClick={() => alignAll("left")}>左齊</button>
+          <button type="button" className="btn btn-ghost text-xs" onClick={() => alignAll("centerX")}>垂中</button>
+          <button type="button" className="btn btn-ghost text-xs" onClick={() => alignAll("right")}>右齊</button>
+          <button type="button" className="btn btn-ghost text-xs" onClick={() => alignAll("top")}>上齊</button>
+          <button type="button" className="btn btn-ghost text-xs" onClick={() => alignAll("centerY")}>橫中</button>
+          <button type="button" className="btn btn-ghost text-xs" onClick={() => alignAll("bottom")}>下齊</button>
+          <span className="text-xs" style={{ color: "var(--text-muted)", borderLeft: "1px solid var(--border)", paddingLeft: 6 }}>畫布置中:</span>
+          <button type="button" className="btn btn-ghost text-xs" onClick={() => alignToCanvas("centerX")}>水平</button>
+          <button type="button" className="btn btn-ghost text-xs" onClick={() => alignToCanvas("centerY")}>垂直</button>
           <button type="button" className="btn btn-ghost text-xs" style={{ color: "var(--danger, #c0392b)" }}
             onClick={deleteSelected}>刪除群組</button>
         </div>
@@ -813,6 +920,9 @@ export default function SeatMapEditor({
                 onClick={() => patchDeco({ color: undefined })} title="還原預設色">✕</button>
             )}
           </label>
+          <button type="button" className="btn btn-ghost text-xs" onClick={duplicateSelected} title="Ctrl/⌘+D">複製</button>
+          <button type="button" className="btn btn-ghost text-xs" onClick={() => alignToCanvas("centerX")} title="水平置中於畫布">置中X</button>
+          <button type="button" className="btn btn-ghost text-xs" onClick={() => alignToCanvas("centerY")} title="垂直置中於畫布">置中Y</button>
           <button type="button" className="btn btn-ghost text-xs" style={{ color: "var(--danger, #c0392b)" }}
             onClick={deleteDeco}>刪除</button>
         </div>
@@ -851,6 +961,16 @@ export default function SeatMapEditor({
             backgroundColor: "var(--bg-base)",
           }}
         >
+          {/* 畫布中心線 */}
+          <div className="absolute pointer-events-none" style={{
+            left: Math.round(width / 2), top: 0, width: 0, height: height,
+            borderLeft: "1px dashed rgba(127,127,127,0.35)", zIndex: 0,
+          }} />
+          <div className="absolute pointer-events-none" style={{
+            left: 0, top: Math.round(height / 2), width: width, height: 0,
+            borderTop: "1px dashed rgba(127,127,127,0.35)", zIndex: 0,
+          }} />
+
           {/* 裝飾元素（在座位下層，以免遮住點擊） */}
           {decorations.map((d) => (
             <div
@@ -920,9 +1040,9 @@ export default function SeatMapEditor({
         </div>
       </div>
       <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-        座位與裝飾元素可框選、Shift/Ctrl 多選並成組拖曳；拖曳時會自動吸附格線、元素邊緣與中心並顯示輔助線。
-        方向鍵每次移動 16px，Ctrl/⌘+Z 可撤銷。
-        多選座位後可對齊、靠攏，或依主要排列方向拆分走道。
+        框選或 Shift/Ctrl 多選後可成組拖曳；混選座位＋裝飾元素同樣可對齊。
+        方向鍵 16px 移動，Shift＋方向鍵 1px 精細移動，Ctrl/⌘+D 複製，Ctrl/⌘+Z 撤銷。
+        畫布虛線為水平／垂直中心線，可用「置中X/Y」快速對齊。
       </p>
     </div>
   );
