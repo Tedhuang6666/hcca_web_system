@@ -43,7 +43,7 @@ export default function SecuritySettingsPage() {
       autoStarted.current = true;
       startSetup();
     }
-  }, [mfaRequired, status, setup]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mfaRequired, status, setup]);
 
   useEffect(() => {
     loadStatus();
