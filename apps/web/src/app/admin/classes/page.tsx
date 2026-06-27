@@ -875,24 +875,23 @@ function ClassWorkspace({
         </div>
       </section>
 
-      <nav className="flex gap-1 overflow-x-auto rounded-md p-1" style={{ border: "1px solid var(--border)" }}>
+      <nav className="module-tabs-scroll max-w-full overflow-x-auto" aria-label="班級管理分頁">
+        <div className="module-tabs-list">
         {tabs.map((item) => (
           <button
             key={item.key}
             type="button"
             onClick={() => setTab(item.key)}
-            className="rounded px-4 py-2 text-sm font-medium"
-            style={tab === item.key
-              ? { background: "var(--primary-dim)", color: "var(--primary)" }
-              : { color: "var(--text-muted)" }}>
-            {item.label}
+            className={`module-tab-link cursor-pointer${tab === item.key ? " is-active" : ""}`}>
+            <span>{item.label}</span>
             {item.count !== undefined && <span className="ml-1 text-xs">{item.count}</span>}
           </button>
         ))}
+        </div>
       </nav>
 
       {tab === "overview" && (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div key="overview" className="tab-panel-transition grid grid-cols-1 gap-4 lg:grid-cols-2">
           <section className="rounded-md p-4" style={{ border: "1px solid var(--border)" }}>
             <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
               身分組狀態
@@ -923,17 +922,25 @@ function ClassWorkspace({
           </section>
         </div>
       )}
-      {tab === "roles" && <RoleBoard roles={roles} onAssign={assignRole} />}
+      {tab === "roles" && (
+        <div key="roles" className="tab-panel-transition">
+          <RoleBoard roles={roles} onAssign={assignRole} />
+        </div>
+      )}
       {tab === "members" && (
-        <MembershipPanel
-          memberships={memberships}
-          members={members}
-          onAdd={addMembership}
-          onEnd={endMembership}
-        />
+        <div key="members" className="tab-panel-transition">
+          <MembershipPanel
+            memberships={memberships}
+            members={members}
+            onAdd={addMembership}
+            onEnd={endMembership}
+          />
+        </div>
       )}
       {tab === "ranges" && (
-        <RangePanel ranges={detail.ranges} onAdd={addRange} onDelete={deleteRange} />
+        <div key="ranges" className="tab-panel-transition">
+          <RangePanel ranges={detail.ranges} onAdd={addRange} onDelete={deleteRange} />
+        </div>
       )}
     </div>
   );

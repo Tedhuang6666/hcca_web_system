@@ -561,33 +561,23 @@ export default function PublicSiteAdminPage() {
         ))}
       </section>
 
-      <nav
-        className="flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl p-1.5"
-        style={{
-          background: "var(--bg-surface)",
-          border: "1px solid var(--border)",
-          boxShadow: "var(--shadow-xs)",
-        }}
-        aria-label="公開網站設定分頁"
-      >
+      <nav className="module-tabs-scroll max-w-full overflow-x-auto" aria-label="公開網站設定分頁">
+        <div className="module-tabs-list">
         {tabs.map((item) => (
           <button
             key={item.id}
             type="button"
             onClick={() => setTab(item.id)}
-            className="inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-lg px-4 text-sm font-medium transition-colors"
-            style={{
-              background: tab === item.id ? "var(--primary-dim)" : "transparent",
-              color: tab === item.id ? "var(--primary-text)" : "var(--text-secondary)",
-            }}>
+            className={`module-tab-link cursor-pointer${tab === item.id ? " is-active" : ""}`}>
             {item.icon}
-            {item.label}
+            <span>{item.label}</span>
           </button>
         ))}
+        </div>
       </nav>
 
       {tab === "settings" && (
-        <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+        <section key="settings" className="tab-panel-transition grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
           <div className="card space-y-4 p-5">
             <Field label="網站標題"><TextInput value={settings.site_title} onChange={(e) => setSettings({ ...settings, site_title: e.target.value })} /></Field>
             <Field label="網站描述"><TextArea value={settings.site_description ?? ""} onChange={(e) => setSettings({ ...settings, site_description: e.target.value })} /></Field>
@@ -625,7 +615,7 @@ export default function PublicSiteAdminPage() {
       )}
 
       {tab === "nav" && (
-        <section className="space-y-4">
+        <section key="nav" className="tab-panel-transition space-y-4">
           <div className="card space-y-3 p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -727,7 +717,7 @@ export default function PublicSiteAdminPage() {
       )}
 
       {tab === "pages" && (
-        <section className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+        <section key="pages" className="tab-panel-transition grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
           <div className="card space-y-4 p-5">
             <h2 className="font-semibold">新增 CMS 頁面</h2>
             <div className="grid gap-4 md:grid-cols-2">
@@ -779,7 +769,7 @@ export default function PublicSiteAdminPage() {
       )}
 
       {tab === "links" && (
-        <section className="grid gap-4 lg:grid-cols-2">
+        <section key="links" className="tab-panel-transition grid gap-4 lg:grid-cols-2">
           <div className="card space-y-4 p-5">
             <h2 className="font-semibold">新增連結類別</h2>
             <div className="grid gap-4 md:grid-cols-2">
@@ -829,7 +819,8 @@ export default function PublicSiteAdminPage() {
 
       {tab === "officers" && (
         <section
-          className={`grid gap-4 ${profiles.length > 0 ? "lg:grid-cols-[0.9fr_1.1fr]" : ""}`}
+          key="officers"
+          className={`tab-panel-transition grid gap-4 ${profiles.length > 0 ? "lg:grid-cols-[0.9fr_1.1fr]" : ""}`}
         >
           <div className="card space-y-4 p-5">
             <h2 className="font-semibold">幹部覆寫 / 隱藏設定</h2>
@@ -890,7 +881,7 @@ export default function PublicSiteAdminPage() {
       )}
 
       {tab === "advanced" && (
-        <section className="grid gap-4 lg:grid-cols-2">
+        <section key="advanced" className="tab-panel-transition grid gap-4 lg:grid-cols-2">
           <div className="card space-y-4 p-5">
             <Field label="主題設定 JSON" hint="可放色彩、區塊開關、品牌設定等。">
               <TextArea rows={10} value={themeJson} onChange={(e) => setThemeJson(e.target.value)} />

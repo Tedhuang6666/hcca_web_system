@@ -25,13 +25,9 @@ export default function ModuleTabs({
   return (
     <nav
       aria-label={label}
-      className="mx-auto mb-4 flex max-w-6xl gap-1 overflow-x-auto px-5 pt-5 md:px-6"
-      style={{ scrollbarWidth: "none" }}
+      className="module-tabs-scroll mx-auto mb-5 max-w-6xl overflow-x-auto px-4 pt-4 md:px-6"
     >
-      <div
-        className="flex gap-1 rounded-lg p-1"
-        style={{ background: "var(--bg-muted)" }}
-      >
+      <div className="module-tabs-list">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const active = tab.end
@@ -42,16 +38,10 @@ export default function ModuleTabs({
               key={tab.href}
               href={tab.href}
               aria-current={active ? "page" : undefined}
-              className="inline-flex min-h-10 flex-shrink-0 items-center gap-2 rounded-md px-3 text-sm font-medium transition-colors"
-              style={{
-                background: active ? "var(--bg-elevated)" : "transparent",
-                color: active ? "var(--text-primary)" : "var(--text-muted)",
-                boxShadow: active ? "var(--shadow-sm)" : "none",
-                textDecoration: "none",
-              }}
+              className={`module-tab-link${active ? " is-active" : ""}`}
             >
               <Icon size={15} aria-hidden={true} />
-              {tab.label}
+              <span>{tab.label}</span>
             </Link>
           );
         })}

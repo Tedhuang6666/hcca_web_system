@@ -313,20 +313,31 @@ export default function ProductSeatingPage() {
       {/* 場次編輯 */}
       {activeZone && (
         <div className="rounded-xl p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
-          <div className="flex items-center gap-2 border-b pb-2" style={{ borderColor: "var(--border)" }}>
+          <nav className="module-tabs-scroll max-w-full overflow-x-auto" aria-label="座位管理分頁">
+            <div className="module-tabs-list">
             {tabs.map((t) => (
               <button key={t.key} type="button" onClick={() => setTab(t.key)}
-                className="text-sm px-3 py-1.5 rounded-lg font-medium"
-                style={tab === t.key
-                  ? { background: "var(--primary)", color: "#1a1a2e" }
-                  : { color: "var(--text-muted)" }}>
-                {t.label}
+                className={`module-tab-link cursor-pointer${tab === t.key ? " is-active" : ""}`}>
+                <span>{t.label}</span>
               </button>
             ))}
-          </div>
-          {tab === "seats" && <SeatMapEditor zone={activeZone} onSaved={onZoneSaved} />}
-          {tab === "waves" && <WaveEditor zone={activeZone} onSaved={onZoneSaved} />}
-          {tab === "assignments" && <AssignmentsPanel zone={activeZone} />}
+            </div>
+          </nav>
+          {tab === "seats" && (
+            <div key="seats" className="tab-panel-transition">
+              <SeatMapEditor zone={activeZone} onSaved={onZoneSaved} />
+            </div>
+          )}
+          {tab === "waves" && (
+            <div key="waves" className="tab-panel-transition">
+              <WaveEditor zone={activeZone} onSaved={onZoneSaved} />
+            </div>
+          )}
+          {tab === "assignments" && (
+            <div key="assignments" className="tab-panel-transition">
+              <AssignmentsPanel zone={activeZone} />
+            </div>
+          )}
         </div>
       )}
 
