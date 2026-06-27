@@ -108,9 +108,9 @@ function rangeFor(cursor: Date, view: ViewMode) {
 
 function canEditFormalMeeting() {
   if (typeof window === "undefined") return false;
-  if (localStorage.getItem("is_superuser") === "true") return true;
+  if (sessionStorage.getItem("is_superuser") === "true") return true;
   try {
-    const permissions = new Set(JSON.parse(localStorage.getItem("permissions") || "[]"));
+    const permissions = new Set(JSON.parse(sessionStorage.getItem("permissions") || "[]"));
     return permissions.has("admin:all") || permissions.has("meeting:manage");
   } catch {
     return false;

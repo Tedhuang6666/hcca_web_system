@@ -106,7 +106,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
     setUserName(localStorage.getItem("user_name") ?? "");
     setUserEmail(localStorage.getItem("user_email") ?? "");
     setUserAvatar(localStorage.getItem("user_avatar"));
-    setIsSuperuser(localStorage.getItem("is_superuser") === "true");
+    setIsSuperuser(sessionStorage.getItem("is_superuser") === "true");
   }, []);
 
   useEffect(() => {

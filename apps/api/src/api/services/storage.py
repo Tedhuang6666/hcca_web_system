@@ -177,9 +177,12 @@ class LocalStorageBackend(StorageBackend):
             raise ValueError(msg)
 
         # 偵測 MIME type
+        # SECURITY: 優先使用副檔名推導（不信任客戶端宣告）；
+        # 若副檔名無法判斷，才 fallback 到客戶端提供的 content_type。
+        # 若兩者皆無法提供白名單內的類型，直接拒絕（不 fallback 到 octet-stream）。
         guessed_type, _ = mimetypes.guess_type(file.filename or "")
-        content_type = file.content_type or guessed_type or "application/octet-stream"
-        if content_type not in _ALLOWED_TYPES:
+        content_type = guessed_type or file.content_type
+        if not content_type or content_type not in _ALLOWED_TYPES:
             msg = f"不支援的檔案類型：{content_type}"
             raise ValueError(msg)
 

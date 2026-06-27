@@ -268,8 +268,14 @@ async def _upsert_google_user(
 
         is_superuser = True
         logger.info("Superuser login successful", extra={"email": email, "ip": client_ip})
-        # 登入必須先簽發 token，讓尚未設定 MFA 的管理員可以進入設定頁。
-        # 後台路由再由 require_admin_mfa 強制檢查 MFA。
+        # SECURITY: MFA 採「路由層強制」模式，而非「登入時攔截」模式。
+        # 理由：允許尚未設定 MFA 的新管理員登入後進入 /admin/mfa-setup 完成設定。
+        # 所有後台路由皆掛載 require_admin_mfa dependency；未通過 MFA 的 JWT
+        # 無法存取任何實質性管理功能，僅能完成 MFA 初始化流程。
+        # 若需升級為「login-time MFA」（更高安全標準），應改為：
+        #   1. login 端點僅發短效 mfa_challenge_token（create_mfa_challenge_token）
+        #   2. 前端導向 /auth/mfa-verify，通過後 POST /auth/mfa/exchange
+        #   3. exchange 端點驗 TOTP 後才發正式 access/refresh token pair
 
     if user is None:
         user = User(

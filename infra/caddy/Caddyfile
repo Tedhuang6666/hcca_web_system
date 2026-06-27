@@ -8,14 +8,24 @@
 #   4. web 前端 SSR
 
 {
-	admin :2019
+	# SECURITY: admin API 綁 loopback，避免 container 網路內其他服務可無認證呼叫 /config/
+	admin 127.0.0.1:2019
 	servers {
 		trusted_proxies cloudflare
+	}
+	# 結構化 access log 輸出至 stdout，供 Grafana/Vector 收集審計軌跡
+	log {
+		output stdout
+		format json
+		level INFO
 	}
 }
 
 # ── API（兩副本 LB） ─────────────────────────────────────────
 :8080 {
+	# SECURITY: HSTS 強制 HTTPS，防止降級攻擊；preload 需額外向 hstspreload.org 提交
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+
 	reverse_proxy /api/* api:8000 api-green:8000 {
 		lb_policy round_robin
 		lb_try_duration 5s
@@ -49,6 +59,9 @@
 }
 
 # ── Admin（單實例、不參與 LB） ───────────────────────────────
+# SECURITY: :8081 僅供 Cloudflare Access / 內部 VPN 存取，絕不可對外曝露。
+# Cloudflare 規則：admin.<domain> → origin :8081（帶 CF Access policy）。
+# :8001 在 docker network 內也只有此 Caddy 實例可達（不綁 0.0.0.0）。
 :8081 {
 	reverse_proxy api-admin:8001 {
 		header_up X-Real-IP {http.request.header.cf-connecting-ip}

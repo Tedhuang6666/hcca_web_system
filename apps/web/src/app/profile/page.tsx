@@ -133,9 +133,9 @@ export default function ProfilePage() {
       linked_at: null,
     }));
 
-    // 從 localStorage 讀取有效權限
+    // 從 sessionStorage 讀取有效權限（敏感欄位已移至 sessionStorage）
     try {
-      const raw = localStorage.getItem("permissions");
+      const raw = sessionStorage.getItem("permissions");
       if (raw) setPermissions(JSON.parse(raw));
     } catch { /* ignore */ }
   }, []);

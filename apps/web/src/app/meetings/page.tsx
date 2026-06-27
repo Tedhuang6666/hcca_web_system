@@ -71,9 +71,9 @@ export default function MeetingsPage() {
   const [isSuperuser, setIsSuperuser] = useState(false);
 
   useEffect(() => {
-    setIsSuperuser(localStorage.getItem("is_superuser") === "true");
+    setIsSuperuser(sessionStorage.getItem("is_superuser") === "true");
     try {
-      setPermissions(new Set(JSON.parse(localStorage.getItem("permissions") || "[]")));
+      setPermissions(new Set(JSON.parse(sessionStorage.getItem("permissions") || "[]")));
     } catch {
       setPermissions(new Set());
     }
