@@ -130,17 +130,6 @@ async function canBypassMaintenance(req: NextRequest) {
   }
 }
 
-/** SECURITY: 安全檢查超時時回傳 503，不靜默放行（fail-closed）。
- * 僅在 AbortError（timeout）時 503；其他網路錯誤（API 未啟動）同樣 503。
- * 若需 fail-open，可在 API 服務健康時設置 bypass header。
- */
-function securityCheckTimeout(): NextResponse {
-  return new NextResponse("Service temporarily unavailable", {
-    status: 503,
-    headers: { "Retry-After": "10", "Content-Type": "text/plain" },
-  });
-}
-
 async function maintenanceRedirect(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (isMaintenanceExempt(pathname)) return null;
@@ -169,9 +158,9 @@ async function maintenanceRedirect(req: NextRequest) {
     if (state.until) url.searchParams.set("until", String(state.until));
     return NextResponse.redirect(url);
   } catch {
-    // SECURITY: API 超時或不可達時返回 503，不靜默放行。
-    // 這可防止攻擊者以 DoS API 的方式繞過維護模式封鎖。
-    return securityCheckTimeout();
+    // fail-open：API 不可達時放行。維護模式需要 API 運作才有意義；
+    // API 整體掛掉時不應連帶讓前端對所有人回傳 503。
+    return null;
   } finally {
     clearTimeout(timeout);
   }
@@ -211,9 +200,9 @@ async function blockedRedirect(req: NextRequest) {
     if (state.expires_at) url.searchParams.set("until", String(state.expires_at));
     return NextResponse.redirect(url);
   } catch {
-    // SECURITY: API 超時或不可達時返回 503，不靜默放行。
-    // 被封鎖的 IP 不應因 API 超時而意外通過封鎖檢查。
-    return securityCheckTimeout();
+    // fail-open：API 不可達時放行。封鎖檢查依賴 API；API 整體掛掉時
+    // 以 503 封鎖所有人（包含正常使用者）的代價高於放行少數被封鎖 IP。
+    return null;
   } finally {
     clearTimeout(timeout);
   }
