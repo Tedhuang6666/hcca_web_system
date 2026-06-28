@@ -167,8 +167,15 @@ export default function SeatMapEditor({
   onSaved?: (z: ZoneOut) => void;
 }) {
   const layout = (zone.layout || {}) as Record<string, unknown>;
-  const [width, setWidth] = useState<number>((layout.width as number) || 760);
-  const [height, setHeight] = useState<number>((layout.height as number) || 460);
+  // 畫布尺寸強制對齊 SEAT=32 的倍數，讓中線落在格線上（760→768, 460→448）
+  const [width, setWidth] = useState<number>(() => {
+    const n = (layout.width as number) || 768;
+    return Math.max(SEAT * 8, Math.round(n / SEAT) * SEAT);
+  });
+  const [height, setHeight] = useState<number>(() => {
+    const n = (layout.height as number) || 448;
+    return Math.max(SEAT * 8, Math.round(n / SEAT) * SEAT);
+  });
   const [seats, setSeats] = useState<EditSeat[]>(() => toEdit(zone.seats));
   const [decorations, setDecorations] = useState<LayoutDecoration[]>(() => parseDeco(layout));
   const [seatTypeColors, setSeatTypeColors] = useState<Record<string, string>>(
@@ -913,13 +920,13 @@ export default function SeatMapEditor({
         <div className="flex items-center gap-0.5 text-xs select-none" style={{ color: "var(--text-muted)" }}>
           <span className="mr-1">畫布</span>
           <button type="button" className="btn btn-ghost text-xs px-1.5 py-0.5"
-            onClick={() => { pushUndo(); setWidth((w) => Math.max(200, w - SEAT)); setDirty(true); }}>−</button>
+            onClick={() => { pushUndo(); setWidth((w) => Math.max(SEAT * 8, w - SEAT)); setDirty(true); }}>−</button>
           <span className="w-12 text-center tabular-nums">{width}</span>
           <button type="button" className="btn btn-ghost text-xs px-1.5 py-0.5"
             onClick={() => { pushUndo(); setWidth((w) => w + SEAT); setDirty(true); }}>＋</button>
           <span className="mx-1">×</span>
           <button type="button" className="btn btn-ghost text-xs px-1.5 py-0.5"
-            onClick={() => { pushUndo(); setHeight((h) => Math.max(200, h - SEAT)); setDirty(true); }}>−</button>
+            onClick={() => { pushUndo(); setHeight((h) => Math.max(SEAT * 8, h - SEAT)); setDirty(true); }}>−</button>
           <span className="w-12 text-center tabular-nums">{height}</span>
           <button type="button" className="btn btn-ghost text-xs px-1.5 py-0.5"
             onClick={() => { pushUndo(); setHeight((h) => h + SEAT); setDirty(true); }}>＋</button>
@@ -981,8 +988,17 @@ export default function SeatMapEditor({
               onChange={(e) => applyToSelected({ price_delta: Number(e.target.value) || 0 })} />
           </label>
           <input className="input w-16 text-xs" placeholder="排代號" value={selectedSeats[0]?.row_label ?? ""}
-            title="排代號（row_label）"
-            onChange={(e) => applyToSelected({ row_label: e.target.value || null })} />
+            title="排代號：會同步替換各座位代號中的前綴（A→B 使 A1 變 B1）"
+            onChange={(e) => {
+              const newRow = e.target.value;
+              pushUndo();
+              mutateSeats((prev) => prev.map((s) => {
+                if (!selected.has(s.key)) return s;
+                const oldRow = s.row_label ?? "";
+                const suffix = oldRow && s.label.startsWith(oldRow) ? s.label.slice(oldRow.length) : s.label;
+                return { ...s, row_label: newRow || null, label: newRow + suffix };
+              }));
+            }} />
           <input className="input w-28 text-xs" placeholder="區塊名稱" value={selectedSeats[0]?.block ?? ""}
             onChange={(e) => applyToSelected({ block: e.target.value || null })} />
           <button type="button" className="btn btn-ghost text-xs" style={{ color: "var(--danger, #c0392b)" }}
