@@ -4,6 +4,32 @@ const API_INTERNAL_BASE =
   process.env.API_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const MAINTENANCE_CHECK_TIMEOUT_MS = 800;
 
+// 模組級快取：在同一 edge worker 實例內跨 request 共用，避免每次換頁都打 API。
+// 鍵值：maintenance 用 "global"，access-status 用 IP，bypass 用 cookie 前 64 字元。
+interface CacheEntry<T> {
+  value: T;
+  ts: number;
+}
+const CACHE_TTL_MS = 30_000;
+
+function cacheGet<T>(map: Map<string, CacheEntry<T>>, key: string): T | undefined {
+  const e = map.get(key);
+  if (!e) return undefined;
+  if (Date.now() - e.ts > CACHE_TTL_MS) { map.delete(key); return undefined; }
+  return e.value;
+}
+
+function cacheSet<T>(map: Map<string, CacheEntry<T>>, key: string, value: T) {
+  map.set(key, { value, ts: Date.now() });
+}
+
+type MaintenanceState = { enabled: false } | { enabled: true; message?: string; until?: number | null };
+type AccessState = { blocked: false } | { blocked: true; reason?: string; expires_at?: number | null };
+
+const maintenanceCache = new Map<string, CacheEntry<MaintenanceState>>();
+const accessStatusCache = new Map<string, CacheEntry<AccessState>>();
+const bypassCache = new Map<string, CacheEntry<boolean>>();
+
 /**
  * 識別中文公文字號格式，例如：
  *   嶺代議字1150000001號   （無「第」、無空格）
@@ -102,6 +128,10 @@ function decodePathPart(value: string) {
 }
 
 async function canBypassMaintenance(req: NextRequest) {
+  const cookieKey = (req.headers.get("cookie") ?? "").slice(0, 64);
+  const cached = cacheGet(bypassCache, cookieKey);
+  if (cached !== undefined) return cached;
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), MAINTENANCE_CHECK_TIMEOUT_MS);
   try {
@@ -110,19 +140,21 @@ async function canBypassMaintenance(req: NextRequest) {
       cache: "no-store",
       signal: controller.signal,
     });
-    if (!res.ok) return false;
+    if (!res.ok) { cacheSet(bypassCache, cookieKey, false); return false; }
     const me = (await res.json()) as {
       is_superuser?: boolean;
       is_owner?: boolean;
       permissions?: string[];
     };
     const permissions = new Set(me.permissions ?? []);
-    return Boolean(
+    const result = Boolean(
       me.is_superuser
       || me.is_owner
       || permissions.has("admin:all")
       || permissions.has("system:maintenance_bypass"),
     );
+    cacheSet(bypassCache, cookieKey, result);
+    return result;
   } catch {
     return false;
   } finally {
@@ -134,86 +166,110 @@ async function maintenanceRedirect(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (isMaintenanceExempt(pathname)) return null;
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), MAINTENANCE_CHECK_TIMEOUT_MS);
-  try {
-    const res = await fetch(`${API_INTERNAL_BASE}/system/maintenance`, {
-      cache: "no-store",
-      signal: controller.signal,
-    });
-    if (!res.ok) return null;
-    const state = (await res.json()) as {
-      enabled?: boolean;
-      message?: string;
-      until?: number | null;
-    };
-    if (!state.enabled || await canBypassMaintenance(req)) return null;
-
-    const url = req.nextUrl.clone();
-    url.pathname = "/maintenance";
-    url.search = "";
-    url.searchParams.set("kind", "maintenance");
-    url.searchParams.set("retry", "60");
-    if (state.message) url.searchParams.set("detail", state.message);
-    if (state.until) url.searchParams.set("until", String(state.until));
-    return NextResponse.redirect(url);
-  } catch {
-    // fail-open：API 不可達時放行。維護模式需要 API 運作才有意義；
-    // API 整體掛掉時不應連帶讓前端對所有人回傳 503。
-    return null;
-  } finally {
-    clearTimeout(timeout);
+  let state = cacheGet(maintenanceCache, "global");
+  if (!state) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), MAINTENANCE_CHECK_TIMEOUT_MS);
+    try {
+      const res = await fetch(`${API_INTERNAL_BASE}/system/maintenance`, {
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      if (!res.ok) return null;
+      const raw = (await res.json()) as { enabled?: boolean; message?: string; until?: number | null };
+      state = raw.enabled
+        ? { enabled: true, message: raw.message, until: raw.until }
+        : { enabled: false };
+      cacheSet(maintenanceCache, "global", state);
+    } catch {
+      // fail-open：API 不可達時放行。維護模式需要 API 運作才有意義；
+      // API 整體掛掉時不應連帶讓前端對所有人回傳 503。
+      return null;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
+
+  if (!state.enabled || await canBypassMaintenance(req)) return null;
+
+  const url = req.nextUrl.clone();
+  url.pathname = "/maintenance";
+  url.search = "";
+  url.searchParams.set("kind", "maintenance");
+  url.searchParams.set("retry", "60");
+  if (state.message) url.searchParams.set("detail", state.message);
+  if (state.until) url.searchParams.set("until", String(state.until));
+  return NextResponse.redirect(url);
 }
 
 async function blockedRedirect(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (pathname === "/blocked" || pathname.startsWith("/blocked/")) return null;
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), MAINTENANCE_CHECK_TIMEOUT_MS);
-  try {
-    const headers: Record<string, string> = {
-      cookie: req.headers.get("cookie") ?? "",
-    };
-    for (const name of ["cf-connecting-ip", "x-forwarded-for", "x-real-ip"]) {
-      const value = req.headers.get(name);
-      if (value) headers[name] = value;
-    }
-    const res = await fetch(`${API_INTERNAL_BASE}/system/access-status`, {
-      headers,
-      cache: "no-store",
-      signal: controller.signal,
-    });
-    if (!res.ok) return null;
-    const state = (await res.json()) as {
-      blocked?: boolean;
-      reason?: string;
-      expires_at?: number | null;
-    };
-    if (!state.blocked) return null;
+  const ip = req.headers.get("cf-connecting-ip")
+    ?? req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+    ?? req.headers.get("x-real-ip")
+    ?? "local";
 
-    const url = req.nextUrl.clone();
-    url.pathname = "/blocked";
-    url.search = "";
-    if (state.reason) url.searchParams.set("reason", state.reason);
-    if (state.expires_at) url.searchParams.set("until", String(state.expires_at));
-    return NextResponse.redirect(url);
-  } catch {
-    // fail-open：API 不可達時放行。封鎖檢查依賴 API；API 整體掛掉時
-    // 以 503 封鎖所有人（包含正常使用者）的代價高於放行少數被封鎖 IP。
-    return null;
-  } finally {
-    clearTimeout(timeout);
+  let state = cacheGet(accessStatusCache, ip);
+  if (!state) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), MAINTENANCE_CHECK_TIMEOUT_MS);
+    try {
+      const fetchHeaders: Record<string, string> = {
+        cookie: req.headers.get("cookie") ?? "",
+      };
+      for (const name of ["cf-connecting-ip", "x-forwarded-for", "x-real-ip"]) {
+        const value = req.headers.get(name);
+        if (value) fetchHeaders[name] = value;
+      }
+      const res = await fetch(`${API_INTERNAL_BASE}/system/access-status`, {
+        headers: fetchHeaders,
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      if (!res.ok) return null;
+      const raw = (await res.json()) as { blocked?: boolean; reason?: string; expires_at?: number | null };
+      state = raw.blocked
+        ? { blocked: true, reason: raw.reason, expires_at: raw.expires_at }
+        : { blocked: false };
+      cacheSet(accessStatusCache, ip, state);
+    } catch {
+      // fail-open：API 不可達時放行。封鎖檢查依賴 API；API 整體掛掉時
+      // 以 503 封鎖所有人（包含正常使用者）的代價高於放行少數被封鎖 IP。
+      return null;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
+
+  if (!state.blocked) return null;
+
+  const url = req.nextUrl.clone();
+  url.pathname = "/blocked";
+  url.search = "";
+  if (state.reason) url.searchParams.set("reason", state.reason);
+  if (state.expires_at) url.searchParams.set("until", String(state.expires_at));
+  return NextResponse.redirect(url);
 }
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const blocked = await blockedRedirect(req);
-  if (blocked) return blocked;
-  const redirect = await maintenanceRedirect(req);
-  if (redirect) return redirect;
+
+  // Next.js App Router 的客戶端換頁是 RSC payload request（帶 "RSC: 1" header），
+  // 不代表新使用者到達網站，不需要每次都打 blocked/maintenance API。
+  // 這些檢查在全頁載入（無 RSC header）時仍會執行，封鎖與維護控制不受影響。
+  const isRscNav = req.headers.get("RSC") === "1";
+
+  if (!isRscNav) {
+    // 兩個 check 並行，避免串行等待
+    const [blocked, redirect] = await Promise.all([
+      blockedRedirect(req),
+      maintenanceRedirect(req),
+    ]);
+    if (blocked) return blocked;
+    if (redirect) return redirect;
+  }
 
   // 注意：法規條文深度連結 /regulations/{id}/第N章/第N條 由
   // app/regulations/[id]/[...refs]/page.tsx 原生路由處理，
