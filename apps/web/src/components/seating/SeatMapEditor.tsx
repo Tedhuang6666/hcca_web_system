@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { DecorationKind, LayoutDecoration, SeatInput, SeatOut, SeatStatus, ZoneOut } from "@/lib/types";
 import { seatingApi, apiErrorMessage } from "@/lib/api";
@@ -8,6 +8,19 @@ import { seatingApi, apiErrorMessage } from "@/lib/api";
 const GRID = 16;
 const SEAT = 32; // = 2×GRID，對齊格點後座位可完美貼合或留走道
 const SNAP_DISTANCE = 10;
+const DRAFT_KEY_PREFIX = "seat_editor_draft_v1_";
+
+type ResizeHandle = "nw"|"n"|"ne"|"e"|"se"|"s"|"sw"|"w";
+const RESIZE_HANDLES: { pos: ResizeHandle; cursor: string; style: React.CSSProperties }[] = [
+  { pos: "nw", cursor: "nwse-resize", style: { left: -4, top: -4 } },
+  { pos: "n",  cursor: "ns-resize",   style: { left: "calc(50% - 4px)", top: -4 } },
+  { pos: "ne", cursor: "nesw-resize", style: { right: -4, top: -4 } },
+  { pos: "e",  cursor: "ew-resize",   style: { right: -4, top: "calc(50% - 4px)" } },
+  { pos: "se", cursor: "nwse-resize", style: { right: -4, bottom: -4 } },
+  { pos: "s",  cursor: "ns-resize",   style: { left: "calc(50% - 4px)", bottom: -4 } },
+  { pos: "sw", cursor: "nesw-resize", style: { left: -4, bottom: -4 } },
+  { pos: "w",  cursor: "ew-resize",   style: { left: -4, top: "calc(50% - 4px)" } },
+];
 
 type EditSeat = SeatInput & { key: string };
 
@@ -116,7 +129,8 @@ type DragTarget =
       seatOrigins: Map<string, { x: number; y: number }>;
       decoOrigins: Map<string, { x: number; y: number }>;
     }
-  | { target: "select"; x: number; y: number; additive: boolean };
+  | { target: "select"; x: number; y: number; additive: boolean }
+  | { target: "resize"; decoId: string; handle: ResizeHandle; originX: number; originY: number; originW: number; originH: number };
 
 type EditorSnapshot = {
   width: number;
@@ -166,6 +180,8 @@ export default function SeatMapEditor({
     height: number;
   } | null>(null);
   const [guideLines, setGuideLines] = useState<GuideLine[]>([]);
+  const [hasDraft, setHasDraft] = useState(false);
+  const [draftSavedAt, setDraftSavedAt] = useState<Date | null>(null);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const dragState = useRef<{ startX: number; startY: number; info: DragTarget } | null>(null);
@@ -205,6 +221,50 @@ export default function SeatMapEditor({
 
   const mutateSeats = useCallback((fn: (prev: EditSeat[]) => EditSeat[]) => { setSeats(fn); setDirty(true); }, []);
   const mutateDeco = useCallback((fn: (prev: LayoutDecoration[]) => LayoutDecoration[]) => { setDecorations(fn); setDirty(true); }, []);
+
+  // ── 草稿自動儲存 ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    const key = DRAFT_KEY_PREFIX + zone.id;
+    const t = setTimeout(() => {
+      try {
+        localStorage.setItem(key, JSON.stringify({ width, height, seats, decorations, seatTypeColors }));
+        setDraftSavedAt(new Date());
+      } catch {}
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [width, height, seats, decorations, seatTypeColors, zone.id]);
+
+  useEffect(() => {
+    const key = DRAFT_KEY_PREFIX + zone.id;
+    const raw = localStorage.getItem(key);
+    if (!raw) return;
+    try {
+      const d = JSON.parse(raw);
+      if (d && (d.seats?.length || d.decorations?.length)) setHasDraft(true);
+    } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const restoreDraft = () => {
+    const raw = localStorage.getItem(DRAFT_KEY_PREFIX + zone.id);
+    if (!raw) return;
+    try {
+      const d = JSON.parse(raw);
+      pushUndo();
+      if (d.width)           setWidth(d.width);
+      if (d.height)          setHeight(d.height);
+      if (d.seats)           setSeats(d.seats);
+      if (d.decorations)     setDecorations(d.decorations);
+      if (d.seatTypeColors)  setSeatTypeColors(d.seatTypeColors);
+      setDirty(true);
+      setHasDraft(false);
+      toast.success("已還原草稿");
+    } catch { toast.error("草稿讀取失敗"); }
+  };
+  const discardDraft = () => {
+    localStorage.removeItem(DRAFT_KEY_PREFIX + zone.id);
+    setHasDraft(false);
+  };
 
   const snap = (n: number) => Math.max(0, Math.round(n / GRID) * GRID);
   const snapSize = (n: number) => Math.max(GRID, Math.round(n / GRID) * GRID);
@@ -260,17 +320,14 @@ export default function SeatMapEditor({
     const moving = collectMovingBoxes(seatOrigins, decoOrigins);
     if (!moving.length) return { dx: snap(dx), dy: snap(dy), guides: [] as GuideLine[] };
 
-    const rawDx = snap(dx);
-    const rawDy = snap(dy);
     const box = boundsOf(moving);
-    const moved = { x: box.x + rawDx, y: box.y + rawDy, width: box.width, height: box.height };
-    const xAnchors = [moved.x, moved.x + moved.width / 2, moved.x + moved.width];
-    const yAnchors = [moved.y, moved.y + moved.height / 2, moved.y + moved.height];
+    // 用原始位移（未格點化）計算錨點，讓元素邊緣吸附優先於格點
+    const movedRaw = { x: box.x + dx, y: box.y + dy, width: box.width, height: box.height };
+    const xAnchors = [movedRaw.x, movedRaw.x + movedRaw.width / 2, movedRaw.x + movedRaw.width];
+    const yAnchors = [movedRaw.y, movedRaw.y + movedRaw.height / 2, movedRaw.y + movedRaw.height];
     const targets = [{ x: 0, y: 0, width, height }, ...collectStaticBoxes(moving)];
     const xTargets = targets.flatMap((b) => [b.x, b.x + b.width / 2, b.x + b.width]);
     const yTargets = targets.flatMap((b) => [b.y, b.y + b.height / 2, b.y + b.height]);
-    let snapDx = rawDx;
-    let snapDy = rawDy;
     let bestX: { distance: number; delta: number; value: number } | null = null;
     let bestY: { distance: number; delta: number; value: number } | null = null;
 
@@ -292,8 +349,9 @@ export default function SeatMapEditor({
         }
       }
     }
-    if (bestX) snapDx += bestX.delta;
-    if (bestY) snapDy += bestY.delta;
+    // 元素邊緣有吸附就用；否則退回格點
+    const snapDx = bestX ? dx + bestX.delta : snap(dx);
+    const snapDy = bestY ? dy + bestY.delta : snap(dy);
     return {
       dx: snapDx,
       dy: snapDy,
@@ -440,6 +498,40 @@ export default function SeatMapEditor({
           return o ? { ...d, x: Math.max(0, o.x + snapped.dx), y: Math.max(0, o.y + snapped.dy) } : d;
         })
       );
+    } else if (ds.info.target === "resize") {
+      const { decoId, handle, originX, originY, originW, originH } = ds.info;
+      const rawDx = e.clientX - ds.startX;
+      const rawDy = e.clientY - ds.startY;
+      const isN = handle.includes("n");
+      const isS = handle.includes("s");
+      const isE = handle.includes("e");
+      const isW = handle.includes("w");
+      const isCorner = handle.length === 2;
+      let x = originX, y = originY, w = originW, h = originH;
+
+      if (isCorner) {
+        // 等比例拉伸：以較大的縮放軸為準
+        const sx = isE ? rawDx : -rawDx;
+        const sy = isS ? rawDy : -rawDy;
+        const aspect = originH / originW;
+        if (Math.abs(sx / originW) >= Math.abs(sy / originH)) {
+          w = Math.max(GRID, snapSize(originW + sx));
+          h = Math.max(GRID, snapSize(w * aspect));
+        } else {
+          h = Math.max(GRID, snapSize(originH + sy));
+          w = Math.max(GRID, snapSize(h / aspect));
+        }
+        if (isN) y = snap(originY + originH - h);
+        if (isW) x = snap(originX + originW - w);
+      } else {
+        if (isE) w = snapSize(Math.max(GRID, originW + rawDx));
+        if (isS) h = snapSize(Math.max(GRID, originH + rawDy));
+        if (isW) { w = snapSize(Math.max(GRID, originW - rawDx)); x = snap(originX + originW - w); }
+        if (isN) { h = snapSize(Math.max(GRID, originH - rawDy)); y = snap(originY + originH - h); }
+      }
+      mutateDeco((prev) => prev.map((d) =>
+        d.id === decoId ? { ...d, x, y, width: Math.max(GRID, w), height: Math.max(GRID, h) } : d
+      ));
     } else {
       const point = canvasPoint(e);
       const x1 = Math.min(ds.info.x, point.x);
@@ -740,7 +832,10 @@ export default function SeatMapEditor({
       const ul = (updated.layout || {}) as Record<string, unknown>;
       setDecorations(parseDeco(ul));
       setSeatTypeColors((ul.seat_type_colors as Record<string, string>) || {});
+      localStorage.removeItem(DRAFT_KEY_PREFIX + zone.id);
       setDirty(false);
+      setHasDraft(false);
+      setDraftSavedAt(null);
       setSelected(new Set());
       toast.success(`已儲存 ${updated.seats.length} 個座位`);
       onSaved?.(updated);
@@ -752,7 +847,25 @@ export default function SeatMapEditor({
   };
 
   return (
-    <div className="space-y-3">
+    // onMouseDown 在 input/select/canvas 以外的地方一律 preventDefault，防止點按鈕讓 canvas 失去焦點
+    <div
+      className="space-y-3"
+      onMouseDown={(e) => {
+        const t = e.target as HTMLElement;
+        if (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA") return;
+        if (canvasRef.current?.contains(t)) return;
+        if (document.activeElement === canvasRef.current) e.preventDefault();
+      }}
+    >
+      {/* 草稿提示 */}
+      {hasDraft && (
+        <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs"
+          style={{ background: "rgba(212,175,55,0.12)", border: "1px solid var(--primary)" }}>
+          <span style={{ color: "var(--primary)" }}>發現未儲存的草稿，是否還原？</span>
+          <button type="button" className="btn btn-ghost text-xs" onClick={restoreDraft}>還原草稿</button>
+          <button type="button" className="btn btn-ghost text-xs" style={{ color: "var(--text-muted)" }} onClick={discardDraft}>捨棄</button>
+        </div>
+      )}
       {/* 工具列 */}
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className="btn btn-ghost text-xs" onClick={addSeat}>＋ 單一座位</button>
@@ -785,16 +898,26 @@ export default function SeatMapEditor({
         <button type="button" className="btn btn-ghost text-xs" onClick={undo} disabled={!undoStack.current.length} title="撤銷上一步（Ctrl/⌘+Z）">
           ↶ 撤銷
         </button>
-        <label className="text-xs flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
-          畫布
-          <input type="number" value={width} min={200} step={20}
-            onChange={(e) => { pushUndo(); setWidth(Number(e.target.value) || 200); setDirty(true); }}
-            className="input w-20 text-xs" />
-          ×
-          <input type="number" value={height} min={200} step={20}
-            onChange={(e) => { pushUndo(); setHeight(Number(e.target.value) || 200); setDirty(true); }}
-            className="input w-20 text-xs" />
-        </label>
+        {/* 畫布大小步進器 */}
+        <div className="flex items-center gap-0.5 text-xs select-none" style={{ color: "var(--text-muted)" }}>
+          <span className="mr-1">畫布</span>
+          <button type="button" className="btn btn-ghost text-xs px-1.5 py-0.5"
+            onClick={() => { pushUndo(); setWidth((w) => Math.max(200, w - SEAT)); setDirty(true); }}>−</button>
+          <span className="w-12 text-center tabular-nums">{width}</span>
+          <button type="button" className="btn btn-ghost text-xs px-1.5 py-0.5"
+            onClick={() => { pushUndo(); setWidth((w) => w + SEAT); setDirty(true); }}>＋</button>
+          <span className="mx-1">×</span>
+          <button type="button" className="btn btn-ghost text-xs px-1.5 py-0.5"
+            onClick={() => { pushUndo(); setHeight((h) => Math.max(200, h - SEAT)); setDirty(true); }}>−</button>
+          <span className="w-12 text-center tabular-nums">{height}</span>
+          <button type="button" className="btn btn-ghost text-xs px-1.5 py-0.5"
+            onClick={() => { pushUndo(); setHeight((h) => h + SEAT); setDirty(true); }}>＋</button>
+        </div>
+        {draftSavedAt && !dirty && (
+          <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+            草稿 {draftSavedAt.toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" })}
+          </span>
+        )}
         <button type="button" className="btn btn-primary text-xs" onClick={save} disabled={saving || !dirty}>
           {saving ? "儲存中…" : dirty ? "儲存座位圖" : "已儲存"}
         </button>
@@ -951,12 +1074,12 @@ export default function SeatMapEditor({
           style={{
             width,
             height,
-            // 雙層格線：粗線每 32px（= 1 座位寬），細線每 16px（= 半格）
+            // 線畫在每個 cell 起始點，與 left/top 定位的元素完全對齊
             backgroundImage: [
-              "repeating-linear-gradient(0deg, transparent, transparent 31px, rgba(127,127,127,0.22) 31px, rgba(127,127,127,0.22) 32px)",
-              "repeating-linear-gradient(90deg, transparent, transparent 31px, rgba(127,127,127,0.22) 31px, rgba(127,127,127,0.22) 32px)",
-              "repeating-linear-gradient(0deg, transparent, transparent 15px, rgba(127,127,127,0.07) 15px, rgba(127,127,127,0.07) 16px)",
-              "repeating-linear-gradient(90deg, transparent, transparent 15px, rgba(127,127,127,0.07) 15px, rgba(127,127,127,0.07) 16px)",
+              "repeating-linear-gradient(0deg, rgba(127,127,127,0.18) 0, rgba(127,127,127,0.18) 1px, transparent 1px, transparent 32px)",
+              "repeating-linear-gradient(90deg, rgba(127,127,127,0.18) 0, rgba(127,127,127,0.18) 1px, transparent 1px, transparent 32px)",
+              "repeating-linear-gradient(0deg, rgba(127,127,127,0.06) 0, rgba(127,127,127,0.06) 1px, transparent 1px, transparent 16px)",
+              "repeating-linear-gradient(90deg, rgba(127,127,127,0.06) 0, rgba(127,127,127,0.06) 1px, transparent 1px, transparent 16px)",
             ].join(", "),
             backgroundColor: "var(--bg-base)",
           }}
@@ -976,10 +1099,32 @@ export default function SeatMapEditor({
             <div
               key={d.id}
               onPointerDown={(e) => onDecoPointerDown(e, d.id)}
-              style={decoStyle(d, selectedDecos.has(d.id))}
+              style={{ ...decoStyle(d, selectedDecos.has(d.id)), overflow: "visible" }}
               title={`${DECO_TYPES.find((t) => t.value === d.type)?.label}：${d.label}`}
             >
               {d.label}
+              {/* 調整大小把手（選取時顯示） */}
+              {selectedDecos.has(d.id) && RESIZE_HANDLES.map((h) => (
+                <div
+                  key={h.pos}
+                  style={{
+                    position: "absolute", width: 8, height: 8,
+                    background: "white", border: "1.5px solid var(--primary)",
+                    borderRadius: 2, cursor: h.cursor, zIndex: 10,
+                    touchAction: "none",
+                    ...h.style,
+                  }}
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                    pushUndo();
+                    dragState.current = {
+                      startX: e.clientX, startY: e.clientY,
+                      info: { target: "resize", decoId: d.id, handle: h.pos, originX: d.x, originY: d.y, originW: d.width, originH: d.height },
+                    };
+                    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+                  }}
+                />
+              ))}
             </div>
           ))}
 
@@ -1040,9 +1185,10 @@ export default function SeatMapEditor({
         </div>
       </div>
       <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-        框選或 Shift/Ctrl 多選後可成組拖曳；混選座位＋裝飾元素同樣可對齊。
-        方向鍵 16px 移動，Shift＋方向鍵 1px 精細移動，Ctrl/⌘+D 複製，Ctrl/⌘+Z 撤銷。
-        畫布虛線為水平／垂直中心線，可用「置中X/Y」快速對齊。
+        框選或 Shift/Ctrl 多選 → 成組拖曳、對齊；混選座位＋裝飾元素可用群組面板一起對齊。
+        走道等裝飾元素選取後，四邊與四角出現調整大小把手（拖角 = 等比例）。
+        方向鍵 16px 移動，Shift＋方向鍵 1px 精細移動；Ctrl/⌘+D 複製，Ctrl/⌘+Z 撤銷。
+        草稿每 1.5 秒自動存入瀏覽器，下次進入會提示還原。
       </p>
     </div>
   );
