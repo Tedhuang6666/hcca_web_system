@@ -101,14 +101,16 @@ function decoStyle(d: LayoutDecoration, selected: boolean): React.CSSProperties 
 }
 
 function toEdit(seats: SeatOut[]): EditSeat[] {
+  // 載入時 snap 到格點，修正歷史資料偏移
+  const g = (n: number) => Math.max(0, Math.round(n / GRID) * GRID);
   return seats.map((s) => ({
     key: s.id,
     id: s.id,
     label: s.label,
     block: s.block,
     row_label: s.row_label,
-    x: s.x,
-    y: s.y,
+    x: g(s.x),
+    y: g(s.y),
     seat_type: s.seat_type,
     price_delta: s.price_delta,
     status: s.status,
@@ -118,9 +120,13 @@ function toEdit(seats: SeatOut[]): EditSeat[] {
 function parseDeco(layout: Record<string, unknown>): LayoutDecoration[] {
   const raw = layout.decorations;
   if (!Array.isArray(raw)) return [];
-  return raw.filter((d): d is LayoutDecoration =>
-    d && typeof d === "object" && typeof d.id === "string" && typeof d.type === "string"
-  );
+  const g = (n: number) => Math.max(0, Math.round(n / GRID) * GRID);
+  const gs = (n: number) => Math.max(GRID, Math.round(n / GRID) * GRID);
+  return raw
+    .filter((d): d is LayoutDecoration =>
+      d && typeof d === "object" && typeof d.id === "string" && typeof d.type === "string"
+    )
+    .map((d) => ({ ...d, x: g(d.x), y: g(d.y), width: gs(d.width), height: gs(d.height) }));
 }
 
 type DragTarget =
@@ -1074,12 +1080,13 @@ export default function SeatMapEditor({
           style={{
             width,
             height,
-            // 線畫在每個 cell 起始點，與 left/top 定位的元素完全對齊
+            // 180deg = 從頂部往下，線在 y=0,16,32,64... 與 top 定位的元素完全對齊
+            // 90deg  = 從左往右，  線在 x=0,16,32,64... 與 left 定位的元素完全對齊
             backgroundImage: [
-              "repeating-linear-gradient(0deg, rgba(127,127,127,0.18) 0, rgba(127,127,127,0.18) 1px, transparent 1px, transparent 32px)",
-              "repeating-linear-gradient(90deg, rgba(127,127,127,0.18) 0, rgba(127,127,127,0.18) 1px, transparent 1px, transparent 32px)",
-              "repeating-linear-gradient(0deg, rgba(127,127,127,0.06) 0, rgba(127,127,127,0.06) 1px, transparent 1px, transparent 16px)",
-              "repeating-linear-gradient(90deg, rgba(127,127,127,0.06) 0, rgba(127,127,127,0.06) 1px, transparent 1px, transparent 16px)",
+              "repeating-linear-gradient(180deg, rgba(127,127,127,0.18) 0, rgba(127,127,127,0.18) 1px, transparent 1px, transparent 32px)",
+              "repeating-linear-gradient(90deg,  rgba(127,127,127,0.18) 0, rgba(127,127,127,0.18) 1px, transparent 1px, transparent 32px)",
+              "repeating-linear-gradient(180deg, rgba(127,127,127,0.06) 0, rgba(127,127,127,0.06) 1px, transparent 1px, transparent 16px)",
+              "repeating-linear-gradient(90deg,  rgba(127,127,127,0.06) 0, rgba(127,127,127,0.06) 1px, transparent 1px, transparent 16px)",
             ].join(", "),
             backgroundColor: "var(--bg-base)",
           }}
