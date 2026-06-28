@@ -331,8 +331,10 @@ export default function SeatMapEditor({
     dx: number,
     dy: number,
   ) => {
+    // snap 用於絕對座標（≥0）；delta 不可 clamp，否則負方向無法移動
+    const snapDelta = (n: number) => Math.round(n / GRID) * GRID;
     const moving = collectMovingBoxes(seatOrigins, decoOrigins);
-    if (!moving.length) return { dx: snap(dx), dy: snap(dy), guides: [] as GuideLine[] };
+    if (!moving.length) return { dx: snapDelta(dx), dy: snapDelta(dy), guides: [] as GuideLine[] };
 
     const box = boundsOf(moving);
     // 用原始位移（未格點化）計算錨點，讓元素邊緣吸附優先於格點
@@ -340,8 +342,15 @@ export default function SeatMapEditor({
     const xAnchors = [movedRaw.x, movedRaw.x + movedRaw.width / 2, movedRaw.x + movedRaw.width];
     const yAnchors = [movedRaw.y, movedRaw.y + movedRaw.height / 2, movedRaw.y + movedRaw.height];
     const targets = [{ x: 0, y: 0, width, height }, ...collectStaticBoxes(moving)];
-    const xTargets = targets.flatMap((b) => [b.x, b.x + b.width / 2, b.x + b.width]);
-    const yTargets = targets.flatMap((b) => [b.y, b.y + b.height / 2, b.y + b.height]);
+    // 排除「起始位置」的吸附目標：避免同排/同欄元素在微移時把選取拉回原點
+    const originXSet = new Set([box.x, box.x + box.width / 2, box.x + box.width].map(Math.round));
+    const originYSet = new Set([box.y, box.y + box.height / 2, box.y + box.height].map(Math.round));
+    const xTargets = targets
+      .flatMap((b) => [b.x, b.x + b.width / 2, b.x + b.width])
+      .filter((t) => !originXSet.has(Math.round(t)));
+    const yTargets = targets
+      .flatMap((b) => [b.y, b.y + b.height / 2, b.y + b.height])
+      .filter((t) => !originYSet.has(Math.round(t)));
     let bestX: { distance: number; delta: number; value: number } | null = null;
     let bestY: { distance: number; delta: number; value: number } | null = null;
 
@@ -363,9 +372,9 @@ export default function SeatMapEditor({
         }
       }
     }
-    // 元素邊緣有吸附就用；否則退回格點
-    const snapDx = bestX ? dx + bestX.delta : snap(dx);
-    const snapDy = bestY ? dy + bestY.delta : snap(dy);
+    // 元素邊緣有吸附就用；否則退回格點（snapDelta 不 clamp 到 0，允許負向移動）
+    const snapDx = bestX ? dx + bestX.delta : snapDelta(dx);
+    const snapDy = bestY ? dy + bestY.delta : snapDelta(dy);
     return {
       dx: snapDx,
       dy: snapDy,
