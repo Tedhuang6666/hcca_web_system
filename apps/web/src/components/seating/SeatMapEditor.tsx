@@ -228,8 +228,9 @@ export default function SeatMapEditor({
   const mutateSeats = useCallback((fn: (prev: EditSeat[]) => EditSeat[]) => { setSeats(fn); setDirty(true); }, []);
   const mutateDeco = useCallback((fn: (prev: LayoutDecoration[]) => LayoutDecoration[]) => { setDecorations(fn); setDirty(true); }, []);
 
-  // ── 草稿自動儲存 ──────────────────────────────────────────────────────────
+  // ── 草稿自動儲存（只在 dirty=true 時才存，避免把伺服器原始狀態誤存為草稿） ──
   useEffect(() => {
+    if (!dirty) return;
     const key = DRAFT_KEY_PREFIX + zone.id;
     const t = setTimeout(() => {
       try {
@@ -238,7 +239,7 @@ export default function SeatMapEditor({
       } catch {}
     }, 1500);
     return () => clearTimeout(t);
-  }, [width, height, seats, decorations, seatTypeColors, zone.id]);
+  }, [dirty, width, height, seats, decorations, seatTypeColors, zone.id]);
 
   useEffect(() => {
     const key = DRAFT_KEY_PREFIX + zone.id;
@@ -390,7 +391,7 @@ export default function SeatMapEditor({
     const count = Number(window.prompt("此排座位數", "10"));
     if (!Number.isFinite(count) || count <= 0) return;
     pushUndo();
-    const baseY = seats.length ? snap(Math.max(...seats.map((s) => s.y)) + SEAT + GRID) : snap(60);
+    const baseY = seats.length ? snap(Math.max(...seats.map((s) => s.y)) + SEAT + GRID) : SEAT * 2;
     const added: EditSeat[] = [];
     for (let i = 0; i < count; i++) {
       added.push({
@@ -399,7 +400,7 @@ export default function SeatMapEditor({
         label: `${prefix}${i + 1}`,
         block: null,
         row_label: prefix,
-        x: snap(40 + i * SEAT),
+        x: SEAT + i * SEAT,
         y: baseY,
         seat_type: "normal",
         price_delta: 0,
@@ -590,11 +591,15 @@ export default function SeatMapEditor({
     if (v === null) return;
     pushUndo();
     const list = selectedSeats;
+    // 去掉尾端數字後即為排代號（A1→A、VIP1→VIP、B→B）
+    const rowPrefix = v.replace(/\d+$/, "") || v;
     mutateSeats((prev) =>
       prev.map((s) => {
         const idx = list.findIndex((x) => x.key === s.key);
         if (idx < 0) return s;
-        return { ...s, label: list.length > 1 ? `${v}${idx + 1}` : v };
+        const label = list.length > 1 ? `${v}${idx + 1}` : v;
+        const row_label = list.length > 1 ? rowPrefix : s.row_label;
+        return { ...s, label, row_label };
       }),
     );
   };
@@ -919,9 +924,9 @@ export default function SeatMapEditor({
           <button type="button" className="btn btn-ghost text-xs px-1.5 py-0.5"
             onClick={() => { pushUndo(); setHeight((h) => h + SEAT); setDirty(true); }}>＋</button>
         </div>
-        {draftSavedAt && !dirty && (
+        {dirty && draftSavedAt && (
           <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-            草稿 {draftSavedAt.toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" })}
+            草稿已儲存 {draftSavedAt.toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" })}
           </span>
         )}
         <button type="button" className="btn btn-primary text-xs" onClick={save} disabled={saving || !dirty}>
@@ -975,6 +980,9 @@ export default function SeatMapEditor({
             <input type="number" className="input w-20 text-xs" value={selectedSeats[0]?.price_delta ?? 0}
               onChange={(e) => applyToSelected({ price_delta: Number(e.target.value) || 0 })} />
           </label>
+          <input className="input w-16 text-xs" placeholder="排代號" value={selectedSeats[0]?.row_label ?? ""}
+            title="排代號（row_label）"
+            onChange={(e) => applyToSelected({ row_label: e.target.value || null })} />
           <input className="input w-28 text-xs" placeholder="區塊名稱" value={selectedSeats[0]?.block ?? ""}
             onChange={(e) => applyToSelected({ block: e.target.value || null })} />
           <button type="button" className="btn btn-ghost text-xs" style={{ color: "var(--danger, #c0392b)" }}
