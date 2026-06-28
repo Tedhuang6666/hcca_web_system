@@ -70,14 +70,22 @@ jobs:
           # ——next build 不會自動把它們放進 .next/standalone。
           cp -r .next/static .next/standalone/.next/static
           cp -r public .next/standalone/public
-          HOSTNAME=127.0.0.1 PORT=3000 node .next/standalone/server.js &
-          for _ in $(seq 1 30); do
-            if curl -sf http://127.0.0.1:3000/ > /dev/null; then
-              echo "Next.js is up"; exit 0;
+          HOSTNAME=127.0.0.1 PORT=3000 node .next/standalone/server.js > /tmp/next-server.log 2>&1 &
+          NEXT_PID=$!
+          for i in $(seq 1 30); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://127.0.0.1:3000/ 2>/dev/null || echo "000")
+            case "$STATUS" in
+              2[0-9][0-9]|3[0-9][0-9]) echo "Next.js is up (HTTP $STATUS)"; exit 0 ;;
+            esac
+            if ! kill -0 "$NEXT_PID" 2>/dev/null; then
+              echo "::error::Next.js server process died"; cat /tmp/next-server.log; exit 1
             fi
+            echo "Waiting for Next.js... (attempt $i, HTTP $STATUS)"
             sleep 2
           done
-          echo "::error::Next.js failed to start within 60s"; exit 1
+          echo "::error::Next.js failed to start within 60s"
+          cat /tmp/next-server.log
+          exit 1
 
       - name: Install axe-core CLI + Chrome-matched ChromeDriver
         run: |
@@ -145,14 +153,22 @@ jobs:
           # env 根本不會被讀），所以這裡自行把 server 拉起來，action 只負責對既有 URL 收數據。
           cp -r .next/static .next/standalone/.next/static
           cp -r public .next/standalone/public
-          HOSTNAME=127.0.0.1 PORT=3000 node .next/standalone/server.js &
-          for _ in $(seq 1 30); do
-            if curl -sf http://127.0.0.1:3000/ > /dev/null; then
-              echo "Next.js is up"; exit 0;
+          HOSTNAME=127.0.0.1 PORT=3000 node .next/standalone/server.js > /tmp/next-server.log 2>&1 &
+          NEXT_PID=$!
+          for i in $(seq 1 30); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://127.0.0.1:3000/ 2>/dev/null || echo "000")
+            case "$STATUS" in
+              2[0-9][0-9]|3[0-9][0-9]) echo "Next.js is up (HTTP $STATUS)"; exit 0 ;;
+            esac
+            if ! kill -0 "$NEXT_PID" 2>/dev/null; then
+              echo "::error::Next.js server process died"; cat /tmp/next-server.log; exit 1
             fi
+            echo "Waiting for Next.js... (attempt $i, HTTP $STATUS)"
             sleep 2
           done
-          echo "::error::Next.js failed to start within 60s"; exit 1
+          echo "::error::Next.js failed to start within 60s"
+          cat /tmp/next-server.log
+          exit 1
 
       - name: Lighthouse CI
         uses: treosh/lighthouse-ci-action@3e7e23fb74242897f95c0ba9cabad3d0227b9b18 # 12.6.2
