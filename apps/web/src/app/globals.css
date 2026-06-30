@@ -2657,12 +2657,10 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
   from {
     opacity: 0;
     transform: translateY(6px);
-    filter: saturate(0.94);
   }
   to {
     opacity: 1;
     transform: translateY(0);
-    filter: saturate(1);
   }
 }
 

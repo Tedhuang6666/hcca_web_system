@@ -8,7 +8,7 @@ export default function PageTransition({ children }: { children: ReactNode }) {
   const reducedMotionSafe = pathname.startsWith("/legal") ? "" : "app-page-transition";
 
   return (
-    <div key={pathname} className={reducedMotionSafe}>
+    <div className={reducedMotionSafe}>
       {children}
     </div>
   );

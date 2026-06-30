@@ -14,6 +14,7 @@ export default function NavigationProgress() {
   const s = useRef({ active: false, raf: null as number | null, timer: null as ReturnType<typeof setTimeout> | null });
   const prefetched = useRef(new Set<string>());
   const lastStart = useRef<{ href: string; at: number } | null>(null);
+  const prefetchOnIntent = process.env.NODE_ENV !== "development";
 
   const internalPathFromAnchor = useCallback((anchor: HTMLAnchorElement): string | null => {
     const href = anchor.getAttribute("href") ?? "";
@@ -101,6 +102,7 @@ export default function NavigationProgress() {
   // 預熱高頻導航：使用者 hover / focus / touch 到內部連結時先載入 RSC payload。
   useEffect(() => {
     const warmup = (target: EventTarget | null) => {
+      if (!prefetchOnIntent) return;
       const anchor = (target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
       if (!anchor) return;
       const href = internalPathFromAnchor(anchor);
@@ -121,7 +123,7 @@ export default function NavigationProgress() {
       document.removeEventListener("focusin", handleFocusIn);
       document.removeEventListener("touchstart", handleTouchStart);
     };
-  }, [internalPathFromAnchor, router]);
+  }, [internalPathFromAnchor, prefetchOnIntent, router]);
 
   return (
     <div
