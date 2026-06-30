@@ -190,6 +190,12 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
 }
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+
+  if (isBare(pathname)) {
+    return <>{children}</>;
+  }
+
   return (
     <ModuleStatusProvider>
       <AppShellContent>{children}</AppShellContent>
