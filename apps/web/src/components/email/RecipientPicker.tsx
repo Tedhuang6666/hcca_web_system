@@ -32,12 +32,24 @@ const MODES: { key: Mode; label: string }[] = [
   { key: "all", label: "全體成員" },
 ];
 
+function selectorKey(sel: RecipientSelector): string {
+  return JSON.stringify({
+    user_ids: [...sel.user_ids].sort(),
+    position_ids: [...sel.position_ids].sort(),
+    org_ids: [...sel.org_ids].sort(),
+    external_emails: [...sel.external_emails].sort(),
+    include_all: sel.include_all,
+    include_school: sel.include_school,
+  });
+}
+
 interface RecipientPickerProps {
+  value?: RecipientSelector;
   onChange: (sel: RecipientSelector) => void;
   disabled?: boolean;
 }
 
-export default function RecipientPicker({ onChange, disabled = false }: RecipientPickerProps) {
+export default function RecipientPicker({ value, onChange, disabled = false }: RecipientPickerProps) {
   const [mode, setMode] = useState<Mode>("users");
   const [allScope, setAllScope] = useState<AllScope>("school");
   const [selectedUsers, setSelectedUsers] = useState<ComboboxOption[]>([]);
@@ -51,6 +63,36 @@ export default function RecipientPicker({ onChange, disabled = false }: Recipien
 
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const valueKey = value ? selectorKey(value) : "";
+
+  useEffect(() => {
+    if (!value) return;
+    if (value.include_all) {
+      setMode("all");
+      setAllScope("everyone");
+    } else if (value.include_school) {
+      setMode("all");
+      setAllScope("school");
+    } else if (value.external_emails.length > 0) {
+      setMode("emails");
+      setExternalEmailsText(value.external_emails.join("\n"));
+    } else if (value.position_ids.length > 0) {
+      setMode("positions");
+      setSelectedPos(value.position_ids.map((id) => ({ value: id, label: id })));
+    } else if (value.org_ids.length > 0) {
+      setMode("orgs");
+      setSelectedOrgs(value.org_ids.map((id) => ({ value: id, label: id })));
+    } else if (value.user_ids.length > 0) {
+      setMode("users");
+      setSelectedUsers(value.user_ids.map((id) => ({ value: id, label: id })));
+    } else {
+      setSelectedUsers([]);
+      setExternalEmailsText("");
+      setSelectedPos([]);
+      setSelectedOrgs([]);
+      setMode("users");
+    }
+  }, [value, valueKey]);
 
   // 任一模式/選擇變動 → 發出對應的 RecipientSelector
   useEffect(() => {
@@ -74,8 +116,9 @@ export default function RecipientPicker({ onChange, disabled = false }: Recipien
     } else {
       sel = { ...EMPTY, include_school: true };
     }
+    if (valueKey && selectorKey(sel) === valueKey) return;
     onChangeRef.current(sel);
-  }, [mode, allScope, selectedUsers, externalEmailsText, selectedPos, selectedOrgs]);
+  }, [mode, allScope, selectedUsers, externalEmailsText, selectedPos, selectedOrgs, valueKey]);
 
   return (
     <div className="space-y-3">
