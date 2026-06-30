@@ -20,6 +20,7 @@ import type {
   EmailButtonStyle,
   EmailCardRow,
   EmailComposePayload,
+  EmailMessageDetailOut,
   EmailMessageOut,
   EmailPreflightOut,
   EmailRecipientListOut,
@@ -660,6 +661,36 @@ function ComposeInner() {
     }
   };
 
+  const applyMessageRecipients = (message: EmailMessageDetailOut) => {
+    setRecipients(message.recipient_spec ?? EMPTY_RECIPIENTS);
+    setRecipientListId("");
+    setVariableDefinitions(message.variable_definitions ?? []);
+    setPreviewVariables(message.default_variables ?? {});
+    setRecipientRows(
+      (message.recipient_variables ?? []).map((row) => ({
+        email: row.email ?? "",
+        name: row.name ?? "",
+        variables: { ...(row.variables ?? {}) },
+      })),
+    );
+    setPreviewRecipientIndex(0);
+  };
+
+  const copyRecentMessageRecipients = async () => {
+    if (!recentMessageId) {
+      toast.error("請先選擇一封過去郵件");
+      return;
+    }
+    try {
+      const message = await emailApi.getMessage(recentMessageId);
+      applyMessageRecipients(message);
+      setCurrentStep(2);
+      toast.success("已複製過去郵件的收件人");
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "複製收件人失敗"));
+    }
+  };
+
   const savePlatformTemplate = async () => {
     const name = window.prompt("平台範本名稱", subject || heading || "未命名範本")?.trim();
     if (!name) return;
@@ -1208,20 +1239,30 @@ function ComposeInner() {
               <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
                 套用過去郵件格式
               </label>
-              <select
-                className="input"
-                value={recentMessageId}
-                onChange={(event) => void applyRecentMessage(event.target.value)}
-              >
-                <option value="">選擇以前寄發或儲存的郵件…</option>
-                {recentMessages.map((message) => (
-                  <option key={message.id} value={message.id}>
-                    {message.subject} · {new Date(message.created_at).toLocaleDateString("zh-TW")}
-                  </option>
-                ))}
-              </select>
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                <select
+                  className="input min-w-0"
+                  value={recentMessageId}
+                  onChange={(event) => void applyRecentMessage(event.target.value)}
+                >
+                  <option value="">選擇以前寄發或儲存的郵件…</option>
+                  {recentMessages.map((message) => (
+                    <option key={message.id} value={message.id}>
+                      {message.subject} · {new Date(message.created_at).toLocaleDateString("zh-TW")}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  disabled={!recentMessageId}
+                  onClick={() => void copyRecentMessageRecipients()}
+                >
+                  複製收件人
+                </button>
+              </div>
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                只套用信件內容、版型與欄位，不會帶入舊收件人。
+                下拉選單只套用信件內容；需要沿用同一批收件人時，按「複製收件人」。
               </p>
             </div>
             <div className="space-y-2">
@@ -1950,7 +1991,7 @@ function ComposeInner() {
                 </option>
               ))}
             </select>
-            <RecipientPicker onChange={setRecipients} disabled={busy} />
+            <RecipientPicker value={recipients} onChange={setRecipients} disabled={busy} />
             <p className="text-xs" style={{ color: "var(--text-muted)" }}>
               {count === null
                 ? importedRecipientCount > 0
