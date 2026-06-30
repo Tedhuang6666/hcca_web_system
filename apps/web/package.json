@@ -7,7 +7,7 @@
     "npm": ">=10"
   },
   "scripts": {
-    "dev": "next dev --webpack",
+    "dev": "next dev",
     "build": "next build --webpack",
     "analyze": "ANALYZE=true next build --webpack",
     "start": "next start",
