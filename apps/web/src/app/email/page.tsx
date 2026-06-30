@@ -631,7 +631,6 @@ function ComposeInner() {
   };
 
   const applyRecentMessage = async (id: string) => {
-    setRecentMessageId(id);
     if (!id) return;
     try {
       const message = await emailApi.getMessage(id);
@@ -691,6 +690,14 @@ function ComposeInner() {
     }
   };
 
+  const hasRecipientSelection = (selector: RecipientSelector) =>
+    selector.include_all ||
+    selector.include_school ||
+    selector.user_ids.length > 0 ||
+    selector.position_ids.length > 0 ||
+    selector.org_ids.length > 0 ||
+    selector.external_emails.length > 0;
+
   const savePlatformTemplate = async () => {
     const name = window.prompt("平台範本名稱", subject || heading || "未命名範本")?.trim();
     if (!name) return;
@@ -722,6 +729,36 @@ function ComposeInner() {
       })),
     );
     toast.success(`已套用收件名單：${list.name}`);
+  };
+
+  const saveCurrentRecipientList = async () => {
+    if (invalidRecipientRows.length > 0) {
+      toast.error(`有 ${invalidRecipientRows.length} 列電子郵件格式錯誤，請先修正`);
+      return;
+    }
+    const members = buildRecipientVariables();
+    if (!hasRecipientSelection(recipients) && members.length === 0) {
+      toast.error("目前沒有可儲存的收件人");
+      return;
+    }
+    const defaultName = subject.trim() ? `${subject.trim()}收件名單` : "未命名收件名單";
+    const name = window.prompt("收件名單名稱", defaultName)?.trim();
+    if (!name) return;
+    try {
+      const list = await emailApi.createRecipientList({
+        name,
+        visibility: "private",
+        org_id: null,
+        recipient_spec: recipients,
+        variable_definitions: variableDefinitions.filter((variable) => variable.key.trim()),
+        members,
+      });
+      setRecipientLists((rows) => [list, ...rows.filter((row) => row.id !== list.id)]);
+      setRecipientListId(list.id);
+      toast.success(`已儲存收件名單：${list.name}`);
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "儲存收件名單失敗"));
+    }
   };
 
   useEffect(() => {
@@ -1239,11 +1276,11 @@ function ComposeInner() {
               <label className="mb-1 block text-xs font-medium" style={{ color: "var(--text-muted)" }}>
                 套用過去郵件格式
               </label>
-              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
                 <select
                   className="input min-w-0"
                   value={recentMessageId}
-                  onChange={(event) => void applyRecentMessage(event.target.value)}
+                  onChange={(event) => setRecentMessageId(event.target.value)}
                 >
                   <option value="">選擇以前寄發或儲存的郵件…</option>
                   {recentMessages.map((message) => (
@@ -1254,6 +1291,14 @@ function ComposeInner() {
                 </select>
                 <button
                   type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={!recentMessageId}
+                  onClick={() => void applyRecentMessage(recentMessageId)}
+                >
+                  套用格式
+                </button>
+                <button
+                  type="button"
                   className="btn btn-secondary btn-sm"
                   disabled={!recentMessageId}
                   onClick={() => void copyRecentMessageRecipients()}
@@ -1262,7 +1307,7 @@ function ComposeInner() {
                 </button>
               </div>
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                下拉選單只套用信件內容；需要沿用同一批收件人時，按「複製收件人」。
+                先選來源，再選要套用格式或只複製收件人，不會因為點下拉就覆蓋目前內容。
               </p>
             </div>
             <div className="space-y-2">
@@ -1979,18 +2024,27 @@ function ComposeInner() {
 
           <section className={`card space-y-2 p-4 ${currentStep === 2 ? "" : "hidden"}`}>
             <h2 className="text-sm font-semibold">收件對象</h2>
-            <select
-              className="input"
-              value={recipientListId}
-              onChange={(e) => applyRecipientList(e.target.value)}
-            >
-              <option value="">套用已儲存名單（選填）…</option>
-              {recipientLists.map((list) => (
-                <option key={list.id} value={list.id}>
-                  {list.name}（{list.members.length} 人）
-                </option>
-              ))}
-            </select>
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+              <select
+                className="input min-w-0"
+                value={recipientListId}
+                onChange={(e) => applyRecipientList(e.target.value)}
+              >
+                <option value="">套用已儲存名單（選填）…</option>
+                {recipientLists.map((list) => (
+                  <option key={list.id} value={list.id}>
+                    {list.name}（{list.members.length} 人）
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => void saveCurrentRecipientList()}
+              >
+                儲存目前名單
+              </button>
+            </div>
             <RecipientPicker value={recipients} onChange={setRecipients} disabled={busy} />
             <p className="text-xs" style={{ color: "var(--text-muted)" }}>
               {count === null
