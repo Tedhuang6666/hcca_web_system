@@ -4445,3 +4445,104 @@ export interface PublicSiteBundleOut {
   featured_officers: PublicOfficerOut[];
   nav_pages: PublicSitePageOut[];
 }
+
+// ── 物品借用系統 ───────────────────────────────────────────────────────────────
+
+export type LoanUnitStatus = "available" | "borrowed" | "lost" | "damaged" | "retired";
+export type LoanRecordStatus = "active" | "returned" | "overdue" | "lost";
+
+export interface LoanUnitOut {
+  id: string;
+  unit_code: string;
+  status: LoanUnitStatus;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface LoanItemOut {
+  id: string;
+  org_id: string;
+  name: string;
+  description: string | null;
+  image_url: string | null;
+  is_active: boolean;
+  default_due_days: number;
+  created_at: string;
+  available_count: number;
+  total_count: number;
+}
+
+export interface LoanAvailableItem {
+  id: string;
+  name: string;
+  description: string | null;
+  image_url: string | null;
+  default_due_days: number;
+  available_count: number;
+  total_count: number;
+}
+
+export interface LoanRecordOut {
+  id: string;
+  unit_id: string;
+  unit_code: string;
+  item_name: string;
+  borrower_name: string;
+  borrower_student_id: string | null;
+  borrower_email: string | null;
+  borrower_contact: string | null;
+  borrowed_at: string;
+  due_at: string;
+  returned_at: string | null;
+  status: LoanRecordStatus;
+  reminder_sent_count: number;
+  notes: string | null;
+  handled_by_name: string | null;
+  created_at: string;
+}
+
+export interface LoanDashboard {
+  active_count: number;
+  overdue_count: number;
+  returned_today: number;
+  total_items: number;
+  available_units: number;
+}
+
+export interface LoanItemCreate {
+  name: string;
+  description?: string;
+  image_url?: string;
+  org_id?: string;
+  default_due_days: number;
+}
+
+export interface LoanItemUpdate {
+  name?: string;
+  description?: string;
+  image_url?: string;
+  default_due_days?: number;
+  is_active?: boolean;
+}
+
+export interface LoanUnitUpdate {
+  status?: LoanUnitStatus;
+  notes?: string;
+  unit_code?: string;
+}
+
+export interface LoanCheckoutCreate {
+  unit_id: string;
+  borrower_name: string;
+  borrower_student_id?: string;
+  borrower_email?: string;
+  borrower_contact?: string;
+  due_at: string;
+  notes?: string;
+}
+
+export interface LoanRecordUpdate {
+  due_at?: string;
+  notes?: string;
+  status?: LoanRecordStatus;
+}
