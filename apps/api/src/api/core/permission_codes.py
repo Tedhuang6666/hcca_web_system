@@ -147,6 +147,10 @@ class PermissionCode(StrEnum):
 
     SITE_MANAGE = "site:manage"
 
+    LOAN_MANAGE = "loan:manage"
+    LOAN_CHECKOUT = "loan:checkout"
+    LOAN_VIEW_ALL = "loan:view_all"
+
     POLICY_ADMIN = "policy:admin"
     API_KEY_ADMIN = "api_key:admin"
     WEBHOOK_ADMIN = "webhook:admin"
@@ -864,6 +868,24 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "desc": "管理官網首頁、公開頁面、平台連結與公開幹部顯示設定",
     },
     # ── 平台治理 ──────────────────────────────────────────────────────
+    {
+        "group": "借用系統",
+        "code": PermissionCode.LOAN_MANAGE,
+        "label": "管理借用物品",
+        "desc": "建立/修改物品類型與個體、標記遺失/損壞",
+    },
+    {
+        "group": "借用系統",
+        "code": PermissionCode.LOAN_CHECKOUT,
+        "label": "執行借還操作",
+        "desc": "辦理物品借出與歸還、查看本組織借用紀錄",
+    },
+    {
+        "group": "借用系統",
+        "code": PermissionCode.LOAN_VIEW_ALL,
+        "label": "查看所有借用紀錄",
+        "desc": "跨組織查看所有借用紀錄（唯讀）",
+    },
     {
         "group": "企業級治理",
         "code": PermissionCode.POLICY_ADMIN,

@@ -318,6 +318,13 @@ from api.models.webhook import (  # noqa: F401
     WebhookDelivery,
     WebhookSubscription,
 )
+from api.models.loan import (  # noqa: F401
+    LoanItemCategory,
+    LoanRecord,
+    LoanRecordStatus,
+    LoanUnit,
+    LoanUnitStatus,
+)
 from api.models.work_item import WorkItem, WorkItemStatus  # noqa: F401
 from api.models.workflow import (  # noqa: F401
     WorkflowEvent,

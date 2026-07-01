@@ -125,6 +125,7 @@ celery_app.conf.include = list(celery_app.conf.include or []) + [
     "api.services.field_crypto_tasks",
     "api.services.webhook_tasks",
     "api.services.document_reminder_tasks",
+    "api.services.loan_tasks",
     "api.services.watchdog_tasks",
     "api.services.error_report_tasks",
     "api.services.discord_reminders",
@@ -271,6 +272,16 @@ celery_app.conf.beat_schedule = {
     "discord-member-reconcile-every-15min": {
         "task": "api.services.discord_sync_tasks.reconcile_members",
         "schedule": 900.0,
+    },
+    # 每日 08:00 掃逾期借用紀錄並標為 overdue
+    "scan-overdue-loans-daily-at-8am": {
+        "task": "api.services.loan_tasks.scan_overdue_loans",
+        "schedule": crontab(hour="8", minute="0"),
+    },
+    # 每日 09:00 寄即將到期/逾期催還信
+    "send-loan-reminders-daily-at-9am": {
+        "task": "api.services.loan_tasks.send_loan_reminders",
+        "schedule": crontab(hour="9", minute="0"),
     },
 }
 

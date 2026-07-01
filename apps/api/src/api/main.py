@@ -77,6 +77,7 @@ from api.routers import (
     impersonation,
     judicial_petitions,
     line_webhook,
+    loans,
     meal,
     meetings,
     metrics_endpoint,
@@ -436,6 +437,7 @@ def create_app() -> FastAPI:
     app.include_router(analytics.router)
     app.include_router(dashboard.router)
     app.include_router(tasks.router)
+    app.include_router(loans.router)
     app.include_router(work_items.router)
     app.include_router(governance.router)
     app.include_router(line_webhook.router)
