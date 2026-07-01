@@ -361,6 +361,26 @@ class OrderSummaryOut(BaseModel):
     unpaid_amount: int = 0
 
 
+class ShopClassProductSummaryRow(BaseModel):
+    product_id: uuid.UUID
+    product_name: str
+    quantity: int
+    total_amount: int
+
+
+class ShopClassSummaryOut(BaseModel):
+    class_count: int = 0
+    order_count: int = 0
+    item_count: int = 0
+    total_amount: int = 0
+    paid_amount: int = 0
+    unpaid_amount: int = 0
+    paid_order_count: int = 0
+    unpaid_order_count: int = 0
+    assisted_order_count: int = 0
+    product_rows: list[ShopClassProductSummaryRow] = []
+
+
 class ImageUploadOut(BaseModel):
     url: str
 
@@ -400,4 +420,6 @@ __all__ = [
     "ProductVariantOptionOut",
     "ProductVariantOptionUpdate",
     "SelectedOption",
+    "ShopClassProductSummaryRow",
+    "ShopClassSummaryOut",
 ]

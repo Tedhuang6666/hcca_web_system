@@ -57,7 +57,7 @@ export const NAV_ITEMS: NavItem[] = [
     id: "shopOrders",
     href: "/shop/class-orders",
     iconKey: "shopOrders",
-    label: "班級訂單",
+    label: "班級商品工作台",
     perm: "class:shop_collect",
   },
   { id: "partnerMap", href: "/partner-map", iconKey: "partnerMap", label: "特約地圖" },

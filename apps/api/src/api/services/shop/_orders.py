@@ -32,6 +32,8 @@ from api.schemas.shop import (
     OrderOut,
     OrderSummaryOut,
     OrderSummaryRow,
+    ShopClassProductSummaryRow,
+    ShopClassSummaryOut,
 )
 from api.services import receivable as receivable_svc
 from api.services import school_class as class_svc
@@ -376,6 +378,7 @@ async def list_orders(
     activity_id: uuid.UUID | None = None,
     class_ids: list[uuid.UUID] | None = None,
     assistance_scope: str | None = None,
+    product_id: uuid.UUID | None = None,
     status: OrderStatus | None = None,
     is_paid: bool | None = None,
     limit: int = 20,
@@ -411,6 +414,8 @@ async def list_orders(
         q = q.where(Order.class_id.in_(class_ids))
     if assistance_scope:
         q = q.where(Order.assistance_scope == assistance_scope)
+    if product_id:
+        q = q.where(Order.items.any(OrderItem.product_id == product_id))
     if status:
         q = q.where(Order.status == status)
     if is_paid is not None:
@@ -418,6 +423,67 @@ async def list_orders(
     q = q.limit(limit).offset(offset)
     result = await session.execute(q)
     return list(result.scalars().unique().all())
+
+
+async def class_order_summary(
+    session: AsyncSession,
+    *,
+    class_ids: list[uuid.UUID],
+    product_id: uuid.UUID | None = None,
+    is_paid: bool | None = None,
+    assistance_scope: str | None = None,
+) -> ShopClassSummaryOut:
+    orders = await list_orders(
+        session,
+        class_ids=class_ids,
+        assistance_scope=assistance_scope,
+        product_id=product_id,
+        is_paid=is_paid,
+        limit=500,
+    )
+    active_orders = [order for order in orders if order.status != OrderStatus.CANCELLED]
+    product_totals: dict[uuid.UUID, ShopClassProductSummaryRow] = {}
+    item_count = 0
+    amount_by_order_id: dict[uuid.UUID, int] = {}
+    for order in active_orders:
+        order_amount = 0
+        for item in order.items:
+            if product_id and item.product_id != product_id:
+                continue
+            quantity = item.quantity
+            amount = item.quantity * item.unit_price
+            item_count += quantity
+            order_amount += amount
+            row = product_totals.get(item.product_id)
+            if row is None:
+                row = ShopClassProductSummaryRow(
+                    product_id=item.product_id,
+                    product_name=item.product.name if item.product else "未命名商品",
+                    quantity=0,
+                    total_amount=0,
+                )
+                product_totals[item.product_id] = row
+            row.quantity += quantity
+            row.total_amount += amount
+        amount_by_order_id[order.id] = order_amount if product_id else order.total_price
+    paid_orders = [order for order in active_orders if order.is_paid]
+    unpaid_orders = [order for order in active_orders if not order.is_paid]
+    return ShopClassSummaryOut(
+        class_count=len(set(class_ids)),
+        order_count=len(active_orders),
+        item_count=item_count,
+        total_amount=sum(amount_by_order_id[order.id] for order in active_orders),
+        paid_amount=sum(amount_by_order_id[order.id] for order in paid_orders),
+        unpaid_amount=sum(amount_by_order_id[order.id] for order in unpaid_orders),
+        paid_order_count=len(paid_orders),
+        unpaid_order_count=len(unpaid_orders),
+        assisted_order_count=sum(
+            1 for order in active_orders if order.assistance_scope == "class_assisted"
+        ),
+        product_rows=sorted(
+            product_totals.values(), key=lambda row: (-row.quantity, row.product_name)
+        ),
+    )
 
 
 def serialize_order_item(item: OrderItem) -> OrderItemOut:

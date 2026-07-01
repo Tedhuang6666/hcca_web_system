@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { activitiesApi, shopApi, apiErrorMessage } from "@/lib/api";
-import type { Activity, OrderListItem } from "@/lib/types";
+import type { Activity, OrderListItem, OrderSummaryOut } from "@/lib/types";
 import { OrderStatusBadge } from "@/components/ui/StatusBadge";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
@@ -20,6 +20,7 @@ export default function OrdersPage() {
   const [activityId, setActivityId] = useState("");
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [summary, setSummary] = useState<OrderSummaryOut | null>(null);
   const canManageOrders = isAdmin || activities.length > 0;
 
   const load = useCallback(async () => {
@@ -30,12 +31,21 @@ export default function OrdersPage() {
       if (activityId) params.activity_id = activityId;
       const data = await shopApi.listOrders(params);
       setOrders(data);
+      if (canManageOrders) {
+        const nextSummary = await shopApi.orderSummary({
+          group_by: "class",
+          activity_id: activityId,
+        }).catch(() => null);
+        setSummary(nextSummary);
+      } else {
+        setSummary(null);
+      }
     } catch (e) {
       toast.error(apiErrorMessage(e, "載入失敗"));
     } finally {
       setLoading(false);
     }
-  }, [activityId, tab]);
+  }, [activityId, canManageOrders, tab]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
@@ -62,6 +72,9 @@ export default function OrdersPage() {
 
   const confirmedOrders = orders.filter(o => o.status === "confirmed");
   const totalAmount = confirmedOrders.reduce((s, o) => s + o.total_price, 0);
+  const activeOrders = orders.filter(o => o.status !== "cancelled");
+  const paidOrders = activeOrders.filter(o => o.is_paid);
+  const unpaidOrders = activeOrders.filter(o => !o.is_paid);
 
   return (
     <div className="space-y-5 max-w-5xl mx-auto">
@@ -81,7 +94,9 @@ export default function OrdersPage() {
             </svg>
           </Link>
           <div>
-            <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>訂單記錄</h1>
+            <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
+              {canManageOrders ? "校商營運工作台" : "訂單記錄"}
+            </h1>
             <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>查看並管理訂單</p>
           </div>
         </div>
@@ -98,6 +113,10 @@ export default function OrdersPage() {
               style={{ background: "rgba(34,211,238,0.05)", color: "#22d3ee", border: "1px solid rgba(34,211,238,0.2)" }}>
               匯出 CSV
             </button>
+            <Link href="/shop/admin" className="px-3 py-2 rounded-lg text-xs font-medium"
+              style={{ border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+              商品與統計
+            </Link>
           </div>
         )}
       </div>
@@ -153,17 +172,42 @@ export default function OrdersPage() {
 
       {/* 統計卡片 */}
       {orders.length > 0 && (
-        <div className="grid grid-cols-3 gap-4">
-          {[
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+          {(canManageOrders ? [
+            { label: "有效訂單", value: activeOrders.length },
+            { label: "已確認", value: confirmedOrders.length },
+            { label: "已繳訂單", value: paidOrders.length },
+            { label: "未繳訂單", value: unpaidOrders.length },
+            { label: "未繳金額", value: `NT$${(summary?.unpaid_amount ?? unpaidOrders.reduce((s, o) => s + o.total_price, 0)).toLocaleString()}` },
+          ] : [
             { label: "總訂單數", value: orders.length },
             { label: "已確認", value: confirmedOrders.length },
             { label: "確認金額", value: `NT$${totalAmount.toLocaleString()}` },
-          ].map(({ label, value }) => (
+          ]).map(({ label, value }) => (
             <div key={label} className="card p-4 text-center">
               <p className="text-xs mb-1" style={{ color: "var(--text-muted)" }}>{label}</p>
               <p className="text-xl font-bold" style={{ color: "var(--primary)" }}>{value}</p>
             </div>
           ))}
+        </div>
+      )}
+
+      {canManageOrders && summary && summary.rows.length > 0 && (
+        <div className="card overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
+            <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>班級收款排行</h2>
+            <Link href="/shop/admin" className="text-xs" style={{ color: "var(--primary)" }}>完整統計</Link>
+          </div>
+          <div className="grid gap-0 md:grid-cols-2 xl:grid-cols-4">
+            {summary.rows.slice(0, 4).map((row) => (
+              <div key={row.key} className="px-5 py-4" style={{ borderRight: "1px solid var(--border)" }}>
+                <p className="truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{row.label}</p>
+                <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                  {row.order_count} 筆 · {row.item_count} 件 · 未繳 NT${row.unpaid_amount.toLocaleString()}
+                </p>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

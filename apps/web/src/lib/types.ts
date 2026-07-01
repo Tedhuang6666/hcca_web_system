@@ -469,6 +469,16 @@ export interface OrderSummaryOut {
   group_by: string; rows: OrderSummaryRow[];
   total_amount: number; paid_amount: number; unpaid_amount: number;
 }
+export interface ShopClassProductSummaryRow {
+  product_id: string; product_name: string;
+  quantity: number; total_amount: number;
+}
+export interface ShopClassSummaryOut {
+  class_count: number; order_count: number; item_count: number;
+  total_amount: number; paid_amount: number; unpaid_amount: number;
+  paid_order_count: number; unpaid_order_count: number; assisted_order_count: number;
+  product_rows: ShopClassProductSummaryRow[];
+}
 
 // ── 劃位 / 票券型別 ──────────────────────────────────────────────────────────
 export type SeatingMode = "at_purchase" | "scheduled" | "admin_assign";

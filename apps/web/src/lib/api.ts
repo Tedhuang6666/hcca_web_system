@@ -3,7 +3,7 @@ import type {
   DocumentTemplateCreate, DocumentTemplateOut, DocumentTemplateUpdate,
   BatchDocumentOperationOut,
   DocumentApprovalDelegationOut,
-  ProductOut, OrderOut, OrderListItem, CartOut, OrderSummaryOut,
+  ProductOut, OrderOut, OrderListItem, CartOut, OrderSummaryOut, ShopClassSummaryOut,
   ProductCategoryOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut,
   CatalogCategoryOut,
   ZoneOut, ZoneListItem, SeatInput, WaveInput, SeatMapOut, HoldOut, SeatBookingOut,
@@ -663,9 +663,23 @@ export const shopApi = {
     const qs = params ? "?" + new URLSearchParams(params).toString() : "";
     return get<OrderListItem[]>(`/shop/orders${qs}`);
   },
-  listClassOrders: (params?: Record<string, string>) => {
+  listClassOrders: (params?: {
+    is_paid?: string;
+    assisted_only?: string;
+    product_id?: string;
+    limit?: string;
+    offset?: string;
+  }) => {
     const qs = params ? "?" + new URLSearchParams(params).toString() : "";
     return get<OrderListItem[]>(`/shop/orders/class${qs}`);
+  },
+  classSummary: (params?: {
+    is_paid?: string;
+    assisted_only?: string;
+    product_id?: string;
+  }) => {
+    const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+    return get<ShopClassSummaryOut>(`/shop/orders/class/summary${qs}`);
   },
   orderSummary: (params: {
     group_by: "class" | "grade" | "user";
