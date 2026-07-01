@@ -488,3 +488,100 @@ async def test_draft_product_not_in_catalog_tree(db_session: AsyncSession) -> No
     )  # 維持 DRAFT
     tree = await shop_svc.build_catalog_tree(db_session, org_id=category.org_id)
     assert tree[0].series[0].products == []
+
+
+async def test_class_order_list_defaults_to_all_class_orders(
+    db_session: AsyncSession,
+) -> None:
+    sc = await _make_class(db_session)
+    buyer = await _make_user(db_session)
+    assisted_buyer = await _make_user(db_session)
+    cadre = await _make_user(db_session)
+    db_session.add_all(
+        [
+            Order(
+                serial_number="ORD-CLASS-SELF",
+                user_id=buyer.id,
+                class_id=sc.id,
+                assistance_scope="self",
+                status=OrderStatus.PENDING,
+                total_price=100,
+            ),
+            Order(
+                serial_number="ORD-CLASS-ASSIST",
+                user_id=assisted_buyer.id,
+                class_id=sc.id,
+                assistance_scope="class_assisted",
+                assisted_by_id=cadre.id,
+                status=OrderStatus.PENDING,
+                total_price=100,
+            ),
+        ]
+    )
+    await db_session.flush()
+
+    all_orders = await shop_svc.list_orders(db_session, class_ids=[sc.id])
+    assisted_orders = await shop_svc.list_orders(
+        db_session, class_ids=[sc.id], assistance_scope="class_assisted"
+    )
+
+    assert {order.serial_number for order in all_orders} == {
+        "ORD-CLASS-SELF",
+        "ORD-CLASS-ASSIST",
+    }
+    assert [order.serial_number for order in assisted_orders] == ["ORD-CLASS-ASSIST"]
+
+
+async def test_class_order_summary_groups_products_and_payment(
+    db_session: AsyncSession,
+) -> None:
+    sc = await _make_class(db_session)
+    product_a = await _make_product(db_session, price=100, stock=10)
+    product_b = await _make_product(db_session, price=250, stock=10)
+    buyer = await _make_user(db_session)
+    paid_order = Order(
+        serial_number="ORD-CLASS-SUMMARY-1",
+        user_id=buyer.id,
+        class_id=sc.id,
+        status=OrderStatus.PENDING,
+        total_price=200,
+        is_paid=True,
+    )
+    unpaid_order = Order(
+        serial_number="ORD-CLASS-SUMMARY-2",
+        user_id=buyer.id,
+        class_id=sc.id,
+        status=OrderStatus.PENDING,
+        total_price=250,
+        is_paid=False,
+        assistance_scope="class_assisted",
+    )
+    db_session.add_all([paid_order, unpaid_order])
+    await db_session.flush()
+    db_session.add_all(
+        [
+            OrderItem(order_id=paid_order.id, product_id=product_a.id, quantity=2, unit_price=100),
+            OrderItem(
+                order_id=unpaid_order.id, product_id=product_b.id, quantity=1, unit_price=250
+            ),
+        ]
+    )
+    await db_session.flush()
+
+    summary = await shop_svc.class_order_summary(db_session, class_ids=[sc.id])
+    filtered = await shop_svc.class_order_summary(
+        db_session, class_ids=[sc.id], product_id=product_a.id
+    )
+
+    assert summary.order_count == 2
+    assert summary.item_count == 3
+    assert summary.total_amount == 450
+    assert summary.paid_amount == 200
+    assert summary.unpaid_amount == 250
+    assert summary.assisted_order_count == 1
+    assert [(row.product_id, row.quantity) for row in summary.product_rows] == [
+        (product_a.id, 2),
+        (product_b.id, 1),
+    ]
+    assert filtered.order_count == 1
+    assert filtered.total_amount == 200

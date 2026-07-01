@@ -55,6 +55,7 @@ from api.schemas.shop import (
     ProductVariantOptionCreate,
     ProductVariantOptionOut,
     ProductVariantOptionUpdate,
+    ShopClassSummaryOut,
 )
 from api.services import activity as activity_svc
 from api.services import audit as audit_svc
@@ -666,7 +667,8 @@ async def list_class_orders(
     session: DbDep,
     current_user: CurrentUser,
     is_paid: bool | None = Query(None, description="篩選繳費狀態"),
-    assisted_only: bool = Query(True, description="僅顯示班級幹部協助建立的訂單"),
+    assisted_only: bool = Query(False, description="僅顯示班級幹部協助建立的訂單"),
+    product_id: uuid.UUID | None = Query(None, description="篩選商品"),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> list[OrderListItem]:
@@ -675,11 +677,34 @@ async def list_class_orders(
         session,
         class_ids=class_ids,
         assistance_scope="class_assisted" if assisted_only else None,
+        product_id=product_id,
         is_paid=is_paid,
         limit=limit,
         offset=offset,
     )
     return [shop_svc.serialize_order_list_item(o) for o in orders]
+
+
+@router.get(
+    "/orders/class/summary",
+    response_model=ShopClassSummaryOut,
+    summary="班級幹部檢視本班商品訂購彙總",
+)
+async def class_order_summary(
+    session: DbDep,
+    current_user: CurrentUser,
+    is_paid: bool | None = Query(None, description="篩選繳費狀態"),
+    assisted_only: bool = Query(False, description="僅顯示班級幹部協助建立的訂單"),
+    product_id: uuid.UUID | None = Query(None, description="篩選商品"),
+) -> ShopClassSummaryOut:
+    class_ids = list(await class_svc.get_cadre_class_ids(session, current_user.id))
+    return await shop_svc.class_order_summary(
+        session,
+        class_ids=class_ids,
+        assistance_scope="class_assisted" if assisted_only else None,
+        product_id=product_id,
+        is_paid=is_paid,
+    )
 
 
 @router.post(
