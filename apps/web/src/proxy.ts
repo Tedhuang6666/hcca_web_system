@@ -253,7 +253,7 @@ async function blockedRedirect(req: NextRequest) {
   return NextResponse.redirect(url);
 }
 
-export default async function middleware(req: NextRequest) {
+export default async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // Next.js App Router 的客戶端換頁是 RSC payload request（帶 "RSC: 1" header），
