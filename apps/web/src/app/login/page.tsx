@@ -19,14 +19,12 @@ const GOVERNANCE_POINTS = [
 export default function LoginPage() {
   const searchParams = useSearchParams();
   const error = searchParams.get("error");
-  const [mounted, setMounted] = useState(false);
   const [googleLoginHref, setGoogleLoginHref] = useState(apiUrl("/auth/google/login"));
   const [discordLoginHref, setDiscordLoginHref] = useState(apiUrl("/auth/discord/login"));
   const { isModuleClosed } = useModuleStatus();
   const discordClosed = isModuleClosed("discord");
 
   useEffect(() => {
-    setMounted(true);
     const frontendOrigin = encodeURIComponent(window.location.origin);
     const next = searchParams.get("next") ?? "/dashboard";
     const nextParam = `&next=${encodeURIComponent(next)}`;
@@ -40,8 +38,6 @@ export default function LoginPage() {
       window.location.replace(next);
     }
   }, [searchParams]);
-
-  if (!mounted) return null;
 
   return (
     <div
@@ -101,7 +97,7 @@ export default function LoginPage() {
               className="max-w-xl text-[2.5rem] font-semibold leading-[1.28] tracking-[-0.04em] xl:text-5xl 2xl:text-6xl"
               style={{
                 color: "#f8f3e5",
-                fontFamily: "\"Noto Serif TC\", serif",
+                fontFamily: "var(--font-noto-serif-tc), serif",
               }}
             >
               <span className="block whitespace-nowrap">
@@ -172,7 +168,7 @@ export default function LoginPage() {
                 className="text-3xl font-semibold tracking-[-0.035em] sm:text-4xl"
                 style={{
                   color: "var(--text-primary)",
-                  fontFamily: "\"Noto Serif TC\", serif",
+                  fontFamily: "var(--font-noto-serif-tc), serif",
                 }}
               >
                 歡迎回來
