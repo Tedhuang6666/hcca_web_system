@@ -11,7 +11,9 @@ import {
   filterNavItems,
   NAV_PREF_EVENT,
   orderedItems,
+  PROFILE_MOBILE_ORDER,
   readNavPreferences,
+  resolveNavigationProfile,
   type NavItem,
 } from "@/lib/navigation";
 import NavIcon from "./NavIcon";
@@ -40,7 +42,8 @@ const CADRE_PREFIXES = ["document:", "regulation:", "audit:"] as const;
  * 手機底部 tab bar（< md 顯示）。
  * 依使用者身分顯示三套不同 tab：
  *  - guest：法規/公告/特約/陳情/登入（皆公開可讀）
- *  - student：首頁/學餐/商品/問卷/更多
+ *  - student：依個人導覽偏好取前四個項目
+ *  - teacher / mealVendor：依專屬視角取常用模組
  *  - cadre：首頁/待辦/公文/法規/更多（有公文、法規或審計權限者）
  */
 export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
@@ -137,8 +140,11 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
     const can = (code: string) => superuser || perms.has("admin:all") || perms.has(code);
     const hasPrefix = (prefix: string) =>
       superuser || perms.has("admin:all") || Array.from(perms).some((perm) => perm.startsWith(prefix));
+    const profile = resolveNavigationProfile(perms, superuser);
+    const mobileOrder = profile === "default" ? navPrefs.mobileOrder : PROFILE_MOBILE_ORDER[profile];
+    const mobileHidden = profile === "default" ? navPrefs.mobileHidden : [];
     const available = filterNavItems(
-      orderedItems(navPrefs.mobileOrder, navPrefs.mobileHidden),
+      orderedItems(mobileOrder, mobileHidden),
       can,
       hasPrefix,
     ).filter((item) =>

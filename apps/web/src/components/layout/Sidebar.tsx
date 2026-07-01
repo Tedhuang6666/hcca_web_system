@@ -15,11 +15,12 @@ import {
   hasSavedNavPreferences,
   isMeetingsUnlocked,
   isSection,
-  NAV_DEF,
   NAV_DEF_LOGGED_OUT,
   NAV_PREF_EVENT,
+  navDefinitionForProfile,
   orderedItems,
   readNavPreferences,
+  resolveNavigationProfile,
   type NavEntry,
   type NavItem,
 } from "@/lib/navigation";
@@ -91,6 +92,14 @@ export default function Sidebar() {
   const [hasCustomNav, setHasCustomNav] = useState(false);
   const [meetingsUnlocked, setMeetingsUnlocked] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const navigationProfile = useMemo(
+    () => resolveNavigationProfile(permissions, isAdmin),
+    [isAdmin, permissions],
+  );
+  const activeNavDef = useMemo(
+    () => navDefinitionForProfile(navigationProfile),
+    [navigationProfile],
+  );
 
   // 初始化：讀 localStorage、設定 event listener，僅在 mount 時執行一次
   useEffect(() => {
@@ -106,7 +115,7 @@ export default function Sidebar() {
     const startCollapsed = persisted.size === 0
       ? (() => {
           const d = new Set<string>();
-          for (const entry of NAV_DEF) {
+          for (const entry of activeNavDef) {
             if (isSection(entry) && entry.collapsible && entry.defaultCollapsed) d.add(entry.heading);
           }
           return d;
@@ -127,14 +136,14 @@ export default function Sidebar() {
       window.removeEventListener(NAV_PREF_EVENT, syncPrefs);
       window.removeEventListener("storage", syncPrefs);
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeNavDef]);
 
   // 切頁時自動展開當前路徑所在分組（不寫 localStorage、不覆蓋手動設定）
   useEffect(() => {
     setCollapsed((prev) => {
       let changed = false;
       const next = new Set(prev);
-      for (const entry of NAV_DEF) {
+      for (const entry of activeNavDef) {
         if (isSection(entry) && next.has(entry.heading)) {
           if (entry.items.some(
             (item) => pathname === item.href || pathname.startsWith(item.href + "/"),
@@ -146,7 +155,7 @@ export default function Sidebar() {
       }
       return changed ? next : prev;
     });
-  }, [pathname]);
+  }, [activeNavDef, pathname]);
 
   const toggleSection = (heading: string) => {
     setCollapsed((prev) => {
@@ -168,6 +177,18 @@ export default function Sidebar() {
       return false;
     };
   }, [isAdmin, permissions]);
+
+  useEffect(() => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      for (const entry of activeNavDef) {
+        if (isSection(entry) && entry.collapsible && entry.defaultCollapsed) {
+          next.add(entry.heading);
+        }
+      }
+      return next;
+    });
+  }, [activeNavDef]);
 
   const itemVisible = (item: NavItem): boolean => {
     if (isModuleClosed(NAV_ID_TO_MODULE[item.id] ?? null)) return false;
@@ -213,7 +234,7 @@ export default function Sidebar() {
             .map((item) => item.id),
         );
         const orderIndex = new Map(desktopPrefs.desktopOrder.map((id, index) => [id, index]));
-        return NAV_DEF.map((entry) => {
+        return activeNavDef.map((entry) => {
           if (!isSection(entry)) return visibleItems.has(entry.id) ? entry : null;
           const items = entry.items
             .filter((item) => visibleItems.has(item.id))
@@ -221,7 +242,7 @@ export default function Sidebar() {
           return items.length > 0 ? { ...entry, items } : null;
         }).filter(Boolean) as NavEntry[];
       }
-      return (isLoggedIn ? NAV_DEF : NAV_DEF_LOGGED_OUT).map((entry) => {
+      return (isLoggedIn ? activeNavDef : NAV_DEF_LOGGED_OUT).map((entry) => {
         if (!isSection(entry)) return entry;
         const items = entry.items.filter(itemVisible);
         return items.length > 0 ? { ...entry, items } : null;
@@ -237,6 +258,7 @@ export default function Sidebar() {
       permissions,
       meetingsUnlocked,
       isModuleClosed,
+      activeNavDef,
     ],
   );
 
