@@ -43,6 +43,8 @@ import type {
   SavedFilterOut,
   AuditLogOut,
   OrgRead,
+  NavigationProfileCreate, NavigationProfileOut, NavigationProfileResolveOut,
+  NavigationProfileUpdate,
   MFASetupOut, MFAStatusOut,
   PetitionCaseListItem, PetitionCaseOut, PetitionCreate, PetitionCreatedOut,
   PetitionStatsOut, PetitionStatus, PetitionTypeOut,
@@ -1850,6 +1852,19 @@ export const adminApi = {
   activateOrg: (id: string) => post<OrgRead>(`/orgs/${id}/activate`, {}),
 };
 
+export const navigationProfilesApi = {
+  list: (includeInactive = true) =>
+    get<NavigationProfileOut[]>(
+      `/admin/navigation-profiles?include_inactive=${String(includeInactive)}`,
+    ),
+  me: () => get<NavigationProfileResolveOut>("/admin/navigation-profiles/me"),
+  create: (body: NavigationProfileCreate) =>
+    post<NavigationProfileOut>("/admin/navigation-profiles", body),
+  update: (id: string, body: NavigationProfileUpdate) =>
+    patch<NavigationProfileOut>(`/admin/navigation-profiles/${id}`, body),
+  delete: (id: string) => del<void>(`/admin/navigation-profiles/${id}`),
+};
+
 // ── 稽核日誌 ──────────────────────────────────────────────────────────────────
 
 export const auditLogsApi = {
@@ -3173,8 +3188,15 @@ export interface TaskInboxResponse {
   by_module: Record<string, number>;
 }
 
+export interface TaskCountResponse {
+  total: number;
+  by_module: Record<string, number>;
+  urgent_count: number;
+}
+
 export const tasksApi = {
   list: () => get<TaskInboxResponse>("/tasks"),
+  count: () => get<TaskCountResponse>("/tasks/count"),
 };
 
 // ── 段考題庫 ────────────────────────────────────────────────────────────────

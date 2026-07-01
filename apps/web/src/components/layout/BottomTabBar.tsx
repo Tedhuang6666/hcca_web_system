@@ -6,6 +6,7 @@ import { LogIn, MoreHorizontal } from "lucide-react";
 import { useWS } from "@/hooks/useWS";
 import { useInboxCountsContext } from "@/contexts/InboxCountsContext";
 import { useModuleStatus } from "@/contexts/ModuleStatusContext";
+import { navigationProfilesApi } from "@/lib/api";
 import { NAV_ID_TO_MODULE, moduleForPath } from "@/lib/modules";
 import {
   filterNavItems,
@@ -53,6 +54,7 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
   const [userRoom, setUserRoom] = useState<string | null>(null);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [navPrefs, setNavPrefs] = useState(() => readNavPreferences());
+  const [serverMobileOrder, setServerMobileOrder] = useState<string[] | null>(null);
   const { isModuleClosed } = useModuleStatus();
   const {
     taskCount,
@@ -105,6 +107,24 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
     else refreshCounts();
   }, [refreshCounts, setNotifCount]), role !== "guest");
 
+  useEffect(() => {
+    if (role === "guest") {
+      setServerMobileOrder(null);
+      return;
+    }
+    let alive = true;
+    navigationProfilesApi.me()
+      .then((result) => {
+        if (alive) setServerMobileOrder(result.profile?.mobile_order ?? null);
+      })
+      .catch(() => {
+        if (alive) setServerMobileOrder(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [role]);
+
   // 鍵盤彈起偵測：visualViewport 高度顯著縮小時隱藏
   useEffect(() => {
     if (typeof window === "undefined" || !window.visualViewport) return;
@@ -141,8 +161,9 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
     const hasPrefix = (prefix: string) =>
       superuser || perms.has("admin:all") || Array.from(perms).some((perm) => perm.startsWith(prefix));
     const profile = resolveNavigationProfile(perms, superuser);
-    const mobileOrder = profile === "default" ? navPrefs.mobileOrder : PROFILE_MOBILE_ORDER[profile];
-    const mobileHidden = profile === "default" ? navPrefs.mobileHidden : [];
+    const mobileOrder =
+      serverMobileOrder ?? (profile === "default" ? navPrefs.mobileOrder : PROFILE_MOBILE_ORDER[profile]);
+    const mobileHidden = serverMobileOrder || profile !== "default" ? [] : navPrefs.mobileHidden;
     const available = filterNavItems(
       orderedItems(mobileOrder, mobileHidden),
       can,
@@ -152,7 +173,7 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
     );
     const topTabs = available.slice(0, 4).map(navItemToTab);
     return [...topTabs, { label: "更多", icon: (p) => <MoreHorizontal {...p} />, onClick: onMoreClick }];
-  }, [navPrefs, role, onMoreClick, isModuleClosed]);
+  }, [navPrefs, role, onMoreClick, isModuleClosed, serverMobileOrder]);
 
   if (keyboardOpen) return null;
   if (!roleResolved) return null;

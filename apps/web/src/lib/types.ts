@@ -2112,6 +2112,47 @@ export interface OrgRead {
   updated_at: string;
 }
 
+export interface NavigationProfileSection {
+  id: string;
+  heading: string;
+  items: string[];
+  collapsible?: boolean;
+  default_collapsed?: boolean;
+}
+
+export interface NavigationProfileOut {
+  id: string;
+  key: string;
+  label: string;
+  description: string | null;
+  audience: string | null;
+  priority: number;
+  is_active: boolean;
+  is_system: boolean;
+  match_any_permissions: string[];
+  match_any_prefixes: string[];
+  exclude_permissions: string[];
+  exclude_prefixes: string[];
+  desktop_sections: NavigationProfileSection[];
+  mobile_order: string[];
+  position_ids: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export type NavigationProfileCreate = Omit<
+  NavigationProfileOut,
+  "id" | "is_system" | "created_at" | "updated_at"
+>;
+
+export type NavigationProfileUpdate = Partial<NavigationProfileCreate>;
+
+export interface NavigationProfileResolveOut {
+  profile: NavigationProfileOut | null;
+  source: "position" | "permission" | "default" | "none" | string;
+  matched: Record<string, unknown>;
+}
+
 export interface UserPositionRead {
   id: string;
   user_id: string;
