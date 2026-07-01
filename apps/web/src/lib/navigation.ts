@@ -19,6 +19,18 @@ export type NavEntry = NavItem | NavSection;
 
 export type NavigationProfile = "default" | "teacher" | "mealVendor";
 
+export type NavigationProfileConfig = {
+  id: NavigationProfile;
+  label: string;
+  description: string;
+  audience: string;
+  matchAnyPrefixes?: string[];
+  matchAnyPermissions?: string[];
+  excludePrefixes?: string[];
+  desktopSections: NavEntry[];
+  mobileOrder: string[];
+};
+
 export type NavPreferences = {
   desktopOrder: string[];
   desktopHidden: string[];
@@ -113,6 +125,13 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/admin/modules",
     iconKey: "modules",
     label: "模組維護",
+    perm: "admin:all",
+  },
+  {
+    id: "navigationProfiles",
+    href: "/admin/navigation-profiles",
+    iconKey: "settings",
+    label: "視角管理",
     perm: "admin:all",
   },
   {
@@ -262,7 +281,14 @@ export const NAV_DEF: NavEntry[] = [
     heading: "工作後台",
     collapsible: true,
     defaultCollapsed: true,
-    items: byIds(["operations", "moduleBackoffice", "adminDashboard", "settings", "about"]),
+    items: byIds([
+      "operations",
+      "moduleBackoffice",
+      "adminDashboard",
+      "navigationProfiles",
+      "settings",
+      "about",
+    ]),
   },
 ];
 
@@ -332,11 +358,49 @@ export const DEFAULT_NAV_PREFERENCES: NavPreferences = {
   mobileHidden: [],
 };
 
-export const PROFILE_MOBILE_ORDER: Record<NavigationProfile, string[]> = {
-  default: DEFAULT_MOBILE_ORDER,
-  teacher: ["dashboard", "tasks", "surveys", "examPapers", "shopOrders", "meal", "settings"],
-  mealVendor: ["mealVendor", "meal", "tasks", "settings"],
+export const NAVIGATION_PROFILES: Record<NavigationProfile, NavigationProfileConfig> = {
+  default: {
+    id: "default",
+    label: "完整平台視角",
+    description: "提供學生會幹部、管理員與一般平台使用者完整導覽，再依權限隱藏不可用項目。",
+    audience: "學生代表、學生會幹部、系統管理員",
+    desktopSections: NAV_DEF,
+    mobileOrder: DEFAULT_MOBILE_ORDER,
+  },
+  teacher: {
+    id: "teacher",
+    label: "教職員視角",
+    description: "保留教職員常用的通知、行事曆、問卷、題庫、班級收單與學餐入口。",
+    audience: "導師、行政老師、協助班級或教學服務的教職員",
+    matchAnyPrefixes: ["class:", "exam:"],
+    matchAnyPermissions: ["survey:review", "survey:manage"],
+    desktopSections: NAV_DEF_TEACHER,
+    mobileOrder: ["dashboard", "tasks", "surveys", "examPapers", "shopOrders", "meal", "settings"],
+  },
+  mealVendor: {
+    id: "mealVendor",
+    label: "餐商視角",
+    description: "把畫面集中在餐商管理、學餐訂購狀態、待辦與個人設定。",
+    audience: "學生餐廳、合作餐商、供餐窗口",
+    matchAnyPrefixes: ["meal:"],
+    excludePrefixes: [
+      "document:",
+      "regulation:",
+      "admin:",
+      "shop:",
+      "finance:",
+      "org:",
+      "petition:",
+      "election:",
+    ],
+    desktopSections: NAV_DEF_MEAL_VENDOR,
+    mobileOrder: ["mealVendor", "meal", "tasks", "settings"],
+  },
 };
+
+export const PROFILE_MOBILE_ORDER: Record<NavigationProfile, string[]> = Object.fromEntries(
+  Object.values(NAVIGATION_PROFILES).map((profile) => [profile.id, profile.mobileOrder]),
+) as Record<NavigationProfile, string[]>;
 
 export const NAV_PREF_EVENT = "hcca:navigation-preferences-changed";
 
@@ -375,32 +439,18 @@ export function resolveNavigationProfile(
   if (isAdmin || permissions.has("admin:all")) return "default";
   const hasPrefix = (prefix: string) => Array.from(permissions).some((p) => p.startsWith(prefix));
 
-  const hasMealOnly =
-    hasPrefix("meal:")
-    && !hasPrefix("document:")
-    && !hasPrefix("regulation:")
-    && !hasPrefix("admin:")
-    && !hasPrefix("shop:")
-    && !hasPrefix("finance:")
-    && !hasPrefix("org:")
-    && !hasPrefix("petition:")
-    && !hasPrefix("election:");
-  if (hasMealOnly) return "mealVendor";
-
-  const hasTeacherWork =
-    hasPrefix("class:")
-    || hasPrefix("exam:")
-    || permissions.has("survey:review")
-    || permissions.has("survey:manage");
-  if (hasTeacherWork) return "teacher";
+  for (const profile of [NAVIGATION_PROFILES.mealVendor, NAVIGATION_PROFILES.teacher]) {
+    const matchedPrefix = profile.matchAnyPrefixes?.some(hasPrefix) ?? false;
+    const matchedPermission = profile.matchAnyPermissions?.some((code) => permissions.has(code)) ?? false;
+    const excluded = profile.excludePrefixes?.some(hasPrefix) ?? false;
+    if ((matchedPrefix || matchedPermission) && !excluded) return profile.id;
+  }
 
   return "default";
 }
 
 export function navDefinitionForProfile(profile: NavigationProfile): NavEntry[] {
-  if (profile === "teacher") return NAV_DEF_TEACHER;
-  if (profile === "mealVendor") return NAV_DEF_MEAL_VENDOR;
-  return NAV_DEF;
+  return NAVIGATION_PROFILES[profile].desktopSections;
 }
 
 export function navPrefsStorageKey() {

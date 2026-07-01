@@ -57,6 +57,7 @@ const PATH_OVERRIDES: Record<string, string> = {
   "/admin/permissions":           "權限管理",
   "/admin/people":                "人員身分",
   "/admin/classes":               "班級管理",
+  "/admin/navigation-profiles":   "視角管理",
   "/settings/navigation":         "介面導覽設定",
   "/settings/notifications":      "通知偏好",
   "/settings/security":           "安全設定",
