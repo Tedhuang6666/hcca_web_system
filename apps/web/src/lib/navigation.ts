@@ -1,3 +1,5 @@
+import type { NavigationProfileOut } from "./types";
+
 export type NavItem = {
   id: string;
   href: string;
@@ -18,9 +20,10 @@ export type NavSection = {
 export type NavEntry = NavItem | NavSection;
 
 export type NavigationProfile = "default" | "teacher" | "mealVendor";
+export type RuntimeNavigationProfile = NavigationProfile | string;
 
 export type NavigationProfileConfig = {
-  id: NavigationProfile;
+  id: RuntimeNavigationProfile;
   label: string;
   description: string;
   audience: string;
@@ -443,14 +446,35 @@ export function resolveNavigationProfile(
     const matchedPrefix = profile.matchAnyPrefixes?.some(hasPrefix) ?? false;
     const matchedPermission = profile.matchAnyPermissions?.some((code) => permissions.has(code)) ?? false;
     const excluded = profile.excludePrefixes?.some(hasPrefix) ?? false;
-    if ((matchedPrefix || matchedPermission) && !excluded) return profile.id;
+    if ((matchedPrefix || matchedPermission) && !excluded) return profile.id as NavigationProfile;
   }
 
   return "default";
 }
 
-export function navDefinitionForProfile(profile: NavigationProfile): NavEntry[] {
-  return NAVIGATION_PROFILES[profile].desktopSections;
+export function navDefinitionForProfile(profile: RuntimeNavigationProfile): NavEntry[] {
+  if (!(profile in NAVIGATION_PROFILES)) return NAV_DEF;
+  return NAVIGATION_PROFILES[profile as NavigationProfile].desktopSections;
+}
+
+export function navProfileFromApi(profile: NavigationProfileOut): NavigationProfileConfig {
+  return {
+    id: profile.key,
+    label: profile.label,
+    description: profile.description ?? "",
+    audience: profile.audience ?? "",
+    matchAnyPrefixes: profile.match_any_prefixes,
+    matchAnyPermissions: profile.match_any_permissions,
+    excludePrefixes: profile.exclude_prefixes,
+    desktopSections: profile.desktop_sections.map((section) => ({
+      id: section.id,
+      heading: section.heading,
+      collapsible: section.collapsible,
+      defaultCollapsed: section.default_collapsed,
+      items: byIds(section.items),
+    })),
+    mobileOrder: profile.mobile_order,
+  };
 }
 
 export function navPrefsStorageKey() {

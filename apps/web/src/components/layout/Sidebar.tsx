@@ -8,6 +8,7 @@ import BrandEmblem from "@/components/brand/BrandEmblem";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useModuleStatus } from "@/contexts/ModuleStatusContext";
 import { BRANDING } from "@/lib/branding";
+import { navigationProfilesApi } from "@/lib/api";
 import { NAV_ID_TO_MODULE } from "@/lib/modules";
 import NavIcon from "./NavIcon";
 import {
@@ -16,6 +17,7 @@ import {
   isMeetingsUnlocked,
   isSection,
   NAV_DEF_LOGGED_OUT,
+  navProfileFromApi,
   NAV_PREF_EVENT,
   navDefinitionForProfile,
   orderedItems,
@@ -23,6 +25,7 @@ import {
   resolveNavigationProfile,
   type NavEntry,
   type NavItem,
+  type NavigationProfileConfig,
 } from "@/lib/navigation";
 
 /* ── 折疊狀態：localStorage 持久化 ─────────────────────────────────────── */
@@ -92,14 +95,34 @@ export default function Sidebar() {
   const [hasCustomNav, setHasCustomNav] = useState(false);
   const [meetingsUnlocked, setMeetingsUnlocked] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [serverProfile, setServerProfile] = useState<NavigationProfileConfig | null>(null);
   const navigationProfile = useMemo(
     () => resolveNavigationProfile(permissions, isAdmin),
     [isAdmin, permissions],
   );
   const activeNavDef = useMemo(
-    () => navDefinitionForProfile(navigationProfile),
-    [navigationProfile],
+    () => serverProfile?.desktopSections ?? navDefinitionForProfile(navigationProfile),
+    [navigationProfile, serverProfile],
   );
+
+  useEffect(() => {
+    if (!isLoggedIn) {
+      setServerProfile(null);
+      return;
+    }
+    let alive = true;
+    navigationProfilesApi.me()
+      .then((result) => {
+        if (!alive) return;
+        setServerProfile(result.profile ? navProfileFromApi(result.profile) : null);
+      })
+      .catch(() => {
+        if (alive) setServerProfile(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [isLoggedIn]);
 
   // 初始化：讀 localStorage、設定 event listener，僅在 mount 時執行一次
   useEffect(() => {
