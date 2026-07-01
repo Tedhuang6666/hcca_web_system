@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -28,6 +28,15 @@ class WorkItem(Base, TimestampMixin):
     """可由網頁或 Discord 建立的工作分配項目。"""
 
     __tablename__ = "work_items"
+    __table_args__ = (
+        Index(
+            "ix_work_items_assignee_open_active_due",
+            "assigned_to_id",
+            "status",
+            "is_active",
+            "due_at",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     title: Mapped[str] = mapped_column(String(200), nullable=False, index=True)

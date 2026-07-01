@@ -150,6 +150,7 @@ export default function DocumentListPage() {
     initialStatus && TABS.some(t => t.key === initialStatus) ? initialStatus : "all"
   );
   const [search, setSearch] = useState(searchParams.get("keyword") ?? "");
+  const [debouncedSearch, setDebouncedSearch] = useState(searchParams.get("keyword") ?? "");
   const [sortKey, setSortKey] = useState<SortKey>("created_desc");
   const [showFilters, setShowFilters] = useState(false);
   const [filters, dispatchFilter] = useReducer(
@@ -193,6 +194,11 @@ export default function DocumentListPage() {
     filters.rocYear || filters.serialPrefix || filters.handlerKeyword || filters.recipientKeyword ||
     filters.myOnly || filters.orgId || filters.activityId
   );
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search), 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
 
   useEffect(() => {
     setNow(Date.now());
@@ -239,7 +245,7 @@ export default function DocumentListPage() {
   useEffect(() => {
     const q = new URLSearchParams();
     if (activeTab !== "all") q.set("status", activeTab);
-    if (search.trim()) q.set("keyword", search.trim());
+    if (debouncedSearch.trim()) q.set("keyword", debouncedSearch.trim());
     if (filters.category) q.set("category", filters.category);
     if (filters.classification) q.set("classification", filters.classification);
     if (filters.visibility) q.set("visibility", filters.visibility);
@@ -256,13 +262,13 @@ export default function DocumentListPage() {
     if (filters.activityId) q.set("activity_id", filters.activityId);
     const next = q.toString() ? `/documents?${q}` : "/documents";
     router.replace(next, { scroll: false });
-  }, [activeTab, search, filters, router]);
+  }, [activeTab, debouncedSearch, filters, router]);
 
   useEffect(() => {
     if (!isMountedFetch.current) return; // mount effect already handled first load
     const params: Record<string, string> = { limit: String(PAGE_SIZE), offset: "0" };
     if (activeTab !== "all") params.status = activeTab;
-    if (search.trim()) params.keyword = search.trim();
+    if (debouncedSearch.trim()) params.keyword = debouncedSearch.trim();
     if (filters.category) params.category = filters.category;
     if (filters.classification) params.classification = filters.classification;
     if (filters.visibility) params.visibility = filters.visibility;
@@ -278,18 +284,28 @@ export default function DocumentListPage() {
     if (filters.orgId) params.org_id = filters.orgId;
     if (filters.activityId) params.activity_id = filters.activityId;
 
-    setLoading(true);
+    const cacheKey = `documents/list/${JSON.stringify(params)}`;
+    const cached = cacheGet<DocumentListItem[]>(cacheKey);
+    if (cached) {
+      setDocs(cached);
+      setHasMore(cached.length === PAGE_SIZE);
+      setSelectedIds(new Set());
+    } else {
+      setLoading(true);
+    }
     setOffset(0);
     documentsApi
       .list(params)
       .then(data => {
         setDocs(data);
+        cacheSet(cacheKey, data);
+        cacheSet("documents/list", data);
         setHasMore(data.length === PAGE_SIZE);
         setSelectedIds(new Set());
       })
       .catch((e) => toast.error(apiErrorMessage(e, "載入失敗")))
       .finally(() => setLoading(false));
-  }, [activeTab, search, filters]);
+  }, [activeTab, debouncedSearch, filters]);
 
   const clearFilters = useCallback(() => {
     dispatchFilter({ type: "clear" });

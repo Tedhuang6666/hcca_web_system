@@ -63,3 +63,11 @@ class TaskInboxResponse(BaseModel):
     items: list[TaskItem]
     total: int
     by_module: dict[str, int]
+
+
+class TaskCountResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    total: int
+    by_module: dict[str, int]
+    urgent_count: int

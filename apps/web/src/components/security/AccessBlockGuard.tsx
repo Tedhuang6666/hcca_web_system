@@ -5,6 +5,9 @@ import { usePathname } from "next/navigation";
 
 import { apiUrl } from "@/lib/config";
 
+const ACCESS_CHECK_INTERVAL_MS = 5 * 60 * 1000;
+const ACCESS_CHECK_START_DELAY_MS = 3_000;
+
 export default function AccessBlockGuard() {
   const pathname = usePathname();
   const pathnameRef = useRef(pathname);
@@ -37,13 +40,22 @@ export default function AccessBlockGuard() {
       }
     }
 
-    void checkAccess();
-    const timer = window.setInterval(checkAccess, 15_000);
+    const startTimer = window.setTimeout(checkAccess, ACCESS_CHECK_START_DELAY_MS);
+    const interval = window.setInterval(checkAccess, ACCESS_CHECK_INTERVAL_MS);
+    const resume = () => {
+      if (document.visibilityState === "visible") void checkAccess();
+    };
+    const onFocus = () => void checkAccess();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", resume);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      window.clearTimeout(startTimer);
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", resume);
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   return null;
 }
