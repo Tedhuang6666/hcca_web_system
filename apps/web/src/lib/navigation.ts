@@ -17,6 +17,8 @@ export type NavSection = {
 
 export type NavEntry = NavItem | NavSection;
 
+export type NavigationProfile = "default" | "teacher" | "mealVendor";
+
 export type NavPreferences = {
   desktopOrder: string[];
   desktopHidden: string[];
@@ -281,6 +283,27 @@ export const NAV_DEF_LOGGED_OUT: NavEntry[] = [
   },
 ];
 
+export const NAV_DEF_TEACHER: NavEntry[] = [
+  {
+    id: "teacher-main",
+    heading: "教職員工作台",
+    items: byIds(["dashboard", "tasks", "announcements", "calendar"]),
+  },
+  {
+    id: "teacher-services",
+    heading: "常用模組",
+    items: byIds(["surveys", "examPapers", "shopOrders", "meal", "settings"]),
+  },
+];
+
+export const NAV_DEF_MEAL_VENDOR: NavEntry[] = [
+  {
+    id: "meal-vendor-main",
+    heading: "餐商工作台",
+    items: byIds(["mealVendor", "meal", "tasks", "settings"]),
+  },
+];
+
 export const DEFAULT_DESKTOP_ORDER = NAV_ITEMS.map((item) => item.id);
 export const DEFAULT_MOBILE_ORDER = [
   "dashboard",
@@ -307,6 +330,12 @@ export const DEFAULT_NAV_PREFERENCES: NavPreferences = {
   desktopHidden: [],
   mobileOrder: DEFAULT_MOBILE_ORDER,
   mobileHidden: [],
+};
+
+export const PROFILE_MOBILE_ORDER: Record<NavigationProfile, string[]> = {
+  default: DEFAULT_MOBILE_ORDER,
+  teacher: ["dashboard", "tasks", "surveys", "examPapers", "shopOrders", "meal", "settings"],
+  mealVendor: ["mealVendor", "meal", "tasks", "settings"],
 };
 
 export const NAV_PREF_EVENT = "hcca:navigation-preferences-changed";
@@ -337,6 +366,41 @@ function byIds(ids: string[]) {
 
 export function isSection(entry: NavEntry): entry is NavSection {
   return "heading" in entry;
+}
+
+export function resolveNavigationProfile(
+  permissions: Set<string>,
+  isAdmin: boolean,
+): NavigationProfile {
+  if (isAdmin || permissions.has("admin:all")) return "default";
+  const hasPrefix = (prefix: string) => Array.from(permissions).some((p) => p.startsWith(prefix));
+
+  const hasMealOnly =
+    hasPrefix("meal:")
+    && !hasPrefix("document:")
+    && !hasPrefix("regulation:")
+    && !hasPrefix("admin:")
+    && !hasPrefix("shop:")
+    && !hasPrefix("finance:")
+    && !hasPrefix("org:")
+    && !hasPrefix("petition:")
+    && !hasPrefix("election:");
+  if (hasMealOnly) return "mealVendor";
+
+  const hasTeacherWork =
+    hasPrefix("class:")
+    || hasPrefix("exam:")
+    || permissions.has("survey:review")
+    || permissions.has("survey:manage");
+  if (hasTeacherWork) return "teacher";
+
+  return "default";
+}
+
+export function navDefinitionForProfile(profile: NavigationProfile): NavEntry[] {
+  if (profile === "teacher") return NAV_DEF_TEACHER;
+  if (profile === "mealVendor") return NAV_DEF_MEAL_VENDOR;
+  return NAV_DEF;
 }
 
 export function navPrefsStorageKey() {
