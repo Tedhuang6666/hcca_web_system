@@ -17,6 +17,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import and_, desc, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.cache import cache_get, cache_set
 from api.models.announcement import Announcement
 from api.models.calendar import CalendarEvent, CalendarEventChecklistItem, CalendarEventParticipant
 from api.models.document import (
@@ -39,11 +40,13 @@ from api.models.shop import Product, ProductStatus
 from api.models.survey import Survey, SurveyStatus
 from api.models.user import User
 from api.models.work_item import WorkItem, WorkItemStatus
-from api.schemas.task import TaskInboxResponse, TaskItem
+from api.schemas.task import TaskCountResponse, TaskInboxResponse, TaskItem
 from api.services.permission import get_user_permission_codes
 from api.services.task_priority import prioritize_tasks
 
 logger = logging.getLogger(__name__)
+
+TASK_INBOX_CACHE_TTL_SECONDS = 45
 
 
 def _has(perms: frozenset[str], is_admin: bool, code: str) -> bool:
@@ -540,3 +543,25 @@ async def build_task_inbox(db: AsyncSession, user: User) -> TaskInboxResponse:
 
     by_module: dict[str, int] = dict(Counter(t.module for t in items))
     return TaskInboxResponse(items=items, total=len(items), by_module=by_module)
+
+
+def task_count_from_inbox(inbox: TaskInboxResponse) -> TaskCountResponse:
+    return TaskCountResponse(
+        total=inbox.total,
+        by_module=inbox.by_module,
+        urgent_count=sum(1 for item in inbox.items if item.severity == "critical"),
+    )
+
+
+async def build_task_inbox_cached(db: AsyncSession, user: User) -> TaskInboxResponse:
+    cache_key = f"task_inbox:{user.id}"
+    cached = await cache_get(cache_key)
+    if isinstance(cached, dict):
+        try:
+            return TaskInboxResponse.model_validate(cached)
+        except Exception:
+            logger.debug("task inbox cache payload invalid user=%s", user.id, exc_info=True)
+
+    inbox = await build_task_inbox(db, user)
+    await cache_set(cache_key, inbox.model_dump(mode="json"), ttl=TASK_INBOX_CACHE_TTL_SECONDS)
+    return inbox

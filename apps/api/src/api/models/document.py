@@ -559,6 +559,8 @@ class DocumentApproval(Base, TimestampMixin):
     __table_args__ = (
         UniqueConstraint("document_id", "step_order", name="uq_doc_approval_step"),
         Index("ix_document_approvals_status", "status"),
+        Index("ix_document_approvals_status_approver", "status", "approver_id"),
+        Index("ix_document_approvals_status_delegate", "status", "delegate_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

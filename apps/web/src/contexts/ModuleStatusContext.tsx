@@ -25,9 +25,44 @@ const ModuleStatusContext = createContext<ModuleStatusValue>({
 
 const DEFAULT_POLL_MS = 30_000;
 const LOW_DATA_POLL_MS = 300_000;
+const MODULE_STATUS_CACHE_KEY = "hcca:module-status-cache";
+const MODULE_STATUS_CACHE_TTL_MS = 20_000;
+
+type ModuleStatusCache = {
+  checkedAt: number;
+  statuses: Record<string, ModuleStatusPublic>;
+};
+
+function readStatusCache(): Record<string, ModuleStatusPublic> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = sessionStorage.getItem(MODULE_STATUS_CACHE_KEY);
+    if (!raw) return {};
+    const cache = JSON.parse(raw) as ModuleStatusCache;
+    if (!Number.isFinite(cache.checkedAt)) return {};
+    if (Date.now() - cache.checkedAt > MODULE_STATUS_CACHE_TTL_MS) return {};
+    return cache.statuses ?? {};
+  } catch {
+    return {};
+  }
+}
+
+function writeStatusCache(statuses: Record<string, ModuleStatusPublic>) {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(
+      MODULE_STATUS_CACHE_KEY,
+      JSON.stringify({ checkedAt: Date.now(), statuses }),
+    );
+  } catch {
+    /* storage may be unavailable */
+  }
+}
 
 export function ModuleStatusProvider({ children }: { children: React.ReactNode }) {
-  const [statuses, setStatuses] = useState<Record<string, ModuleStatusPublic>>({});
+  const [statuses, setStatuses] = useState<Record<string, ModuleStatusPublic>>(
+    () => readStatusCache(),
+  );
   const [wsRoom, setWsRoom] = useState<string | null>(null);
   const lowDataMode = useLowDataMode();
 
@@ -39,6 +74,7 @@ export function ModuleStatusProvider({ children }: { children: React.ReactNode }
       const map: Record<string, ModuleStatusPublic> = {};
       for (const item of list) map[item.id] = item;
       setStatuses(map);
+      writeStatusCache(map);
       return "ok" as const;
     } catch (e) {
       if (e instanceof ApiError && isFatalApiStatus(e.status)) return "stop" as const;

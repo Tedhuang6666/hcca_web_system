@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 const API_INTERNAL_BASE =
   process.env.API_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const MAINTENANCE_CHECK_TIMEOUT_MS = 800;
+const MAINTENANCE_CHECK_TIMEOUT_MS = 450;
+const MAINTENANCE_BYPASS_TIMEOUT_MS = 300;
 
 // 模組級快取：在同一 edge worker 實例內跨 request 共用，避免每次換頁都打 API。
 // 鍵值：maintenance 用 "global"，access-status 用 IP，bypass 用 cookie 前 64 字元。
@@ -133,7 +134,7 @@ async function canBypassMaintenance(req: NextRequest) {
   if (cached !== undefined) return cached;
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), MAINTENANCE_CHECK_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), MAINTENANCE_BYPASS_TIMEOUT_MS);
   try {
     const res = await fetch(`${API_INTERNAL_BASE}/auth/me`, {
       headers: { cookie: req.headers.get("cookie") ?? "" },
