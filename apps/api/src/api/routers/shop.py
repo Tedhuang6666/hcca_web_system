@@ -34,11 +34,13 @@ from api.schemas.shop import (
     CatalogCategoryOut,
     CheckoutRequest,
     ClassOrderUpsert,
+    CloseStatusOut,
     ImageUploadOut,
     OrderCancelRequest,
     OrderListItem,
     OrderOut,
     OrderPaymentUpdate,
+    OrderQuantityRow,
     OrderSummaryOut,
     ProductCategoryCreate,
     ProductCategoryOut,
@@ -56,6 +58,8 @@ from api.schemas.shop import (
     ProductVariantOptionOut,
     ProductVariantOptionUpdate,
     ShopClassSummaryOut,
+    ShopOrderCloseCreate,
+    ShopOrderCloseOut,
 )
 from api.services import activity as activity_svc
 from api.services import audit as audit_svc
@@ -621,6 +625,23 @@ async def checkout(
         full = await shop_svc.get_order(session, order.id)
         if full is not None:
             result.append(shop_svc.serialize_order(full))
+        try:
+            from api.services.outbox import emit as outbox_emit
+
+            await outbox_emit(
+                session,
+                event_type="shop.order_confirmed",
+                payload={
+                    "order_id": str(order.id),
+                    "serial_number": order.serial_number,
+                    "buyer_id": str(current_user.id),
+                    "buyer_email": current_user.email or "",
+                    "buyer_name": current_user.display_name or "",
+                    "total_price": order.total_price,
+                },
+            )
+        except Exception:
+            logger.warning("emit shop.order_confirmed failed", exc_info=True)
     return result
 
 
@@ -634,24 +655,34 @@ async def list_orders(
     activity_id: uuid.UUID | None = Query(None),
     status_filter: OrderStatus | None = Query(None, alias="status"),
     my_only: bool = Query(True, description="僅顯示我的訂單"),
+    grade: int | None = Query(None, description="按年級篩選（需 SHOP_VIEW_ALL 權限）"),
+    class_id: uuid.UUID | None = Query(None, description="按班級篩選（需 SHOP_VIEW_ALL 權限）"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ) -> list[OrderListItem]:
-    if (
-        current_user.is_superuser
-        or activity_id
+    is_admin = current_user.is_superuser
+    if not is_admin:
+        codes = await get_user_permission_codes(session, str(current_user.id))
+        is_admin = bool(_ADMIN_VIEW_CODES & set(codes))
+    if is_admin or (
+        activity_id
         and await activity_svc.can_manage_activity_resource(session, current_user, activity_id)
     ):
         my_only = False
     elif not my_only:
-        codes = await get_user_permission_codes(session, str(current_user.id))
-        if not (_ADMIN_VIEW_CODES & set(codes)):
-            my_only = True
+        my_only = True
+
+    # grade/class_id 篩選只對管理員有效
+    filter_grade = grade if is_admin else None
+    filter_class_ids: list[uuid.UUID] | None = [class_id] if (is_admin and class_id) else None
+
     orders = await shop_svc.list_orders(
         session,
         user_id=current_user.id if my_only else None,
         activity_id=activity_id,
         status=status_filter,
+        class_ids=filter_class_ids,
+        grade=filter_grade,
         limit=limit,
         offset=offset,
     )
@@ -669,6 +700,7 @@ async def list_class_orders(
     is_paid: bool | None = Query(None, description="篩選繳費狀態"),
     assisted_only: bool = Query(False, description="僅顯示班級幹部協助建立的訂單"),
     product_id: uuid.UUID | None = Query(None, description="篩選商品"),
+    member_user_id: uuid.UUID | None = Query(None, description="篩選特定學生"),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> list[OrderListItem]:
@@ -676,6 +708,7 @@ async def list_class_orders(
     orders = await shop_svc.list_orders(
         session,
         class_ids=class_ids,
+        user_id=member_user_id,
         assistance_scope="class_assisted" if assisted_only else None,
         product_id=product_id,
         is_paid=is_paid,
@@ -810,9 +843,19 @@ async def cancel_order(
     current_user: CurrentUser,
 ) -> OrderOut:
     order = await _get_order_or_404(order_id, session)
+    bypass = current_user.is_superuser
+    if not bypass and order.user_id != current_user.id:
+        cadre_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
+        bypass = order.class_id is not None and order.class_id in cadre_ids
+        if not bypass:
+            codes = await get_user_permission_codes(session, str(current_user.id))
+            bypass = bool(_ADMIN_VIEW_CODES & set(codes))
+        if not bypass:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權取消此訂單")
     try:
         order = await shop_svc.cancel_order(
-            session, order, requested_by=current_user.id, reason=payload.reason
+            session, order, requested_by=current_user.id, reason=payload.reason,
+            bypass_owner_check=bypass,
         )
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
@@ -842,7 +885,8 @@ async def update_order_items(
     order = await _get_order_or_404(order_id, session)
     if order.user_id != current_user.id and not current_user.is_superuser:
         cadre_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
-        if order.assistance_scope != "class_assisted" or order.class_id not in cadre_ids:
+        is_cadre_of_class = order.class_id is not None and order.class_id in cadre_ids
+        if not is_cadre_of_class:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權修改此訂單")
     try:
         order = await shop_svc.replace_order_items(session, order, data=payload)
@@ -944,4 +988,187 @@ async def export_orders_csv(
         content=csv_str.encode("utf-8-sig"),
         media_type="text/csv; charset=utf-8-sig",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ── 結單管理 ──────────────────────────────────────────────────────────────────
+
+
+_COUNCIL_CODES = {
+    PermissionCode.SHOP_MANAGE,
+    PermissionCode.SHOP_MANAGE_ORDERS,
+    PermissionCode.SHOP_VIEW_ALL,
+    PermissionCode.ADMIN_ALL,
+}
+
+
+async def _assert_close_permission(
+    session: AsyncSession,
+    current_user: User,
+    target_class_id: uuid.UUID | None,
+) -> None:
+    """確認結單權限：
+    - 超管或 council codes → 任意班
+    - ClassCadre → 只能操作自己班
+    """
+    if current_user.is_superuser:
+        return
+    codes = await get_user_permission_codes(session, str(current_user.id))
+    if _COUNCIL_CODES & set(codes):
+        return
+    cadre_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
+    if target_class_id is not None and target_class_id in cadre_ids:
+        return
+    if target_class_id is None and cadre_ids:
+        # 幹部只能指定 class_id，不可全局結單
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="僅系統管理員可執行全局結單，班級幹部請指定班級",
+        )
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無結單權限")
+
+
+@router.post(
+    "/categories/{category_id}/close",
+    response_model=ShopOrderCloseOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="結單：關閉指定班級（或全局）的訂購",
+)
+async def close_category(
+    category_id: uuid.UUID,
+    payload: ShopOrderCloseCreate,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> ShopOrderCloseOut:
+    await _get_category_or_404(category_id, session)
+    await _assert_close_permission(session, current_user, payload.class_id)
+    try:
+        close = await shop_svc.close_category_for_class(
+            session,
+            category_id=category_id,
+            class_id=payload.class_id,
+            closed_by_id=current_user.id,
+            notes=payload.notes,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    await audit_svc.record(
+        session,
+        entity_type="shop_category",
+        entity_id=str(category_id),
+        action="shop.order_close",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={"class_id": str(payload.class_id) if payload.class_id else None},
+        summary=f"結單：商品分類「{category_id}」{'全局' if not payload.class_id else '班級'}",
+    )
+    return shop_svc._serialize_close(close)
+
+
+@router.delete(
+    "/categories/{category_id}/close",
+    response_model=ShopOrderCloseOut,
+    summary="重新開單：重開指定班級（或全局）的訂購",
+)
+async def reopen_category(
+    category_id: uuid.UUID,
+    session: DbDep,
+    current_user: CurrentUser,
+    class_id: uuid.UUID | None = Query(None, description="班級 ID，None=全局"),
+) -> ShopOrderCloseOut:
+    await _get_category_or_404(category_id, session)
+    await _assert_close_permission(session, current_user, class_id)
+    try:
+        close = await shop_svc.reopen_category_for_class(
+            session,
+            category_id=category_id,
+            class_id=class_id,
+            reopened_by_id=current_user.id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    await audit_svc.record(
+        session,
+        entity_type="shop_category",
+        entity_id=str(category_id),
+        action="shop.order_reopen",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={"class_id": str(class_id) if class_id else None},
+        summary=f"重新開單：商品分類「{category_id}」",
+    )
+    return shop_svc._serialize_close(close)
+
+
+@router.get(
+    "/close-status",
+    response_model=CloseStatusOut,
+    summary="查詢各分類結單狀態",
+)
+async def get_close_status(
+    session: DbDep,
+    current_user: CurrentUser,
+    category_ids: list[uuid.UUID] = Query(..., description="要查詢的分類 ID 列表"),
+    class_id: uuid.UUID | None = Query(None, description="指定班級（不填則用登入者的班）"),
+) -> CloseStatusOut:
+    from api.models.school_class import SchoolClass
+    from api.services import school_class as class_svc_inner
+
+    if class_id is None:
+        school_class = await class_svc_inner.resolve_user_class(session, current_user)
+        class_id = school_class.id if school_class else None
+
+    close_map = await shop_svc.get_close_status(session, category_ids, class_id)
+    statuses: dict[str, dict] = {}
+    for cid, row in close_map.items():
+        if row is None:
+            statuses[str(cid)] = {"is_closed": False}
+        else:
+            closed_by_name = None
+            if row.closed_by:
+                closed_by_name = getattr(row.closed_by, "display_name", None)
+            statuses[str(cid)] = {
+                "is_closed": True,
+                "closed_at": row.created_at,
+                "closed_by_name": closed_by_name,
+            }
+    return CloseStatusOut(statuses=statuses)
+
+
+# ── 商品規格數量彙總（班聯採購視圖）──────────────────────────────────────────────
+
+
+@router.get(
+    "/orders/quantities",
+    response_model=list[OrderQuantityRow],
+    summary="商品規格訂購數量彙總（採購用）",
+    dependencies=[
+        Depends(
+            require_any(
+                PermissionCode.SHOP_MANAGE,
+                PermissionCode.SHOP_MANAGE_ORDERS,
+                PermissionCode.SHOP_VIEW_ALL,
+                PermissionCode.ADMIN_ALL,
+            )
+        )
+    ],
+)
+async def order_quantities(
+    session: DbDep,
+    _: CurrentUser,
+    grade: int | None = Query(None),
+    class_id: uuid.UUID | None = Query(None),
+    category_id: uuid.UUID | None = Query(None),
+    product_id: uuid.UUID | None = Query(None),
+    is_paid: bool | None = Query(None),
+    status_filter: OrderStatus | None = Query(None, alias="status"),
+) -> list[OrderQuantityRow]:
+    return await shop_svc.order_quantities(
+        session,
+        grade=grade,
+        class_id=class_id,
+        category_id=category_id,
+        product_id=product_id,
+        is_paid=is_paid,
+        status=status_filter,
     )

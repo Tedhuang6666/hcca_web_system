@@ -258,6 +258,143 @@ async def _create_notice_document(
     )
 
 
+_CN_ORDINALS = "一二三四五六七八九十"
+
+
+def _roc_datetime_label(dt: datetime) -> str:
+    """將 UTC/本地 datetime 轉換為民國曆格式文字，例：中華民國115年6月30日(星期一)晚上10時00分。"""
+    local = dt.astimezone()
+    roc_year = local.year - 1911
+    weekdays = "一二三四五六日"
+    weekday_cn = weekdays[local.weekday()]
+    hour = local.hour
+    minute = local.minute
+    if 0 <= hour < 5:
+        period, hour_12 = "凌晨", hour
+    elif 5 <= hour < 12:
+        period, hour_12 = "上午", hour
+    elif hour == 12:
+        period, hour_12 = "中午", 12
+    elif 13 <= hour < 18:
+        period, hour_12 = "下午", hour - 12
+    else:
+        period, hour_12 = "晚上", hour - 12
+    return (
+        f"中華民國{roc_year}年{local.month}月{local.day}日"
+        f"(星期{weekday_cn}){period}{hour_12}時{minute:02d}分"
+    )
+
+
+def _cn_ordinal(n: int) -> str:
+    """將正整數轉為中文序號（1→一，10→十，11→十一，...）。"""
+    if n <= 0:
+        return str(n)
+    tens, ones = divmod(n - 1, 10) if n > 10 else (0, n - 1)
+    if n <= 10:
+        return _CN_ORDINALS[ones]
+    prefix = ("" if tens == 0 else _CN_ORDINALS[tens - 1]) + "十"
+    suffix = _CN_ORDINALS[ones] if ones < len(_CN_ORDINALS) else str(ones + 1)
+    return prefix + (suffix if ones > 0 else "")
+
+
+async def _create_notice_email_draft(
+    session: AsyncSession,
+    meeting: Meeting,
+    *,
+    actor_id: uuid.UUID,
+) -> "EmailMessage":
+    """在現有事務中建立開會通知信草稿（DRAFT），格式與歷史通知信一致。"""
+    from api.core.config import settings
+    from api.models.email_message import EmailCampaignRecipient, EmailMessage, EmailStatus
+
+    starts_label = _roc_datetime_label(meeting.starts_at) if meeting.starts_at else "（待定）"
+    location = meeting.location or "（待定）"
+    chair = meeting.chair_name or "（待定）"
+
+    ordered_items = sorted(meeting.agenda_items, key=lambda x: x.order_index)
+    agenda_lines = "\n>\n".join(
+        f"> {_cn_ordinal(i + 1)}、{item.title}" for i, item in enumerate(ordered_items)
+    )
+
+    body_md = (
+        f"### {{{{ 姓名 }}}}您好，\n\n"
+        f"敬請準時出席下列會議，會議資訊如下：\n\n"
+        f"**開會事由**：{meeting.title}\n\n"
+        f"**開會時間**：{starts_label}\n\n"
+        f"**開會地點**：{location}\n\n"
+        f"**主持人**：{chair}\\\n\\\n\n"
+        f"**議事日程**\n\n"
+        + (agenda_lines if agenda_lines else "> （議程待補）")
+    )
+
+    base = settings.FRONTEND_BASE_URL.rstrip("/")
+    join_url = f"{base}/meetings/join/{meeting.checkin_token}"
+
+    context = {
+        "blocks": [],
+        "buttons": [{"url": join_url, "label": "議員入口", "style": "primary"}],
+        "cta_url": "",
+        "heading": f"「{meeting.title}」{starts_label}召開",
+        "card_rows": [{"label": "會議資訊", "value": f"{starts_label}｜{location}"}],
+        "cta_label": "",
+        "footer_text": f"主席 {chair}" if chair != "（待定）" else "",
+        "accent_color": "#111827",
+        "preview_text": f"{meeting.title}｜{starts_label}｜{location}",
+        "background_color": "#eef2f7",
+        "banner_image_alt": "",
+        "banner_image_url": "",
+        "body_line_height": 1.6,
+        "paragraph_spacing": 18,
+        "show_system_footer": True,
+        "content_background_color": "#ffffff",
+    }
+
+    recipients = [att for att in meeting.attendance_records if att.user is not None and att.user.email]
+    external_emails = [att.user.email for att in recipients]
+    recipient_variables = [
+        {
+            "user_id": str(att.user_id),
+            "email": att.user.email,
+            "name": att.user.display_name or att.user.email,
+            "variables": {"姓名": att.user.display_name or att.user.email},
+        }
+        for att in recipients
+    ]
+
+    msg = EmailMessage(
+        sender_id=actor_id,
+        org_id=meeting.org_id,
+        subject=f"【開會通知】{meeting.title}",
+        body=body_md,
+        template="generic",
+        context=context,
+        recipient_spec={"external_emails": external_emails},
+        variable_definitions=[{"key": "姓名", "label": "姓名", "required": False, "default_value": "您"}],
+        default_variables={"姓名": "您"},
+        recipient_variables=recipient_variables,
+        resolved_emails=external_emails,
+        recipient_count=len(external_emails),
+        status=EmailStatus.DRAFT,
+        idempotency_key=f"meeting-notice-{meeting.id}",
+    )
+    session.add(msg)
+    await session.flush()
+
+    for rv in recipient_variables:
+        session.add(
+            EmailCampaignRecipient(
+                message_id=msg.id,
+                user_id=uuid.UUID(rv["user_id"]),
+                email=rv["email"],
+                name=rv["name"],
+                variables=rv["variables"],
+                status="queued",
+            )
+        )
+    await session.flush()
+    return msg
+
+
 async def confirm_meeting(
     session: AsyncSession,
     meeting: Meeting,
@@ -312,5 +449,12 @@ async def confirm_meeting(
             )
     except Exception:
         logger.warning("send meeting_invited notifications failed", exc_info=True)
+
+    try:
+        email_draft = await _create_notice_email_draft(session, meeting, actor_id=actor.id)
+        meeting.notice_email_message_id = email_draft.id
+        await session.flush()
+    except Exception:
+        logger.warning("create meeting notice email draft failed", exc_info=True)
 
     return meeting

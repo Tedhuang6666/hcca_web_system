@@ -333,6 +333,21 @@ async def publish_announcement(
         summary=f"發布公告「{ann.title}」",
     )
     await emit_announcement_notice(db, ann)
+    try:
+        from api.services.outbox import emit as outbox_emit
+
+        await outbox_emit(
+            db,
+            event_type="announcement.published",
+            payload={
+                "announcement_id": str(ann.id),
+                "title": ann.title,
+                "org_id": str(ann.org_id) if ann.org_id else None,
+                "actor_id": str(user.id),
+            },
+        )
+    except Exception:
+        pass
     # 治理匯流：公告發布經 audit_svc.record()（action="announcement.publish"）統一橋接，
     # 不再於此手寫 ingest。
     return _enrich(ann)
