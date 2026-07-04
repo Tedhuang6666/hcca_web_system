@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from api.models.activity import Activity
     from api.models.council_proposal import CouncilProposal
     from api.models.document import Document
+    from api.models.email_message import EmailMessage
     from api.models.org import Org
     from api.models.regulation import Regulation
     from api.models.school_class import SchoolClass
@@ -296,11 +297,18 @@ class Meeting(Base, TimestampMixin):
     notice_document_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("documents.id", ondelete="SET NULL"), nullable=True
     )
+    # 確認議程時自動建立的開會通知信草稿（EmailMessage）
+    notice_email_message_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("email_messages.id", ondelete="SET NULL"), nullable=True
+    )
 
     org: Mapped[Org] = relationship("Org")
     activity: Mapped[Activity | None] = relationship("Activity")
     notice_document: Mapped[Document | None] = relationship(
         "Document", foreign_keys=[notice_document_id]
+    )
+    notice_email_message: Mapped["EmailMessage | None"] = relationship(
+        "EmailMessage", foreign_keys=[notice_email_message_id]
     )
     agenda_items: Mapped[list[MeetingAgendaItem]] = relationship(
         "MeetingAgendaItem",

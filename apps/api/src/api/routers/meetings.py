@@ -512,6 +512,22 @@ async def close_meeting(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     await _record_event(session, meeting, event_type="meeting.closed", actor=current_user)
     await _broadcast_meeting(session, meeting.id, "meeting.closed")
+    try:
+        from api.services.outbox import emit as outbox_emit
+
+        await outbox_emit(
+            session,
+            event_type="meeting.minutes_ready",
+            payload={
+                "meeting_id": str(meeting.id),
+                "meeting_title": meeting.title,
+                "org_id": str(meeting.org_id),
+                "actor_id": str(current_user.id),
+                "attendee_ids": [str(att.user_id) for att in meeting.attendance_records],
+            },
+        )
+    except Exception:
+        logger.warning("emit meeting.minutes_ready failed", exc_info=True)
     return await _meeting_or_404(session, meeting.id)
 
 

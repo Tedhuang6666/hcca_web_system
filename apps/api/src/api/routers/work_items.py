@@ -51,6 +51,21 @@ async def create_work_item(
         meta=body.model_dump(mode="json"),
         summary=f"建立工作分配：{item.title}",
     )
+    if body.assigned_to_id and body.assigned_to_id != current_user.id:
+        try:
+            from api.routers.notifications import create_notification
+
+            await create_notification(
+                db,
+                user_id=body.assigned_to_id,
+                type="work_item_assigned",
+                title=f"你被指派了工作：{item.title}",
+                body=item.description or "",
+                link="/work-items",
+                related_id=item.id,
+            )
+        except Exception:
+            pass
     return WorkItemOut.model_validate(item)
 
 

@@ -548,6 +548,7 @@ class MeetingListItem(BaseModel):
     screen_focus_body: str | None = None
     confirmed_at: datetime | None = None
     notice_document_id: uuid.UUID | None = None
+    notice_email_message_id: uuid.UUID | None = None
     created_at: datetime
 
 

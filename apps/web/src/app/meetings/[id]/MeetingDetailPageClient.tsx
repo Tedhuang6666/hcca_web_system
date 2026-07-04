@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   ClipboardList,
   FileText,
+  Mail,
   Monitor,
   Paperclip,
   Pause,
@@ -259,6 +260,14 @@ export default function MeetingDetailPageClient({
                   開會通知單
                 </Link>
               )}
+              {meeting.notice_email_message_id && (
+                <Link
+                  href={`/email/messages/${meeting.notice_email_message_id}`}
+                  className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-1.5 font-medium text-white hover:bg-blue-700">
+                  <Mail size={14} aria-hidden="true" />
+                  開會通知信 — 預覽並發送
+                </Link>
+              )}
             </div>
           ) : (
             <p className="text-[var(--muted)]">
@@ -310,13 +319,23 @@ export default function MeetingDetailPageClient({
               <p className="text-xs font-medium text-[var(--muted)]">會後收尾工作台</p>
               <h2 className="mt-1 text-xl font-semibold">紀錄、決議與公文草稿</h2>
             </div>
-            <button
-              disabled={draftBusy}
-              onClick={createMinutesDocument}
-              className="inline-flex items-center justify-center gap-2 rounded-md bg-[var(--primary)] px-3 py-2 text-sm font-medium text-black disabled:opacity-50">
-              <ClipboardList size={16} aria-hidden="true" />
-              轉公文草稿
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                disabled={draftBusy}
+                onClick={createMinutesDocument}
+                className="inline-flex items-center justify-center gap-2 rounded-md bg-[var(--primary)] px-3 py-2 text-sm font-medium text-black disabled:opacity-50">
+                <ClipboardList size={16} aria-hidden="true" />
+                轉公文草稿
+              </button>
+              {agenda.some((item) => item.regulation_id) && (
+                <Link
+                  href={`/regulations?from_meeting=${meeting.id}`}
+                  className="inline-flex items-center gap-2 rounded-md border border-amber-500 px-3 py-2 text-sm font-medium text-amber-600 hover:bg-amber-50">
+                  <FileText size={16} aria-hidden="true" />
+                  推進法規流程
+                </Link>
+              )}
+            </div>
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-4">
             <div className="rounded-md border border-[var(--border)] p-3">

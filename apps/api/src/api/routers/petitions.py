@@ -142,19 +142,49 @@ async def _notify(
     body: str | None,
     link: str,
     related_id: uuid.UUID,
+    external_email: str | None = None,
+    external_name: str | None = None,
 ) -> None:
-    if user_id is None:
-        return
-    session.add(
-        Notification(
-            user_id=user_id,
-            type=type,
-            title=title,
-            body=body,
-            link=link,
-            related_id=related_id,
-        )
-    )
+    if user_id is not None:
+        try:
+            from api.routers.notifications import create_notification
+
+            await create_notification(
+                session,
+                user_id=user_id,
+                type=type,
+                title=title,
+                body=body or "",
+                link=link,
+                related_id=related_id,
+            )
+        except Exception:
+            session.add(
+                Notification(
+                    user_id=user_id,
+                    type=type,
+                    title=title,
+                    body=body,
+                    link=link,
+                    related_id=related_id,
+                )
+            )
+    elif external_email:
+        try:
+            from api.services.outbox import emit as outbox_emit
+
+            await outbox_emit(
+                session,
+                event_type="petition.external_notify",
+                payload={
+                    "contact_email": external_email,
+                    "contact_name": external_name or "",
+                    "title": title,
+                    "body": body or "",
+                },
+            )
+        except Exception:
+            pass
 
 
 def _decorate_list_item(case_obj: PetitionCase) -> PetitionCaseListItem:
@@ -729,6 +759,8 @@ async def reply_case(
         body=case_obj.title,
         link=f"/petitions/{case_obj.id}",
         related_id=case_obj.id,
+        external_email=case_obj.contact_email if case_obj.submitter_id is None else None,
+        external_name=case_obj.contact_name,
     )
     return await _decorate_case(
         case_obj, include_internal=True, can_view_submitter=case_obj.is_named
@@ -765,6 +797,8 @@ async def update_status(
         body=petition_svc.STATUS_LABELS[case_obj.status],
         link=f"/petitions/{case_obj.id}",
         related_id=case_obj.id,
+        external_email=case_obj.contact_email if case_obj.submitter_id is None else None,
+        external_name=case_obj.contact_name,
     )
     return await _decorate_case(
         case_obj, include_internal=True, can_view_submitter=case_obj.is_named

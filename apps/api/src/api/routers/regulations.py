@@ -1812,6 +1812,22 @@ async def president_publish(
         },
         summary=f"主席公布法規「{reg.title}」",
     )
+    try:
+        from api.services.outbox import emit as outbox_emit
+
+        await outbox_emit(
+            session,
+            event_type="regulation.published",
+            payload={
+                "regulation_id": str(reg.id),
+                "regulation_title": reg.title,
+                "org_id": str(reg.org_id),
+                "actor_id": str(current_user.id),
+                "actor_email": current_user.email or "",
+            },
+        )
+    except Exception:
+        logger.warning("emit regulation.published failed", exc_info=True)
     return reg
 
 

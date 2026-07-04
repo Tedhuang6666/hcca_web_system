@@ -480,6 +480,22 @@ export interface ShopClassSummaryOut {
   product_rows: ShopClassProductSummaryRow[];
 }
 
+export interface ShopOrderCloseOut {
+  id: string; category_id: string; class_id: string | null;
+  closed_by_name: string | null; closed_at: string;
+  reopened_at: string | null; notes: string | null; is_active: boolean;
+}
+export interface CloseStatusItem {
+  is_closed: boolean; closed_at?: string; closed_by_name?: string;
+}
+export interface CloseStatusOut {
+  statuses: Record<string, CloseStatusItem>;
+}
+export interface OrderQuantityRow {
+  product_id: string; product_name: string; series_name: string;
+  variant_key: string; qty_total: number; qty_paid: number;
+}
+
 // ── 劃位 / 票券型別 ──────────────────────────────────────────────────────────
 export type SeatingMode = "at_purchase" | "scheduled" | "admin_assign";
 export type SeatStatus = "available" | "disabled" | "blocked";
@@ -1558,6 +1574,7 @@ export interface MeetingListItem {
   screen_focus_body: string | null;
   confirmed_at: string | null;
   notice_document_id: string | null;
+  notice_email_message_id: string | null;
   created_at: string;
 }
 
@@ -4768,4 +4785,16 @@ export interface InventoryDashboard {
   low_stock_count: number;
   pending_procurement_count: number;
   monthly_transaction_count: number;
+}
+
+// ── Google Calendar 同步 ──────────────────────────────────────────────────────
+
+export interface GoogleCalendarStatusOut {
+  is_connected: boolean;
+  authorized_email: string | null;
+  google_calendar_id: string;
+  sync_enabled: boolean;
+  last_pull_at: string | null;
+  last_error: string | null;
+  authorized_at: string | null;
 }
