@@ -392,18 +392,19 @@ function sectionsToText(sections: NavigationProfileSection[]) {
 }
 
 function parseSections(value: string): NavigationProfileSection[] {
-  const sections = value.split("\n").map((line, index) => {
+  const sections: NavigationProfileSection[] = [];
+  value.split("\n").forEach((line, index) => {
     const [headingRaw, itemsRaw = ""] = line.split(":");
     const heading = headingRaw.trim();
-    if (!heading) return null;
+    if (!heading) return;
     const items = lines(itemsRaw).filter((id) => NAV_ITEMS_BY_ID[id]);
-    return {
+    sections.push({
       id: heading.toLowerCase().replace(/[^a-z0-9_-]+/g, "-") || `section-${index}`,
       heading,
       items,
       collapsible: false,
       default_collapsed: false,
-    };
-  }).filter((section): section is NavigationProfileSection => Boolean(section));
+    });
+  });
   return sections.length > 0 ? sections : EMPTY_DRAFT.desktop_sections;
 }

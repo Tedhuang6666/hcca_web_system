@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import {
   dashboardApi,
+  governanceApi,
   tasksApi,
   type DashboardResponse,
   type DashboardWidget,
@@ -17,6 +18,7 @@ import {
   type TaskItem,
   type TaskModule,
 } from "@/lib/api";
+import type { MatterListItem } from "@/lib/types";
 import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useRecentItems } from "@/hooks/useRecentItems";
@@ -263,6 +265,7 @@ export default function DashboardPage() {
   const [greeting, setGreeting] = useState("歡迎回來");
   const [data, setData] = useState<DashboardResponse | null>(() => cacheGet("dashboard/data") ?? null);
   const [tasks, setTasks] = useState<TaskInboxResponse | null>(() => cacheGet("dashboard/tasks") ?? null);
+  const [matters, setMatters] = useState<MatterListItem[]>(() => cacheGet("dashboard/matters") ?? []);
   const [loading, setLoading] = useState(!cacheHas("dashboard/data"));
   const { can, canAny, isAdmin, permissions } = usePermissions();
   const recents = useRecentItems(6);
@@ -281,8 +284,12 @@ export default function DashboardPage() {
     if (!userId) { setLoading(false); return; }
     // 有快取時背景靜默更新，不顯示 loading
     if (!cacheHas("dashboard/data")) setLoading(true);
-    Promise.allSettled([dashboardApi.get(), tasksApi.list()])
-      .then(([dashboardRes, tasksRes]) => {
+    Promise.allSettled([
+      dashboardApi.get(),
+      tasksApi.list(),
+      governanceApi.listMatters({ status: "active", limit: 6 }),
+    ])
+      .then(([dashboardRes, tasksRes, mattersRes]) => {
         if (dashboardRes.status === "fulfilled") {
           setData(dashboardRes.value);
           cacheSet("dashboard/data", dashboardRes.value);
@@ -290,6 +297,10 @@ export default function DashboardPage() {
         if (tasksRes.status === "fulfilled") {
           setTasks(tasksRes.value);
           cacheSet("dashboard/tasks", tasksRes.value);
+        }
+        if (mattersRes.status === "fulfilled") {
+          setMatters(mattersRes.value);
+          cacheSet("dashboard/matters", mattersRes.value);
         }
       })
       .catch((e) => {
@@ -332,7 +343,7 @@ export default function DashboardPage() {
               <span className="dashboard-kicker-icon">
                 <Inbox size={12} aria-hidden={true} />
               </span>
-              今日工作入口
+              今日工作台
             </div>
             <div className="mt-4 flex items-center gap-2 flex-wrap">
               <h1 className="dashboard-title">
@@ -348,8 +359,8 @@ export default function DashboardPage() {
             </div>
             <p className="dashboard-subtitle">
               {priorityTasks.length > 0
-                ? "需要你動作的事項已排在最前面，點進去就能處理。"
-                : "今天沒有急迫待辦，可以從常用入口快速進入公告、問卷與校園服務。"}
+                ? "需要你動作的事項已排在最前面，正在進行的活動與事情放在同一個工作流裡。"
+                : "今天沒有急迫待辦，可以從活動、事情或常用入口直接開始。"}
             </p>
           </div>
           <div className="dashboard-pulse" aria-hidden="true">
@@ -424,6 +435,46 @@ export default function DashboardPage() {
             ))}
           </div>
         </aside>
+      </section>
+
+      <section className="rounded-lg p-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }} aria-label="正在進行的活動與事情">
+        <div className="dashboard-section-heading">
+          <div>
+            <p className="dashboard-eyebrow">正在進行</p>
+            <h2>活動與事情</h2>
+          </div>
+          <Link href="/governance" className="dashboard-text-link">
+            進入工作中心 <ChevronRight size={14} aria-hidden={true} />
+          </Link>
+        </div>
+        <div className="mt-3 grid gap-2 md:grid-cols-3">
+          {matters.length === 0 && (
+            <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+              尚未有進行中的工作。建立活動或事情後，會集中出現在這裡。
+            </p>
+          )}
+          {matters.map((matter) => (
+            <Link
+              key={matter.id}
+              href={`/governance/${matter.id}`}
+              className="rounded-lg border p-3 transition-colors"
+              style={{ borderColor: "var(--border)", color: "var(--text-primary)", textDecoration: "none" }}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold">{matter.title}</p>
+                  <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                    {matter.matter_type === "activity" ? "活動" : "事情"} · {matter.open_task_count} 待辦 · {matter.link_count} 關聯
+                  </p>
+                </div>
+                <ChevronRight size={14} aria-hidden={true} style={{ color: "var(--text-muted)" }} />
+              </div>
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full" style={{ background: "var(--bg-hover)" }}>
+                <div className="h-full rounded-full" style={{ width: `${matter.progress_percent}%`, background: "var(--primary)" }} />
+              </div>
+            </Link>
+          ))}
+        </div>
       </section>
 
       {adminActions.length > 0 && (

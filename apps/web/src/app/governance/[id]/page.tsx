@@ -156,6 +156,11 @@ export default function GovernanceMatterPage() {
 
   const openTasks = useMemo(() => tasks.filter((task) => task.status === "open"), [tasks]);
   const completedTasks = useMemo(() => tasks.filter((task) => task.status === "done"), [tasks]);
+  const linkedActivityId = useMemo(() => {
+    if (!matter || matter.matter_type !== "activity") return null;
+    const relation = matter.links.find((link) => link.target_type === "activity" && link.target_id);
+    return relation?.target_id ?? null;
+  }, [matter]);
 
   const addCase = (event: FormEvent) => {
     event.preventDefault();
@@ -466,7 +471,7 @@ export default function GovernanceMatterPage() {
     return (
       <div className="mx-auto max-w-3xl rounded-lg p-10 text-center" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
         <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>找不到這件事情</p>
-        <Link href="/governance" className="btn btn-secondary mt-4">返回治理中樞</Link>
+        <Link href="/governance" className="btn btn-secondary mt-4">返回工作中心</Link>
       </div>
     );
   }
@@ -477,7 +482,7 @@ export default function GovernanceMatterPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <Link href="/governance" className="text-xs font-medium" style={{ color: "var(--primary)", textDecoration: "none" }}>
-              治理中樞
+              工作中心
             </Link>
             <h1 className="mt-2 text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>{matter.title}</h1>
             {matter.description && <p className="mt-2 max-w-3xl text-sm" style={{ color: "var(--text-muted)" }}>{matter.description}</p>}
@@ -489,6 +494,13 @@ export default function GovernanceMatterPage() {
             <TopStat label="開放任務" value={String(openTasks.length)} />
           </div>
         </div>
+        {linkedActivityId && (
+          <div className="mt-4">
+            <Link href={`/activities/${linkedActivityId}`} className="btn btn-secondary">
+              返回活動工作區
+            </Link>
+          </div>
+        )}
         <div className="mt-4 h-2 overflow-hidden rounded-full" style={{ background: "var(--bg-hover)" }}>
           <div className="h-full rounded-full" style={{ width: `${matter.progress_percent}%`, background: "var(--primary)" }} />
         </div>

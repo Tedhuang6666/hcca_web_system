@@ -164,10 +164,10 @@ export default function GovernancePage() {
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
-            治理中樞
+            工作中心
           </h1>
           <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            集中追蹤跨模組事項、案件與執行進度
+            從活動、專案與自治事項出發，集中追蹤跨模組資料與執行進度
           </p>
         </div>
         <button type="button" className="btn btn-primary" onClick={() => setShowCreate(true)}>

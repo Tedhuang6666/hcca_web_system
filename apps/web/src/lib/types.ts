@@ -1920,7 +1920,7 @@ export interface WorkflowTimelineOut {
 export type ActivityLinkKind =
   | "announcement" | "survey" | "shop_product" | "shop_order"
   | "meal_schedule" | "meal_order" | "meeting" | "document"
-  | "regulation" | "petition" | "council_proposal" | "judicial_petition"
+  | "calendar_event" | "regulation" | "petition" | "council_proposal" | "judicial_petition"
   | "work_item" | "receivable" | "publication";
 
 export interface ActivityLinkOut {
@@ -1948,12 +1948,72 @@ export interface ActivityLinkSuggestion {
   meta: Record<string, unknown>;
 }
 
+export interface ActivityWorkspaceItem {
+  id: string;
+  title: string;
+  href: string;
+  status?: string | null;
+  timestamp?: string | null;
+  due_at?: string | null;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  location?: string | null;
+  note?: string | null;
+  meta?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
 export interface ActivityWorkspaceOut {
   activity_id: string;
+  matter_id: string | null;
+  summary: {
+    title?: string;
+    description?: string | null;
+    status?: string;
+    starts_at?: string | null;
+    ends_at?: string | null;
+    linked_count?: number;
+    open_task_count?: number;
+    meeting_count?: number;
+    unpaid_amount?: number;
+    people_count?: number;
+    [key: string]: unknown;
+  };
   sections: Array<{ key: string; title: string; count: number; items: ActivityLinkOut[] }>;
   pending_items: Array<Record<string, unknown>>;
   checklist: Array<{ key: string; title: string; status: string; action: string }>;
+  tasks: ActivityWorkspaceItem[];
+  meetings: ActivityWorkspaceItem[];
+  calendar_events: ActivityWorkspaceItem[];
+  notifications: ActivityWorkspaceItem[];
+  people: ActivityWorkspaceItem[];
+  finance: {
+    total_amount?: number;
+    paid_amount?: number;
+    unpaid_amount?: number;
+    by_status?: Record<string, { count: number; amount: number }>;
+    [key: string]: unknown;
+  };
+  procurement: ActivityWorkspaceItem[];
+  documents: ActivityWorkspaceItem[];
   suggestions: ActivityLinkSuggestion[];
+}
+
+export interface ActivitySpawnCreate {
+  kind: "task" | "meeting" | "calendar_event" | "announcement" | "document" | "survey";
+  title: string;
+  description?: string | null;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  due_at?: string | null;
+  location?: string | null;
+}
+
+export interface ActivitySpawnOut {
+  kind: ActivitySpawnCreate["kind"];
+  id: string;
+  title: string;
+  href: string;
 }
 
 export interface ActivityClosingReportOut {
