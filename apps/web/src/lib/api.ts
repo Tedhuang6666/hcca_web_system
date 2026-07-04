@@ -685,7 +685,8 @@ export const shopApi = {
     assisted_only?: string;
     product_id?: string;
   }) => {
-    const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+    const defined = params ? Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined)) : {};
+    const qs = Object.keys(defined).length ? "?" + new URLSearchParams(defined).toString() : "";
     return get<ShopClassSummaryOut>(`/shop/orders/class/summary${qs}`);
   },
   orderSummary: (params: {
