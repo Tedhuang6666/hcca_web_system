@@ -385,6 +385,49 @@ class ImageUploadOut(BaseModel):
     url: str
 
 
+# ── 結單 ──────────────────────────────────────────────────────────────────────
+
+
+class ShopOrderCloseCreate(BaseModel):
+    class_id: uuid.UUID | None = None
+    notes: str | None = None
+
+
+class ShopOrderCloseOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    category_id: uuid.UUID
+    class_id: uuid.UUID | None
+    closed_by_name: str | None = None
+    closed_at: datetime
+    reopened_at: datetime | None
+    notes: str | None
+    is_active: bool
+
+
+class CloseStatusItem(BaseModel):
+    is_closed: bool
+    closed_at: datetime | None = None
+    closed_by_name: str | None = None
+
+
+class CloseStatusOut(BaseModel):
+    statuses: dict[str, CloseStatusItem]
+
+
+# ── 商品規格數量彙總 ────────────────────────────────────────────────────────────
+
+
+class OrderQuantityRow(BaseModel):
+    product_id: uuid.UUID
+    product_name: str
+    series_name: str
+    variant_key: str
+    qty_total: int
+    qty_paid: int
+
+
 __all__ = [
     "CartItemCreate",
     "CartItemOut",
@@ -422,4 +465,9 @@ __all__ = [
     "SelectedOption",
     "ShopClassProductSummaryRow",
     "ShopClassSummaryOut",
+    "ShopOrderCloseCreate",
+    "ShopOrderCloseOut",
+    "CloseStatusItem",
+    "CloseStatusOut",
+    "OrderQuantityRow",
 ]
