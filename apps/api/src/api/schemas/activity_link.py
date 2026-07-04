@@ -62,9 +62,19 @@ class ActivityChecklistItem(BaseModel):
 
 class ActivityWorkspaceOut(BaseModel):
     activity_id: uuid.UUID
+    matter_id: uuid.UUID | None = None
+    summary: dict = Field(default_factory=dict)
     sections: list[ActivityWorkspaceSection]
     pending_items: list[dict]
     checklist: list[ActivityChecklistItem]
+    tasks: list[dict] = Field(default_factory=list)
+    meetings: list[dict] = Field(default_factory=list)
+    calendar_events: list[dict] = Field(default_factory=list)
+    notifications: list[dict] = Field(default_factory=list)
+    people: list[dict] = Field(default_factory=list)
+    finance: dict = Field(default_factory=dict)
+    procurement: list[dict] = Field(default_factory=list)
+    documents: list[dict] = Field(default_factory=list)
     suggestions: list[ActivityLinkSuggestion]
 
 
@@ -75,3 +85,20 @@ class ActivityClosingReportOut(BaseModel):
     tasks: dict[str, int]
     publications: dict[str, int]
     generated_at: datetime
+
+
+class ActivitySpawnCreate(BaseModel):
+    kind: str = Field(..., pattern="^(task|meeting|calendar_event|announcement|document|survey)$")
+    title: str = Field(..., min_length=1, max_length=240)
+    description: str | None = Field(None, max_length=5000)
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    due_at: datetime | None = None
+    location: str | None = Field(None, max_length=200)
+
+
+class ActivitySpawnOut(BaseModel):
+    kind: str
+    id: uuid.UUID
+    title: str
+    href: str

@@ -82,6 +82,7 @@ import type {
   WorkflowInstanceOut, WorkflowLinkCreate, WorkflowLinkOut, WorkflowTimelineOut,
   WorkflowTransitionCreate,
   ActivityClosingReportOut, ActivityLinkCreate, ActivityLinkOut, ActivityLinkSuggestion,
+  ActivitySpawnCreate, ActivitySpawnOut,
   ActivityWorkspaceOut,
   ReceivableOut, ReceivableSummaryOut, ReceivableSource,
   PublicationCampaignOut, PublicationPreviewOut, PublicationStatsOut,
@@ -1443,8 +1444,12 @@ export const activitiesApi = {
     get<Activity[]>(`/activities/mine?active_only=${String(activeOnly)}`),
   get: (id: string) => get<Activity>(`/activities/${id}`),
   workspace: (id: string) => get<ActivityWorkspaceOut>(`/activities/${id}/workspace`),
+  spawn: (id: string, body: ActivitySpawnCreate) =>
+    post<ActivitySpawnOut>(`/activities/${id}/spawn`, body),
   links: (id: string) => get<ActivityLinkOut[]>(`/activities/${id}/links`),
   createLink: (id: string, body: ActivityLinkCreate) =>
+    post<ActivityLinkOut>(`/activities/${id}/links`, body),
+  linkResource: (id: string, body: ActivityLinkCreate) =>
     post<ActivityLinkOut>(`/activities/${id}/links`, body),
   deleteLink: (activityId: string, linkId: string) =>
     del<void>(`/activities/${activityId}/links/${linkId}`),
@@ -4303,7 +4308,11 @@ export const inventoryApi = {
     item_id?: string;
     txn_type?: InventoryTxnType;
     limit?: number;
-  }) => get<InventoryTransactionOut[]>(`/inventory/transactions${buildQs(params ?? {})}`),
+  }) => get<InventoryTransactionOut[]>(`/inventory/transactions${buildQs({
+    item_id: params?.item_id,
+    txn_type: params?.txn_type,
+    limit: params?.limit === undefined ? undefined : String(params.limit),
+  })}`),
 
   // 採購申請
   listProcurements: (params?: {

@@ -22,6 +22,7 @@ class ActivityLinkKind(enum.StrEnum):
     MEAL_SCHEDULE = "meal_schedule"
     MEAL_ORDER = "meal_order"
     MEETING = "meeting"
+    CALENDAR_EVENT = "calendar_event"
     DOCUMENT = "document"
     REGULATION = "regulation"
     PETITION = "petition"

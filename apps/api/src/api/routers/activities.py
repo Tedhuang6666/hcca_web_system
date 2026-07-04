@@ -37,6 +37,8 @@ from api.schemas.activity_link import (
     ActivityLinkCreate,
     ActivityLinkOut,
     ActivityLinkSuggestion,
+    ActivitySpawnCreate,
+    ActivitySpawnOut,
     ActivityWorkspaceOut,
 )
 from api.services import activity as activity_svc
@@ -125,6 +127,39 @@ async def get_activity_workspace(
 ) -> ActivityWorkspaceOut:
     activity = await _activity_or_404(db, activity_id)
     return ActivityWorkspaceOut(**await workspace_svc.workspace(db, activity))
+
+
+@router.post(
+    "/{activity_id}/spawn",
+    response_model=ActivitySpawnOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="從活動工作區建立跨模組項目",
+)
+async def spawn_activity_item(
+    activity_id: uuid.UUID,
+    payload: ActivitySpawnCreate,
+    db: DbDep,
+    user: CurrentUser,
+) -> ActivitySpawnOut:
+    activity = await _activity_or_404(db, activity_id)
+    await _require_activity_resource_manager(db, user, activity.id)
+    try:
+        result = await workspace_svc.spawn(db, activity, payload, actor=user)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    await audit_svc.record(
+        db,
+        entity_type="activity",
+        entity_id=str(activity.id),
+        action="activity.spawn",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        meta=payload.model_dump(mode="json"),
+        summary=f"從活動「{activity.name}」建立「{payload.title}」",
+    )
+    return ActivitySpawnOut(**result)
 
 
 @router.get(
