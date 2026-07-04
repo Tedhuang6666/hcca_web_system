@@ -63,6 +63,7 @@ class WorkItem(Base, TimestampMixin):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     discord_channel_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     discord_message_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    google_task_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
 
     assigned_to: Mapped[User | None] = relationship("User", foreign_keys=[assigned_to_id])

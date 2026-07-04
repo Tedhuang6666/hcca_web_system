@@ -27940,6 +27940,8 @@ export interface components {
             discord_message_id: string | null;
             /** Due At */
             due_at: string | null;
+            /** Google Task Id */
+            google_task_id: string | null;
             /**
              * Id
              * Format: uuid

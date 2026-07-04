@@ -178,6 +178,7 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str = Field(default="")
     GOOGLE_REDIRECT_URI: str = "http://localhost:8000/auth/google/callback"
     GOOGLE_CALENDAR_REDIRECT_URI: str = "http://localhost:8000/calendar/google/callback"
+    GOOGLE_TASKS_REDIRECT_URI: str = "http://localhost:8000/user/google-tasks/callback"
     LOGIN_ALLOWED_EMAIL_DOMAINS: list[str] = Field(
         default_factory=lambda: ["hchs.hc.edu.tw"],
         description="允許一般使用者登入的 Email 網域；不含 @",
@@ -499,6 +500,8 @@ class Settings(BaseSettings):
             self.GOOGLE_REDIRECT_URI = f"{origin}/auth/google/callback"
         if _is_local_url(self.GOOGLE_CALENDAR_REDIRECT_URI):
             self.GOOGLE_CALENDAR_REDIRECT_URI = f"{origin}/calendar/google/callback"
+        if _is_local_url(self.GOOGLE_TASKS_REDIRECT_URI):
+            self.GOOGLE_TASKS_REDIRECT_URI = f"{origin}/user/google-tasks/callback"
         if _is_local_url(self.DISCORD_REDIRECT_URI):
             self.DISCORD_REDIRECT_URI = f"{origin}/discord/callback"
         if _is_local_url(self.DISCORD_LOGIN_REDIRECT_URI):

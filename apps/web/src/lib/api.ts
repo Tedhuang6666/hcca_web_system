@@ -96,7 +96,8 @@ import type {
   GovernanceDiscordEventRouteIn, GovernanceDiscordEventRouteOut,
   GovernanceDiscordWorkspaceIn, GovernanceDiscordWorkspaceOut,
   GovernanceModuleCapabilityOut, GovernanceResourceSearchOut, GovernanceWorkflowTemplateOut,
-  MatterCreate, MatterListItem, MatterOut, MatterRoleAssignmentCreate,
+  MatterCreate, MatterListItem, MatterOut, MatterResourceCreate, MatterResourceOut,
+  MatterResourceUpdate, MatterRoleAssignmentCreate,
   MatterRoleAssignmentOut, MatterRoleAssignmentUpdate, MatterUpdate, PlanningDocumentCreate,
   PlanningDocumentAttachmentOut, PlanningDocumentOut, PlanningDocumentRevisionCreate,
   PlanningDocumentRevisionOut,
@@ -120,6 +121,8 @@ import type {
   InventoryTransactionOut, InventoryProcurementOut,
   InventoryProcurementCreate, InventoryProcurementUpdate, InventoryDashboard,
 } from "./types";
+
+export type { WorkItemOut } from "./types";
 import { API_BASE, apiUrl } from "./config";
 import { ApiError } from "./api-helpers";
 export { ApiError, withFallback, apiErrorMessage } from "./api-helpers";
@@ -1427,6 +1430,30 @@ export const workItemsApi = {
   complete: (id: string) => post<WorkItemOut>(`/work-items/${id}/complete`, {}),
 };
 
+// ── Google Tasks 整合 ─────────────────────────────────────────────────────────
+
+export type GoogleTasksStatus = {
+  is_connected: boolean;
+  authorized_email: string | null;
+  sync_enabled: boolean;
+  last_sync_at: string | null;
+  last_error: string | null;
+  authorized_at: string | null;
+};
+
+export type GoogleTasksSyncResult = {
+  pushed: number;
+  pulled_created: number;
+  pulled_skipped: number;
+  errors: number;
+};
+
+export const googleTasksApi = {
+  status: () => get<GoogleTasksStatus>("/user/google-tasks/status"),
+  disconnect: () => del<void>("/user/google-tasks/disconnect"),
+  sync: () => post<GoogleTasksSyncResult>("/user/google-tasks/sync", {}),
+};
+
 // ── 組織（公開端點）───────────────────────────────────────────────────────────
 
 export type { OrgRead } from "./types";
@@ -1712,6 +1739,39 @@ export const governanceApi = {
   updateAutomationRule: (id: string, body: AutomationRuleUpdate) =>
     patch<AutomationRuleOut>(`/governance/automation-rules/${id}`, body),
   automationMeta: () => get<AutomationMeta>("/governance/automation-meta"),
+};
+
+export const mattersApi = {
+  list: (params?: {
+    status?: string;
+    matter_type?: string;
+    q?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const q = new URLSearchParams();
+    if (params?.status) q.set("status", params.status);
+    if (params?.matter_type) q.set("matter_type", params.matter_type);
+    if (params?.q) q.set("q", params.q);
+    if (params?.limit !== undefined) q.set("limit", String(params.limit));
+    if (params?.offset !== undefined) q.set("offset", String(params.offset));
+    const qs = q.toString();
+    return get<MatterListItem[]>(`/matters${qs ? `?${qs}` : ""}`);
+  },
+  create: (body: MatterCreate) => post<MatterOut>("/matters", body),
+  get: (id: string) => get<MatterOut>(`/matters/${id}`),
+  update: (id: string, body: MatterUpdate) => patch<MatterOut>(`/matters/${id}`, body),
+  timeline: (id: string) => get<TimelineEventOut[]>(`/matters/${id}/timeline`),
+  createRelation: (id: string, body: EntityRelationCreate) =>
+    post<EntityRelationOut>(`/matters/${id}/relations`, body),
+  deleteRelation: (id: string, relationId: string) =>
+    del<void>(`/matters/${id}/relations/${relationId}`),
+  createResource: (id: string, body: MatterResourceCreate) =>
+    post<MatterResourceOut>(`/matters/${id}/resources`, body),
+  updateResource: (id: string, resourceId: string, body: MatterResourceUpdate) =>
+    patch<MatterResourceOut>(`/matters/${id}/resources/${resourceId}`, body),
+  deleteResource: (id: string, resourceId: string) =>
+    del<void>(`/matters/${id}/resources/${resourceId}`),
 };
 
 export const receivablesApi = {

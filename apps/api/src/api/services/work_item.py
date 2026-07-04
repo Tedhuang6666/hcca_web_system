@@ -22,6 +22,7 @@ async def create_work_item(
     db.add(item)
     await db.flush()
     await _emit_assignment_notice(db, item)
+    await _push_to_google_tasks(db, item)
     return item
 
 
@@ -80,6 +81,7 @@ async def update_work_item(db: AsyncSession, *, item: WorkItem, data: WorkItemUp
     await db.flush()
     if "assigned_to_id" in payload and item.status == WorkItemStatus.OPEN:
         await _emit_assignment_notice(db, item)
+    await _push_to_google_tasks(db, item)
     return item
 
 
@@ -87,6 +89,7 @@ async def complete_work_item(db: AsyncSession, *, item: WorkItem) -> WorkItem:
     item.status = WorkItemStatus.DONE
     item.completed_at = datetime.now(UTC)
     await db.flush()
+    await _push_to_google_tasks(db, item)
     return item
 
 
@@ -139,6 +142,31 @@ async def _emit_assignment_notice(db: AsyncSession, item: WorkItem) -> None:
             "link": "/tasks",
         },
     )
+
+
+async def _push_to_google_tasks(db: AsyncSession, item: WorkItem) -> None:
+    """靜默推送 WorkItem 到 Google Tasks（使用者未授權時直接跳過）。"""
+    user_id = item.assigned_to_id
+    if user_id is None:
+        return
+    try:
+        from api.services.google_tasks_service import (
+            GoogleTasksAuthError,
+            get_config_for_user,
+            push_work_item,
+        )
+
+        config = await get_config_for_user(db, user_id)
+        if config is None:
+            return
+        await push_work_item(db, item, config)
+    except GoogleTasksAuthError:
+        pass
+    except Exception:
+        import logging
+        logging.getLogger(__name__).warning(
+            "[GoogleTasks] push 靜默失敗（item=%s）", item.id, exc_info=True
+        )
 
 
 async def _emit_due_notice(db: AsyncSession, item: WorkItem) -> None:
