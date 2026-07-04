@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 import Modal from "@/components/ui/Modal";
 import { UserPicker } from "@/components/meal/UserPicker";
 import { mealApi, type UserSummary } from "@/lib/api";
@@ -417,6 +418,13 @@ export default function VendorAdminPage() {
             <Plus size={16} /> 新增商家
           </button>
         </header>
+
+        <GovernanceLinkPanel
+          entityType="meal_vendor"
+          entityId={selectedVendorId || "meal-vendor-workspace"}
+          title={selectedVendor ? `學餐商家營運：${selectedVendor.name}` : "學餐商家營運工作區"}
+          href="/meal/vendor"
+        />
 
         <div className="grid gap-5 lg:grid-cols-[320px_1fr]">
           <aside className="rounded-lg p-3" style={{ border: "1px solid var(--border)", background: "var(--card-bg)" }}>

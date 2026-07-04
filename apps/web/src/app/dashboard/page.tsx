@@ -24,6 +24,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useRecentItems } from "@/hooks/useRecentItems";
 import OnboardingHint from "@/components/ui/OnboardingHint";
 import { resolveNavigationProfile, type NavigationProfile } from "@/lib/navigation";
+import { riskColor, sortMattersByInsight } from "@/lib/governanceInsights";
 
 type IconProps = { size: number; "aria-hidden": boolean };
 function FallbackWidgetIcon(p: IconProps) { return <FileText {...p} />; }
@@ -327,6 +328,7 @@ export default function DashboardPage() {
     .slice()
     .sort((a, b) => b.priority_score - a.priority_score)
     .slice(0, 5);
+  const priorityMatters = sortMattersByInsight(matters).slice(0, 4);
   const urgentCount = (tasks?.items ?? []).filter((task) => task.severity === "critical").length;
   const isOperator = isAdmin || permissions.size > 0 || layoutHint !== "student";
   const dashboardContent = getDashboardContent(profile, can, canAny, isOperator);
@@ -417,9 +419,12 @@ export default function DashboardPage() {
             <div className="space-y-2">
               {Array.from({ length: 3 }).map((_, i) => <TaskSkeleton key={i} />)}
             </div>
-          ) : priorityTasks.length > 0 ? (
+          ) : priorityTasks.length > 0 || priorityMatters.length > 0 ? (
             <ul className="space-y-2">
               {priorityTasks.map((task) => <PriorityTaskRow key={task.id} task={task} />)}
+              {priorityMatters.map(({ matter, insight }) => (
+                <GovernanceMatterFocusRow key={matter.id} matter={matter} insight={insight} />
+              ))}
             </ul>
           ) : (
             <div className="dashboard-quiet-state">
@@ -478,7 +483,7 @@ export default function DashboardPage() {
               尚未有進行中的工作。建立活動或事情後，會集中出現在這裡。
             </p>
           )}
-          {matters.map((matter) => (
+          {priorityMatters.map(({ matter, insight }) => (
             <Link
               key={matter.id}
               href={`/governance/${matter.id}`}
@@ -490,6 +495,9 @@ export default function DashboardPage() {
                   <p className="truncate text-sm font-semibold">{matter.title}</p>
                   <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
                     {matter.matter_type === "activity" ? "活動" : "事情"} · {matter.open_task_count} 待辦 · {matter.link_count} 關聯
+                  </p>
+                  <p className="mt-1 truncate text-[11px]" style={{ color: riskColor(insight.risk_level) }}>
+                    {insight.recommended_action.label}
                   </p>
                 </div>
                 <ChevronRight size={14} aria-hidden={true} style={{ color: "var(--text-muted)" }} />
@@ -568,6 +576,51 @@ export default function DashboardPage() {
         </p>
       )}
     </div>
+  );
+}
+
+function GovernanceMatterFocusRow({
+  matter,
+  insight,
+}: {
+  matter: MatterListItem;
+  insight: ReturnType<typeof sortMattersByInsight>[number]["insight"];
+}) {
+  return (
+    <li>
+      <Link
+        href={`/governance/${matter.id}`}
+        className="dashboard-task-row"
+        style={{ borderLeftColor: riskColor(insight.risk_level) }}
+      >
+        <span
+          className="dashboard-task-icon"
+          style={{
+            color: riskColor(insight.risk_level),
+            background: "var(--bg-hover)",
+            borderColor: "var(--border)",
+          }}
+          aria-hidden="true"
+        >
+          <Layers3 size={16} aria-hidden={true} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="dashboard-task-title">{matter.title}</span>
+          <span className="dashboard-task-meta">
+            <span>治理</span>
+            <span>{matter.open_task_count} 待辦</span>
+            <span>{matter.link_count} 關聯</span>
+          </span>
+          <span className="dashboard-task-recommend">
+            {insight.recommended_action.label}：{insight.recommended_action.reason}
+          </span>
+        </span>
+        <span className="dashboard-task-due" style={{ color: riskColor(insight.risk_level) }}>
+          {insight.risk_label}
+        </span>
+        <ChevronRight size={16} aria-hidden={true} style={{ color: "var(--text-disabled)" }} />
+      </Link>
+    </li>
   );
 }
 

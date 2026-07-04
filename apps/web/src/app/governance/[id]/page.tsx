@@ -17,6 +17,7 @@ import {
   Play,
   Plus,
   ScrollText,
+  ShieldAlert,
   Sparkles,
   Trash2,
   UserRoundCog,
@@ -40,6 +41,13 @@ import type {
   TimelineEventOut,
   WorkItemOut,
 } from "@/lib/types";
+import {
+  buildCaseInsight,
+  buildDecisionInsight,
+  buildMatterInsight,
+  buildPlanningInsight,
+  riskColor,
+} from "@/lib/governanceInsights";
 
 const CASE_COLUMNS: Array<{ key: GovernanceCaseStatus; label: string }> = [
   { key: "todo", label: "待處理" },
@@ -156,6 +164,10 @@ export default function GovernanceMatterPage() {
 
   const openTasks = useMemo(() => tasks.filter((task) => task.status === "open"), [tasks]);
   const completedTasks = useMemo(() => tasks.filter((task) => task.status === "done"), [tasks]);
+  const insight = useMemo(() => (matter ? buildMatterInsight(matter, tasks) : null), [matter, tasks]);
+  const activeCases = useMemo(() => (matter ? buildCaseInsight(matter.cases) : []), [matter]);
+  const pendingDecisions = useMemo(() => (matter ? buildDecisionInsight(matter.decisions) : []), [matter]);
+  const activePlans = useMemo(() => (matter ? buildPlanningInsight(matter.planning_documents) : []), [matter]);
   const linkedActivityId = useMemo(() => {
     if (!matter || matter.matter_type !== "activity") return null;
     const relation = matter.links.find((link) => link.target_type === "activity" && link.target_id);
@@ -484,8 +496,49 @@ export default function GovernanceMatterPage() {
             <Link href="/governance" className="text-xs font-medium" style={{ color: "var(--primary)", textDecoration: "none" }}>
               工作中心
             </Link>
-            <h1 className="mt-2 text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>{matter.title}</h1>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>{matter.title}</h1>
+              {insight && (
+                <span
+                  className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-semibold"
+                  style={{ background: "var(--bg-hover)", color: riskColor(insight.risk_level), border: "1px solid var(--border)" }}
+                >
+                  <ShieldAlert size={12} aria-hidden={true} />
+                  {insight.risk_label}
+                </span>
+              )}
+            </div>
             {matter.description && <p className="mt-2 max-w-3xl text-sm" style={{ color: "var(--text-muted)" }}>{matter.description}</p>}
+            {insight && (
+              <div className="mt-4 rounded-lg p-3" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
+                <p className="text-xs font-semibold" style={{ color: "var(--primary)" }}>推薦下一步</p>
+                <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                      {insight.recommended_action.label}
+                    </p>
+                    <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                      {insight.recommended_action.reason}
+                    </p>
+                  </div>
+                  {insight.recommended_action.anchor && (
+                    <Link href={`#${insight.recommended_action.anchor}`} className="btn btn-primary flex-shrink-0">
+                      前往處理
+                      <ChevronDown size={13} aria-hidden={true} />
+                    </Link>
+                  )}
+                </div>
+                {(insight.context_badges.length > 0 || insight.reasons.length > 0) && (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {[...insight.context_badges, ...insight.reasons].slice(0, 5).map((item) => (
+                      <span key={item} className="rounded px-1.5 py-0.5 text-[10px]" style={{ color: "var(--text-secondary)", background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:min-w-[440px]">
             <TopStat label="狀態" value={STATUS_LABEL[matter.status] ?? matter.status} />
@@ -567,11 +620,18 @@ export default function GovernanceMatterPage() {
         )}
       </section>
 
+      <section className="grid gap-3 md:grid-cols-4" aria-label="執行佇列摘要">
+        <QueueSummary href="#tasks" label="開放任務" value={openTasks.length} tone={openTasks.length === 0 ? "warning" : "normal"} />
+        <QueueSummary href="#cases" label="進行案件" value={activeCases.length} tone={activeCases.length === 0 ? "warning" : "normal"} />
+        <QueueSummary href="#decisions" label="待執行決議" value={pendingDecisions.length} tone={pendingDecisions.length > 0 ? "warning" : "normal"} />
+        <QueueSummary href="#plans" label="企劃文件" value={activePlans.length} tone={activePlans.some((plan) => plan.status === "revision_requested") ? "warning" : "normal"} />
+      </section>
+
       <GovernanceDiscordPanel matterId={matterId} initial={matter.discord_workspace} />
 
       <section className="grid gap-5 xl:grid-cols-[1.5fr_1fr]">
         <div className="space-y-5">
-          <Panel id="cases" icon={FolderKanban} title="案件看板" defaultOpen>
+          <Panel id="cases" icon={FolderKanban} title="執行佇列：案件看板" defaultOpen={insight?.recommended_action.anchor === "cases" || activeCases.length > 0}>
             <form onSubmit={addCase} className="mb-3 flex gap-2">
               <input value={caseTitle} onChange={(event) => setCaseTitle(event.target.value)} className="input min-w-0 flex-1" placeholder="新增案件" />
               <button type="submit" className="btn btn-secondary"><Plus size={13} aria-hidden={true} />新增</button>
@@ -597,7 +657,7 @@ export default function GovernanceMatterPage() {
             </div>
           </Panel>
 
-          <Panel id="links" icon={GitBranch} title="關聯資源">
+          <Panel id="links" icon={GitBranch} title="脈絡資料：關聯資源" defaultOpen={insight?.recommended_action.anchor === "create-artifact" || matter.links.length > 0}>
             <form onSubmit={addLink} className="mb-3 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
               <input value={linkTitle} onChange={(event) => setLinkTitle(event.target.value)} className="input" placeholder="資源名稱" />
               <input value={linkHref} onChange={(event) => setLinkHref(event.target.value)} className="input" placeholder="連結網址，可留空" />
@@ -611,7 +671,7 @@ export default function GovernanceMatterPage() {
             </div>
           </Panel>
 
-          <Panel id="decisions" icon={ScrollText} title="決議追蹤">
+          <Panel id="decisions" icon={ScrollText} title="執行佇列：決議追蹤" defaultOpen={insight?.recommended_action.anchor === "decisions" || pendingDecisions.length > 0}>
             <form onSubmit={addDecision} className="mb-3 grid gap-2 md:grid-cols-[1fr_1.4fr_auto]">
               <input value={decisionTitle} onChange={(event) => setDecisionTitle(event.target.value)} className="input" placeholder="決議標題" />
               <input value={decisionContent} onChange={(event) => setDecisionContent(event.target.value)} className="input" placeholder="決議內容" />
@@ -647,7 +707,7 @@ export default function GovernanceMatterPage() {
             </div>
           </Panel>
 
-          <Panel id="plans" icon={FilePlus2} title="企劃書與版本">
+          <Panel id="plans" icon={FilePlus2} title="脈絡資料：企劃書與版本" defaultOpen={insight?.recommended_action.anchor === "plans" || activePlans.length > 0}>
             <form onSubmit={addPlanningDocument} className="mb-3 grid gap-2 md:grid-cols-[1fr_1.4fr_auto]">
               <input value={planTitle} onChange={(event) => setPlanTitle(event.target.value)} className="input" placeholder="企劃書名稱" />
               <input value={planContent} onChange={(event) => setPlanContent(event.target.value)} className="input" placeholder="草稿內容摘要" />
@@ -665,7 +725,7 @@ export default function GovernanceMatterPage() {
         </div>
 
         <div className="space-y-5">
-          <Panel id="tasks" icon={CheckSquare} title="任務" defaultOpen>
+          <Panel id="tasks" icon={CheckSquare} title="執行佇列：任務" defaultOpen>
             <form onSubmit={addTask} className="mb-3 flex gap-2">
               <input value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} className="input min-w-0 flex-1" placeholder="新增任務" />
               <button type="submit" className="btn btn-secondary"><Plus size={13} aria-hidden={true} />新增</button>
@@ -682,7 +742,7 @@ export default function GovernanceMatterPage() {
             </div>
           </Panel>
 
-          <Panel id="timeline" icon={Clock} title="行政時間軸" defaultOpen>
+          <Panel id="timeline" icon={Clock} title="脈絡資料：行政時間軸" defaultOpen={insight?.recommended_action.anchor === "timeline" || matter.events.length > 0}>
             <form onSubmit={addNote} className="mb-3 flex gap-2">
               <input value={note} onChange={(event) => setNote(event.target.value)} className="input min-w-0 flex-1" placeholder="新增進度紀錄" />
               <button type="submit" className="btn btn-secondary"><Plus size={13} aria-hidden={true} />新增</button>
@@ -695,7 +755,7 @@ export default function GovernanceMatterPage() {
             </div>
           </Panel>
 
-          <Panel id="roles" icon={UserRoundCog} title="人員與組織架構">
+          <Panel id="roles" icon={UserRoundCog} title="低頻設定：人員與組織架構">
             <form onSubmit={addRoleAssignment} className="mb-3 grid gap-2">
               <input value={roleName} onChange={(event) => setRoleName(event.target.value)} className="input" placeholder="職務，例如：總召、場務組長" />
               <input value={unitName} onChange={(event) => setUnitName(event.target.value)} className="input" placeholder="組別，可留空" />
@@ -714,7 +774,7 @@ export default function GovernanceMatterPage() {
             </div>
           </Panel>
 
-          <Panel id="workflow" icon={Workflow} title="流程模板">
+          <Panel id="workflow" icon={Workflow} title="低頻設定：流程模板">
             <form onSubmit={addWorkflowTemplate} className="mb-3 grid gap-2">
               <input value={templateName} onChange={(event) => setTemplateName(event.target.value)} className="input" placeholder="模板名稱，例如：活動流程" />
               <button type="submit" className="btn btn-secondary"><Plus size={13} aria-hidden={true} />新增模板</button>
@@ -730,7 +790,7 @@ export default function GovernanceMatterPage() {
             </div>
           </Panel>
 
-          <Panel id="automation" icon={Zap} title="自動化規則">
+          <Panel id="automation" icon={Zap} title="低頻設定：自動化規則">
             <form onSubmit={addAutomationRule} className="mb-3 grid gap-2">
               <input value={automationName} onChange={(event) => setAutomationName(event.target.value)} className="input" placeholder="規則名稱，例如：活動結束後建立問卷" />
               <label className="space-y-1">
@@ -783,6 +843,31 @@ export default function GovernanceMatterPage() {
         }}
       />
     </div>
+  );
+}
+
+function QueueSummary({
+  href,
+  label,
+  value,
+  tone,
+}: {
+  href: string;
+  label: string;
+  value: number;
+  tone: "normal" | "warning";
+}) {
+  return (
+    <Link
+      href={href}
+      className="rounded-lg p-3 transition-colors hover:bg-[var(--bg-hover)]"
+      style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", textDecoration: "none" }}
+    >
+      <p className="text-xs" style={{ color: "var(--text-muted)" }}>{label}</p>
+      <p className="mt-1 text-xl font-semibold" style={{ color: tone === "warning" ? "var(--warning)" : "var(--text-primary)" }}>
+        {value}
+      </p>
+    </Link>
   );
 }
 

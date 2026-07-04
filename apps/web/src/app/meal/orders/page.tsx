@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
+import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 import { mealApi, apiErrorMessage } from "@/lib/api";
 import type { MealOrderListItem, MealOrderOut, MealOrderStatus, MenuScheduleListItem, MealVendorOut } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -304,6 +305,13 @@ function VendorDashboard() {
 
   return (
     <div className="space-y-4">
+      <GovernanceLinkPanel
+        entityType="meal_order"
+        entityId={selectedSchedule || selectedVendor || "meal-orders-workspace"}
+        title={selectedScheduleInfo ? `學餐訂單：${selectedScheduleInfo.date}` : "學餐訂單工作區"}
+        href="/meal/orders"
+      />
+
       {/* 篩選器 */}
       <div className="card p-4 space-y-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
