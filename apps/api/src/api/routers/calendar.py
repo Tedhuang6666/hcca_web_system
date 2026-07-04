@@ -410,6 +410,16 @@ class GoogleCalendarStatusOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class GoogleCalendarItem(BaseModel):
+    id: str
+    summary: str
+    primary: bool
+
+
+class GoogleConfigUpdate(BaseModel):
+    google_calendar_id: str
+
+
 def _require_calendar_admin(user: User, codes: frozenset[str]) -> None:
     if not user.is_superuser and PermissionCode.CALENDAR_ADMIN not in codes:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="需要 calendar:admin 權限")
@@ -597,3 +607,64 @@ async def google_calendar_trigger_pull(
     await _get_google_config_or_404(session, org_id)
     pull_all_orgs.delay()
     return {"status": "queued"}
+
+
+@router.get(
+    "/google/calendars/{org_id}",
+    response_model=list[GoogleCalendarItem],
+    summary="列出 Google 帳戶可用日曆",
+)
+async def list_google_calendars(
+    org_id: uuid.UUID,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> list[GoogleCalendarItem]:
+    from api.services.google_calendar_service import GoogleCalendarAuthError, list_calendars
+
+    codes = await _permission_codes(session, current_user)
+    _require_calendar_admin(current_user, codes)
+    config = await _get_google_config_or_404(session, org_id)
+
+    try:
+        items = await list_calendars(session, config)
+    except GoogleCalendarAuthError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"無法取得日曆清單：{exc}")
+
+    return [GoogleCalendarItem(**item) for item in items]
+
+
+@router.patch(
+    "/google/config/{org_id}",
+    response_model=GoogleCalendarStatusOut,
+    summary="更新 Google Calendar 同步設定（選定日曆）",
+)
+async def update_google_config(
+    org_id: uuid.UUID,
+    body: GoogleConfigUpdate,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> GoogleCalendarStatusOut:
+    codes = await _permission_codes(session, current_user)
+    _require_calendar_admin(current_user, codes)
+    config = await _get_google_config_or_404(session, org_id)
+
+    if config.google_calendar_id != body.google_calendar_id:
+        config.google_calendar_id = body.google_calendar_id
+        # 切換日曆後清空 syncToken，下次 pull 執行 full resync
+        config.sync_token = None
+        config.sync_token_updated_at = None
+
+    await session.commit()
+    await session.refresh(config)
+
+    return GoogleCalendarStatusOut(
+        is_connected=config.is_connected,
+        authorized_email=config.authorized_email,
+        google_calendar_id=config.google_calendar_id,
+        sync_enabled=config.sync_enabled,
+        last_pull_at=config.last_pull_at,
+        last_error=config.last_error,
+        authorized_at=config.authorized_at,
+    )
