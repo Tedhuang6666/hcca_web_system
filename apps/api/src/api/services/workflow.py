@@ -10,6 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.models.council_proposal import CouncilProposal, CouncilProposalStatus
+from api.models.governance import (
+    EntityRelation,
+    GovernanceEventType,
+    Matter,
+    MatterResource,
+    MatterResourceType,
+    MatterType,
+)
 from api.models.judicial_petition import JudicialPetition, JudicialPetitionStatus
 from api.models.publication import PublicationCampaign, PublicationStatus
 from api.models.workflow import (
@@ -19,6 +27,7 @@ from api.models.workflow import (
     WorkflowLink,
 )
 from api.schemas.workflow import WorkflowLinkCreate
+from api.services.governance._events import record_event as record_matter_event
 
 _COMPLETED_STATUSES = {"passed", "rejected", "withdrawn", "decided", "dismissed", "published"}
 
@@ -118,6 +127,12 @@ async def ensure_instance(
         existing.activity_id = activity_id
         existing.meta = meta or existing.meta or {}
         await db.flush()
+        await _ensure_matter_for_instance(
+            db,
+            existing,
+            actor_id=created_by_id,
+            actor_email=actor_email,
+        )
         return existing
 
     instance = WorkflowInstance(
@@ -142,6 +157,12 @@ async def ensure_instance(
         actor_id=created_by_id,
         actor_email=actor_email,
         payload={"source_type": source_type, "source_id": str(source_id)},
+    )
+    await _ensure_matter_for_instance(
+        db,
+        instance,
+        actor_id=created_by_id,
+        actor_email=actor_email,
     )
     return instance
 
@@ -283,7 +304,239 @@ async def add_link(
             "title": link.title,
         },
     )
+    matter = await _ensure_matter_for_instance(
+        db,
+        instance,
+        actor_id=created_by_id,
+    )
+    await _sync_workflow_link_to_matter(db, matter=matter, link=link, actor_id=created_by_id)
     return link
+
+
+async def _ensure_matter_for_instance(
+    db: AsyncSession,
+    instance: WorkflowInstance,
+    *,
+    actor_id: uuid.UUID | None = None,
+    actor_email: str | None = None,
+) -> Matter:
+    existing = await db.scalar(
+        select(Matter)
+        .join(EntityRelation, EntityRelation.matter_id == Matter.id)
+        .where(
+            EntityRelation.target_type == "workflow_instance",
+            EntityRelation.target_id == instance.id,
+            EntityRelation.relation == "source",
+            Matter.is_active.is_(True),
+        )
+    )
+    if existing is not None:
+        existing.title = instance.title
+        existing.status = "completed" if instance.completed_at else "active"
+        existing.org_id = instance.org_id
+        await db.flush()
+        return existing
+    matter = Matter(
+        title=instance.title,
+        matter_type=_matter_type_for_workflow(instance),
+        description=instance.meta.get("summary") if isinstance(instance.meta, dict) else None,
+        org_id=instance.org_id,
+        status="completed" if instance.completed_at else "active",
+        created_by_id=actor_id or instance.created_by_id,
+        meta={
+            "source_type": "workflow_instance",
+            "source_id": str(instance.id),
+            "workflow_type": instance.workflow_type,
+            "workflow_source_type": instance.source_type,
+            "workflow_source_id": str(instance.source_id),
+        },
+    )
+    db.add(matter)
+    await db.flush()
+    db.add(
+        EntityRelation(
+            matter_id=matter.id,
+            source_type="matter",
+            source_id=matter.id,
+            target_type="workflow_instance",
+            target_id=instance.id,
+            relation="source",
+            title=instance.title,
+            href=f"/workflows/instances/{instance.id}",
+            created_by_id=actor_id,
+            meta={"synced_from": "workflow"},
+        )
+    )
+    db.add(
+        EntityRelation(
+            matter_id=matter.id,
+            source_type="workflow_instance",
+            source_id=instance.id,
+            target_type=instance.source_type,
+            target_id=instance.source_id,
+            relation="source_object",
+            title=instance.title,
+            href=_href_for_source(instance.source_type, instance.source_id),
+            created_by_id=actor_id,
+            meta={"synced_from": "workflow"},
+        )
+    )
+    await record_matter_event(
+        db,
+        matter_id=matter.id,
+        event_type=GovernanceEventType.CREATED,
+        title=f"建立工作流事項：{instance.title}",
+        actor_id=actor_id,
+        actor_email=actor_email,
+        payload={"workflow_instance_id": str(instance.id)},
+    )
+    await db.flush()
+    return matter
+
+
+def _matter_type_for_workflow(instance: WorkflowInstance) -> str:
+    if instance.source_type == "activity":
+        return MatterType.ACTIVITY
+    if instance.source_type == "meeting":
+        return MatterType.MEETING
+    if instance.source_type == "judicial_petition":
+        return MatterType.PETITION
+    if instance.source_type == "council_proposal":
+        return MatterType.POLICY
+    return MatterType.ADMINISTRATION
+
+
+def _href_for_source(source_type: str, source_id: uuid.UUID) -> str | None:
+    hrefs = {
+        "activity": f"/activities/{source_id}",
+        "meeting": f"/meetings/{source_id}",
+        "judicial_petition": f"/judicial-petitions/{source_id}",
+        "council_proposal": f"/council-proposals/{source_id}",
+    }
+    return hrefs.get(source_type)
+
+
+async def _sync_workflow_link_to_matter(
+    db: AsyncSession,
+    *,
+    matter: Matter,
+    link: WorkflowLink,
+    actor_id: uuid.UUID | None,
+) -> None:
+    if _is_external_resource(link):
+        await _sync_workflow_resource(db, matter=matter, link=link, actor_id=actor_id)
+        return
+    if link.target_id is None:
+        return
+    existing = await db.scalar(
+        select(EntityRelation).where(
+            EntityRelation.matter_id == matter.id,
+            EntityRelation.target_type == link.target_type,
+            EntityRelation.target_id == link.target_id,
+            EntityRelation.relation == link.relation,
+        )
+    )
+    if existing is not None:
+        return
+    db.add(
+        EntityRelation(
+            matter_id=matter.id,
+            source_type="workflow_instance",
+            source_id=link.instance_id,
+            target_type=link.target_type,
+            target_id=link.target_id,
+            relation=link.relation,
+            title=link.title,
+            href=link.href,
+            note=link.note,
+            meta={**(link.meta or {}), "workflow_link_id": str(link.id)},
+            created_by_id=actor_id,
+        )
+    )
+    await record_matter_event(
+        db,
+        matter_id=matter.id,
+        event_type=GovernanceEventType.LINKED,
+        title=f"新增工作流關聯：{link.title}",
+        actor_id=actor_id,
+        payload={"workflow_link_id": str(link.id), "target_type": link.target_type},
+    )
+
+
+def _is_external_resource(link: WorkflowLink) -> bool:
+    if not link.href:
+        return False
+    resource_types = {
+        "external",
+        "external_url",
+        "google_meet",
+        "google_drive",
+        "discord_text",
+        "discord_voice",
+        "drive",
+        "meet",
+        "url",
+    }
+    return link.target_id is None or link.target_type in resource_types
+
+
+async def _sync_workflow_resource(
+    db: AsyncSession,
+    *,
+    matter: Matter,
+    link: WorkflowLink,
+    actor_id: uuid.UUID | None,
+) -> None:
+    if not link.href:
+        return
+    existing = await db.scalar(
+        select(MatterResource).where(
+            MatterResource.matter_id == matter.id,
+            MatterResource.url == link.href,
+            MatterResource.is_active.is_(True),
+        )
+    )
+    if existing is not None:
+        return
+    resource = MatterResource(
+        matter_id=matter.id,
+        resource_type=_resource_type_for_link(link),
+        title=link.title,
+        url=link.href,
+        provider=_provider_for_link(link),
+        description=link.note,
+        meta={**(link.meta or {}), "workflow_link_id": str(link.id)},
+        created_by_id=actor_id,
+    )
+    db.add(resource)
+    await record_matter_event(
+        db,
+        matter_id=matter.id,
+        event_type=GovernanceEventType.LINKED,
+        title=f"新增工作流資源：{link.title}",
+        actor_id=actor_id,
+        payload={"workflow_link_id": str(link.id), "resource_type": resource.resource_type},
+    )
+
+
+def _resource_type_for_link(link: WorkflowLink) -> str:
+    if link.target_type in {"google_meet", "meet"}:
+        return MatterResourceType.GOOGLE_MEET
+    if link.target_type in {"google_drive", "drive"}:
+        return MatterResourceType.GOOGLE_DRIVE
+    if link.target_type == "discord_voice":
+        return MatterResourceType.DISCORD_VOICE
+    if link.target_type == "discord_text":
+        return MatterResourceType.DISCORD_TEXT
+    return MatterResourceType.EXTERNAL_URL
+
+
+def _provider_for_link(link: WorkflowLink) -> str | None:
+    if link.target_type.startswith("google") or link.target_type in {"meet", "drive"}:
+        return "google"
+    if link.target_type.startswith("discord"):
+        return "discord"
+    return None
 
 
 async def timeline(
