@@ -62,13 +62,6 @@ export const NAV_ITEMS: NavItem[] = [
     label: "物資管理",
     perm: "inventory:*",
   },
-  {
-    id: "shopOrders",
-    href: "/shop/class-orders",
-    iconKey: "shopOrders",
-    label: "班級商品工作台",
-    perm: "class:shop_collect",
-  },
   { id: "partnerMap", href: "/partner-map", iconKey: "partnerMap", label: "特約地圖" },
   { id: "surveys", href: "/surveys", iconKey: "survey", label: "問卷專區" },
   { id: "petitions", href: "/petitions", iconKey: "petition", label: "陳情中心" },
@@ -277,7 +270,7 @@ export const NAV_DEF: NavEntry[] = [
   {
     id: "finance",
     heading: "財務與採購",
-    items: byIds(["receivables", "shop", "shopOrders", "meal", "inventoryAdmin"]),
+    items: byIds(["receivables", "shop", "meal", "inventoryAdmin"]),
   },
   {
     id: "records",
@@ -335,7 +328,7 @@ export const NAV_DEF_TEACHER: NavEntry[] = [
   {
     id: "teacher-services",
     heading: "常用模組",
-    items: byIds(["surveys", "examPapers", "shopOrders", "meal", "settings"]),
+    items: byIds(["surveys", "examPapers", "shop", "meal", "settings"]),
   },
 ];
 
@@ -394,7 +387,6 @@ export const DEFAULT_MOBILE_ORDER = [
   "meetings",
   "receivables",
   "shop",
-  "shopOrders",
   "meal",
   "surveys",
   "petitions",
@@ -431,12 +423,12 @@ export const NAVIGATION_PROFILES: Record<NavigationProfile, NavigationProfileCon
   teacher: {
     id: "teacher",
     label: "教職員視角",
-    description: "保留教職員常用的通知、行事曆、問卷、題庫、班級收單與學餐入口。",
+    description: "保留教職員常用的通知、行事曆、問卷、題庫、商品與學餐入口。",
     audience: "導師、行政老師、協助班級或教學服務的教職員",
     matchAnyPrefixes: ["class:", "exam:"],
     matchAnyPermissions: ["survey:review", "survey:manage"],
     desktopSections: NAV_DEF_TEACHER,
-    mobileOrder: ["dashboard", "tasks", "surveys", "examPapers", "shopOrders", "meal", "settings"],
+    mobileOrder: ["dashboard", "tasks", "surveys", "examPapers", "shop", "meal", "settings"],
   },
   vendor: {
     id: "vendor",
