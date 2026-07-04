@@ -63,7 +63,7 @@ export const FE_MODULES: Record<ModuleId, FeModuleSpec> = {
   shop: {
     label: "商品訂購",
     routePrefixes: ["/shop"],
-    navIds: ["shop", "shopOrders", "shopAdmin"],
+    navIds: ["shop", "shopAdmin"],
   },
   meal: { label: "學餐訂購", routePrefixes: ["/meal"], navIds: ["meal", "mealVendor"] },
   surveys: { label: "問卷系統", routePrefixes: ["/surveys"], navIds: ["surveys"] },
