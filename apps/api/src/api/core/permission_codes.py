@@ -151,6 +151,10 @@ class PermissionCode(StrEnum):
     LOAN_CHECKOUT = "loan:checkout"
     LOAN_VIEW_ALL = "loan:view_all"
 
+    INVENTORY_MANAGE = "inventory:manage"
+    INVENTORY_STOCK = "inventory:stock"
+    INVENTORY_VIEW = "inventory:view"
+
     POLICY_ADMIN = "policy:admin"
     API_KEY_ADMIN = "api_key:admin"
     WEBHOOK_ADMIN = "webhook:admin"
@@ -885,6 +889,24 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "code": PermissionCode.LOAN_VIEW_ALL,
         "label": "查看所有借用紀錄",
         "desc": "跨組織查看所有借用紀錄（唯讀）",
+    },
+    {
+        "group": "物資管理",
+        "code": PermissionCode.INVENTORY_MANAGE,
+        "label": "管理物資",
+        "desc": "建立/修改品項與類別、審核採購申請、查看所有庫存",
+    },
+    {
+        "group": "物資管理",
+        "code": PermissionCode.INVENTORY_STOCK,
+        "label": "執行進出庫",
+        "desc": "進行庫存調整（入庫/出庫/盤點）、提交採購申請",
+    },
+    {
+        "group": "物資管理",
+        "code": PermissionCode.INVENTORY_VIEW,
+        "label": "查看庫存",
+        "desc": "唯讀查看物資品項、庫存數量與異動紀錄",
     },
     {
         "group": "企業級治理",
