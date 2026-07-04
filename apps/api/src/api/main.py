@@ -75,6 +75,7 @@ from api.routers import (
     feature_flags,
     governance,
     impersonation,
+    inventory,
     judicial_petitions,
     line_webhook,
     loans,
@@ -438,6 +439,7 @@ def create_app() -> FastAPI:
     app.include_router(dashboard.router)
     app.include_router(tasks.router)
     app.include_router(loans.router)
+    app.include_router(inventory.router)
     app.include_router(work_items.router)
     app.include_router(governance.router)
     app.include_router(line_webhook.router)

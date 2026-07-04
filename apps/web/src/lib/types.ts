@@ -4556,3 +4556,156 @@ export interface LoanRecordUpdate {
   notes?: string;
   status?: LoanRecordStatus;
 }
+
+// ── 物資管理系統 ──────────────────────────────────────────────────────────────
+
+export type InventoryItemType = "consumable" | "equipment" | "loanable";
+export type InventoryTxnType = "initial" | "in" | "out" | "adjustment" | "damaged" | "lost";
+export type InventoryProcurementStatus = "draft" | "submitted" | "approved" | "rejected" | "received";
+
+export interface InventoryCategoryOut {
+  id: string;
+  org_id: string;
+  name: string;
+  color: string | null;
+  sort_order: number;
+  is_active: boolean;
+}
+
+export interface InventoryCategoryCreate {
+  name: string;
+  color?: string;
+  sort_order?: number;
+  org_id?: string;
+}
+
+export interface InventoryCategoryUpdate {
+  name?: string;
+  color?: string;
+  sort_order?: number;
+  is_active?: boolean;
+}
+
+export interface InventoryItemOut {
+  id: string;
+  org_id: string;
+  category_id: string | null;
+  category_name: string | null;
+  name: string;
+  description: string | null;
+  unit: string;
+  item_type: InventoryItemType;
+  quantity: number;
+  low_stock_threshold: number;
+  is_low_stock: boolean;
+  location: string | null;
+  image_url: string | null;
+  is_active: boolean;
+  loan_item_id: string | null;
+  created_at: string;
+}
+
+export interface InventoryItemCreate {
+  name: string;
+  description?: string;
+  unit?: string;
+  item_type?: InventoryItemType;
+  quantity?: number;
+  low_stock_threshold?: number;
+  location?: string;
+  image_url?: string;
+  category_id?: string;
+  loan_item_id?: string;
+  org_id?: string;
+}
+
+export interface InventoryItemUpdate {
+  name?: string;
+  description?: string;
+  unit?: string;
+  item_type?: InventoryItemType;
+  low_stock_threshold?: number;
+  location?: string;
+  image_url?: string;
+  category_id?: string;
+  loan_item_id?: string;
+  is_active?: boolean;
+}
+
+export interface InventoryItemAdjust {
+  txn_type: InventoryTxnType;
+  quantity: number;
+  notes?: string;
+}
+
+export interface InventoryTransactionOut {
+  id: string;
+  item_id: string;
+  item_name: string;
+  txn_type: InventoryTxnType;
+  quantity: number;
+  quantity_before: number;
+  quantity_after: number;
+  notes: string | null;
+  created_by_name: string | null;
+  created_at: string;
+}
+
+export interface InventoryProcurementItemOut {
+  id: string;
+  item_id: string | null;
+  item_name: string;
+  item_unit: string;
+  quantity_requested: number;
+  quantity_received: number;
+  estimated_unit_price: number | null;
+  notes: string | null;
+}
+
+export interface InventoryProcurementOut {
+  id: string;
+  org_id: string;
+  title: string;
+  status: InventoryProcurementStatus;
+  estimated_amount: number | null;
+  requester_id: string;
+  requester_name: string;
+  reviewer_id: string | null;
+  reviewer_name: string | null;
+  reviewed_at: string | null;
+  requester_notes: string | null;
+  reviewer_notes: string | null;
+  created_at: string;
+  line_items: InventoryProcurementItemOut[];
+}
+
+export interface InventoryProcurementItemIn {
+  item_id?: string;
+  item_name: string;
+  item_unit?: string;
+  quantity_requested: number;
+  estimated_unit_price?: number;
+  notes?: string;
+}
+
+export interface InventoryProcurementCreate {
+  title: string;
+  requester_notes?: string;
+  estimated_amount?: number;
+  line_items?: InventoryProcurementItemIn[];
+  org_id?: string;
+}
+
+export interface InventoryProcurementUpdate {
+  title?: string;
+  requester_notes?: string;
+  estimated_amount?: number;
+  line_items?: InventoryProcurementItemIn[];
+}
+
+export interface InventoryDashboard {
+  total_items: number;
+  low_stock_count: number;
+  pending_procurement_count: number;
+  monthly_transaction_count: number;
+}

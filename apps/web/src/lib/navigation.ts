@@ -54,6 +54,13 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "meal", href: "/meal", iconKey: "meal", label: "學餐訂購" },
   { id: "shop", href: "/shop", iconKey: "shop", label: "商品訂購" },
   {
+    id: "inventoryAdmin",
+    href: "/admin/inventory",
+    iconKey: "inventory",
+    label: "物資管理",
+    perm: "inventory:*",
+  },
+  {
     id: "shopOrders",
     href: "/shop/class-orders",
     iconKey: "shopOrders",
@@ -274,6 +281,7 @@ export const NAV_DEF: NavEntry[] = [
       "petitions",
       "meal",
       "shop",
+      "inventoryAdmin",
       "shopOrders",
       "partnerMap",
       "examPapers",

@@ -318,6 +318,16 @@ from api.models.webhook import (  # noqa: F401
     WebhookDelivery,
     WebhookSubscription,
 )
+from api.models.inventory import (  # noqa: F401
+    InventoryCategory,
+    InventoryItem,
+    InventoryItemType,
+    InventoryProcurement,
+    InventoryProcurementItem,
+    InventoryProcurementStatus,
+    InventoryTransaction,
+    InventoryTxnType,
+)
 from api.models.loan import (  # noqa: F401
     LoanItemCategory,
     LoanRecord,
