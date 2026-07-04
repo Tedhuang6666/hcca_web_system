@@ -97,6 +97,7 @@ celery_app.conf.update(
         Queue("backup"),
         Queue("documents"),
         Queue("recovery"),
+        Queue("gcal"),
     ),
     task_routes={
         "api.services.mail.*": {"queue": "email"},
@@ -105,11 +106,13 @@ celery_app.conf.update(
         "api.services.meal_tasks.*": {"queue": "meal"},
         "api.services.backup_tasks.*": {"queue": "backup"},
         "api.services.recovery_tasks.*": {"queue": "recovery"},
+        "api.services.google_calendar_tasks.*": {"queue": "gcal"},
     },
 )
 
 # ── Celery Beat 定時任務排程 ──────────────────────────────────────────────────
 celery_app.conf.include = list(celery_app.conf.include or []) + [
+    "api.services.google_calendar_tasks",
     "api.services.outbox_tasks",
     "api.services.regulation_tasks",
     "api.services.email_tasks",
@@ -134,6 +137,12 @@ celery_app.conf.include = list(celery_app.conf.include or []) + [
 ]
 
 celery_app.conf.beat_schedule = {
+    # 每 5 分鐘從 Google Calendar 增量拉取更新（雙向同步）
+    "pull-google-calendar-every-5min": {
+        "task": "api.services.google_calendar_tasks.pull_all_orgs",
+        "schedule": 300.0,
+        "options": {"soft_time_limit": 240, "time_limit": 300, "queue": "gcal"},
+    },
     # 每 30 秒掃 outbox pending 事件並處理
     "process-outbox-events-every-30s": {
         "task": "api.services.outbox_tasks.process_outbox",

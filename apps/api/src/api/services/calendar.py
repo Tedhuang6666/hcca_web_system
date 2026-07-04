@@ -43,6 +43,45 @@ FORMAL_MEETING_LOCKED_STATUSES = {
 }
 
 
+async def _trigger_google_push(
+    session: AsyncSession,
+    event: CalendarEvent,
+    operation: str,
+) -> None:
+    """若 org 已連結 Google Calendar 且事件符合同步條件，觸發 Celery push task。
+
+    條件：visibility != PRIVATE、非投影事件（source_module 為 None）、org 有啟用設定。
+    吃掉所有例外，確保 Google 推送失敗不影響主流程。
+    """
+    if event.visibility == CalendarVisibility.PRIVATE:
+        return
+    if event.source_module:
+        return
+    if event.org_id is None:
+        return
+    try:
+        from sqlalchemy import select
+
+        from api.models.google_calendar import OrgGoogleCalendarConfig
+        from api.services.google_calendar_tasks import push_event as push_task
+
+        config_exists = await session.scalar(
+            select(OrgGoogleCalendarConfig.id).where(
+                OrgGoogleCalendarConfig.org_id == event.org_id,
+                OrgGoogleCalendarConfig.is_active.is_(True),
+                OrgGoogleCalendarConfig.sync_enabled.is_(True),
+                OrgGoogleCalendarConfig.refresh_token_enc.isnot(None),
+            )
+        )
+        if config_exists is not None:
+            push_task.delay(str(event.id), operation, str(event.org_id))
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "觸發 Google Calendar push 失敗（event=%s operation=%s）", event.id, operation
+        )
+
+
 def _event_load_options() -> list:
     return [
         selectinload(CalendarEvent.participants).selectinload(CalendarEventParticipant.user),
@@ -194,7 +233,9 @@ async def create_event(
     await session.flush()
     await _notify_participants(session, event, actor, "calendar_event_invited")
     await _publish_social_notice(session, event, action="新增行程")
-    return await get_event(session, event.id) or event
+    result = await get_event(session, event.id) or event
+    await _trigger_google_push(session, result, "create")
+    return result
 
 
 async def update_event(
@@ -220,7 +261,9 @@ async def update_event(
         await sync_event_to_meeting(session, event, actor_id=actor.id)
     await _notify_participants(session, event, actor, "calendar_event_updated")
     await _publish_social_notice(session, event, action="更新行程")
-    return await get_event(session, event.id) or event
+    result = await get_event(session, event.id) or event
+    await _trigger_google_push(session, result, "update")
+    return result
 
 
 async def delete_event(session: AsyncSession, event: CalendarEvent) -> None:
@@ -230,6 +273,7 @@ async def delete_event(session: AsyncSession, event: CalendarEvent) -> None:
         raise ValueError("投影事件請回到來源模組刪除或停用")
     event.is_active = False
     await session.flush()
+    await _trigger_google_push(session, event, "delete")
 
 
 async def upsert_participant(

@@ -119,6 +119,7 @@ class CalendarEvent(Base, TimestampMixin):
     source_meeting_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("meetings.id", ondelete="CASCADE"), nullable=True, index=True
     )
+    google_event_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     source_module: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
     source_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), nullable=True, index=True
