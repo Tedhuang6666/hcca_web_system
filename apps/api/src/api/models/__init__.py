@@ -24,6 +24,7 @@ from api.models.api_key import ApiKey  # noqa: F401
 from api.models.audit_anchor import AuditLogAnchor  # noqa: F401
 from api.models.audit_log import AuditLog  # noqa: F401
 from api.models.backup_record import BackupKind, BackupRecord, BackupStatus  # noqa: F401
+from api.models.google_calendar import OrgGoogleCalendarConfig  # noqa: F401
 from api.models.calendar import (  # noqa: F401
     CalendarEvent,
     CalendarEventChecklistItem,
@@ -290,6 +291,7 @@ from api.models.shop import (  # noqa: F401
     ProductStatus,
     ProductVariantGroup,
     ProductVariantOption,
+    ShopOrderClose,
 )
 from api.models.site import (  # noqa: F401
     PublicLink,

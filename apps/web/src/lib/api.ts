@@ -5,7 +5,7 @@ import type {
   DocumentApprovalDelegationOut,
   ProductOut, OrderOut, OrderListItem, CartOut, OrderSummaryOut, ShopClassSummaryOut,
   ProductCategoryOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut,
-  CatalogCategoryOut,
+  CatalogCategoryOut, ShopOrderCloseOut, CloseStatusOut, OrderQuantityRow,
   ZoneOut, ZoneListItem, SeatInput, WaveInput, SeatMapOut, HoldOut, SeatBookingOut,
   SchoolClassOut, SchoolClassListItem, SchoolClassBulkActionKind, SchoolClassBulkActionOut,
   SchoolClassBulkCreate, SchoolClassBulkCreateOut,
@@ -673,6 +673,7 @@ export const shopApi = {
     is_paid?: string;
     assisted_only?: string;
     product_id?: string;
+    member_user_id?: string;
     limit?: string;
     offset?: string;
   }) => {
@@ -767,6 +768,33 @@ export const shopApi = {
   updateVariantOption: (optionId: string, body: Record<string, unknown>) =>
     patch<ProductVariantOptionOut>(`/shop/variant-options/${optionId}`, body),
   deleteVariantOption: (optionId: string) => del<void>(`/shop/variant-options/${optionId}`),
+
+  // 結單管理
+  closeCategory: (categoryId: string, body: { class_id?: string; notes?: string }) =>
+    post<ShopOrderCloseOut>(`/shop/categories/${categoryId}/close`, body),
+  reopenCategory: (categoryId: string, classId?: string) => {
+    const qs = classId ? `?class_id=${classId}` : "";
+    return del<ShopOrderCloseOut>(`/shop/categories/${categoryId}/close${qs}`);
+  },
+  getCloseStatus: (categoryIds: string[], classId?: string) => {
+    const p = new URLSearchParams();
+    categoryIds.forEach((id) => p.append("category_ids", id));
+    if (classId) p.set("class_id", classId);
+    return get<CloseStatusOut>(`/shop/close-status?${p.toString()}`);
+  },
+
+  // 班聯數量彙總
+  orderQuantities: (params?: {
+    grade?: string;
+    class_id?: string;
+    category_id?: string;
+    product_id?: string;
+    is_paid?: string;
+    status?: string;
+  }) => {
+    const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+    return get<OrderQuantityRow[]>(`/shop/orders/quantities${qs}`);
+  },
 
   // 圖片上傳
   uploadImage: async (file: File): Promise<{ url: string }> => {
@@ -3008,6 +3036,17 @@ export const calendarApi = {
     post<CalendarLinkOut>(`/calendar/events/${id}/links`, body),
   deleteLink: (id: string, linkId: string) =>
     del<void>(`/calendar/events/${id}/links/${linkId}`),
+};
+
+export const googleCalendarApi = {
+  getStatus: (orgId: string) =>
+    get<import("@/lib/types").GoogleCalendarStatusOut>(`/calendar/google/status/${orgId}`),
+  getAuthorizeUrl: (orgId: string): string =>
+    apiUrl(`/calendar/google/authorize?org_id=${orgId}`),
+  disconnect: (orgId: string) =>
+    del<void>(`/calendar/google/disconnect/${orgId}`),
+  triggerPull: (orgId: string) =>
+    post<{ status: string }>(`/calendar/google/trigger-pull/${orgId}`, {}),
 };
 
 // ── 電子郵件 ──────────────────────────────────────────────────────────────────

@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { shopApi, apiErrorMessage } from "@/lib/api";
+import { classApi, shopApi, apiErrorMessage } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
 import type { CartOut, CartItemOut } from "@/lib/types";
 
@@ -127,17 +127,49 @@ export default function CartPage() {
   const [loading, setLoading] = useState(true);
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [closedCategoryNames, setClosedCategoryNames] = useState<string[]>([]);
 
-  const load = useCallback(() => {
+  const load = useCallback(async () => {
     setLoading(true);
-    shopApi
-      .getCart()
-      .then(setCart)
-      .catch((e) => toast.error(apiErrorMessage(e, "載入失敗")))
-      .finally(() => setLoading(false));
+    try {
+      const cartData = await shopApi.getCart();
+      setCart(cartData);
+      // best-effort 結單檢查
+      if (cartData.items.length) {
+        const [catalog, schoolClass] = await Promise.all([
+          shopApi.catalog().catch(() => []),
+          classApi.myClass().catch(() => null),
+        ]);
+        if (schoolClass && catalog.length) {
+          const productCatMap = new Map<string, string>();
+          const catNameMap = new Map<string, string>();
+          for (const cat of catalog) {
+            catNameMap.set(cat.id, cat.name);
+            for (const s of cat.series)
+              for (const p of s.products)
+                productCatMap.set(p.id, cat.id);
+          }
+          const catIds = [...new Set(
+            cartData.items.map((i) => productCatMap.get(i.product_id)).filter(Boolean) as string[]
+          )];
+          if (catIds.length) {
+            const status = await shopApi.getCloseStatus(catIds, schoolClass.id).catch(() => null);
+            if (status) {
+              setClosedCategoryNames(
+                catIds.filter((id) => status.statuses[id]?.is_closed).map((id) => catNameMap.get(id) ?? id)
+              );
+            }
+          }
+        }
+      }
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "載入失敗"));
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  useEffect(load, [load]);
+  useEffect(() => { load(); }, [load]);
 
   const changeQty = async (itemId: string, qty: number) => {
     try {
@@ -243,9 +275,18 @@ export default function CartPage() {
                 部分商品已無法購買，請先調整數量或移除後再送單。
               </p>
             )}
+            {closedCategoryNames.length > 0 && (
+              <div className="rounded-lg px-4 py-3 text-xs" style={{
+                border: "1px solid rgba(239,68,68,0.3)",
+                background: "rgba(239,68,68,0.06)",
+                color: "#b91c1c",
+              }}>
+                <strong>您的班級已結單</strong>（{closedCategoryNames.join("、")}），購物車中有該分類商品，無法送單。請聯繫班級幹部。
+              </div>
+            )}
             <button
               onClick={checkout}
-              disabled={submitting || (cart?.total_price ?? 0) === 0}
+              disabled={submitting || (cart?.total_price ?? 0) === 0 || closedCategoryNames.length > 0}
               className="btn w-full"
               style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}
               aria-busy={submitting}>

@@ -366,6 +366,50 @@ class OrderItem(Base, TimestampMixin):
     product: Mapped[Product] = relationship("Product", back_populates="order_items")
 
 
+class ShopOrderClose(Base, TimestampMixin):
+    """班級訂購結單紀錄（per category × per class）。
+
+    is_active=True 表示目前有效結單；重新開單時設為 False（保留歷程）。
+    class_id=None 表示全局關閉（僅管理員使用）。
+    """
+
+    __tablename__ = "shop_order_closes"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    category_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("product_categories.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    class_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("school_classes.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    closed_by_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    reopened_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    reopened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true", index=True
+    )
+
+    category: Mapped[ProductCategory] = relationship("ProductCategory")
+    school_class: Mapped[SchoolClass | None] = relationship("SchoolClass")
+    closed_by: Mapped[User] = relationship("User", foreign_keys=[closed_by_id])
+    reopened_by: Mapped[User | None] = relationship("User", foreign_keys=[reopened_by_id])
+
+
 __all__ = [
     "Cart",
     "CartItem",
@@ -378,4 +422,5 @@ __all__ = [
     "ProductStatus",
     "ProductVariantGroup",
     "ProductVariantOption",
+    "ShopOrderClose",
 ]

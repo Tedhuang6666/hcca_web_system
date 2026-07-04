@@ -6,10 +6,11 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.core.clock import now_local
 from api.models.shop import (
     Cart,
     CartItem,
@@ -20,20 +21,25 @@ from api.models.shop import (
     ProductCategory,
     ProductSeries,
     ProductStatus,
+    ShopOrderClose,
 )
 from api.schemas.shop import (
     CartItemCreate,
     CartItemOut,
     CartOut,
     ClassOrderUpsert,
+    CloseStatusItem,
+    CloseStatusOut,
     OrderItemCreate,
     OrderItemOut,
     OrderListItem,
     OrderOut,
+    OrderQuantityRow,
     OrderSummaryOut,
     OrderSummaryRow,
     ShopClassProductSummaryRow,
     ShopClassSummaryOut,
+    ShopOrderCloseOut,
 )
 from api.services import receivable as receivable_svc
 from api.services import school_class as class_svc
@@ -340,6 +346,19 @@ async def checkout(session: AsyncSession, user, *, notes: str | None = None) -> 
     school_class = await class_svc.resolve_user_class(session, user)
     class_id = school_class.id if school_class else None
 
+    # 結單驗證：若學生班級已結單，拒絕送出
+    if class_id is not None:
+        cat_ids: list[uuid.UUID] = []
+        for ci in cart.items:
+            p = await get_product(session, ci.product_id)
+            if p and p.series and p.series.category_id not in cat_ids:
+                cat_ids.append(p.series.category_id)
+        if cat_ids:
+            close_map = await get_close_status(session, cat_ids, class_id)
+            closed_cats = [str(cid) for cid, row in close_map.items() if row is not None]
+            if closed_cats:
+                raise ValueError("您的班級已結單，無法送出訂購，請聯繫班級幹部")
+
     order = await _create_order_from_items(
         session,
         user_id=user.id,
@@ -377,6 +396,7 @@ async def list_orders(
     user_id: uuid.UUID | None = None,
     activity_id: uuid.UUID | None = None,
     class_ids: list[uuid.UUID] | None = None,
+    grade: int | None = None,
     assistance_scope: str | None = None,
     product_id: uuid.UUID | None = None,
     status: OrderStatus | None = None,
@@ -412,6 +432,8 @@ async def list_orders(
         if not class_ids:
             return []
         q = q.where(Order.class_id.in_(class_ids))
+    if grade is not None:
+        q = q.where(Order.school_class.has(grade=grade))
     if assistance_scope:
         q = q.where(Order.assistance_scope == assistance_scope)
     if product_id:
@@ -543,8 +565,9 @@ async def cancel_order(
     *,
     requested_by: uuid.UUID,
     reason: str | None = None,
+    bypass_owner_check: bool = False,
 ) -> Order:
-    if order.user_id != requested_by:
+    if not bypass_owner_check and order.user_id != requested_by:
         raise PermissionError("只有訂購人可取消訂單")
     if order.status not in (OrderStatus.PENDING, OrderStatus.CONFIRMED):
         raise ValueError(f"訂單狀態 {order.status} 無法取消")
@@ -716,3 +739,189 @@ async def order_summary(
         paid_amount=sum(r.paid_amount for r in rows),
         unpaid_amount=sum(r.unpaid_amount for r in rows),
     )
+
+
+# ── 結單服務 ───────────────────────────────────────────────────────────────────
+
+
+async def get_close_status(
+    session: AsyncSession,
+    category_ids: list[uuid.UUID],
+    class_id: uuid.UUID | None,
+) -> dict[uuid.UUID, ShopOrderCloseOut | None]:
+    """回傳各 category 目前有效結單紀錄（or None）。
+    若有 class_id，優先查班級結單；再查全局結單（class_id IS NULL）。
+    """
+    if not category_ids:
+        return {}
+    q = select(ShopOrderClose).options(selectinload(ShopOrderClose.closed_by)).where(
+        ShopOrderClose.is_active.is_(True),
+        ShopOrderClose.category_id.in_(category_ids),
+        or_(
+            ShopOrderClose.class_id == class_id,
+            ShopOrderClose.class_id.is_(None),
+        ),
+    )
+    rows = (await session.execute(q)).scalars().all()
+    result: dict[uuid.UUID, ShopOrderClose | None] = {cid: None for cid in category_ids}
+    for row in rows:
+        cid = row.category_id
+        existing = result.get(cid)
+        # 班級結單 > 全局結單（若兩者都有）
+        if existing is None or row.class_id is not None:
+            result[cid] = row
+    return result
+
+
+def _serialize_close(row: ShopOrderClose) -> ShopOrderCloseOut:
+    closed_by_name = None
+    if row.closed_by:
+        closed_by_name = getattr(row.closed_by, "display_name", None) or str(row.closed_by_id)
+    return ShopOrderCloseOut(
+        id=row.id,
+        category_id=row.category_id,
+        class_id=row.class_id,
+        closed_by_name=closed_by_name,
+        closed_at=row.created_at,
+        reopened_at=row.reopened_at,
+        notes=row.notes,
+        is_active=row.is_active,
+    )
+
+
+async def close_category_for_class(
+    session: AsyncSession,
+    *,
+    category_id: uuid.UUID,
+    class_id: uuid.UUID | None,
+    closed_by_id: uuid.UUID,
+    notes: str | None = None,
+) -> ShopOrderClose:
+    # 確認沒有重複有效結單
+    existing_q = select(ShopOrderClose).where(
+        ShopOrderClose.category_id == category_id,
+        ShopOrderClose.is_active.is_(True),
+        ShopOrderClose.class_id == class_id if class_id else ShopOrderClose.class_id.is_(None),
+    )
+    existing = (await session.execute(existing_q)).scalar_one_or_none()
+    if existing:
+        raise ValueError("此分類已結單，請先重新開單再結單")
+    close = ShopOrderClose(
+        category_id=category_id,
+        class_id=class_id,
+        closed_by_id=closed_by_id,
+        notes=notes,
+        is_active=True,
+    )
+    session.add(close)
+    await session.flush()
+    await session.refresh(close)
+    return close
+
+
+async def reopen_category_for_class(
+    session: AsyncSession,
+    *,
+    category_id: uuid.UUID,
+    class_id: uuid.UUID | None,
+    reopened_by_id: uuid.UUID,
+) -> ShopOrderClose:
+    existing_q = select(ShopOrderClose).where(
+        ShopOrderClose.category_id == category_id,
+        ShopOrderClose.is_active.is_(True),
+        ShopOrderClose.class_id == class_id if class_id else ShopOrderClose.class_id.is_(None),
+    )
+    existing = (await session.execute(existing_q)).scalar_one_or_none()
+    if not existing:
+        raise ValueError("此分類目前未結單")
+    existing.is_active = False
+    existing.reopened_by_id = reopened_by_id
+    existing.reopened_at = now_local()
+    await session.flush()
+    return existing
+
+
+# ── 商品規格數量彙總 ────────────────────────────────────────────────────────────
+
+
+async def order_quantities(
+    session: AsyncSession,
+    *,
+    grade: int | None = None,
+    class_id: uuid.UUID | None = None,
+    category_id: uuid.UUID | None = None,
+    product_id: uuid.UUID | None = None,
+    is_paid: bool | None = None,
+    status: OrderStatus | None = None,
+) -> list[OrderQuantityRow]:
+    """回傳各商品規格組合的訂購數量（用於採購彙總）。"""
+    from api.models.school_class import SchoolClass
+
+    q = (
+        select(Order)
+        .options(
+            selectinload(Order.items)
+            .selectinload(OrderItem.product)
+            .selectinload(Product.series)
+            .selectinload(ProductSeries.category),
+            selectinload(Order.school_class),
+        )
+        .where(
+            Order.status != OrderStatus.CANCELLED
+            if status is None
+            else Order.status == status
+        )
+    )
+    if grade is not None:
+        q = q.where(Order.school_class.has(grade=grade))
+    if class_id:
+        q = q.where(Order.class_id == class_id)
+    if is_paid is not None:
+        q = q.where(Order.is_paid.is_(is_paid))
+    if product_id:
+        q = q.where(Order.items.any(OrderItem.product_id == product_id))
+    if category_id:
+        q = q.where(
+            Order.items.any(
+                OrderItem.product.has(
+                    Product.series.has(ProductSeries.category_id == category_id)
+                )
+            )
+        )
+    orders = (await session.execute(q)).scalars().unique().all()
+
+    # 逐 item 展開 variant key
+    tally: dict[tuple, dict] = {}
+    for order in orders:
+        for item in order.items:
+            if product_id and item.product_id != product_id:
+                continue
+            p = item.product
+            if p is None:
+                continue
+            if category_id and (p.series is None or p.series.category_id != category_id):
+                continue
+            variant_key = (
+                " / ".join(
+                    f"{opt['group_name']}:{opt['value']}"
+                    for opt in sorted(item.selected_options, key=lambda x: x.get("group_name", ""))
+                )
+                if item.selected_options
+                else "—"
+            )
+            key = (item.product_id, variant_key)
+            if key not in tally:
+                series_name = p.series.name if p.series else ""
+                tally[key] = {
+                    "product_id": item.product_id,
+                    "product_name": p.name,
+                    "series_name": series_name,
+                    "variant_key": variant_key,
+                    "qty_total": 0,
+                    "qty_paid": 0,
+                }
+            tally[key]["qty_total"] += item.quantity
+            if order.is_paid:
+                tally[key]["qty_paid"] += item.quantity
+
+    return [OrderQuantityRow(**v) for v in sorted(tally.values(), key=lambda x: x["product_name"])]

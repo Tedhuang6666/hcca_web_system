@@ -4,9 +4,9 @@ import { useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import Link from "next/link";
-import { shopApi, apiErrorMessage } from "@/lib/api";
+import { classApi, shopApi, apiErrorMessage } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
-import type { CatalogCategoryOut, CatalogProductOut, ProductOut } from "@/lib/types";
+import type { CatalogCategoryOut, CatalogProductOut, CloseStatusItem, ProductOut } from "@/lib/types";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import SmartEmptyState from "@/components/ui/SmartEmptyState";
 import { usePersistedState } from "@/hooks/usePersistedState";
@@ -271,6 +271,7 @@ export default function ShopPage() {
   const [loading, setLoading] = useState(true);
   const [openProduct, setOpenProduct] = useState<string | null>(null);
   const [cartCount, setCartCount] = useState(0);
+  const [closeStatus, setCloseStatus] = useState<Record<string, CloseStatusItem>>({});
   const [selectedCategoryId, setSelectedCategoryId] = usePersistedState<string | null>("hcca:pref:shop:category:v1", null);
   const activityId = useSearchParams().get("activity_id") || undefined;
 
@@ -278,9 +279,17 @@ export default function ShopPage() {
     setLoading(true);
     shopApi
       .catalog(activityId)
-      .then((data) => {
+      .then(async (data) => {
         setCatalog(data);
         setSelectedCategoryId((current) => current ?? data[0]?.id ?? null);
+        try {
+          const schoolClass = await classApi.myClass();
+          if (schoolClass && data.length) {
+            const catIds = data.map((c) => c.id);
+            const status = await shopApi.getCloseStatus(catIds, schoolClass.id);
+            setCloseStatus(status.statuses);
+          }
+        } catch { /* best effort */ }
       })
       .catch((e) => toast.error(apiErrorMessage(e, "載入失敗")))
       .finally(() => setLoading(false));
@@ -393,6 +402,21 @@ export default function ShopPage() {
                   </p>
                 </div>
               </div>
+              {closeStatus[selectedCategory.id]?.is_closed && (
+                <div className="rounded-lg px-4 py-3 text-sm" style={{
+                  border: "1px solid rgba(239,68,68,0.3)",
+                  background: "rgba(239,68,68,0.06)",
+                  color: "#b91c1c",
+                }}>
+                  <strong>您的班級已結單</strong>
+                  {closeStatus[selectedCategory.id].closed_at && (
+                    <span className="ml-1 text-xs">
+                      （{new Date(closeStatus[selectedCategory.id].closed_at!).toLocaleString("zh-TW")}）
+                    </span>
+                  )}
+                  ，如需更改請聯繫班級幹部。
+                </div>
+              )}
               {selectedCategory.series.map((series) => (
                 <section key={series.id} id={`shop-series-${series.id}`} className="scroll-mt-24 space-y-3">
                   <div className="flex items-center gap-3">
