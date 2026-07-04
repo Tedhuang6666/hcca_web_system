@@ -10,7 +10,8 @@ import {
   filterNavItems,
   isMeetingsUnlocked,
   isSection,
-  NAV_DEF,
+  navDefinitionForProfile,
+  resolveNavigationProfile,
   type NavItem,
 } from "@/lib/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -98,7 +99,8 @@ export default function CommandMenu() {
 
   const allNavActions = useMemo(() => {
     const items: NavItem[] = [];
-    for (const entry of NAV_DEF) {
+    const profile = resolveNavigationProfile(permissions, isAdmin);
+    for (const entry of navDefinitionForProfile(profile)) {
       const candidates = isSection(entry) ? entry.items : [entry];
       // meetings 由 canSeeMeetings() 單獨控制，此處先排除
       const filtered = filterNavItems(candidates, can, hasPrefix).filter((i) => i.id !== "meetings");
@@ -106,7 +108,7 @@ export default function CommandMenu() {
     }
     if (meetingsVisible) items.unshift(MEETINGS_ITEM);
     return items;
-  }, [can, hasPrefix, meetingsVisible]);
+  }, [can, hasPrefix, isAdmin, meetingsVisible, permissions]);
 
   const filteredActions = useMemo(() => {
     const q = query.trim().toLowerCase();

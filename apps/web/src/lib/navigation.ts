@@ -19,7 +19,7 @@ export type NavSection = {
 
 export type NavEntry = NavItem | NavSection;
 
-export type NavigationProfile = "default" | "teacher" | "mealVendor";
+export type NavigationProfile = "default" | "student" | "teacher" | "vendor" | "mealVendor";
 export type RuntimeNavigationProfile = NavigationProfile | string;
 
 export type NavigationProfileConfig = {
@@ -337,11 +337,42 @@ export const NAV_DEF_TEACHER: NavEntry[] = [
   },
 ];
 
+export const NAV_DEF_STUDENT: NavEntry[] = [
+  {
+    id: "student-main",
+    heading: "我的校園服務",
+    items: byIds(["dashboard", "tasks", "announcements", "surveys", "petitions"]),
+  },
+  {
+    id: "student-services",
+    heading: "常用入口",
+    items: byIds(["meal", "shop", "partnerMap", "examPapers", "settings"]),
+  },
+];
+
+export const NAV_DEF_VENDOR: NavEntry[] = [
+  {
+    id: "vendor-main",
+    heading: "合作夥伴工作台",
+    items: byIds(["dashboard", "tasks", "partnerMap", "partnerMapAdmin"]),
+  },
+  {
+    id: "vendor-services",
+    heading: "營運入口",
+    items: byIds(["announcements", "activitiesAdmin", "settings"]),
+  },
+];
+
 export const NAV_DEF_MEAL_VENDOR: NavEntry[] = [
   {
     id: "meal-vendor-main",
     heading: "餐商工作台",
-    items: byIds(["mealVendor", "meal", "tasks", "settings"]),
+    items: byIds(["dashboard", "tasks", "mealVendor", "meal"]),
+  },
+  {
+    id: "meal-vendor-services",
+    heading: "營運入口",
+    items: byIds(["announcements", "settings"]),
   },
 ];
 
@@ -386,6 +417,14 @@ export const NAVIGATION_PROFILES: Record<NavigationProfile, NavigationProfileCon
     desktopSections: NAV_DEF,
     mobileOrder: DEFAULT_MOBILE_ORDER,
   },
+  student: {
+    id: "student",
+    label: "學生服務視角",
+    description: "把一般學生常用的公告、問卷、陳情、學餐、商品與特約地圖集中成服務入口。",
+    audience: "一般學生、未持有行政或商家權限的登入使用者",
+    desktopSections: NAV_DEF_STUDENT,
+    mobileOrder: ["dashboard", "announcements", "surveys", "meal", "shop", "petitions", "partnerMap", "settings"],
+  },
   teacher: {
     id: "teacher",
     label: "教職員視角",
@@ -395,6 +434,15 @@ export const NAVIGATION_PROFILES: Record<NavigationProfile, NavigationProfileCon
     matchAnyPermissions: ["survey:review", "survey:manage"],
     desktopSections: NAV_DEF_TEACHER,
     mobileOrder: ["dashboard", "tasks", "surveys", "examPapers", "shopOrders", "meal", "settings"],
+  },
+  vendor: {
+    id: "vendor",
+    label: "校商與廠商視角",
+    description: "把合作商家需要的特約管理、合作活動、公告與待辦集中起來。",
+    audience: "校商、合作廠商、外部合作窗口",
+    matchAnyPrefixes: ["partner_map:"],
+    desktopSections: NAV_DEF_VENDOR,
+    mobileOrder: ["dashboard", "tasks", "partnerMapAdmin", "partnerMap", "announcements", "settings"],
   },
   mealVendor: {
     id: "mealVendor",
@@ -413,7 +461,7 @@ export const NAVIGATION_PROFILES: Record<NavigationProfile, NavigationProfileCon
       "election:",
     ],
     desktopSections: NAV_DEF_MEAL_VENDOR,
-    mobileOrder: ["mealVendor", "meal", "tasks", "settings"],
+    mobileOrder: ["dashboard", "tasks", "mealVendor", "meal", "announcements", "settings"],
   },
 };
 
@@ -457,15 +505,31 @@ export function resolveNavigationProfile(
 ): NavigationProfile {
   if (isAdmin || permissions.has("admin:all")) return "default";
   const hasPrefix = (prefix: string) => Array.from(permissions).some((p) => p.startsWith(prefix));
+  const hasGovernanceOrBackoffice = [
+    "document:",
+    "regulation:",
+    "admin:",
+    "org:",
+    "finance:",
+    "election:",
+    "audit:",
+    "email:",
+  ].some(hasPrefix);
 
-  for (const profile of [NAVIGATION_PROFILES.mealVendor, NAVIGATION_PROFILES.teacher]) {
+  if (hasGovernanceOrBackoffice) return "default";
+
+  for (const profile of [
+    NAVIGATION_PROFILES.mealVendor,
+    NAVIGATION_PROFILES.vendor,
+    NAVIGATION_PROFILES.teacher,
+  ]) {
     const matchedPrefix = profile.matchAnyPrefixes?.some(hasPrefix) ?? false;
     const matchedPermission = profile.matchAnyPermissions?.some((code) => permissions.has(code)) ?? false;
     const excluded = profile.excludePrefixes?.some(hasPrefix) ?? false;
     if ((matchedPrefix || matchedPermission) && !excluded) return profile.id as NavigationProfile;
   }
 
-  return "default";
+  return "student";
 }
 
 export function navDefinitionForProfile(profile: RuntimeNavigationProfile): NavEntry[] {

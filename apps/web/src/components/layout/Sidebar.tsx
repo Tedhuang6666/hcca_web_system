@@ -215,6 +215,7 @@ export default function Sidebar() {
 
   const itemVisible = (item: NavItem): boolean => {
     if (isModuleClosed(NAV_ID_TO_MODULE[item.id] ?? null)) return false;
+    if (item.id === "governanceHub" && navigationProfile !== "default") return false;
     if (item.id === "systemDefense" && !isAdmin) return false;
     if (item.id === "moduleBackoffice") {
       return (
