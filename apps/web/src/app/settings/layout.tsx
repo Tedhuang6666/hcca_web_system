@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, Eye, Gauge, ListTree, ShieldCheck } from "lucide-react";
+import { Bell, Eye, Gauge, ListTree, Plug, ShieldCheck } from "lucide-react";
 
 const TABS = [
   { href: "/settings/navigation", label: "介面", icon: ListTree },
@@ -10,6 +10,7 @@ const TABS = [
   { href: "/settings/data-saver", label: "省流", icon: Gauge },
   { href: "/settings/privacy", label: "隱私", icon: Eye },
   { href: "/settings/security", label: "安全", icon: ShieldCheck },
+  { href: "/settings/integrations", label: "整合", icon: Plug },
 ];
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {

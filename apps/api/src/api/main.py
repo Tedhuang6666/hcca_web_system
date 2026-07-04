@@ -79,6 +79,7 @@ from api.routers import (
     judicial_petitions,
     line_webhook,
     loans,
+    matters,
     meal,
     meetings,
     metrics_endpoint,
@@ -107,6 +108,7 @@ from api.routers import (
     tasks,
     term_rollover,
     trash,
+    user_google_tasks,
     user_lifecycle,
     user_positions,
     users,
@@ -353,6 +355,7 @@ def create_app() -> FastAPI:
     attach_module_health(line_webhook.router, module_id="line")
     attach_module_health(discord.router, module_id="discord")
     attach_module_health(governance.router, module_id="governance")
+    attach_module_health(matters.router, module_id="matters")
     attach_module_health(activities.router, module_id="activities")
     attach_module_health(elections.router, module_id="elections")
     attach_module_health(seating.router, module_id="seating")
@@ -441,7 +444,9 @@ def create_app() -> FastAPI:
     app.include_router(loans.router)
     app.include_router(inventory.router)
     app.include_router(work_items.router)
+    app.include_router(user_google_tasks.router)
     app.include_router(governance.router)
+    app.include_router(matters.router)
     app.include_router(line_webhook.router)
     app.include_router(ws.router)
     app.include_router(policies.router)

@@ -24,7 +24,6 @@ from api.models.api_key import ApiKey  # noqa: F401
 from api.models.audit_anchor import AuditLogAnchor  # noqa: F401
 from api.models.audit_log import AuditLog  # noqa: F401
 from api.models.backup_record import BackupKind, BackupRecord, BackupStatus  # noqa: F401
-from api.models.google_calendar import OrgGoogleCalendarConfig  # noqa: F401
 from api.models.calendar import (  # noqa: F401
     CalendarEvent,
     CalendarEventChecklistItem,
@@ -105,6 +104,7 @@ from api.models.exam_paper import ExamGradeTrack, ExamPaper, ExamPaperDownload  
 
 # Feature Flag
 from api.models.feature_flag import FeatureFlag  # noqa: F401
+from api.models.google_calendar import OrgGoogleCalendarConfig  # noqa: F401
 from api.models.governance import (  # noqa: F401
     AutomationRule,
     AutomationRuleStatus,
@@ -119,6 +119,8 @@ from api.models.governance import (  # noqa: F401
     GovernanceWorkflowTemplate,
     Matter,
     MatterPriority,
+    MatterResource,
+    MatterResourceType,
     MatterRoleAssignment,
     MatterStatus,
     MatterType,
@@ -131,12 +133,29 @@ from api.models.governance import (  # noqa: F401
     Program,
     TimelineEvent,
 )
+from api.models.inventory import (  # noqa: F401
+    InventoryCategory,
+    InventoryItem,
+    InventoryItemType,
+    InventoryProcurement,
+    InventoryProcurementItem,
+    InventoryProcurementStatus,
+    InventoryTransaction,
+    InventoryTxnType,
+)
 from api.models.judicial_petition import (  # noqa: F401
     JudicialPetition,
     JudicialPetitionStatus,
     JudicialPetitionType,
 )
 from api.models.line_account import LineAccountLink  # noqa: F401
+from api.models.loan import (  # noqa: F401
+    LoanItemCategory,
+    LoanRecord,
+    LoanRecordStatus,
+    LoanUnit,
+    LoanUnitStatus,
+)
 from api.models.meal import (  # noqa: F401
     MealClassPickupCode,
     MealOrder,
@@ -309,6 +328,7 @@ from api.models.survey import (  # noqa: F401
     SurveyStatus,
 )
 from api.models.user import User  # noqa: F401
+from api.models.user_google_tasks import UserGoogleTasksConfig  # noqa: F401
 
 # 外部身份綁定
 from api.models.user_identity import UserIdentity  # noqa: F401
@@ -319,23 +339,6 @@ from api.models.webhook import (  # noqa: F401
     DeliveryStatus,
     WebhookDelivery,
     WebhookSubscription,
-)
-from api.models.inventory import (  # noqa: F401
-    InventoryCategory,
-    InventoryItem,
-    InventoryItemType,
-    InventoryProcurement,
-    InventoryProcurementItem,
-    InventoryProcurementStatus,
-    InventoryTransaction,
-    InventoryTxnType,
-)
-from api.models.loan import (  # noqa: F401
-    LoanItemCategory,
-    LoanRecord,
-    LoanRecordStatus,
-    LoanUnit,
-    LoanUnitStatus,
 )
 from api.models.work_item import WorkItem, WorkItemStatus  # noqa: F401
 from api.models.workflow import (  # noqa: F401
