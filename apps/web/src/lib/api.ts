@@ -215,6 +215,7 @@ export async function silentRefresh(): Promise<boolean> {
   refreshPromise ??= fetch(apiUrl("/auth/refresh"), {
     method: "POST",
     credentials: "include",
+    headers: csrfHeaders("POST"),
   })
     .then((res) => res.ok)
     .catch(() => false)

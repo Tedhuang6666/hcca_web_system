@@ -33,9 +33,15 @@ export default function AuthCallbackPage() {
 
     async function refreshFromCookie(): Promise<boolean> {
       try {
+        const csrfToken = document.cookie
+          .split(";")
+          .map((c) => c.trim())
+          .find((c) => c.startsWith("csrf_token="))
+          ?.slice("csrf_token=".length);
         const res = await fetch(apiUrl("/auth/refresh"), {
           method: "POST",
           credentials: "include",
+          headers: csrfToken ? { "X-CSRF-Token": decodeURIComponent(csrfToken) } : {},
         });
         return res.ok;
       } catch {
