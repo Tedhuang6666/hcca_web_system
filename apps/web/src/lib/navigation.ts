@@ -260,31 +260,32 @@ export const NAV_DEF: NavEntry[] = [
   {
     id: "work",
     heading: "工作入口",
-    items: byIds(["dashboard", "matters", "governanceHub", "tasks", "activitiesAdmin", "calendar"]),
+    items: byIds(["dashboard", "tasks", "matters", "governanceHub", "calendar"]),
   },
   {
-    id: "publishing",
-    heading: "發布與通知",
-    items: byIds(["announcements", "publications", "email", "surveys"]),
-  },
-  {
-    id: "finance",
-    heading: "財務與採購",
-    items: byIds(["receivables", "shop", "meal", "inventoryAdmin"]),
-  },
-  {
-    id: "records",
-    heading: "治理資料庫",
+    id: "governance",
+    heading: "治理與公開",
     items: byIds([
       "documents",
-      "councilProposals",
       "regulations",
       "meetings",
+      "councilProposals",
       "judicialPetitions",
       "petitions",
-      "partnerMap",
-      "examPapers",
+      "announcements",
     ]),
+  },
+  {
+    id: "services",
+    heading: "校園服務",
+    items: byIds(["shop", "meal", "surveys", "partnerMap", "examPapers"]),
+  },
+  {
+    id: "operations",
+    heading: "營運管理",
+    collapsible: true,
+    defaultCollapsed: true,
+    items: byIds(["operations", "publications", "email", "activitiesAdmin", "receivables", "inventoryAdmin"]),
   },
   {
     id: "workbench",
