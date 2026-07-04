@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
@@ -23,6 +23,7 @@ import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useRecentItems } from "@/hooks/useRecentItems";
 import OnboardingHint from "@/components/ui/OnboardingHint";
+import { resolveNavigationProfile, type NavigationProfile } from "@/lib/navigation";
 
 type IconProps = { size: number; "aria-hidden": boolean };
 function FallbackWidgetIcon(p: IconProps) { return <FileText {...p} />; }
@@ -60,6 +61,10 @@ const SEVERITY_STYLES: Record<string, { color: string; bg: string; border: strin
 
 const HINT_LABEL: Record<string, string> = {
   student: "學生視角",
+  teacher: "師長視角",
+  vendor: "合作夥伴視角",
+  mealVendor: "餐商視角",
+  default: "完整平台視角",
   officer: "幹部視角",
   leader: "領導視角",
 };
@@ -312,6 +317,10 @@ export default function DashboardPage() {
 
   const widgets = data?.widgets ?? [];
   const layoutHint = data?.layout_hint ?? "student";
+  const profile = useMemo(
+    () => resolveNavigationProfile(permissions, isAdmin),
+    [isAdmin, permissions],
+  );
   const hasAny = widgets.length > 0;
   const visibleItems = widgets.reduce((sum, widget) => sum + widget.items.length, 0);
   const priorityTasks = (tasks?.items ?? [])
@@ -320,8 +329,9 @@ export default function DashboardPage() {
     .slice(0, 5);
   const urgentCount = (tasks?.items ?? []).filter((task) => task.severity === "critical").length;
   const isOperator = isAdmin || permissions.size > 0 || layoutHint !== "student";
-  const primaryAction = getPrimaryAction(can, isOperator);
-  const quickActions = getQuickActions(can, canAny, isOperator);
+  const dashboardContent = getDashboardContent(profile, can, canAny, isOperator);
+  const primaryAction = dashboardContent.primaryAction;
+  const quickActions = dashboardContent.quickActions;
   const adminActions = getAdminActions(can, canAny, isAdmin);
 
   return (
@@ -343,7 +353,7 @@ export default function DashboardPage() {
               <span className="dashboard-kicker-icon">
                 <Inbox size={12} aria-hidden={true} />
               </span>
-              今日工作台
+              {dashboardContent.kicker}
             </div>
             <div className="mt-4 flex items-center gap-2 flex-wrap">
               <h1 className="dashboard-title">
@@ -353,14 +363,14 @@ export default function DashboardPage() {
               <span
                   className="dashboard-role-badge">
                 <Sparkles size={10} aria-hidden={true} />
-                {HINT_LABEL[layoutHint]}
+                {HINT_LABEL[profile] ?? HINT_LABEL[layoutHint] ?? "個人化視角"}
               </span>
             )}
             </div>
             <p className="dashboard-subtitle">
               {priorityTasks.length > 0
-                ? "需要你動作的事項已排在最前面，正在進行的活動與事情放在同一個工作流裡。"
-                : "今天沒有急迫待辦，可以從活動、事情或常用入口直接開始。"}
+                ? dashboardContent.busySubtitle
+                : dashboardContent.emptySubtitle}
             </p>
           </div>
           <div className="dashboard-pulse" aria-hidden="true">
@@ -422,11 +432,11 @@ export default function DashboardPage() {
           )}
         </div>
 
-        <aside className="dashboard-actions-panel" aria-label={isOperator ? "管理快捷" : "常用快捷"}>
+        <aside className="dashboard-actions-panel" aria-label={dashboardContent.actionHeading}>
           <div className="dashboard-section-heading">
             <div>
-              <p className="dashboard-eyebrow">{isOperator ? "管理捷徑" : "常用入口"}</p>
-              <h2>{isOperator ? "少走幾層選單" : "直接開始"}</h2>
+              <p className="dashboard-eyebrow">{dashboardContent.actionEyebrow}</p>
+              <h2>{dashboardContent.actionHeading}</h2>
             </div>
           </div>
           <div className="dashboard-action-list">
@@ -437,6 +447,21 @@ export default function DashboardPage() {
         </aside>
       </section>
 
+      <section className="rounded-lg p-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }} aria-label={dashboardContent.serviceTitle}>
+        <div className="dashboard-section-heading">
+          <div>
+            <p className="dashboard-eyebrow">{dashboardContent.serviceEyebrow}</p>
+            <h2>{dashboardContent.serviceTitle}</h2>
+          </div>
+        </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {dashboardContent.services.map((action) => (
+            <QuickActionCard key={action.href} action={action} />
+          ))}
+        </div>
+      </section>
+
+      {dashboardContent.showGovernance && (
       <section className="rounded-lg p-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }} aria-label="正在進行的活動與事情">
         <div className="dashboard-section-heading">
           <div>
@@ -476,6 +501,7 @@ export default function DashboardPage() {
           ))}
         </div>
       </section>
+      )}
 
       {adminActions.length > 0 && (
         <section className="dashboard-admin-strip" aria-label="管理員工作台">
@@ -553,10 +579,113 @@ type DashboardAction = {
   tone?: "primary" | "warning" | "danger" | "neutral";
 };
 
+type DashboardContent = {
+  kicker: string;
+  emptySubtitle: string;
+  busySubtitle: string;
+  actionHeading: string;
+  actionEyebrow: string;
+  primaryAction: DashboardAction;
+  quickActions: DashboardAction[];
+  serviceTitle: string;
+  serviceEyebrow: string;
+  services: DashboardAction[];
+  showGovernance: boolean;
+};
+
+function getDashboardContent(
+  profile: NavigationProfile,
+  can: (code: string) => boolean,
+  canAny: (...codes: string[]) => boolean,
+  isOperator: boolean,
+): DashboardContent {
+  const primaryAction = getPrimaryAction(profile, can, isOperator);
+  return {
+    default: {
+      kicker: "治理工作台",
+      busySubtitle: "需要你動作的事項已排在最前面，正在進行的活動與事情放在同一個工作流裡。",
+      emptySubtitle: "今天沒有急迫待辦，可以從活動、事情或常用入口直接開始。",
+      actionEyebrow: "管理捷徑",
+      actionHeading: "少走幾層選單",
+      primaryAction,
+      quickActions: getQuickActions(profile, can, canAny, isOperator),
+      serviceEyebrow: "服務目錄",
+      serviceTitle: "常用治理入口",
+      services: getServiceActions("default", can, canAny),
+      showGovernance: true,
+    },
+    student: {
+      kicker: "學生服務台",
+      busySubtitle: "需要填寫、確認或追蹤的事項已排在最前面。",
+      emptySubtitle: "今天沒有急迫事項，可以從公告、問卷、餐點或陳情直接開始。",
+      actionEyebrow: "常用服務",
+      actionHeading: "直接開始",
+      primaryAction,
+      quickActions: getQuickActions(profile, can, canAny, isOperator),
+      serviceEyebrow: "服務目錄",
+      serviceTitle: "你常用的校園服務",
+      services: getServiceActions("student", can, canAny),
+      showGovernance: false,
+    },
+    teacher: {
+      kicker: "師長工作台",
+      busySubtitle: "班級、問卷、題庫與通知相關事項已集中在這裡。",
+      emptySubtitle: "目前沒有急迫事項，可以查看班級收單、問卷或公告。",
+      actionEyebrow: "教職員入口",
+      actionHeading: "班級與教學服務",
+      primaryAction,
+      quickActions: getQuickActions(profile, can, canAny, isOperator),
+      serviceEyebrow: "服務目錄",
+      serviceTitle: "師長常用工具",
+      services: getServiceActions("teacher", can, canAny),
+      showGovernance: false,
+    },
+    vendor: {
+      kicker: "合作夥伴工作台",
+      busySubtitle: "合作資料、特約內容與待處理事項會集中顯示。",
+      emptySubtitle: "目前沒有急迫事項，可以管理特約資訊或查看公告。",
+      actionEyebrow: "合作入口",
+      actionHeading: "商家與合作事項",
+      primaryAction,
+      quickActions: getQuickActions(profile, can, canAny, isOperator),
+      serviceEyebrow: "服務目錄",
+      serviceTitle: "合作夥伴服務",
+      services: getServiceActions("vendor", can, canAny),
+      showGovernance: false,
+    },
+    mealVendor: {
+      kicker: "餐商工作台",
+      busySubtitle: "菜單、訂單、核銷與結單提醒已排在最前面。",
+      emptySubtitle: "目前沒有急迫事項，可以查看今日訂單或管理菜單。",
+      actionEyebrow: "餐商入口",
+      actionHeading: "今日供餐工作",
+      primaryAction,
+      quickActions: getQuickActions(profile, can, canAny, isOperator),
+      serviceEyebrow: "服務目錄",
+      serviceTitle: "餐商營運服務",
+      services: getServiceActions("mealVendor", can, canAny),
+      showGovernance: false,
+    },
+  }[profile];
+}
+
 function getPrimaryAction(
+  profile: NavigationProfile,
   can: (code: string) => boolean,
   isOperator: boolean,
 ): DashboardAction {
+  if (profile === "mealVendor") {
+    return { href: "/meal/vendor", label: "管理今日餐單", detail: "菜單、訂單與核銷", icon: Utensils };
+  }
+  if (profile === "vendor") {
+    return { href: "/partner-map/admin", label: "管理特約資訊", detail: "商家、優惠與曝光", icon: ShoppingCart };
+  }
+  if (profile === "teacher") {
+    if (!can("class:shop_collect")) {
+      return { href: "/surveys", label: "查看問卷", detail: "回覆、審閱與追蹤", icon: PenLine };
+    }
+    return { href: "/shop/class-orders", label: "班級收單", detail: "查看班級商品訂單", icon: ListChecks };
+  }
   if (can("document:draft")) {
     return { href: "/documents/new", label: "新增公文", detail: "建立草稿", icon: Plus };
   }
@@ -570,10 +699,13 @@ function getPrimaryAction(
 }
 
 function getQuickActions(
+  profile: NavigationProfile,
   can: (code: string) => boolean,
   canAny: (...codes: string[]) => boolean,
   isOperator: boolean,
 ): DashboardAction[] {
+  if (profile !== "default") return getServiceActions(profile, can, canAny).slice(0, 6);
+
   const actions: DashboardAction[] = [
     { href: "/tasks", label: "我的待辦", detail: "簽核、問卷、訂單集中處理", icon: ListChecks, tone: "primary" },
     { href: "/announcements", label: "最新公告", detail: "校內訊息與公開事項", icon: Bell },
@@ -588,6 +720,76 @@ function getQuickActions(
   }
   if (canAny("meeting:manage", "meeting:create")) {
     actions.splice(1, 0, { href: "/meetings", label: "議事管理", detail: "議程、出席、決議", icon: Landmark });
+  }
+  return actions.slice(0, 6);
+}
+
+function getServiceActions(
+  profile: NavigationProfile,
+  can: (code: string) => boolean,
+  canAny: (...codes: string[]) => boolean,
+): DashboardAction[] {
+  const commonStudent: DashboardAction[] = [
+    { href: "/announcements", label: "看最新公告", detail: "校內訊息與公開事項", icon: Bell },
+    { href: "/surveys", label: "填寫問卷", detail: "參與校園決策與回饋", icon: PenLine },
+    { href: "/petitions/new", label: "我要陳情", detail: "提交問題、建議或申訴", icon: MessageSquare },
+    { href: "/meal", label: "查看餐單", detail: "菜單、訂單與取餐資訊", icon: Utensils },
+    { href: "/shop", label: "購買商品票券", detail: "活動商品與票券訂購", icon: ShoppingCart },
+    { href: "/partner-map", label: "找特約商家", detail: "優惠、地點與合作店家", icon: Search },
+  ];
+
+  if (profile === "student") return commonStudent;
+  if (profile === "teacher") {
+    const teacherActions: DashboardAction[] = [
+      { href: "/announcements", label: "看校內公告", detail: "掌握近期校務與活動", icon: Bell },
+      { href: "/surveys", label: "問卷與回覆", detail: "查看需協助的問卷事項", icon: PenLine },
+      { href: "/exam-papers", label: "段考題庫", detail: "查找與管理教學資料", icon: FileText },
+      { href: "/meal", label: "查看學餐", detail: "菜單與訂餐狀態", icon: Utensils },
+      { href: "/calendar", label: "查看行事曆", detail: "會議、活動與重要日期", icon: CalendarDays },
+    ];
+    if (can("class:shop_collect")) {
+      teacherActions.splice(1, 0, {
+        href: "/shop/class-orders",
+        label: "班級收單",
+        detail: "協助班級商品與票券訂購",
+        icon: ListChecks,
+      });
+    }
+    return teacherActions;
+  }
+  if (profile === "vendor") {
+    return [
+      { href: "/partner-map/admin", label: "管理特約內容", detail: "商家資料、地點與優惠", icon: ShoppingCart },
+      { href: "/partner-map", label: "查看公開頁面", detail: "確認學生看到的商家資訊", icon: Search },
+      { href: "/tasks", label: "處理待辦", detail: "合作事項與通知集中處理", icon: ListChecks },
+      { href: "/announcements", label: "合作公告", detail: "查看校內與合作資訊", icon: Bell },
+      { href: "/settings", label: "帳號設定", detail: "通知、安全與介面偏好", icon: Settings },
+    ];
+  }
+  if (profile === "mealVendor") {
+    return [
+      { href: "/meal/vendor", label: "管理今日餐單", detail: "菜單、排程、供應商與結單", icon: Utensils },
+      { href: "/meal/orders", label: "查看學餐訂單", detail: "核銷、確認與匯出訂單", icon: ListChecks },
+      { href: "/meal", label: "查看學生頁面", detail: "確認餐點呈現與開放狀態", icon: Search },
+      { href: "/tasks", label: "處理待辦", detail: "結單、核銷與通知集中處理", icon: Inbox },
+      { href: "/announcements", label: "供餐公告", detail: "查看校內與營運通知", icon: Bell },
+      { href: "/settings", label: "帳號設定", detail: "通知、安全與介面偏好", icon: Settings },
+    ];
+  }
+
+  const actions: DashboardAction[] = [
+    { href: "/tasks", label: "我的待辦", detail: "簽核、問卷、訂單集中處理", icon: ListChecks, tone: "primary" },
+    { href: "/governance", label: "工作中心", detail: "活動、事情與跨模組追蹤", icon: Layers3 },
+    { href: "/documents", label: "公文作業", detail: "草稿、簽核與公文查找", icon: FileText },
+    { href: "/regulations", label: "法規資料庫", detail: "查詢、修正與公布法規", icon: Scale },
+    { href: "/announcements", label: "發布與公告", detail: "公告、電子郵件與通知", icon: Megaphone },
+    { href: "/search", label: "全站搜尋", detail: "找公文、法規、會議與公告", icon: Search },
+  ];
+  if (canAny("meeting:manage", "meeting:create")) {
+    actions.splice(2, 0, { href: "/meetings", label: "議事管理", detail: "議程、出席、決議", icon: Landmark });
+  }
+  if (can("meal:manage")) {
+    actions.push({ href: "/meal/vendor", label: "餐商管理", detail: "菜單、訂單與供應商", icon: Utensils });
   }
   return actions.slice(0, 6);
 }
