@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { ApiError, googleCalendarApi, orgsApi } from "@/lib/api";
 import { orgDisplayName } from "@/lib/orgs";
-import type { GoogleCalendarStatusOut, OrgRead } from "@/lib/types";
+import type { GoogleCalendarItem, GoogleCalendarStatusOut, OrgRead } from "@/lib/types";
 
 function formatRelativeTime(isoString: string | null): string {
   if (!isoString) return "從未";
@@ -26,6 +26,12 @@ export default function GoogleCalendarAdminPage() {
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  // 日曆選擇
+  const [calendars, setCalendars] = useState<GoogleCalendarItem[]>([]);
+  const [calLoading, setCalLoading] = useState(false);
+  const [selectedCalId, setSelectedCalId] = useState<string>("");
+  const [calendarSaved, setCalendarSaved] = useState(false);
+
   useEffect(() => {
     orgsApi.list({ active_only: true }).then((list) => {
       setOrgs(list);
@@ -38,7 +44,7 @@ export default function GoogleCalendarAdminPage() {
     const error = searchParams.get("error");
     const orgId = searchParams.get("org_id");
     if (connected === "true") {
-      toast.success("Google Calendar 連結成功");
+      toast.success("Google Calendar 連結成功，請選擇要同步的日曆");
       if (orgId) setSelectedOrgId(orgId);
     } else if (error) {
       const messages: Record<string, string> = {
@@ -54,9 +60,13 @@ export default function GoogleCalendarAdminPage() {
   const fetchStatus = useCallback(async () => {
     if (!selectedOrgId) return;
     setLoading(true);
+    setCalendars([]);
+    setSelectedCalId("");
+    setCalendarSaved(false);
     try {
       const data = await googleCalendarApi.getStatus(selectedOrgId);
       setStatus(data);
+      setSelectedCalId(data.google_calendar_id);
     } catch {
       setStatus(null);
     } finally {
@@ -67,6 +77,24 @@ export default function GoogleCalendarAdminPage() {
   useEffect(() => {
     fetchStatus();
   }, [fetchStatus]);
+
+  // 連結後自動載入日曆清單
+  const fetchCalendars = useCallback(async () => {
+    if (!selectedOrgId || !status?.is_connected) return;
+    setCalLoading(true);
+    try {
+      const list = await googleCalendarApi.listCalendars(selectedOrgId);
+      setCalendars(list);
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "無法取得日曆清單，請重新授權");
+    } finally {
+      setCalLoading(false);
+    }
+  }, [selectedOrgId, status?.is_connected]);
+
+  useEffect(() => {
+    fetchCalendars();
+  }, [fetchCalendars]);
 
   const handleConnect = () => {
     if (!selectedOrgId) return;
@@ -80,6 +108,7 @@ export default function GoogleCalendarAdminPage() {
     try {
       await googleCalendarApi.disconnect(selectedOrgId);
       toast.success("已解除連結");
+      setCalendars([]);
       await fetchStatus();
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "解除連結失敗");
@@ -101,12 +130,29 @@ export default function GoogleCalendarAdminPage() {
     }
   };
 
+  const handleSaveCalendar = async () => {
+    if (!selectedOrgId || !selectedCalId) return;
+    setBusy(true);
+    try {
+      const updated = await googleCalendarApi.updateConfig(selectedOrgId, selectedCalId);
+      setStatus(updated);
+      setCalendarSaved(true);
+      toast.success("已儲存，下次同步將使用選定的日曆");
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "儲存失敗");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const calendarChanged = status !== null && selectedCalId !== status.google_calendar_id;
+
   return (
     <div className="p-6 max-w-2xl space-y-6">
       <div>
         <h1 className="text-xl font-semibold">Google Calendar 同步設定</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          連結後，HCCA 行事曆事件將雙向同步到指定組織的 Google Calendar。
+          連結後選擇帳戶內要同步的日曆，HCCA 事件將雙向同步到該日曆。
         </p>
       </div>
 
@@ -135,20 +181,64 @@ export default function GoogleCalendarAdminPage() {
               {status.is_connected ? "✓ 已連結" : "未連結"}
             </span>
           </div>
+
           {status.is_connected && (
             <>
               <div className="p-4 flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">授權帳號</span>
                 <span className="text-sm">{status.authorized_email ?? "—"}</span>
               </div>
-              <div className="p-4 flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">目標日曆</span>
-                <span className="text-sm font-mono">{status.google_calendar_id}</span>
+
+              {/* 日曆選擇 */}
+              <div className="p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">同步日曆</span>
+                  {calLoading && (
+                    <span className="text-xs text-muted-foreground">載入日曆清單…</span>
+                  )}
+                </div>
+                {calendars.length > 0 ? (
+                  <div className="flex gap-2">
+                    <select
+                      className="flex-1 border rounded-md px-3 py-2 text-sm bg-background"
+                      value={selectedCalId}
+                      onChange={(e) => {
+                        setSelectedCalId(e.target.value);
+                        setCalendarSaved(false);
+                      }}
+                    >
+                      {calendars.map((cal) => (
+                        <option key={cal.id} value={cal.id}>
+                          {cal.summary}{cal.primary ? "（主要日曆）" : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={handleSaveCalendar}
+                      disabled={busy || (!calendarChanged && calendarSaved)}
+                      className="px-3 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50"
+                    >
+                      儲存
+                    </button>
+                  </div>
+                ) : !calLoading ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-mono text-muted-foreground">{status.google_calendar_id}</span>
+                    <button
+                      onClick={fetchCalendars}
+                      className="text-xs text-blue-600 hover:underline"
+                    >
+                      載入日曆清單
+                    </button>
+                  </div>
+                ) : null}
               </div>
+
               <div className="p-4 flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">上次同步</span>
                 <span className="text-sm">{formatRelativeTime(status.last_pull_at)}</span>
               </div>
+
               {status.last_error && (
                 <div className="p-4 bg-red-50 dark:bg-red-950/20">
                   <p className="text-sm text-red-600 dark:text-red-400">
@@ -199,9 +289,8 @@ export default function GoogleCalendarAdminPage() {
 
       <div className="text-xs text-muted-foreground space-y-1 border-t pt-4">
         <p>• 僅同步 visibility ≠ 私人 的事件</p>
-        <p>• Google Calendar 新增的事件會以「投影」方式顯示（唯讀），在 HCCA 編輯請回到 Google Calendar</p>
-        <p>• 自動同步每 5 分鐘執行一次</p>
-        <p>• 首次連結需要在 Google Cloud Console 將 <code>{"<你的部署網址>"}/calendar/google/callback</code> 加入 Authorized Redirect URIs</p>
+        <p>• Google Calendar 新增的事件會以「投影」方式顯示（唯讀）</p>
+        <p>• 自動同步每 5 分鐘執行一次；切換日曆後會自動重新完整同步</p>
       </div>
     </div>
   );

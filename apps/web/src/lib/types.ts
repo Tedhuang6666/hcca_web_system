@@ -4835,3 +4835,9 @@ export interface GoogleCalendarStatusOut {
   last_error: string | null;
   authorized_at: string | null;
 }
+
+export interface GoogleCalendarItem {
+  id: string;
+  summary: string;
+  primary: boolean;
+}

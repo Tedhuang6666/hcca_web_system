@@ -448,6 +448,28 @@ async def _get_system_fallback_user_id(session: AsyncSession) -> uuid.UUID | Non
     return result
 
 
+async def list_calendars(
+    session: AsyncSession,
+    config: OrgGoogleCalendarConfig,
+) -> list[dict]:
+    """列出 Google 帳戶下所有可寫入的日曆。
+
+    Returns:
+        list of {"id": str, "summary": str, "primary": bool}
+    """
+    creds = await get_valid_credentials(session, config)
+    service = _build_service(creds)
+    result = service.calendarList().list(minAccessRole="writer").execute()
+    return [
+        {
+            "id": item["id"],
+            "summary": item.get("summary", item["id"]),
+            "primary": item.get("primary", False),
+        }
+        for item in result.get("items", [])
+    ]
+
+
 async def get_config_for_org(
     session: AsyncSession, org_id: uuid.UUID
 ) -> OrgGoogleCalendarConfig | None:

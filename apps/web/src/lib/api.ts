@@ -3108,6 +3108,12 @@ export const googleCalendarApi = {
     del<void>(`/calendar/google/disconnect/${orgId}`),
   triggerPull: (orgId: string) =>
     post<{ status: string }>(`/calendar/google/trigger-pull/${orgId}`, {}),
+  listCalendars: (orgId: string) =>
+    get<import("@/lib/types").GoogleCalendarItem[]>(`/calendar/google/calendars/${orgId}`),
+  updateConfig: (orgId: string, googleCalendarId: string) =>
+    patch<import("@/lib/types").GoogleCalendarStatusOut>(`/calendar/google/config/${orgId}`, {
+      google_calendar_id: googleCalendarId,
+    }),
 };
 
 // ── 電子郵件 ──────────────────────────────────────────────────────────────────
