@@ -54,6 +54,16 @@ class MatterType(enum.StrEnum):
     OTHER = "other"
 
 
+class MatterResourceType(enum.StrEnum):
+    GOOGLE_MEET = "google_meet"
+    GOOGLE_DRIVE = "google_drive"
+    DISCORD_TEXT = "discord_text"
+    DISCORD_VOICE = "discord_voice"
+    EXTERNAL_URL = "external_url"
+    FILE = "file"
+    OTHER = "other"
+
+
 class CaseStatus(enum.StrEnum):
     DRAFT = "draft"
     TODO = "todo"
@@ -177,6 +187,48 @@ class Matter(Base, TimestampMixin):
         cascade="all, delete-orphan",
         uselist=False,
     )
+    resources: Mapped[list[MatterResource]] = relationship(
+        "MatterResource",
+        back_populates="matter",
+        cascade="all, delete-orphan",
+        order_by="MatterResource.created_at",
+    )
+
+
+class MatterResource(Base, TimestampMixin):
+    """Matter 可使用的外部協作資源與檔案連結。"""
+
+    __tablename__ = "matter_resources"
+    __table_args__ = (
+        Index("ix_matter_resources_matter_type", "matter_id", "resource_type"),
+        Index("ix_matter_resources_provider", "provider", "external_id"),
+        Index("ix_matter_resources_provider_single", "provider"),
+        Index("ix_matter_resources_external_id", "external_id"),
+        UniqueConstraint("matter_id", "url", name="uq_matter_resources_matter_url"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    matter_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("matters.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    resource_type: Mapped[str] = mapped_column(
+        String(40), nullable=False, default=MatterResourceType.EXTERNAL_URL, index=True
+    )
+    title: Mapped[str] = mapped_column(String(240), nullable=False)
+    url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    meta: Mapped[dict] = mapped_column(JSONDict, nullable=False, default=dict, server_default="{}")
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true", index=True
+    )
+
+    matter: Mapped[Matter] = relationship("Matter", back_populates="resources")
+    created_by: Mapped[User | None] = relationship("User")
 
 
 class Program(Base, TimestampMixin):
@@ -719,6 +771,8 @@ __all__ = [
     "GovernanceEventType",
     "Matter",
     "MatterPriority",
+    "MatterResource",
+    "MatterResourceType",
     "MatterStatus",
     "MatterType",
     "MatterVisibility",

@@ -11,6 +11,7 @@ from api.models.activity import Activity
 from api.models.activity_link import ActivityLink
 from api.models.announcement import Announcement
 from api.models.document import Document, DocumentApproval
+from api.models.governance import EntityRelation, Matter
 from api.models.meeting import Meeting, MeetingAgendaItem, MeetingAttendance
 from api.models.petition import PetitionCase
 from api.models.regulation import Regulation
@@ -189,6 +190,18 @@ async def regulation_usage_context(
 
 
 async def _links_for(db: AsyncSession, target_type: str, target_id: uuid.UUID) -> list[ContextLink]:
+    matter_rows = (
+        await db.execute(
+            select(EntityRelation, Matter)
+            .join(Matter, EntityRelation.matter_id == Matter.id)
+            .where(
+                EntityRelation.target_type == target_type,
+                EntityRelation.target_id == target_id,
+                Matter.is_active.is_(True),
+            )
+            .order_by(EntityRelation.updated_at.desc())
+        )
+    ).all()
     rows = (
         await db.execute(
             select(ActivityLink).where(
@@ -197,12 +210,24 @@ async def _links_for(db: AsyncSession, target_type: str, target_id: uuid.UUID) -
             )
         )
     ).scalars()
-    return [
+    links = [
         ContextLink(
-            title=row.title,
-            href=f"/activities/{row.activity_id}",
-            kind="activity_link",
-            timestamp=row.created_at,
+            title=matter.title,
+            href=f"/matters/{matter.id}",
+            kind=relation.relation,
+            timestamp=relation.created_at,
         )
-        for row in rows
+        for relation, matter in matter_rows
     ]
+    links.extend(
+        [
+            ContextLink(
+                title=row.title,
+                href=f"/activities/{row.activity_id}",
+                kind="activity_link",
+                timestamp=row.created_at,
+            )
+            for row in rows
+        ]
+    )
+    return links

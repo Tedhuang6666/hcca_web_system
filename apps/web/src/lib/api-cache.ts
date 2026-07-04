@@ -16,8 +16,9 @@ export function cacheGet<T>(key: string): T | undefined {
   return _cache.get(key)?.data as T | undefined;
 }
 
-/** 寫快取。 */
-export function cacheSet(key: string, data: unknown): void {
+/** 寫快取。ttlMs 目前保留給呼叫端語意標示，讀取仍由呼叫端決定是否陳舊。 */
+export function cacheSet(key: string, data: unknown, ttlMs?: number): void {
+  void ttlMs;
   _cache.set(key, { data, at: Date.now() });
 }
 

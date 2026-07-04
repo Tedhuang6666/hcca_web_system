@@ -120,6 +120,7 @@ async def get_matter(db: AsyncSession, matter_id: uuid.UUID) -> Matter | None:
             selectinload(Matter.cases),
             selectinload(Matter.links),
             selectinload(Matter.events),
+            selectinload(Matter.resources),
             selectinload(Matter.decisions),
             selectinload(Matter.planning_documents).selectinload(PlanningDocument.attachments),
             selectinload(Matter.planning_documents)

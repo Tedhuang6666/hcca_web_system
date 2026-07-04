@@ -3376,15 +3376,14 @@ export interface WorkItemOut {
   completed_at: string | null;
   discord_channel_id: string | null;
   discord_message_id: string | null;
+  google_task_id?: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
 }
 
-export type WorkItemCreate = Pick<
-  WorkItemOut,
-  "title" | "description" | "assigned_to_id" | "source_type" | "source_id" | "due_at"
->;
+export type WorkItemCreate = Pick<WorkItemOut, "title"> &
+  Partial<Pick<WorkItemOut, "description" | "assigned_to_id" | "source_type" | "source_id" | "due_at">>;
 
 export type WorkItemUpdate = Partial<
   Pick<WorkItemOut, "title" | "description" | "assigned_to_id" | "due_at" | "status">
@@ -3497,6 +3496,43 @@ export interface TimelineEventOut {
   payload: Record<string, unknown>;
   created_at: string;
 }
+
+export type MatterResourceType =
+  | "google_meet"
+  | "google_drive"
+  | "discord_text"
+  | "discord_voice"
+  | "external_url"
+  | "file"
+  | "other";
+
+export interface MatterResourceOut {
+  id: string;
+  matter_id: string;
+  resource_type: MatterResourceType | string;
+  title: string;
+  url: string;
+  provider: string | null;
+  external_id: string | null;
+  description: string | null;
+  meta: Record<string, unknown>;
+  created_by_id: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MatterResourceCreate {
+  resource_type?: MatterResourceType;
+  title: string;
+  url: string;
+  provider?: string | null;
+  external_id?: string | null;
+  description?: string | null;
+  meta?: Record<string, unknown>;
+}
+
+export type MatterResourceUpdate = Partial<MatterResourceCreate & { is_active: boolean }>;
 
 export interface DecisionOut {
   id: string;
@@ -3698,6 +3734,7 @@ export interface MatterOut extends Omit<MatterListItem, "case_count" | "open_tas
   cases: GovernanceCaseOut[];
   links: EntityRelationOut[];
   events: TimelineEventOut[];
+  resources: MatterResourceOut[];
   decisions: DecisionOut[];
   planning_documents: PlanningDocumentOut[];
   role_assignments: MatterRoleAssignmentOut[];

@@ -15,13 +15,14 @@ from api.models.activity_link import ActivityLink, ActivityLinkKind
 from api.models.announcement import Announcement
 from api.models.calendar import CalendarEvent
 from api.models.document import Document
+from api.models.governance import EntityRelation, GovernanceEventType, Matter, MatterType
 from api.models.meal import MealOrder, MenuSchedule
 from api.models.meeting import Meeting
 from api.models.petition import PetitionCase
 from api.models.publication import PublicationCampaign
 from api.models.receivable import Receivable, ReceivableStatus
 from api.models.regulation import Regulation
-from api.models.shop import Order, Product
+from api.models.shop import Order, Product, ProductCategory, ProductSeries
 from api.models.survey import Survey
 from api.models.work_item import WorkItem, WorkItemStatus
 from api.schemas.activity_link import (
@@ -29,6 +30,7 @@ from api.schemas.activity_link import (
     ActivityLinkSuggestion,
     ActivitySpawnCreate,
 )
+from api.services.governance._events import record_event
 
 
 @dataclass
@@ -77,6 +79,8 @@ async def create_link(
     db.add(link)
     await db.flush()
     await db.refresh(link)
+    matter = await ensure_activity_matter(db, activity_id, actor_id=actor_id)
+    await _sync_activity_link_relation(db, matter, link, actor_id=actor_id)
     return link
 
 
@@ -90,6 +94,7 @@ async def get_link(db: AsyncSession, link_id: uuid.UUID) -> ActivityLink | None:
 
 
 async def workspace(db: AsyncSession, activity: Activity) -> dict:
+    matter = await ensure_activity_matter(db, activity.id)
     links = await list_links(db, activity.id)
     grouped: dict[str, list[ActivityLink]] = defaultdict(list)
     for link in links:
@@ -128,7 +133,7 @@ async def workspace(db: AsyncSession, activity: Activity) -> dict:
     ]
     return {
         "activity_id": activity.id,
-        "matter_id": None,
+        "matter_id": matter.id,
         "summary": {
             "title": activity.name,
             "description": activity.description,
@@ -154,6 +159,111 @@ async def workspace(db: AsyncSession, activity: Activity) -> dict:
         "documents": documents,
         "suggestions": suggestions,
     }
+
+
+async def ensure_activity_matter(
+    db: AsyncSession,
+    activity_id: uuid.UUID,
+    *,
+    actor_id: uuid.UUID | None = None,
+) -> Matter:
+    existing = await db.scalar(
+        select(Matter)
+        .join(EntityRelation, EntityRelation.matter_id == Matter.id)
+        .where(
+            EntityRelation.target_type == "activity",
+            EntityRelation.target_id == activity_id,
+            EntityRelation.relation == "source",
+            Matter.is_active.is_(True),
+        )
+    )
+    if existing is not None:
+        return existing
+    activity = await db.get(Activity, activity_id)
+    if activity is None:
+        raise ValueError("活動不存在")
+    matter = Matter(
+        title=activity.name,
+        matter_type=MatterType.ACTIVITY,
+        description=activity.description,
+        org_id=activity.org_id,
+        starts_at=activity.starts_at,
+        due_at=activity.ends_at,
+        status="active" if activity.status == "active" else "draft",
+        created_by_id=actor_id,
+        meta={"source_type": "activity", "source_id": str(activity.id)},
+    )
+    db.add(matter)
+    await db.flush()
+    relation = EntityRelation(
+        matter_id=matter.id,
+        source_type="matter",
+        source_id=matter.id,
+        target_type="activity",
+        target_id=activity.id,
+        relation="source",
+        title=activity.name,
+        href=f"/activities/{activity.id}",
+        created_by_id=actor_id,
+        meta={"synced_from": "activity_workspace"},
+    )
+    db.add(relation)
+    await record_event(
+        db,
+        matter_id=matter.id,
+        event_type=GovernanceEventType.CREATED,
+        title=f"建立活動事項：{activity.name}",
+        actor_id=actor_id,
+        payload={"activity_id": str(activity.id)},
+    )
+    await db.flush()
+    return matter
+
+
+async def _sync_activity_link_relation(
+    db: AsyncSession,
+    matter: Matter,
+    link: ActivityLink,
+    *,
+    actor_id: uuid.UUID | None,
+) -> None:
+    existing = await db.scalar(
+        select(EntityRelation).where(
+            EntityRelation.matter_id == matter.id,
+            EntityRelation.target_type == link.target_type,
+            EntityRelation.target_id == link.target_id,
+            EntityRelation.relation == "activity_link",
+        )
+    )
+    if existing is not None:
+        return
+    db.add(
+        EntityRelation(
+            matter_id=matter.id,
+            source_type="activity",
+            source_id=link.activity_id,
+            target_type=link.target_type,
+            target_id=link.target_id,
+            relation="activity_link",
+            title=link.title,
+            href=link.href,
+            note=link.note,
+            meta={**(link.meta or {}), "activity_link_id": str(link.id)},
+            created_by_id=actor_id,
+        )
+    )
+    await record_event(
+        db,
+        matter_id=matter.id,
+        event_type=GovernanceEventType.LINKED,
+        title=f"新增活動關聯：{link.title}",
+        actor_id=actor_id,
+        payload={
+            "activity_link_id": str(link.id),
+            "target_type": link.target_type,
+            "target_id": str(link.target_id),
+        },
+    )
 
 
 async def spawn(
@@ -708,7 +818,9 @@ async def _procurement(
     products = (
         await db.execute(
             select(Product)
-            .where(Product.activity_id == activity_id)
+            .join(ProductSeries, Product.series_id == ProductSeries.id)
+            .join(ProductCategory, ProductSeries.category_id == ProductCategory.id)
+            .where(ProductCategory.activity_id == activity_id)
             .order_by(Product.created_at.desc())
             .limit(40)
         )

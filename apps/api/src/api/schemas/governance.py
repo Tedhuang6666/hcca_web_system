@@ -12,6 +12,7 @@ from api.models.governance import (
     CaseStatus,
     DecisionStatus,
     MatterPriority,
+    MatterResourceType,
     MatterStatus,
     MatterType,
     MatterVisibility,
@@ -111,6 +112,27 @@ class TimelineEventCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=240)
     body: str | None = Field(None, max_length=10000)
     payload: dict = Field(default_factory=dict)
+
+
+class MatterResourceCreate(BaseModel):
+    resource_type: MatterResourceType = MatterResourceType.EXTERNAL_URL
+    title: str = Field(..., min_length=1, max_length=240)
+    url: str = Field(..., min_length=1, max_length=2048)
+    provider: str | None = Field(None, max_length=50)
+    external_id: str | None = Field(None, max_length=255)
+    description: str | None = Field(None, max_length=5000)
+    meta: dict = Field(default_factory=dict)
+
+
+class MatterResourceUpdate(BaseModel):
+    resource_type: MatterResourceType | None = None
+    title: str | None = Field(None, min_length=1, max_length=240)
+    url: str | None = Field(None, min_length=1, max_length=2048)
+    provider: str | None = Field(None, max_length=50)
+    external_id: str | None = Field(None, max_length=255)
+    description: str | None = Field(None, max_length=5000)
+    meta: dict | None = None
+    is_active: bool | None = None
 
 
 class DecisionCreate(BaseModel):
@@ -292,6 +314,24 @@ class TimelineEventOut(BaseModel):
     actor_email: str | None
     payload: dict
     created_at: datetime
+
+
+class MatterResourceOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    matter_id: uuid.UUID
+    resource_type: str
+    title: str
+    url: str
+    provider: str | None
+    external_id: str | None
+    description: str | None
+    meta: dict
+    created_by_id: uuid.UUID | None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
 
 
 class DecisionOut(BaseModel):
@@ -574,6 +614,7 @@ class MatterOut(BaseModel):
     cases: list[GovernanceCaseOut] = []
     links: list[EntityRelationOut] = []
     events: list[TimelineEventOut] = []
+    resources: list[MatterResourceOut] = []
     decisions: list[DecisionOut] = []
     planning_documents: list[PlanningDocumentOut] = []
     role_assignments: list[MatterRoleAssignmentOut] = []
