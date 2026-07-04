@@ -8,15 +8,20 @@ import {
   AlertTriangle,
   ChevronRight,
   Clock,
+  Filter,
   FolderKanban,
+  GitBranch,
   Loader2,
   Plus,
   Search,
+  ShieldCheck,
+  Sparkles,
   X,
 } from "lucide-react";
 import { governanceApi } from "@/lib/api";
 import type { GovernanceDashboardOut, MatterListItem, MatterPriority, MatterType } from "@/lib/types";
 import { cacheGet, cacheHas, cacheSet, cachePurge } from "@/lib/api-cache";
+import { buildMatterInsight, riskColor, sortMattersByInsight } from "@/lib/governanceInsights";
 
 const TYPE_LABEL: Record<string, string> = {
   activity: "活動",
@@ -158,16 +163,24 @@ export default function GovernancePage() {
   };
 
   const stats = dashboard?.stats;
+  const smartMatters = sortMattersByInsight(matters);
+  const topInsight = smartMatters[0]?.insight ?? null;
+  const criticalCount = smartMatters.filter((item) => item.insight.risk_level === "critical").length;
+  const warningCount = smartMatters.filter((item) => item.insight.risk_level === "warning").length;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4">
+    <div className="mx-auto max-w-7xl space-y-5">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
-            工作中心
+          <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold" style={{ color: "var(--primary)" }}>
+            <Sparkles size={13} aria-hidden={true} />
+            營運工作台
+          </p>
+          <h1 className="text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
+            治理中樞
           </h1>
           <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            從活動、專案與自治事項出發，集中追蹤跨模組資料與執行進度
+            依期限、任務、關聯與決議狀態排序，先看到最需要處理的跨模組事項
           </p>
         </div>
         <button type="button" className="btn btn-primary" onClick={() => setShowCreate(true)}>
@@ -176,11 +189,13 @@ export default function GovernancePage() {
         </button>
       </header>
 
-      <section className="grid grid-cols-2 gap-2 lg:grid-cols-4" aria-label="治理摘要">
+      <section className="grid grid-cols-2 gap-2 lg:grid-cols-6" aria-label="治理摘要">
         <Summary label="進行中" value={stats?.active_matters ?? 0} />
         <Summary label="逾期" value={stats?.overdue_matters ?? 0} danger />
         <Summary label="開放案件" value={stats?.open_cases ?? 0} />
         <Summary label="開放任務" value={stats?.open_tasks ?? 0} />
+        <Summary label="優先處理" value={criticalCount} danger />
+        <Summary label="有風險" value={warningCount} />
       </section>
 
       {showCreate && (
@@ -236,57 +251,109 @@ export default function GovernancePage() {
         </section>
       )}
 
-      <section
-        className="overflow-hidden rounded-lg"
-        style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
-      >
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            void load();
-          }}
-          className="flex flex-col gap-2 p-3 sm:flex-row"
-          style={{ borderBottom: "1px solid var(--border)" }}
+      <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div
+          className="overflow-hidden rounded-lg"
+          style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
         >
-          <label className="relative flex-1">
-            <Search
-              size={14}
-              aria-hidden={true}
-              className="absolute left-3 top-1/2 -translate-y-1/2"
-              style={{ color: "var(--text-muted)" }}
-            />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              className="input w-full"
-              style={{ paddingLeft: "2.25rem" }}
-              placeholder="搜尋事情"
-            />
-          </label>
-          <select value={status} onChange={(event) => setStatus(event.target.value)} className="input sm:w-36">
-            <option value="">全部狀態</option>
-            <option value="active">進行中</option>
-            <option value="paused">暫停</option>
-            <option value="completed">完成</option>
-            <option value="archived">歸檔</option>
-          </select>
-          <button type="submit" className="btn btn-secondary">篩選</button>
-        </form>
+          <div className="flex items-center justify-between gap-3 p-4" style={{ borderBottom: "1px solid var(--border)" }}>
+            <div>
+              <p className="text-xs font-semibold" style={{ color: "var(--primary)" }}>智慧工作佇列</p>
+              <h2 className="mt-1 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                依風險與下一步排序
+              </h2>
+            </div>
+            {topInsight && (
+              <span
+                className="rounded px-2 py-1 text-[11px] font-semibold"
+                style={{ background: "var(--bg-hover)", color: riskColor(topInsight.risk_level), border: "1px solid var(--border)" }}
+              >
+                最高風險：{topInsight.risk_label}
+              </span>
+            )}
+          </div>
 
-        {loading ? (
-          <div className="p-10 text-center">
-            <Loader2 size={18} className="mx-auto animate-spin" aria-hidden={true} style={{ color: "var(--primary)" }} />
-          </div>
-        ) : matters.length === 0 ? (
-          <div className="p-10 text-center">
-            <FolderKanban size={28} className="mx-auto" aria-hidden={true} style={{ color: "var(--text-disabled)" }} />
-            <p className="mt-2 text-sm" style={{ color: "var(--text-muted)" }}>沒有符合條件的事情</p>
-          </div>
-        ) : (
-          <div className="divide-y" style={{ borderColor: "var(--border)" }}>
-            {matters.map((matter) => <MatterRow key={matter.id} matter={matter} />)}
-          </div>
-        )}
+          {loading ? (
+            <div className="p-10 text-center">
+              <Loader2 size={18} className="mx-auto animate-spin" aria-hidden={true} style={{ color: "var(--primary)" }} />
+            </div>
+          ) : smartMatters.length === 0 ? (
+            <div className="p-10 text-center">
+              <FolderKanban size={28} className="mx-auto" aria-hidden={true} style={{ color: "var(--text-disabled)" }} />
+              <p className="mt-2 text-sm" style={{ color: "var(--text-muted)" }}>沒有符合條件的事情</p>
+            </div>
+          ) : (
+            <div className="divide-y" style={{ borderColor: "var(--border)" }}>
+              {smartMatters.map(({ matter, insight }) => (
+                <MatterRow key={matter.id} matter={matter} insight={insight} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        <aside className="space-y-4">
+          <section
+            className="rounded-lg p-4"
+            style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
+          >
+            <div className="mb-3 flex items-center gap-2">
+              <Filter size={15} aria-hidden={true} style={{ color: "var(--primary)" }} />
+              <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>篩選與搜尋</h2>
+            </div>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void load();
+              }}
+              className="space-y-2"
+            >
+              <label className="relative block">
+                <Search
+                  size={14}
+                  aria-hidden={true}
+                  className="absolute left-3 top-1/2 -translate-y-1/2"
+                  style={{ color: "var(--text-muted)" }}
+                />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  className="input w-full"
+                  style={{ paddingLeft: "2.25rem" }}
+                  placeholder="搜尋事情"
+                />
+              </label>
+              <select value={status} onChange={(event) => setStatus(event.target.value)} className="input w-full">
+                <option value="">全部狀態</option>
+                <option value="active">進行中</option>
+                <option value="paused">暫停</option>
+                <option value="completed">完成</option>
+                <option value="archived">歸檔</option>
+              </select>
+              <button type="submit" className="btn btn-secondary w-full justify-center">套用篩選</button>
+            </form>
+          </section>
+
+          <section
+            className="rounded-lg p-4"
+            style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
+          >
+            <div className="mb-3 flex items-center gap-2">
+              <ShieldCheck size={15} aria-hidden={true} style={{ color: "var(--primary)" }} />
+              <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>營運摘要</h2>
+            </div>
+            <div className="space-y-2 text-xs" style={{ color: "var(--text-muted)" }}>
+              <p>待辦：{stats?.open_tasks ?? 0} 件，決議待處理：{stats?.pending_decisions ?? 0} 筆。</p>
+              <p>企劃審查中：{stats?.plans_in_review ?? 0} 件，我的任務：{stats?.my_tasks ?? 0} 件。</p>
+              {topInsight ? (
+                <p style={{ color: riskColor(topInsight.risk_level) }}>
+                  下一步：{topInsight.recommended_action.label}
+                </p>
+              ) : (
+                <p>目前沒有需要排序的治理事項。</p>
+              )}
+            </div>
+          </section>
+        </aside>
       </section>
     </div>
   );
@@ -312,12 +379,18 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function MatterRow({ matter }: { matter: MatterListItem }) {
+function MatterRow({
+  matter,
+  insight,
+}: {
+  matter: MatterListItem;
+  insight: ReturnType<typeof buildMatterInsight>;
+}) {
   const overdue = isOverdue(matter);
   return (
     <Link
       href={`/governance/${matter.id}`}
-      className="grid gap-3 px-4 py-3 transition-colors sm:grid-cols-[minmax(0,1fr)_100px_160px_130px_20px] sm:items-center"
+      className="grid gap-3 px-4 py-3 transition-colors hover:bg-[var(--bg-hover)] sm:grid-cols-[minmax(0,1.2fr)_120px_150px_130px_140px_20px] sm:items-center"
       style={{ textDecoration: "none" }}
     >
       <div className="min-w-0">
@@ -328,10 +401,18 @@ function MatterRow({ matter }: { matter: MatterListItem }) {
         <p className="mt-1 truncate text-xs" style={{ color: "var(--text-muted)" }}>
           {TYPE_LABEL[matter.matter_type] ?? matter.matter_type} · {PRIORITY_LABEL[matter.priority] ?? matter.priority}
         </p>
+        <p className="mt-1 truncate text-[11px]" style={{ color: riskColor(insight.risk_level) }}>
+          {insight.recommended_action.label}：{insight.recommended_action.reason}
+        </p>
       </div>
-      <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
-        {STATUS_LABEL[matter.status] ?? matter.status}
-      </span>
+      <div className="flex flex-wrap gap-1">
+        <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold" style={{ color: riskColor(insight.risk_level), background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
+          {insight.risk_label}
+        </span>
+        <span className="rounded px-1.5 py-0.5 text-[10px]" style={{ color: "var(--text-secondary)", background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
+          {STATUS_LABEL[matter.status] ?? matter.status}
+        </span>
+      </div>
       <div>
         <div className="flex justify-between text-[10px]" style={{ color: "var(--text-muted)" }}>
           <span>進度</span><span>{matter.progress_percent}%</span>
@@ -343,6 +424,10 @@ function MatterRow({ matter }: { matter: MatterListItem }) {
       <span className="flex items-center gap-1 text-xs" style={{ color: overdue ? "var(--danger)" : "var(--text-muted)" }}>
         <Clock size={12} aria-hidden={true} />
         {formatDate(matter.due_at)}
+      </span>
+      <span className="hidden items-center gap-1 text-xs lg:flex" style={{ color: "var(--text-muted)" }}>
+        <GitBranch size={12} aria-hidden={true} />
+        {matter.open_task_count} 任務 · {matter.link_count} 關聯
       </span>
       <ChevronRight size={14} aria-hidden={true} style={{ color: "var(--text-disabled)" }} />
     </Link>

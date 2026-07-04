@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  AlertTriangle,
   Check,
   ChevronRight,
   FolderKanban,
@@ -17,6 +18,7 @@ import { toast } from "sonner";
 import { governanceApi } from "@/lib/api";
 import type { EntityRelationOut, MatterListItem, MatterLinkRef } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
+import { buildGovernanceContextSummary, riskColor } from "@/lib/governanceInsights";
 
 type GovernanceEntityType =
   | "document"
@@ -181,6 +183,11 @@ export default function GovernanceLinkPanel({
   }, [loadingMatters, matters.length, open]);
 
   const linkedIds = useMemo(() => new Set(links.map((l) => l.matter_id)), [links]);
+  const visibleRelations = useMemo(
+    () => relations.filter((relation) => !(relation.matter_id && relation.source_type === "matter")),
+    [relations],
+  );
+  const contextSummary = buildGovernanceContextSummary(links.length, visibleRelations.length);
 
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -294,90 +301,122 @@ export default function GovernanceLinkPanel({
   };
 
   return (
-    <div className="relative flex flex-wrap items-center gap-2">
-      {links.map((link) => (
-        <span
-          key={link.relation_id}
-          className={`flex items-center gap-1.5 rounded-md ${compact ? "px-2 py-1" : "px-3 py-1.5"}`}
-          style={{
-            background: "var(--primary-dim)",
-            color: "var(--primary)",
-            border: "1px solid var(--info-border)",
-          }}
-        >
-          <Check size={12} aria-hidden={true} />
-          <Link
-            href={`/governance/${link.matter_id}`}
-            className="max-w-[160px] truncate text-xs font-semibold"
-            style={{ color: "var(--primary)", textDecoration: "none" }}
-            title={link.matter_title}
-          >
-            {link.matter_title}
-          </Link>
-          <button
-            type="button"
-            onClick={() => unlink(link)}
-            disabled={saving}
-            aria-label={`解除與「${link.matter_title}」的關聯`}
-            className="ml-0.5 opacity-70 hover:opacity-100"
-          >
-            <X size={11} aria-hidden={true} />
-          </button>
-        </span>
-      ))}
-      {relations
-        .filter((relation) => !(relation.matter_id && relation.source_type === "matter"))
-        .map((relation) => (
+    <div
+      className={`relative rounded-lg ${compact ? "p-2" : "p-3"}`}
+      style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
           <span
-            key={relation.id}
-            className={`flex items-center gap-1.5 rounded-md ${compact ? "px-2 py-1" : "px-3 py-1.5"}`}
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg"
             style={{
               background: "var(--bg-hover)",
-              color: "var(--text-secondary)",
+              color: riskColor(contextSummary.risk_level),
               border: "1px solid var(--border)",
             }}
           >
-            <GitBranch size={12} aria-hidden={true} />
-            {relation.source_type === entityType &&
-            relation.source_id === entityId &&
-            relation.href ? (
-              <Link
-                href={relation.href}
-                className="max-w-[160px] truncate text-xs font-semibold"
-                title={relation.title}
-              >
-                {ENTITY_LABEL[relation.target_type as GovernanceEntityType] ??
-                  relation.target_type}
-                ：{relation.title}
-              </Link>
+            {contextSummary.risk_level === "info" ? (
+              <AlertTriangle size={16} aria-hidden={true} />
             ) : (
-              <span className="max-w-[160px] truncate text-xs" title={relation.title}>
-                {relation.source_type === entityType && relation.source_id === entityId
-                  ? `${ENTITY_LABEL[relation.target_type as GovernanceEntityType] ?? relation.target_type}：${relation.title}`
-                  : `來自 ${ENTITY_LABEL[relation.source_type as GovernanceEntityType] ?? relation.source_type}`}
-              </span>
+              <GitBranch size={16} aria-hidden={true} />
             )}
-            <button
-              type="button"
-              onClick={() => unlinkDirect(relation)}
-              disabled={saving}
-              aria-label={`解除與「${relation.title}」的關聯`}
-            >
-              <X size={11} aria-hidden={true} />
-            </button>
           </span>
-        ))}
+          <div className="min-w-0">
+            <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+              {contextSummary.headline}
+            </p>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              {contextSummary.detail}
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          className={compact ? "btn btn-secondary text-xs" : "btn btn-secondary"}
+          aria-expanded={open}
+          aria-haspopup="dialog"
+        >
+          <Link2 size={14} aria-hidden={true} />
+          {links.length > 0 ? "管理脈絡" : "納入治理"}
+        </button>
+      </div>
 
-      <button
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        className={compact ? "btn btn-secondary text-xs" : "btn btn-secondary"}
-        aria-expanded={open}
-        aria-haspopup="dialog"
-      >
-        <Link2 size={14} aria-hidden={true} />
-        {links.length > 0 ? "再納入" : "納入治理"}
-      </button>
+      {(links.length > 0 || visibleRelations.length > 0) && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {links.map((link) => (
+            <span
+              key={link.relation_id}
+              className={`flex items-center gap-1.5 rounded-md ${compact ? "px-2 py-1" : "px-3 py-1.5"}`}
+              style={{
+                background: "var(--primary-dim)",
+                color: "var(--primary)",
+                border: "1px solid var(--info-border)",
+              }}
+            >
+              <Check size={12} aria-hidden={true} />
+              <Link
+                href={`/governance/${link.matter_id}`}
+                className="max-w-[180px] truncate text-xs font-semibold"
+                style={{ color: "var(--primary)", textDecoration: "none" }}
+                title={link.matter_title}
+              >
+                {link.matter_title}
+              </Link>
+              <span className="text-[10px] opacity-75">{link.matter_progress}%</span>
+              <button
+                type="button"
+                onClick={() => unlink(link)}
+                disabled={saving}
+                aria-label={`解除與「${link.matter_title}」的關聯`}
+                className="ml-0.5 opacity-70 hover:opacity-100"
+              >
+                <X size={11} aria-hidden={true} />
+              </button>
+            </span>
+          ))}
+          {visibleRelations.map((relation) => (
+            <span
+              key={relation.id}
+              className={`flex items-center gap-1.5 rounded-md ${compact ? "px-2 py-1" : "px-3 py-1.5"}`}
+              style={{
+                background: "var(--bg-hover)",
+                color: "var(--text-secondary)",
+                border: "1px solid var(--border)",
+              }}
+            >
+              <GitBranch size={12} aria-hidden={true} />
+              {relation.source_type === entityType &&
+              relation.source_id === entityId &&
+              relation.href ? (
+                <Link
+                  href={relation.href}
+                  className="max-w-[180px] truncate text-xs font-semibold"
+                  title={relation.title}
+                >
+                  {ENTITY_LABEL[relation.target_type as GovernanceEntityType] ??
+                    relation.target_type}
+                  ：{relation.title}
+                </Link>
+              ) : (
+                <span className="max-w-[180px] truncate text-xs" title={relation.title}>
+                  {relation.source_type === entityType && relation.source_id === entityId
+                    ? `${ENTITY_LABEL[relation.target_type as GovernanceEntityType] ?? relation.target_type}：${relation.title}`
+                    : `來自 ${ENTITY_LABEL[relation.source_type as GovernanceEntityType] ?? relation.source_type}`}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => unlinkDirect(relation)}
+                disabled={saving}
+                aria-label={`解除與「${relation.title}」的關聯`}
+              >
+                <X size={11} aria-hidden={true} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
 
       {open && (
         <div
