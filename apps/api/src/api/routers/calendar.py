@@ -1,14 +1,20 @@
-"""行事曆 Router - 事件 / 參與者 / 準備清單 / 關聯連結。"""
+"""行事曆 Router - 事件 / 參與者 / 準備清單 / 關聯連結 / Google Calendar 同步。"""
 
 from __future__ import annotations
 
+import logging
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from authlib.integrations.base_client import OAuthError
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
@@ -387,3 +393,207 @@ async def delete_link(
     if link is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此關聯連結")
     await calendar_svc.delete_link(session, link)
+
+
+# ── Google Calendar 雙向同步 ──────────────────────────────────────────────────
+
+
+class GoogleCalendarStatusOut(BaseModel):
+    is_connected: bool
+    authorized_email: str | None
+    google_calendar_id: str
+    sync_enabled: bool
+    last_pull_at: datetime | None
+    last_error: str | None
+    authorized_at: datetime | None
+
+    model_config = {"from_attributes": True}
+
+
+def _require_calendar_admin(user: User, codes: frozenset[str]) -> None:
+    if not user.is_superuser and PermissionCode.CALENDAR_ADMIN not in codes:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="需要 calendar:admin 權限")
+
+
+async def _get_google_config_or_404(
+    session: AsyncSession, org_id: uuid.UUID
+) -> "OrgGoogleCalendarConfig":
+    from api.models.google_calendar import OrgGoogleCalendarConfig
+
+    config = await session.scalar(
+        select(OrgGoogleCalendarConfig).where(
+            OrgGoogleCalendarConfig.org_id == org_id,
+            OrgGoogleCalendarConfig.is_active.is_(True),
+        )
+    )
+    if config is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="此組織尚未連結 Google Calendar")
+    return config
+
+
+@router.get("/google/status/{org_id}", response_model=GoogleCalendarStatusOut, summary="查詢 Google Calendar 同步狀態")
+async def google_calendar_status(
+    org_id: uuid.UUID,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> GoogleCalendarStatusOut:
+    from api.models.google_calendar import OrgGoogleCalendarConfig
+
+    codes = await _permission_codes(session, current_user)
+    _require_calendar_admin(current_user, codes)
+    config = await session.scalar(
+        select(OrgGoogleCalendarConfig).where(
+            OrgGoogleCalendarConfig.org_id == org_id,
+            OrgGoogleCalendarConfig.is_active.is_(True),
+        )
+    )
+    if config is None:
+        return GoogleCalendarStatusOut(
+            is_connected=False,
+            authorized_email=None,
+            google_calendar_id="primary",
+            sync_enabled=False,
+            last_pull_at=None,
+            last_error=None,
+            authorized_at=None,
+        )
+    return GoogleCalendarStatusOut(
+        is_connected=config.is_connected,
+        authorized_email=config.authorized_email,
+        google_calendar_id=config.google_calendar_id,
+        sync_enabled=config.sync_enabled,
+        last_pull_at=config.last_pull_at,
+        last_error=config.last_error,
+        authorized_at=config.authorized_at,
+    )
+
+
+@router.get("/google/authorize", summary="發起 Google Calendar OAuth 授權")
+async def google_calendar_authorize(
+    request: Request,
+    org_id: uuid.UUID,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> RedirectResponse:
+    from api.core.oauth import google_calendar as gcal_client
+
+    codes = await _permission_codes(session, current_user)
+    _require_calendar_admin(current_user, codes)
+
+    request.session["gcal_org_id"] = str(org_id)
+    request.session["gcal_user_id"] = str(current_user.id)
+
+    from api.core.config import settings
+
+    redirect_uri = settings.GOOGLE_CALENDAR_REDIRECT_URI
+    return await gcal_client.authorize_redirect(request, redirect_uri)  # type: ignore[return-value]
+
+
+@router.get("/google/callback", summary="Google Calendar OAuth 回呼（內部端點）", include_in_schema=False)
+async def google_calendar_callback(
+    request: Request,
+    session: DbDep,
+) -> RedirectResponse:
+    from datetime import UTC, datetime
+
+    import sqlalchemy
+
+    from api.core.config import settings
+    from api.core.field_crypto import FieldEncryptionNotConfigured
+    from api.core.oauth import google_calendar as gcal_client
+    from api.models.google_calendar import OrgGoogleCalendarConfig
+
+    frontend_origin = settings.ALLOWED_ORIGINS[0] if settings.ALLOWED_ORIGINS else "http://localhost:3000"
+
+    org_id_str = request.session.pop("gcal_org_id", None)
+    user_id_str = request.session.pop("gcal_user_id", None)
+
+    if not org_id_str or not user_id_str:
+        return RedirectResponse(url=f"{frontend_origin}/admin/calendar/google?error=session_expired")
+
+    try:
+        token_data = await gcal_client.authorize_access_token(request)
+    except OAuthError as exc:
+        logger.warning("Google Calendar OAuth 失敗：%s", exc)
+        return RedirectResponse(url=f"{frontend_origin}/admin/calendar/google?error=oauth_error")
+
+    access_token: str = token_data.get("access_token", "")
+    refresh_token: str | None = token_data.get("refresh_token")
+    expires_at: float | None = token_data.get("expires_at")
+    userinfo: dict = token_data.get("userinfo") or {}
+    authorized_email: str | None = userinfo.get("email")
+
+    token_expiry: datetime | None = None
+    if expires_at:
+        token_expiry = datetime.fromtimestamp(expires_at, tz=UTC)
+
+    org_uuid = uuid.UUID(org_id_str)
+    user_uuid = uuid.UUID(user_id_str)
+
+    try:
+        existing = await session.scalar(
+            select(OrgGoogleCalendarConfig).where(
+                OrgGoogleCalendarConfig.org_id == org_uuid,
+            )
+        )
+        if existing is None:
+            config = OrgGoogleCalendarConfig(
+                org_id=org_uuid,
+                authorized_by=user_uuid,
+            )
+            session.add(config)
+        else:
+            config = existing
+            config.is_active = True
+            config.authorized_by = user_uuid
+
+        config.access_token = access_token
+        if refresh_token:
+            config.refresh_token = refresh_token
+        config.token_expiry = token_expiry
+        config.authorized_email = authorized_email
+        config.authorized_at = datetime.now(UTC)
+        config.sync_enabled = True
+        config.sync_token = None
+        config.last_error = None
+
+        await session.commit()
+    except FieldEncryptionNotConfigured:
+        logger.error("Google Calendar callback：FIELD_ENCRYPTION_KEYS 未設定")
+        return RedirectResponse(url=f"{frontend_origin}/admin/calendar/google?error=encryption_not_configured")
+    except Exception:
+        await session.rollback()
+        logger.exception("Google Calendar callback：儲存 token 失敗")
+        return RedirectResponse(url=f"{frontend_origin}/admin/calendar/google?error=save_failed")
+
+    return RedirectResponse(url=f"{frontend_origin}/admin/calendar/google?connected=true&org_id={org_id_str}")
+
+
+@router.delete("/google/disconnect/{org_id}", status_code=status.HTTP_204_NO_CONTENT, summary="解除 Google Calendar 連結")
+async def google_calendar_disconnect(
+    org_id: uuid.UUID,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> None:
+    codes = await _permission_codes(session, current_user)
+    _require_calendar_admin(current_user, codes)
+    config = await _get_google_config_or_404(session, org_id)
+    config.is_active = False
+    config.sync_enabled = False
+    config.sync_token = None
+    await session.commit()
+
+
+@router.post("/google/trigger-pull/{org_id}", summary="手動觸發 Google Calendar 拉取")
+async def google_calendar_trigger_pull(
+    org_id: uuid.UUID,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> dict:
+    from api.services.google_calendar_tasks import pull_all_orgs
+
+    codes = await _permission_codes(session, current_user)
+    _require_calendar_admin(current_user, codes)
+    await _get_google_config_or_404(session, org_id)
+    pull_all_orgs.delay()
+    return {"status": "queued"}

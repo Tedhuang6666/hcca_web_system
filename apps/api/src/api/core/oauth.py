@@ -18,6 +18,18 @@ oauth.register(
 )
 
 oauth.register(
+    name="google_calendar",
+    client_id=settings.GOOGLE_CLIENT_ID,
+    client_secret=settings.GOOGLE_CLIENT_SECRET,
+    server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+    client_kwargs={
+        "scope": "https://www.googleapis.com/auth/calendar",
+        "access_type": "offline",
+        "prompt": "consent",
+    },
+)
+
+oauth.register(
     name="discord",
     client_id=settings.DISCORD_CLIENT_ID,
     client_secret=settings.DISCORD_CLIENT_SECRET,
@@ -29,4 +41,5 @@ oauth.register(
 
 # 型別提示輔助
 google: StarletteOAuth2App = oauth.google  # type: ignore[assignment]
+google_calendar: StarletteOAuth2App = oauth.google_calendar  # type: ignore[assignment]
 discord: StarletteOAuth2App = oauth.discord  # type: ignore[assignment]
