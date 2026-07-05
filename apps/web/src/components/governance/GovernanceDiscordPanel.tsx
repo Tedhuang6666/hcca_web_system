@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronDown } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ApiError, discordApi, governanceApi } from "@/lib/api";
@@ -76,6 +77,9 @@ export default function GovernanceDiscordPanel({ matterId, initial }: Props) {
   );
   const [routeDraft, setRouteDraft] = useState<GovernanceDiscordEventRouteIn>(emptyRoute);
   const [busy, setBusy] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const [routesOpen, setRoutesOpen] = useState(false);
 
   useEffect(() => {
     void discordApi.availableGuilds().then(setGuilds).catch(() => setGuilds([]));
@@ -145,19 +149,31 @@ export default function GovernanceDiscordPanel({ matterId, initial }: Props) {
   if (isModuleClosed("discord")) return null;
 
   return (
-    <details className="group rounded-lg" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
-      <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 p-5">
+    <section className="rounded-lg" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+      <div className="flex flex-wrap items-start justify-between gap-3 p-5">
         <div>
           <h2 className="text-sm font-semibold">Discord 治理工作區</h2>
           <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
             綁定既有頻道，或由 Bot 建立分類、討論、公告與核心工作頻道。
           </p>
         </div>
-        <span className="btn btn-secondary btn-sm pointer-events-none">
-          展開設定
-        </span>
-      </summary>
-      <div className="px-5 pb-5 pt-0">
+        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setPanelOpen((value) => !value)}>
+          {panelOpen ? "收合" : "展開"}
+          <ChevronDown size={14} className={panelOpen ? "rotate-180 transition-transform" : "transition-transform"} aria-hidden={true} />
+        </button>
+      </div>
+      {panelOpen && (
+      <div className="space-y-4 px-5 pb-5 pt-0">
+      <section className="rounded-md" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
+        <div className="flex items-center justify-between gap-2 px-3 py-2">
+          <h3 className="text-sm font-semibold">工作區設定</h3>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => setWorkspaceOpen((value) => !value)}>
+            {workspaceOpen ? "收合" : "展開"}
+            <ChevronDown size={14} className={workspaceOpen ? "rotate-180 transition-transform" : "transition-transform"} aria-hidden={true} />
+          </button>
+        </div>
+        {workspaceOpen && (
+        <div className="px-3 pb-3 pt-1" style={{ borderTop: "1px solid var(--border)" }}>
       <div className="flex flex-wrap items-start justify-end gap-3">
         {workspace && (
           <button
@@ -255,9 +271,25 @@ export default function GovernanceDiscordPanel({ matterId, initial }: Props) {
       {workspace?.last_error && (
         <p className="mt-2 text-xs" style={{ color: "var(--danger)" }}>{workspace.last_error}</p>
       )}
+        </div>
+        )}
+      </section>
 
-      <div className="mt-6 border-t pt-5" style={{ borderColor: "var(--border)" }}>
-        <h3 className="text-sm font-semibold">模組事件推送</h3>
+      <section className="rounded-md" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
+        <div className="flex items-center justify-between gap-2 px-3 py-2">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold">模組事件推送</h3>
+            <span className="rounded px-1.5 py-0.5 text-[10px]" style={{ background: "var(--bg-surface)", color: "var(--text-muted)", border: "1px solid var(--border)" }}>
+              {routes.length} 個路由
+            </span>
+          </div>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => setRoutesOpen((value) => !value)}>
+            {routesOpen ? "收合" : "展開"}
+            <ChevronDown size={14} className={routesOpen ? "rotate-180 transition-transform" : "transition-transform"} aria-hidden={true} />
+          </button>
+        </div>
+        {routesOpen && (
+        <div className="px-3 pb-3 pt-1" style={{ borderTop: "1px solid var(--border)" }}>
         <div className="mt-3 grid gap-3 md:grid-cols-4">
           <SelectField
             label="事件"
@@ -331,9 +363,12 @@ export default function GovernanceDiscordPanel({ matterId, initial }: Props) {
             已設定 {routes.length} 個事件路由
           </p>
         )}
+        </div>
+        )}
+      </section>
       </div>
-      </div>
-    </details>
+      )}
+    </section>
   );
 }
 
