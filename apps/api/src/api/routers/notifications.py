@@ -26,10 +26,14 @@ from api.models.web_push import WebPushSubscription
 from api.services.mail import enqueue_email
 from api.services.notification_pref import (
     DIGEST_FREQUENCIES,
+    KNOWN_MODULES,
+    MODULE_LABELS,
     TYPE_LABELS,
     get_digest_frequency,
+    get_muted_modules,
     normalize_preferences,
     set_digest_frequency,
+    set_muted_modules,
 )
 from api.services.web_push import send_to_user, web_push_enabled
 
@@ -332,6 +336,59 @@ async def update_digest_preference(
     )
     await db.flush()
     return DigestPreferenceOut(frequency=body.frequency)
+
+
+class MutedModulesOut(BaseModel):
+    muted_modules: list[str]
+    available_modules: dict[str, str] = Field(
+        default_factory=dict, description="模組代號 → 中文名稱"
+    )
+
+
+class MutedModulesIn(BaseModel):
+    muted_modules: list[str] = Field(..., description="要靜音的模組代號列表（空列表 = 全部開啟）")
+
+
+@router.get(
+    "/preferences/muted-modules",
+    response_model=MutedModulesOut,
+    summary="取得已靜音的通知模組",
+)
+async def get_muted_modules_preference(current_user: CurrentUser) -> MutedModulesOut:
+    return MutedModulesOut(
+        muted_modules=get_muted_modules(current_user.notification_preferences),
+        available_modules=dict(MODULE_LABELS),
+    )
+
+
+@router.put(
+    "/preferences/muted-modules",
+    response_model=MutedModulesOut,
+    summary="更新已靜音的通知模組",
+    description=(
+        "傳入要靜音的模組代號列表。靜音後，該模組所有通知類型的站內、Email、Line、Discord 管道"
+        "均同時關閉。傳空列表即解除全部靜音。取消靜音不會自動恢復細部設定。"
+    ),
+)
+async def update_muted_modules_preference(
+    body: MutedModulesIn,
+    db: DbDep,
+    current_user: CurrentUser,
+) -> MutedModulesOut:
+    invalid = [m for m in body.muted_modules if m not in KNOWN_MODULES]
+    if invalid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"未知的模組名稱：{', '.join(invalid)}；可用：{', '.join(sorted(KNOWN_MODULES))}",
+        )
+    current_user.notification_preferences = set_muted_modules(
+        current_user.notification_preferences, body.muted_modules
+    )
+    await db.flush()
+    return MutedModulesOut(
+        muted_modules=sorted(body.muted_modules),
+        available_modules=dict(MODULE_LABELS),
+    )
 
 
 @router.get("/web-push/config", response_model=WebPushConfigOut, summary="取得 Web Push 設定")
