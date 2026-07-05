@@ -15,6 +15,7 @@ import {
   GitBranch,
   Loader2,
   Pause,
+  Pencil,
   Play,
   Plus,
   ScrollText,
@@ -40,6 +41,7 @@ import type {
   GovernanceWorkflowTemplateOut,
   MatterOut,
   MatterResourceOut,
+  MatterRoleAssignmentOut,
   MatterSpawnResult,
   OrgRead,
   TimelineEventOut,
@@ -467,6 +469,31 @@ export default function GovernanceMatterPage() {
       })
       .catch((error) => {
         toast.error("更新職務指派失敗");
+        console.error(error);
+      });
+  };
+
+  const updateRoleAssignment = (
+    role: MatterRoleAssignmentOut,
+    body: Partial<Pick<MatterRoleAssignmentOut, "role_name" | "unit_name" | "user_id" | "start_at" | "end_at" | "note" | "sort_order" | "is_active">>,
+  ) => {
+    governanceApi
+      .updateRoleAssignment(role.id, body)
+      .then((updated) => {
+        setMatter((prev) =>
+          prev
+            ? {
+                ...prev,
+                role_assignments: prev.role_assignments.map((item) =>
+                  item.id === updated.id ? updated : item,
+                ),
+              }
+            : prev,
+        );
+        toast.success("職務資料已更新");
+      })
+      .catch((error) => {
+        toast.error("更新職務資料失敗");
         console.error(error);
       });
   };
@@ -1000,16 +1027,14 @@ export default function GovernanceMatterPage() {
               {[...matter.role_assignments]
                 .sort((a, b) => a.sort_order - b.sort_order)
                 .map((role) => (
-                  <div key={role.id} className="rounded-md p-3" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
-                    <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{role.role_name}</p>
-                    <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{role.unit_name || "未分組"} · {userName(role.user_id)}</p>
-                    <select value={role.user_id ?? ""} onChange={(event) => updateRoleUser(role.id, event.target.value)} className="input mt-2 w-full text-xs">
-                      <option value="">尚未指派</option>
-                      {users.map((user) => (
-                        <option key={user.id} value={user.id}>{user.display_name || user.email}</option>
-                      ))}
-                    </select>
-                  </div>
+                  <RoleAssignmentCard
+                    key={role.id}
+                    role={role}
+                    users={users}
+                    userName={userName}
+                    onAssign={updateRoleUser}
+                    onUpdate={updateRoleAssignment}
+                  />
                 ))}
               {matter.role_assignments.length === 0 && <EmptyInline label="尚未建立組織職務" />}
             </div>
@@ -1354,36 +1379,69 @@ function TaskRow({
   ) => void;
   muted?: boolean;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(task.title);
+  const [description, setDescription] = useState(task.description ?? "");
+  const [assignedToId, setAssignedToId] = useState(task.assigned_to_id ?? "");
+  const [dueAt, setDueAt] = useState(toDateInputValue(task.due_at));
+  const [status, setStatus] = useState(task.status);
   const assignee =
     users.find((user) => user.id === task.assigned_to_id)?.display_name ||
     users.find((user) => user.id === task.assigned_to_id)?.email ||
     "未指派";
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (!title.trim()) return;
+    onUpdate(task, {
+      title: title.trim(),
+      description: description.trim() || null,
+      assigned_to_id: assignedToId || null,
+      due_at: dueAt ? new Date(dueAt).toISOString() : null,
+      status,
+    });
+    setEditing(false);
+  };
   return (
-    <details className="rounded-md p-3" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", opacity: muted ? 0.72 : 1 }}>
-      <summary className="flex cursor-pointer list-none items-start justify-between gap-2">
+    <article
+      className="rounded-md p-3"
+      onDoubleClick={() => setEditing(true)}
+      style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", opacity: muted ? 0.72 : 1 }}
+    >
+      <div className="flex items-start justify-between gap-2">
         <span className="min-w-0">
           <span className="block truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{task.title}</span>
           <span className="mt-1 block text-xs" style={{ color: "var(--text-muted)" }}>{assignee} · {formatDate(task.due_at)}</span>
+          {task.description && <span className="mt-1 line-clamp-2 block text-xs" style={{ color: "var(--text-muted)" }}>{task.description}</span>}
         </span>
-        <ChevronDown size={14} aria-hidden={true} style={{ color: "var(--text-muted)" }} />
-      </summary>
-      <div className="mt-1 flex items-center justify-between gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
-        <span>{task.status === "done" ? "已完成" : "開放"}</span>
-        <span>{formatDate(task.due_at)}</span>
+        <button type="button" className="btn btn-secondary btn-sm flex-shrink-0" onClick={() => setEditing((value) => !value)}>
+          <Pencil size={12} aria-hidden={true} />
+          編輯
+        </button>
       </div>
-      <div className="mt-3 grid gap-2">
+      {!editing && (
+        <div className="mt-2 flex items-center justify-between gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
+          <span>{task.status === "done" ? "已完成" : task.status === "canceled" ? "已取消" : "開放"}</span>
+          <span>雙擊或按編輯可完整設定</span>
+        </div>
+      )}
+      {editing && (
+      <form onSubmit={submit} className="mt-3 grid gap-2">
         <input
           className="input text-xs"
-          defaultValue={task.title}
-          onBlur={(event) => {
-            const title = event.target.value.trim();
-            if (title && title !== task.title) onUpdate(task, { title });
-          }}
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          placeholder="任務標題"
+        />
+        <textarea
+          className="input min-h-20 text-xs"
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+          placeholder="詳細說明、驗收條件、交付內容"
         />
         <select
           className="input text-xs"
-          value={task.assigned_to_id ?? ""}
-          onChange={(event) => onUpdate(task, { assigned_to_id: event.target.value || null })}
+          value={assignedToId}
+          onChange={(event) => setAssignedToId(event.target.value)}
         >
           <option value="">未指派</option>
           {users.map((user) => (
@@ -1394,23 +1452,122 @@ function TaskRow({
           <input
             type="date"
             className="input text-xs"
-            value={toDateInputValue(task.due_at)}
-            onChange={(event) =>
-              onUpdate(task, { due_at: event.target.value ? new Date(event.target.value).toISOString() : null })
-            }
+            value={dueAt}
+            onChange={(event) => setDueAt(event.target.value)}
           />
           <select
             className="input text-xs"
-            value={task.status}
-            onChange={(event) => onUpdate(task, { status: event.target.value as WorkItemOut["status"] })}
+            value={status}
+            onChange={(event) => setStatus(event.target.value as WorkItemOut["status"])}
           >
             <option value="open">開放</option>
             <option value="done">已完成</option>
             <option value="canceled">取消</option>
           </select>
         </div>
+        <div className="flex justify-end gap-2">
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditing(false)}>
+            取消
+          </button>
+          <button type="submit" className="btn btn-primary btn-sm">
+            儲存任務
+          </button>
+        </div>
+      </form>
+      )}
+    </article>
+  );
+}
+
+function RoleAssignmentCard({
+  role,
+  users,
+  userName,
+  onAssign,
+  onUpdate,
+}: {
+  role: MatterRoleAssignmentOut;
+  users: AdminUserDetail[];
+  userName: (id?: string | null) => string;
+  onAssign: (roleId: string, userId: string) => void;
+  onUpdate: (
+    role: MatterRoleAssignmentOut,
+    body: Partial<Pick<MatterRoleAssignmentOut, "role_name" | "unit_name" | "user_id" | "start_at" | "end_at" | "note" | "sort_order" | "is_active">>,
+  ) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [roleName, setRoleName] = useState(role.role_name);
+  const [unitName, setUnitName] = useState(role.unit_name ?? "");
+  const [userId, setUserId] = useState(role.user_id ?? "");
+  const [startAt, setStartAt] = useState(toDateInputValue(role.start_at));
+  const [endAt, setEndAt] = useState(toDateInputValue(role.end_at));
+  const [note, setNote] = useState(role.note ?? "");
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (!roleName.trim()) return;
+    onUpdate(role, {
+      role_name: roleName.trim(),
+      unit_name: unitName.trim() || null,
+      user_id: userId || null,
+      start_at: startAt ? new Date(startAt).toISOString() : null,
+      end_at: endAt ? new Date(endAt).toISOString() : null,
+      note: note.trim() || null,
+    });
+    setEditing(false);
+  };
+
+  return (
+    <article
+      className="rounded-md p-3"
+      onDoubleClick={() => setEditing(true)}
+      style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{role.role_name}</p>
+          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{role.unit_name || "未分組"} · {userName(role.user_id)}</p>
+          {role.note && <p className="mt-1 line-clamp-2 text-xs" style={{ color: "var(--text-muted)" }}>{role.note}</p>}
+        </div>
+        <button type="button" className="btn btn-secondary btn-sm flex-shrink-0" onClick={() => setEditing((value) => !value)}>
+          <Pencil size={12} aria-hidden={true} />
+          編輯
+        </button>
       </div>
-    </details>
+      {!editing && (
+        <select value={role.user_id ?? ""} onChange={(event) => onAssign(role.id, event.target.value)} className="input mt-2 w-full text-xs">
+          <option value="">尚未指派</option>
+          {users.map((user) => (
+            <option key={user.id} value={user.id}>{user.display_name || user.email}</option>
+          ))}
+        </select>
+      )}
+      {editing && (
+        <form onSubmit={submit} className="mt-3 grid gap-2">
+          <input className="input text-xs" value={roleName} onChange={(event) => setRoleName(event.target.value)} placeholder="職務名稱" />
+          <input className="input text-xs" value={unitName} onChange={(event) => setUnitName(event.target.value)} placeholder="組別" />
+          <select className="input text-xs" value={userId} onChange={(event) => setUserId(event.target.value)}>
+            <option value="">尚未指派</option>
+            {users.map((user) => (
+              <option key={user.id} value={user.id}>{user.display_name || user.email}</option>
+            ))}
+          </select>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <input type="date" className="input text-xs" value={startAt} onChange={(event) => setStartAt(event.target.value)} />
+            <input type="date" className="input text-xs" value={endAt} onChange={(event) => setEndAt(event.target.value)} />
+          </div>
+          <textarea className="input min-h-20 text-xs" value={note} onChange={(event) => setNote(event.target.value)} placeholder="職責、交接事項、權限備註" />
+          <div className="flex justify-end gap-2">
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditing(false)}>
+              取消
+            </button>
+            <button type="submit" className="btn btn-primary btn-sm">
+              儲存職務
+            </button>
+          </div>
+        </form>
+      )}
+    </article>
   );
 }
 
