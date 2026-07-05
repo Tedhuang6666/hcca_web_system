@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
@@ -40,6 +41,7 @@ export default function GovernanceArtifactDrawer({
   onLinked: (relation: EntityRelationOut) => void;
   onSpawned: (result: MatterSpawnResult) => void;
 }) {
+  const router = useRouter();
   const { canAny, isAdmin } = usePermissions();
   const [capabilities, setCapabilities] = useState<GovernanceModuleCapabilityOut[]>([]);
   const [selected, setSelected] = useState<GovernanceModuleCapabilityOut | null>(null);
@@ -106,10 +108,22 @@ export default function GovernanceArtifactDrawer({
     return groups;
   }, [recentKeys, visible]);
 
+  const guidedHrefFor = (item: GovernanceModuleCapabilityOut) =>
+    `${item.href}${item.href.includes("?") ? "&" : "?"}${new URLSearchParams({
+      governance_matter_id: matter.id,
+      title: matter.title,
+      ...(matter.org_id ? { org_id: matter.org_id } : {}),
+    }).toString()}`;
+
   const selectModule = (item: GovernanceModuleCapabilityOut) => {
     const nextRecent = [item.key, ...recentKeys.filter((key) => key !== item.key)].slice(0, 6);
     setRecentKeys(nextRecent);
     window.localStorage.setItem("governance.recent-modules", JSON.stringify(nextRecent));
+    if (mode === "create" && item.create_mode === "guided") {
+      router.push(guidedHrefFor(item));
+      onClose();
+      return;
+    }
     setSelected(item);
     if (mode === "link") void search(item);
   };
@@ -169,13 +183,7 @@ export default function GovernanceArtifactDrawer({
     }
   };
 
-  const guidedHref = selected
-    ? `${selected.href}${selected.href.includes("?") ? "&" : "?"}${new URLSearchParams({
-        governance_matter_id: matter.id,
-        title: matter.title,
-        ...(matter.org_id ? { org_id: matter.org_id } : {}),
-      }).toString()}`
-    : "";
+  const guidedHref = selected ? guidedHrefFor(selected) : "";
 
   return (
     <Drawer
@@ -190,7 +198,7 @@ export default function GovernanceArtifactDrawer({
         <div className="space-y-5">
           <p className="text-sm" style={{ color: "var(--text-muted)" }}>
             {mode === "create"
-              ? "選擇模組。簡單項目可直接建立，複雜項目會帶入事情資料前往完整表單。"
+              ? "選擇模組。任務可直接建立，其他項目會帶入事情資料前往原本的完整表單。"
               : "選擇資料類型後，以名稱搜尋並連接既有項目。"}
           </p>
           {[...grouped.entries()].map(([category, items]) => (

@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import dynamic from "next/dynamic";
 import { inferParentIdByPrevious } from "@/lib/articleTree";
@@ -15,6 +15,11 @@ import { orgsApi, regulationsApi, regulationHref, type OrgRead, apiErrorMessage 
 import type { ArticleType, RegulationArticleOut, RegulationCategory } from "@/lib/types";
 import { orgDisplayName } from "@/lib/orgs";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
+import {
+  GovernanceLinkNotice,
+  createGovernanceBacklink,
+  governanceContextFromParams,
+} from "@/lib/governanceLinking";
 
 const CATEGORIES: [RegulationCategory, string][] = [
   ["constitution", "憲章"],
@@ -63,11 +68,16 @@ function toArticle(id: string, type: ArticleType, parent_id: string | null, sort
 
 export default function NewRegulationPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const governanceContext = useMemo(
+    () => governanceContextFromParams(searchParams),
+    [searchParams],
+  );
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
   const [orgs, setOrgs] = useState<OrgRead[]>([]);
-  const [selectedOrgId, setSelectedOrgId] = useState("");
-  const [title, setTitle] = useState("");
+  const [selectedOrgId, setSelectedOrgId] = useState(governanceContext?.orgId ?? "");
+  const [title, setTitle] = useState(governanceContext?.matterTitle ?? "");
   const [category, setCategory] = useState<RegulationCategory>("ordinance");
   const [preface, setPreface] = useState("");
   const [importFiles, setImportFiles] = useState<File[]>([]);
@@ -80,7 +90,10 @@ export default function NewRegulationPage() {
     orgsApi.myRegulationCreateOrgs().then(list => {
       setOrgs(list);
       const stored = typeof window !== "undefined" ? localStorage.getItem("org_id") ?? "" : "";
-      setSelectedOrgId(stored && list.some(o => o.id === stored) ? stored : list[0]?.id ?? "");
+      setSelectedOrgId((current) => {
+        if (current && list.some(o => o.id === current)) return current;
+        return stored && list.some(o => o.id === stored) ? stored : list[0]?.id ?? "";
+      });
     }).catch(() => {});
   }, []);
 
@@ -157,6 +170,13 @@ export default function NewRegulationPage() {
         });
         idMap.set(a.id, created.id);
       }
+      await createGovernanceBacklink({
+        context: governanceContext,
+        targetType: "regulation",
+        targetId: reg.id,
+        title: reg.title,
+        href: regulationHref(reg),
+      });
       clearDraft();
       toast.success("法規草案已建立");
       router.push(`${regulationHref(reg)}/edit`);
@@ -200,6 +220,7 @@ export default function NewRegulationPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-5">
+      <GovernanceLinkNotice context={governanceContext} />
       <div className="flex items-center gap-3">
         <Link href="/regulations" className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ border: "1px solid var(--border)" }}>←</Link>
         <div>

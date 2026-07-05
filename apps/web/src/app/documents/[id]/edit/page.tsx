@@ -13,6 +13,7 @@ import GongwenEditor from "@/components/ui/GongwenEditor";
 import SmartTextarea from "@/components/ui/SmartTextarea";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import { useOnlineAutosave } from "@/hooks/useOnlineAutosave";
+import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 
 interface Recipient { id: string; recipient_type: RecipientType; name: string; email: string }
 
@@ -379,6 +380,13 @@ export default function EditDocumentPage() {
           </p>
         </div>
       </div>
+
+      <GovernanceLinkPanel
+        entityType="document"
+        entityId={doc.id}
+        title={doc.title}
+        href={`/documents/${encodeURIComponent(doc.serial_number)}`}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <div className="lg:col-span-2 space-y-4">

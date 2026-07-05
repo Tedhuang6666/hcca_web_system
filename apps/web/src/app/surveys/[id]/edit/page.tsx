@@ -11,6 +11,7 @@ import { uploadUrl } from "@/lib/config";
 import { usePermissions } from "@/hooks/usePermissions";
 import UserPicker from "@/components/surveys/UserPicker";
 import ActivitySelect from "@/components/activities/ActivitySelect";
+import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 
 const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: "text", label: "簡答（單行）" },
@@ -626,6 +627,13 @@ export default function EditSurveyPage() {
           </p>
         </div>
       </div>
+
+      <GovernanceLinkPanel
+        entityType="survey"
+        entityId={survey.id}
+        title={survey.title}
+        href={`/surveys/${encodeURIComponent(survey.title)}`}
+      />
 
       {/* 基本資料 */}
       <div className="card p-5 space-y-3">

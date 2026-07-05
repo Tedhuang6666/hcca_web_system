@@ -29,6 +29,7 @@ import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import { useOnlineAutosave } from "@/hooks/useOnlineAutosave";
 import { regulationsApi, regulationHref, serialTemplatesApi, apiErrorMessage } from "@/lib/api";
 import { ARTICLE_TYPE_LABEL, canNestInside } from "@/lib/regulationStructure";
+import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 import type {
   ArticleType,
   RegulationAmendmentType,
@@ -791,6 +792,13 @@ export default function EditRegulationPage() {
             )}
           </div>
         </div>
+
+        <GovernanceLinkPanel
+          entityType="regulation"
+          entityId={reg.id}
+          title={reg.title}
+          href={regulationHref(reg)}
+        />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           {/* 左：基本資訊 + 全文 + 條文 */}

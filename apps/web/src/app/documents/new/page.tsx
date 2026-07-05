@@ -16,6 +16,11 @@ import Toggle from "@/components/ui/Toggle";
 import { useDraftAutosave, useFileDraftAutosave } from "@/hooks/useDraftAutosave";
 import { RecipientSearch } from "@/components/documents/RecipientSearch";
 import ActivitySelect from "@/components/activities/ActivitySelect";
+import {
+  GovernanceLinkNotice,
+  createGovernanceBacklink,
+  governanceContextFromParams,
+} from "@/lib/governanceLinking";
 
 interface Recipient {
   id: string;
@@ -166,10 +171,14 @@ export default function NewDocumentPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const templateId = searchParams.get("template_id");
+  const governanceContext = useMemo(
+    () => governanceContextFromParams(searchParams),
+    [searchParams],
+  );
   const [saving, setSaving] = useState(false);
   const [urgency, setUrgency] = useState<DocumentUrgency>("normal");
   const [classification, setClassification] = useState<DocumentClassification>("normal");
-  const [subject, setSubject] = useState("");
+  const [subject, setSubject] = useState(governanceContext?.matterTitle ?? "");
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [category, setCategory] = useState<DocumentCategory>("letter");
   const isMeetingNotice = category === "meeting_notice";
@@ -180,7 +189,7 @@ export default function NewDocumentPage() {
 
   // 組織列表
   const [orgs, setOrgs] = useState<OrgRead[]>([]);
-  const [selectedOrgId, setSelectedOrgId] = useState<string>("");
+  const [selectedOrgId, setSelectedOrgId] = useState<string>(governanceContext?.orgId ?? "");
   const [activityId, setActivityId] = useState("");
   const selectedOrg = orgs.find(o => o.id === selectedOrgId) ?? null;
 
@@ -355,11 +364,11 @@ export default function NewDocumentPage() {
     orgsApi.myCreateOrgs().then((items) => {
       setOrgs(items);
       const storedOrgId = typeof window !== "undefined" ? (localStorage.getItem("org_id") ?? "") : "";
-      if (storedOrgId && items.some((org) => org.id === storedOrgId)) {
-        setSelectedOrgId(storedOrgId);
-      } else if (items.length === 1) {
-        setSelectedOrgId((prev) => prev || items[0].id);
-      }
+      setSelectedOrgId((current) => {
+        if (current && items.some((org) => org.id === current)) return current;
+        if (storedOrgId && items.some((org) => org.id === storedOrgId)) return storedOrgId;
+        return items.length === 1 ? items[0].id : "";
+      });
     }).catch(() => {});
 
     // 從個人資料自動填入承辦人
@@ -460,6 +469,13 @@ export default function NewDocumentPage() {
       for (const file of pendingFiles) {
         await documentsApi.uploadAttachment(doc.id, file);
       }
+      await createGovernanceBacklink({
+        context: governanceContext,
+        targetType: "document",
+        targetId: doc.id,
+        title: doc.title,
+        href: `/documents/${encodeURIComponent(doc.serial_number)}`,
+      });
       clearDraft();
       clearDraftFiles();
       toast.success("草稿已儲存");
@@ -504,6 +520,8 @@ export default function NewDocumentPage() {
           </p>
         </div>
       </div>
+
+      <GovernanceLinkNotice context={governanceContext} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* 主欄 */}
