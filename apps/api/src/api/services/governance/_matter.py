@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import UTC, datetime
 
@@ -37,6 +38,50 @@ from api.schemas.governance import (
 )
 from api.services._base import apply_updates
 from api.services.governance._events import record_event
+
+
+def _title_to_slug(title: str) -> str:
+    """把標題轉成 URL slug：保留中文字元與英數，其餘換成連字號。"""
+    slug = re.sub(r"[^\w一-鿿㐀-䶿぀-ヿ＀-￯]", "-", title)
+    slug = re.sub(r"-{2,}", "-", slug).strip("-")
+    return slug[:200] or "untitled"
+
+
+async def _unique_slug(db: AsyncSession, base: str, exclude_id: uuid.UUID | None = None) -> str:
+    slug = base
+    counter = 2
+    while True:
+        q = select(Matter.id).where(Matter.slug == slug)
+        if exclude_id is not None:
+            q = q.where(Matter.id != exclude_id)
+        existing = (await db.execute(q)).scalar_one_or_none()
+        if not existing:
+            return slug
+        slug = f"{base}-{counter}"
+        counter += 1
+
+
+async def get_matter_by_slug(db: AsyncSession, slug: str) -> Matter | None:
+    result = await db.execute(
+        select(Matter)
+        .options(
+            selectinload(Matter.programs),
+            selectinload(Matter.cases),
+            selectinload(Matter.links),
+            selectinload(Matter.events),
+            selectinload(Matter.resources),
+            selectinload(Matter.decisions),
+            selectinload(Matter.planning_documents).selectinload(PlanningDocument.attachments),
+            selectinload(Matter.planning_documents)
+            .selectinload(PlanningDocument.revisions)
+            .selectinload(PlanningDocumentRevision.attachment_links)
+            .selectinload(PlanningDocumentRevisionAttachment.attachment),
+            selectinload(Matter.role_assignments),
+            selectinload(Matter.discord_workspace).selectinload(GovernanceDiscordWorkspace.routes),
+        )
+        .where(Matter.slug == slug, Matter.is_active.is_(True))
+    )
+    return result.scalar_one_or_none()
 
 
 def _apply_visibility(stmt: Select[tuple[Matter]], user: User) -> Select[tuple[Matter]]:
@@ -139,7 +184,8 @@ async def get_matter(db: AsyncSession, matter_id: uuid.UUID) -> Matter | None:
 
 
 async def create_matter(db: AsyncSession, *, data: MatterCreate, user: User) -> Matter:
-    matter = Matter(**data.model_dump(), created_by_id=user.id)
+    slug = await _unique_slug(db, _title_to_slug(data.title))
+    matter = Matter(**data.model_dump(), created_by_id=user.id, slug=slug)
     db.add(matter)
     await db.flush()
     await record_event(

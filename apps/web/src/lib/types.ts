@@ -3708,6 +3708,7 @@ export interface AutomationMeta {
 
 export interface MatterListItem {
   id: string;
+  slug: string | null;
   title: string;
   matter_type: MatterType | string;
   description: string | null;

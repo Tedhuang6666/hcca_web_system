@@ -23,6 +23,7 @@ from api.services.governance._matter import (
     delete_matter_resource,
     get_case,
     get_matter,
+    get_matter_by_slug,
     get_matter_resource,
     get_program,
     list_matters,
@@ -70,6 +71,7 @@ __all__ = [
     # matter
     "list_matters",
     "get_matter",
+    "get_matter_by_slug",
     "create_matter",
     "update_matter",
     "create_matter_resource",

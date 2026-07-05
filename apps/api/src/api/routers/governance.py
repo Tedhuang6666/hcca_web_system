@@ -166,6 +166,14 @@ async def create_matter(body: MatterCreate, db: DbDep, user: CurrentUser) -> Mat
     return await _matter_or_404(db, matter.id)
 
 
+@router.get("/matters/by-slug/{slug}", response_model=MatterOut, summary="以 slug 取得事情中心")
+async def get_matter_by_slug(slug: str, db: DbDep, _: CurrentUser) -> Matter:
+    matter = await governance_svc.get_matter_by_slug(db, slug)
+    if matter is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="事情不存在")
+    return matter
+
+
 @router.get("/matters/{matter_id}", response_model=MatterOut, summary="取得事情中心")
 async def get_matter(matter_id: uuid.UUID, db: DbDep, _: CurrentUser) -> Matter:
     return await _matter_or_404(db, matter_id)
