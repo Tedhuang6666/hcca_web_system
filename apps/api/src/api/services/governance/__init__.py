@@ -18,13 +18,17 @@ from api.services.governance._events import (
 from api.services.governance._matter import (
     create_case,
     create_matter,
+    create_matter_resource,
     create_program,
+    delete_matter_resource,
     get_case,
     get_matter,
+    get_matter_resource,
     get_program,
     list_matters,
     update_case,
     update_matter,
+    update_matter_resource,
     update_program,
 )
 from api.services.governance._planning import (
@@ -68,6 +72,10 @@ __all__ = [
     "get_matter",
     "create_matter",
     "update_matter",
+    "create_matter_resource",
+    "get_matter_resource",
+    "update_matter_resource",
+    "delete_matter_resource",
     "create_program",
     "update_program",
     "get_program",

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { toast } from "sonner";
 import {
+  CalendarDays,
   CheckSquare,
   ChevronDown,
   Clock,
@@ -28,8 +29,9 @@ import type { CSSProperties } from "react";
 import GovernanceArtifactDrawer from "@/components/governance/GovernanceArtifactDrawer";
 import GovernanceDiscordPanel from "@/components/governance/GovernanceDiscordPanel";
 import PlanningDocumentsPanel from "@/components/governance/PlanningDocumentsPanel";
-import { governanceApi } from "@/lib/api";
+import { adminApi, governanceApi, orgsApi, withFallback, workItemsApi } from "@/lib/api";
 import type {
+  AdminUserDetail,
   EntityRelationOut,
   AutomationMeta,
   AutomationRuleOut,
@@ -37,7 +39,9 @@ import type {
   GovernanceCaseStatus,
   GovernanceWorkflowTemplateOut,
   MatterOut,
+  MatterResourceOut,
   MatterSpawnResult,
+  OrgRead,
   TimelineEventOut,
   WorkItemOut,
 } from "@/lib/types";
@@ -101,10 +105,25 @@ const AUTOMATION_STATUS_LABEL: Record<string, string> = {
   archived: "已歸檔",
 };
 
+const RESOURCE_TYPE_LABEL: Record<string, string> = {
+  google_meet: "Google Meet",
+  google_drive: "Google 雲端",
+  discord_text: "Discord 文字頻道",
+  discord_voice: "Discord 語音頻道",
+  external_url: "外部連結",
+  file: "檔案",
+  other: "其他",
+};
+
 function formatDate(value?: string | null) {
   if (!value) return "未設定";
   const d = new Date(value);
   return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+function toDateInputValue(value?: string | null) {
+  if (!value) return "";
+  return new Date(value).toISOString().slice(0, 10);
 }
 
 export default function GovernanceMatterPage() {
@@ -116,6 +135,8 @@ export default function GovernanceMatterPage() {
   const [automationMeta, setAutomationMeta] = useState<AutomationMeta | null>(null);
   const [automationTrigger, setAutomationTrigger] = useState("meeting.decision_created");
   const [templates, setTemplates] = useState<GovernanceWorkflowTemplateOut[]>([]);
+  const [orgs, setOrgs] = useState<OrgRead[]>([]);
+  const [users, setUsers] = useState<AdminUserDetail[]>([]);
   const [loading, setLoading] = useState(true);
   const [caseTitle, setCaseTitle] = useState("");
   const [taskTitle, setTaskTitle] = useState("");
@@ -128,6 +149,15 @@ export default function GovernanceMatterPage() {
   const [planContent, setPlanContent] = useState("");
   const [roleName, setRoleName] = useState("");
   const [unitName, setUnitName] = useState("");
+  const [roleUserId, setRoleUserId] = useState("");
+  const [resourceTitle, setResourceTitle] = useState("");
+  const [resourceUrl, setResourceUrl] = useState("");
+  const [resourceType, setResourceType] = useState("google_drive");
+  const [resourceDescription, setResourceDescription] = useState("");
+  const [matterOrgId, setMatterOrgId] = useState("");
+  const [matterOwnerId, setMatterOwnerId] = useState("");
+  const [matterDueAt, setMatterDueAt] = useState("");
+  const [matterProgress, setMatterProgress] = useState(0);
   const [automationName, setAutomationName] = useState("");
   const [templateName, setTemplateName] = useState("");
   const [lastSpawn, setLastSpawn] = useState<MatterSpawnResult | null>(null);
@@ -142,13 +172,21 @@ export default function GovernanceMatterPage() {
       governanceApi.listAutomationRules(matterId),
       governanceApi.listWorkflowTemplates(),
       governanceApi.automationMeta().catch(() => null),
+      withFallback(orgsApi.list({ active_only: true }), []),
+      withFallback(adminApi.listUsers({ active_only: true, limit: 200 }), []),
     ])
-      .then(([matterRes, taskRes, automationRes, templateRes, metaRes]) => {
+      .then(([matterRes, taskRes, automationRes, templateRes, metaRes, orgRows, userRows]) => {
         setMatter(matterRes);
         setTasks(taskRes);
         setAutomationRules(automationRes);
         setTemplates(templateRes);
         setAutomationMeta(metaRes);
+        setOrgs(orgRows);
+        setUsers(userRows);
+        setMatterOrgId(matterRes.org_id ?? "");
+        setMatterOwnerId(matterRes.owner_user_id ?? "");
+        setMatterDueAt(toDateInputValue(matterRes.due_at));
+        setMatterProgress(matterRes.progress_percent);
       })
       .catch((error) => {
         toast.error("無法載入事情中心");
@@ -173,6 +211,46 @@ export default function GovernanceMatterPage() {
     const relation = matter.links.find((link) => link.target_type === "activity" && link.target_id);
     return relation?.target_id ?? null;
   }, [matter]);
+  const projectCalendarItems = useMemo(() => {
+    if (!matter) return [];
+    return [
+      matter.starts_at ? { id: "matter-start", label: "開始", title: matter.title, at: matter.starts_at } : null,
+      matter.due_at ? { id: "matter-due", label: "期限", title: matter.title, at: matter.due_at } : null,
+      ...matter.cases
+        .filter((item) => item.due_at)
+        .map((item) => ({ id: item.id, label: "案件", title: item.title, at: item.due_at as string })),
+      ...tasks
+        .filter((item) => item.due_at)
+        .map((item) => ({ id: item.id, label: "任務", title: item.title, at: item.due_at as string })),
+    ].filter((item): item is { id: string; label: string; title: string; at: string } => Boolean(item))
+      .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
+  }, [matter, tasks]);
+
+  const userName = (id?: string | null) =>
+    users.find((user) => user.id === id)?.display_name ||
+    users.find((user) => user.id === id)?.email ||
+    (id ? "已指派使用者" : "尚未指派");
+
+  const saveMatterBasics = (event: FormEvent) => {
+    event.preventDefault();
+    setSaving(true);
+    governanceApi
+      .updateMatter(matterId, {
+        org_id: matterOrgId || null,
+        owner_user_id: matterOwnerId || null,
+        due_at: matterDueAt ? new Date(matterDueAt).toISOString() : null,
+        progress_percent: matterProgress,
+      })
+      .then((updated) => {
+        setMatter(updated);
+        toast.success("事情設定已更新");
+      })
+      .catch((error) => {
+        toast.error("更新事情設定失敗");
+        console.error(error);
+      })
+      .finally(() => setSaving(false));
+  };
 
   const addCase = (event: FormEvent) => {
     event.preventDefault();
@@ -349,7 +427,7 @@ export default function GovernanceMatterPage() {
         parent_id: null,
         role_name: roleName.trim(),
         unit_name: unitName.trim() || null,
-        user_id: null,
+        user_id: roleUserId || null,
         start_at: null,
         end_at: null,
         note: null,
@@ -359,6 +437,7 @@ export default function GovernanceMatterPage() {
         toast.success("已新增組織職務");
         setRoleName("");
         setUnitName("");
+        setRoleUserId("");
         setMatter((prev) =>
           prev ? { ...prev, role_assignments: [...prev.role_assignments, created] } : prev,
         );
@@ -368,6 +447,87 @@ export default function GovernanceMatterPage() {
         console.error(error);
       })
       .finally(() => setSaving(false));
+  };
+
+  const updateRoleUser = (roleId: string, userId: string) => {
+    governanceApi
+      .updateRoleAssignment(roleId, { user_id: userId || null })
+      .then((updated) => {
+        setMatter((prev) =>
+          prev
+            ? {
+                ...prev,
+                role_assignments: prev.role_assignments.map((role) =>
+                  role.id === updated.id ? updated : role,
+                ),
+              }
+            : prev,
+        );
+        toast.success("職務指派已更新");
+      })
+      .catch((error) => {
+        toast.error("更新職務指派失敗");
+        console.error(error);
+      });
+  };
+
+  const addResource = (event: FormEvent) => {
+    event.preventDefault();
+    if (!resourceTitle.trim() || !resourceUrl.trim()) return;
+    setSaving(true);
+    governanceApi
+      .createResource(matterId, {
+        title: resourceTitle.trim(),
+        url: resourceUrl.trim(),
+        resource_type: resourceType as never,
+        provider: resourceType.startsWith("google") ? "google" : resourceType.startsWith("discord") ? "discord" : null,
+        external_id: null,
+        description: resourceDescription.trim() || null,
+        meta: {},
+      })
+      .then((created) => {
+        toast.success("已新增協作資源");
+        setResourceTitle("");
+        setResourceUrl("");
+        setResourceDescription("");
+        setMatter((prev) => prev ? { ...prev, resources: [created, ...prev.resources] } : prev);
+      })
+      .catch((error) => {
+        toast.error("新增協作資源失敗");
+        console.error(error);
+      })
+      .finally(() => setSaving(false));
+  };
+
+  const deleteResource = (resource: MatterResourceOut) => {
+    governanceApi
+      .deleteResource(matterId, resource.id)
+      .then(() => {
+        setMatter((prev) =>
+          prev ? { ...prev, resources: prev.resources.filter((item) => item.id !== resource.id) } : prev,
+        );
+        toast.success("已移除協作資源");
+      })
+      .catch((error) => {
+        toast.error("移除協作資源失敗");
+        console.error(error);
+      });
+  };
+
+  const updateTask = (
+    task: WorkItemOut,
+    body: Partial<Pick<WorkItemOut, "title" | "description" | "assigned_to_id" | "due_at" | "status">>,
+  ) => {
+    workItemsApi
+      .update(task.id, body)
+      .then((updated) => {
+        setTasks((prev) => prev.map((item) => item.id === updated.id ? updated : item));
+        toast.success("任務已更新");
+      })
+      .catch((error) => {
+        toast.error("更新任務失敗");
+        console.error(error);
+      });
   };
 
   const addAutomationRule = (event: FormEvent) => {
@@ -561,6 +721,55 @@ export default function GovernanceMatterPage() {
 
       {saving && <span className="sr-only">儲存中</span>}
 
+      <section className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
+        <Panel id="settings" icon={ShieldAlert} title="專案設定" defaultOpen>
+          <form onSubmit={saveMatterBasics} className="grid gap-3 md:grid-cols-2">
+            <label className="space-y-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              <span>組織</span>
+              <select value={matterOrgId} onChange={(event) => setMatterOrgId(event.target.value)} className="input w-full">
+                <option value="">未指定</option>
+                {orgs.map((org) => (
+                  <option key={org.id} value={org.id}>{org.name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              <span>負責人</span>
+              <select value={matterOwnerId} onChange={(event) => setMatterOwnerId(event.target.value)} className="input w-full">
+                <option value="">未指定</option>
+                {users.map((user) => (
+                  <option key={user.id} value={user.id}>{user.display_name || user.email}</option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              <span>期限</span>
+              <input type="date" value={matterDueAt} onChange={(event) => setMatterDueAt(event.target.value)} className="input w-full" />
+            </label>
+            <label className="space-y-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              <span>進度 {matterProgress}%</span>
+              <input type="range" min={0} max={100} value={matterProgress} onChange={(event) => setMatterProgress(Number(event.target.value))} className="w-full" />
+            </label>
+            <button type="submit" className="btn btn-secondary md:col-span-2" disabled={saving}>
+              儲存專案設定
+            </button>
+          </form>
+        </Panel>
+
+        <Panel id="calendar" icon={CalendarDays} title="專案時辰日曆" defaultOpen>
+          <div className="space-y-2">
+            {projectCalendarItems.slice(0, 8).map((item) => (
+              <div key={item.id} className="flex items-center gap-3 rounded-md p-2" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
+                <span className="w-16 flex-shrink-0 text-xs font-medium" style={{ color: "var(--primary)" }}>{item.label}</span>
+                <span className="min-w-0 flex-1 truncate text-sm" style={{ color: "var(--text-primary)" }}>{item.title}</span>
+                <span className="text-xs" style={{ color: "var(--text-muted)" }}>{formatDate(item.at)}</span>
+              </div>
+            ))}
+            {projectCalendarItems.length === 0 && <EmptyInline label="尚未設定任何專案時程" />}
+          </div>
+        </Panel>
+      </section>
+
       <section
         className="rounded-lg p-4"
         style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
@@ -671,6 +880,26 @@ export default function GovernanceMatterPage() {
             </div>
           </Panel>
 
+          <Panel id="resources" icon={ExternalLink} title="脈絡資料：協作資源" defaultOpen={matter.resources.length > 0}>
+            <form onSubmit={addResource} className="mb-3 grid gap-2 md:grid-cols-[1fr_1fr_150px_auto]">
+              <input value={resourceTitle} onChange={(event) => setResourceTitle(event.target.value)} className="input" placeholder="資源名稱，例如：企劃雲端資料夾" />
+              <input value={resourceUrl} onChange={(event) => setResourceUrl(event.target.value)} className="input" placeholder="Google 雲端、群組、Discord 或外部連結" />
+              <select value={resourceType} onChange={(event) => setResourceType(event.target.value)} className="input">
+                {Object.entries(RESOURCE_TYPE_LABEL).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+              <button type="submit" className="btn btn-secondary"><Plus size={13} aria-hidden={true} />新增</button>
+              <input value={resourceDescription} onChange={(event) => setResourceDescription(event.target.value)} className="input md:col-span-4" placeholder="備註，可留空" />
+            </form>
+            <div className="grid gap-2 md:grid-cols-2">
+              {matter.resources.map((resource) => (
+                <ResourceCard key={resource.id} resource={resource} onDelete={deleteResource} />
+              ))}
+              {matter.resources.length === 0 && <EmptyInline label="尚未加入協作資源" />}
+            </div>
+          </Panel>
+
           <Panel id="decisions" icon={ScrollText} title="執行佇列：決議追蹤" defaultOpen={insight?.recommended_action.anchor === "decisions" || pendingDecisions.length > 0}>
             <form onSubmit={addDecision} className="mb-3 grid gap-2 md:grid-cols-[1fr_1.4fr_auto]">
               <input value={decisionTitle} onChange={(event) => setDecisionTitle(event.target.value)} className="input" placeholder="決議標題" />
@@ -731,12 +960,12 @@ export default function GovernanceMatterPage() {
               <button type="submit" className="btn btn-secondary"><Plus size={13} aria-hidden={true} />新增</button>
             </form>
             <div className="space-y-2">
-              {openTasks.map((task) => <TaskRow key={task.id} task={task} />)}
+              {openTasks.map((task) => <TaskRow key={task.id} task={task} users={users} onUpdate={updateTask} />)}
               {openTasks.length === 0 && <EmptyInline label="沒有開放任務" />}
               {completedTasks.length > 0 && (
                 <div className="pt-2">
                   <p className="mb-2 text-xs font-medium" style={{ color: "var(--text-muted)" }}>已完成</p>
-                  {completedTasks.slice(0, 5).map((task) => <TaskRow key={task.id} task={task} muted />)}
+                  {completedTasks.slice(0, 5).map((task) => <TaskRow key={task.id} task={task} users={users} onUpdate={updateTask} muted />)}
                 </div>
               )}
             </div>
@@ -759,6 +988,12 @@ export default function GovernanceMatterPage() {
             <form onSubmit={addRoleAssignment} className="mb-3 grid gap-2">
               <input value={roleName} onChange={(event) => setRoleName(event.target.value)} className="input" placeholder="職務，例如：總召、場務組長" />
               <input value={unitName} onChange={(event) => setUnitName(event.target.value)} className="input" placeholder="組別，可留空" />
+              <select value={roleUserId} onChange={(event) => setRoleUserId(event.target.value)} className="input">
+                <option value="">尚未指派</option>
+                {users.map((user) => (
+                  <option key={user.id} value={user.id}>{user.display_name || user.email}</option>
+                ))}
+              </select>
               <button type="submit" className="btn btn-secondary"><Plus size={13} aria-hidden={true} />新增職務</button>
             </form>
             <div className="space-y-2">
@@ -767,7 +1002,13 @@ export default function GovernanceMatterPage() {
                 .map((role) => (
                   <div key={role.id} className="rounded-md p-3" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
                     <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{role.role_name}</p>
-                    <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{role.unit_name || "未分組"} · {role.user_id || "尚未指派"}</p>
+                    <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{role.unit_name || "未分組"} · {userName(role.user_id)}</p>
+                    <select value={role.user_id ?? ""} onChange={(event) => updateRoleUser(role.id, event.target.value)} className="input mt-2 w-full text-xs">
+                      <option value="">尚未指派</option>
+                      {users.map((user) => (
+                        <option key={user.id} value={user.id}>{user.display_name || user.email}</option>
+                      ))}
+                    </select>
                   </div>
                 ))}
               {matter.role_assignments.length === 0 && <EmptyInline label="尚未建立組織職務" />}
@@ -1024,6 +1265,36 @@ function RelationCard({
   );
 }
 
+function ResourceCard({
+  resource,
+  onDelete,
+}: {
+  resource: MatterResourceOut;
+  onDelete: (resource: MatterResourceOut) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-md p-3" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
+      <Link href={resource.url} className="min-w-0 flex-1" target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+        <p className="truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{resource.title}</p>
+        <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+          {RESOURCE_TYPE_LABEL[resource.resource_type] ?? resource.resource_type}
+          {resource.description ? ` · ${resource.description}` : ""}
+        </p>
+      </Link>
+      <ExternalLink size={14} aria-hidden={true} style={{ color: "var(--primary)" }} />
+      <button
+        type="button"
+        onClick={() => onDelete(resource)}
+        className="topbar-icon-btn flex-shrink-0"
+        aria-label={`移除協作資源：${resource.title}`}
+        title="移除"
+      >
+        <Trash2 size={13} aria-hidden={true} style={{ color: "var(--text-muted)" }} />
+      </button>
+    </div>
+  );
+}
+
 function AutomationRuleRow({
   rule,
   meta,
@@ -1069,15 +1340,77 @@ function AutomationRuleRow({
   );
 }
 
-function TaskRow({ task, muted = false }: { task: WorkItemOut; muted?: boolean }) {
+function TaskRow({
+  task,
+  users,
+  onUpdate,
+  muted = false,
+}: {
+  task: WorkItemOut;
+  users: AdminUserDetail[];
+  onUpdate: (
+    task: WorkItemOut,
+    body: Partial<Pick<WorkItemOut, "title" | "description" | "assigned_to_id" | "due_at" | "status">>,
+  ) => void;
+  muted?: boolean;
+}) {
+  const assignee =
+    users.find((user) => user.id === task.assigned_to_id)?.display_name ||
+    users.find((user) => user.id === task.assigned_to_id)?.email ||
+    "未指派";
   return (
-    <div className="rounded-md p-3" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", opacity: muted ? 0.72 : 1 }}>
-      <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{task.title}</p>
+    <details className="rounded-md p-3" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", opacity: muted ? 0.72 : 1 }}>
+      <summary className="flex cursor-pointer list-none items-start justify-between gap-2">
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{task.title}</span>
+          <span className="mt-1 block text-xs" style={{ color: "var(--text-muted)" }}>{assignee} · {formatDate(task.due_at)}</span>
+        </span>
+        <ChevronDown size={14} aria-hidden={true} style={{ color: "var(--text-muted)" }} />
+      </summary>
       <div className="mt-1 flex items-center justify-between gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
         <span>{task.status === "done" ? "已完成" : "開放"}</span>
         <span>{formatDate(task.due_at)}</span>
       </div>
-    </div>
+      <div className="mt-3 grid gap-2">
+        <input
+          className="input text-xs"
+          defaultValue={task.title}
+          onBlur={(event) => {
+            const title = event.target.value.trim();
+            if (title && title !== task.title) onUpdate(task, { title });
+          }}
+        />
+        <select
+          className="input text-xs"
+          value={task.assigned_to_id ?? ""}
+          onChange={(event) => onUpdate(task, { assigned_to_id: event.target.value || null })}
+        >
+          <option value="">未指派</option>
+          {users.map((user) => (
+            <option key={user.id} value={user.id}>{user.display_name || user.email}</option>
+          ))}
+        </select>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <input
+            type="date"
+            className="input text-xs"
+            value={toDateInputValue(task.due_at)}
+            onChange={(event) =>
+              onUpdate(task, { due_at: event.target.value ? new Date(event.target.value).toISOString() : null })
+            }
+          />
+          <select
+            className="input text-xs"
+            value={task.status}
+            onChange={(event) => onUpdate(task, { status: event.target.value as WorkItemOut["status"] })}
+          >
+            <option value="open">開放</option>
+            <option value="done">已完成</option>
+            <option value="canceled">取消</option>
+          </select>
+        </div>
+      </div>
+    </details>
   );
 }
 

@@ -18,8 +18,15 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import { governanceApi } from "@/lib/api";
-import type { GovernanceDashboardOut, MatterListItem, MatterPriority, MatterType } from "@/lib/types";
+import { adminApi, governanceApi, orgsApi, withFallback } from "@/lib/api";
+import type {
+  AdminUserDetail,
+  GovernanceDashboardOut,
+  MatterListItem,
+  MatterPriority,
+  MatterType,
+  OrgRead,
+} from "@/lib/types";
 import { cacheGet, cacheHas, cacheSet, cachePurge } from "@/lib/api-cache";
 import { buildMatterInsight, riskColor, sortMattersByInsight } from "@/lib/governanceInsights";
 
@@ -79,6 +86,10 @@ export default function GovernancePage() {
   const [matterType, setMatterType] = useState<MatterType>("project");
   const [priority, setPriority] = useState<MatterPriority>("normal");
   const [dueAt, setDueAt] = useState("");
+  const [orgId, setOrgId] = useState("");
+  const [ownerUserId, setOwnerUserId] = useState("");
+  const [orgs, setOrgs] = useState<OrgRead[]>([]);
+  const [users, setUsers] = useState<AdminUserDetail[]>([]);
 
   const load = async () => {
     if (!cacheHas(GOV_DASHBOARD_KEY) || query || status) setLoading(true);
@@ -107,6 +118,13 @@ export default function GovernancePage() {
 
   useEffect(() => {
     void load();
+    void Promise.all([
+      withFallback(orgsApi.list({ active_only: true }), []),
+      withFallback(adminApi.listUsers({ active_only: true, limit: 200 }), []),
+    ]).then(([orgRows, userRows]) => {
+      setOrgs(orgRows);
+      setUsers(userRows);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -135,8 +153,8 @@ export default function GovernancePage() {
         title: title.trim(),
         matter_type: matterType,
         description: null,
-        org_id: null,
-        owner_user_id: null,
+        org_id: orgId || null,
+        owner_user_id: ownerUserId || null,
         starts_at: null,
         due_at: dueAt ? new Date(dueAt).toISOString() : null,
         priority,
@@ -151,6 +169,8 @@ export default function GovernancePage() {
       ]);
       setTitle("");
       setDueAt("");
+      setOrgId("");
+      setOwnerUserId("");
       setShowCreate(false);
       toast.success("事情已建立，接著設定案件、任務或跨模組項目");
       router.push(`/governance/${matter.id}`);
@@ -215,7 +235,7 @@ export default function GovernancePage() {
           <p className="mb-3 text-xs" style={{ color: "var(--text-muted)" }}>
             事情是跨模組工作的容器。建立後可在同一頁新增案件、任務、會議、公告與問卷。
           </p>
-          <form onSubmit={submit} className="grid gap-3 md:grid-cols-[minmax(0,1.5fr)_1fr_1fr_1fr_auto] md:items-end">
+          <form onSubmit={submit} className="grid gap-3 md:grid-cols-2 lg:grid-cols-[minmax(0,1.5fr)_1fr_1fr_1fr_1fr_1fr_auto] lg:items-end">
             <Field label="名稱">
               <input
                 value={title}
@@ -242,6 +262,22 @@ export default function GovernancePage() {
             </Field>
             <Field label="預定完成">
               <input type="date" value={dueAt} onChange={(event) => setDueAt(event.target.value)} className="input w-full" />
+            </Field>
+            <Field label="組織">
+              <select value={orgId} onChange={(event) => setOrgId(event.target.value)} className="input w-full">
+                <option value="">未指定</option>
+                {orgs.map((org) => (
+                  <option key={org.id} value={org.id}>{org.name}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="負責人">
+              <select value={ownerUserId} onChange={(event) => setOwnerUserId(event.target.value)} className="input w-full">
+                <option value="">未指定</option>
+                {users.map((user) => (
+                  <option key={user.id} value={user.id}>{user.display_name || user.email}</option>
+                ))}
+              </select>
             </Field>
             <button type="submit" className="btn btn-primary" disabled={creating}>
               {creating && <Loader2 size={13} className="animate-spin" aria-hidden={true} />}
