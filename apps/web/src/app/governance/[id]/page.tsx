@@ -129,9 +129,12 @@ function toDateInputValue(value?: string | null) {
   return new Date(value).toISOString().slice(0, 10);
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export default function GovernanceMatterPage() {
   const params = useParams<{ id: string }>();
-  const matterId = params.id;
+  const slug = params.id;
+  const [matterId, setMatterId] = useState<string>("");
   const [matter, setMatter] = useState<MatterOut | null>(null);
   const [tasks, setTasks] = useState<WorkItemOut[]>([]);
   const [automationRules, setAutomationRules] = useState<AutomationRuleOut[]>([]);
@@ -169,16 +172,21 @@ export default function GovernanceMatterPage() {
 
   const load = () => {
     setLoading(true);
-    Promise.all([
-      governanceApi.getMatter(matterId),
-      governanceApi.listTasks(matterId),
-      governanceApi.listAutomationRules(matterId),
-      governanceApi.listWorkflowTemplates(),
-      governanceApi.automationMeta().catch(() => null),
-      withFallback(orgsApi.list({ active_only: true }), []),
-      withFallback(adminApi.listUsers({ active_only: true, limit: 200 }), []),
-    ])
-      .then(([matterRes, taskRes, automationRes, templateRes, metaRes, orgRows, userRows]) => {
+    const fetchMatter = UUID_RE.test(slug)
+      ? governanceApi.getMatter(slug)
+      : governanceApi.getMatterBySlug(slug);
+    fetchMatter
+      .then(async (matterRes) => {
+        const uuid = String(matterRes.id);
+        setMatterId(uuid);
+        const [taskRes, automationRes, templateRes, metaRes, orgRows, userRows] = await Promise.all([
+          governanceApi.listTasks(uuid),
+          governanceApi.listAutomationRules(uuid),
+          governanceApi.listWorkflowTemplates(),
+          governanceApi.automationMeta().catch(() => null),
+          withFallback(orgsApi.list({ active_only: true }), []),
+          withFallback(adminApi.listUsers({ active_only: true, limit: 200 }), []),
+        ]);
         setMatter(matterRes);
         setTasks(taskRes);
         setAutomationRules(automationRes);
@@ -201,7 +209,7 @@ export default function GovernanceMatterPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [matterId]);
+  }, [slug]);
 
   const openTasks = useMemo(() => tasks.filter((task) => task.status === "open"), [tasks]);
   const completedTasks = useMemo(() => tasks.filter((task) => task.status === "done"), [tasks]);

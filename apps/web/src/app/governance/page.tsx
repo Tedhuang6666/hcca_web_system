@@ -173,7 +173,7 @@ export default function GovernancePage() {
       setOwnerUserId("");
       setShowCreate(false);
       toast.success("事情已建立，接著設定案件、任務或跨模組項目");
-      router.push(`/governance/${matter.id}`);
+      router.push(`/governance/${matter.slug ?? matter.id}`);
     } catch (error) {
       toast.error("建立失敗");
       console.error(error);
@@ -425,7 +425,7 @@ function MatterRow({
   const overdue = isOverdue(matter);
   return (
     <Link
-      href={`/governance/${matter.id}`}
+      href={`/governance/${matter.slug ?? matter.id}`}
       className="grid gap-3 px-4 py-3 transition-colors hover:bg-[var(--bg-hover)] sm:grid-cols-[minmax(0,1.2fr)_120px_150px_130px_140px_20px] sm:items-center"
       style={{ textDecoration: "none" }}
     >

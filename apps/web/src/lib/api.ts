@@ -1604,6 +1604,7 @@ export const governanceApi = {
   },
   createMatter: (body: MatterCreate) => post<MatterOut>("/governance/matters", body),
   getMatter: (id: string) => get<MatterOut>(`/governance/matters/${id}`),
+  getMatterBySlug: (slug: string) => get<MatterOut>(`/governance/matters/by-slug/${encodeURIComponent(slug)}`),
   discordWorkspace: (id: string) =>
     get<GovernanceDiscordWorkspaceOut | null>(
       `/governance/matters/${id}/discord-workspace`,

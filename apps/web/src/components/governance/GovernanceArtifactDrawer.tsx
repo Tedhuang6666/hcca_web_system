@@ -111,6 +111,7 @@ export default function GovernanceArtifactDrawer({
   const guidedHrefFor = (item: GovernanceModuleCapabilityOut) =>
     `${item.href}${item.href.includes("?") ? "&" : "?"}${new URLSearchParams({
       governance_matter_id: matter.id,
+      ...(matter.slug ? { governance_matter_slug: matter.slug } : {}),
       title: matter.title,
       ...(matter.org_id ? { org_id: matter.org_id } : {}),
     }).toString()}`;

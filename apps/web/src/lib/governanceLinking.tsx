@@ -6,6 +6,7 @@ import { governanceApi } from "@/lib/api";
 
 export type GovernanceLinkContext = {
   matterId: string;
+  matterSlug: string | null;
   matterTitle: string;
   orgId: string | null;
 };
@@ -17,6 +18,7 @@ export function governanceContextFromParams(
   if (!matterId) return null;
   return {
     matterId,
+    matterSlug: searchParams.get("governance_matter_slug")?.trim() || null,
     matterTitle: searchParams.get("title")?.trim() || "未命名事情",
     orgId: searchParams.get("org_id")?.trim() || null,
   };
@@ -58,7 +60,7 @@ export function GovernanceLinkNotice({ context }: { context: GovernanceLinkConte
       style={{ border: "1px solid var(--border)", background: "var(--bg-elevated)" }}
     >
       <span style={{ color: "var(--text-muted)" }}>建立後會關聯到 </span>
-      <Link href={`/governance/${context.matterId}`} className="font-medium" style={{ color: "var(--primary)" }}>
+      <Link href={`/governance/${context.matterSlug ?? context.matterId}`} className="font-medium" style={{ color: "var(--primary)" }}>
         {context.matterTitle}
       </Link>
     </section>

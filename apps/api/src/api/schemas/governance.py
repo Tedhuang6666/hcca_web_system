@@ -570,6 +570,7 @@ class MatterListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    slug: str | None = None
     title: str
     matter_type: str
     description: str | None
@@ -594,6 +595,7 @@ class MatterOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    slug: str | None = None
     title: str
     matter_type: str
     description: str | None
