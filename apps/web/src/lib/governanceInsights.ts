@@ -15,7 +15,14 @@ export interface RecommendedAction {
   anchor?: string;
   reason: string;
   priority: number;
-  quick_action?: "assign-owner" | "create-task" | "create-case" | "link-artifact" | "create-resource" | "create-note";
+  quick_action?:
+    | "assign-owner"
+    | "assign-task-owner"
+    | "create-task"
+    | "create-case"
+    | "link-artifact"
+    | "create-resource"
+    | "create-note";
   suggested_title?: string;
 }
 
@@ -167,7 +174,15 @@ export function buildMatterInsight(
     score += Math.min(24, 10 + unassignedTasks.length * 4);
     reasons.push(`${unassignedTasks.length} 件任務未指派`);
     badges.push("任務缺人");
-    pushAction(actions, "補上任務負責人", "未指派任務容易卡住，先把責任落到人。", 73, "tasks");
+    pushAction(
+      actions,
+      "補上任務負責人",
+      "未指派任務容易卡住，先把責任落到人。",
+      73,
+      "tasks",
+      undefined,
+      "assign-task-owner",
+    );
   }
 
   if (active && linkCount === 0) {
