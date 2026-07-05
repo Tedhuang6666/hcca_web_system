@@ -281,6 +281,15 @@ export default function GovernanceMatterPage() {
       openPanel("tasks");
       return;
     }
+    if (target.quick_action === "assign-task-owner") {
+      openPanel("tasks");
+      window.requestAnimationFrame(() => {
+        const taskElement = document.querySelector<HTMLElement>("[data-unassigned-task='true']");
+        taskElement?.focus();
+        taskElement?.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+      return;
+    }
     if (target.quick_action === "create-case") {
       setCaseTitle(target.suggested_title ?? "第一個執行案件");
       openPanel("cases");
@@ -1496,10 +1505,24 @@ function TaskRow({
   const [assignedToId, setAssignedToId] = useState(task.assigned_to_id ?? "");
   const [dueAt, setDueAt] = useState(toDateInputValue(task.due_at));
   const [status, setStatus] = useState(task.status);
+  const [quickAssigneeId, setQuickAssigneeId] = useState(task.assigned_to_id ?? "");
+  useEffect(() => {
+    setTitle(task.title);
+    setDescription(task.description ?? "");
+    setAssignedToId(task.assigned_to_id ?? "");
+    setQuickAssigneeId(task.assigned_to_id ?? "");
+    setDueAt(toDateInputValue(task.due_at));
+    setStatus(task.status);
+  }, [task]);
   const assignee =
     users.find((user) => user.id === task.assigned_to_id)?.display_name ||
     users.find((user) => user.id === task.assigned_to_id)?.email ||
     "未指派";
+  const assignTaskOwner = (userId: string) => {
+    setQuickAssigneeId(userId);
+    setAssignedToId(userId);
+    onUpdate(task, { assigned_to_id: userId || null });
+  };
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!title.trim()) return;
@@ -1514,9 +1537,15 @@ function TaskRow({
   };
   return (
     <article
+      tabIndex={-1}
+      data-unassigned-task={!task.assigned_to_id ? "true" : undefined}
       className="rounded-md p-3"
       onDoubleClick={() => setEditing(true)}
-      style={{ background: "var(--bg-hover)", border: "1px solid var(--border)", opacity: muted ? 0.72 : 1 }}
+      style={{
+        background: "var(--bg-hover)",
+        border: !task.assigned_to_id ? "1px solid var(--warning)" : "1px solid var(--border)",
+        opacity: muted ? 0.72 : 1,
+      }}
     >
       <div className="flex items-start justify-between gap-2">
         <span className="min-w-0">
@@ -1530,9 +1559,22 @@ function TaskRow({
         </button>
       </div>
       {!editing && (
-        <div className="mt-2 flex items-center justify-between gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
-          <span>{task.status === "done" ? "已完成" : task.status === "canceled" ? "已取消" : "開放"}</span>
-          <span>雙擊或按編輯可完整設定</span>
+        <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_minmax(150px,220px)] sm:items-center">
+          <div className="flex items-center justify-between gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
+            <span>{task.status === "done" ? "已完成" : task.status === "canceled" ? "已取消" : "開放"}</span>
+            <span>{task.assigned_to_id ? "可快速改派" : "尚未指派負責人"}</span>
+          </div>
+          <select
+            className="input h-8 text-xs"
+            value={quickAssigneeId}
+            onChange={(event) => assignTaskOwner(event.target.value)}
+            aria-label={`設定任務負責人：${task.title}`}
+          >
+            <option value="">指派負責人</option>
+            {users.map((user) => (
+              <option key={user.id} value={user.id}>{user.display_name || user.email}</option>
+            ))}
+          </select>
         </div>
       )}
       {editing && (
