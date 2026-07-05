@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { announcementsApi, apiErrorMessage } from "@/lib/api";
@@ -14,6 +14,11 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import ActivitySelect from "@/components/activities/ActivitySelect";
 import type { Activity } from "@/lib/types";
+import {
+  GovernanceLinkNotice,
+  createGovernanceBacklink,
+  governanceContextFromParams,
+} from "@/lib/governanceLinking";
 
 const DEFAULT_AUDIENCE: AudienceValue = {
   audience_type: "all",
@@ -31,8 +36,13 @@ type AnnouncementDraft = {
 
 export default function NewAnnouncementPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const governanceContext = useMemo(
+    () => governanceContextFromParams(searchParams),
+    [searchParams],
+  );
   const { can } = usePermissions();
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState(governanceContext?.matterTitle ?? "");
   const [markdown, setMarkdown] = useState("");
   const [isUrgent, setIsUrgent] = useState(false);
   const [urgentUntil, setUrgentUntil] = useState("");
@@ -106,6 +116,13 @@ export default function NewAnnouncementPage() {
       if (publish && canPublish) {
         await announcementsApi.publish(created.id);
       }
+      await createGovernanceBacklink({
+        context: governanceContext,
+        targetType: "announcement",
+        targetId: created.id,
+        title: created.title,
+        href: `/announcements/${created.id}`,
+      });
       clearDraft();
       toast.success(publish && canPublish ? "公告已發布" : "公告草稿已建立");
       router.push(`/announcements/${created.id}/edit`);
@@ -128,6 +145,8 @@ export default function NewAnnouncementPage() {
         </div>
         <Link href="/announcements" className="btn btn-ghost">取消</Link>
       </div>
+
+      <GovernanceLinkNotice context={governanceContext} />
 
       <input
         value={title}

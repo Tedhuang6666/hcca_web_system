@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { surveysApi, orgsApi, apiErrorMessage } from "@/lib/api";
@@ -10,6 +10,11 @@ import { uploadUrl } from "@/lib/config";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import UserPicker from "@/components/surveys/UserPicker";
 import ActivitySelect from "@/components/activities/ActivitySelect";
+import {
+  GovernanceLinkNotice,
+  createGovernanceBacklink,
+  governanceContextFromParams,
+} from "@/lib/governanceLinking";
 
 const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: "section_text", label: "文字描述區塊" },
@@ -227,15 +232,20 @@ function ConditionEditor({
 
 export default function NewSurveyPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const governanceContext = useMemo(
+    () => governanceContextFromParams(searchParams),
+    [searchParams],
+  );
   const [saving, setSaving] = useState(false);
 
   // 問卷基本資料
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState(governanceContext?.matterTitle ?? "");
   const [description, setDescription] = useState("");
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [allowMultiple, setAllowMultiple] = useState(false);
   const [closesAt, setClosesAt] = useState("");
-  const [orgId, setOrgId] = useState("");
+  const [orgId, setOrgId] = useState(governanceContext?.orgId ?? "");
   const [activityId, setActivityId] = useState("");
   const [orgs, setOrgs] = useState<OrgRead[]>([]);
 
@@ -259,7 +269,10 @@ export default function NewSurveyPage() {
       .then((items) => {
         const usableStoredOrgId = items.some((org) => org.id === storedOrgId) ? storedOrgId : "";
         setOrgs(items);
-        setOrgId(usableStoredOrgId || (items.length === 1 ? items[0].id : ""));
+        setOrgId((current) => {
+          if (current && items.some((org) => org.id === current)) return current;
+          return usableStoredOrgId || (items.length === 1 ? items[0].id : "");
+        });
       })
       .catch(() => {
         // 建立時仍會由後端權限檢查；這裡只避免 UI 直接卡死。
@@ -462,6 +475,13 @@ export default function NewSurveyPage() {
         }
       }
       if (publish) await surveysApi.open(survey.id);
+      await createGovernanceBacklink({
+        context: governanceContext,
+        targetType: "survey",
+        targetId: survey.id,
+        title: survey.title,
+        href: `/surveys/${survey.id}`,
+      });
       clearDraft();
       toast.success(publish ? "問卷已建立並開放填答" : "問卷草稿已建立");
       router.push(`/surveys/${encodeURIComponent(survey.title)}`);
@@ -494,6 +514,8 @@ export default function NewSurveyPage() {
           <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>建立草稿後可開放填答</p>
         </div>
       </div>
+
+      <GovernanceLinkNotice context={governanceContext} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* 主欄 */}

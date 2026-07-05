@@ -15,6 +15,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import ActivitySelect from "@/components/activities/ActivitySelect";
 import type { Activity } from "@/lib/types";
+import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 
 const DEFAULT_AUDIENCE: AudienceValue = {
   audience_type: "all",
@@ -191,6 +192,13 @@ export default function EditAnnouncementPage() {
           )}
         </div>
       </div>
+
+      <GovernanceLinkPanel
+        entityType="announcement"
+        entityId={item.id}
+        title={item.title}
+        href={`/announcements/${item.id}`}
+      />
 
       <input
         value={title}
