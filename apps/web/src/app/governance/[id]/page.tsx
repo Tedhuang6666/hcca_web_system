@@ -53,6 +53,7 @@ import {
   buildMatterInsight,
   buildPlanningInsight,
   riskColor,
+  type RecommendedAction,
 } from "@/lib/governanceInsights";
 
 const CASE_COLUMNS: Array<{ key: GovernanceCaseStatus; label: string }> = [
@@ -232,6 +233,67 @@ export default function GovernanceMatterPage() {
     users.find((user) => user.id === id)?.display_name ||
     users.find((user) => user.id === id)?.email ||
     (id ? "已指派使用者" : "尚未指派");
+
+  const openPanel = (id: string) => {
+    const element = document.getElementById(id);
+    if (element instanceof HTMLDetailsElement) element.open = true;
+    element?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const quickAssignOwner = () => {
+    if (!matterOwnerId) {
+      openPanel("settings");
+      toast.info("請先選擇負責人");
+      return;
+    }
+    setSaving(true);
+    governanceApi
+      .updateMatter(matterId, { owner_user_id: matterOwnerId })
+      .then((updated) => {
+        setMatter(updated);
+        setMatterOwnerId(updated.owner_user_id ?? "");
+        toast.success("已指派事情負責人");
+      })
+      .catch((error) => {
+        toast.error("指派負責人失敗");
+        console.error(error);
+      })
+      .finally(() => setSaving(false));
+  };
+
+  const runRecommendedAction = (action?: RecommendedAction) => {
+    const target = action ?? insight?.recommended_action;
+    if (!target) return;
+    if (target.quick_action === "assign-owner") {
+      void quickAssignOwner();
+      return;
+    }
+    if (target.quick_action === "create-task") {
+      setTaskTitle(target.suggested_title ?? "確認下一步");
+      openPanel("tasks");
+      return;
+    }
+    if (target.quick_action === "create-case") {
+      setCaseTitle(target.suggested_title ?? "第一個執行案件");
+      openPanel("cases");
+      return;
+    }
+    if (target.quick_action === "link-artifact") {
+      setArtifactDrawer("link");
+      return;
+    }
+    if (target.quick_action === "create-resource") {
+      setResourceTitle(target.suggested_title ?? "協作資源");
+      openPanel("resources");
+      return;
+    }
+    if (target.quick_action === "create-note") {
+      setNote(target.suggested_title ?? "進度紀錄");
+      openPanel("timeline");
+      return;
+    }
+    if (target.anchor) openPanel(target.anchor);
+  };
 
   const saveMatterBasics = (event: FormEvent) => {
     event.preventDefault();
@@ -708,13 +770,54 @@ export default function GovernanceMatterPage() {
                       {insight.recommended_action.reason}
                     </p>
                   </div>
-                  {insight.recommended_action.anchor && (
-                    <Link href={`#${insight.recommended_action.anchor}`} className="btn btn-primary flex-shrink-0">
-                      前往處理
-                      <ChevronDown size={13} aria-hidden={true} />
-                    </Link>
-                  )}
+                  <button
+                    type="button"
+                    className="btn btn-primary flex-shrink-0"
+                    onClick={() => runRecommendedAction()}
+                    disabled={saving}
+                  >
+                    快速處理
+                    <ChevronDown size={13} aria-hidden={true} />
+                  </button>
                 </div>
+                {insight.recommended_action.quick_action === "assign-owner" && (
+                  <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                    <select
+                      value={matterOwnerId}
+                      onChange={(event) => setMatterOwnerId(event.target.value)}
+                      className="input w-full"
+                      aria-label="選擇事情負責人"
+                    >
+                      <option value="">選擇負責人</option>
+                      {users.map((user) => (
+                        <option key={user.id} value={user.id}>{user.display_name || user.email}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="btn btn-secondary justify-center"
+                      onClick={quickAssignOwner}
+                      disabled={saving || !matterOwnerId}
+                    >
+                      指派
+                    </button>
+                  </div>
+                )}
+                {insight.next_steps.length > 1 && (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {insight.next_steps.slice(1).map((action) => (
+                      <button
+                        key={`${action.label}-${action.anchor ?? action.quick_action ?? "action"}`}
+                        type="button"
+                        className="rounded px-1.5 py-0.5 text-[10px] transition-colors hover:bg-[var(--bg-hover)]"
+                        style={{ color: "var(--text-secondary)", background: "var(--bg-surface)", border: "1px solid var(--border)" }}
+                        onClick={() => runRecommendedAction(action)}
+                      >
+                        {action.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {(insight.context_badges.length > 0 || insight.reasons.length > 0) && (
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {[...insight.context_badges, ...insight.reasons].slice(0, 5).map((item) => (

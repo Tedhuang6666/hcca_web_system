@@ -15,6 +15,8 @@ export interface RecommendedAction {
   anchor?: string;
   reason: string;
   priority: number;
+  quick_action?: "assign-owner" | "create-task" | "create-case" | "link-artifact" | "create-resource" | "create-note";
+  suggested_title?: string;
 }
 
 export interface OperationalInsight {
@@ -69,8 +71,18 @@ function pushAction(
   priority: number,
   anchor?: string,
   href?: string,
+  quickAction?: RecommendedAction["quick_action"],
+  suggestedTitle?: string,
 ) {
-  actions.push({ label, reason, priority, anchor, href });
+  actions.push({
+    label,
+    reason,
+    priority,
+    anchor,
+    href,
+    quick_action: quickAction,
+    suggested_title: suggestedTitle,
+  });
 }
 
 function riskFromScore(score: number): RiskLevel {
@@ -96,17 +108,23 @@ export function buildMatterInsight(
       score += 80;
       reasons.push(`已逾期 ${Math.abs(dueDays)} 天`);
       badges.push("逾期");
-      pushAction(actions, "檢查逾期原因", "期限已過，先更新任務或調整時程。", 95, "tasks");
+      pushAction(actions, "記錄逾期處理", "期限已過，先留下原因與調整後續時程。", 95, "timeline", undefined, "create-note", "逾期原因與調整方案");
     } else if (dueDays === 0) {
       score += 65;
       reasons.push("今天到期");
       badges.push("今天到期");
-      pushAction(actions, "完成今日交付", "今天到期，先確認未完成項目。", 88, "tasks");
+      pushAction(actions, "建立今日交付任務", "今天到期，先把最後交付拆成可完成任務。", 88, "tasks", undefined, "create-task", "完成今日交付");
     } else if (dueDays <= 3) {
       score += 35;
       reasons.push(`${dueDays} 天內到期`);
       badges.push("近期到期");
+      pushAction(actions, "確認近期交付", "期限接近，補上明確任務與負責人。", 70, "tasks", undefined, "create-task", "確認近期交付");
     }
+  } else if (active && dueDays === null) {
+    score += 16;
+    reasons.push("尚未設定期限");
+    badges.push("缺期限");
+    pushAction(actions, "設定預定完成日", "沒有期限時容易失去追蹤節奏，先補上預定完成時間。", 64, "settings");
   }
 
   if (matter.priority === "urgent") {
@@ -126,29 +144,64 @@ export function buildMatterInsight(
   if (active && openTaskCount === 0) {
     score += 28;
     reasons.push("沒有開放任務");
-    pushAction(actions, "建立第一個任務", "進行中的事情需要明確下一步。", 76, "tasks");
+    pushAction(actions, "建立第一個任務", "進行中的事情需要明確下一步。", 76, "tasks", undefined, "create-task", "確認下一步");
   } else if (openTaskCount >= 6) {
     score += 18;
     reasons.push(`${openTaskCount} 件開放任務`);
     badges.push("任務偏多");
   }
 
+  const openTasks = tasks.filter((task) => task.status !== "done" && task.status !== "canceled");
+  const overdueTasks = openTasks.filter((task) => {
+    const days = daysUntil(task.due_at);
+    return days !== null && days < 0;
+  });
+  const unassignedTasks = openTasks.filter((task) => !task.assigned_to_id);
+  if (overdueTasks.length > 0) {
+    score += 30;
+    reasons.push(`${overdueTasks.length} 件任務逾期`);
+    badges.push("任務逾期");
+    pushAction(actions, "處理逾期任務", "先更新逾期任務的狀態、期限或負責人。", 84, "tasks");
+  }
+  if (unassignedTasks.length > 0) {
+    score += Math.min(24, 10 + unassignedTasks.length * 4);
+    reasons.push(`${unassignedTasks.length} 件任務未指派`);
+    badges.push("任務缺人");
+    pushAction(actions, "補上任務負責人", "未指派任務容易卡住，先把責任落到人。", 73, "tasks");
+  }
+
   if (active && linkCount === 0) {
     score += 22;
     reasons.push("尚未連接任何模組資源");
-    pushAction(actions, "連接跨模組項目", "把公文、會議、公告或問卷納入同一件事情。", 72, "create-artifact");
+    pushAction(actions, "連接跨模組項目", "把公文、會議、公告或問卷納入同一件事情。", 72, "create-artifact", undefined, "link-artifact");
   }
 
   if (active && caseCount === 0) {
     score += 18;
     reasons.push("尚未拆成案件");
-    pushAction(actions, "拆成案件", "用案件看板定義可交付的工作範圍。", 68, "cases");
+    pushAction(actions, "拆成案件", "用案件看板定義可交付的工作範圍。", 68, "cases", undefined, "create-case", "第一個執行案件");
   }
 
   if ("owner_user_id" in matter && !matter.owner_user_id && active) {
-    score += 14;
+    score += 26;
     reasons.push("尚未指定負責人");
     badges.push("缺負責人");
+    pushAction(actions, "指派負責人", "讓一位成員接住總體進度與跨模組協調。", 86, "settings", undefined, "assign-owner");
+  }
+
+  if ("resources" in matter && matter.resources.length === 0 && active) {
+    score += 10;
+    reasons.push("尚未加入協作資源");
+    pushAction(actions, "加入協作資源", "補上雲端資料夾、會議連結或工作頻道，降低交接成本。", 57, "resources", undefined, "create-resource");
+  }
+
+  if ("cases" in matter) {
+    const reviewCases = matter.cases.filter((item) => item.status === "review");
+    if (reviewCases.length > 0) {
+      score += 14;
+      badges.push("案件待確認");
+      pushAction(actions, "確認待審案件", "案件已送到確認欄，適合先判斷通過、退回或補件。", 69, "cases");
+    }
   }
 
   if ("decisions" in matter) {
@@ -161,6 +214,18 @@ export function buildMatterInsight(
       badges.push("決議待辦");
       pushAction(actions, "追蹤決議落地", "會議或手動決議需要轉成任務並回報進度。", 82, "decisions");
     }
+    const missingDecisionOwners = pending.filter((decision) => !decision.owner_user_id);
+    const missingDecisionDue = pending.filter((decision) => !decision.due_at);
+    if (missingDecisionOwners.length > 0) {
+      score += 14;
+      reasons.push(`${missingDecisionOwners.length} 筆決議缺負責人`);
+      pushAction(actions, "指派決議負責人", "決議需要有人承接，才不會只停在紀錄裡。", 71, "decisions");
+    }
+    if (missingDecisionDue.length > 0) {
+      score += 10;
+      reasons.push(`${missingDecisionDue.length} 筆決議缺期限`);
+      pushAction(actions, "補上決議期限", "補上期限後，後續提醒與逾期判斷才會準確。", 60, "decisions");
+    }
   }
 
   if ("planning_documents" in matter) {
@@ -172,10 +237,22 @@ export function buildMatterInsight(
       score += 16;
       badges.push("企劃審查");
       pushAction(actions, "處理企劃審查", "企劃書正在審查或需修正。", 62, "plans");
+      if (reviewPlans.some((plan) => plan.status === "revision_requested")) {
+        score += 16;
+        reasons.push("企劃書需修正");
+        badges.push("需修正");
+        pushAction(actions, "修正企劃書", "已有企劃被要求修正，先更新版本再送回審查。", 79, "plans");
+      }
     } else if (drafts.length > 0 && active) {
       score += 8;
       badges.push("企劃草稿");
     }
+  }
+
+  if ("role_assignments" in matter && matter.matter_type === "activity" && matter.role_assignments.length === 0) {
+    score += 12;
+    reasons.push("活動尚未建立人員架構");
+    pushAction(actions, "建立活動職務", "活動型事情需要職務與組別，方便分工和交接。", 56, "roles");
   }
 
   if (matter.progress_percent >= 90 && active) {
