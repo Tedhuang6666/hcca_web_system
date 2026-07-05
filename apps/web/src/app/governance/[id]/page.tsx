@@ -10,7 +10,9 @@ import {
   ChevronDown,
   Clock,
   ExternalLink,
+  FileText,
   FilePlus2,
+  FolderOpen,
   FolderKanban,
   GitBranch,
   Loader2,
@@ -118,6 +120,9 @@ const RESOURCE_TYPE_LABEL: Record<string, string> = {
   other: "其他",
 };
 
+const IMAGE_EXTENSIONS = new Set(["avif", "gif", "jpeg", "jpg", "png", "svg", "webp"]);
+const DOCUMENT_EXTENSIONS = new Set(["csv", "doc", "docx", "pdf", "ppt", "pptx", "txt", "xls", "xlsx"]);
+
 function formatDate(value?: string | null) {
   if (!value) return "未設定";
   const d = new Date(value);
@@ -127,6 +132,41 @@ function formatDate(value?: string | null) {
 function toDateInputValue(value?: string | null) {
   if (!value) return "";
   return new Date(value).toISOString().slice(0, 10);
+}
+
+function extensionFromUrl(value: string) {
+  try {
+    const url = new URL(value);
+    const last = url.pathname.split("/").pop() ?? "";
+    const ext = last.includes(".") ? last.split(".").pop() : "";
+    return ext?.toLowerCase() ?? "";
+  } catch {
+    const clean = value.split("?")[0]?.split("#")[0] ?? "";
+    const ext = clean.includes(".") ? clean.split(".").pop() : "";
+    return ext?.toLowerCase() ?? "";
+  }
+}
+
+function googleDriveId(value: string) {
+  const patterns = [
+    /\/folders\/([a-zA-Z0-9_-]+)/,
+    /\/file\/d\/([a-zA-Z0-9_-]+)/,
+    /[?&]id=([a-zA-Z0-9_-]+)/,
+  ];
+  for (const pattern of patterns) {
+    const match = value.match(pattern);
+    if (match?.[1]) return match[1];
+  }
+  return null;
+}
+
+function googlePreviewUrl(value: string, resourceType: string) {
+  const id = googleDriveId(value);
+  if (!id) return null;
+  if (resourceType === "google_drive" && value.includes("/folders/")) {
+    return `https://drive.google.com/embeddedfolderview?id=${id}#grid`;
+  }
+  return `https://drive.google.com/file/d/${id}/preview`;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -1417,26 +1457,111 @@ function ResourceCard({
   resource: MatterResourceOut;
   onDelete: (resource: MatterResourceOut) => void;
 }) {
+  const typeLabel = RESOURCE_TYPE_LABEL[resource.resource_type] ?? resource.resource_type;
   return (
-    <div className="flex items-center gap-2 rounded-md p-3" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
-      <Link href={resource.url} className="min-w-0 flex-1" target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
-        <p className="truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{resource.title}</p>
-        <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-          {RESOURCE_TYPE_LABEL[resource.resource_type] ?? resource.resource_type}
-          {resource.description ? ` · ${resource.description}` : ""}
-        </p>
-      </Link>
-      <ExternalLink size={14} aria-hidden={true} style={{ color: "var(--primary)" }} />
-      <button
-        type="button"
-        onClick={() => onDelete(resource)}
-        className="topbar-icon-btn flex-shrink-0"
-        aria-label={`移除協作資源：${resource.title}`}
-        title="移除"
-      >
-        <Trash2 size={13} aria-hidden={true} style={{ color: "var(--text-muted)" }} />
-      </button>
+    <div className="overflow-hidden rounded-md" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
+      <div className="flex items-start gap-2 p-3">
+        <Link href={resource.url} className="min-w-0 flex-1" target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+          <p className="truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{resource.title}</p>
+          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            {typeLabel}
+            {resource.description ? ` · ${resource.description}` : ""}
+          </p>
+        </Link>
+        <Link href={resource.url} target="_blank" rel="noreferrer" className="topbar-icon-btn flex-shrink-0" aria-label={`開啟協作資源：${resource.title}`}>
+          <ExternalLink size={13} aria-hidden={true} style={{ color: "var(--primary)" }} />
+        </Link>
+        <button
+          type="button"
+          onClick={() => onDelete(resource)}
+          className="topbar-icon-btn flex-shrink-0"
+          aria-label={`移除協作資源：${resource.title}`}
+          title="移除"
+        >
+          <Trash2 size={13} aria-hidden={true} style={{ color: "var(--text-muted)" }} />
+        </button>
+      </div>
+      <ResourcePreview resource={resource} />
     </div>
+  );
+}
+
+function ResourcePreview({ resource }: { resource: MatterResourceOut }) {
+  const ext = extensionFromUrl(resource.url);
+  const googleUrl = googlePreviewUrl(resource.url, resource.resource_type);
+  const isDriveFolder = resource.resource_type === "google_drive" && resource.url.includes("/folders/");
+  const isImage = IMAGE_EXTENSIONS.has(ext);
+  const isDocument = DOCUMENT_EXTENSIONS.has(ext);
+
+  if (isImage) {
+    return (
+      <a
+        href={resource.url}
+        target="_blank"
+        rel="noreferrer"
+        className="block border-t"
+        style={{ borderColor: "var(--border)", textDecoration: "none" }}
+      >
+        <span
+          role="img"
+          aria-label={`${resource.title} 預覽`}
+          className="block h-72 w-full bg-contain bg-center bg-no-repeat"
+          style={{ backgroundColor: "var(--bg-surface)", backgroundImage: `url(${JSON.stringify(resource.url)})` }}
+        />
+      </a>
+    );
+  }
+
+  if (googleUrl) {
+    return (
+      <div className="border-t" style={{ borderColor: "var(--border)" }}>
+        <iframe
+          src={googleUrl}
+          title={`${resource.title} 預覽`}
+          className="h-72 w-full"
+          loading="lazy"
+          referrerPolicy="no-referrer-when-downgrade"
+          sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+        />
+      </div>
+    );
+  }
+
+  if (isDocument) {
+    return (
+      <div className="border-t" style={{ borderColor: "var(--border)" }}>
+        <iframe
+          src={resource.url}
+          title={`${resource.title} 預覽`}
+          className="h-72 w-full"
+          loading="lazy"
+          referrerPolicy="no-referrer-when-downgrade"
+        />
+      </div>
+    );
+  }
+
+  const Icon = isDriveFolder ? FolderOpen : FileText;
+  return (
+    <Link
+      href={resource.url}
+      target="_blank"
+      rel="noreferrer"
+      className="flex items-center gap-3 border-t p-3 transition-colors hover:bg-[var(--bg-surface)]"
+      style={{ borderColor: "var(--border)", textDecoration: "none" }}
+    >
+      <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md" style={{ background: "var(--bg-surface)", color: "var(--primary)" }}>
+        <Icon size={18} aria-hidden={true} />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-xs font-medium" style={{ color: "var(--text-primary)" }}>
+          {isDriveFolder ? "資料夾預覽需在 Google 雲端開啟" : "此資源無法直接嵌入預覽"}
+        </span>
+        <span className="mt-0.5 block truncate text-[11px]" style={{ color: "var(--text-muted)" }}>
+          點擊開啟原始資源
+        </span>
+      </span>
+    </Link>
   );
 }
 
