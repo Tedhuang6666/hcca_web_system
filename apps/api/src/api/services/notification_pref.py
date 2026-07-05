@@ -144,3 +144,91 @@ def set_digest_frequency(prefs: dict | None, frequency: str) -> dict:
     next_prefs = dict(prefs or {})
     next_prefs[_DIGEST_KEY] = frequency
     return next_prefs
+
+
+# ── 模組靜音（一鍵關閉整個模組的所有通知）────────────────────────────────────
+
+# 通知類型 → 所屬模組（供靜音時批次關閉同模組所有類型）
+TYPE_MODULE_MAP: dict[str, str] = {
+    "document_pending": "document",
+    "document_approved": "document",
+    "document_rejected": "document",
+    "document_recalled": "document",
+    "meeting_invited": "meeting",
+    "meeting_today": "meeting",
+    "meeting_minutes_ready": "meeting",
+    "regulation_review_assigned": "regulation",
+    "regulation_publish_ready": "regulation",
+    "regulation_published": "regulation",
+    "petition_assigned": "petition",
+    "petition_replied": "petition",
+    "petition_status_updated": "petition",
+    "meal_class_collecting": "meal",
+    "meal_pickup_ready": "meal",
+    "shop_order_paid": "shop",
+    "survey_invitation": "survey",
+    "announcement": "announcement",
+    "calendar_event_invited": "calendar",
+    "calendar_event_updated": "calendar",
+    "work_item_assigned": "work",
+    "work_item_due": "work",
+    "system": "system",
+}
+
+MODULE_LABELS: dict[str, str] = {
+    "document": "公文",
+    "meeting": "會議",
+    "regulation": "法規",
+    "petition": "陳情",
+    "meal": "學餐",
+    "shop": "購票",
+    "survey": "問卷",
+    "announcement": "公告",
+    "calendar": "行事曆",
+    "work": "工作",
+    "system": "系統",
+}
+
+KNOWN_MODULES: frozenset[str] = frozenset(MODULE_LABELS)
+
+# 存於 notification_preferences JSON 的保留鍵（雙底線開頭）
+_MUTED_MODULES_KEY = "__muted_modules"
+
+
+def get_muted_modules(prefs: dict | None) -> list[str]:
+    """從原始 prefs JSON 取出已靜音的模組清單；未設定回空列表。"""
+    raw = (prefs or {}).get(_MUTED_MODULES_KEY)
+    if isinstance(raw, list):
+        return [m for m in raw if isinstance(m, str) and m in KNOWN_MODULES]
+    return []
+
+
+def set_muted_modules(prefs: dict | None, modules: list[str]) -> dict:
+    """回傳寫入新靜音模組清單後的完整 prefs dict（保留其他欄位）。
+
+    同時把被靜音模組的所有通知類型的 inapp/email/line/discord 全關；
+    取消靜音時不自動恢復（避免覆蓋使用者之前的細部設定）。
+    """
+    invalid = [m for m in modules if m not in KNOWN_MODULES]
+    if invalid:
+        raise ValueError(f"未知的模組名稱：{', '.join(invalid)}")
+    next_prefs = normalize_preferences(prefs)
+    mute_set = frozenset(modules)
+    for ntype, module in TYPE_MODULE_MAP.items():
+        if module in mute_set:
+            next_prefs[ntype] = {"inapp": False, "email": False, "line": False, "discord": False}
+    # 寫回保留鍵，在 JSONB 最外層
+    result: dict = {**next_prefs, _MUTED_MODULES_KEY: sorted(mute_set)}
+    # 保留其他保留鍵（如 __digest_frequency）
+    for key, val in (prefs or {}).items():
+        if key.startswith("__") and key != _MUTED_MODULES_KEY:
+            result[key] = val
+    return result
+
+
+def is_module_muted(prefs: dict | None, notification_type: str) -> bool:
+    """快速判斷某通知類型的所屬模組是否被靜音（供發送前 gate 用）。"""
+    module = TYPE_MODULE_MAP.get(notification_type)
+    if module is None:
+        return False
+    return module in get_muted_modules(prefs)
