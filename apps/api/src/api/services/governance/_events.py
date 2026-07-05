@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import UTC, datetime
 
@@ -45,7 +46,7 @@ async def record_event(
         body=body,
         actor_id=resolved_actor_id,
         actor_email=resolved_actor_email,
-        payload=payload or {},
+        payload=json.loads(json.dumps(payload or {}, default=str)),
         created_at=datetime.now(UTC),
     )
     db.add(event)
