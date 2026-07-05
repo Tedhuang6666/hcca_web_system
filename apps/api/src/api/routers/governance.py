@@ -49,6 +49,9 @@ from api.schemas.governance import (
     MatterLinkRefOut,
     MatterListItem,
     MatterOut,
+    MatterResourceCreate,
+    MatterResourceOut,
+    MatterResourceUpdate,
     MatterRoleAssignmentCreate,
     MatterRoleAssignmentOut,
     MatterRoleAssignmentUpdate,
@@ -602,6 +605,68 @@ async def search_governance_resources(
     limit: int = Query(20, ge=1, le=50),
 ) -> list[dict]:
     return await governance_modules.search_resources(db, kind=kind, query=q, limit=limit)
+
+
+@router.post(
+    "/matters/{matter_id}/resources",
+    response_model=MatterResourceOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="新增事情協作資源",
+    dependencies=[GovernanceManagerDep],
+)
+async def create_matter_resource(
+    matter_id: uuid.UUID,
+    body: MatterResourceCreate,
+    db: DbDep,
+    user: CurrentUser,
+) -> MatterResourceOut:
+    matter = await _matter_or_404(db, matter_id)
+    resource = await governance_svc.create_matter_resource(
+        db, matter=matter, data=body, user=user
+    )
+    return MatterResourceOut.model_validate(resource)
+
+
+@router.patch(
+    "/matters/{matter_id}/resources/{resource_id}",
+    response_model=MatterResourceOut,
+    summary="更新事情協作資源",
+    dependencies=[GovernanceManagerDep],
+)
+async def update_matter_resource(
+    matter_id: uuid.UUID,
+    resource_id: uuid.UUID,
+    body: MatterResourceUpdate,
+    db: DbDep,
+    user: CurrentUser,
+) -> MatterResourceOut:
+    await _matter_or_404(db, matter_id)
+    resource = await governance_svc.get_matter_resource(db, resource_id)
+    if resource is None or resource.matter_id != matter_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="協作資源不存在")
+    updated = await governance_svc.update_matter_resource(
+        db, resource=resource, data=body, user=user
+    )
+    return MatterResourceOut.model_validate(updated)
+
+
+@router.delete(
+    "/matters/{matter_id}/resources/{resource_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="停用事情協作資源",
+    dependencies=[GovernanceManagerDep],
+)
+async def delete_matter_resource(
+    matter_id: uuid.UUID,
+    resource_id: uuid.UUID,
+    db: DbDep,
+    user: CurrentUser,
+) -> None:
+    await _matter_or_404(db, matter_id)
+    resource = await governance_svc.get_matter_resource(db, resource_id)
+    if resource is None or resource.matter_id != matter_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="協作資源不存在")
+    await governance_svc.delete_matter_resource(db, resource=resource, user=user)
 
 
 @router.post(

@@ -1691,6 +1691,12 @@ export const governanceApi = {
         limit: String(limit),
       }).toString()}`,
     ),
+  createResource: (matterId: string, body: MatterResourceCreate) =>
+    post<MatterResourceOut>(`/governance/matters/${matterId}/resources`, body),
+  updateResource: (matterId: string, resourceId: string, body: MatterResourceUpdate) =>
+    patch<MatterResourceOut>(`/governance/matters/${matterId}/resources/${resourceId}`, body),
+  deleteResource: (matterId: string, resourceId: string) =>
+    del<void>(`/governance/matters/${matterId}/resources/${resourceId}`),
   uploadPlanningAttachment: async (id: string, file: File) => {
     const form = new FormData();
     form.append("file", file);

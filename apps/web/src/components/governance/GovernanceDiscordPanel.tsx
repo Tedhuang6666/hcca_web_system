@@ -145,14 +145,20 @@ export default function GovernanceDiscordPanel({ matterId, initial }: Props) {
   if (isModuleClosed("discord")) return null;
 
   return (
-    <section className="rounded-lg p-5" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <details className="group rounded-lg" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+      <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 p-5">
         <div>
           <h2 className="text-sm font-semibold">Discord 治理工作區</h2>
           <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
             綁定既有頻道，或由 Bot 建立分類、討論、公告與核心工作頻道。
           </p>
         </div>
+        <span className="btn btn-secondary btn-sm pointer-events-none">
+          展開設定
+        </span>
+      </summary>
+      <div className="px-5 pb-5 pt-0">
+      <div className="flex flex-wrap items-start justify-end gap-3">
         {workspace && (
           <button
             className="btn btn-secondary btn-sm"
@@ -326,7 +332,8 @@ export default function GovernanceDiscordPanel({ matterId, initial }: Props) {
           </p>
         )}
       </div>
-    </section>
+      </div>
+    </details>
   );
 }
 

@@ -16,6 +16,7 @@ from api.models.governance import (
     GovernanceDiscordWorkspace,
     GovernanceEventType,
     Matter,
+    MatterResource,
     PlanningDocument,
     PlanningDocumentRevision,
     PlanningDocumentRevisionAttachment,
@@ -28,6 +29,8 @@ from api.schemas.governance import (
     GovernanceCaseUpdate,
     MatterCreate,
     MatterListItem,
+    MatterResourceCreate,
+    MatterResourceUpdate,
     MatterUpdate,
     ProgramCreate,
     ProgramUpdate,
@@ -174,6 +177,63 @@ async def update_matter(
         )
     await db.flush()
     return matter
+
+
+async def create_matter_resource(
+    db: AsyncSession, *, matter: Matter, data: MatterResourceCreate, user: User
+) -> MatterResource:
+    resource = MatterResource(
+        matter_id=matter.id,
+        created_by_id=user.id,
+        **data.model_dump(),
+    )
+    db.add(resource)
+    await db.flush()
+    await record_event(
+        db,
+        matter_id=matter.id,
+        event_type=GovernanceEventType.LINKED,
+        title=f"新增協作資源：{resource.title}",
+        actor=user,
+        payload={"resource_id": str(resource.id), "resource_type": resource.resource_type},
+    )
+    return resource
+
+
+async def get_matter_resource(db: AsyncSession, resource_id: uuid.UUID) -> MatterResource | None:
+    return await db.get(MatterResource, resource_id)
+
+
+async def update_matter_resource(
+    db: AsyncSession, *, resource: MatterResource, data: MatterResourceUpdate, user: User
+) -> MatterResource:
+    payload = apply_updates(resource, data)
+    await record_event(
+        db,
+        matter_id=resource.matter_id,
+        event_type=GovernanceEventType.UPDATED,
+        title=f"更新協作資源：{resource.title}",
+        actor=user,
+        payload=payload,
+    )
+    await db.flush()
+    return resource
+
+
+async def delete_matter_resource(
+    db: AsyncSession, *, resource: MatterResource, user: User
+) -> MatterResource:
+    resource.is_active = False
+    await record_event(
+        db,
+        matter_id=resource.matter_id,
+        event_type=GovernanceEventType.UPDATED,
+        title=f"停用協作資源：{resource.title}",
+        actor=user,
+        payload={"resource_id": str(resource.id), "is_active": False},
+    )
+    await db.flush()
+    return resource
 
 
 async def create_program(
