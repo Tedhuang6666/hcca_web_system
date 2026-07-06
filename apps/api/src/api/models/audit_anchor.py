@@ -45,7 +45,7 @@ class AuditLogAnchor(Base, TimestampMixin):
 
     last_audit_log_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("audit_logs.id"),
+        ForeignKey("audit_logs.id", ondelete="SET NULL"),
         nullable=True,
     )
     """該日最後一筆 AuditLog。若該日無紀錄則 NULL。"""
