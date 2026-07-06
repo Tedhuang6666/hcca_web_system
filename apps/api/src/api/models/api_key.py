@@ -61,7 +61,7 @@ class ApiKey(Base, TimestampMixin):
     """
 
     owner_user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
 
     scopes: Mapped[list[str]] = mapped_column(JSONList, nullable=False, default=list)

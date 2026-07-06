@@ -93,7 +93,7 @@ class PolicyDocument(Base, TimestampMixin):
     """是否為當前生效版本。同 kind 只能一個 True。"""
 
     published_by: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     """發布者；可為 NULL（系統初次匯入）。"""
 
@@ -125,11 +125,11 @@ class PolicyConsent(Base, TimestampMixin):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
 
     policy_document_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("policy_documents.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("policy_documents.id", ondelete="RESTRICT"), nullable=False
     )
 
     agreed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -159,7 +159,7 @@ class PrivacyRequest(Base, TimestampMixin):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
 
     request_type: Mapped[str] = mapped_column(String(24), nullable=False)
@@ -172,7 +172,7 @@ class PrivacyRequest(Base, TimestampMixin):
     submitted_user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
     response_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     handled_by: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     handled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
