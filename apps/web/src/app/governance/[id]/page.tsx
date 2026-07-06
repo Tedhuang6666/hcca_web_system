@@ -169,6 +169,14 @@ function googlePreviewUrl(value: string, resourceType: string) {
   return `https://drive.google.com/file/d/${id}/preview`;
 }
 
+function recommendationKey(action: RecommendedAction) {
+  return action.id ?? `${action.quick_action ?? "anchor"}:${action.anchor ?? ""}:${action.label}`;
+}
+
+function recommendationStorageKey(matterId: string) {
+  return `governance:recommendations:dismissed:${matterId}`;
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default function GovernanceMatterPage() {
@@ -209,6 +217,7 @@ export default function GovernanceMatterPage() {
   const [lastSpawn, setLastSpawn] = useState<MatterSpawnResult | null>(null);
   const [artifactDrawer, setArtifactDrawer] = useState<"create" | "link" | null>(null);
   const [saving, setSaving] = useState(false);
+  const [dismissedRecommendationIds, setDismissedRecommendationIds] = useState<Set<string>>(new Set());
 
   const load = () => {
     setLoading(true);
@@ -254,6 +263,12 @@ export default function GovernanceMatterPage() {
   const openTasks = useMemo(() => tasks.filter((task) => task.status === "open"), [tasks]);
   const completedTasks = useMemo(() => tasks.filter((task) => task.status === "done"), [tasks]);
   const insight = useMemo(() => (matter ? buildMatterInsight(matter, tasks) : null), [matter, tasks]);
+  const visibleRecommendedActions = useMemo(
+    () =>
+      insight?.next_steps.filter((action) => !dismissedRecommendationIds.has(recommendationKey(action))) ?? [],
+    [dismissedRecommendationIds, insight],
+  );
+  const visibleRecommendedAction = visibleRecommendedActions[0] ?? null;
   const activeCases = useMemo(() => (matter ? buildCaseInsight(matter.cases) : []), [matter]);
   const pendingDecisions = useMemo(() => (matter ? buildDecisionInsight(matter.decisions) : []), [matter]);
   const activePlans = useMemo(() => (matter ? buildPlanningInsight(matter.planning_documents) : []), [matter]);
@@ -281,6 +296,25 @@ export default function GovernanceMatterPage() {
     users.find((user) => user.id === id)?.display_name ||
     users.find((user) => user.id === id)?.email ||
     (id ? "已指派使用者" : "尚未指派");
+
+  useEffect(() => {
+    if (!matter?.id) return;
+    const raw = window.localStorage.getItem(recommendationStorageKey(matter.id));
+    try {
+      setDismissedRecommendationIds(new Set(raw ? JSON.parse(raw) as string[] : []));
+    } catch {
+      setDismissedRecommendationIds(new Set());
+    }
+  }, [matter?.id]);
+
+  const skipRecommendedAction = (action: RecommendedAction) => {
+    if (!matter?.id) return;
+    const next = new Set(dismissedRecommendationIds);
+    next.add(recommendationKey(action));
+    setDismissedRecommendationIds(next);
+    window.localStorage.setItem(recommendationStorageKey(matter.id), JSON.stringify([...next]));
+    toast.info("已跳過此建議");
+  };
 
   const openPanel = (id: string) => {
     const element = document.getElementById(id);
@@ -310,7 +344,7 @@ export default function GovernanceMatterPage() {
   };
 
   const runRecommendedAction = (action?: RecommendedAction) => {
-    const target = action ?? insight?.recommended_action;
+    const target = action ?? visibleRecommendedAction;
     if (!target) return;
     if (target.quick_action === "assign-owner") {
       void quickAssignOwner();
@@ -815,29 +849,38 @@ export default function GovernanceMatterPage() {
               )}
             </div>
             {matter.description && <p className="mt-2 max-w-3xl text-sm" style={{ color: "var(--text-muted)" }}>{matter.description}</p>}
-            {insight && (
+            {insight && visibleRecommendedAction && (
               <div className="mt-4 rounded-lg p-3" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
                 <p className="text-xs font-semibold" style={{ color: "var(--primary)" }}>推薦下一步</p>
                 <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
                     <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                      {insight.recommended_action.label}
+                      {visibleRecommendedAction.label}
                     </p>
                     <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                      {insight.recommended_action.reason}
+                      {visibleRecommendedAction.reason}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    className="btn btn-primary flex-shrink-0"
-                    onClick={() => runRecommendedAction()}
-                    disabled={saving}
-                  >
-                    快速處理
-                    <ChevronDown size={13} aria-hidden={true} />
-                  </button>
+                  <div className="flex flex-shrink-0 gap-2">
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => skipRecommendedAction(visibleRecommendedAction)}
+                    >
+                      跳過
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() => runRecommendedAction()}
+                      disabled={saving}
+                    >
+                      快速處理
+                      <ChevronDown size={13} aria-hidden={true} />
+                    </button>
+                  </div>
                 </div>
-                {insight.recommended_action.quick_action === "assign-owner" && (
+                {visibleRecommendedAction.quick_action === "assign-owner" && (
                   <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
                     <select
                       value={matterOwnerId}
@@ -860,19 +903,32 @@ export default function GovernanceMatterPage() {
                     </button>
                   </div>
                 )}
-                {insight.next_steps.length > 1 && (
+                {visibleRecommendedActions.length > 1 && (
                   <div className="mt-3 flex flex-wrap gap-1.5">
-                    {insight.next_steps.slice(1).map((action) => (
-                      <button
-                        key={`${action.label}-${action.anchor ?? action.quick_action ?? "action"}`}
-                        type="button"
-                        className="rounded px-1.5 py-0.5 text-[10px] transition-colors hover:bg-[var(--bg-hover)]"
-                        style={{ color: "var(--text-secondary)", background: "var(--bg-surface)", border: "1px solid var(--border)" }}
-                        onClick={() => runRecommendedAction(action)}
-                      >
-                        {action.label}
-                      </button>
-                    ))}
+                    {visibleRecommendedActions.slice(1).map((action) => {
+                      const key = recommendationKey(action);
+                      return (
+                        <span key={key} className="inline-flex overflow-hidden rounded" style={{ border: "1px solid var(--border)" }}>
+                          <button
+                            type="button"
+                            className="px-1.5 py-0.5 text-[10px] transition-colors hover:bg-[var(--bg-hover)]"
+                            style={{ color: "var(--text-secondary)", background: "var(--bg-surface)" }}
+                            onClick={() => runRecommendedAction(action)}
+                          >
+                            {action.label}
+                          </button>
+                          <button
+                            type="button"
+                            className="px-1.5 py-0.5 text-[10px] transition-colors hover:bg-[var(--bg-hover)]"
+                            style={{ color: "var(--text-disabled)", background: "var(--bg-surface)", borderLeft: "1px solid var(--border)" }}
+                            onClick={() => skipRecommendedAction(action)}
+                            aria-label={`跳過建議：${action.label}`}
+                          >
+                            跳過
+                          </button>
+                        </span>
+                      );
+                    })}
                   </div>
                 )}
                 {(insight.context_badges.length > 0 || insight.reasons.length > 0) && (
