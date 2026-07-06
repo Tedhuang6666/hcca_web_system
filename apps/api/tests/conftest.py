@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import uuid
 
 # 測試用 HTTP client 以 base_url="http://test" 發送請求；
 # 確保 TrustedHostMiddleware 不會在使用者本機 .env 限縮 ALLOWED_HOSTS 時
@@ -127,8 +128,21 @@ class CSRFAwareAsyncClient(AsyncClient):
 
 @pytest_asyncio.fixture(scope="function")
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
-    """每個測試函式建立全新的資料庫（PostgreSQL）或 in-memory（SQLite）"""
-    engine = create_async_engine(TEST_DATABASE_URL, echo=False)
+    """每個測試函式建立全新的資料庫（PostgreSQL）或 in-memory（SQLite）
+
+    PostgreSQL 模式下每個測試使用專屬的 schema（透過連線層級 search_path），
+    而非共用 "public"。這樣任一測試的 teardown 若被中斷（例如 deadlock、crash），
+    只會留下它自己那個獨立 schema 的殘骸，不會讓下一個測試的 CREATE TABLE /
+    pg_type 目錄撞名，避免全套測試被連鎖拖垮。
+    """
+    is_postgres = "postgresql" in TEST_DATABASE_URL
+    schema_name = f"test_{uuid.uuid4().hex[:16]}" if is_postgres else None
+    connect_args = {"server_settings": {"search_path": schema_name}} if is_postgres else {}
+    engine = create_async_engine(TEST_DATABASE_URL, echo=False, connect_args=connect_args)
+
+    if is_postgres:
+        async with engine.begin() as conn:
+            await conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}"'))
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -138,12 +152,10 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     async with session_factory() as session:
         yield session
 
-    # 清理測試資料（PostgreSQL 用 CASCADE，SQLite 用 DROP ALL）
+    # 清理測試資料：PostgreSQL 整個 schema 一起丟掉，SQLite 用 DROP ALL
     async with engine.begin() as conn:
-        if "postgresql" in TEST_DATABASE_URL:
-            # PostgreSQL：用 CASCADE 忽略外鍵約束
-            for table in reversed(Base.metadata.sorted_tables):
-                await conn.execute(text(f"DROP TABLE IF EXISTS {table.name} CASCADE"))
+        if is_postgres:
+            await conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema_name}" CASCADE'))
         else:
             await conn.run_sync(Base.metadata.drop_all)
 
