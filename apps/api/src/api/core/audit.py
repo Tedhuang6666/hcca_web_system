@@ -1,19 +1,33 @@
 """安全審計中間件 - 記錄敏感操作"""
 
-import logging
-from collections.abc import Callable
-from datetime import UTC, datetime
+from __future__ import annotations
 
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
-from starlette.responses import Response
+import logging
+from datetime import UTC, datetime
+from urllib.parse import parse_qsl
+
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 logger = logging.getLogger(__name__)
 
 
-class SecurityAuditMiddleware(BaseHTTPMiddleware):
+def _client_ip(scope: Scope) -> str:
+    client = scope.get("client")
+    return client[0] if client else "unknown"
+
+
+def _query_params(scope: Scope) -> dict[str, str]:
+    query_string = scope.get("query_string") or b""
+    if not query_string:
+        return {}
+    return dict(parse_qsl(query_string.decode("latin-1")))
+
+
+class SecurityAuditMiddleware:
     """
     安全審計中間件：記錄敏感操作（管理員操作、權限變更、資料修改等）
+
+    Pure ASGI；不依賴 BaseHTTPMiddleware（後者每個請求都多開一層 anyio task group）。
     """
 
     # 需要審計的端點前綴（POST/PATCH/DELETE 操作）
@@ -28,8 +42,8 @@ class SecurityAuditMiddleware(BaseHTTPMiddleware):
         "/users/",
     ]
 
-    def __init__(self, app: Callable) -> None:
-        super().__init__(app)
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
 
     def _is_sensitive(self, method: str, path: str) -> bool:
         """檢查是否為敏感操作"""
@@ -38,40 +52,45 @@ class SecurityAuditMiddleware(BaseHTTPMiddleware):
 
         return any(path.startswith(prefix) for prefix in self.SENSITIVE_ENDPOINTS)
 
-    async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        if not self._is_sensitive(request.method, request.url.path):
-            return await call_next(request)
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        method = str(scope.get("method", "GET")).upper()
+        path = scope.get("path", "")
+        if scope["type"] != "http" or not self._is_sensitive(method, path):
+            await self.app(scope, receive, send)
+            return
 
-        # 提取使用者資訊（若可用）
-        user_id = "anonymous"
-        user_email = "unknown"
-        try:
-            # 嘗試從 token 提取使用者（簡化版，實際可能需要解碼 JWT）
-            if hasattr(request.state, "user"):
-                user_id = str(request.state.user.id)
-                user_email = request.state.user.email
-        except Exception:
-            logger.debug("audit middleware 取得 user context 失敗", exc_info=True)
+        client_ip = _client_ip(scope)
+        status_code = 500
 
-        client_ip = request.client.host if request.client else "unknown"
+        async def send_wrapper(message: Message) -> None:
+            nonlocal status_code
+            if message["type"] == "http.response.start":
+                status_code = message["status"]
+            await send(message)
 
-        # 執行請求
-        response = await call_next(request)
+        await self.app(scope, receive, send_wrapper)
+
+        # 提取使用者資訊（若可用；由上游 auth middleware/dependency 寫入 scope["state"]）
+        state = scope.get("state") or {}
+        user = state.get("user")
+        user_id = str(user.id) if user is not None else "anonymous"
+        user_email = user.email if user is not None else "unknown"
 
         # 記錄敏感操作（info level；失敗時 status_code >= 400 方升為 warning）
-        log_fn = logger.warning if response.status_code >= 400 else logger.info
+        log_fn = logger.warning if status_code >= 400 else logger.info
         log_fn(
             "Security audit: sensitive operation",
             extra={
                 "timestamp": datetime.now(UTC).isoformat(),
-                "method": request.method,
-                "path": request.url.path,
+                "method": method,
+                "path": path,
                 "user_id": user_id,
                 "user_email": user_email,
                 "client_ip": client_ip,
-                "status_code": response.status_code,
-                "query_params": dict(request.query_params),
+                "status_code": status_code,
+                "query_params": _query_params(scope),
             },
         )
 
-        return response
+
+__all__ = ["SecurityAuditMiddleware"]

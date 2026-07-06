@@ -10,6 +10,7 @@ import type { CatalogCategoryOut, CatalogProductOut, CloseStatusItem, ProductOut
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import SmartEmptyState from "@/components/ui/SmartEmptyState";
 import { usePersistedState } from "@/hooks/usePersistedState";
+import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
 
 function Thumb({ url, alt, size = 64 }: { url: string | null; alt: string; size?: number }) {
   if (!url) {
@@ -267,20 +268,23 @@ function ProductCard({ product, onClick }: { product: CatalogProductOut; onClick
 // ── 購買頁 ────────────────────────────────────────────────────────────────────
 
 export default function ShopPage() {
-  const [catalog, setCatalog] = useState<CatalogCategoryOut[]>([]);
-  const [loading, setLoading] = useState(true);
+  const activityId = useSearchParams().get("activity_id") || undefined;
+  const catalogCacheKey = `shop/catalog/${activityId ?? "all"}`;
+
+  const [catalog, setCatalog] = useState<CatalogCategoryOut[]>(() => cacheGet<CatalogCategoryOut[]>(catalogCacheKey) ?? []);
+  const [loading, setLoading] = useState(!cacheHas(catalogCacheKey));
   const [openProduct, setOpenProduct] = useState<string | null>(null);
   const [cartCount, setCartCount] = useState(0);
   const [closeStatus, setCloseStatus] = useState<Record<string, CloseStatusItem>>({});
   const [selectedCategoryId, setSelectedCategoryId] = usePersistedState<string | null>("hcca:pref:shop:category:v1", null);
-  const activityId = useSearchParams().get("activity_id") || undefined;
 
   const loadCatalog = useCallback(() => {
-    setLoading(true);
+    if (!cacheHas(catalogCacheKey)) setLoading(true);
     shopApi
       .catalog(activityId)
       .then(async (data) => {
         setCatalog(data);
+        cacheSet(catalogCacheKey, data);
         setSelectedCategoryId((current) => current ?? data[0]?.id ?? null);
         try {
           const schoolClass = await classApi.myClass();
@@ -293,7 +297,7 @@ export default function ShopPage() {
       })
       .catch((e) => toast.error(apiErrorMessage(e, "載入失敗")))
       .finally(() => setLoading(false));
-  }, [setSelectedCategoryId, activityId]);
+  }, [setSelectedCategoryId, activityId, catalogCacheKey]);
 
   const loadCart = useCallback(() => {
     shopApi
@@ -359,7 +363,7 @@ export default function ShopPage() {
                     style={category.id === selectedCategory.id
                       ? { background: "var(--primary-dim)", color: "var(--primary)" }
                       : { color: "var(--text-secondary)" }}>
-                    <Thumb url={category.image_url} alt={category.name} size={34} />
+                    <Thumb url={category.image_url ?? null} alt={category.name} size={34} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">{category.name}</span>
                       <span className="block text-[11px]" style={{ color: "var(--text-muted)" }}>
@@ -420,7 +424,7 @@ export default function ShopPage() {
               {selectedCategory.series.map((series) => (
                 <section key={series.id} id={`shop-series-${series.id}`} className="scroll-mt-24 space-y-3">
                   <div className="flex items-center gap-3">
-                    <Thumb url={series.image_url} alt={series.name} size={42} />
+                    <Thumb url={series.image_url ?? null} alt={series.name} size={42} />
                     <div>
                       <h3 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>{series.name}</h3>
                       <p className="text-xs" style={{ color: "var(--text-muted)" }}>{series.products.length} 件商品</p>
