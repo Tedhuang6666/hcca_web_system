@@ -1544,8 +1544,8 @@ function ResourceCard({
 
 function ResourcePreview({ resource }: { resource: MatterResourceOut }) {
   const ext = extensionFromUrl(resource.url);
-  const googleUrl = googlePreviewUrl(resource.url, resource.resource_type);
   const isDriveFolder = resource.resource_type === "google_drive" && resource.url.includes("/folders/");
+  const googleUrl = isDriveFolder ? null : googlePreviewUrl(resource.url, resource.resource_type);
   const isImage = IMAGE_EXTENSIONS.has(ext);
   const isDocument = DOCUMENT_EXTENSIONS.has(ext);
 
