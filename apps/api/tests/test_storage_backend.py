@@ -57,7 +57,9 @@ async def test_local_rejects_oversized(tmp_path):
 
 async def test_local_delete_removes_file(tmp_path):
     backend = LocalStorageBackend(base_dir=str(tmp_path))
-    stored = await backend.save(_upload("a.png", b"\x89PNG data", content_type="image/png"))
+    stored = await backend.save(
+        _upload("a.png", b"\x89PNG\r\n\x1a\n data", content_type="image/png")
+    )
     path = backend.local_path(stored.storage_key)
     assert path is not None and path.exists()
     await backend.delete(stored.storage_key)
