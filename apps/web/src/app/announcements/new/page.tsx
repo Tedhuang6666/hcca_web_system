@@ -177,7 +177,7 @@ export default function NewAnnouncementPage() {
       {canUrgent && (
         <section className="card p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <label className="flex items-center gap-2 text-sm">
+            <label className="flex shrink-0 items-center gap-2 whitespace-nowrap text-sm">
               <input
                 type="checkbox"
                 checked={isUrgent}
@@ -189,7 +189,7 @@ export default function NewAnnouncementPage() {
               type="datetime-local"
               value={urgentUntil}
               onChange={(e) => setUrgentUntil(e.target.value)}
-              className="input sm:w-64"
+              className="input sm:!w-64"
               disabled={!isUrgent}
             />
           </div>
