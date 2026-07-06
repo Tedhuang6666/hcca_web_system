@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from typing import Annotated
@@ -122,11 +123,15 @@ CurrentUser = Annotated[User, Depends(get_current_active_user)]
 async def _meeting_or_404(session: AsyncSession, meeting_id: uuid.UUID) -> Meeting:
     meeting = or_404(await meeting_svc.get_meeting(session, meeting_id), "找不到此會議")
     storage = get_storage()
-    for item in meeting.agenda_items:
-        for attachment in item.attachments:
-            attachment.__dict__["url"] = (
-                await storage.get_url(attachment.storage_key) if attachment.storage_key else ""
-            )
+    attachments = [a for item in meeting.agenda_items for a in item.attachments]
+
+    async def _url_for(attachment: MeetingAgendaAttachment) -> str:
+        return await storage.get_url(attachment.storage_key) if attachment.storage_key else ""
+
+    # 逐一 await 在 S3 後端下是 N 次序列 thread-hop；平行取得省下等待時間。
+    urls = await asyncio.gather(*(_url_for(a) for a in attachments))
+    for attachment, url in zip(attachments, urls, strict=True):
+        attachment.__dict__["url"] = url
     return meeting
 
 
