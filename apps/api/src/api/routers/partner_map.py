@@ -14,6 +14,7 @@ from api.dependencies.auth import get_optional_user
 from api.dependencies.permissions import require_permission
 from api.models.partner_map import PartnerBusiness, PartnerLocation, PartnerOffer, PartnerTag
 from api.models.user import User
+from api.routers._common import or_404
 from api.schemas.partner_map import (
     PartnerBusinessCreate,
     PartnerBusinessListItem,
@@ -126,30 +127,22 @@ def _map_item(location: PartnerLocation, *, include_private: bool) -> PartnerMap
 
 async def _business_or_404(db: AsyncSession, business_id: uuid.UUID) -> PartnerBusiness:
     business = await map_svc.get_business(db, business_id)
-    if business is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此特約店家")
-    return business
+    return or_404(business, "找不到此特約店家")
 
 
 async def _tag_or_404(db: AsyncSession, tag_id: uuid.UUID) -> PartnerTag:
     tag = await map_svc.get_tag(db, tag_id)
-    if tag is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此標籤")
-    return tag
+    return or_404(tag, "找不到此標籤")
 
 
 async def _location_or_404(db: AsyncSession, location_id: uuid.UUID) -> PartnerLocation:
     location = await map_svc.get_location(db, location_id)
-    if location is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此點位")
-    return location
+    return or_404(location, "找不到此點位")
 
 
 async def _offer_or_404(db: AsyncSession, offer_id: uuid.UUID) -> PartnerOffer:
     offer = await map_svc.get_offer(db, offer_id)
-    if offer is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此優惠")
-    return offer
+    return or_404(offer, "找不到此優惠")
 
 
 @router.get("", response_model=list[PartnerMapItem], summary="特約地圖點位列表")

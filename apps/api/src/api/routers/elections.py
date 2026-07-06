@@ -14,6 +14,7 @@ from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_permission
 from api.models.election import BallotBox, Election
 from api.models.user import User
+from api.routers._common import or_404
 from api.schemas.election import (
     BallotBoxOut,
     BallotBoxStatusUpdate,
@@ -43,9 +44,7 @@ class ElectionImageOut(BaseModel):
 
 async def _election_or_404(session: AsyncSession, election_id: uuid.UUID) -> Election:
     election = await election_svc.get_election(session, election_id)
-    if election is None:
-        raise HTTPException(status_code=404, detail="找不到此選舉")
-    return election
+    return or_404(election, "找不到此選舉")
 
 
 async def _broadcast_summary(session: AsyncSession, election_id: uuid.UUID) -> None:

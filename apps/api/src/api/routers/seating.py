@@ -15,6 +15,7 @@ from api.dependencies.permissions import require_permission
 from api.models.seating import SeatingZone
 from api.models.shop import Order
 from api.models.user import User
+from api.routers._common import or_404
 from api.schemas.seating import (
     AdminAssignRequest,
     AssignmentOut,
@@ -45,9 +46,7 @@ SeatingAssigner = Annotated[User, Depends(require_permission(PermissionCode.SEAT
 
 async def _get_zone_or_404(zone_id: uuid.UUID, session: AsyncSession) -> SeatingZone:
     zone = await seating_svc.get_zone(session, zone_id)
-    if zone is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此場次")
-    return zone
+    return or_404(zone, "找不到此場次")
 
 
 def _bad_request(exc: Exception) -> HTTPException:
@@ -245,6 +244,8 @@ async def order_assignments(
     if order.user_id != current_user.id and not current_user.is_superuser:
         codes = await get_user_permission_codes(session, current_user.id)
         if PermissionCode.SEATING_MANAGE not in codes:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權查閱他人訂單的劃位結果")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="無權查閱他人訂單的劃位結果"
+            )
     rows = await seating_svc.list_assignments(session, order_id=order_id)
     return [seating_svc.serialize_assignment(a) for a in rows]

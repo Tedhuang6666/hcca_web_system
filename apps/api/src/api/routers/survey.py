@@ -20,6 +20,7 @@ from api.dependencies.permissions import require_permission
 from api.email.sender import send_branded_email
 from api.models.survey import Survey, SurveyQuestion, SurveyResponse, SurveyStatus
 from api.models.user import User
+from api.routers._common import or_404
 from api.schemas.survey import (
     SurveyCreate,
     SurveyImageOut,
@@ -51,9 +52,7 @@ OptionalUser = Annotated[User | None, Depends(get_optional_user)]
 
 async def _survey_or_404(survey_id: uuid.UUID | str, session: DbDep) -> Survey:
     s = await survey_svc.get_survey_by_identifier(session, survey_id)
-    if s is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此問卷")
-    return s
+    return or_404(s, "找不到此問卷")
 
 
 async def _question_or_404(question_id: uuid.UUID, session: DbDep) -> SurveyQuestion:
@@ -61,9 +60,7 @@ async def _question_or_404(question_id: uuid.UUID, session: DbDep) -> SurveyQues
 
     result = await session.execute(select(SurveyQuestion).where(SurveyQuestion.id == question_id))
     q = result.scalar_one_or_none()
-    if q is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此題目")
-    return q
+    return or_404(q, "找不到此題目")
 
 
 async def _has_survey_manage(session: AsyncSession, user: User) -> bool:

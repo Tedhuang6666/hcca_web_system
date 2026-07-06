@@ -14,6 +14,7 @@ from api.dependencies.auth import get_current_active_user, get_current_school_me
 from api.dependencies.permissions import require_any
 from api.models.judicial_petition import JudicialPetition, JudicialPetitionStatus
 from api.models.user import User
+from api.routers._common import or_404
 from api.schemas.judicial_petition import (
     JudicialPetitionCreate,
     JudicialPetitionListItem,
@@ -33,9 +34,7 @@ SchoolMember = Annotated[User, Depends(get_current_school_member)]
 
 async def _petition_or_404(session: AsyncSession, petition_id: uuid.UUID) -> JudicialPetition:
     petition = await judicial_svc.get(session, petition_id)
-    if petition is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此評議聲請")
-    return petition
+    return or_404(petition, "找不到此評議聲請")
 
 
 @router.post(

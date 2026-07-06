@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
@@ -14,6 +14,7 @@ from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_any
 from api.models.user import User
 from api.models.workflow import WorkflowInstance
+from api.routers._common import or_404
 from api.schemas.workflow import (
     WorkflowInstanceOut,
     WorkflowLinkCreate,
@@ -41,9 +42,7 @@ WorkflowManagerDep = Depends(
 
 async def _instance_or_404(db: AsyncSession, instance_id: uuid.UUID) -> WorkflowInstance:
     instance = await workflow_svc.get_instance(db, instance_id)
-    if instance is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="工作流不存在")
-    return instance
+    return or_404(instance, "工作流不存在")
 
 
 @router.get(

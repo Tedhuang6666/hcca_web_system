@@ -39,6 +39,7 @@ from api.models.petition import (
     PetitionType,
 )
 from api.models.user import User
+from api.routers._common import or_404
 from api.schemas.context import PetitionResolutionContextOut
 from api.schemas.petition import (
     PetitionAssignUpdate,
@@ -87,9 +88,7 @@ def _has_all_scope(codes: frozenset[str], user: User) -> bool:
 
 async def _case_or_404(session: AsyncSession, case_id: uuid.UUID) -> PetitionCase:
     case_obj = await petition_svc.get_case(session, case_id)
-    if case_obj is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此陳情案件")
-    return case_obj
+    return or_404(case_obj, "找不到此陳情案件")
 
 
 async def _manageable_org_ids(

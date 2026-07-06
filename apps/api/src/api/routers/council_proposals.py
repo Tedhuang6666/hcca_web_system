@@ -18,6 +18,7 @@ from api.models.council_proposal import (
     CouncilProposalStatus,
 )
 from api.models.user import User
+from api.routers._common import or_404
 from api.schemas.council_proposal import (
     CouncilProposalCreate,
     CouncilProposalListItem,
@@ -39,9 +40,7 @@ OptionalUser = Annotated[User | None, Depends(get_optional_user)]
 
 async def _proposal_or_404(session: AsyncSession, proposal_id: uuid.UUID) -> CouncilProposal:
     proposal = await proposal_svc.get(session, proposal_id)
-    if proposal is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此議會提案")
-    return proposal
+    return or_404(proposal, "找不到此議會提案")
 
 
 @router.post(

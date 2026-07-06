@@ -12,6 +12,7 @@ RBAC 權限說明（v2 細粒度）：
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import UTC, datetime
 from typing import Annotated
@@ -43,6 +44,7 @@ from api.models.regulation import (
     RegulationWorkflowStatus,
 )
 from api.models.user import User
+from api.routers._common import or_404
 from api.schemas.context import RegulationUsageContextOut
 from api.schemas.document import DocumentCreate
 from api.schemas.regulation import (
@@ -76,6 +78,8 @@ from api.services import regulation as reg_svc
 from api.services import regulation_import as reg_import_svc
 from api.services.permission import get_user_permission_codes, get_user_permission_codes_for_org
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/regulations", tags=["法規系統"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
@@ -90,9 +94,7 @@ _EDITABLE_WORKFLOW_STATUSES = {
 
 async def _get_reg_or_404(reg_id: uuid.UUID | str, session: DbDep) -> Regulation:
     reg = await reg_svc.get_regulation_by_identifier(session, reg_id)
-    if reg is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此法規")
-    return reg
+    return or_404(reg, "找不到此法規")
 
 
 def _assert_regulation_editable(reg: Regulation) -> None:
@@ -107,9 +109,9 @@ async def _get_article_or_404(
     reg: Regulation, article_id: uuid.UUID, session: DbDep
 ) -> RegulationArticle:
     article = await reg_svc.get_article(session, article_id)
-    if article is None or article.regulation_id != reg.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此條文")
-    return article
+    if article is not None and article.regulation_id != reg.id:
+        article = None
+    return or_404(article, "找不到此條文")
 
 
 def _assert_creator(reg: Regulation, user: User) -> None:

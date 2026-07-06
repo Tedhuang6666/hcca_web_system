@@ -14,8 +14,6 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-logger = logging.getLogger(__name__)
-
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
@@ -29,6 +27,7 @@ from api.models.calendar import (
     CalendarVisibility,
 )
 from api.models.user import User
+from api.routers._common import or_404
 from api.schemas.calendar import (
     CalendarChecklistCreate,
     CalendarChecklistOut,
@@ -47,6 +46,8 @@ from api.services import audit as audit_svc
 from api.services import calendar as calendar_svc
 from api.services import coordination as coordination_svc
 from api.services.permission import get_user_permission_codes
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/calendar", tags=["行事曆"])
 
@@ -83,9 +84,7 @@ async def _event_or_404(
     user: User,
     codes: frozenset[str],
 ) -> CalendarEvent:
-    event = await calendar_svc.get_event(session, event_id)
-    if event is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此行事曆事件")
+    event = or_404(await calendar_svc.get_event(session, event_id), "找不到此行事曆事件")
     visible = await calendar_svc.list_events(
         session,
         user=user,
@@ -422,7 +421,9 @@ class GoogleConfigUpdate(BaseModel):
 
 def _require_calendar_admin(user: User, codes: frozenset[str]) -> None:
     if not user.is_superuser and PermissionCode.CALENDAR_ADMIN not in codes:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="需要 calendar:admin 權限")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="需要 calendar:admin 權限"
+        )
 
 
 async def _get_google_config_or_404(
@@ -436,12 +437,14 @@ async def _get_google_config_or_404(
             OrgGoogleCalendarConfig.is_active.is_(True),
         )
     )
-    if config is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="此組織尚未連結 Google Calendar")
-    return config
+    return or_404(config, "此組織尚未連結 Google Calendar")
 
 
-@router.get("/google/status/{org_id}", response_model=GoogleCalendarStatusOut, summary="查詢 Google Calendar 同步狀態")
+@router.get(
+    "/google/status/{org_id}",
+    response_model=GoogleCalendarStatusOut,
+    summary="查詢 Google Calendar 同步狀態",
+)
 async def google_calendar_status(
     org_id: uuid.UUID,
     session: DbDep,
@@ -499,7 +502,9 @@ async def google_calendar_authorize(
     return await gcal_client.authorize_redirect(request, redirect_uri)  # type: ignore[return-value]
 
 
-@router.get("/google/callback", summary="Google Calendar OAuth 回呼（內部端點）", include_in_schema=False)
+@router.get(
+    "/google/callback", summary="Google Calendar OAuth 回呼（內部端點）", include_in_schema=False
+)
 async def google_calendar_callback(
     request: Request,
     session: DbDep,
@@ -513,13 +518,17 @@ async def google_calendar_callback(
     from api.core.oauth import google_calendar as gcal_client
     from api.models.google_calendar import OrgGoogleCalendarConfig
 
-    frontend_origin = settings.ALLOWED_ORIGINS[0] if settings.ALLOWED_ORIGINS else "http://localhost:3000"
+    frontend_origin = (
+        settings.ALLOWED_ORIGINS[0] if settings.ALLOWED_ORIGINS else "http://localhost:3000"
+    )
 
     org_id_str = request.session.pop("gcal_org_id", None)
     user_id_str = request.session.pop("gcal_user_id", None)
 
     if not org_id_str or not user_id_str:
-        return RedirectResponse(url=f"{frontend_origin}/admin/calendar/google?error=session_expired")
+        return RedirectResponse(
+            url=f"{frontend_origin}/admin/calendar/google?error=session_expired"
+        )
 
     try:
         token_data = await gcal_client.authorize_access_token(request)
@@ -570,16 +579,24 @@ async def google_calendar_callback(
         await session.commit()
     except FieldEncryptionNotConfigured:
         logger.error("Google Calendar callback：FIELD_ENCRYPTION_KEYS 未設定")
-        return RedirectResponse(url=f"{frontend_origin}/admin/calendar/google?error=encryption_not_configured")
+        return RedirectResponse(
+            url=f"{frontend_origin}/admin/calendar/google?error=encryption_not_configured"
+        )
     except Exception:
         await session.rollback()
         logger.exception("Google Calendar callback：儲存 token 失敗")
         return RedirectResponse(url=f"{frontend_origin}/admin/calendar/google?error=save_failed")
 
-    return RedirectResponse(url=f"{frontend_origin}/admin/calendar/google?connected=true&org_id={org_id_str}")
+    return RedirectResponse(
+        url=f"{frontend_origin}/admin/calendar/google?connected=true&org_id={org_id_str}"
+    )
 
 
-@router.delete("/google/disconnect/{org_id}", status_code=status.HTTP_204_NO_CONTENT, summary="解除 Google Calendar 連結")
+@router.delete(
+    "/google/disconnect/{org_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="解除 Google Calendar 連結",
+)
 async def google_calendar_disconnect(
     org_id: uuid.UUID,
     session: DbDep,
@@ -630,7 +647,9 @@ async def list_google_calendars(
     except GoogleCalendarAuthError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"無法取得日曆清單：{exc}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=f"無法取得日曆清單：{exc}"
+        )
 
     return [GoogleCalendarItem(**item) for item in items]
 
