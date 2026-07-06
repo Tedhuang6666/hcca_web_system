@@ -86,7 +86,9 @@ class CSRFMiddleware:
         ]
 
     def _is_exempt(self, path: str) -> bool:
-        return any(path.startswith(prefix) for prefix in self.exempt_paths)
+        # 精確匹配或「前綴 + /」子路徑，避免 /health 誤放行 /health-check 這類同前綴但
+        # 不相干的路由（startswith 純前綴比對語意過寬）。
+        return any(path == prefix or path.startswith(f"{prefix}/") for prefix in self.exempt_paths)
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http" or not self.enabled or self._is_exempt(scope.get("path", "")):
