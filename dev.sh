@@ -20,6 +20,7 @@
 #   - Email Celery worker 自動啟動，避免寄信任務只排隊不送出
 #   - uv sync 失敗自動清 .venv 重試
 #   - npm install 失敗自動清 node_modules 重試
+#   - Next.js Turbopack dev cache 自動清理，避免快取資料庫損壞造成 panic
 #   - Docker daemon 沒在跑時自動嘗試啟動
 # =============================================================================
 set -uo pipefail  # 不使用 -e，改用明確的錯誤處理流程實現自動修復
@@ -773,6 +774,12 @@ if [[ $NEED_INSTALL -eq 1 ]]; then
         fi
         fix "已清理 node_modules / .next 並重新安裝"
     fi
+fi
+
+if [[ -d "${WEB_DIR}/.next/dev/cache/turbopack" ]]; then
+    warn "清理 Next.js Turbopack dev cache，避免快取資料庫損壞導致啟動 panic"
+    rm -rf "${WEB_DIR}/.next/dev/cache/turbopack" 2>/dev/null || true
+    fix "Turbopack dev cache 已清理"
 fi
 
 : > "$WEB_LOG"
