@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import abc
+import functools
 import logging
 import mimetypes
 import re
@@ -141,6 +142,16 @@ def _validate_magic_bytes(content: bytes, mime: str) -> bool:
     return content[: len(sig)] == sig
 
 
+def _detect_content_type(filename: str, declared_content_type: str | None) -> str | None:
+    """依副檔名判斷 MIME type，優先於用戶端宣告的 Content-Type。
+
+    SECURITY: 不信任客戶端宣告；若副檔名無法判斷才 fallback 到客戶端提供的值。
+    兩後端（Local / S3）共用同一份判定順序，避免各自實作出現不一致的安全決策。
+    """
+    guessed_type, _ = mimetypes.guess_type(filename)
+    return guessed_type or declared_content_type
+
+
 def _sanitize_filename(filename: str) -> str:
     """移除文件名中 Windows 不允許的字符"""
     # Windows 不允許的字符: < > : " / \ | ? *
@@ -176,12 +187,8 @@ class LocalStorageBackend(StorageBackend):
             msg = f"檔案超過最大限制 {MAX_FILE_SIZE // 1024 // 1024} MB"
             raise ValueError(msg)
 
-        # 偵測 MIME type
-        # SECURITY: 優先使用副檔名推導（不信任客戶端宣告）；
-        # 若副檔名無法判斷，才 fallback 到客戶端提供的 content_type。
-        # 若兩者皆無法提供白名單內的類型，直接拒絕（不 fallback 到 octet-stream）。
-        guessed_type, _ = mimetypes.guess_type(file.filename or "")
-        content_type = guessed_type or file.content_type
+        # 偵測 MIME type；若兩者皆無法提供白名單內的類型，直接拒絕（不 fallback 到 octet-stream）。
+        content_type = _detect_content_type(file.filename or "", file.content_type)
         if not content_type or content_type not in _ALLOWED_TYPES:
             msg = f"不支援的檔案類型：{content_type}"
             raise ValueError(msg)
@@ -228,7 +235,17 @@ class LocalStorageBackend(StorageBackend):
         return f"/uploads/{storage_key}"
 
     def local_path(self, storage_key: str) -> Path | None:
-        return self._base / storage_key
+        """正規化後仍須落在 self._base 底下，否則視為不存在。
+
+        目前所有呼叫端的 storage_key 皆為伺服器產生（uuid4 + 白名單副檔名），
+        不受使用者輸入影響；這層檢查是縱深防禦，避免未來任何呼叫端不慎把
+        使用者輸入傳進來時，"../../etc/passwd" 這類路徑跳脫仍能被擋下。
+        """
+        base = self._base.resolve()
+        candidate = (self._base / storage_key).resolve()
+        if not candidate.is_relative_to(base):
+            return None
+        return candidate
 
 
 # ── S3StorageBackend（介面預留）────────────────────────────────────────────────
@@ -258,10 +275,9 @@ class S3StorageBackend(StorageBackend):
             msg = "檔案超過最大限制"
             raise ValueError(msg)
 
-        # 與 LocalStorageBackend 一致：驗證 MIME 白名單 + magic bytes
-        guessed_type, _ = mimetypes.guess_type(file.filename or "")
-        content_type = file.content_type or guessed_type or "application/octet-stream"
-        if content_type not in _ALLOWED_TYPES:
+        # 與 LocalStorageBackend 共用同一份判定順序：驗證 MIME 白名單 + magic bytes
+        content_type = _detect_content_type(file.filename or "", file.content_type)
+        if not content_type or content_type not in _ALLOWED_TYPES:
             msg = f"不支援的檔案類型：{content_type}"
             raise ValueError(msg)
 
@@ -295,9 +311,7 @@ class S3StorageBackend(StorageBackend):
     async def delete(self, storage_key: str) -> None:
         client = self._client
         bucket = self._bucket
-        await anyio.to_thread.run_sync(
-            lambda: client.delete_object(Bucket=bucket, Key=storage_key)
-        )
+        await anyio.to_thread.run_sync(lambda: client.delete_object(Bucket=bucket, Key=storage_key))
 
     async def get_url(
         self,
@@ -331,8 +345,13 @@ class S3StorageBackend(StorageBackend):
 # ── 全域單例（由 config 決定後端）────────────────────────────────────────────
 
 
+@functools.lru_cache(maxsize=1)
 def get_storage() -> StorageBackend:
-    """依 settings.STORAGE_BACKEND 回傳對應的儲存後端（FastAPI 依賴注入用）。"""
+    """依 settings.STORAGE_BACKEND 回傳對應的儲存後端（FastAPI 依賴注入用）。
+
+    設定在程式啟動後不會變動，故快取為單例：避免每次呼叫都重建（Local 會
+    重複 mkdir；S3 更是每次都新建 boto3 client，成本明顯偏高）。
+    """
     from api.core.config import settings
 
     backend = (settings.STORAGE_BACKEND or "local").lower()
