@@ -199,8 +199,11 @@ async def delete_attachment(
     if att.uploaded_by != current_user.id and doc.created_by != current_user.id:
         await assert_can_edit(session, doc, current_user)
 
-    storage = get_storage()
-    await storage.delete(att.storage_key)
+    # 外部連結附件沒有 storage_key（見 download/preview 端點的同款判斷），
+    # 沒有實體檔案可刪，直接刪 DB 紀錄即可；否則 storage.delete(None) 會拋 TypeError。
+    if att.storage_key:
+        storage = get_storage()
+        await storage.delete(att.storage_key)
     await session.delete(att)
 
 
