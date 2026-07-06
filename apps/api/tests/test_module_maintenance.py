@@ -53,6 +53,7 @@ async def _seed_users(db: AsyncSession) -> tuple[User, User]:
         is_active=True,
         is_verified=True,
         is_superuser=True,
+        mfa_enabled=True,
     )
     member = User(
         email="mod-member@school.edu",

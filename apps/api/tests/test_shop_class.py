@@ -8,7 +8,6 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.models.org import Org
 from api.models.shop import Order, OrderItem, OrderStatus, Product
 from api.models.user import User
 from api.schemas.school_class import (
@@ -45,13 +44,6 @@ async def _make_user(db: AsyncSession, *, student_id: str | None = None) -> User
     return user
 
 
-async def _make_org(db: AsyncSession, *, name: str = "商品組織") -> Org:
-    org = Org(name=name)
-    db.add(org)
-    await db.flush()
-    return org
-
-
 async def _make_actor(db: AsyncSession) -> uuid.UUID:
     """建立真實 user 並回傳 id，供 created_by / actor_id 等 FK 欄位使用。"""
     user = await _make_user(db)
@@ -74,10 +66,9 @@ async def _make_class(db: AsyncSession, *, start: str = "11501", end: str = "115
 async def _make_product(
     db: AsyncSession, *, price: int = 100, stock: int = 50, sale_end: datetime | None = None
 ) -> Product:
-    org = await _make_org(db)
     creator = await _make_actor(db)
     category = await shop_svc.create_category(
-        db, data=ProductCategoryCreate(org_id=org.id, name="商品"), created_by=creator
+        db, data=ProductCategoryCreate(name="商品"), created_by=creator
     )
     series = await shop_svc.create_series(
         db, data=ProductSeriesCreate(category_id=category.id, name="衣服系列")
@@ -246,8 +237,8 @@ async def test_bulk_create_classes_allows_per_class_student_count_override(
 async def test_build_catalog_tree_includes_active_product_with_variants(
     db_session: AsyncSession,
 ) -> None:
-    product = await _make_product(db_session)
-    tree = await shop_svc.build_catalog_tree(db_session, org_id=product.org_id)
+    await _make_product(db_session)
+    tree = await shop_svc.build_catalog_tree(db_session)
     assert len(tree) == 1
     assert tree[0].name == "商品"
     assert tree[0].series[0].products[0].has_variants is True
@@ -306,7 +297,9 @@ async def test_checkout_snapshots_class_and_variant_price(
         counter["n"] += 1
         return f"ORD-TEST-{counter['n']:04d}"
 
-    monkeypatch.setattr(shop_svc, "generate_order_serial", _fake_serial)
+    from api.services.shop import _orders
+
+    monkeypatch.setattr(_orders, "generate_order_serial", _fake_serial)
 
     sc = await _make_class(db_session, start="11501", end="11540")
     user = await _make_user(db_session, student_id="11510")
@@ -337,7 +330,9 @@ async def test_checkout_after_sale_end_is_rejected(
     async def _fake_serial(_session: AsyncSession) -> str:
         return "ORD-TEST-9999"
 
-    monkeypatch.setattr(shop_svc, "generate_order_serial", _fake_serial)
+    from api.services.shop import _orders
+
+    monkeypatch.setattr(_orders, "generate_order_serial", _fake_serial)
 
     user = await _make_user(db_session, student_id="11510")
     product = await _make_product(db_session, sale_end=datetime.now(UTC) - timedelta(hours=1))
@@ -356,12 +351,10 @@ async def test_checkout_after_sale_end_is_rejected(
 
 
 async def test_set_order_paid_can_toggle_both_directions(db_session: AsyncSession) -> None:
-    org = await _make_org(db_session)
     buyer = await _make_user(db_session)
     order = Order(
         serial_number="ORD-PAY-1",
         user_id=buyer.id,
-        org_id=org.id,
         status=OrderStatus.PENDING,
         total_price=100,
     )
@@ -382,14 +375,12 @@ async def test_set_order_paid_can_toggle_both_directions(db_session: AsyncSessio
 
 async def test_order_summary_groups_by_class_with_paid_split(db_session: AsyncSession) -> None:
     sc = await _make_class(db_session)
-    org = await _make_org(db_session)
     buyer = await _make_user(db_session)
     db_session.add_all(
         [
             Order(
                 serial_number="ORD-S-1",
                 user_id=buyer.id,
-                org_id=org.id,
                 class_id=sc.id,
                 status=OrderStatus.PENDING,
                 total_price=200,
@@ -398,7 +389,6 @@ async def test_order_summary_groups_by_class_with_paid_split(db_session: AsyncSe
             Order(
                 serial_number="ORD-S-2",
                 user_id=buyer.id,
-                org_id=org.id,
                 class_id=sc.id,
                 status=OrderStatus.PENDING,
                 total_price=300,
@@ -407,7 +397,6 @@ async def test_order_summary_groups_by_class_with_paid_split(db_session: AsyncSe
             Order(
                 serial_number="ORD-S-3",
                 user_id=buyer.id,
-                org_id=org.id,
                 class_id=sc.id,
                 status=OrderStatus.CANCELLED,
                 total_price=999,
@@ -434,7 +423,6 @@ async def test_order_summary_filters_product_and_grade_amount(
     order = Order(
         serial_number="ORD-FILTER-1",
         user_id=buyer.id,
-        org_id=product_a.org_id,
         class_id=sc.id,
         status=OrderStatus.PENDING,
         total_price=400,
@@ -473,10 +461,9 @@ async def test_product_create_rejects_unknown_series(db_session: AsyncSession) -
 
 
 async def test_draft_product_not_in_catalog_tree(db_session: AsyncSession) -> None:
-    org = await _make_org(db_session)
     creator = await _make_actor(db_session)
     category = await shop_svc.create_category(
-        db_session, data=ProductCategoryCreate(org_id=org.id, name="商品"), created_by=creator
+        db_session, data=ProductCategoryCreate(name="商品"), created_by=creator
     )
     series = await shop_svc.create_series(
         db_session, data=ProductSeriesCreate(category_id=category.id, name="文具系列")
@@ -486,7 +473,7 @@ async def test_draft_product_not_in_catalog_tree(db_session: AsyncSession) -> No
         data=ProductCreate(series_id=series.id, name="未上架草稿", price=10),
         created_by=creator,
     )  # 維持 DRAFT
-    tree = await shop_svc.build_catalog_tree(db_session, org_id=category.org_id)
+    tree = await shop_svc.build_catalog_tree(db_session)
     assert tree[0].series[0].products == []
 
 

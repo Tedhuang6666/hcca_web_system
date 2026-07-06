@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import uuid
 from unittest.mock import AsyncMock, MagicMock
@@ -252,12 +254,24 @@ async def test_admin_can_replay_json_safe_dead_letter(
 ) -> None:
     admin, _ = await _seed_users(db_session)
     _override_user(admin)
+    task = "api.services.mail.send_email"
+    replay_args = [["user@example.com"], "subject", "body"]
+    replay_kwargs: dict = {}
+    sig_body = json.dumps(
+        {"task": task, "replay_args": replay_args, "replay_kwargs": replay_kwargs},
+        sort_keys=True,
+        ensure_ascii=False,
+    ).encode()
+    replay_sig = hmac.new(
+        admin_system.settings.SECRET_KEY.encode(), sig_body, hashlib.sha256
+    ).hexdigest()
     raw = json.dumps(
         {
-            "task": "api.services.mail.send_email",
+            "task": task,
             "task_id": "failed-task",
-            "replay_args": [["user@example.com"], "subject", "body"],
-            "replay_kwargs": {},
+            "replay_args": replay_args,
+            "replay_kwargs": replay_kwargs,
+            "replay_sig": replay_sig,
         }
     )
     monkeypatch.setattr(admin_system.redis_client, "lindex", AsyncMock(return_value=raw))
