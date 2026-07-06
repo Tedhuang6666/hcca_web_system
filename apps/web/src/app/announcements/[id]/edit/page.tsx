@@ -239,7 +239,7 @@ export default function EditAnnouncementPage() {
       {canUrgent && (
         <section className="card p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <label className="flex items-center gap-2 text-sm">
+            <label className="flex shrink-0 items-center gap-2 whitespace-nowrap text-sm">
               <input
                 type="checkbox"
                 checked={isUrgent}
@@ -251,10 +251,10 @@ export default function EditAnnouncementPage() {
               type="datetime-local"
               value={urgentUntil}
               onChange={(e) => setUrgentUntil(e.target.value)}
-              className="input sm:w-64"
+              className="input sm:!w-64"
               disabled={!isUrgent}
             />
-            <button type="button" className="btn btn-secondary" disabled={saving} onClick={saveUrgent}>
+            <button type="button" className="btn btn-secondary shrink-0" disabled={saving} onClick={saveUrgent}>
               更新緊急設定
             </button>
           </div>
