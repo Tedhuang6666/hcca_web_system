@@ -583,6 +583,11 @@ function EventEditor({
         location: location.trim() || null,
         starts_at: startsAt.toISOString(),
         ends_at: endsAt.toISOString(),
+        status: "confirmed",
+        all_day: false,
+        participants: [],
+        checklist_items: [],
+        links: [],
       };
       const event = await calendarApi.create(payload);
       onSaved(event.id);

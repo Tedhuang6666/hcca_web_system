@@ -30,17 +30,17 @@ const KIND_LABEL: Record<PolicyKind, string> = {
 };
 
 const STATUS_LABEL: Record<PrivacyRequestStatus, string> = {
-  received: "已收件",
+  submitted: "已收件",
   in_review: "處理中",
-  fulfilled: "已完成",
+  completed: "已完成",
   rejected: "已拒絕",
   cancelled: "已取消",
 };
 
 const STATUS_COLOR: Record<PrivacyRequestStatus, string> = {
-  received: "var(--warning)",
+  submitted: "var(--warning)",
   in_review: "var(--primary)",
-  fulfilled: "var(--success)",
+  completed: "var(--success)",
   rejected: "var(--danger)",
   cancelled: "var(--text-muted)",
 };
@@ -701,7 +701,7 @@ function PrivacyRequestsTab() {
                 type="button"
                 className="btn btn-primary"
                 disabled={busy}
-                onClick={() => updateStatus("fulfilled")}>
+                onClick={() => updateStatus("completed")}>
                 標為完成
               </button>
               <button

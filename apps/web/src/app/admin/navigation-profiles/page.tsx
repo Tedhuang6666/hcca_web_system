@@ -238,16 +238,16 @@ function Editor({
 
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         <Field label="符合任一權限">
-          <textarea className="input min-h-20" value={draft.match_any_permissions.join("\n")} onChange={(event) => set("match_any_permissions", lines(event.target.value))} />
+          <textarea className="input min-h-20" value={(draft.match_any_permissions ?? []).join("\n")} onChange={(event) => set("match_any_permissions", lines(event.target.value))} />
         </Field>
         <Field label="符合任一權限前綴">
-          <textarea className="input min-h-20" value={draft.match_any_prefixes.join("\n")} onChange={(event) => set("match_any_prefixes", lines(event.target.value))} />
+          <textarea className="input min-h-20" value={(draft.match_any_prefixes ?? []).join("\n")} onChange={(event) => set("match_any_prefixes", lines(event.target.value))} />
         </Field>
         <Field label="排除權限">
-          <textarea className="input min-h-20" value={draft.exclude_permissions.join("\n")} onChange={(event) => set("exclude_permissions", lines(event.target.value))} />
+          <textarea className="input min-h-20" value={(draft.exclude_permissions ?? []).join("\n")} onChange={(event) => set("exclude_permissions", lines(event.target.value))} />
         </Field>
         <Field label="排除權限前綴">
-          <textarea className="input min-h-20" value={draft.exclude_prefixes.join("\n")} onChange={(event) => set("exclude_prefixes", lines(event.target.value))} />
+          <textarea className="input min-h-20" value={(draft.exclude_prefixes ?? []).join("\n")} onChange={(event) => set("exclude_prefixes", lines(event.target.value))} />
         </Field>
       </div>
 
@@ -270,12 +270,12 @@ function Editor({
         <Field label="左側欄分組">
           <textarea
             className="input min-h-40 font-mono text-xs"
-            value={sectionsToText(draft.desktop_sections)}
+            value={sectionsToText(draft.desktop_sections ?? [])}
             onChange={(event) => set("desktop_sections", parseSections(event.target.value))}
           />
         </Field>
         <Field label="手機項目順序">
-          <textarea className="input min-h-40 font-mono text-xs" value={draft.mobile_order.join("\n")} onChange={(event) => set("mobile_order", lines(event.target.value))} />
+          <textarea className="input min-h-40 font-mono text-xs" value={(draft.mobile_order ?? []).join("\n")} onChange={(event) => set("mobile_order", lines(event.target.value))} />
         </Field>
       </div>
 
@@ -341,13 +341,13 @@ function profileToDraft(profile: NavigationProfileOut): Draft {
     audience: profile.audience ?? "",
     priority: profile.priority,
     is_active: profile.is_active,
-    match_any_permissions: profile.match_any_permissions,
-    match_any_prefixes: profile.match_any_prefixes,
-    exclude_permissions: profile.exclude_permissions,
-    exclude_prefixes: profile.exclude_prefixes,
-    desktop_sections: profile.desktop_sections,
-    mobile_order: profile.mobile_order,
-    position_ids: profile.position_ids,
+    match_any_permissions: profile.match_any_permissions ?? [],
+    match_any_prefixes: profile.match_any_prefixes ?? [],
+    exclude_permissions: profile.exclude_permissions ?? [],
+    exclude_prefixes: profile.exclude_prefixes ?? [],
+    desktop_sections: profile.desktop_sections ?? [],
+    mobile_order: profile.mobile_order ?? [],
+    position_ids: profile.position_ids ?? [],
   };
 }
 
@@ -366,16 +366,16 @@ function normalizeDraft(draft: Draft): Draft {
     ...draft,
     key: draft.key.trim(),
     label: draft.label.trim(),
-    match_any_permissions: unique(draft.match_any_permissions),
-    match_any_prefixes: unique(draft.match_any_prefixes),
-    exclude_permissions: unique(draft.exclude_permissions),
-    exclude_prefixes: unique(draft.exclude_prefixes),
-    mobile_order: unique(draft.mobile_order).filter((id) => NAV_ITEMS_BY_ID[id]),
-    desktop_sections: draft.desktop_sections.map((section) => ({
+    match_any_permissions: unique(draft.match_any_permissions ?? []),
+    match_any_prefixes: unique(draft.match_any_prefixes ?? []),
+    exclude_permissions: unique(draft.exclude_permissions ?? []),
+    exclude_prefixes: unique(draft.exclude_prefixes ?? []),
+    mobile_order: unique(draft.mobile_order ?? []).filter((id) => NAV_ITEMS_BY_ID[id]),
+    desktop_sections: (draft.desktop_sections ?? []).map((section) => ({
       ...section,
-      items: unique(section.items).filter((id) => NAV_ITEMS_BY_ID[id]),
+      items: unique(section.items ?? []).filter((id) => NAV_ITEMS_BY_ID[id]),
     })),
-    position_ids: unique(draft.position_ids),
+    position_ids: unique(draft.position_ids ?? []),
   };
 }
 
@@ -388,7 +388,7 @@ function unique(values: string[]) {
 }
 
 function sectionsToText(sections: NavigationProfileSection[]) {
-  return sections.map((section) => `${section.heading}: ${section.items.join(", ")}`).join("\n");
+  return sections.map((section) => `${section.heading}: ${(section.items ?? []).join(", ")}`).join("\n");
 }
 
 function parseSections(value: string): NavigationProfileSection[] {
@@ -406,5 +406,5 @@ function parseSections(value: string): NavigationProfileSection[] {
       default_collapsed: false,
     });
   });
-  return sections.length > 0 ? sections : EMPTY_DRAFT.desktop_sections;
+  return sections.length > 0 ? sections : (EMPTY_DRAFT.desktop_sections ?? []);
 }

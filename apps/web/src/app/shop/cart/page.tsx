@@ -211,7 +211,7 @@ export default function CartPage() {
         map.set(item.product_id, {
           product_id: item.product_id,
           product_name: item.product_name,
-          product_image_url: item.product_image_url,
+          product_image_url: item.product_image_url ?? null,
           items: [item],
           total: item.available ? item.subtotal : 0,
         });

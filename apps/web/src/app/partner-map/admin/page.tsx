@@ -91,7 +91,7 @@ export default function PartnerMapAdminPage() {
           cover_image_url: business.cover_image_url || "",
           category: business.category || "",
           business_hours_text: business.business_hours_text || "",
-          status: business.status,
+          status: business.status as "draft" | "active" | "archived" | "hidden",
           sort_order: business.sort_order,
           internal_note: business.internal_note || "",
           tag_ids: business.tags.map((tag) => tag.id),
@@ -140,7 +140,7 @@ export default function PartnerMapAdminPage() {
   const createTag = async () => {
     if (!tagName.trim()) return;
     try {
-      await partnerMapApi.createTag({ name: tagName.trim(), color: tagColor, is_active: true });
+      await partnerMapApi.createTag({ name: tagName.trim(), color: tagColor, sort_order: 0, is_active: true });
       setTagName("");
       load();
     } catch (error) {
@@ -193,6 +193,8 @@ export default function PartnerMapAdminPage() {
         latitude,
         longitude,
         phone: locationForm.phone || null,
+        sort_order: 0,
+        is_active: true,
       });
       setLocationForm({ name: "", address: "", latitude: "", longitude: "", phone: "" });
       selectBusiness(selected.id);
@@ -210,6 +212,8 @@ export default function PartnerMapAdminPage() {
         public_summary: offerForm.public_summary || null,
         full_description: offerForm.full_description || null,
         instructions: offerForm.instructions || null,
+        sort_order: 0,
+        is_active: true,
       });
       setOfferForm({ title: "", public_summary: "", full_description: "", instructions: "" });
       selectBusiness(selected.id);

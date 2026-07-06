@@ -218,7 +218,8 @@ function QuestionInput({
   value: AnswerValue;
   onChange: (val: AnswerValue) => void;
 }) {
-  const { question_type: type, options, min_value, max_value, placeholder } = question;
+  const { question_type: type, options: rawOptions, min_value, max_value, placeholder } = question;
+  const options = rawOptions ?? [];
   const minV = min_value ?? 1;
   const maxV = max_value ?? 5;
 
@@ -560,10 +561,10 @@ function StatsView({ surveyId }: { surveyId: string }) {
   if (loading) return <div className="py-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>統計載入中…</div>;
   if (!stats) return null;
 
-  const renderPie = (qs: SurveyStats["questions"][number]) => {
-    const entries = Object.entries(qs.option_counts).sort(([, a], [, b]) => b - a);
+  const renderPie = (qs: NonNullable<SurveyStats["questions"]>[number]) => {
+    const entries = Object.entries(qs.option_counts ?? {}).sort(([, a], [, b]) => b - a);
     if (entries.length === 0) return null;
-    const total = entries.reduce((sum, [, count]) => sum + count, 0) || 1;
+    const total = entries.reduce((sum, [, count]) => sum + (count as number), 0) || 1;
     const colors = ["#38bdf8", "#22c55e", "#f59e0b", "#ef4444", "#a78bfa", "#14b8a6"];
     let offset = 25;
     return (
@@ -603,7 +604,7 @@ function StatsView({ surveyId }: { surveyId: string }) {
     );
   };
 
-  const questionLabels = new Map(stats.questions.map(q => [q.question_id, q.question_text]));
+  const questionLabels = new Map((stats.questions ?? []).map(q => [q.question_id, q.question_text]));
 
   return (
     <div className="space-y-4">
@@ -646,15 +647,15 @@ function StatsView({ surveyId }: { surveyId: string }) {
         </div>
       )}
 
-      {view === "charts" && stats.questions.map(qs => (
+      {view === "charts" && (stats.questions ?? []).map(qs => (
         <div key={qs.question_id} className="card p-5 space-y-3">
           <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
             {qs.question_text}
           </p>
           <p className="text-xs" style={{ color: "var(--text-muted)" }}>{qs.total_responses} 份回答</p>
-          {qs.available_charts.length > 1 && (
+          {(qs.available_charts ?? []).length > 1 && (
             <div className="flex gap-1">
-              {qs.available_charts.map(chart => (
+              {(qs.available_charts ?? []).map(chart => (
                 <button
                   key={chart}
                   type="button"
@@ -673,9 +674,9 @@ function StatsView({ surveyId }: { surveyId: string }) {
           {(chartTypes[qs.question_id] ?? qs.suggested_chart) === "pie" && renderPie(qs)}
 
           {/* 選項票數 */}
-          {Object.keys(qs.option_counts).length > 0 && (chartTypes[qs.question_id] ?? qs.suggested_chart) !== "pie" && (
+          {Object.keys(qs.option_counts ?? {}).length > 0 && (chartTypes[qs.question_id] ?? qs.suggested_chart) !== "pie" && (
             <div className="space-y-2.5">
-              {Object.entries(qs.option_counts)
+              {Object.entries(qs.option_counts ?? {})
                 .sort(([, a], [, b]) => b - a)
                 .map(([opt, count]) => {
                   const pct = qs.total_responses > 0 ? Math.round((count / qs.total_responses) * 100) : 0;
@@ -700,7 +701,7 @@ function StatsView({ surveyId }: { surveyId: string }) {
           )}
 
           {/* 平均評分 */}
-          {qs.average_rating !== null && (
+          {qs.average_rating != null && (
             <div className="flex items-baseline gap-2">
               <p className="text-2xl font-bold" style={{ color: "var(--primary)" }}>
                 {qs.average_rating.toFixed(1)}
@@ -712,16 +713,16 @@ function StatsView({ surveyId }: { surveyId: string }) {
           )}
 
           {/* 文字回答 */}
-          {qs.text_answers.length > 0 && (
+          {(qs.text_answers ?? []).length > 0 && (
             <div>
               <p className="text-xs mb-2" style={{ color: "var(--text-muted)" }}>
-                文字回答（{qs.text_answers.length} 則）
+                文字回答（{(qs.text_answers ?? []).length} 則）
               </p>
               <ul
                 className="space-y-1.5 overflow-y-auto pr-1"
                 style={{ maxHeight: "12rem" }}
                 aria-label="文字回答列表">
-                {qs.text_answers.map((ans, i) => (
+                {(qs.text_answers ?? []).map((ans, i) => (
                   <li key={i}
                     className="text-xs px-3 py-2 rounded-lg whitespace-pre-wrap break-words"
                     style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)" }}>
@@ -760,8 +761,8 @@ function StatsView({ surveyId }: { surveyId: string }) {
                   ) : (
                     r.answers.map(a => {
                       const label = questionLabels.get(a.question_id) ?? "題目";
-                      const val = a.answer_options.length
-                        ? a.answer_options.join("、")
+                      const val = (a.answer_options ?? []).length
+                        ? (a.answer_options ?? []).join("、")
                         : (a.answer_text || "—");
                       return (
                         <div key={a.id} className="text-xs pt-1.5">
@@ -878,7 +879,7 @@ export default function SurveyDetailPage() {
       if (q.question_type !== "ranking" || hiddenIds.has(q.id)) continue;
       const chosen = answers[q.id]?.options ?? [];
       const minN = q.min_value ?? (q.is_required ? 1 : 0);
-      const maxN = q.max_value ?? q.options.length;
+      const maxN = q.max_value ?? (q.options ?? []).length;
       if (q.is_required && chosen.length < Math.max(minN, 1)) {
         toast.error(`「${q.question_text.slice(0, 20)}」至少需排序 ${Math.max(minN, 1)} 項`);
         return;

@@ -232,7 +232,7 @@ export default function GovernanceDiscordPanel({ matterId, initial }: Props) {
             />
             <ChannelField
               label="討論頻道"
-              value={draft.discussion_channel_id}
+              value={draft.discussion_channel_id ?? null}
               channels={textChannels}
               onChange={(value) =>
                 setDraft((current) => ({ ...current, discussion_channel_id: value }))
@@ -240,7 +240,7 @@ export default function GovernanceDiscordPanel({ matterId, initial }: Props) {
             />
             <ChannelField
               label="公告頻道"
-              value={draft.announcement_channel_id}
+              value={draft.announcement_channel_id ?? null}
               channels={textChannels}
               onChange={(value) =>
                 setDraft((current) => ({ ...current, announcement_channel_id: value }))
@@ -248,7 +248,7 @@ export default function GovernanceDiscordPanel({ matterId, initial }: Props) {
             />
             <ChannelField
               label="核心工作頻道"
-              value={draft.staff_channel_id}
+              value={draft.staff_channel_id ?? null}
               channels={textChannels}
               onChange={(value) =>
                 setDraft((current) => ({ ...current, staff_channel_id: value }))
@@ -318,7 +318,7 @@ export default function GovernanceDiscordPanel({ matterId, initial }: Props) {
           />
           <ChannelField
             label="指定頻道"
-            value={routeDraft.channel_id}
+            value={routeDraft.channel_id ?? null}
             channels={textChannels}
             disabled={routeDraft.channel_kind !== "custom"}
             onChange={(value) =>

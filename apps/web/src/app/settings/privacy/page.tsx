@@ -13,17 +13,17 @@ import type {
 
 const REQUEST_TYPES: Array<{ value: PrivacyRequestType; label: string; hint: string }> = [
   { value: "access", label: "查詢/閱覽", hint: "了解平台保存了哪些與我有關的資料。" },
-  { value: "copy_export", label: "資料匯出", hint: "申請完整資料 ZIP，由管理員驗證後提供。" },
-  { value: "rectification", label: "更正資料", hint: "姓名、班級、聯絡方式或其他資料不正確。" },
-  { value: "erasure", label: "刪除/假名化", hint: "停用帳號並移除可識別欄位，治理紀錄依法保留。" },
+  { value: "export", label: "資料匯出", hint: "申請完整資料 ZIP，由管理員驗證後提供。" },
+  { value: "correction", label: "更正資料", hint: "姓名、班級、聯絡方式或其他資料不正確。" },
+  { value: "deletion", label: "刪除/假名化", hint: "停用帳號並移除可識別欄位，治理紀錄依法保留。" },
+  { value: "restriction", label: "限制處理", hint: "暫停特定資料的處理用途。" },
   { value: "objection", label: "異議", hint: "對特定資料處理目的提出異議。" },
-  { value: "other", label: "其他", hint: "其他個資權利或處理需求。" },
 ];
 
 const STATUS_LABEL: Record<string, string> = {
-  received: "已送出",
+  submitted: "已送出",
   in_review: "審查中",
-  fulfilled: "已完成",
+  completed: "已完成",
   rejected: "已駁回",
   cancelled: "已取消",
 };
@@ -269,7 +269,7 @@ export default function PrivacySettingsPage() {
                     {item.response_message}
                   </div>
                 )}
-                {(item.status === "received" || item.status === "in_review") && (
+                {(item.status === "submitted" || item.status === "in_review") && (
                   <button
                     type="button"
                     className="btn-sm btn-danger-ghost mt-3"

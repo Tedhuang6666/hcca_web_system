@@ -1023,7 +1023,7 @@ export default function GovernanceMatterPage() {
         <QueueSummary href="#plans" label="企劃文件" value={activePlans.length} tone={activePlans.some((plan) => plan.status === "revision_requested") ? "warning" : "normal"} />
       </section>
 
-      <GovernanceDiscordPanel matterId={matterId} initial={matter.discord_workspace} />
+      <GovernanceDiscordPanel matterId={matterId} initial={matter.discord_workspace ?? null} />
 
       <section className="grid gap-5 xl:grid-cols-[1.5fr_1fr]">
         <div className="space-y-5">

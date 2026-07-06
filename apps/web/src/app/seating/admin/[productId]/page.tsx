@@ -132,10 +132,10 @@ function WaveEditor({ zone, onSaved }: { zone: ZoneOut; onSaved: (z: ZoneOut) =>
           </div>
           <label className="text-xs block" style={{ color: "var(--text-muted)" }}>
             開放時間
-            <input type="datetime-local" className="input text-sm block mt-1" value={toLocalInput(w.starts_at)}
+            <input type="datetime-local" className="input text-sm block mt-1" value={toLocalInput(w.starts_at ?? null)}
               onChange={(e) => update(i, { starts_at: e.target.value ? new Date(e.target.value).toISOString() : null })} />
           </label>
-          <AudiencePicker value={w.audience} onChange={(a) => update(i, { audience: a })} />
+          <AudiencePicker value={w.audience ?? {}} onChange={(a) => update(i, { audience: a })} />
         </div>
       ))}
       <div className="flex gap-2">
