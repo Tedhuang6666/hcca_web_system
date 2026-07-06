@@ -134,6 +134,11 @@ function toDateInputValue(value?: string | null) {
   return new Date(value).toISOString().slice(0, 10);
 }
 
+function clampProgress(value: number) {
+  if (Number.isNaN(value)) return 0;
+  return Math.max(0, Math.min(100, value));
+}
+
 function extensionFromUrl(value: string) {
   try {
     const url = new URL(value);
@@ -991,7 +996,43 @@ export default function GovernanceMatterPage() {
             </label>
             <label className="space-y-1 text-xs" style={{ color: "var(--text-muted)" }}>
               <span>進度 {matterProgress}%</span>
-              <input type="range" min={0} max={100} value={matterProgress} onChange={(event) => setMatterProgress(Number(event.target.value))} className="w-full" />
+              <div className="flex items-center gap-3">
+                <div className="relative h-9 min-w-0 flex-1">
+                  <div className="absolute left-0 right-0 top-1/2 h-2 -translate-y-1/2 overflow-hidden rounded-full" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+                    <div className="h-full rounded-full" style={{ width: `${matterProgress}%`, background: "var(--primary)" }} />
+                  </div>
+                  <div
+                    className="pointer-events-none absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                    style={{
+                      left: `${matterProgress}%`,
+                      background: "var(--primary)",
+                      border: "2px solid var(--bg-elevated)",
+                      boxShadow: "0 0 0 1px var(--border)",
+                    }}
+                  />
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={matterProgress}
+                    onChange={(event) => setMatterProgress(clampProgress(Number(event.target.value)))}
+                    className="absolute inset-0 h-9 w-full cursor-pointer opacity-0"
+                    aria-label="專案進度"
+                  />
+                </div>
+                <div className="flex w-24 items-center gap-1">
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={matterProgress}
+                    onChange={(event) => setMatterProgress(clampProgress(Number(event.target.value)))}
+                    className="input w-full text-right"
+                    aria-label="專案進度百分比"
+                  />
+                  <span aria-hidden={true}>%</span>
+                </div>
+              </div>
             </label>
             <button type="submit" className="btn btn-secondary md:col-span-2" disabled={saving}>
               儲存專案設定
