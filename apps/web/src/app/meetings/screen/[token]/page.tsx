@@ -124,7 +124,7 @@ export default function MeetingScreenPage({ params }: { params: Promise<{ token:
   }
 
   const { meeting, current_agenda_item: current, active_vote: vote, attendance_summary: summary } = screen;
-  const activeSpeech = screen.active_speech;
+  const activeSpeech = screen.active_speech ?? null;
   const remaining = timerRemaining(activeSpeech, now);
   const notVoted = Math.max(0, (vote?.tally?.eligible ?? 0) - (vote?.tally?.total ?? 0));
   const title = screenState?.title || current?.title || meeting.title;

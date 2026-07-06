@@ -324,7 +324,7 @@ export default function PartnerMapPage() {
   const rateSelected = async (score: number) => {
     if (!selectedBusiness) return;
     try {
-      await partnerMapApi.rateBusiness(selectedBusiness.id, { rating: score, visit_count: 1 });
+      await partnerMapApi.rateBusiness(selectedBusiness.id, { rating: score, visit_count: 1, is_public: true });
       toast.success("謝謝你的評價");
       partnerMapApi.getBusiness(selectedBusiness.id).then(setSelectedBusiness);
     } catch (error) {

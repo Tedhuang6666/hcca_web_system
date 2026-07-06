@@ -192,7 +192,7 @@ export default function SeatSelectionPage() {
           )}
           {map.seats.map((s) => {
             const isPicked = picked.has(s.id);
-            const kind: SeatStateKind = isPicked && s.state !== "taken" ? "mine" : s.state;
+            const kind: SeatStateKind = isPicked && s.state !== "taken" ? "mine" : s.state as SeatStateKind;
             if (s.state === "disabled") return null;
             // 套用自訂座位類型顏色（只在 available 狀態）
             const customColor = kind === "available" ? seatTypeColors[s.seat_type] : undefined;
@@ -225,7 +225,7 @@ export default function SeatSelectionPage() {
         </div>
         <div className="flex-1" />
         {holding && <span className="text-xs" style={{ color: "var(--text-muted)" }}>保留中…</span>}
-        <Countdown expiresAt={map.hold_expires_at} onExpire={load} />
+        <Countdown expiresAt={map.hold_expires_at ?? null} onExpire={load} />
         <button className="btn btn-primary text-sm" onClick={confirm} disabled={confirming || !picked.size || !map.can_select_now}>
           {confirming ? "處理中…" : "確認劃位"}
         </button>

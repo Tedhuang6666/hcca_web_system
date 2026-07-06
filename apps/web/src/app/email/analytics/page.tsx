@@ -69,8 +69,8 @@ export default function EmailAnalyticsPage() {
             {analytics.top_links.length === 0 ? (
               <p className="mt-3 text-sm" style={{ color: "var(--text-muted)" }}>尚無點擊資料。</p>
             ) : analytics.top_links.map((link) => (
-              <div key={link.url} className="mt-3 flex justify-between gap-4 text-sm">
-                <span className="truncate">{link.url}</span><strong>{link.clicks}</strong>
+              <div key={link.url as string} className="mt-3 flex justify-between gap-4 text-sm">
+                <span className="truncate">{link.url as string}</span><strong>{link.clicks as number}</strong>
               </div>
             ))}
           </section>

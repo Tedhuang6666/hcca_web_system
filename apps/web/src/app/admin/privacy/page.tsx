@@ -282,10 +282,10 @@ export default function PrivacyPage() {
                     <button
                       type="button"
                       className="btn-sm btn-primary"
-                      disabled={requestBusy === item.id || item.status === "fulfilled"}
+                      disabled={requestBusy === item.id || item.status === "completed"}
                       onClick={() => {
                         const msg = window.prompt("回覆給使用者的處理說明：", item.response_message ?? "");
-                        if (msg !== null) void updateRequest(item.id, "fulfilled", msg);
+                        if (msg !== null) void updateRequest(item.id, "completed", msg);
                       }}>
                       完成
                     </button>

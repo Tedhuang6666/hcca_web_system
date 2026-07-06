@@ -411,7 +411,7 @@ export default function NewDocumentPage() {
         setHandlerUnit(template.handler_unit ?? "");
         setVisibilityLevel(template.visibility_level);
         setRecipients(
-          template.recipients.map((item) => ({
+          (template.recipients ?? []).map((item) => ({
             id: crypto.randomUUID(),
             recipient_type: item.recipient_type,
             name: item.name,
@@ -442,6 +442,9 @@ export default function NewDocumentPage() {
     try {
       const doc = await documentsApi.create({
         title: autoTitle, urgency, classification, category,
+        declassification_condition: "none",
+        content: "",
+        is_public: false,
         serial_template_id: selectedTemplateId || null,
         subject: copy.subjectLabel ? subject || undefined : undefined,
         doc_description: docDescription || undefined,
@@ -461,6 +464,7 @@ export default function NewDocumentPage() {
           recipient_type: r.recipient_type,
           name: r.name,
           email: r.email || undefined,
+          delivery_method: (r.email ? "email" : "none") as "none" | "system" | "email" | "paper" | "postal",
         })),
       });
       for (const lnk of pendingLinks) {

@@ -34,17 +34,19 @@ function detailToPreviewPayload(d: EmailMessageDetailOut): EmailComposePayload {
     body: d.body,
     banner_image_url: d.banner_image_url,
     banner_image_alt: d.banner_image_alt,
-    card_rows: d.card_rows,
+    card_rows: d.card_rows as EmailComposePayload["card_rows"],
     cta_label: d.cta_label,
     cta_url: d.cta_url,
-    buttons: d.buttons,
-    blocks: d.blocks,
-    recipients: d.recipient_spec,
-    variable_definitions: d.variable_definitions,
-    default_variables: d.default_variables,
-    recipient_variables: d.recipient_variables,
-    preview_variables: d.default_variables,
+    buttons: d.buttons as EmailComposePayload["buttons"],
+    blocks: d.blocks as EmailComposePayload["blocks"],
+    recipients: d.recipient_spec as EmailComposePayload["recipients"],
+    variable_definitions: d.variable_definitions as EmailComposePayload["variable_definitions"],
+    default_variables: d.default_variables as EmailComposePayload["default_variables"],
+    recipient_variables: d.recipient_variables as EmailComposePayload["recipient_variables"],
+    preview_variables: d.default_variables as EmailComposePayload["preview_variables"],
     preview_recipient: null,
+    track_opens: d.track_opens,
+    track_clicks: d.track_clicks,
   };
 }
 
@@ -308,7 +310,7 @@ export default function EmailLogsPage() {
         ) : (
           <ul>
             {rows.map((m) => {
-              const meta = STATUS_META[m.status];
+              const meta = STATUS_META[m.status as EmailStatus];
               return (
                 <li
                   key={m.id}
@@ -368,7 +370,7 @@ export default function EmailLogsPage() {
                       </button>
                     )}
                     {(["queued", "failed", "retrying", "dead", "partial"] as EmailStatus[]).includes(
-                      m.status,
+                      m.status as EmailStatus,
                     ) && (
                       <button
                         className="btn btn-secondary btn-sm"
@@ -405,7 +407,7 @@ export default function EmailLogsPage() {
           footer={
             <>
               {(["queued", "failed", "retrying", "dead", "partial"] as EmailStatus[]).includes(
-                detail.status,
+                detail.status as EmailStatus,
               ) && (
                 <button
                   className="btn btn-secondary btn-sm"
@@ -433,8 +435,8 @@ export default function EmailLogsPage() {
           <div className="space-y-4">
             <p className="text-xs" style={{ color: "var(--text-muted)" }}>
               {detail.sender_name ?? "—"} · {detail.recipient_count} 人 · {fmt(detail.created_at)} ·{" "}
-              <span style={{ color: STATUS_META[detail.status].color }}>
-                {STATUS_META[detail.status].label}
+              <span style={{ color: STATUS_META[detail.status as EmailStatus].color }}>
+                {STATUS_META[detail.status as EmailStatus].label}
               </span>
             </p>
 

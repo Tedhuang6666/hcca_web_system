@@ -16,7 +16,8 @@
     "test": "vitest run --coverage",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "generate:types": "openapi-typescript ../../openapi.json -o ./src/lib/api-types.ts"
+    "generate:types": "openapi-typescript ../../openapi.json -o ./src/lib/api-types.ts",
+    "generate:bridge": "node ../../scripts/generate-bridge.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

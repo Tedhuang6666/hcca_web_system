@@ -64,7 +64,7 @@ function QuestionRow({
 }) {
   const [text, setText] = useState(q.question_text);
   const [required, setRequired] = useState(q.is_required);
-  const [optionsText, setOptionsText] = useState(q.options.join("\n"));
+  const [optionsText, setOptionsText] = useState((q.options ?? []).join("\n"));
   const [minValue, setMinValue] = useState(q.min_value ?? 1);
   const [maxValue, setMaxValue] = useState(q.max_value ?? 5);
   const [minLabel, setMinLabel] = useState(q.min_label ?? "");
@@ -384,7 +384,7 @@ function QuestionRow({
               {(() => {
                 const src = others.find(o => o.id === r.question_id);
                 const choices = src && (src.question_type === "single" || src.question_type === "multiple")
-                  ? src.options : [];
+                  ? (src.options ?? []) : [];
                 return choices.length > 0 ? (
                   <select value={r.value} onChange={e => updateRule(i, { value: e.target.value })}
                     className="input text-sm" style={{ flex: "2 1 8rem" }}>
@@ -469,10 +469,10 @@ export default function EditSurveyPage() {
         setClosesAt(s.closes_at ? s.closes_at.slice(0, 16) : "");
         setActivityId(s.activity_id ?? "");
         setIsPublic(s.is_public);
-        setAllowedDomains(s.allowed_domains.join("\n"));
-        setAllowedOrgIds(s.allowed_org_ids);
-        if (s.allowed_user_ids.length > 0) {
-          usersApi.listByIds(s.allowed_user_ids)
+        setAllowedDomains((s.allowed_domains ?? []).join("\n"));
+        setAllowedOrgIds(s.allowed_org_ids ?? []);
+        if ((s.allowed_user_ids?.length ?? 0) > 0) {
+          usersApi.listByIds(s.allowed_user_ids ?? [])
             .then(setAllowedUsers)
             .catch(() => setAllowedUsers([]));
         } else {

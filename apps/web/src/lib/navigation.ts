@@ -540,16 +540,16 @@ export function navProfileFromApi(profile: NavigationProfileOut): NavigationProf
     description: profile.description ?? "",
     audience: profile.audience ?? "",
     matchAnyPrefixes: profile.match_any_prefixes,
-    matchAnyPermissions: profile.match_any_permissions,
-    excludePrefixes: profile.exclude_prefixes,
-    desktopSections: profile.desktop_sections.map((section) => ({
+    matchAnyPermissions: profile.match_any_permissions ?? [],
+    excludePrefixes: profile.exclude_prefixes ?? [],
+    desktopSections: (profile.desktop_sections ?? []).map((section) => ({
       id: section.id,
       heading: section.heading,
       collapsible: section.collapsible,
       defaultCollapsed: section.default_collapsed,
-      items: byIds(section.items),
+      items: byIds(section.items ?? []),
     })),
-    mobileOrder: profile.mobile_order,
+    mobileOrder: profile.mobile_order ?? [],
   };
 }
 

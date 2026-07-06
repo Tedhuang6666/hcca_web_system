@@ -99,7 +99,7 @@ export default function EmailTemplatesPage() {
             <div className="min-w-0 flex-1">
               <p className="font-medium">{row.is_favorite ? "★ " : ""}{row.name}</p>
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                {row.visibility === "org" ? "組織共享" : "私人"} · v{row.current_version} · {row.content.subject || "無預設主旨"}
+                {row.visibility === "org" ? "組織共享" : "私人"} · v{row.current_version} · {(row.content as Record<string, string>).subject || "無預設主旨"}
               </p>
             </div>
             <Link href={`/email?template=${row.id}`} className="btn btn-secondary btn-sm">使用</Link>

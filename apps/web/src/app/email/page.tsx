@@ -213,23 +213,24 @@ function ComposeInner() {
         setBannerImageUrl(m.banner_image_url ?? "");
         setBannerImageAlt(m.banner_image_alt ?? "");
         setBody(m.body);
-        setCardRows(m.card_rows);
+        setCardRows(m.card_rows as unknown as EmailCardRow[]);
         // 舊草稿可能只有單一 CTA，無 buttons：自動轉成一顆主要按鈕。
-        if (m.buttons && m.buttons.length > 0) {
-          setButtons(m.buttons);
+        const mButtons = m.buttons as unknown as EmailButton[] | undefined;
+        if (mButtons && mButtons.length > 0) {
+          setButtons(mButtons);
         } else if (m.cta_url || m.cta_label) {
-          setButtons([{ label: m.cta_label, url: m.cta_url, style: "primary" }]);
+          setButtons([{ label: m.cta_label ?? "", url: m.cta_url ?? "", style: "primary" }]);
         } else {
           setButtons([]);
         }
-        setBlocks(m.blocks ?? []);
-        setRecipients(m.recipient_spec ?? EMPTY_RECIPIENTS);
+        setBlocks(m.blocks as unknown as EmailBlock[] ?? []);
+        setRecipients((m.recipient_spec as RecipientSelector) ?? EMPTY_RECIPIENTS);
         setRetainedAttachmentIds(m.attachment_ids ?? []);
-        setVariableDefinitions(m.variable_definitions);
+        setVariableDefinitions(m.variable_definitions as unknown as EmailVariableDefinition[]);
         const rows = (m.recipient_variables ?? []).map((r) => ({
-          email: r.email ?? "",
-          name: r.name ?? "",
-          variables: { ...(r.variables ?? {}) },
+          email: (r.email as string | null | undefined) ?? "",
+          name: (r.name as string | null | undefined) ?? "",
+          variables: { ...(r.variables as Record<string, string> ?? {}) },
         }));
         setRecipientRows(rows);
       })
@@ -607,7 +608,7 @@ function ComposeInner() {
     setPlatformTemplateId(id);
     const template = platformTemplates.find((item) => item.id === id);
     if (!template) return;
-    const content = template.content;
+    const content = template.content as EmailComposePayload;
     setSubject(content.subject ?? "");
     setHeading(content.heading ?? "");
     setPreviewText(content.preview_text ?? "");
@@ -624,7 +625,7 @@ function ComposeInner() {
     setCardRows(content.card_rows ?? []);
     setButtons(content.buttons ?? []);
     setBlocks(content.blocks ?? []);
-    setVariableDefinitions(template.variable_definitions ?? []);
+    setVariableDefinitions(template.variable_definitions as EmailVariableDefinition[] ?? []);
     setTrackOpens(content.track_opens ?? true);
     setTrackClicks(content.track_clicks ?? true);
     toast.success(`已套用平台範本：${template.name}`);
@@ -647,11 +648,11 @@ function ComposeInner() {
       setBannerImageUrl(message.banner_image_url ?? "");
       setBannerImageAlt(message.banner_image_alt ?? "");
       setBody(message.body);
-      setCardRows(message.card_rows ?? []);
-      setButtons(message.buttons ?? []);
-      setBlocks(message.blocks ?? []);
-      setVariableDefinitions(message.variable_definitions ?? []);
-      setPreviewVariables(message.default_variables ?? {});
+      setCardRows(message.card_rows as unknown as EmailCardRow[] ?? []);
+      setButtons(message.buttons as unknown as EmailButton[] ?? []);
+      setBlocks(message.blocks as unknown as EmailBlock[] ?? []);
+      setVariableDefinitions(message.variable_definitions as EmailVariableDefinition[] ?? []);
+      setPreviewVariables(message.default_variables as Record<string, string> ?? {});
       setTrackOpens(message.track_opens);
       setTrackClicks(message.track_clicks);
       toast.success("已套用過去郵件格式，未帶入舊收件人");
@@ -661,15 +662,15 @@ function ComposeInner() {
   };
 
   const applyMessageRecipients = (message: EmailMessageDetailOut) => {
-    setRecipients(message.recipient_spec ?? EMPTY_RECIPIENTS);
+    setRecipients((message.recipient_spec as RecipientSelector) ?? EMPTY_RECIPIENTS);
     setRecipientListId("");
-    setVariableDefinitions(message.variable_definitions ?? []);
-    setPreviewVariables(message.default_variables ?? {});
+    setVariableDefinitions(message.variable_definitions as EmailVariableDefinition[] ?? []);
+    setPreviewVariables(message.default_variables as Record<string, string> ?? {});
     setRecipientRows(
       (message.recipient_variables ?? []).map((row) => ({
-        email: row.email ?? "",
-        name: row.name ?? "",
-        variables: { ...(row.variables ?? {}) },
+        email: (row.email as string | null | undefined) ?? "",
+        name: (row.name as string | null | undefined) ?? "",
+        variables: { ...(row.variables as Record<string, string> ?? {}) },
       })),
     );
     setPreviewRecipientIndex(0);
@@ -693,10 +694,10 @@ function ComposeInner() {
   const hasRecipientSelection = (selector: RecipientSelector) =>
     selector.include_all ||
     selector.include_school ||
-    selector.user_ids.length > 0 ||
-    selector.position_ids.length > 0 ||
-    selector.org_ids.length > 0 ||
-    selector.external_emails.length > 0;
+    (selector.user_ids?.length ?? 0) > 0 ||
+    (selector.position_ids?.length ?? 0) > 0 ||
+    (selector.org_ids?.length ?? 0) > 0 ||
+    (selector.external_emails?.length ?? 0) > 0;
 
   const savePlatformTemplate = async () => {
     const name = window.prompt("平台範本名稱", subject || heading || "未命名範本")?.trim();
@@ -720,12 +721,12 @@ function ComposeInner() {
     setRecipientListId(id);
     const list = recipientLists.find((item) => item.id === id);
     if (!list) return;
-    setVariableDefinitions(list.variable_definitions ?? []);
+    setVariableDefinitions(list.variable_definitions as EmailVariableDefinition[] ?? []);
     setRecipientRows(
       list.members.map((member) => ({
         email: member.email,
         name: member.name ?? "",
-        variables: { ...member.variables },
+        variables: { ...member.variables as Record<string, string> },
       })),
     );
     toast.success(`已套用收件名單：${list.name}`);

@@ -34,10 +34,10 @@ const MODES: { key: Mode; label: string }[] = [
 
 function selectorKey(sel: RecipientSelector): string {
   return JSON.stringify({
-    user_ids: [...sel.user_ids].sort(),
-    position_ids: [...sel.position_ids].sort(),
-    org_ids: [...sel.org_ids].sort(),
-    external_emails: [...sel.external_emails].sort(),
+    user_ids: [...(sel.user_ids ?? [])].sort(),
+    position_ids: [...(sel.position_ids ?? [])].sort(),
+    org_ids: [...(sel.org_ids ?? [])].sort(),
+    external_emails: [...(sel.external_emails ?? [])].sort(),
     include_all: sel.include_all,
     include_school: sel.include_school,
   });
@@ -73,18 +73,18 @@ export default function RecipientPicker({ value, onChange, disabled = false }: R
     } else if (value.include_school) {
       setMode("all");
       setAllScope("school");
-    } else if (value.external_emails.length > 0) {
+    } else if ((value.external_emails ?? []).length > 0) {
       setMode("emails");
-      setExternalEmailsText(value.external_emails.join("\n"));
-    } else if (value.position_ids.length > 0) {
+      setExternalEmailsText((value.external_emails ?? []).join("\n"));
+    } else if ((value.position_ids ?? []).length > 0) {
       setMode("positions");
-      setSelectedPos(value.position_ids.map((id) => ({ value: id, label: id })));
-    } else if (value.org_ids.length > 0) {
+      setSelectedPos((value.position_ids ?? []).map((id) => ({ value: id, label: id })));
+    } else if ((value.org_ids ?? []).length > 0) {
       setMode("orgs");
-      setSelectedOrgs(value.org_ids.map((id) => ({ value: id, label: id })));
-    } else if (value.user_ids.length > 0) {
+      setSelectedOrgs((value.org_ids ?? []).map((id) => ({ value: id, label: id })));
+    } else if ((value.user_ids ?? []).length > 0) {
       setMode("users");
-      setSelectedUsers(value.user_ids.map((id) => ({ value: id, label: id })));
+      setSelectedUsers((value.user_ids ?? []).map((id) => ({ value: id, label: id })));
     } else {
       setSelectedUsers([]);
       setExternalEmailsText("");

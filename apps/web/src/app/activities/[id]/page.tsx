@@ -120,18 +120,18 @@ export default function ActivityWorkspacePage() {
   );
   const financeItems = useMemo(
     () => [
-      ...(workspace?.procurement ?? []),
+      ...((workspace?.procurement ?? []) as ActivityWorkspaceItem[]),
       ...((workspace?.sections ?? [])
         .filter((section) => section.key === "receivable")
-        .flatMap((section) => section.items)
+        .flatMap((section) => section.items ?? [])
         .map((item) => ({
-          id: item.target_id,
-          title: item.title,
-          href: item.href,
-          status: item.target_type,
-          timestamp: item.created_at,
-          note: item.note,
-          meta: item.meta,
+          id: item.target_id as string,
+          title: item.title as string,
+          href: item.href as string,
+          status: item.target_type as string,
+          timestamp: item.created_at as string,
+          note: item.note as string | null,
+          meta: item.meta as Record<string, unknown>,
         }))),
     ],
     [workspace],
@@ -188,7 +188,7 @@ export default function ActivityWorkspacePage() {
               活動工作區
             </p>
             <h1 className="truncate text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
-              {activity?.name ?? summary.title ?? "活動"}
+              {activity?.name ?? String(summary.title ?? "活動")}
             </h1>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
               <span>{STATUS_LABEL[String(summary.status ?? activity?.status)] ?? activity?.status}</span>
@@ -224,10 +224,10 @@ export default function ActivityWorkspacePage() {
       </header>
 
       <section className="grid gap-3 md:grid-cols-5">
-        <Metric icon={CheckSquare} label="待辦" value={Number(summary.open_task_count ?? workspace?.tasks.length ?? 0)} />
+        <Metric icon={CheckSquare} label="待辦" value={Number(summary.open_task_count ?? workspace?.tasks?.length ?? 0)} />
         <Metric icon={Landmark} label="會議/日曆" value={meetingsAndCalendar.length} />
-        <Metric icon={Bell} label="通知" value={workspace?.notifications.length ?? 0} />
-        <Metric icon={Receipt} label="未收款" value={money(Number(summary.unpaid_amount ?? workspace?.finance.unpaid_amount ?? 0))} />
+        <Metric icon={Bell} label="通知" value={workspace?.notifications?.length ?? 0} />
+        <Metric icon={Receipt} label="未收款" value={money(Number(summary.unpaid_amount ?? workspace?.finance?.unpaid_amount ?? 0))} />
         <Metric icon={Link2} label="關聯資料" value={Number(summary.linked_count ?? allLinkedCount)} />
       </section>
 
@@ -281,28 +281,28 @@ export default function ActivityWorkspacePage() {
                 <ItemList items={workspace?.pending_items as ActivityWorkspaceItem[] ?? []} empty="目前沒有待處理項目。" />
               </Panel>
               <Panel title="近期會議與日曆" icon={CalendarDays}>
-                <ItemList items={meetingsAndCalendar.slice(0, 6)} empty="尚未安排會議或日曆事件。" />
+                <ItemList items={meetingsAndCalendar.slice(0, 6) as ActivityWorkspaceItem[]} empty="尚未安排會議或日曆事件。" />
               </Panel>
               <Panel title="通知與文件" icon={Megaphone}>
-                <ItemList items={[...(workspace?.notifications ?? []), ...(workspace?.documents ?? [])].slice(0, 6)} empty="尚未建立通知或文件。" />
+                <ItemList items={([...(workspace?.notifications ?? []), ...(workspace?.documents ?? [])] as ActivityWorkspaceItem[]).slice(0, 6)} empty="尚未建立通知或文件。" />
               </Panel>
             </div>
           )}
-          {tab === "tasks" && <Panel title="待辦" icon={CheckSquare}><ItemTable items={workspace?.tasks ?? []} empty="尚未建立活動待辦。" /></Panel>}
-          {tab === "meetings" && <Panel title="會議與日曆" icon={CalendarDays}><ItemTable items={meetingsAndCalendar} empty="尚未安排會議或日曆事件。" /></Panel>}
-          {tab === "notifications" && <Panel title="通知與公告" icon={Megaphone}><ItemTable items={workspace?.notifications ?? []} empty="尚未建立公告、郵件或發布。" /></Panel>}
-          {tab === "people" && <Panel title="人員編組" icon={Users}><ItemTable items={workspace?.people ?? []} empty="尚未設定活動人員。" /></Panel>}
+          {tab === "tasks" && <Panel title="待辦" icon={CheckSquare}><ItemTable items={workspace?.tasks as ActivityWorkspaceItem[] ?? []} empty="尚未建立活動待辦。" /></Panel>}
+          {tab === "meetings" && <Panel title="會議與日曆" icon={CalendarDays}><ItemTable items={meetingsAndCalendar as ActivityWorkspaceItem[]} empty="尚未安排會議或日曆事件。" /></Panel>}
+          {tab === "notifications" && <Panel title="通知與公告" icon={Megaphone}><ItemTable items={workspace?.notifications as ActivityWorkspaceItem[] ?? []} empty="尚未建立公告、郵件或發布。" /></Panel>}
+          {tab === "people" && <Panel title="人員編組" icon={Users}><ItemTable items={workspace?.people as ActivityWorkspaceItem[] ?? []} empty="尚未設定活動人員。" /></Panel>}
           {tab === "finance" && (
             <Panel title="經費與採購" icon={ShoppingCart}>
               <div className="mb-3 grid gap-2 sm:grid-cols-3">
-                <Metric icon={Receipt} label="應收" value={money(workspace?.finance.total_amount)} />
-                <Metric icon={Receipt} label="已收" value={money(workspace?.finance.paid_amount)} />
-                <Metric icon={Receipt} label="未收" value={money(workspace?.finance.unpaid_amount)} />
+                <Metric icon={Receipt} label="應收" value={money(workspace?.finance?.total_amount as number | undefined)} />
+                <Metric icon={Receipt} label="已收" value={money(workspace?.finance?.paid_amount as number | undefined)} />
+                <Metric icon={Receipt} label="未收" value={money(workspace?.finance?.unpaid_amount as number | undefined)} />
               </div>
               <ItemTable items={financeItems} empty="尚未建立採購、商品、訂單或收款資料。" />
             </Panel>
           )}
-          {tab === "documents" && <Panel title="文件資料" icon={FileText}><ItemTable items={workspace?.documents ?? []} empty="尚未建立公文、問卷或法規資料。" /></Panel>}
+          {tab === "documents" && <Panel title="文件資料" icon={FileText}><ItemTable items={workspace?.documents as ActivityWorkspaceItem[] ?? []} empty="尚未建立公文、問卷或法規資料。" /></Panel>}
         </div>
 
         <aside className="space-y-4">
