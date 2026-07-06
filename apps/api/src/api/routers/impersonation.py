@@ -1,8 +1,8 @@
 """Admin Impersonation 路由。
 
 端點：
-    POST /admin/impersonate/{target_user_id}    啟動（回傳短效 token）
-    POST /admin/impersonate/{target_user_id}/end  結束（撤銷 token）
+    POST /admin/impersonate/{target_user_id}  啟動（回傳短效 token）
+    POST /admin/impersonate/end                結束（撤銷 token，token 放 body）
 
 前端：
     1. 點「以 X 身分檢視」→ POST /admin/impersonate/{id}
@@ -42,6 +42,40 @@ class ImpersonationStartResponse(BaseModel):
     expires_in_minutes: int
     target_user_id: uuid.UUID
     target_email: str
+
+
+class ImpersonationEndBody(BaseModel):
+    token: str = Field(..., description="要撤銷的 impersonation token")
+    reason: str = Field("explicit_end", max_length=200)
+
+
+# 注意：/end 必須註冊在 /{target_user_id} 之前。FastAPI 依註冊順序比對路由，
+# 若 /{target_user_id} 先註冊，POST /admin/impersonate/end 會先被當成
+# target_user_id="end" 嘗試轉型為 UUID 而以 422 失敗，永遠打不到這支端點。
+@router.post(
+    "/end",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def end_impersonation(
+    body: ImpersonationEndBody,
+    db: DbDep,
+    actor: Annotated[User, Depends(require_permission(PermissionCode.ADMIN_IMPERSONATE))],
+) -> None:
+    claims = impersonation_svc.parse_impersonation_token(body.token)
+    if claims is None:
+        raise HTTPException(400, "提供的不是 impersonation token")
+
+    # 寫黑名單（撤銷 jti）
+    await add_to_blacklist(body.token)
+
+    await impersonation_svc.record_end(
+        db,
+        actor_id=str(actor.id),
+        actor_email=actor.email,
+        target_user_id=str(claims.get("sub")),
+        reason=body.reason,
+    )
+    await db.commit()
 
 
 @router.post(
@@ -90,34 +124,3 @@ async def start_impersonation(
         target_user_id=target.id,
         target_email=target.email,
     )
-
-
-class ImpersonationEndBody(BaseModel):
-    token: str = Field(..., description="要撤銷的 impersonation token")
-    reason: str = Field("explicit_end", max_length=200)
-
-
-@router.post(
-    "/end",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
-async def end_impersonation(
-    body: ImpersonationEndBody,
-    db: DbDep,
-    actor: Annotated[User, Depends(require_permission(PermissionCode.ADMIN_IMPERSONATE))],
-) -> None:
-    claims = impersonation_svc.parse_impersonation_token(body.token)
-    if claims is None:
-        raise HTTPException(400, "提供的不是 impersonation token")
-
-    # 寫黑名單（撤銷 jti）
-    await add_to_blacklist(body.token)
-
-    await impersonation_svc.record_end(
-        db,
-        actor_id=str(actor.id),
-        actor_email=actor.email,
-        target_user_id=str(claims.get("sub")),
-        reason=body.reason,
-    )
-    await db.commit()

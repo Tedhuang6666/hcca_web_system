@@ -20,6 +20,9 @@ os.environ.setdefault("LOAD_SHED_ENABLED", "false")
 # 同理：測試不使用真實 Redis broker，避免事件迴圈跨 test 互鎖。
 os.environ.setdefault("WS_PUBSUB_BACKEND", "memory")
 
+import hashlib  # noqa: E402
+import hmac  # noqa: E402
+import secrets  # noqa: E402
 from collections.abc import AsyncGenerator, Callable  # noqa: E402
 from typing import Any  # noqa: E402
 
@@ -71,6 +74,24 @@ async def _isolate_redis_client_per_test():
         _security.redis_client.connection_pool = old_pool
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def _reset_storage_cache_per_test():
+    """每個 test 前後清掉 get_storage() 的 lru_cache。
+
+    api.services.storage.get_storage 用 @lru_cache(maxsize=1) 快取儲存後端
+    （生產環境設定不變，故意這樣做避免重複建物件）。測試若用 monkeypatch 改
+    settings.STORAGE_LOCAL_DIR 想切到 tmp_path，只有「本次測試是全程序第一個
+    呼叫 get_storage() 的測試」才會生效；一旦被前面任何測試快取過，之後所有
+    測試都會拿到指向別人 tmp_path 的舊實例，檔案永遠 404。每個測試前後清快取，
+    讓 monkeypatch 過的設定值當場生效，也不會汙染下一個測試。
+    """
+    from api.services.storage import get_storage
+
+    get_storage.cache_clear()
+    yield
+    get_storage.cache_clear()
+
+
 # 本機快速測試可使用 SQLite；CI 與整合測試必須明確提供 PostgreSQL，
 # 避免 SQLite 未強制外鍵或型別差異掩蓋正式環境問題。
 TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", "sqlite+aiosqlite:///:memory:")
@@ -85,9 +106,17 @@ _IS_POSTGRES = "postgresql" in TEST_DATABASE_URL
 
 
 def _worker_schema_name() -> str:
-    """pytest-xdist 平行執行時，每個 worker 需要專屬 schema，避免互相 DROP/CREATE 撞名。"""
+    """每個 pytest process 用專屬 schema，避免互相 DROP/CREATE 撞名。
+
+    xdist worker 用 worker id；沒有 xdist 時退回 PID 而非固定字串 "test_master"——
+    本機常常會有多個 pytest process 同時跑（例如多個背景 agent 各自起一個
+    `uv run pytest`），固定名稱會讓後結束的那個 process 的 session teardown
+    把還在跑的另一個 process 的 schema 整個 DROP 掉，其餘測試全部
+    「relation does not exist」。crash 留下的殘骸交給 session fixture 開頭的
+    DROP IF EXISTS 清，不影響下次全新 PID 的執行。
+    """
     worker_id = os.environ.get("PYTEST_XDIST_WORKER")
-    return f"test_{worker_id}" if worker_id else "test_master"
+    return f"test_{worker_id}" if worker_id else f"test_master_{os.getpid()}"
 
 
 _SCHEMA_NAME = _worker_schema_name()
@@ -182,6 +211,20 @@ async def _build_schema_once() -> AsyncGenerator[None, None]:
     await _schema_engine.dispose()
 
 
+def _make_valid_csrf_token() -> str:
+    """簽出一個 CSRFMiddleware 會接受的 token。
+
+    CSRFMiddleware._is_valid_token 要求 cookie 值必須是 `nonce.hmac簽章` 格式
+    （見 api/core/csrf.py），單純 secrets.token_urlsafe() 產生的隨機字串沒有
+    「.」分隔符，一定會被判定為無效，讓所有已登入 client 的 POST/PATCH/PUT/
+    DELETE 一律先被 CSRF 擋下（403），不會真的打到 route handler。這裡比照
+    CSRFMiddleware._make_token 的簽章方式，讓測試 client 一開始就帶有效 token。
+    """
+    nonce = secrets.token_urlsafe(32)
+    signature = hmac.new(settings.SECRET_KEY.encode(), nonce.encode(), hashlib.sha256).hexdigest()
+    return f"{nonce}.{signature}"
+
+
 class CSRFAwareAsyncClient(AsyncClient):
     """測試用 AsyncClient，自動處理 CSRF token"""
 
@@ -257,7 +300,6 @@ async def db_session(_build_schema_once: None) -> AsyncGenerator[AsyncSession, N
 @pytest_asyncio.fixture(scope="function")
 async def client(db_session: AsyncSession) -> AsyncGenerator[CSRFAwareAsyncClient, None]:
     """帶 DB override 的 TestClient（自動處理 CSRF token）"""
-    import secrets
 
     async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
         yield db_session
@@ -265,8 +307,8 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[CSRFAwareAsyncClien
     app.dependency_overrides[get_db] = override_get_db
 
     async with CSRFAwareAsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        # 為測試生成 CSRF token，手動設定到 cookies
-        csrf_token = secrets.token_urlsafe(32)
+        # 為測試生成一個 CSRFMiddleware 會接受的合法簽章 token，手動設定到 cookies
+        csrf_token = _make_valid_csrf_token()
         ac.cookies.set("csrf_token", csrf_token)
         ac._csrf_token = csrf_token
         yield ac
@@ -331,11 +373,13 @@ async def authed_client_factory(
     def _factory(user: User) -> CSRFAwareAsyncClient:
         app.dependency_overrides[get_db] = override_get_db
         token = create_access_token(str(user.id))
+        csrf_token = _make_valid_csrf_token()
         ac = CSRFAwareAsyncClient(
             transport=ASGITransport(app=app),
             base_url="http://test",
-            cookies={settings.ACCESS_TOKEN_COOKIE_NAME: token},
+            cookies={settings.ACCESS_TOKEN_COOKIE_NAME: token, "csrf_token": csrf_token},
         )
+        ac._csrf_token = csrf_token
         clients.append(ac)
         return ac
 

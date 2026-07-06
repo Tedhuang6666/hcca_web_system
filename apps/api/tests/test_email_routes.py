@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
@@ -415,6 +415,452 @@ async def test_compose_preview_allows_incomplete_rows_and_applies_branding(
     assert "color:#2563eb" in html
     assert "background-color:#f1f5f9" in html
     assert "資訊部 敬上" in html
+
+
+@pytest.mark.asyncio
+async def test_update_message_edits_draft_succeeds(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await _seed_user(db_session, "editor@school.edu", ["email:send"])
+    message = EmailMessage(sender_id=user.id, subject="原始標題", status="draft")
+    db_session.add(message)
+    await db_session.flush()
+    _override_user(user)
+
+    resp = await client.patch(
+        f"/email/messages/{message.id}",
+        json={"subject": "更新後標題"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["subject"] == "更新後標題"
+
+
+@pytest.mark.asyncio
+async def test_update_sent_message_returns_409(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """已寄出的郵件不可編輯：只有草稿/預約中允許 PATCH，避免竄改已稽核的寄送內容。"""
+    user = await _seed_user(db_session, "editor2@school.edu", ["email:send"])
+    message = EmailMessage(sender_id=user.id, subject="已寄出", status="sent")
+    db_session.add(message)
+    await db_session.flush()
+    _override_user(user)
+
+    resp = await client.patch(
+        f"/email/messages/{message.id}",
+        json={"subject": "想改但不行"},
+    )
+
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_update_message_not_owner_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    owner = await _seed_user(db_session, "owner@school.edu", ["email:send"])
+    intruder = await _seed_user(db_session, "intruder@school.edu", ["email:send"])
+    message = EmailMessage(sender_id=owner.id, subject="別人的草稿", status="draft")
+    db_session.add(message)
+    await db_session.flush()
+    _override_user(intruder)
+
+    resp = await client.patch(
+        f"/email/messages/{message.id}",
+        json={"subject": "偷改"},
+    )
+
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_send_message_endpoint_sends_draft_succeeds(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = await _seed_user(db_session, "send-endpoint@school.edu", ["email:send"])
+    message = EmailMessage(
+        sender_id=user.id,
+        subject="草稿待寄出",
+        body="內容",
+        status="draft",
+        recipient_spec={"external_emails": ["draft-target@example.org"]},
+    )
+    db_session.add(message)
+    await db_session.flush()
+    _override_user(user)
+    monkeypatch.setattr("api.routers.email.enqueue_rendered", lambda *args, **kwargs: ["task-id"])
+
+    resp = await client.post(f"/email/messages/{message.id}/send")
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "queued"
+
+
+@pytest.mark.asyncio
+async def test_send_message_endpoint_on_sent_message_returns_409(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await _seed_user(db_session, "send-endpoint2@school.edu", ["email:send"])
+    message = EmailMessage(sender_id=user.id, subject="已寄出", status="sent")
+    db_session.add(message)
+    await db_session.flush()
+    _override_user(user)
+
+    resp = await client.post(f"/email/messages/{message.id}/send")
+
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_delete_draft_message_removes_it(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await _seed_user(db_session, "deleter@school.edu", ["email:send"])
+    message = EmailMessage(sender_id=user.id, subject="待刪草稿", status="draft")
+    db_session.add(message)
+    await db_session.flush()
+    message_id = message.id
+    _override_user(user)
+
+    resp = await client.delete(f"/email/messages/{message_id}")
+
+    assert resp.status_code == 204
+    assert await db_session.get(EmailMessage, message_id) is None
+
+
+@pytest.mark.asyncio
+async def test_delete_scheduled_message_cancels_instead_of_removing(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await _seed_user(db_session, "canceler@school.edu", ["email:send"])
+    message = EmailMessage(sender_id=user.id, subject="待取消預約", status="scheduled")
+    db_session.add(message)
+    await db_session.flush()
+    message_id = message.id
+    _override_user(user)
+
+    resp = await client.delete(f"/email/messages/{message_id}")
+
+    assert resp.status_code == 204
+    cancelled = await db_session.get(EmailMessage, message_id)
+    assert cancelled is not None
+    assert cancelled.status == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_delete_sent_message_returns_409(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await _seed_user(db_session, "cant-delete-sent@school.edu", ["email:send"])
+    message = EmailMessage(sender_id=user.id, subject="已寄出", status="sent")
+    db_session.add(message)
+    await db_session.flush()
+    _override_user(user)
+
+    resp = await client.delete(f"/email/messages/{message.id}")
+
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_list_messages_filters_by_status_and_keyword(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await _seed_user(db_session, "lister@school.edu", ["email:send"])
+    db_session.add_all(
+        [
+            EmailMessage(sender_id=user.id, subject="草稿甲", status="draft"),
+            EmailMessage(sender_id=user.id, subject="已寄乙", status="sent"),
+        ]
+    )
+    await db_session.flush()
+    _override_user(user)
+
+    resp = await client.get("/email/messages", params={"status": "draft"})
+
+    assert resp.status_code == 200
+    subjects = [item["subject"] for item in resp.json()]
+    assert subjects == ["草稿甲"]
+
+    resp_q = await client.get("/email/messages", params={"q": "已寄"})
+    assert resp_q.status_code == 200
+    assert [item["subject"] for item in resp_q.json()] == ["已寄乙"]
+
+
+@pytest.mark.asyncio
+async def test_list_messages_without_view_logs_only_sees_own(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await _seed_user(db_session, "own-viewer@school.edu", ["email:send"])
+    other = await _seed_user(db_session, "other-sender@school.edu", ["email:send"])
+    db_session.add_all(
+        [
+            EmailMessage(sender_id=user.id, subject="我的信", status="draft"),
+            EmailMessage(sender_id=other.id, subject="別人的信", status="draft"),
+        ]
+    )
+    await db_session.flush()
+    _override_user(user)
+
+    resp = await client.get("/email/messages")
+
+    assert resp.status_code == 200
+    assert [item["subject"] for item in resp.json()] == ["我的信"]
+
+
+@pytest.mark.asyncio
+async def test_get_message_detail_includes_recipient_status_counts(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await _seed_user(db_session, "detail-viewer@school.edu", ["email:send"])
+    message = EmailMessage(sender_id=user.id, subject="詳情測試", status="sent", recipient_count=1)
+    db_session.add(message)
+    await db_session.flush()
+    db_session.add(
+        EmailCampaignRecipient(message_id=message.id, email="a@example.org", status="sent")
+    )
+    await db_session.flush()
+    _override_user(user)
+
+    resp = await client.get(f"/email/messages/{message.id}")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["recipient_status_counts"] == {"sent": 1}
+
+
+@pytest.mark.asyncio
+async def test_get_message_detail_without_permission_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    owner = await _seed_user(db_session, "detail-owner@school.edu", ["email:send"])
+    stranger = await _seed_user(db_session, "detail-stranger@school.edu", ["email:send"])
+    message = EmailMessage(sender_id=owner.id, subject="他人詳情", status="draft")
+    db_session.add(message)
+    await db_session.flush()
+    _override_user(stranger)
+
+    resp = await client.get(f"/email/messages/{message.id}")
+
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_list_message_recipients_returns_rows(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await _seed_user(db_session, "recipients-viewer@school.edu", ["email:send"])
+    message = EmailMessage(sender_id=user.id, subject="收件人列表", status="sent")
+    db_session.add(message)
+    await db_session.flush()
+    db_session.add(
+        EmailCampaignRecipient(message_id=message.id, email="row@example.org", status="sent")
+    )
+    await db_session.flush()
+    _override_user(user)
+
+    resp = await client.get(f"/email/messages/{message.id}/recipients")
+
+    assert resp.status_code == 200
+    assert [row["email"] for row in resp.json()] == ["row@example.org"]
+
+
+@pytest.mark.asyncio
+async def test_list_message_recipients_without_permission_returns_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    owner = await _seed_user(db_session, "recipients-owner@school.edu", ["email:send"])
+    stranger = await _seed_user(db_session, "recipients-stranger@school.edu", ["email:send"])
+    message = EmailMessage(sender_id=owner.id, subject="他人收件人", status="sent")
+    db_session.add(message)
+    await db_session.flush()
+    _override_user(stranger)
+
+    resp = await client.get(f"/email/messages/{message.id}/recipients")
+
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_preview_message_recipient_wrong_message_returns_404(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await _seed_user(db_session, "preview-mismatch@school.edu", ["email:send"])
+    message_a = EmailMessage(sender_id=user.id, subject="信件甲", status="sent")
+    message_b = EmailMessage(sender_id=user.id, subject="信件乙", status="sent")
+    db_session.add_all([message_a, message_b])
+    await db_session.flush()
+    recipient = EmailCampaignRecipient(message_id=message_a.id, email="x@example.org")
+    db_session.add(recipient)
+    await db_session.flush()
+    _override_user(user)
+
+    resp = await client.get(f"/email/messages/{message_b.id}/recipients/{recipient.id}/preview")
+
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_upload_email_image_rejects_bad_content_type(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await _seed_user(db_session, "image-uploader@school.edu", ["email:send"])
+    _override_user(user)
+
+    resp = await client.post(
+        "/email/images",
+        files={"file": ("evil.txt", b"not-an-image", "text/plain")},
+    )
+
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_upload_email_image_succeeds(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    from api.services.storage import LocalStorageBackend
+
+    user = await _seed_user(db_session, "image-uploader2@school.edu", ["email:send"])
+    _override_user(user)
+    monkeypatch.setattr(
+        "api.routers.email.get_storage", lambda: LocalStorageBackend(base_dir=str(tmp_path))
+    )
+
+    resp = await client.post(
+        "/email/images",
+        files={"file": ("logo.png", b"\x89PNG\r\n\x1a\n data", "image/png")},
+    )
+
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["content_type"] == "image/png"
+    assert body["url"]
+
+
+@pytest.mark.asyncio
+async def test_test_send_without_email_returns_422(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await _seed_user(db_session, "no-email-user@school.edu", ["email:send"])
+    user.email = ""
+    await db_session.flush()
+    _override_user(user)
+
+    resp = await client.post("/email/test", json={"subject": "測試"})
+
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_test_send_sample_queues_for_selected_rows(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = await _seed_user(db_session, "sample-tester@school.edu", ["email:send"])
+    _override_user(user)
+    queued: list[str] = []
+    monkeypatch.setattr(
+        "api.routers.email.enqueue_rendered",
+        lambda destinations, *args, **kwargs: queued.extend(destinations) or ["task-id"],
+    )
+
+    resp = await client.post(
+        "/email/test-sample",
+        json={
+            "subject": "抽樣測試",
+            "test_emails": ["qa@example.org"],
+            "recipient_variables": [
+                {"email": "row1@example.org", "name": "第一列", "variables": {}}
+            ],
+        },
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["queued"] == 1
+    assert body["sent_to"] == ["qa@example.org"]
+    assert queued == ["qa@example.org"]
+
+
+@pytest.mark.asyncio
+async def test_create_message_schedule_action_succeeds(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await _seed_user(db_session, "scheduler@school.edu", ["email:send"])
+    _override_user(user)
+    future_time = (datetime.now(UTC) + timedelta(days=1)).isoformat()
+
+    resp = await client.post(
+        "/email/messages",
+        json={"subject": "預約通知", "action": "schedule", "scheduled_at": future_time},
+    )
+
+    assert resp.status_code == 201
+    assert resp.json()["status"] == "scheduled"
+
+
+@pytest.mark.asyncio
+async def test_create_message_schedule_past_time_returns_422(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await _seed_user(db_session, "scheduler2@school.edu", ["email:send"])
+    _override_user(user)
+
+    resp = await client.post(
+        "/email/messages",
+        json={
+            "subject": "過去時間",
+            "action": "schedule",
+            "scheduled_at": "2000-01-01T00:00:00Z",
+        },
+    )
+
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_message_idempotency_key_returns_existing_draft(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await _seed_user(db_session, "idempotent-sender@school.edu", ["email:send"])
+    _override_user(user)
+
+    first = await client.post(
+        "/email/messages",
+        json={"subject": "重複請求", "action": "draft", "idempotency_key": "dup-key-1"},
+    )
+    assert first.status_code == 201
+    second = await client.post(
+        "/email/messages",
+        json={"subject": "重複請求（應被忽略）", "action": "draft", "idempotency_key": "dup-key-1"},
+    )
+
+    assert second.status_code == 201
+    assert first.json()["id"] == second.json()["id"]
+
+
+@pytest.mark.asyncio
+async def test_create_message_send_exceeding_daily_quota_returns_429(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = await _seed_user(db_session, "quota-user@school.edu", ["email:send"])
+    _override_user(user)
+    monkeypatch.setattr("api.routers.email.settings.EMAIL_DAILY_QUOTA_PER_USER", 1)
+    monkeypatch.setattr("api.routers.email.enqueue_rendered", lambda *args, **kwargs: ["task-id"])
+
+    resp = await client.post(
+        "/email/messages",
+        json={
+            "subject": "超過配額",
+            "action": "send",
+            "recipients": {
+                "external_emails": ["over-quota-1@example.org", "over-quota-2@example.org"]
+            },
+        },
+    )
+
+    assert resp.status_code == 429
 
 
 @pytest.mark.asyncio
