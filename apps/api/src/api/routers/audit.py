@@ -139,8 +139,8 @@ async def _list_filtered_audit_logs(
             return []
         q = q.where(
             or_(
-                AuditLog.meta["org_id"].astext.in_(org_ids),
-                AuditLog.meta["custom_permission_org_id"].astext.in_(org_ids),
+                AuditLog.meta["org_id"].as_string().in_(org_ids),
+                AuditLog.meta["custom_permission_org_id"].as_string().in_(org_ids),
                 (AuditLog.entity_type == "org") & AuditLog.entity_id.in_(org_ids),
             )
         )
