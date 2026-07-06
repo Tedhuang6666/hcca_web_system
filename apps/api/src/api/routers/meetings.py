@@ -44,6 +44,7 @@ from api.models.meeting import (
 )
 from api.models.regulation import Regulation
 from api.models.user import User
+from api.routers._common import or_404
 from api.schemas.context import MeetingBriefingCardOut
 from api.schemas.document import DocumentCreate, RecipientCreate
 from api.schemas.meeting import (
@@ -119,9 +120,7 @@ CurrentUser = Annotated[User, Depends(get_current_active_user)]
 
 
 async def _meeting_or_404(session: AsyncSession, meeting_id: uuid.UUID) -> Meeting:
-    meeting = await meeting_svc.get_meeting(session, meeting_id)
-    if meeting is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此會議")
+    meeting = or_404(await meeting_svc.get_meeting(session, meeting_id), "找不到此會議")
     storage = get_storage()
     for item in meeting.agenda_items:
         for attachment in item.attachments:
@@ -135,9 +134,7 @@ async def _agenda_or_404(
     session: AsyncSession, meeting: Meeting, agenda_item_id: uuid.UUID
 ) -> MeetingAgendaItem:
     item = next((x for x in meeting.agenda_items if x.id == agenda_item_id), None)
-    if item is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此議程項目")
-    return item
+    return or_404(item, "找不到此議程項目")
 
 
 async def _agenda_attachment_or_404(
@@ -150,9 +147,7 @@ async def _agenda_attachment_or_404(
         )
     )
     attachment = result.scalar_one_or_none()
-    if attachment is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此議程附件")
-    return attachment
+    return or_404(attachment, "找不到此議程附件")
 
 
 async def _artifact_link_or_404(
@@ -165,61 +160,57 @@ async def _artifact_link_or_404(
         )
     )
     link = result.scalar_one_or_none()
-    if link is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此議程資料包")
-    return link
+    return or_404(link, "找不到此議程資料包")
 
 
 async def _attendance_or_404(
     session: AsyncSession, meeting_id: uuid.UUID, attendance_id: uuid.UUID
 ) -> MeetingAttendance:
     record = await session.get(MeetingAttendance, attendance_id)
-    if record is None or record.meeting_id != meeting_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此出席紀錄")
-    return record
+    if record is not None and record.meeting_id != meeting_id:
+        record = None
+    return or_404(record, "找不到此出席紀錄")
 
 
 async def _motion_or_404(
     session: AsyncSession, meeting_id: uuid.UUID, motion_id: uuid.UUID
 ) -> MeetingMotion:
     motion = await session.get(MeetingMotion, motion_id)
-    if motion is None or motion.meeting_id != meeting_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此動議")
-    return motion
+    if motion is not None and motion.meeting_id != meeting_id:
+        motion = None
+    return or_404(motion, "找不到此動議")
 
 
 async def _decision_or_404(
     session: AsyncSession, meeting_id: uuid.UUID, decision_id: uuid.UUID
 ) -> MeetingDecision:
     decision = await session.get(MeetingDecision, decision_id)
-    if decision is None or decision.meeting_id != meeting_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此決議")
-    return decision
+    if decision is not None and decision.meeting_id != meeting_id:
+        decision = None
+    return or_404(decision, "找不到此決議")
 
 
 async def _vote_or_404(session: AsyncSession, meeting: Meeting, vote_id: uuid.UUID) -> MeetingVote:
     vote = next((x for x in meeting.votes if x.id == vote_id), None)
-    if vote is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此表決")
-    return vote
+    return or_404(vote, "找不到此表決")
 
 
 async def _request_or_404(
     session: AsyncSession, meeting_id: uuid.UUID, request_id: uuid.UUID
 ) -> MeetingRequest:
     record = await session.get(MeetingRequest, request_id)
-    if record is None or record.meeting_id != meeting_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此議事請求")
-    return record
+    if record is not None and record.meeting_id != meeting_id:
+        record = None
+    return or_404(record, "找不到此議事請求")
 
 
 async def _speech_or_404(
     session: AsyncSession, meeting_id: uuid.UUID, speech_id: uuid.UUID
 ) -> MeetingSpeechQueueItem:
     record = await session.get(MeetingSpeechQueueItem, speech_id)
-    if record is None or record.meeting_id != meeting_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此發言項目")
-    return record
+    if record is not None and record.meeting_id != meeting_id:
+        record = None
+    return or_404(record, "找不到此發言項目")
 
 
 async def _broadcast_meeting(session: AsyncSession, meeting_id: uuid.UUID, event: str) -> None:

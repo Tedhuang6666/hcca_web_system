@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
@@ -14,6 +14,7 @@ from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_any
 from api.models.governance import EntityRelation, Matter, MatterResource
 from api.models.user import User
+from api.routers._common import or_404
 from api.schemas.governance import (
     EntityRelationCreate,
     EntityRelationOut,
@@ -45,27 +46,25 @@ MatterManagerDep = Depends(
 
 async def _matter_or_404(db: AsyncSession, matter_id: uuid.UUID) -> Matter:
     matter = await matter_svc.get_matter(db, matter_id)
-    if matter is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="事項不存在")
-    return matter
+    return or_404(matter, "事項不存在")
 
 
 async def _relation_or_404(
     db: AsyncSession, matter_id: uuid.UUID, relation_id: uuid.UUID
 ) -> EntityRelation:
     relation = await matter_svc.get_relation(db, relation_id)
-    if relation is None or relation.matter_id != matter_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="事項關聯不存在")
-    return relation
+    if relation is not None and relation.matter_id != matter_id:
+        relation = None
+    return or_404(relation, "事項關聯不存在")
 
 
 async def _resource_or_404(
     db: AsyncSession, matter_id: uuid.UUID, resource_id: uuid.UUID
 ) -> MatterResource:
     resource = await matter_svc.get_resource(db, resource_id)
-    if resource is None or resource.matter_id != matter_id or not resource.is_active:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="事項資源不存在")
-    return resource
+    if resource is not None and (resource.matter_id != matter_id or not resource.is_active):
+        resource = None
+    return or_404(resource, "事項資源不存在")
 
 
 @router.get("", response_model=list[MatterListItem], summary="列出事項")

@@ -15,6 +15,7 @@ from api.dependencies.permissions import require_permission
 from api.models.activity import Activity
 from api.models.activity_discord import ActivityMember, ActivityRole
 from api.models.user import User
+from api.routers._common import or_404
 from api.schemas.activity import (
     ActivityConvenerCreate,
     ActivityConvenerOut,
@@ -54,9 +55,7 @@ CurrentUser = Annotated[User, Depends(get_current_active_user)]
 
 async def _activity_or_404(db: AsyncSession, activity_id: uuid.UUID) -> Activity:
     activity = await activity_svc.get_activity(db, activity_id)
-    if activity is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="活動不存在")
-    return activity
+    return or_404(activity, "活動不存在")
 
 
 async def _require_activity_resource_manager(

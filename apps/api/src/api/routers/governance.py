@@ -23,6 +23,7 @@ from api.models.governance import (
 )
 from api.models.regulation import RegulationCategory
 from api.models.user import User
+from api.routers._common import or_404
 from api.schemas.governance import (
     AutomationRuleCreate,
     AutomationRuleOut,
@@ -99,23 +100,21 @@ GovernanceManagerDep = Depends(
 
 async def _matter_or_404(db: AsyncSession, matter_id: uuid.UUID) -> Matter:
     matter = await governance_svc.get_matter(db, matter_id)
-    if matter is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="事情不存在")
-    return matter
+    return or_404(matter, "事情不存在")
 
 
 async def _program_or_404(db: AsyncSession, program_id: uuid.UUID) -> Program:
     program = await governance_svc.get_program(db, program_id)
-    if program is None or not program.is_active:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="專案不存在")
-    return program
+    if program is not None and not program.is_active:
+        program = None
+    return or_404(program, "專案不存在")
 
 
 async def _case_or_404(db: AsyncSession, case_id: uuid.UUID) -> GovernanceCase:
     case = await governance_svc.get_case(db, case_id)
-    if case is None or not case.is_active:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="案件不存在")
-    return case
+    if case is not None and not case.is_active:
+        case = None
+    return or_404(case, "案件不存在")
 
 
 @router.get("/dashboard", response_model=GovernanceDashboardOut, summary="治理工作台")
@@ -629,9 +628,7 @@ async def create_matter_resource(
     user: CurrentUser,
 ) -> MatterResourceOut:
     matter = await _matter_or_404(db, matter_id)
-    resource = await governance_svc.create_matter_resource(
-        db, matter=matter, data=body, user=user
-    )
+    resource = await governance_svc.create_matter_resource(db, matter=matter, data=body, user=user)
     return MatterResourceOut.model_validate(resource)
 
 
@@ -973,9 +970,9 @@ async def _planning_attachment_or_404(
     db: AsyncSession, document_id: uuid.UUID, attachment_id: uuid.UUID
 ) -> PlanningDocumentAttachment:
     attachment = await governance_svc.get_planning_attachment(db, attachment_id)
-    if attachment is None or attachment.document_id != document_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="附件不存在")
-    return attachment
+    if attachment is not None and attachment.document_id != document_id:
+        attachment = None
+    return or_404(attachment, "附件不存在")
 
 
 @router.get(

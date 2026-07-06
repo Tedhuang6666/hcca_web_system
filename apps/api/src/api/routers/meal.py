@@ -19,6 +19,7 @@ from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_permission
 from api.models.meal import MealOrder, MealVendor, MenuItem, MenuSchedule
 from api.models.user import User
+from api.routers._common import or_404
 from api.schemas.meal import (
     ItemStatOut,
     MealAvailabilityCreate,
@@ -86,9 +87,7 @@ async def _get_user_org_ids(session: AsyncSession, user_id: uuid.UUID) -> set[uu
 
 async def _vendor_or_404(vendor_id: uuid.UUID, session: DbDep) -> MealVendor:
     v = await meal_svc.get_vendor(session, vendor_id)
-    if v is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此商家")
-    return v
+    return or_404(v, "找不到此商家")
 
 
 async def _require_vendor_manager(session: AsyncSession, vendor_id: uuid.UUID, user: User) -> None:
@@ -106,23 +105,17 @@ async def _require_vendor_manager(session: AsyncSession, vendor_id: uuid.UUID, u
 
 async def _schedule_or_404(schedule_id: uuid.UUID, session: DbDep) -> MenuSchedule:
     s = await meal_svc.get_schedule(session, schedule_id)
-    if s is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此菜單排程")
-    return s
+    return or_404(s, "找不到此菜單排程")
 
 
 async def _item_or_404(item_id: uuid.UUID, session: DbDep) -> MenuItem:
     i = await meal_svc.get_menu_item(session, item_id)
-    if i is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此菜單品項")
-    return i
+    return or_404(i, "找不到此菜單品項")
 
 
 async def _order_or_404(order_id: uuid.UUID, session: DbDep) -> MealOrder:
     o = await meal_svc.get_meal_order(session, order_id)
-    if o is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此學餐訂單")
-    return o
+    return or_404(o, "找不到此學餐訂單")
 
 
 # ══════════════════════════════════════════════════════════════════════════════

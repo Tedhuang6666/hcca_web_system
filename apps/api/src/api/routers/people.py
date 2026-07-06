@@ -13,6 +13,7 @@ from api.core.permission_codes import PermissionCode
 from api.dependencies.permissions import require_any, require_permission
 from api.models.person import Person, PersonAffiliation, PersonStatus
 from api.models.user import User
+from api.routers._common import or_404
 from api.schemas.person import (
     PersonAffiliationCreate,
     PersonAffiliationOut,
@@ -47,16 +48,12 @@ AdminUser = Annotated[User, Depends(require_permission(PermissionCode.ADMIN_ALL)
 
 async def _get_person_or_404(db: AsyncSession, person_id: uuid.UUID) -> Person:
     person = await person_svc.get_person(db, person_id)
-    if person is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到人員主檔")
-    return person
+    return or_404(person, "找不到人員主檔")
 
 
 async def _get_affiliation_or_404(db: AsyncSession, affiliation_id: uuid.UUID) -> PersonAffiliation:
     affiliation = await db.get(PersonAffiliation, affiliation_id)
-    if affiliation is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到身分紀錄")
-    return affiliation
+    return or_404(affiliation, "找不到身分紀錄")
 
 
 @router.get("", response_model=list[PersonListItem], summary="搜尋人員主檔")

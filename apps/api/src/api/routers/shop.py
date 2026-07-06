@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime
 from typing import Annotated
@@ -27,6 +28,7 @@ from api.models.shop import (
     ProductVariantOption,
 )
 from api.models.user import User
+from api.routers._common import or_404
 from api.schemas.shop import (
     CartItemCreate,
     CartItemUpdate,
@@ -68,6 +70,8 @@ from api.services import shop as shop_svc
 from api.services.permission import get_user_permission_codes
 from api.services.storage import get_storage
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/shop", tags=["商品訂購"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
@@ -87,48 +91,36 @@ _ADMIN_VIEW_CODES = {
 
 async def _get_category_or_404(category_id: uuid.UUID, session: AsyncSession) -> ProductCategory:
     obj = await shop_svc.get_category(session, category_id)
-    if obj is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此主題")
-    return obj
+    return or_404(obj, "找不到此主題")
 
 
 async def _get_series_or_404(series_id: uuid.UUID, session: AsyncSession) -> ProductSeries:
     obj = await shop_svc.get_series(session, series_id)
-    if obj is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此系列")
-    return obj
+    return or_404(obj, "找不到此系列")
 
 
 async def _get_product_or_404(product_id: uuid.UUID, session: AsyncSession) -> Product:
     p = await shop_svc.get_product(session, product_id)
-    if p is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此商品")
-    return p
+    return or_404(p, "找不到此商品")
 
 
 async def _get_variant_group_or_404(
     group_id: uuid.UUID, session: AsyncSession
 ) -> ProductVariantGroup:
     g = await shop_svc.get_variant_group(session, group_id)
-    if g is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此變體群組")
-    return g
+    return or_404(g, "找不到此變體群組")
 
 
 async def _get_variant_option_or_404(
     option_id: uuid.UUID, session: AsyncSession
 ) -> ProductVariantOption:
     o = await shop_svc.get_variant_option(session, option_id)
-    if o is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此變體選項")
-    return o
+    return or_404(o, "找不到此變體選項")
 
 
 async def _get_order_or_404(order_id: uuid.UUID, session: AsyncSession) -> Order:
     o = await shop_svc.get_order(session, order_id)
-    if o is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此訂單")
-    return o
+    return or_404(o, "找不到此訂單")
 
 
 async def _has_shop_manage(session: AsyncSession, user: User) -> bool:
@@ -854,7 +846,10 @@ async def cancel_order(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權取消此訂單")
     try:
         order = await shop_svc.cancel_order(
-            session, order, requested_by=current_user.id, reason=payload.reason,
+            session,
+            order,
+            requested_by=current_user.id,
+            reason=payload.reason,
             bypass_owner_check=bypass,
         )
     except PermissionError as e:

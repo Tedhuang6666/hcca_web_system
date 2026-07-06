@@ -25,6 +25,7 @@ from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_permission
 from api.models.exam_paper import ExamGradeTrack, ExamPaper, ExamPaperDownload
 from api.models.user import User
+from api.routers._common import or_404
 from api.schemas.exam_paper import (
     ExamPaperDownloadOut,
     ExamPaperListItem,
@@ -44,9 +45,7 @@ CurrentUser = Annotated[User, Depends(get_current_active_user)]
 
 async def _paper_or_404(session: AsyncSession, paper_id: uuid.UUID) -> ExamPaper:
     paper = await exam_svc.get_paper(session, paper_id)
-    if paper is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此段考題")
-    return paper
+    return or_404(paper, "找不到此段考題")
 
 
 async def _assert_school_or_download(session: AsyncSession, user: User) -> None:

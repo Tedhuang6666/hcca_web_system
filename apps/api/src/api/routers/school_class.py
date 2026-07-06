@@ -15,6 +15,7 @@ from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_permission
 from api.models.school_class import SchoolClass
 from api.models.user import User
+from api.routers._common import or_404
 from api.schemas.school_class import (
     ClassCadreCreate,
     ClassCadreOut,
@@ -47,9 +48,7 @@ ManagerUser = Annotated[User, Depends(require_permission(PermissionCode.CLASS_MA
 
 async def _get_class_or_404(class_id: uuid.UUID, session: AsyncSession) -> SchoolClass:
     sc = await class_svc.get_class(session, class_id)
-    if sc is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此班級")
-    return sc
+    return or_404(sc, "找不到此班級")
 
 
 # ── 班級 ──────────────────────────────────────────────────────────────────────
