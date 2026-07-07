@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, EmailStr, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +17,6 @@ from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_any, require_permission
-from api.services.permission import get_user_org_ids_with_permission
 from api.models.loan import (
     LoanItemCategory,
     LoanRecord,
@@ -26,6 +25,7 @@ from api.models.loan import (
     LoanUnitStatus,
 )
 from api.models.user import User
+from api.services.permission import get_user_org_ids_with_permission
 
 router = APIRouter(prefix="/loans", tags=["物品借用"])
 
@@ -183,10 +183,24 @@ def _record_out(record: LoanRecord) -> LoanRecordOut:
     )
 
 
-async def _item_with_counts(db: AsyncSession, item: LoanItemCategory) -> LoanItemOut:
-    total = await db.scalar(
-        select(func.count()).where(LoanUnit.item_id == item.id)
+_RECORD_OPTS = [
+    selectinload(LoanRecord.unit).selectinload(LoanUnit.item),
+    selectinload(LoanRecord.handled_by),
+]
+
+
+async def _reload_record(db: AsyncSession, record_id: uuid.UUID) -> LoanRecord:
+    """以顯式 select 重新查詢，避免 db.get(..., options=...) 在 identity map 已有
+    該物件時略過預載入選項，導致 _record_out() 存取關聯欄位時 lazy load 崩潰。
+    """
+    result = await db.execute(
+        select(LoanRecord).where(LoanRecord.id == record_id).options(*_RECORD_OPTS)
     )
+    return result.scalar_one()
+
+
+async def _item_with_counts(db: AsyncSession, item: LoanItemCategory) -> LoanItemOut:
+    total = await db.scalar(select(func.count()).where(LoanUnit.item_id == item.id))
     available = await db.scalar(
         select(func.count()).where(
             LoanUnit.item_id == item.id,
@@ -213,7 +227,13 @@ async def _item_with_counts(db: AsyncSession, item: LoanItemCategory) -> LoanIte
 @router.get("/items", response_model=list[LoanItemOut])
 async def list_items(db: DbDep, _: CheckoutUser) -> list[LoanItemOut]:
     rows = (
-        (await db.execute(select(LoanItemCategory).where(LoanItemCategory.is_active == True).order_by(LoanItemCategory.created_at)))  # noqa: E712
+        (
+            await db.execute(
+                select(LoanItemCategory)
+                .where(LoanItemCategory.is_active == True)
+                .order_by(LoanItemCategory.created_at)
+            )
+        )  # noqa: E712
         .scalars()
         .all()
     )
@@ -246,7 +266,9 @@ async def create_item(body: LoanItemCreate, db: DbDep, current_user: ManagerUser
 
 
 @router.patch("/items/{item_id}", response_model=LoanItemOut)
-async def update_item(item_id: uuid.UUID, body: LoanItemUpdate, db: DbDep, _: ManagerUser) -> LoanItemOut:
+async def update_item(
+    item_id: uuid.UUID, body: LoanItemUpdate, db: DbDep, _: ManagerUser
+) -> LoanItemOut:
     item = await db.get(LoanItemCategory, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="物品類型不存在")
@@ -279,9 +301,7 @@ async def list_units(item_id: uuid.UUID, db: DbDep, _: CheckoutUser) -> list[Loa
     rows = (
         (
             await db.execute(
-                select(LoanUnit)
-                .where(LoanUnit.item_id == item_id)
-                .order_by(LoanUnit.unit_code)
+                select(LoanUnit).where(LoanUnit.item_id == item_id).order_by(LoanUnit.unit_code)
             )
         )
         .scalars()
@@ -291,7 +311,9 @@ async def list_units(item_id: uuid.UUID, db: DbDep, _: CheckoutUser) -> list[Loa
 
 
 @router.post("/items/{item_id}/units", response_model=list[LoanUnitOut], status_code=201)
-async def add_units(item_id: uuid.UUID, body: LoanUnitCreate, db: DbDep, _: ManagerUser) -> list[LoanUnitOut]:
+async def add_units(
+    item_id: uuid.UUID, body: LoanUnitCreate, db: DbDep, _: ManagerUser
+) -> list[LoanUnitOut]:
     item = await db.get(LoanItemCategory, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="物品類型不存在")
@@ -311,10 +333,7 @@ async def add_units(item_id: uuid.UUID, body: LoanUnitCreate, db: DbDep, _: Mana
     if existing:
         raise HTTPException(status_code=409, detail=f"以下編號已存在：{', '.join(existing)}")
 
-    units = [
-        LoanUnit(id=uuid.uuid4(), item_id=item_id, unit_code=code)
-        for code in body.unit_codes
-    ]
+    units = [LoanUnit(id=uuid.uuid4(), item_id=item_id, unit_code=code) for code in body.unit_codes]
     db.add_all(units)
     await db.commit()
     for u in units:
@@ -323,13 +342,17 @@ async def add_units(item_id: uuid.UUID, body: LoanUnitCreate, db: DbDep, _: Mana
 
 
 @router.patch("/units/{unit_id}", response_model=LoanUnitOut)
-async def update_unit(unit_id: uuid.UUID, body: LoanUnitUpdate, db: DbDep, _: ManagerUser) -> LoanUnitOut:
+async def update_unit(
+    unit_id: uuid.UUID, body: LoanUnitUpdate, db: DbDep, _: ManagerUser
+) -> LoanUnitOut:
     unit = await db.get(LoanUnit, unit_id)
     if not unit:
         raise HTTPException(status_code=404, detail="個體不存在")
     if body.status is not None:
         if body.status == LoanUnitStatus.AVAILABLE and unit.status == LoanUnitStatus.BORROWED:
-            raise HTTPException(status_code=400, detail="借用中的個體無法直接設為可用，請先辦理歸還")
+            raise HTTPException(
+                status_code=400, detail="借用中的個體無法直接設為可用，請先辦理歸還"
+            )
         unit.status = body.status
     if body.notes is not None:
         unit.notes = body.notes
@@ -359,12 +382,15 @@ async def available_items(db: DbDep, _: CheckoutUser) -> list[LoanAvailableItem]
     result = []
     for item in rows:
         total = await db.scalar(select(func.count()).where(LoanUnit.item_id == item.id)) or 0
-        available = await db.scalar(
-            select(func.count()).where(
-                LoanUnit.item_id == item.id,
-                LoanUnit.status == LoanUnitStatus.AVAILABLE,
+        available = (
+            await db.scalar(
+                select(func.count()).where(
+                    LoanUnit.item_id == item.id,
+                    LoanUnit.status == LoanUnitStatus.AVAILABLE,
+                )
             )
-        ) or 0
+            or 0
+        )
         result.append(
             LoanAvailableItem(
                 id=item.id,
@@ -380,10 +406,10 @@ async def available_items(db: DbDep, _: CheckoutUser) -> list[LoanAvailableItem]
 
 
 @router.post("/checkout", response_model=LoanRecordOut, status_code=201)
-async def checkout(body: LoanCheckoutCreate, db: DbDep, current_user: CheckoutUser) -> LoanRecordOut:
-    unit = await db.get(
-        LoanUnit, body.unit_id, options=[selectinload(LoanUnit.item)]
-    )
+async def checkout(
+    body: LoanCheckoutCreate, db: DbDep, current_user: CheckoutUser
+) -> LoanRecordOut:
+    unit = await db.get(LoanUnit, body.unit_id, options=[selectinload(LoanUnit.item)])
     if not unit:
         raise HTTPException(status_code=404, detail="個體不存在")
     if unit.status != LoanUnitStatus.AVAILABLE:
@@ -408,16 +434,7 @@ async def checkout(body: LoanCheckoutCreate, db: DbDep, current_user: CheckoutUs
     unit.status = LoanUnitStatus.BORROWED
     db.add(record)
     await db.commit()
-    await db.refresh(record)
-
-    record = await db.get(
-        LoanRecord,
-        record.id,
-        options=[
-            selectinload(LoanRecord.unit).selectinload(LoanUnit.item),
-            selectinload(LoanRecord.handled_by),
-        ],
-    )
+    record = await _reload_record(db, record.id)
     return _record_out(record)
 
 
@@ -445,15 +462,7 @@ async def return_item(record_id: uuid.UUID, db: DbDep, current_user: CheckoutUse
         unit.status = LoanUnitStatus.AVAILABLE
 
     await db.commit()
-    await db.refresh(record)
-    record = await db.get(
-        LoanRecord,
-        record.id,
-        options=[
-            selectinload(LoanRecord.unit).selectinload(LoanUnit.item),
-            selectinload(LoanRecord.handled_by),
-        ],
-    )
+    record = await _reload_record(db, record.id)
     return _record_out(record)
 
 
@@ -489,7 +498,9 @@ async def list_records(
 
 
 @router.patch("/records/{record_id}", response_model=LoanRecordOut)
-async def update_record(record_id: uuid.UUID, body: LoanRecordUpdate, db: DbDep, _: CheckoutUser) -> LoanRecordOut:
+async def update_record(
+    record_id: uuid.UUID, body: LoanRecordUpdate, db: DbDep, _: CheckoutUser
+) -> LoanRecordOut:
     record = await db.get(
         LoanRecord,
         record_id,
@@ -507,15 +518,7 @@ async def update_record(record_id: uuid.UUID, body: LoanRecordUpdate, db: DbDep,
     if body.status is not None:
         record.status = body.status
     await db.commit()
-    await db.refresh(record)
-    record = await db.get(
-        LoanRecord,
-        record.id,
-        options=[
-            selectinload(LoanRecord.unit).selectinload(LoanUnit.item),
-            selectinload(LoanRecord.handled_by),
-        ],
-    )
+    record = await _reload_record(db, record.id)
     return _record_out(record)
 
 
@@ -527,24 +530,33 @@ async def dashboard(db: DbDep, _: CheckoutUser) -> LoanDashboard:
     now = now_local()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
-    active = await db.scalar(
-        select(func.count()).where(LoanRecord.status == LoanRecordStatus.ACTIVE)
-    ) or 0
-    overdue = await db.scalar(
-        select(func.count()).where(LoanRecord.status == LoanRecordStatus.OVERDUE)
-    ) or 0
-    returned_today = await db.scalar(
-        select(func.count()).where(
-            LoanRecord.status == LoanRecordStatus.RETURNED,
-            LoanRecord.returned_at >= today_start,
+    active = (
+        await db.scalar(select(func.count()).where(LoanRecord.status == LoanRecordStatus.ACTIVE))
+        or 0
+    )
+    overdue = (
+        await db.scalar(select(func.count()).where(LoanRecord.status == LoanRecordStatus.OVERDUE))
+        or 0
+    )
+    returned_today = (
+        await db.scalar(
+            select(func.count()).where(
+                LoanRecord.status == LoanRecordStatus.RETURNED,
+                LoanRecord.returned_at >= today_start,
+            )
         )
-    ) or 0
-    total_items = await db.scalar(
-        select(func.count()).where(LoanItemCategory.is_active == True)  # noqa: E712
-    ) or 0
-    available_units = await db.scalar(
-        select(func.count()).where(LoanUnit.status == LoanUnitStatus.AVAILABLE)
-    ) or 0
+        or 0
+    )
+    total_items = (
+        await db.scalar(
+            select(func.count()).where(LoanItemCategory.is_active == True)  # noqa: E712
+        )
+        or 0
+    )
+    available_units = (
+        await db.scalar(select(func.count()).where(LoanUnit.status == LoanUnitStatus.AVAILABLE))
+        or 0
+    )
 
     return LoanDashboard(
         active_count=active,
