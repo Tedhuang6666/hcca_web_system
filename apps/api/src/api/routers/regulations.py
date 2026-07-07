@@ -1679,7 +1679,11 @@ async def president_publish(
             amended_at=now,
             amended_by=current_user.id,
         )
-        session.add(rev)
+        # 用 reg.revisions.append 而非只 session.add：reg 在本次請求內已透過
+        # _get_reg_or_404 selectinload 過 revisions，僅 session.add 不會反向同步
+        # 這個已載入的 in-memory collection，會讓本次回應的 RegulationOut.revisions
+        # 看不到剛建立的公布快照。
+        reg.revisions.append(rev)
 
         # 4. 查詢主席公布專用字號模板；若前端指定模板，優先使用指定模板。
         tmpl_result = await session.execute(

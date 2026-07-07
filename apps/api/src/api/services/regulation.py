@@ -399,6 +399,16 @@ async def create_regulation(
     )
     session.add(reg)
     await session.flush()
+    # reg 剛建立、必然沒有任何條文；用 set_committed_value 直接標記該 collection
+    # 為「已載入＝空」，避免 _structure_text_content_if_possible 內讀取 reg.articles
+    # 對這個「persistent 但從未查詢過」的物件觸發 lazy load——AsyncSession 下的隱式
+    # lazy load 發生在目前這種非 select() 觸發的呼叫堆疊會直接丟出
+    # sqlalchemy.exc.MissingGreenlet，導致「新增法規時帶入非空 content」一律 500
+    # （只有 content 為空字串才會提早 return 而避開此路徑）。用一般屬性賦值
+    # （reg.articles = []）不能解決，因為 SQLAlchemy 在寫入前仍會先讀取舊值。
+    from sqlalchemy.orm.attributes import set_committed_value
+
+    set_committed_value(reg, "articles", [])
     await _structure_text_content_if_possible(session, reg, content=data.content)
     logger.info("法規建立 id=%s title=%s", reg.id, reg.title)
     # 重新查詢以載入所有關聯（避免 async 環境下的 MissingGreenlet）
@@ -496,7 +506,10 @@ async def publish_imported_regulation(
             zip(events, amended_dates, strict=True), start=1
         ):
             is_latest = version == total
-            session.add(
+            # reg.revisions.append 而非只 session.add：reg 傳入時通常已被呼叫端
+            # selectinload 過 revisions，只 session.add 不會反向同步這個已載入的
+            # in-memory collection，回傳物件的 revisions 會看不到剛建立的沿革快照。
+            reg.revisions.append(
                 RegulationRevision(
                     regulation_id=reg.id,
                     version=version,
@@ -513,7 +526,7 @@ async def publish_imported_regulation(
         reg.version = total
     else:
         reg.version = 1
-        session.add(
+        reg.revisions.append(
             RegulationRevision(
                 regulation_id=reg.id,
                 version=1,
@@ -667,7 +680,16 @@ async def update_regulation(
 
     if changed:
         if "content" in data.model_fields_set and data.content is not None:
-            await _structure_text_content_if_possible(session, reg, content=data.content)
+            structured = await _structure_text_content_if_possible(
+                session, reg, content=data.content
+            )
+            if structured:
+                # 新結構化條文尚未 flush 時 lineage_id/created_at 等仍為 None，
+                # 若在此之後建立修訂快照（下方 _article_snapshot_json 會用
+                # RegulationArticleOut.model_validate 驗證每筆條文），會因缺值直接
+                # 拋出 pydantic ValidationError（其為 ValueError 子類，被 router 誤判為
+                # 409 業務衝突）。此處先 flush 讓條文取得 DB 端/預設值再建快照。
+                await session.flush()
         reg.version += 1
         # 若有提供 change_brief，建立修訂快照記錄
         if data.change_brief:
@@ -682,7 +704,10 @@ async def update_regulation(
                 amended_at=datetime.now(UTC),
                 amended_by=updated_by,
             )
-            session.add(rev)
+            # 用 reg.revisions.append 而非只 session.add：後者不會反向同步
+            # reg.revisions 這個已載入的 in-memory collection，導致本次回應的
+            # RegulationOut.revisions 看不到剛建立的修訂快照（需等下次重新查詢才會出現）。
+            reg.revisions.append(rev)
 
     await session.flush()
     return reg
@@ -715,7 +740,11 @@ async def structure_regulation_content(
     if content is not None:
         reg.content = content
 
-    await _add_imported_articles(session, reg_id=reg.id, data=parsed)
+    new_articles = await _add_imported_articles(session, reg_id=reg.id, data=parsed)
+    # reg 在這個請求內通常已被 _get_reg_or_404 載入過一次（articles 已 selectinload）；
+    # 之後對同一個 identity-map 物件重新查詢並不會刷新已載入的 collection，必須手動
+    # extend，否則回應的 RegulationOut.articles 看不到剛結構化出來的條文。
+    reg.articles.extend(new_articles)
     await session.flush()
     loaded = await get_regulation(session, reg.id)
     return loaded or reg

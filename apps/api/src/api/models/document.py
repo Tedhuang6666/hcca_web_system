@@ -504,15 +504,18 @@ class Document(Base, TimestampMixin):
         "DocumentRevision",
         back_populates="document",
         order_by="DocumentRevision.revision_number",
+        cascade="all, delete-orphan",
     )
     approvals: Mapped[list[DocumentApproval]] = relationship(
         "DocumentApproval",
         back_populates="document",
         order_by="DocumentApproval.step_order",
+        cascade="all, delete-orphan",
     )
     attachments: Mapped[list[DocumentAttachment]] = relationship(
         "DocumentAttachment",
         back_populates="document",
+        cascade="all, delete-orphan",
     )
     recipients: Mapped[list[DocumentRecipient]] = relationship(
         "DocumentRecipient",
@@ -626,7 +629,10 @@ class DocumentApprovalDelegation(Base, TimestampMixin):
     __table_args__ = (
         Index(
             "ix_doc_approval_delegation_lookup",
-            "principal_user_id", "org_id", "is_active", "start_at",
+            "principal_user_id",
+            "org_id",
+            "is_active",
+            "start_at",
         ),
     )
 

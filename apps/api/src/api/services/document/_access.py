@@ -461,7 +461,11 @@ async def list_documents(
         q = q.join(DocumentRecipient, DocumentRecipient.document_id == Document.id).where(
             DocumentRecipient.name.ilike(pattern)
         )
-        q = q.distinct(Document.id)
+        # 注意：不可用 .distinct(Document.id)（PostgreSQL DISTINCT ON 要求其欄位須為
+        # ORDER BY 的前綴，而下方一律以 created_at 排序，兩者不符會直接 500）；
+        # 這裡改用一般 SELECT DISTINCT，因為 select() 只選 Document 欄位，
+        # id 已是主鍵，效果等價於「每份公文只出現一次」。
+        q = q.distinct()
     if keyword:
         pattern = like_contains(keyword)
         q = q.where(

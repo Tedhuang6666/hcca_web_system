@@ -551,6 +551,13 @@ async def record_acclamation(
         opened_at=datetime.now(UTC),
         closed_at=datetime.now(UTC),
     )
+    # 無異議通過本就不會有逐人票；在 flush（transient→persistent）前先把
+    # ballots 快取成空集合。SQLAlchemy 只有在物件仍是 transient/pending 時，
+    # 存取尚未賦值的 collection 關聯才會直接回傳空集合且不觸發查詢；一旦
+    # flush 完成物件轉為 persistent，日後任何存取都會嘗試 lazy load，而
+    # async session 下的隱式 lazy load 會直接以 MissingGreenlet 炸掉（router
+    # 的 decorate_vote() 一定會讀 vote.ballots，因為 visibility=NAMED）。
+    vote.ballots = []
     session.add(vote)
     await session.flush()
     await _write_back_resolution(session, vote)
@@ -698,7 +705,10 @@ async def attendance_summary(session: AsyncSession, meeting_id: uuid.UUID) -> di
         .where(MeetingAttendance.meeting_id == meeting_id)
         .group_by(MeetingAttendance.status)
     )
-    summary = {status.value: int(count) for status, count in result.all()}
+    # MeetingAttendance.status 欄位是 String(20)（非 SQLAlchemy Enum），Core 層級
+    # select() 直接回傳的是原始字串而非 AttendanceStatus 實例，呼叫 .value 會
+    # AttributeError；str() 對兩種情況皆安全（StrEnum 的 str() 即其值本身）。
+    summary = {str(status): int(count) for status, count in result.all()}
     present_voters = await session.scalar(
         select(func.count()).where(
             MeetingAttendance.meeting_id == meeting_id,

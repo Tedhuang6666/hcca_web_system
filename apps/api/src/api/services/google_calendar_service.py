@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from sqlalchemy import select
@@ -30,7 +30,6 @@ logger = logging.getLogger(__name__)
 
 _CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar"
 _TOKEN_URI = "https://oauth2.googleapis.com/token"
-_TAIPEI_TZ = timezone(datetime.now(UTC).astimezone(timezone(datetime.fromtimestamp(0, tz=UTC).astimezone().tzinfo)).utcoffset() or UTC)
 
 
 class GoogleCalendarAuthError(Exception):
@@ -85,7 +84,9 @@ async def get_valid_credentials(session: AsyncSession, config: OrgGoogleCalendar
     if creds.token != config.access_token:
         config.access_token = creds.token
         if creds.expiry:
-            config.token_expiry = creds.expiry.replace(tzinfo=UTC) if creds.expiry.tzinfo is None else creds.expiry
+            config.token_expiry = (
+                creds.expiry.replace(tzinfo=UTC) if creds.expiry.tzinfo is None else creds.expiry
+            )
         await session.flush()
     return creds
 
@@ -113,12 +114,8 @@ def hcca_event_to_google(event: CalendarEvent) -> dict:
         body["location"] = event.location
 
     if event.all_day:
-        start_date = event.starts_at.astimezone(timezone.utc).date()
-        end_date = (
-            event.ends_at.astimezone(timezone.utc).date()
-            if event.ends_at
-            else start_date
-        )
+        start_date = event.starts_at.astimezone(UTC).date()
+        end_date = event.ends_at.astimezone(UTC).date() if event.ends_at else start_date
         body["start"] = {"date": start_date.isoformat()}
         body["end"] = {"date": end_date.isoformat()}
     else:
@@ -184,13 +181,13 @@ async def push_event_to_google(
         body = hcca_event_to_google(event)
 
         if operation == "update" and event.google_event_id:
-            result = service.events().patch(
-                calendarId=calendar_id, eventId=event.google_event_id, body=body
-            ).execute()
+            result = (
+                service.events()
+                .patch(calendarId=calendar_id, eventId=event.google_event_id, body=body)
+                .execute()
+            )
         else:
-            result = service.events().insert(
-                calendarId=calendar_id, body=body
-            ).execute()
+            result = service.events().insert(calendarId=calendar_id, body=body).execute()
 
         google_event_id: str = result["id"]
         event.google_event_id = google_event_id
@@ -215,9 +212,6 @@ async def pull_from_google(
         {"created": n, "updated": n, "deleted": n, "errors": n}
     """
     from googleapiclient.errors import HttpError
-
-    from api.models.calendar import CalendarEventStatus, CalendarEventType, CalendarVisibility
-    from api.services.coordination import _upsert_projection
 
     stats = {"created": 0, "updated": 0, "deleted": 0, "errors": 0}
 
@@ -348,7 +342,9 @@ async def _process_google_event(
         starts_at = datetime(start_date.year, start_date.month, start_date.day, tzinfo=UTC)
         if "date" in end_info:
             end_date = date.fromisoformat(end_info["date"])
-            ends_at: datetime | None = datetime(end_date.year, end_date.month, end_date.day, tzinfo=UTC)
+            ends_at: datetime | None = datetime(
+                end_date.year, end_date.month, end_date.day, tzinfo=UTC
+            )
         else:
             ends_at = None
     else:
@@ -369,7 +365,7 @@ async def _process_google_event(
 
     title = (item.get("summary") or "（無標題）")[:200]
     description = item.get("description") or None
-    location = (item.get("location") or None)
+    location = item.get("location") or None
     href = item.get("htmlLink") or None
 
     was_existing = await _projection_exists(session, config, google_event_id)
@@ -383,7 +379,7 @@ async def _process_google_event(
         starts_at=starts_at,
         ends_at=ends_at,
         created_by=created_by_id,
-        href=href or f"https://calendar.google.com/calendar/r",
+        href=href or "https://calendar.google.com/calendar/r",
         event_type=CalendarEventType.OTHER,
         status=CalendarEventStatus.CONFIRMED,
         visibility=CalendarVisibility.ORG,
@@ -414,9 +410,7 @@ async def _projection_exists(
     return existing is not None
 
 
-async def _clear_google_projections(
-    session: AsyncSession, config: OrgGoogleCalendarConfig
-) -> None:
+async def _clear_google_projections(session: AsyncSession, config: OrgGoogleCalendarConfig) -> None:
     """Full resync 前清除此 org 所有 Google Calendar 投影事件（軟刪除）。"""
     from sqlalchemy import update
 

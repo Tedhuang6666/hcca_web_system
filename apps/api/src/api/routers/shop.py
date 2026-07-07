@@ -812,6 +812,48 @@ async def order_summary(
     )
 
 
+# ── 商品規格數量彙總（班聯採購視圖）──────────────────────────────────────────────
+# 注意：必須註冊在 /orders/{order_id} 之前，否則 Starlette 依註冊順序比對路由，
+# GET /orders/quantities 會先被 {order_id} 這條路由攔截（"quantities" 不是合法
+# UUID，導致 422 而非真正命中此端點）。
+
+
+@router.get(
+    "/orders/quantities",
+    response_model=list[OrderQuantityRow],
+    summary="商品規格訂購數量彙總（採購用）",
+    dependencies=[
+        Depends(
+            require_any(
+                PermissionCode.SHOP_MANAGE,
+                PermissionCode.SHOP_MANAGE_ORDERS,
+                PermissionCode.SHOP_VIEW_ALL,
+                PermissionCode.ADMIN_ALL,
+            )
+        )
+    ],
+)
+async def order_quantities(
+    session: DbDep,
+    _: CurrentUser,
+    grade: int | None = Query(None),
+    class_id: uuid.UUID | None = Query(None),
+    category_id: uuid.UUID | None = Query(None),
+    product_id: uuid.UUID | None = Query(None),
+    is_paid: bool | None = Query(None),
+    status_filter: OrderStatus | None = Query(None, alias="status"),
+) -> list[OrderQuantityRow]:
+    return await shop_svc.order_quantities(
+        session,
+        grade=grade,
+        class_id=class_id,
+        category_id=category_id,
+        product_id=product_id,
+        is_paid=is_paid,
+        status=status_filter,
+    )
+
+
 @router.get("/orders/{order_id}", response_model=OrderOut, summary="取得訂單詳情")
 async def get_order(order_id: uuid.UUID, session: DbDep, current_user: CurrentUser) -> OrderOut:
     order = await _get_order_or_404(order_id, session)
@@ -1106,7 +1148,6 @@ async def get_close_status(
     category_ids: list[uuid.UUID] = Query(..., description="要查詢的分類 ID 列表"),
     class_id: uuid.UUID | None = Query(None, description="指定班級（不填則用登入者的班）"),
 ) -> CloseStatusOut:
-    from api.models.school_class import SchoolClass
     from api.services import school_class as class_svc_inner
 
     if class_id is None:
@@ -1128,42 +1169,3 @@ async def get_close_status(
                 "closed_by_name": closed_by_name,
             }
     return CloseStatusOut(statuses=statuses)
-
-
-# ── 商品規格數量彙總（班聯採購視圖）──────────────────────────────────────────────
-
-
-@router.get(
-    "/orders/quantities",
-    response_model=list[OrderQuantityRow],
-    summary="商品規格訂購數量彙總（採購用）",
-    dependencies=[
-        Depends(
-            require_any(
-                PermissionCode.SHOP_MANAGE,
-                PermissionCode.SHOP_MANAGE_ORDERS,
-                PermissionCode.SHOP_VIEW_ALL,
-                PermissionCode.ADMIN_ALL,
-            )
-        )
-    ],
-)
-async def order_quantities(
-    session: DbDep,
-    _: CurrentUser,
-    grade: int | None = Query(None),
-    class_id: uuid.UUID | None = Query(None),
-    category_id: uuid.UUID | None = Query(None),
-    product_id: uuid.UUID | None = Query(None),
-    is_paid: bool | None = Query(None),
-    status_filter: OrderStatus | None = Query(None, alias="status"),
-) -> list[OrderQuantityRow]:
-    return await shop_svc.order_quantities(
-        session,
-        grade=grade,
-        class_id=class_id,
-        category_id=category_id,
-        product_id=product_id,
-        is_paid=is_paid,
-        status=status_filter,
-    )
