@@ -71,7 +71,7 @@ async def _r_pending_documents_top(session: AsyncSession) -> list[dict[str, Any]
             Document.created_at,
             Document.created_by,
         )
-        .where(Document.status.in_([DocumentStatus.UNDER_REVIEW, DocumentStatus.DRAFT]))
+        .where(Document.status.in_([DocumentStatus.PENDING, DocumentStatus.DRAFT]))
         .order_by(Document.created_at.asc())
         .limit(20)
     )

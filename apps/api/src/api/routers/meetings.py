@@ -692,11 +692,14 @@ async def reorder_agenda_items(
 ) -> list[MeetingAgendaItem]:
     meeting = await _meeting_or_404(session, meeting_id)
     try:
-        await meeting_svc.reorder_agenda_items(session, meeting, ordered_ids=ordered_ids)
+        items = await meeting_svc.reorder_agenda_items(session, meeting, ordered_ids=ordered_ids)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     await _broadcast_meeting(session, meeting.id, "meeting.agenda_updated")
-    return (await _meeting_or_404(session, meeting.id)).agenda_items
+    # 直接回傳 service 已依 ordered_ids 排好的清單：meeting.agenda_items 這個 Python
+    # list 本身不會因為裡面物件的 order_index 屬性被改動而自動重新排序，若在此重查
+    # 只會拿回舊排序（且撞上與 create_vote 相同的 identity map 快取問題）。
+    return items
 
 
 @router.patch(
@@ -955,6 +958,12 @@ async def add_recusal(
         payload={"user_id": str(payload.user_id)},
     )
     await _broadcast_meeting(session, meeting.id, "meeting.agenda_updated")
+    # item.recusals 與 meeting.agenda_items 在本次請求最上方的 _meeting_or_404 已
+    # selectinload 過（新增前為空/舊值）；同 create_agenda_item 對 agenda_items 的
+    # 手法，兩層都須 expire，重查時巢狀 selectinload 才會真正重新查詢 recusals，
+    # 否則序列化會拿到新增前的舊集合。
+    session.expire(meeting, ["agenda_items"])
+    session.expire(item, ["recusals"])
     refreshed = await _meeting_or_404(session, meeting.id)
     return await _agenda_or_404(session, refreshed, agenda_item_id)
 
@@ -976,6 +985,9 @@ async def remove_recusal(
     item = await _agenda_or_404(session, meeting, agenda_item_id)
     await meeting_svc.remove_recusal(session, item, user_id=user_id)
     await _broadcast_meeting(session, meeting.id, "meeting.agenda_updated")
+    # 同上：迴避已刪除，須 expire 兩層集合才能讓重查反映最新（不含已刪除迴避）的狀態。
+    session.expire(meeting, ["agenda_items"])
+    session.expire(item, ["recusals"])
     refreshed = await _meeting_or_404(session, meeting.id)
     return await _agenda_or_404(session, refreshed, agenda_item_id)
 
@@ -1192,6 +1204,10 @@ async def create_vote(
         agenda_item_id=vote.agenda_item_id,
         payload={"vote_id": str(vote.id), "title": vote.title},
     )
+    # 新表決以 FK 建立，未進入已載入的 meeting.votes 集合；同 create_agenda_item 的
+    # 手法，須先 expire 該集合，重查時 selectinload 才會重新載入（否則 votes[-1] 撞
+    # 到上面 _meeting_or_404 已快取的舊（空）集合而 IndexError）。
+    session.expire(meeting, ["votes"])
     vote = (await _meeting_or_404(session, meeting_id)).votes[-1]
     await _broadcast_meeting(session, meeting.id, "meeting.vote_created")
     return await meeting_svc.decorate_vote(session, vote, include_ballots=True)
