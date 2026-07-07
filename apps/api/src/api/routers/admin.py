@@ -20,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.core.clock import local_today
 from api.core.config import settings
 from api.core.database import get_db
 from api.core.permission_codes import (
@@ -272,9 +273,7 @@ async def _enrich_users_batch(db: AsyncSession, users: list[User]) -> list[UserD
             emails_by_user[uid].add(email)
 
     # 並行取 permission codes（大多命中 Redis 快取，剩餘也只是 SELECT）
-    perm_results = await asyncio.gather(
-        *[get_user_permission_codes(db, u.id) for u in users]
-    )
+    perm_results = await asyncio.gather(*[get_user_permission_codes(db, u.id) for u in users])
 
     details: list[UserDetail] = []
     for user, effective in zip(users, perm_results, strict=False):
@@ -1095,3 +1094,113 @@ async def list_orgs_with_positions(db: DbDep, _: AdminUser) -> list[dict]:
         }
         for o in orgs
     ]
+
+
+# ── 殭屍權限稽核 ────────────────────────────────────────────────────────────
+
+
+class ZombieCredentialEntry(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    user_id: str
+    user_email: str
+    display_name: str
+    last_position_end_date: str | None
+    active_api_keys: int
+    active_webhooks: int
+    has_active_session: bool
+
+
+@router.get(
+    "/zombie-credentials",
+    response_model=list[ZombieCredentialEntry],
+    summary="殭屍權限稽核：列出任期已過但仍持有長效憑證的帳號",
+    dependencies=[Depends(require_permission(PermissionCode.ADMIN_ALL))],
+)
+async def list_zombie_credentials(db: DbDep, _: AdminUser) -> list[ZombieCredentialEntry]:
+    from datetime import UTC, datetime
+
+    from sqlalchemy import and_, func
+
+    from api.core.security import USER_TOKENS_PREFIX, redis_client
+    from api.models.api_key import ApiKey
+    from api.models.webhook import WebhookSubscription
+
+    today = local_today()
+    now_utc = datetime.now(UTC)
+
+    subq = (
+        select(
+            UserPosition.user_id,
+            func.max(UserPosition.end_date).label("last_end_date"),
+        )
+        .where(UserPosition.end_date.is_not(None))
+        .group_by(UserPosition.user_id)
+        .having(func.max(UserPosition.end_date) < today)
+        .subquery()
+    )
+
+    users_q = await db.execute(
+        select(User, subq.c.last_end_date)
+        .join(subq, User.id == subq.c.user_id)
+        .where(User.is_active.is_(True))
+    )
+    rows = users_q.all()
+    if not rows:
+        return []
+
+    ak_q = await db.execute(
+        select(ApiKey.owner_user_id, func.count(ApiKey.id).label("cnt"))
+        .where(
+            and_(
+                ApiKey.owner_user_id.in_([r.User.id for r in rows]),
+                ApiKey.is_active.is_(True),
+                ApiKey.revoked_at.is_(None),
+            )
+        )
+        .where((ApiKey.expires_at.is_(None)) | (ApiKey.expires_at > now_utc))
+        .group_by(ApiKey.owner_user_id)
+    )
+    ak_counts: dict[str, int] = {str(r.owner_user_id): r.cnt for r in ak_q}
+
+    wh_q = await db.execute(
+        select(WebhookSubscription.owner_user_id, func.count(WebhookSubscription.id).label("cnt"))
+        .where(
+            and_(
+                WebhookSubscription.owner_user_id.in_([r.User.id for r in rows]),
+                WebhookSubscription.is_active.is_(True),
+            )
+        )
+        .group_by(WebhookSubscription.owner_user_id)
+    )
+    wh_counts: dict[str, int] = {str(r.owner_user_id): r.cnt for r in wh_q}
+
+    session_flags: dict[str, bool] = {}
+    for row in rows:
+        uid = str(row.User.id)
+        try:
+            count = await redis_client.scard(f"{USER_TOKENS_PREFIX}{uid}")
+            session_flags[uid] = bool(count and count > 0)
+        except Exception:
+            session_flags[uid] = False
+
+    result: list[ZombieCredentialEntry] = []
+    for row in rows:
+        uid = str(row.User.id)
+        api_key_cnt = ak_counts.get(uid, 0)
+        webhook_cnt = wh_counts.get(uid, 0)
+        has_session = session_flags.get(uid, False)
+        if api_key_cnt == 0 and webhook_cnt == 0 and not has_session:
+            continue
+        result.append(
+            ZombieCredentialEntry(
+                user_id=uid,
+                user_email=row.User.email,
+                display_name=row.User.display_name,
+                last_position_end_date=str(row.last_end_date) if row.last_end_date else None,
+                active_api_keys=api_key_cnt,
+                active_webhooks=webhook_cnt,
+                has_active_session=has_session,
+            )
+        )
+    result.sort(key=lambda x: x.last_position_end_date or "", reverse=True)
+    return result

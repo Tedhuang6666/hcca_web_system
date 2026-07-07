@@ -130,6 +130,48 @@ RULES: list[LifecycleRule] = [
         danger_level="dangerous",
         affects_modules=("audit",),
     ),
+    LifecycleRule(
+        id="survey_responses_old",
+        label="問卷回應（過舊）",
+        description="超過保留天數的問卷回應紀錄。"
+        "archive 後 purge，以履行個資最小化原則；問卷的統計摘要應事先另存。",
+        model_path="api.models.survey:SurveyResponse",
+        default_retention_days=730,  # 2 年
+        min_retention_days=365,
+        timestamp_field="created_at",
+        extra_filter=None,
+        default_action="archive_then_purge",
+        danger_level="caution",
+        affects_modules=("surveys",),
+    ),
+    LifecycleRule(
+        id="shop_orders_cancelled_old",
+        label="購票取消訂單（過舊）",
+        description="status=cancelled 且超過保留天數的購票訂單。"
+        "已取消的訂單不含付款資訊，歸檔後可清以縮減訂單表體積。",
+        model_path="api.models.shop:Order",
+        default_retention_days=365,
+        min_retention_days=180,
+        timestamp_field="created_at",
+        extra_filter="僅 status = cancelled",
+        default_action="archive_then_purge",
+        danger_level="caution",
+        affects_modules=("shop",),
+    ),
+    LifecycleRule(
+        id="meal_orders_old",
+        label="學餐訂單（過舊）",
+        description="超過保留天數的學餐訂單紀錄。"
+        "學餐訂單屬個資，保留 2 年後 archive 並清理。",
+        model_path="api.models.meal:MealOrder",
+        default_retention_days=730,
+        min_retention_days=365,
+        timestamp_field="created_at",
+        extra_filter=None,
+        default_action="archive_then_purge",
+        danger_level="caution",
+        affects_modules=("meal",),
+    ),
 ]
 
 
@@ -182,6 +224,10 @@ def _build_where(rule: LifecycleRule, model: type, cutoff: datetime) -> tuple[Co
                 [EmailStatus.SENT, EmailStatus.FAILED, EmailStatus.CANCELLED]
             ),
         )
+    if rule.id == "shop_orders_cancelled_old":
+        from api.models.shop import OrderStatus
+
+        return (*base, model.status == OrderStatus.CANCELLED)  # type: ignore[attr-defined]
     return base
 
 

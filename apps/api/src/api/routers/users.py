@@ -206,3 +206,104 @@ async def verify_email(
     except UserRegistrationError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     return LinkedEmailsOut(emails=await email_verification_svc.list_user_emails(db, current_user))
+
+
+# ── 自助隱私操作（個資法當事人權利） ────────────────────────────────────────
+
+
+class SelfExportRequestOut(BaseModel):
+    message: str
+    filename: str
+    size_bytes: int
+    file_count: int
+    download_url: str
+
+
+class SelfAnonymizeRequestOut(BaseModel):
+    message: str
+
+
+@router.post(
+    "/me/privacy/export",
+    response_model=SelfExportRequestOut,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="自助匯出我的個資（ZIP）",
+    description=(
+        "依個資法第 10 條，產生包含你所有個人資料的 ZIP 封存檔，"
+        "回傳下載連結。下載 URL 有效期 10 分鐘，請盡快下載。"
+    ),
+)
+async def self_export_data(db: DbDep, current_user: CurrentUser) -> SelfExportRequestOut:
+    from api.services import privacy as privacy_svc
+
+    result = await privacy_svc.export_user_data(
+        db,
+        user_id=current_user.id,
+        requested_by_email=current_user.email,
+    )
+    await db.commit()
+    return SelfExportRequestOut(
+        message="個資匯出已完成，請在 10 分鐘內下載。",
+        filename=result.file_path,
+        size_bytes=result.size_bytes,
+        file_count=result.file_count,
+        download_url=f"/users/me/privacy/export/download?filename={result.file_path}",
+    )
+
+
+@router.get(
+    "/me/privacy/export/download",
+    summary="下載自助匯出的個資檔案",
+    response_model=None,
+)
+async def self_download_export(
+    filename: str,
+    current_user: CurrentUser,
+) -> object:
+    from fastapi.responses import Response
+
+    from api.services import privacy as privacy_svc
+
+    # 安全性：只允許下載自己的 export（以 user_id 前綴驗證）
+    expected_prefix = f"export_{current_user.id}_"
+    if not filename.startswith(expected_prefix) or ".." in filename or "/" in filename:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權下載此檔案")
+    try:
+        data = privacy_svc.read_export_bytes(filename)
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="檔案不存在或已過期"
+        ) from exc
+    return Response(
+        content=data,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post(
+    "/me/privacy/request-deletion",
+    response_model=SelfAnonymizeRequestOut,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="申請刪除我的帳號（假名化）",
+    description=(
+        "依個資法第 11 條，將你的帳號假名化：顯示名稱、Email 替換為不可逆雜湊值，"
+        "帳號停用。公文／法規等公共利益資料中的簽核紀錄依法保留不刪除。"
+        "此操作不可逆，請確認後再送出。"
+    ),
+)
+async def self_request_deletion(db: DbDep, current_user: CurrentUser) -> SelfAnonymizeRequestOut:
+    from api.services import privacy as privacy_svc
+
+    await privacy_svc.anonymize_user(
+        db,
+        user_id=current_user.id,
+        requested_by_email=current_user.email,
+    )
+    await db.commit()
+    return SelfAnonymizeRequestOut(
+        message=(
+            "帳號已假名化並停用。公共利益相關的稽核紀錄依個資法規定保留，"
+            "其他個人資料已不可逆去識別化。"
+        )
+    )
