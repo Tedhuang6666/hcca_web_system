@@ -297,14 +297,42 @@ async def db_session(_build_schema_once: None) -> AsyncGenerator[AsyncSession, N
     await connection.close()
 
 
+def _make_override_get_db(
+    session: AsyncSession,
+) -> Callable[[], AsyncGenerator[AsyncSession, None]]:
+    """比照 api.core.database.get_db 的 commit-on-success 語意（僅此半邊，見下）。
+
+    client/authed_client_factory 讓整個測試共用同一個 db_session（供測試直接
+    db_session.add() 用）；若這裡只是單純 yield、不管 commit，遇到某個 request
+    handler 成功回傳但從未自己 commit 過（例如 site.py 多個 admin 端點，正式
+    環境全靠 get_db() 這層自動 commit）時，會讓這次異動一直卡在未提交的
+    SAVEPOINT 裡，被下一個觸發 rollback 的 request 一併撤銷——包含這個 request
+    之前、甚至 db_session fixture 本身已 add 但從未 commit 過的東西，因為它們
+    全部共用同一個 SAVEPOINT。故此處補上 commit-on-success。
+
+    刻意不比照 get_db() 在例外時做 `except Exception: await session.rollback()`：
+    session.rollback()（不論是否為 SAVEPOINT）會無條件 expire 整個 identity
+    map，這對正式環境的短生命週期 session 無感，但會讓測試裡常見的
+    `app.dependency_overrides[get_current_active_user] = lambda: captured_user`
+    模式（直接回傳先前建立的 Python 物件、不重新查詢）在該物件的欄位被 expire
+    後，任何後續同步存取都需要重新從 DB 讀取，而在非 await 鏈中觸發的隱式
+    reload 會直接以 MissingGreenlet 炸掉。DB 層級真正失敗（IntegrityError 等）
+    的 rollback 全部由各 router 自己的 except 區塊處理（本專案既有慣例），
+    不需要這裡再補。
+    """
+
+    async def _override() -> AsyncGenerator[AsyncSession, None]:
+        yield session
+        await session.commit()
+
+    return _override
+
+
 @pytest_asyncio.fixture(scope="function")
 async def client(db_session: AsyncSession) -> AsyncGenerator[CSRFAwareAsyncClient, None]:
     """帶 DB override 的 TestClient（自動處理 CSRF token）"""
 
-    async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
-        yield db_session
-
-    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_db] = _make_override_get_db(db_session)
 
     async with CSRFAwareAsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         # 為測試生成一個 CSRFMiddleware 會接受的合法簽章 token，手動設定到 cookies
@@ -365,9 +393,7 @@ async def authed_client_factory(
 ) -> AsyncGenerator[Callable[[User], CSRFAwareAsyncClient], None]:
     """回傳 make_authed_client(user) -> 已登入的測試 client，可為任意 user 建立。"""
 
-    async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
-        yield db_session
-
+    override_get_db = _make_override_get_db(db_session)
     clients: list[CSRFAwareAsyncClient] = []
 
     def _factory(user: User) -> CSRFAwareAsyncClient:
