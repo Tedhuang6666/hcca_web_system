@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -312,17 +312,23 @@ async def _record_transaction(
 @router.get("/categories", response_model=list[CategoryOut])
 async def list_categories(db: DbDep, current_user: ViewerUser) -> list[CategoryOut]:
     rows = (
-        await db.execute(
-            select(InventoryCategory)
-            .where(InventoryCategory.is_active == True)  # noqa: E712
-            .order_by(InventoryCategory.sort_order, InventoryCategory.name)
+        (
+            await db.execute(
+                select(InventoryCategory)
+                .where(InventoryCategory.is_active == True)  # noqa: E712
+                .order_by(InventoryCategory.sort_order, InventoryCategory.name)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return [CategoryOut.model_validate(r) for r in rows]
 
 
 @router.post("/categories", response_model=CategoryOut, status_code=201)
-async def create_category(body: CategoryCreate, db: DbDep, current_user: ManagerUser) -> CategoryOut:
+async def create_category(
+    body: CategoryCreate, db: DbDep, current_user: ManagerUser
+) -> CategoryOut:
     org_id = body.org_id or await _get_org_id(db, current_user, PermissionCode.INVENTORY_MANAGE)
     cat = InventoryCategory(
         id=uuid.uuid4(),
@@ -375,6 +381,19 @@ _ITEM_OPTS = [
 ]
 
 
+async def _reload_item(db: AsyncSession, item_id: uuid.UUID) -> InventoryItem:
+    """以顯式 select 重新查詢，確保套用 _ITEM_OPTS 預載入。
+
+    `db.get(..., options=...)` 若該 id 已在 identity map 中（同一 session 內剛
+    add/flush 過），會直接回傳快取物件、略過所給的 options，導致關聯欄位在
+    序列化時觸發同步 lazy load 而以 MissingGreenlet 崩潰。
+    """
+    result = await db.execute(
+        select(InventoryItem).where(InventoryItem.id == item_id).options(*_ITEM_OPTS)
+    )
+    return result.scalar_one()
+
+
 @router.get("/items", response_model=list[ItemOut])
 async def list_items(
     db: DbDep,
@@ -385,11 +404,7 @@ async def list_items(
     keyword: str | None = None,
     include_inactive: bool = False,
 ) -> list[ItemOut]:
-    q = (
-        select(InventoryItem)
-        .options(*_ITEM_OPTS)
-        .order_by(InventoryItem.name)
-    )
+    q = select(InventoryItem).options(*_ITEM_OPTS).order_by(InventoryItem.name)
     if not include_inactive:
         q = q.where(InventoryItem.is_active == True)  # noqa: E712
     if category_id:
@@ -416,7 +431,8 @@ async def create_item(body: ItemCreate, db: DbDep, current_user: ManagerUser) ->
         description=body.description,
         unit=body.unit,
         item_type=body.item_type,
-        quantity=body.quantity,
+        # 起始量一律透過 _record_transaction 的 INITIAL 異動累加，避免與下方雙重計入。
+        quantity=0,
         low_stock_threshold=body.low_stock_threshold,
         location=body.location,
         image_url=body.image_url,
@@ -429,8 +445,7 @@ async def create_item(body: ItemCreate, db: DbDep, current_user: ManagerUser) ->
             db, item, InventoryTxnType.INITIAL, body.quantity, "期初建帳", current_user.id
         )
     await db.commit()
-    await db.refresh(item)
-    item = await db.get(InventoryItem, item.id, options=_ITEM_OPTS)
+    item = await _reload_item(db, item.id)
     return _item_out(item)
 
 
@@ -468,8 +483,7 @@ async def update_item(item_id: uuid.UUID, body: ItemUpdate, db: DbDep, _: Manage
     if body.is_active is not None:
         item.is_active = body.is_active
     await db.commit()
-    await db.refresh(item)
-    item = await db.get(InventoryItem, item.id, options=_ITEM_OPTS)
+    item = await _reload_item(db, item.id)
     return _item_out(item)
 
 
@@ -491,7 +505,11 @@ async def adjust_stock(
         raise HTTPException(status_code=404, detail="品項不存在")
 
     # 計算 delta：IN 系列為正，OUT/DAMAGED/LOST 為負
-    if body.txn_type in (InventoryTxnType.IN, InventoryTxnType.INITIAL, InventoryTxnType.ADJUSTMENT):
+    if body.txn_type in (
+        InventoryTxnType.IN,
+        InventoryTxnType.INITIAL,
+        InventoryTxnType.ADJUSTMENT,
+    ):
         delta = abs(body.quantity)
     elif body.txn_type in (InventoryTxnType.OUT, InventoryTxnType.DAMAGED, InventoryTxnType.LOST):
         delta = -abs(body.quantity)
@@ -499,18 +517,20 @@ async def adjust_stock(
         delta = body.quantity
 
     if item.quantity + delta < 0:
-        raise HTTPException(status_code=400, detail=f"庫存不足，目前剩餘 {item.quantity} {item.unit}")
+        raise HTTPException(
+            status_code=400, detail=f"庫存不足，目前剩餘 {item.quantity} {item.unit}"
+        )
 
-    txn = await _record_transaction(
-        db, item, body.txn_type, delta, body.notes, current_user.id
-    )
+    txn = await _record_transaction(db, item, body.txn_type, delta, body.notes, current_user.id)
     await db.commit()
-    await db.refresh(txn)
-    txn = await db.get(
-        InventoryTransaction,
-        txn.id,
-        options=[selectinload(InventoryTransaction.item), selectinload(InventoryTransaction.created_by)],
+    result = await db.execute(
+        select(InventoryTransaction)
+        .where(InventoryTransaction.id == txn.id)
+        .options(
+            selectinload(InventoryTransaction.item), selectinload(InventoryTransaction.created_by)
+        )
     )
+    txn = result.scalar_one()
     return _txn_out(txn)
 
 
@@ -525,17 +545,21 @@ async def list_item_transactions(
     if not item:
         raise HTTPException(status_code=404, detail="品項不存在")
     rows = (
-        await db.execute(
-            select(InventoryTransaction)
-            .where(InventoryTransaction.item_id == item_id)
-            .options(
-                selectinload(InventoryTransaction.item),
-                selectinload(InventoryTransaction.created_by),
+        (
+            await db.execute(
+                select(InventoryTransaction)
+                .where(InventoryTransaction.item_id == item_id)
+                .options(
+                    selectinload(InventoryTransaction.item),
+                    selectinload(InventoryTransaction.created_by),
+                )
+                .order_by(InventoryTransaction.created_at.desc())
+                .limit(limit)
             )
-            .order_by(InventoryTransaction.created_at.desc())
-            .limit(limit)
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return [_txn_out(r) for r in rows]
 
 
@@ -576,6 +600,14 @@ _PROC_OPTS = [
 ]
 
 
+async def _reload_procurement(db: AsyncSession, proc_id: uuid.UUID) -> InventoryProcurement:
+    """同 _reload_item：以顯式 select 繞過 db.get() 的 identity map 短路。"""
+    result = await db.execute(
+        select(InventoryProcurement).where(InventoryProcurement.id == proc_id).options(*_PROC_OPTS)
+    )
+    return result.scalar_one()
+
+
 @router.get("/procurements", response_model=list[ProcurementOut])
 async def list_procurements(
     db: DbDep,
@@ -613,18 +645,20 @@ async def create_procurement(
     db.add(proc)
     await db.flush()
     for li in body.line_items:
-        db.add(InventoryProcurementItem(
-            id=uuid.uuid4(),
-            procurement_id=proc.id,
-            item_id=li.item_id,
-            item_name=li.item_name,
-            item_unit=li.item_unit,
-            quantity_requested=li.quantity_requested,
-            estimated_unit_price=li.estimated_unit_price,
-            notes=li.notes,
-        ))
+        db.add(
+            InventoryProcurementItem(
+                id=uuid.uuid4(),
+                procurement_id=proc.id,
+                item_id=li.item_id,
+                item_name=li.item_name,
+                item_unit=li.item_unit,
+                quantity_requested=li.quantity_requested,
+                estimated_unit_price=li.estimated_unit_price,
+                notes=li.notes,
+            )
+        )
     await db.commit()
-    proc = await db.get(InventoryProcurement, proc.id, options=_PROC_OPTS)
+    proc = await _reload_procurement(db, proc.id)
     return _procurement_out(proc)
 
 
@@ -658,18 +692,20 @@ async def update_procurement(
             await db.delete(li)
         await db.flush()
         for li in body.line_items:
-            db.add(InventoryProcurementItem(
-                id=uuid.uuid4(),
-                procurement_id=proc.id,
-                item_id=li.item_id,
-                item_name=li.item_name,
-                item_unit=li.item_unit,
-                quantity_requested=li.quantity_requested,
-                estimated_unit_price=li.estimated_unit_price,
-                notes=li.notes,
-            ))
+            db.add(
+                InventoryProcurementItem(
+                    id=uuid.uuid4(),
+                    procurement_id=proc.id,
+                    item_id=li.item_id,
+                    item_name=li.item_name,
+                    item_unit=li.item_unit,
+                    quantity_requested=li.quantity_requested,
+                    estimated_unit_price=li.estimated_unit_price,
+                    notes=li.notes,
+                )
+            )
     await db.commit()
-    proc = await db.get(InventoryProcurement, proc.id, options=_PROC_OPTS)
+    proc = await _reload_procurement(db, proc.id)
     return _procurement_out(proc)
 
 
@@ -686,7 +722,7 @@ async def submit_procurement(
         raise HTTPException(status_code=400, detail="採購清單不能為空")
     proc.status = InventoryProcurementStatus.SUBMITTED
     await db.commit()
-    proc = await db.get(InventoryProcurement, proc.id, options=_PROC_OPTS)
+    proc = await _reload_procurement(db, proc.id)
     return _procurement_out(proc)
 
 
@@ -703,7 +739,7 @@ async def approve_procurement(
     proc.reviewer_id = current_user.id
     proc.reviewed_at = now_local()
     await db.commit()
-    proc = await db.get(InventoryProcurement, proc.id, options=_PROC_OPTS)
+    proc = await _reload_procurement(db, proc.id)
     return _procurement_out(proc)
 
 
@@ -725,7 +761,7 @@ async def reject_procurement(
     if reviewer_notes:
         proc.reviewer_notes = reviewer_notes
     await db.commit()
-    proc = await db.get(InventoryProcurement, proc.id, options=_PROC_OPTS)
+    proc = await _reload_procurement(db, proc.id)
     return _procurement_out(proc)
 
 
@@ -748,13 +784,16 @@ async def receive_procurement(
             item = await db.get(InventoryItem, li.item_id)
             if item:
                 await _record_transaction(
-                    db, item, InventoryTxnType.IN, received,
+                    db,
+                    item,
+                    InventoryTxnType.IN,
+                    received,
                     f"採購收貨（{proc.title}）{body.notes or ''}".strip(),
                     current_user.id,
                 )
     proc.status = InventoryProcurementStatus.RECEIVED
     await db.commit()
-    proc = await db.get(InventoryProcurement, proc.id, options=_PROC_OPTS)
+    proc = await _reload_procurement(db, proc.id)
     return _procurement_out(proc)
 
 
@@ -763,31 +802,39 @@ async def receive_procurement(
 
 @router.get("/dashboard", response_model=InventoryDashboard)
 async def dashboard(db: DbDep, _: ViewerUser) -> InventoryDashboard:
-    total_items = await db.scalar(
-        select(func.count()).where(InventoryItem.is_active == True)  # noqa: E712
-    ) or 0
-
-    low_stock_count = await db.scalar(
-        select(func.count()).where(
-            InventoryItem.is_active == True,  # noqa: E712
-            InventoryItem.low_stock_threshold > 0,
-            InventoryItem.quantity <= InventoryItem.low_stock_threshold,
+    total_items = (
+        await db.scalar(
+            select(func.count()).where(InventoryItem.is_active == True)  # noqa: E712
         )
-    ) or 0
+        or 0
+    )
 
-    pending_procurement_count = await db.scalar(
-        select(func.count()).where(
-            InventoryProcurement.status == InventoryProcurementStatus.SUBMITTED
+    low_stock_count = (
+        await db.scalar(
+            select(func.count()).where(
+                InventoryItem.is_active == True,  # noqa: E712
+                InventoryItem.low_stock_threshold > 0,
+                InventoryItem.quantity <= InventoryItem.low_stock_threshold,
+            )
         )
-    ) or 0
+        or 0
+    )
+
+    pending_procurement_count = (
+        await db.scalar(
+            select(func.count()).where(
+                InventoryProcurement.status == InventoryProcurementStatus.SUBMITTED
+            )
+        )
+        or 0
+    )
 
     now = now_local()
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    monthly_transaction_count = await db.scalar(
-        select(func.count()).where(
-            InventoryTransaction.created_at >= month_start
-        )
-    ) or 0
+    monthly_transaction_count = (
+        await db.scalar(select(func.count()).where(InventoryTransaction.created_at >= month_start))
+        or 0
+    )
 
     return InventoryDashboard(
         total_items=total_items,
