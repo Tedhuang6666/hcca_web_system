@@ -152,7 +152,7 @@ export default function DiagnosticsPage() {
                 <p className="flex items-center gap-1.5 text-sm font-semibold text-[var(--text-primary)]">
                   <GitCommitHorizontal size={15} aria-hidden /> 版本與部署狀態
                 </p>
-                <p className="mt-1 text-xs text-[var(--text-muted)]">主版本・功能・修補・建置・部署</p>
+                <p className="mt-1 text-xs text-[var(--text-muted)]">大版本・主版本・實版本・功能版本・commit 次數</p>
               </div>
               {version && <VersionStatus status={version.sync_status} />}
             </div>
@@ -163,7 +163,7 @@ export default function DiagnosticsPage() {
                 <div className="rounded-xl border border-[var(--primary)] bg-[var(--primary-dim)] p-4">
                   <p className="text-xs font-medium text-[var(--text-secondary)]">系統版本</p>
                   <p className="mt-1 font-mono text-2xl font-bold tracking-wide text-[var(--text-primary)]">{version.runtime.app_version}</p>
-                  <p className="mt-1 text-xs text-[var(--text-muted)]">五段式版本號，發布時由根目錄 VERSION 決定。</p>
+                  <p className="mt-1 text-xs text-[var(--text-muted)]">前四段由 VERSION 管理；最後一段是 Git commit 總數。</p>
                 </div>
                 <div className="grid gap-3 lg:grid-cols-2">
                   <div className="rounded-lg border border-[var(--border)] p-4">
@@ -176,6 +176,7 @@ export default function DiagnosticsPage() {
                     <p className="text-xs font-medium text-[var(--text-muted)]">GitHub 最新推送（{version.github?.branch ?? "main"}）</p>
                     {version.github ? (
                       <>
+                        <p className="mt-2 font-mono text-lg font-bold text-[var(--text-primary)]">{version.github.version ?? "版本計算中"}</p>
                         <a href={version.github.url ?? undefined} target="_blank" rel="noreferrer" className="mt-2 block font-mono text-base font-semibold text-[var(--primary)] hover:underline">{version.github.short_sha}</a>
                         <p className="mt-2 line-clamp-2 text-xs text-[var(--text-secondary)]">{version.github.message}</p>
                         <p className="mt-1 text-xs text-[var(--text-secondary)]">推送時間：{version.github.pushed_at ? new Date(version.github.pushed_at).toLocaleString() : "—"}</p>

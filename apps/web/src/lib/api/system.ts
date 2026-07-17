@@ -291,6 +291,7 @@ export interface VersionStatus {
     message: string | null;
     pushed_at: string | null;
     url: string | null;
+    version: string | null;
   } | null;
   sync_status: "current" | "outdated" | "unknown";
   github_error: string | null;
