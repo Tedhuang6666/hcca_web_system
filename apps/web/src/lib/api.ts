@@ -27,6 +27,7 @@ export * from "./api/workflows";
 export * from "./api/governance";
 export * from "./api/matters";
 export * from "./api/receivables";
+export * from "./api/finance";
 export * from "./api/publications";
 export * from "./api/context";
 export * from "./api/admin";

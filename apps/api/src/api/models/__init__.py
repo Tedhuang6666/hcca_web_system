@@ -104,6 +104,10 @@ from api.models.exam_paper import ExamGradeTrack, ExamPaper, ExamPaperDownload  
 
 # Feature Flag
 from api.models.feature_flag import FeatureFlag  # noqa: F401
+from api.models.finance import (  # noqa: F401
+    BankTransaction, ChartAccount, FinanceAccountType, FinanceLedger, FiscalPeriod,
+    FundAccount, FundStorageType, JournalEntry, JournalLine, JournalStatus,
+)
 from api.models.google_calendar import OrgGoogleCalendarConfig  # noqa: F401
 from api.models.governance import (  # noqa: F401
     AutomationRule,
