@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 from typing import Any
 
@@ -10,11 +11,22 @@ import httpx
 from api.core.config import settings
 
 _github_cache: tuple[float, dict[str, Any] | None, str | None] | None = None
+_VERSION_PATTERN = re.compile(r"^\d{2}\.\d{2}\.\d{2}\.\d{2}\.\d{2}$")
+
+
+def release_version(value: str) -> str:
+    """將舊版號安全顯示為五段式，避免管理畫面出現無法辨識的格式。"""
+    if _VERSION_PATTERN.fullmatch(value):
+        return value
+    numbers = value.split(".")
+    if 1 <= len(numbers) <= 5 and all(part.isdigit() for part in numbers):
+        return ".".join([*(part.zfill(2) for part in numbers), *("00",) * (5 - len(numbers))])
+    return "00.00.00.00.00"
 
 
 def runtime_version() -> dict[str, str | None]:
     return {
-        "app_version": settings.APP_VERSION,
+        "app_version": release_version(settings.APP_VERSION),
         "commit": settings.BUILD_COMMIT or None,
         "ref": settings.BUILD_REF or None,
         "built_at": settings.BUILD_TIME or None,

@@ -58,6 +58,7 @@ COPY libs/shared/src /app/src
 COPY apps/api/alembic /app/alembic
 COPY apps/api/alembic.ini /app/alembic.ini
 COPY apps/api/gunicorn.conf.py /app/gunicorn.conf.py
+COPY VERSION /app/VERSION
 
 RUN mkdir -p /app/uploads /app/backups && chown -R appuser:appgroup /app/uploads /app/backups
 

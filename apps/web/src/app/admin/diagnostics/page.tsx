@@ -68,6 +68,15 @@ function HealthBadge({ ok, detail }: { ok: boolean; detail?: string | null }) {
   );
 }
 
+function VersionStatus({ status }: { status: VersionStatus["sync_status"] }) {
+  const content = {
+    current: { label: "版本一致", className: "bg-[var(--success-dim)] text-[var(--success)]" },
+    outdated: { label: "等待部署", className: "bg-[var(--warning-dim)] text-[var(--warning)]" },
+    unknown: { label: "無法確認", className: "bg-[var(--bg-hover)] text-[var(--text-muted)]" },
+  }[status];
+  return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${content.className}`}>{content.label}</span>;
+}
+
 export default function DiagnosticsPage() {
   const { isAdmin } = usePermissions();
   const [data, setData] = useState<SystemDiagnostics | null>(null);
@@ -137,44 +146,47 @@ export default function DiagnosticsPage() {
         <section className="card p-8 text-center text-sm text-[var(--text-muted)]">載入中…</section>
       ) : (
         <>
-          {/* 核心健康 */}
           <section className="card p-5">
-            <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-[var(--text-primary)]">
-              <GitCommitHorizontal size={15} aria-hidden /> 部署版本
-            </h2>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="flex items-center gap-1.5 text-sm font-semibold text-[var(--text-primary)]">
+                  <GitCommitHorizontal size={15} aria-hidden /> 版本與部署狀態
+                </p>
+                <p className="mt-1 text-xs text-[var(--text-muted)]">主版本・功能・修補・建置・部署</p>
+              </div>
+              {version && <VersionStatus status={version.sync_status} />}
+            </div>
             {!version ? (
               <p className="text-sm text-[var(--text-muted)]">載入版本資訊中…</p>
             ) : (
-              <div className="space-y-3 text-sm">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-lg border border-[var(--border)] p-3">
-                    <p className="text-xs text-[var(--text-muted)]">目前運行（API）</p>
-                    <p className="mt-1 font-mono text-[var(--text-primary)]">
-                      {version.runtime.commit?.slice(0, 12) ?? "未注入 commit"}
-                    </p>
-                    <p className="mt-1 text-xs text-[var(--text-muted)]">
-                      {version.runtime.app_version} · {version.runtime.ref ?? "—"} · {version.runtime.built_at ?? "—"}
-                    </p>
+              <div className="mt-5 space-y-4 text-sm">
+                <div className="rounded-xl border border-[var(--primary)] bg-[var(--primary-dim)] p-4">
+                  <p className="text-xs font-medium text-[var(--text-secondary)]">系統版本</p>
+                  <p className="mt-1 font-mono text-2xl font-bold tracking-wide text-[var(--text-primary)]">{version.runtime.app_version}</p>
+                  <p className="mt-1 text-xs text-[var(--text-muted)]">五段式版本號，發布時由根目錄 VERSION 決定。</p>
+                </div>
+                <div className="grid gap-3 lg:grid-cols-2">
+                  <div className="rounded-lg border border-[var(--border)] p-4">
+                    <p className="text-xs font-medium text-[var(--text-muted)]">目前運行的 API</p>
+                    <p className="mt-2 font-mono text-base font-semibold text-[var(--text-primary)]">{version.runtime.commit?.slice(0, 12) ?? "尚無 Git commit"}</p>
+                    <p className="mt-2 text-xs text-[var(--text-secondary)]">分支：{version.runtime.ref ?? "—"}</p>
+                    <p className="mt-1 text-xs text-[var(--text-secondary)]">建置時間：{version.runtime.built_at ? new Date(version.runtime.built_at).toLocaleString() : "—"}</p>
                   </div>
-                  <div className="rounded-lg border border-[var(--border)] p-3">
-                    <p className="text-xs text-[var(--text-muted)]">GitHub 最新推送（{version.github?.branch ?? "—"}）</p>
+                  <div className="rounded-lg border border-[var(--border)] p-4">
+                    <p className="text-xs font-medium text-[var(--text-muted)]">GitHub 最新推送（{version.github?.branch ?? "main"}）</p>
                     {version.github ? (
                       <>
-                        <a href={version.github.url ?? undefined} target="_blank" rel="noreferrer" className="mt-1 block font-mono text-[var(--primary)] hover:underline">
-                          {version.github.short_sha ?? "未知 commit"}
-                        </a>
-                        <p className="mt-1 truncate text-xs text-[var(--text-muted)]">{version.github.message ?? "—"}</p>
+                        <a href={version.github.url ?? undefined} target="_blank" rel="noreferrer" className="mt-2 block font-mono text-base font-semibold text-[var(--primary)] hover:underline">{version.github.short_sha}</a>
+                        <p className="mt-2 line-clamp-2 text-xs text-[var(--text-secondary)]">{version.github.message}</p>
+                        <p className="mt-1 text-xs text-[var(--text-secondary)]">推送時間：{version.github.pushed_at ? new Date(version.github.pushed_at).toLocaleString() : "—"}</p>
                       </>
-                    ) : <p className="mt-1 text-xs text-[var(--danger)]">{version.github_error ?? "無法取得 GitHub 版本"}</p>}
+                    ) : <p className="mt-2 text-sm text-[var(--danger)]">{version.github_error ?? "無法讀取 GitHub"}</p>}
                   </div>
                 </div>
-                <p className={version.sync_status === "current" ? "text-[var(--success)]" : version.sync_status === "outdated" ? "text-[var(--warning)]" : "text-[var(--text-muted)]"}>
-                  {version.sync_status === "current" ? "已部署最新 GitHub 推送版本" : version.sync_status === "outdated" ? "GitHub 有較新的推送，尚未部署" : "無法比對：請確認映像由 CI 建置並注入 commit"}
-                </p>
-                <p className="text-xs text-[var(--text-muted)]">
-                  前端建置：{process.env.NEXT_PUBLIC_BUILD_COMMIT?.slice(0, 12) ?? "本機／未注入"}
-                  {process.env.NEXT_PUBLIC_BUILD_TIME ? ` · ${process.env.NEXT_PUBLIC_BUILD_TIME}` : ""}
-                </p>
+                <div className="rounded-lg bg-[var(--bg-hover)] px-4 py-3 text-sm text-[var(--text-secondary)]">
+                  {version.sync_status === "current" ? "目前 API 與 GitHub 最新推送為同一個 commit。" : version.sync_status === "outdated" ? "GitHub 已有新版本；請拉取新版映像並重啟 API、Web 服務。" : "目前為本機或舊版執行環境，重啟 dev.sh 或使用 GitHub Actions 建置的映像後即可比對。"}
+                </div>
+                <p className="text-xs text-[var(--text-muted)]">前端 commit：{process.env.NEXT_PUBLIC_BUILD_COMMIT?.slice(0, 12) ?? "本機啟動後自動取得"}</p>
               </div>
             )}
           </section>
