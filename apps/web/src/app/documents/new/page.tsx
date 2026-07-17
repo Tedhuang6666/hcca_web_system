@@ -13,6 +13,7 @@ import { orgDisplayName } from "@/lib/orgs";
 import GongwenEditor from "@/components/ui/GongwenEditor";
 import SmartTextarea from "@/components/ui/SmartTextarea";
 import Toggle from "@/components/ui/Toggle";
+import GuidedForm, { GuidedFormStep, type GuidedFormStepDefinition } from "@/components/ui/GuidedForm";
 import { useDraftAutosave, useFileDraftAutosave } from "@/hooks/useDraftAutosave";
 import { RecipientSearch } from "@/components/documents/RecipientSearch";
 import ActivitySelect from "@/components/activities/ActivitySelect";
@@ -96,6 +97,13 @@ const CATEGORY_OPTIONS: { value: DocumentCategory; label: string }[] = [
   { value: "other",          label: "其他"     },
 ];
 
+const DOCUMENT_STEPS: GuidedFormStepDefinition[] = [
+  { label: "基本資料", description: "先選擇組織與公文用途。" },
+  { label: "撰寫內容", description: "完成本次要傳達的重點。" },
+  { label: "對象與附件", description: "加入收件人、連結或檔案。" },
+  { label: "確認設定", description: "檢查字號、可見範圍與承辦資訊。" },
+];
+
 const CONTENT_COPY: Record<DocumentCategory, {
   section: string;
   subjectLabel?: string;
@@ -176,6 +184,7 @@ export default function NewDocumentPage() {
     [searchParams],
   );
   const [saving, setSaving] = useState(false);
+  const [activeStep, setActiveStep] = useState(0);
   const [urgency, setUrgency] = useState<DocumentUrgency>("normal");
   const [classification, setClassification] = useState<DocumentClassification>("normal");
   const [subject, setSubject] = useState(governanceContext?.matterTitle ?? "");
@@ -329,7 +338,7 @@ export default function NewDocumentPage() {
     setSelectedTemplateId(draft.selectedTemplateId ?? "");
     toast.info("已復原未儲存的公文草稿");
   }, []);
-  const { clearDraft, flushDraft } = useDraftAutosave({
+  const { clearDraft, flushDraft, lastSavedAt } = useDraftAutosave({
     key: draftKey,
     value: draftValue,
     onRestore: restoreDraft,
@@ -493,6 +502,38 @@ export default function NewDocumentPage() {
     }
   };
 
+  const advanceStep = () => {
+    if (activeStep === 0) {
+      setTouched((current) => ({
+        ...current,
+        org: true,
+        subject: true,
+        meetingPurpose: true,
+        meetingTime: true,
+        meetingLocation: true,
+        recordChairperson: true,
+      }));
+      const needsBasicInfo = Boolean(
+        fieldError.org
+        || fieldError.subject
+        || fieldError.meetingPurpose
+        || fieldError.meetingTime
+        || fieldError.meetingLocation
+        || fieldError.recordChairperson,
+      );
+      if (needsBasicInfo) {
+        toast.error("請先完成此步驟的必填欄位");
+        return;
+      }
+    }
+    if (activeStep === 1 && (fieldError.recordDiscussion || fieldError.recordDecision)) {
+      setTouched((current) => ({ ...current, recordDiscussion: true, recordDecision: true }));
+      toast.error("請先完成此步驟的必填欄位");
+      return;
+    }
+    setActiveStep((step) => Math.min(step + 1, DOCUMENT_STEPS.length - 1));
+  };
+
   const inputStyle = {
     background: "var(--bg-surface)",
     border: "1px solid var(--border)",
@@ -527,10 +568,25 @@ export default function NewDocumentPage() {
 
       <GovernanceLinkNotice context={governanceContext} />
 
+      <GuidedForm
+        steps={DOCUMENT_STEPS}
+        activeStep={activeStep}
+        onStepChange={setActiveStep}
+        onBack={() => setActiveStep((step) => Math.max(step - 1, 0))}
+        onNext={advanceStep}
+        onSave={save}
+        saveLabel="儲存草稿"
+        saving={saving}
+        draftStatus={lastSavedAt
+          ? `已於 ${new Date(lastSavedAt).toLocaleTimeString("zh-TW", {
+            hour: "2-digit", minute: "2-digit",
+          })} 自動保存`
+          : "變更會自動保存到此裝置"}>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* 主欄 */}
         <div className="lg:col-span-2 space-y-4">
 
+          <GuidedFormStep step={0} activeStep={activeStep} className="space-y-4">
           <FormSection title="基本資訊">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
@@ -647,8 +703,10 @@ export default function NewDocumentPage() {
               </div>
             </FormSection>
           )}
+          </GuidedFormStep>
 
           {/* 公文主體 */}
+          <GuidedFormStep step={1} activeStep={activeStep}>
           <FormSection title={copy.section}>
             {/* 主旨（類別需要時顯示） */}
             {copy.subjectLabel && (
@@ -717,8 +775,10 @@ export default function NewDocumentPage() {
               </div>
             )}
           </FormSection>
+          </GuidedFormStep>
 
           {/* 受文者 / 出席者 */}
+          <GuidedFormStep step={2} activeStep={activeStep} className="space-y-4">
           <FormSection title={
             isMeetingNotice
               ? "受文者 / 正本（出席） / 副本（列席）"
@@ -847,10 +907,11 @@ export default function NewDocumentPage() {
               )}
             </div>
           </FormSection>
+          </GuidedFormStep>
         </div>
 
         {/* 右欄 */}
-        <div className="space-y-4">
+        <GuidedFormStep step={3} activeStep={activeStep} className="space-y-4">
 
           {/* 字號模板 */}
           <FormSection title="字號設定">
@@ -909,7 +970,7 @@ export default function NewDocumentPage() {
           </FormSection>
 
           {/* 儲存 */}
-          <div className="card p-4 space-y-3">
+          <div className="card p-4 space-y-3 hidden md:block">
             <button onClick={save} disabled={saving} className="btn btn-primary w-full" aria-busy={saving}>
               {saving ? "儲存中…" : "儲存草稿"}
             </button>
@@ -958,8 +1019,9 @@ export default function NewDocumentPage() {
             <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
               style={inputStyle} />
           </div>
-        </div>
+        </GuidedFormStep>
       </div>
+      </GuidedForm>
     </div>
   );
 }

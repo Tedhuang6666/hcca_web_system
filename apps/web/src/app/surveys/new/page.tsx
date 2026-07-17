@@ -10,6 +10,7 @@ import { uploadUrl } from "@/lib/config";
 import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import UserPicker from "@/components/surveys/UserPicker";
 import ActivitySelect from "@/components/activities/ActivitySelect";
+import GuidedForm, { GuidedFormStep, type GuidedFormStepDefinition } from "@/components/ui/GuidedForm";
 import {
   GovernanceLinkNotice,
   createGovernanceBacklink,
@@ -39,6 +40,13 @@ const VALIDATION_RULES: { value: ValidationRule | ""; label: string }[] = [
   { value: "integer", label: "整數" },
   { value: "url",     label: "網址" },
   { value: "phone",   label: "電話號碼" },
+];
+
+const SURVEY_STEPS: GuidedFormStepDefinition[] = [
+  { label: "基本資料", description: "說明這份問卷要蒐集什麼。" },
+  { label: "填答對象", description: "決定誰能看到與填寫問卷。" },
+  { label: "設計題目", description: "逐題加入內容，進階規則可稍後再調整。" },
+  { label: "確認發布", description: "檢查設定後儲存草稿或直接開放填答。" },
 ];
 
 type CondRule = { question_id: string; operator: string; value: string; connector: string };
@@ -238,6 +246,7 @@ export default function NewSurveyPage() {
     [searchParams],
   );
   const [saving, setSaving] = useState(false);
+  const [activeStep, setActiveStep] = useState(0);
 
   // 問卷基本資料
   const [title, setTitle] = useState(governanceContext?.matterTitle ?? "");
@@ -329,7 +338,7 @@ export default function NewSurveyPage() {
     setOptionInput(draft.optionInput ?? "");
     toast.info("已復原未送出的問卷草稿");
   }, []);
-  const { clearDraft, flushDraft } = useDraftAutosave({
+  const { clearDraft, flushDraft, lastSavedAt } = useDraftAutosave({
     key: "surveys:new",
     value: draftValue,
     onRestore: restoreDraft,
@@ -491,6 +500,18 @@ export default function NewSurveyPage() {
     } finally { setSaving(false); }
   };
 
+  const advanceStep = () => {
+    if (activeStep === 0 && (!title.trim() || !orgId)) {
+      toast.error(!title.trim() ? "請先輸入問卷標題" : "請先選擇所屬組織");
+      return;
+    }
+    if (activeStep === 2 && !questions.some((question) => !isDisplayType(question.question_type))) {
+      toast.error("請至少新增一道可填答題目");
+      return;
+    }
+    setActiveStep((step) => Math.min(step + 1, SURVEY_STEPS.length - 1));
+  };
+
   const needsOptions = newQ.question_type === "single" || newQ.question_type === "multiple";
   const isRating = newQ.question_type === "rating";
   const isDisplay = isDisplayType(newQ.question_type);
@@ -517,10 +538,26 @@ export default function NewSurveyPage() {
 
       <GovernanceLinkNotice context={governanceContext} />
 
+      <GuidedForm
+        steps={SURVEY_STEPS}
+        activeStep={activeStep}
+        onStepChange={setActiveStep}
+        onBack={() => setActiveStep((step) => Math.max(step - 1, 0))}
+        onNext={advanceStep}
+        onSave={() => save(true)}
+        secondarySaveAction={{ label: "儲存草稿", onClick: () => save(false) }}
+        saveLabel="建立並發布"
+        saving={saving}
+        draftStatus={lastSavedAt
+          ? `已於 ${new Date(lastSavedAt).toLocaleTimeString("zh-TW", {
+            hour: "2-digit", minute: "2-digit",
+          })} 自動保存`
+          : "變更會自動保存到此裝置"}>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* 主欄 */}
         <div className="lg:col-span-2 space-y-4">
 
+          <GuidedFormStep step={0} activeStep={activeStep}>
           {/* 基本資訊 */}
           <div className="card p-5 space-y-4">
             <h3 className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>基本資訊</h3>
@@ -560,7 +597,9 @@ export default function NewSurveyPage() {
             </div>
             <ActivitySelect value={activityId} onChange={setActivityId} />
           </div>
+          </GuidedFormStep>
 
+          <GuidedFormStep step={1} activeStep={activeStep}>
           {/* 填答對象 */}
           <div className="card p-5 space-y-3">
             <h3 className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>
@@ -611,7 +650,9 @@ export default function NewSurveyPage() {
               </>
             )}
           </div>
+          </GuidedFormStep>
 
+          <GuidedFormStep step={2} activeStep={activeStep} className="space-y-4">
           {/* 題目列表 */}
           {questions.length > 0 && (
             <div className="card overflow-hidden">
@@ -867,11 +908,12 @@ export default function NewSurveyPage() {
               加入此題目
             </button>
           </div>
+          </GuidedFormStep>
         </div>
 
         {/* 右欄：儲存 */}
-        <div className="space-y-4">
-          <div className="card p-4 space-y-3">
+        <GuidedFormStep step={3} activeStep={activeStep} className="space-y-4">
+          <div className="card p-4 space-y-3 hidden md:block">
             <button onClick={() => save(true)} disabled={saving} className="btn btn-primary w-full" aria-busy={saving}>
               {saving ? "處理中…" : "建立並發布"}
             </button>
@@ -892,8 +934,9 @@ export default function NewSurveyPage() {
               {closesAt && <p>截止：{new Date(closesAt).toLocaleString("zh-TW")}</p>}
             </div>
           </div>
-        </div>
+        </GuidedFormStep>
       </div>
+      </GuidedForm>
     </div>
   );
 }

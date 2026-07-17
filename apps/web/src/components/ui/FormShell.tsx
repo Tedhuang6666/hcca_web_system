@@ -11,6 +11,8 @@ interface FormShellProps {
   hideFooterOnKeyboard?: boolean;
   /** 自訂額外 className 加到外層。 */
   className?: string;
+  /** 自訂底部動作列 className，例如只在手機顯示。 */
+  footerClassName?: string;
 }
 
 /**
@@ -29,6 +31,7 @@ export default function FormShell({
   footer,
   hideFooterOnKeyboard = false,
   className,
+  footerClassName,
 }: FormShellProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -77,7 +80,7 @@ export default function FormShell({
         <div
           className={`fixed bottom-0 left-0 right-0 z-20 md:relative md:bottom-auto md:left-auto md:right-auto md:z-auto px-4 py-3 md:px-0 md:py-4 flex flex-wrap items-center justify-end gap-2 ${
             hideFooterOnKeyboard ? "data-[keyboard-open=true]:hidden" : ""
-          }`}
+          } ${footerClassName ?? ""}`}
           style={{
             background: "var(--bg-elevated)",
             borderTop: "1px solid var(--border)",
