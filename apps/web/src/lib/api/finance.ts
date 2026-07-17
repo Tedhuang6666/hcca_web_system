@@ -20,6 +20,7 @@ export const financeApi = {
   listFunds: (ledgerId: string) => get<FundAccountOut[]>(`/finance/ledgers/${ledgerId}/funds`),
   createPeriod: (ledgerId: string, body: PeriodCreate) =>
     post<PeriodOut>(`/finance/ledgers/${ledgerId}/periods`, body),
+  listPeriods: (ledgerId: string) => get<PeriodOut[]>(`/finance/ledgers/${ledgerId}/periods`),
   createJournal: (ledgerId: string, body: JournalCreate) =>
     post<JournalOut>(`/finance/ledgers/${ledgerId}/journals`, body),
   listJournals: (ledgerId: string, status?: string) =>
