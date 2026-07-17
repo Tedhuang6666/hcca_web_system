@@ -4,8 +4,8 @@ import Link from "next/link";
 import { toast } from "sonner";
 import {
   FileText, ListChecks, Landmark, Scale, Megaphone, MessageSquare,
-  CheckSquare, ChevronRight, Plus, Loader2, Sparkles, Clock, ArrowUpRight,
-  Layers3, Zap, ShoppingCart, Utensils, CalendarDays, Inbox, ShieldCheck,
+  CheckSquare, ChevronRight, Plus, Loader2, Clock, ArrowUpRight,
+  Layers3, ShoppingCart, Utensils, CalendarDays, Inbox, ShieldCheck,
   Settings, Users, Bell, Search, PenLine, Send, Wrench, AlertCircle,
 } from "lucide-react";
 import {
@@ -327,8 +327,8 @@ export default function DashboardPage() {
   const priorityTasks = (tasks?.items ?? [])
     .slice()
     .sort((a, b) => b.priority_score - a.priority_score)
-    .slice(0, 5);
-  const priorityMatters = sortMattersByInsight(matters).slice(0, 4);
+    .slice(0, 3);
+  const priorityMatters = sortMattersByInsight(matters).slice(0, 2);
   const urgentCount = (tasks?.items ?? []).filter((task) => task.severity === "critical").length;
   const isOperator = isAdmin || permissions.size > 0 || layoutHint !== "student";
   const dashboardContent = getDashboardContent(profile, can, canAny, isOperator);
@@ -341,14 +341,11 @@ export default function DashboardPage() {
 
       {/* 一次性引導：首次進站時提示 */}
       <OnboardingHint id="hint.dashboard.first-visit">
-        歡迎使用平台首頁！下面的卡片會依您的角色顯示最相關的待辦與最新消息，
-        點任一卡片可以直接開始。
+        從「先處理這些」開始；其他服務可隨時從底部選單、側欄或搜尋開啟。
       </OnboardingHint>
 
       {/* 頁首 */}
       <section className="dashboard-hero">
-        <div className="dashboard-hero-glow dashboard-hero-glow-one" aria-hidden="true" />
-        <div className="dashboard-hero-glow dashboard-hero-glow-two" aria-hidden="true" />
         <div className="dashboard-hero-content">
           <div className="min-w-0">
             <div className="dashboard-kicker">
@@ -361,13 +358,7 @@ export default function DashboardPage() {
               <h1 className="dashboard-title">
                 {greeting}，{userName || "使用者"}
               </h1>
-            {data && (
-              <span
-                  className="dashboard-role-badge">
-                <Sparkles size={10} aria-hidden={true} />
-                {HINT_LABEL[profile] ?? HINT_LABEL[layoutHint] ?? "個人化視角"}
-              </span>
-            )}
+            {data && <span className="dashboard-role-badge">{HINT_LABEL[profile] ?? HINT_LABEL[layoutHint] ?? "個人化視角"}</span>}
             </div>
             <p className="dashboard-subtitle">
               {priorityTasks.length > 0
@@ -375,26 +366,11 @@ export default function DashboardPage() {
                 : dashboardContent.emptySubtitle}
             </p>
           </div>
-          <div className="dashboard-pulse" aria-hidden="true">
-            <span className="dashboard-pulse-ring" />
-            <span className="dashboard-pulse-core">
-              <Zap size={22} />
-            </span>
-            <span className="dashboard-pulse-label">LIVE</span>
-          </div>
         </div>
 
         <div className="dashboard-hero-footer">
-          <div className="dashboard-stat">
-            <Layers3 size={16} aria-hidden={true} />
-            <span><strong>{tasks?.total ?? 0}</strong> 件待辦</span>
-          </div>
-          <div className="dashboard-stat">
-            <ListChecks size={16} aria-hidden={true} />
-            <span><strong>{urgentCount}</strong> 件緊急</span>
-          </div>
           <p className="dashboard-updated">
-            內容依權限與角色即時彙整
+            {urgentCount > 0 ? `${urgentCount} 件需要優先處理` : "內容依你的權限與角色整理"}
           </p>
           <Link href={primaryAction.href} className="dashboard-primary-action">
             <primaryAction.icon size={14} aria-hidden={true} />
@@ -445,38 +421,45 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="dashboard-action-list">
-            {quickActions.map((action) => (
+            {quickActions.slice(0, 3).map((action) => (
               <QuickActionCard key={action.href} action={action} />
             ))}
           </div>
+          <Link href="/search" className="dashboard-text-link mt-3 justify-end">
+            找其他服務 <ChevronRight size={14} aria-hidden={true} />
+          </Link>
         </aside>
       </section>
 
-      <section className="rounded-lg p-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }} aria-label={dashboardContent.serviceTitle}>
-        <div className="dashboard-section-heading">
-          <div>
-            <p className="dashboard-eyebrow">{dashboardContent.serviceEyebrow}</p>
-            <h2>{dashboardContent.serviceTitle}</h2>
-          </div>
-        </div>
+      <details className="rounded-lg p-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+          <span>
+            <span className="block text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+              {dashboardContent.serviceTitle}
+            </span>
+            <span className="mt-0.5 block text-xs" style={{ color: "var(--text-muted)" }}>
+              {dashboardContent.serviceEyebrow}，需要時再展開。
+            </span>
+          </span>
+          <ChevronRight size={16} aria-hidden={true} style={{ color: "var(--text-muted)" }} />
+        </summary>
         <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {dashboardContent.services.map((action) => (
-            <QuickActionCard key={action.href} action={action} />
-          ))}
+          {dashboardContent.services.map((action) => <QuickActionCard key={action.href} action={action} />)}
         </div>
-      </section>
+      </details>
 
       {dashboardContent.showGovernance && (
-      <section className="rounded-lg p-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }} aria-label="正在進行的活動與事情">
-        <div className="dashboard-section-heading">
-          <div>
-            <p className="dashboard-eyebrow">正在進行</p>
-            <h2>活動與事情</h2>
-          </div>
-          <Link href="/governance" className="dashboard-text-link">
-            進入工作中心 <ChevronRight size={14} aria-hidden={true} />
-          </Link>
-        </div>
+      <details className="rounded-lg p-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+          <span>
+            <span className="block text-sm font-semibold" style={{ color: "var(--text-primary)" }}>活動與事情</span>
+            <span className="mt-0.5 block text-xs" style={{ color: "var(--text-muted)" }}>跨模組進度與關聯，必要時再查看。</span>
+          </span>
+          <ChevronRight size={16} aria-hidden={true} style={{ color: "var(--text-muted)" }} />
+        </summary>
+        <Link href="/governance" className="dashboard-text-link mt-3 justify-end">
+          進入工作中心 <ChevronRight size={14} aria-hidden={true} />
+        </Link>
         <div className="mt-3 grid gap-2 md:grid-cols-3">
           {matters.length === 0 && (
             <p className="text-sm" style={{ color: "var(--text-muted)" }}>
@@ -508,21 +491,24 @@ export default function DashboardPage() {
             </Link>
           ))}
         </div>
-      </section>
+      </details>
       )}
 
       {adminActions.length > 0 && (
-        <section className="dashboard-admin-strip" aria-label="管理員工作台">
-          <div>
-            <p className="dashboard-eyebrow">後台工作台</p>
-            <h2>管理員常用操作</h2>
-          </div>
+        <details className="dashboard-admin-strip">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+            <span>
+              <span className="block text-sm font-semibold">管理員常用操作</span>
+              <span className="mt-0.5 block text-xs">維護與管理工具</span>
+            </span>
+            <ChevronRight size={16} aria-hidden={true} />
+          </summary>
           <div className="dashboard-admin-actions">
             {adminActions.map((action) => (
               <QuickActionCard key={action.href} action={action} compact />
             ))}
           </div>
-        </section>
+        </details>
       )}
 
       {/* 最近開啟：個人化捷徑，少翻選單 */}
@@ -544,29 +530,28 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Widget Grid */}
-      <div className="dashboard-section-heading">
-        <div>
-          <p className="dashboard-eyebrow">智慧摘要</p>
-          <h2>跨模組動態</h2>
+      <details className="rounded-lg p-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+          <span>
+            <span className="block text-sm font-semibold" style={{ color: "var(--text-primary)" }}>跨模組動態</span>
+            <span className="mt-0.5 block text-xs" style={{ color: "var(--text-muted)" }}>
+              {widgets.length} 個摘要 · {visibleItems} 筆項目
+            </span>
+          </span>
+          <ChevronRight size={16} aria-hidden={true} style={{ color: "var(--text-muted)" }} />
+        </summary>
+        <div className="mt-4">
+          {loading ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)}
+            </div>
+          ) : hasAny ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {widgets.map((w, index) => <WidgetCard key={w.key} w={w} index={index} />)}
+            </div>
+          ) : <EmptyState />}
         </div>
-        <span className="dashboard-mini-meta">
-          {widgets.length} 個摘要 · {visibleItems} 筆項目
-        </span>
-      </div>
-      {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
-        </div>
-      ) : hasAny ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {widgets.map((w, index) => (
-            <WidgetCard key={w.key} w={w} index={index} />
-          ))}
-        </div>
-      ) : (
-        <EmptyState />
-      )}
+      </details>
 
       {loading && (
         <p className="flex items-center justify-center gap-2 text-xs"
@@ -591,7 +576,7 @@ function GovernanceMatterFocusRow({
       <Link
         href={`/governance/${matter.id}`}
         className="dashboard-task-row"
-        style={{ borderLeftColor: riskColor(insight.risk_level) }}
+        style={{ borderColor: riskColor(insight.risk_level) }}
       >
         <span
           className="dashboard-task-icon"
@@ -880,7 +865,7 @@ function PriorityTaskRow({ task }: { task: TaskItem }) {
       <Link
         href={task.href}
         className="dashboard-task-row"
-        style={{ borderLeftColor: sev.color }}
+        style={{ borderColor: sev.color }}
       >
         <span
           className="dashboard-task-icon"
@@ -957,7 +942,7 @@ function EmptyState() {
         border: "1px solid var(--border)",
         borderRadius: "var(--radius-lg)",
       }}>
-      <Sparkles size={32} aria-hidden={true}
+      <ShieldCheck size={32} aria-hidden={true}
         style={{ color: "var(--primary)", display: "inline-block", marginBottom: 12 }} />
       <p className="text-sm font-medium mb-2" style={{ color: "var(--text-primary)" }}>
         今天一片寧靜
