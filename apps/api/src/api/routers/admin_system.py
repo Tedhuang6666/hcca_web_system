@@ -528,6 +528,7 @@ class GitHubVersionView(BaseModel):
     message: str | None
     pushed_at: str | None
     url: str | None
+    version: str | None
 
 
 class VersionStatusView(BaseModel):

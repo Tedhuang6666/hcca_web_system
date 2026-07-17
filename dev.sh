@@ -649,6 +649,8 @@ step "7/8 啟動 FastAPI（port 8000）"
     # 中環境變數會壓過 .env），這裡強制覆寫，避免 console 變成 JSON 大水缸。
     # 想要 json log 請手動跑 `LOG_FORMAT=json uv run ...`。
     export LOG_FORMAT=text
+    VERSION_BASE="$(tr -d '[:space:]' < "${REPO_ROOT}/VERSION")"
+    export APP_VERSION="${VERSION_BASE}.$(printf '%02d' "$(git -C "${REPO_ROOT}" rev-list --count HEAD)")"
     export BUILD_COMMIT="$(git -C "${REPO_ROOT}" rev-parse HEAD)"
     export BUILD_REF="$(git -C "${REPO_ROOT}" branch --show-current)"
     export BUILD_TIME="$(git -C "${REPO_ROOT}" log -1 --format=%cI)"
@@ -791,6 +793,8 @@ fi
     # DEBUG 是後端 FastAPI 旗標；若繼承到此處會讓 @tailwindcss/postcss
     # 在每次 CSS rebuild 噴出 [Xms] 計時 log，故前端行程不繼承它
     unset DEBUG
+    VERSION_BASE="$(tr -d '[:space:]' < "${REPO_ROOT}/VERSION")"
+    export NEXT_PUBLIC_APP_VERSION="${VERSION_BASE}.$(printf '%02d' "$(git -C "${REPO_ROOT}" rev-list --count HEAD)")"
     export NEXT_PUBLIC_BUILD_COMMIT="$(git -C "${REPO_ROOT}" rev-parse HEAD)"
     export NEXT_PUBLIC_BUILD_REF="$(git -C "${REPO_ROOT}" branch --show-current)"
     export NEXT_PUBLIC_BUILD_TIME="$(git -C "${REPO_ROOT}" log -1 --format=%cI)"
