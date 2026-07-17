@@ -1,0 +1,43 @@
+/* System-level accessibility and motion corrections. */
+:root {
+  --surface: var(--bg-surface);
+  --card-bg: var(--bg-elevated);
+  --muted: var(--text-muted);
+}
+
+[data-theme="dark"] {
+  --text-muted: #aaa8ba;
+  --text-disabled: #89879a;
+}
+
+.scroll-progress-bar {
+  transition: none;
+}
+
+.float-btn {
+  animation: none;
+}
+
+.dashboard-task-row {
+  border-left-width: 1px;
+}
+
+@media (pointer: coarse) {
+  .dashboard-task-row,
+  .dashboard-widget-row,
+  .dashboard-recent-chip {
+    min-height: 44px;
+  }
+
+  .guided-form-shell .btn {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scroll-progress-bar,
+  .float-btn {
+    transition: none;
+    animation: none;
+  }
+}

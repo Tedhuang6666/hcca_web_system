@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import { Suspense } from "react";
 import "./globals.css";
+import "./accessibility.css";
 import { Toaster } from "sonner";
 import AppShell from "@/components/layout/AppShell";
 import GoogleOneTap from "@/components/auth/GoogleOneTap";
@@ -71,6 +72,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: BRANDING.themeColor,
+  viewportFit: "cover",
 };
 
 async function ThemeScript() {

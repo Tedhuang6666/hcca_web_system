@@ -807,8 +807,9 @@ export default function NewDocumentPage() {
                       <span className="truncate max-w-32" style={{ color: "var(--text-muted)" }}>{r.email}</span>
                     )}
                     <button onClick={() => setRecipients((p) => p.filter((x) => x.id !== r.id))}
-                      className="flex-shrink-0 transition-colors hover:text-red-500"
-                      style={{ color: "var(--text-muted)" }}>
+                      className="flex min-h-11 min-w-11 flex-shrink-0 items-center justify-center transition-colors hover:text-red-500"
+                      style={{ color: "var(--text-muted)" }}
+                      aria-label={`移除收件人 ${r.name}`}>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                         strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
                         <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -848,8 +849,9 @@ export default function NewDocumentPage() {
                     </span>
                     <span className="truncate max-w-40 text-[10px]" style={{ color: "var(--text-muted)" }}>{lnk.url}</span>
                     <button onClick={() => setPendingLinks(p => p.filter(x => x.id !== lnk.id))}
-                      className="flex-shrink-0 transition-colors hover:text-red-500"
-                      style={{ color: "var(--text-muted)" }}>
+                      className="flex min-h-11 min-w-11 flex-shrink-0 items-center justify-center transition-colors hover:text-red-500"
+                      style={{ color: "var(--text-muted)" }}
+                      aria-label={`移除連結 ${lnk.display_text || lnk.url}`}>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                         strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
                         <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -898,6 +900,7 @@ export default function NewDocumentPage() {
                       style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
                       <span className="truncate" style={{ color: "var(--text-primary)" }}>{file.name}</span>
                       <button type="button" onClick={() => setPendingFiles(prev => prev.filter((_, i) => i !== idx))}
+                        className="min-h-11 px-2"
                         style={{ color: "var(--danger)" }}>
                         移除
                       </button>
@@ -968,6 +971,27 @@ export default function NewDocumentPage() {
               控制哪些人可以查閱此公文
             </p>
           </FormSection>
+
+          <div className="card p-4 space-y-2" aria-label="儲存前檢查">
+            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>儲存前檢查</h3>
+            <dl className="space-y-1 text-xs" style={{ color: "var(--text-secondary)" }}>
+              <div className="flex items-center justify-between gap-3">
+                <dt>組織</dt><dd className="truncate font-medium">{selectedOrg?.name || "尚未選擇"}</dd>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <dt>類別</dt><dd className="font-medium">{docType}</dd>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <dt>收件人</dt><dd className="font-medium">{recipients.length} 位</dd>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <dt>可見範圍</dt><dd className="font-medium">{visibilityLevel === "org_only" ? "機關成員" : visibilityLevel === "publicly_open" ? "完全公開" : "受限公開"}</dd>
+              </div>
+            </dl>
+            <p className="pt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              儲存後會前往詳情頁設定審核人並送審。
+            </p>
+          </div>
 
           {/* 儲存 */}
           <div className="card p-4 space-y-3 hidden md:block">
