@@ -4,13 +4,15 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 import { financeApi } from "@/lib/api";
-import type { FundAccountOut, JournalOut, LedgerOut, PeriodOut } from "@/lib/types";
+import { orgsApi } from "@/lib/api";
+import type { FundAccountOut, JournalOut, LedgerOut, OrgRead, PeriodOut } from "@/lib/types";
 
 const storageLabel = { petty_cash: "零用金", safe: "保險箱", bank: "銀行帳戶" } as const;
 const today = new Date().toISOString().slice(0, 10);
 
 export default function FinancePage() {
   const [ledger, setLedger] = useState<LedgerOut | null>(null);
+  const [orgs, setOrgs] = useState<OrgRead[]>([]);
   const [orgId, setOrgId] = useState("");
   const [ledgerName, setLedgerName] = useState("班聯會財務帳本");
   const [funds, setFunds] = useState<FundAccountOut[]>([]);
@@ -35,6 +37,11 @@ export default function FinancePage() {
   };
 
   useEffect(() => { const id = localStorage.getItem("finance.ledger_id"); if (id) void load(id); }, []);
+  useEffect(() => {
+    void orgsApi.list({ active_only: true }).then(setOrgs).catch((error) => {
+      toast.error(error instanceof Error ? error.message : "無法載入組織清單");
+    });
+  }, []);
 
   const initialize = async () => {
     if (!orgId.trim()) { toast.error("請填入組織 ID；可從組織管理頁複製"); return; }
@@ -58,7 +65,7 @@ export default function FinancePage() {
   return <main className="mx-auto max-w-7xl space-y-6 p-6">
     <header><p className="text-sm" style={{ color: "var(--text-muted)" }}>班聯會財務總帳</p><h1 className="text-2xl font-semibold">複式總帳與資金保管</h1><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>依照下方三個步驟設定。班級／校商收款請使用側邊欄的另一個入口。</p></header>
 
-    {!ledger ? <section className="rounded border p-5" style={{ borderColor: "var(--border)" }}><Step n="1" title="建立組織帳本" text="第一次使用時建立一次即可，之後系統會記住帳本。"><div className="grid gap-3 md:grid-cols-2"><label className="text-sm">組織 ID<input className="input mt-1 w-full" value={orgId} onChange={(e) => setOrgId(e.target.value)} placeholder="從組織管理頁複製 UUID" /></label><label className="text-sm">帳本名稱<input className="input mt-1 w-full" value={ledgerName} onChange={(e) => setLedgerName(e.target.value)} /></label></div><button className="btn btn-primary mt-4" onClick={() => void initialize()}>建立帳本並繼續</button></Step></section> : <>
+    {!ledger ? <section className="rounded border p-5" style={{ borderColor: "var(--border)" }}><Step n="1" title="建立組織帳本" text="第一次使用時建立一次即可，之後系統會記住帳本。"><div className="grid gap-3 md:grid-cols-2"><label className="text-sm">選擇組織<select className="input mt-1 w-full" value={orgId} onChange={(e) => setOrgId(e.target.value)}><option value="">請選擇要建立帳本的組織</option>{orgs.map((org) => <option key={org.id} value={org.id}>{org.prefix ? `${org.prefix}｜` : ""}{org.name}</option>)}</select></label><label className="text-sm">帳本名稱<input className="input mt-1 w-full" value={ledgerName} onChange={(e) => setLedgerName(e.target.value)} /></label></div><button className="btn btn-primary mt-4" disabled={!orgId} onClick={() => void initialize()}>建立帳本並繼續</button>{orgs.length === 0 && <p className="mt-3 text-sm" style={{ color: "var(--warning)" }}>目前沒有可用組織，請先確認你的組織權限。</p>}</Step></section> : <>
       <section className="rounded border p-5" style={{ borderColor: "var(--border)" }}><Step n="1" title={ledger.name} text="帳本已設定完成。若要切換組織，可清除瀏覽器中的 finance.ledger_id 後重新建立。" /></section>
       <section className="rounded border p-5" style={{ borderColor: "var(--border)" }}><Step n="2" title="建立會計期間" text="例如：2026 年度。所有傳票都必須落在未關閉的會計期間內。"><div className="grid gap-3 md:grid-cols-3"><input className="input" value={newPeriod.name} onChange={(e) => setNewPeriod({ ...newPeriod, name: e.target.value })} placeholder="期間名稱，例如 2026 年度" /><input className="input" type="date" value={newPeriod.starts_on} onChange={(e) => setNewPeriod({ ...newPeriod, starts_on: e.target.value })} /><input className="input" type="date" value={newPeriod.ends_on} onChange={(e) => setNewPeriod({ ...newPeriod, ends_on: e.target.value })} /></div><button className="btn btn-secondary mt-3" onClick={() => void addPeriod()}>新增會計期間</button>{periods.length > 0 && <select className="input mt-3 w-full" value={periodId} onChange={(e) => setPeriodId(e.target.value)}><option value="">請選擇使用中的會計期間</option>{periods.map((p) => <option key={p.id} value={p.id} disabled={p.is_closed}>{p.name}（{p.starts_on}～{p.ends_on}）{p.is_closed ? "／已關閉" : ""}</option>)}</select>}</Step></section>
       <section className="rounded border p-5" style={{ borderColor: "var(--border)" }}><Step n="3" title="管理資金保管點" text="帳本初始化後會自動建立零用金、保險箱與銀行帳戶。資金移轉送出後須由另一位有覆核權限的人員過帳。"><div className="grid gap-3 md:grid-cols-3">{funds.map((fund) => <article key={fund.id} className="rounded border p-4" style={{ borderColor: "var(--border)" }}><p className="text-sm" style={{ color: "var(--text-muted)" }}>{storageLabel[fund.storage_type]}</p><h3 className="font-semibold">{fund.name}</h3><p className="mt-2 text-xl font-semibold">NT${fund.balance.toLocaleString()}</p></article>)}</div><div className="mt-5 grid gap-3 md:grid-cols-4"><select className="input" value={fromId} onChange={(e) => setFromId(e.target.value)}><option value="">轉出哪裡？</option>{funds.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select><select className="input" value={toId} onChange={(e) => setToId(e.target.value)}><option value="">轉入哪裡？</option>{funds.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select><input className="input" type="number" min="1" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="移轉金額（NT$）" /><button className="btn btn-primary" onClick={() => void transfer()}>建立移轉傳票</button></div></Step></section>
