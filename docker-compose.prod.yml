@@ -19,7 +19,7 @@ x-api-common: &api-common
     context: .
     dockerfile: apps/api/Dockerfile
     args:
-      APP_VERSION: ${APP_VERSION:-0.1.0}
+      APP_VERSION: ${APP_VERSION:-01.00.00.00.00}
       BUILD_COMMIT: ${BUILD_COMMIT:-}
       BUILD_REF: ${BUILD_REF:-}
       BUILD_TIME: ${BUILD_TIME:-}

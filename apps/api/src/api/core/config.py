@@ -1,6 +1,7 @@
 """應用程式設定 - 使用 Pydantic Settings 管理環境變數"""
 
 import warnings
+from pathlib import Path
 from typing import Annotated
 from urllib.parse import urlsplit
 
@@ -22,6 +23,20 @@ _KNOWN_INSECURE_KEYS: frozenset[str] = frozenset(
 
 # 視為「本機預設」的 host；這些值代表尚未為部署環境設定，可被部署網址自動覆寫。
 _LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0"})
+_DEFAULT_RELEASE_VERSION = "01.00.00.00.00"
+
+
+def _read_release_version() -> str:
+    """讀取 repository 的五段式版本；容器與本機開發均可用。"""
+    candidates = (Path("/app/VERSION"), Path(__file__).resolve().parents[5] / "VERSION")
+    for path in candidates:
+        try:
+            value = path.read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+        if value:
+            return value
+    return _DEFAULT_RELEASE_VERSION
 
 
 def _is_local_url(value: str) -> bool:
@@ -43,7 +58,7 @@ class Settings(BaseSettings):
 
     # --- 應用程式基本設定 ---
     APP_NAME: str = "校園自治整合平台"
-    APP_VERSION: str = "0.1.0"
+    APP_VERSION: str = _read_release_version()
     # 由 CI 在 image build 時寫入；不可在容器啟動後覆寫，才能正確識別實際執行映像。
     BUILD_COMMIT: str = ""
     BUILD_REF: str = ""
