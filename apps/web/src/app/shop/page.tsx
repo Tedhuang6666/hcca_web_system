@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
@@ -54,6 +54,8 @@ function ProductModal({
   const [qty, setQty] = useState(1);
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     shopApi
@@ -69,10 +71,34 @@ function ProductModal({
   useEffect(() => {
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    const frame = window.requestAnimationFrame(() => closeButtonRef.current?.focus());
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      }
+      if (event.key !== "Tab" || !dialogRef.current) return;
+      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
+        "button:not([disabled]), [href], input:not([disabled]), select:not([disabled])",
+      ));
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
     return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = originalOverflow;
     };
-  }, []);
+  }, [onClose]);
 
   if (!product || !mounted) return null;
 
@@ -113,18 +139,20 @@ function ProductModal({
   return createPortal(
     <div
       className="fixed inset-0 z-50 grid min-h-dvh place-items-center overflow-y-auto p-4"
-      style={{ background: "var(--bg-overlay)" }}
-      role="dialog"
-      aria-modal="true"
-      aria-label="選購商品">
+      style={{ background: "var(--bg-overlay)" }}>
       <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="product-modal-title"
+        tabIndex={-1}
         className="relative max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto card p-6 space-y-4 animate-scale-in"
         style={{ boxShadow: "var(--shadow-xl)" }}>
         <div className="flex items-start gap-4">
           <Thumb url={displayImage} alt={product.name} size={88} />
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold" style={{ color: "var(--text-primary)" }}>
+            <h3 id="product-modal-title" className="font-semibold" style={{ color: "var(--text-primary)" }}>
               {product.name}
             </h3>
             {product.description && (
@@ -136,7 +164,7 @@ function ProductModal({
               {product.is_unlimited ? "無限量" : `庫存 ${product.stock_quantity} 件`}
             </p>
           </div>
-          <button onClick={onClose} className="topbar-icon-btn" aria-label="關閉">
+          <button ref={closeButtonRef} onClick={onClose} className="topbar-icon-btn" aria-label="關閉">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
               <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -159,7 +187,8 @@ function ProductModal({
                     <button
                       key={o.id}
                       onClick={() => setPicked((p) => ({ ...p, [g.id]: o.id }))}
-                      className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs"
+                      className="flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm"
+                      aria-pressed={sel}
                       style={{
                         border: sel ? "1.5px solid var(--primary)" : "1px solid var(--border)",
                         background: sel ? "var(--primary-soft, var(--bg-elevated))" : "var(--bg)",
@@ -186,14 +215,14 @@ function ProductModal({
           </label>
           <div className="flex items-center gap-3">
             <button onClick={() => setQty((q) => Math.max(1, q - 1))}
-              className="btn btn-ghost w-9 h-9 p-0" aria-label="減少數量">−</button>
+              className="btn btn-ghost h-11 w-11 p-0" aria-label="減少數量">−</button>
             <span className="text-base font-semibold w-8 text-center" style={{ color: "var(--text-primary)" }}>
               {qty}
             </span>
             <button
               onClick={() => setQty((q) =>
                 product.is_unlimited ? q + 1 : Math.min(product.stock_quantity, q + 1))}
-              className="btn btn-ghost w-9 h-9 p-0" aria-label="增加數量">＋</button>
+              className="btn btn-ghost h-11 w-11 p-0" aria-label="增加數量">＋</button>
           </div>
         </div>
 

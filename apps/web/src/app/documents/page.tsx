@@ -127,12 +127,16 @@ function SortTh({
   const active = sortKey === sk;
   return (
     <th
-      className="px-5 py-3.5 text-left text-xs font-semibold cursor-pointer select-none"
-      style={{ color: active ? "var(--primary)" : "var(--text-muted)" }}
+      className="px-5 py-3.5 text-left"
       scope="col"
-      onClick={() => onToggle(sk)}
       aria-sort={active ? "ascending" : "none"}>
-      {label} {active ? "↑" : ""}
+      <button
+        type="button"
+        className="-m-2 inline-flex min-h-11 items-center gap-1 rounded px-2 text-xs font-semibold"
+        style={{ color: active ? "var(--primary)" : "var(--text-muted)" }}
+        onClick={() => onToggle(sk)}>
+        {label} {active ? "↑" : ""}
+      </button>
     </th>
   );
 }
@@ -1158,8 +1162,7 @@ export default function DocumentListPage() {
                             <>
                               <Link
                                 href={`/documents/${encodeURIComponent(doc.serial_number)}`}
-                                className="btn btn-ghost text-xs px-3 py-1.5"
-                                style={{ minHeight: "auto" }}>
+                                className="btn btn-ghost text-xs px-3">
                                 查看
                               </Link>
                               <button
@@ -1173,8 +1176,9 @@ export default function DocumentListPage() {
                                     toast.error("複製失敗");
                                   }
                                 }}
-                                className="p-1.5 rounded hover:opacity-80 transition-opacity"
+                                className="min-h-11 min-w-11 rounded hover:opacity-80 transition-opacity"
                                 style={{ color: "var(--text-muted)" }}
+                                aria-label={`複製公文 ${doc.serial_number} 的連結`}
                                 title="複製連結">
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                   strokeWidth="2" strokeLinecap="round" aria-hidden="true">
@@ -1269,8 +1273,10 @@ export default function DocumentListPage() {
                           try { await navigator.clipboard.writeText(url); toast.success("連結已複製"); }
                           catch { toast.error("複製失敗"); }
                         }}
-                        className="p-2 rounded flex-shrink-0 hover:opacity-80"
-                        style={{ color: "var(--text-muted)" }} title="複製連結">
+                        className="min-h-11 min-w-11 rounded flex-shrink-0 hover:opacity-80"
+                        style={{ color: "var(--text-muted)" }}
+                        aria-label={`複製公文 ${doc.serial_number} 的連結`}
+                        title="複製連結">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                           strokeWidth="2" strokeLinecap="round" aria-hidden="true">
                           <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>

@@ -240,7 +240,7 @@ function WorkRow({
         onClick={onComplete}
         disabled={done || completing}
         aria-label={done ? "已完成" : "標記完成"}
-        className="mt-0.5 flex-shrink-0 disabled:cursor-not-allowed"
+        className="-m-2 flex min-h-11 min-w-11 flex-shrink-0 items-center justify-center rounded disabled:cursor-not-allowed"
         style={{ color: done ? "var(--success)" : "var(--text-disabled)" }}
       >
         {completing ? (

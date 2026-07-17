@@ -926,7 +926,7 @@ export default function NewSurveyPage() {
           </div>
 
           <div className="card p-4 space-y-2">
-            <h3 className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>問卷設定</h3>
+            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>發布前確認</h3>
             <div className="space-y-1 text-xs" style={{ color: "var(--text-secondary)" }}>
               <p>{questions.length} 道題目</p>
               <p>{isAnonymous ? "匿名填答" : "記名填答"}</p>
