@@ -102,6 +102,17 @@ async def close_period(period_id: uuid.UUID, db: DbDep, _: CurrentUser) -> Perio
 
 
 @router.get(
+    "/ledgers/{ledger_id}/periods",
+    response_model=list[PeriodOut],
+    dependencies=[Depends(require_permission(PermissionCode.FINANCE_VIEW))],
+)
+async def list_periods(ledger_id: uuid.UUID, db: DbDep, _: CurrentUser) -> list[PeriodOut]:
+    await service.get_ledger(db, ledger_id)
+    rows = (await db.execute(select(FiscalPeriod).where(FiscalPeriod.ledger_id == ledger_id).order_by(FiscalPeriod.starts_on.desc()))).scalars()
+    return [PeriodOut.model_validate(row) for row in rows]
+
+
+@router.get(
     "/ledgers/{ledger_id}/accounts",
     response_model=list[ChartAccountOut],
     dependencies=[Depends(require_permission(PermissionCode.FINANCE_VIEW))],
