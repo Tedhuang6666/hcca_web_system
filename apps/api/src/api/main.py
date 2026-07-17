@@ -73,6 +73,7 @@ from api.routers import (
     email_platform,
     exam_papers,
     feature_flags,
+    finance,
     governance,
     impersonation,
     inventory,
@@ -405,6 +406,7 @@ def create_app() -> FastAPI:
     app.include_router(reports.router)
     app.include_router(activities.router)
     app.include_router(receivables.router)
+    app.include_router(finance.router)
     app.include_router(publications.router)
     app.include_router(orgs.router)
     app.include_router(people.router)

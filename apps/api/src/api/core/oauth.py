@@ -23,7 +23,7 @@ oauth.register(
     client_secret=settings.GOOGLE_CLIENT_SECRET,
     server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
     client_kwargs={
-        "scope": "https://www.googleapis.com/auth/calendar",
+        "scope": "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/spreadsheets",
         "access_type": "offline",
         "prompt": "consent",
     },

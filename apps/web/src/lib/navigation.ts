@@ -90,6 +90,7 @@ export const NAV_ITEMS: NavItem[] = [
     label: "收款對帳",
     perm: "finance:view",
   },
+  { id: "finance", href: "/finance", iconKey: "analytics", label: "財務總帳", perm: "finance:view" },
   {
     id: "publications",
     href: "/publications",
@@ -285,7 +286,7 @@ export const NAV_DEF: NavEntry[] = [
     heading: "營運管理",
     collapsible: true,
     defaultCollapsed: true,
-    items: byIds(["operations", "publications", "email", "activitiesAdmin", "receivables", "inventoryAdmin"]),
+    items: byIds(["operations", "publications", "email", "activitiesAdmin", "finance", "receivables", "inventoryAdmin"]),
   },
   {
     id: "workbench",
