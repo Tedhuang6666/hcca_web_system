@@ -75,6 +75,7 @@ from api.models.user_identity import UserIdentity
 from api.services import audit as audit_svc
 from api.services import defense as defense_svc
 from api.services import mfa as mfa_svc
+from api.services import version as version_svc
 from api.services.discord_bot import emit_security_alert
 
 router = APIRouter(prefix="/admin/system", tags=["管理員 / 系統"])
@@ -511,6 +512,47 @@ class DiagnosticsView(BaseModel):
     ws: WsView
 
 
+class RuntimeVersionView(BaseModel):
+    app_version: str
+    commit: str | None
+    ref: str | None
+    built_at: str | None
+    environment: str
+
+
+class GitHubVersionView(BaseModel):
+    repository: str
+    branch: str
+    sha: str | None
+    short_sha: str | None
+    message: str | None
+    pushed_at: str | None
+    url: str | None
+
+
+class VersionStatusView(BaseModel):
+    runtime: RuntimeVersionView
+    github: GitHubVersionView | None
+    sync_status: Literal["current", "outdated", "unknown"]
+    github_error: str | None = None
+
+
+@router.get("/version", response_model=VersionStatusView, summary="運行與 GitHub 版本")
+async def system_version(_admin: AdminUser) -> VersionStatusView:
+    runtime = RuntimeVersionView(**version_svc.runtime_version())
+    github_data, github_error = await version_svc.github_version()
+    github = GitHubVersionView(**github_data) if github_data else None
+    sync_status: Literal["current", "outdated", "unknown"] = "unknown"
+    if runtime.commit and github and github.sha:
+        sync_status = "current" if github.sha.startswith(runtime.commit) else "outdated"
+    return VersionStatusView(
+        runtime=runtime,
+        github=github,
+        sync_status=sync_status,
+        github_error=github_error,
+    )
+
+
 @router.get("/diagnostics", response_model=DiagnosticsView, summary="一鍵健康診斷（管理員）")
 async def system_diagnostics(_admin: AdminUser, db: DbDep) -> DiagnosticsView:
     """彙整 DB / Redis / Celery / queue 積壓 / email outbox / WebSocket / uptime / 版本，
@@ -684,7 +726,9 @@ async def get_maintenance(_admin: AdminUser) -> MaintenanceView:
     return MaintenanceView(**state)
 
 
-@router.put("/maintenance", response_model=MaintenanceView, dependencies=[Depends(require_admin_mfa)])
+@router.put(
+    "/maintenance", response_model=MaintenanceView, dependencies=[Depends(require_admin_mfa)]
+)
 async def update_maintenance(
     body: MaintenanceBody, session: DbDep, _admin: AdminUser
 ) -> MaintenanceView:
@@ -716,7 +760,11 @@ async def list_flags(_admin: AdminUser) -> list[FeatureFlagItem]:
     return [FeatureFlagItem(**i) for i in items]
 
 
-@router.patch("/feature-flags/{key:path}", response_model=FeatureFlagItem, dependencies=[Depends(require_admin_mfa)])
+@router.patch(
+    "/feature-flags/{key:path}",
+    response_model=FeatureFlagItem,
+    dependencies=[Depends(require_admin_mfa)],
+)
 async def update_flag(
     key: str, body: SetFlagBody, session: DbDep, _admin: AdminUser
 ) -> FeatureFlagItem:
@@ -796,7 +844,11 @@ async def list_modules(_admin: AdminUser) -> list[ModuleStatusOut]:
     return out
 
 
-@router.put("/modules/{module_id}/maintenance", response_model=ModuleStatusOut, dependencies=[Depends(require_admin_mfa)])
+@router.put(
+    "/modules/{module_id}/maintenance",
+    response_model=ModuleStatusOut,
+    dependencies=[Depends(require_admin_mfa)],
+)
 async def update_module_maintenance(
     module_id: str, body: ModuleMaintenanceBody, session: DbDep, _admin: AdminUser
 ) -> ModuleStatusOut:
@@ -1104,7 +1156,12 @@ async def list_defense_rules(
     return [DefenseRuleOut(**defense_svc.rule_to_dict(row)) for row in rows]
 
 
-@router.post("/defense/rules", response_model=DefenseRuleOut, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_admin_mfa)])
+@router.post(
+    "/defense/rules",
+    response_model=DefenseRuleOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_admin_mfa)],
+)
 async def create_defense_rule(
     body: DefenseRuleCreate, session: DbDep, _admin: AdminUser
 ) -> DefenseRuleOut:
@@ -1125,7 +1182,11 @@ async def create_defense_rule(
     return DefenseRuleOut(**defense_svc.rule_to_dict(rule))
 
 
-@router.patch("/defense/rules/{rule_id}", response_model=DefenseRuleOut, dependencies=[Depends(require_admin_mfa)])
+@router.patch(
+    "/defense/rules/{rule_id}",
+    response_model=DefenseRuleOut,
+    dependencies=[Depends(require_admin_mfa)],
+)
 async def update_defense_rule(
     rule_id: uuid.UUID, body: DefenseRuleUpdate, session: DbDep, _admin: AdminUser
 ) -> DefenseRuleOut:
@@ -1139,7 +1200,11 @@ async def update_defense_rule(
     return DefenseRuleOut(**defense_svc.rule_to_dict(rule))
 
 
-@router.delete("/defense/rules/{rule_id}", response_model=DefenseRuleOut, dependencies=[Depends(require_admin_mfa)])
+@router.delete(
+    "/defense/rules/{rule_id}",
+    response_model=DefenseRuleOut,
+    dependencies=[Depends(require_admin_mfa)],
+)
 async def deactivate_defense_rule(
     rule_id: uuid.UUID, session: DbDep, _admin: AdminUser
 ) -> DefenseRuleOut:
@@ -1243,7 +1308,12 @@ async def get_ip_blocklist(_admin: AdminUser) -> list[IpBlockedItem]:
     return [IpBlockedItem(**i) for i in await ip_list_blocked()]
 
 
-@router.post("/ip-blocklist", response_model=IpBlockedItem, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_admin_mfa)])
+@router.post(
+    "/ip-blocklist",
+    response_model=IpBlockedItem,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_admin_mfa)],
+)
 async def add_ip_block(body: IpBlockBody, session: DbDep, _admin: AdminUser) -> IpBlockedItem:
     await ip_block(body.ip, reason=body.reason, ttl_seconds=body.ttl_seconds)
     expires_at = (time.time() + body.ttl_seconds) if body.ttl_seconds else None
@@ -1389,7 +1459,12 @@ async def clear_recent_errors(_admin: AdminUser) -> dict:
 # ── 復原工具（清快取 / 升級資料庫 / 重啟） ──────────────────────────────────
 
 
-@router.post("/recovery/clear-cache", response_model=dict, summary="清除應用層快取", dependencies=[Depends(require_admin_mfa)])
+@router.post(
+    "/recovery/clear-cache",
+    response_model=dict,
+    summary="清除應用層快取",
+    dependencies=[Depends(require_admin_mfa)],
+)
 async def recovery_clear_cache(session: DbDep, _admin: AdminUser) -> dict:
     result = await recovery.clear_app_cache()
     await audit_svc.record(
@@ -1410,7 +1485,12 @@ async def recovery_clear_cache(session: DbDep, _admin: AdminUser) -> dict:
     return {"ok": True, **result}
 
 
-@router.post("/recovery/db-upgrade", response_model=dict, summary="升級資料庫到最新版本", dependencies=[Depends(require_admin_mfa)])
+@router.post(
+    "/recovery/db-upgrade",
+    response_model=dict,
+    summary="升級資料庫到最新版本",
+    dependencies=[Depends(require_admin_mfa)],
+)
 async def recovery_db_upgrade(session: DbDep, _admin: AdminUser) -> dict:
     """執行 alembic upgrade head。"""
     try:
@@ -1445,7 +1525,12 @@ async def recovery_db_upgrade(session: DbDep, _admin: AdminUser) -> dict:
     return {"ok": True, **result}
 
 
-@router.post("/recovery/restart", response_model=dict, summary="重啟服務", dependencies=[Depends(require_admin_mfa)])
+@router.post(
+    "/recovery/restart",
+    response_model=dict,
+    summary="重啟服務",
+    dependencies=[Depends(require_admin_mfa)],
+)
 async def recovery_restart(background: BackgroundTasks, session: DbDep, _admin: AdminUser) -> dict:
     """依環境觸發重啟（dev 熱重載 / prod SIGHUP gunicorn master）。回應送出後才執行。"""
     await audit_svc.record(

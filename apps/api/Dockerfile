@@ -44,6 +44,11 @@ RUN groupadd --gid 1001 appgroup && \
 
 WORKDIR /app
 
+ARG APP_VERSION=0.1.0
+ARG BUILD_COMMIT=
+ARG BUILD_REF=
+ARG BUILD_TIME=
+
 # 從 builder 複製虛擬環境
 COPY --from=builder /build/.venv /app/.venv
 
@@ -59,7 +64,11 @@ RUN mkdir -p /app/uploads /app/backups && chown -R appuser:appgroup /app/uploads
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONPATH="/app/src"
+    PYTHONPATH="/app/src" \
+    APP_VERSION=$APP_VERSION \
+    BUILD_COMMIT=$BUILD_COMMIT \
+    BUILD_REF=$BUILD_REF \
+    BUILD_TIME=$BUILD_TIME
 
 USER appuser
 

@@ -37,6 +37,13 @@ jobs:
         with:
           driver: docker
 
+      - name: 產生建置版本資訊
+        id: version
+        run: |
+          echo "commit=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "ref=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          echo "built_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+
       - uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7
         with:
           context: .
@@ -48,3 +55,10 @@ jobs:
           build-args: |
             NEXT_PUBLIC_API_URL=
             NEXT_PUBLIC_WS_URL=
+            APP_VERSION=${{ github.ref_name }}-${{ github.sha }}
+            BUILD_COMMIT=${{ steps.version.outputs.commit }}
+            BUILD_REF=${{ steps.version.outputs.ref }}
+            BUILD_TIME=${{ steps.version.outputs.built_at }}
+            NEXT_PUBLIC_BUILD_COMMIT=${{ steps.version.outputs.commit }}
+            NEXT_PUBLIC_BUILD_REF=${{ steps.version.outputs.ref }}
+            NEXT_PUBLIC_BUILD_TIME=${{ steps.version.outputs.built_at }}
