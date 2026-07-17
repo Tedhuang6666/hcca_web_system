@@ -261,7 +261,7 @@ export const NAV_DEF: NavEntry[] = [
   {
     id: "work",
     heading: "工作入口",
-    items: byIds(["dashboard", "tasks", "matters", "governanceHub", "calendar"]),
+    items: byIds(["dashboard", "tasks", "governanceHub", "calendar"]),
   },
   {
     id: "governance",
@@ -338,7 +338,7 @@ export const NAV_DEF_STUDENT: NavEntry[] = [
   {
     id: "student-main",
     heading: "我的校園服務",
-    items: byIds(["dashboard", "tasks", "announcements", "surveys", "petitions"]),
+    items: byIds(["dashboard", "tasks", "announcements", "surveys"]),
   },
   {
     id: "student-services",
@@ -376,11 +376,11 @@ export const NAV_DEF_MEAL_VENDOR: NavEntry[] = [
 export const DEFAULT_DESKTOP_ORDER = NAV_ITEMS.map((item) => item.id);
 export const DEFAULT_MOBILE_ORDER = [
   "dashboard",
-  "governanceHub",
-  "matters",
   "tasks",
-  "activitiesAdmin",
+  "governanceHub",
   "calendar",
+  "matters",
+  "activitiesAdmin",
   "announcements",
   "publications",
   "councilProposals",
