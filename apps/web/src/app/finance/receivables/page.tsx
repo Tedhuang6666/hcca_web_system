@@ -62,8 +62,11 @@ export default function ReceivablesPage() {
     <main className="mx-auto max-w-7xl space-y-6 p-6">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>收款對帳中心</p>
-          <h1 className="text-2xl font-semibold">應收款與付款狀態</h1>
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>班級／校商收款作業</p>
+          <h1 className="text-2xl font-semibold">班級與校商應收款</h1>
+          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+            管理班級訂購、校商交易與活動費用的收款狀態；這裡不是複式財務總帳。
+          </p>
         </div>
         <a className="btn btn-ghost" href={receivablesApi.exportUrl({ activity_id: activityId })}>
           匯出 CSV

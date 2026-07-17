@@ -87,7 +87,7 @@ export const NAV_ITEMS: NavItem[] = [
     id: "receivables",
     href: "/finance/receivables",
     iconKey: "shopOrders",
-    label: "收款對帳",
+    label: "班級／校商收款",
     perm: "finance:view",
   },
   { id: "finance", href: "/finance", iconKey: "analytics", label: "財務總帳", perm: "finance:view" },
