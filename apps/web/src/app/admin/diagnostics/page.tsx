@@ -11,13 +11,14 @@ import {
   Mail,
   RefreshCcw,
   Server,
+  GitCommitHorizontal,
   Wifi,
   XCircle,
 } from "lucide-react";
 
 import { usePermissions } from "@/hooks/usePermissions";
 import { useResilientPoll } from "@/hooks/useResilientPoll";
-import { ApiError, systemApi, type SystemDiagnostics } from "@/lib/api";
+import { ApiError, systemApi, type SystemDiagnostics, type VersionStatus } from "@/lib/api";
 import { isFatalApiStatus } from "@/lib/polling";
 
 const POLL_MS = 10_000;
@@ -70,13 +71,15 @@ function HealthBadge({ ok, detail }: { ok: boolean; detail?: string | null }) {
 export default function DiagnosticsPage() {
   const { isAdmin } = usePermissions();
   const [data, setData] = useState<SystemDiagnostics | null>(null);
+  const [version, setVersion] = useState<VersionStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
 
   const poll = useCallback(async () => {
     try {
-      const d = await systemApi.diagnostics();
+      const [d, v] = await Promise.all([systemApi.diagnostics(), systemApi.version()]);
       setData(d);
+      setVersion(v);
       setError(null);
       setUpdatedAt(Date.now());
       return "ok" as const;
@@ -134,6 +137,48 @@ export default function DiagnosticsPage() {
         <section className="card p-8 text-center text-sm text-[var(--text-muted)]">載入中…</section>
       ) : (
         <>
+          {/* 核心健康 */}
+          <section className="card p-5">
+            <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-[var(--text-primary)]">
+              <GitCommitHorizontal size={15} aria-hidden /> 部署版本
+            </h2>
+            {!version ? (
+              <p className="text-sm text-[var(--text-muted)]">載入版本資訊中…</p>
+            ) : (
+              <div className="space-y-3 text-sm">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-lg border border-[var(--border)] p-3">
+                    <p className="text-xs text-[var(--text-muted)]">目前運行（API）</p>
+                    <p className="mt-1 font-mono text-[var(--text-primary)]">
+                      {version.runtime.commit?.slice(0, 12) ?? "未注入 commit"}
+                    </p>
+                    <p className="mt-1 text-xs text-[var(--text-muted)]">
+                      {version.runtime.app_version} · {version.runtime.ref ?? "—"} · {version.runtime.built_at ?? "—"}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-[var(--border)] p-3">
+                    <p className="text-xs text-[var(--text-muted)]">GitHub 最新推送（{version.github?.branch ?? "—"}）</p>
+                    {version.github ? (
+                      <>
+                        <a href={version.github.url ?? undefined} target="_blank" rel="noreferrer" className="mt-1 block font-mono text-[var(--primary)] hover:underline">
+                          {version.github.short_sha ?? "未知 commit"}
+                        </a>
+                        <p className="mt-1 truncate text-xs text-[var(--text-muted)]">{version.github.message ?? "—"}</p>
+                      </>
+                    ) : <p className="mt-1 text-xs text-[var(--danger)]">{version.github_error ?? "無法取得 GitHub 版本"}</p>}
+                  </div>
+                </div>
+                <p className={version.sync_status === "current" ? "text-[var(--success)]" : version.sync_status === "outdated" ? "text-[var(--warning)]" : "text-[var(--text-muted)]"}>
+                  {version.sync_status === "current" ? "已部署最新 GitHub 推送版本" : version.sync_status === "outdated" ? "GitHub 有較新的推送，尚未部署" : "無法比對：請確認映像由 CI 建置並注入 commit"}
+                </p>
+                <p className="text-xs text-[var(--text-muted)]">
+                  前端建置：{process.env.NEXT_PUBLIC_BUILD_COMMIT?.slice(0, 12) ?? "本機／未注入"}
+                  {process.env.NEXT_PUBLIC_BUILD_TIME ? ` · ${process.env.NEXT_PUBLIC_BUILD_TIME}` : ""}
+                </p>
+              </div>
+            )}
+          </section>
+
           {/* 核心健康 */}
           <section className="card p-5">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

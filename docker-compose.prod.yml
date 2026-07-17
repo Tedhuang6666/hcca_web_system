@@ -18,6 +18,11 @@ x-api-common: &api-common
   build:
     context: .
     dockerfile: apps/api/Dockerfile
+    args:
+      APP_VERSION: ${APP_VERSION:-0.1.0}
+      BUILD_COMMIT: ${BUILD_COMMIT:-}
+      BUILD_REF: ${BUILD_REF:-}
+      BUILD_TIME: ${BUILD_TIME:-}
   env_file:
     - ${PROD_ENV_FILE:-.env.production}
   environment:
@@ -282,6 +287,9 @@ services:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
         NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-}
         NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://hcca40.hct.works}
+        NEXT_PUBLIC_BUILD_COMMIT: ${BUILD_COMMIT:-}
+        NEXT_PUBLIC_BUILD_REF: ${BUILD_REF:-}
+        NEXT_PUBLIC_BUILD_TIME: ${BUILD_TIME:-}
     restart: unless-stopped
     mem_limit: ${WEB_MEM_LIMIT:-512m}
     mem_reservation: 192m

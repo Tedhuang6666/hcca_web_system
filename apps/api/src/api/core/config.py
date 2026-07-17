@@ -10,13 +10,15 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 _FALLBACK_SIGNING_KEY = "CHANGE_ME_IN_PRODUCTION_USE_256_BIT_KEY"
 
 # 已知不安全金鑰清單：dev/CI 環境使用的固定字串，生產環境必須拒絕。
-_KNOWN_INSECURE_KEYS: frozenset[str] = frozenset({
-    _FALLBACK_SIGNING_KEY,
-    "ci-test-secret-key-32-characters-min",
-    "test-secret-key",
-    "secret",
-    "dev",
-})
+_KNOWN_INSECURE_KEYS: frozenset[str] = frozenset(
+    {
+        _FALLBACK_SIGNING_KEY,
+        "ci-test-secret-key-32-characters-min",
+        "test-secret-key",
+        "secret",
+        "dev",
+    }
+)
 
 # 視為「本機預設」的 host；這些值代表尚未為部署環境設定，可被部署網址自動覆寫。
 _LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0"})
@@ -42,6 +44,15 @@ class Settings(BaseSettings):
     # --- 應用程式基本設定 ---
     APP_NAME: str = "校園自治整合平台"
     APP_VERSION: str = "0.1.0"
+    # 由 CI 在 image build 時寫入；不可在容器啟動後覆寫，才能正確識別實際執行映像。
+    BUILD_COMMIT: str = ""
+    BUILD_REF: str = ""
+    BUILD_TIME: str = ""
+    GITHUB_REPOSITORY: str = "Tedhuang6666/hcca_web_system"
+    GITHUB_DEFAULT_BRANCH: str = "main"
+    # 私有 repository 請填 fine-grained token（Contents: Read）；公開 repository 可留空。
+    GITHUB_TOKEN: str = ""
+    GITHUB_VERSION_CACHE_SECONDS: int = Field(default=60, ge=0, le=3600)
     ENVIRONMENT: str = "development"
     DEBUG: bool = False
     ENABLE_API_DOCS: bool = False
@@ -515,7 +526,9 @@ class Settings(BaseSettings):
     def production_security_must_be_explicit(self) -> "Settings":
         is_prod = self.ENVIRONMENT.lower() in {"prod", "production"}
         if is_prod and self.SECRET_KEY in _KNOWN_INSECURE_KEYS:
-            raise ValueError("生產環境必須設定強 SECRET_KEY，不能使用已知不安全值（dev/CI 固定字串）")
+            raise ValueError(
+                "生產環境必須設定強 SECRET_KEY，不能使用已知不安全值（dev/CI 固定字串）"
+            )
         if is_prod and self.DEBUG:
             raise ValueError("生產環境不可啟用 DEBUG")
         if is_prod and self.ENABLE_API_DOCS:
@@ -530,6 +543,7 @@ class Settings(BaseSettings):
             raise ValueError("生產環境 ALLOWED_HOSTS 不可包含 '*'；請明確列出允許 Host")
         if is_prod and self.VAPID_PRIVATE_KEY and len(self.VAPID_PRIVATE_KEY) > 20:
             import logging as _logging
+
             _logging.getLogger(__name__).warning(
                 "VAPID_PRIVATE_KEY 以明文存在環境變數中；建議改用 Secrets Manager 或加密 vault 管理，"
                 "避免透過 /admin/settings 或 env dump 洩漏此金鑰（洩漏後可偽造推播通知給所有使用者）"

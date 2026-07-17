@@ -275,6 +275,27 @@ export interface SystemDiagnostics {
   ws: WsView;
 }
 
+export interface VersionStatus {
+  runtime: {
+    app_version: string;
+    commit: string | null;
+    ref: string | null;
+    built_at: string | null;
+    environment: string;
+  };
+  github: {
+    repository: string;
+    branch: string;
+    sha: string | null;
+    short_sha: string | null;
+    message: string | null;
+    pushed_at: string | null;
+    url: string | null;
+  } | null;
+  sync_status: "current" | "outdated" | "unknown";
+  github_error: string | null;
+}
+
 export const systemApi = {
   status: () => get<SystemMetricsSnapshot>("/admin/system/status"),
   defenseSummary: () => get<DefenseSummary>("/admin/system/defense/summary"),
@@ -304,6 +325,7 @@ export const systemApi = {
     put<{ mode: LoadShedMode }>("/admin/system/load-shed", { mode }),
   moduleStatuses: () => get<ModuleStatusPublic[]>("/system/module-status"),
   diagnostics: () => get<SystemDiagnostics>("/admin/system/diagnostics"),
+  version: () => get<VersionStatus>("/admin/system/version"),
   listModules: () => get<ModuleStatus[]>("/admin/system/modules"),
   setModuleMaintenance: (
     id: string,
