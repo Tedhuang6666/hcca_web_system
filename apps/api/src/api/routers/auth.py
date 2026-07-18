@@ -648,7 +648,7 @@ async def refresh_token(
     token = (body.refresh_token if body else None) or request.cookies.get(
         settings.REFRESH_TOKEN_COOKIE_NAME
     )
-    if not token or await is_blacklisted(token):
+    if not token or await is_blacklisted(token, fail_closed=True):
         raise credentials_exception
 
     try:

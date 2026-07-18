@@ -241,7 +241,7 @@ export default function FinancePage() {
       let finalEvidenceUrl = evidenceUrl.trim() || undefined;
       if (evidenceFile) {
         setIsEvidenceUploading(true);
-        finalEvidenceUrl = (await financeApi.uploadEvidence(evidenceFile)).url;
+        finalEvidenceUrl = (await financeApi.uploadEvidence(ledger.id, evidenceFile)).storage_key;
       }
       if (entryType === "expense") {
         if (!claimItems.every((item) => item.name.trim() && item.unit_price > 0 && item.quantity > 0)) {

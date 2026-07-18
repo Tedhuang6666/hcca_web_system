@@ -13,7 +13,7 @@ from api.models.org import Org, Permission, Position, UserPosition
 from api.services.finance import initialize_ledger
 
 
-async def _grant(db_session, user, code: str) -> None:
+async def _grant(db_session, user, code: str) -> Org:
     org = Org(name=f"finance-org-{uuid.uuid4().hex[:6]}")
     db_session.add(org)
     await db_session.flush()
@@ -30,12 +30,14 @@ async def _grant(db_session, user, code: str) -> None:
         )
     )
     await db_session.flush()
+    return org
 
 
-async def _make_ledger(db_session):
-    org = Org(name=f"ledger-org-{uuid.uuid4().hex[:6]}")
-    db_session.add(org)
-    await db_session.flush()
+async def _make_ledger(db_session, org: Org | None = None):
+    if org is None:
+        org = Org(name=f"ledger-org-{uuid.uuid4().hex[:6]}")
+        db_session.add(org)
+        await db_session.flush()
     ledger = await initialize_ledger(db_session, org.id, "測試帳本")
     period = FiscalPeriod(
         ledger_id=ledger.id,
@@ -63,8 +65,8 @@ async def _make_ledger(db_session):
 async def test_expense_claim_with_multiple_items_creates_pending_journal(
     db_session, member_user, authed_client_factory
 ) -> None:
-    await _grant(db_session, member_user, "finance:expense_claim")
-    ledger, period, fund, expense = await _make_ledger(db_session)
+    org = await _grant(db_session, member_user, "finance:expense_claim")
+    ledger, period, fund, expense = await _make_ledger(db_session, org)
     fund_account_id = await db_session.scalar(
         select(FundAccount.id).where(FundAccount.chart_account_id == fund.id)
     )
@@ -93,7 +95,7 @@ async def test_expense_claim_with_multiple_items_creates_pending_journal(
         (
             await db_session.execute(
                 select(ExpenseClaimItem).where(
-                    ExpenseClaimItem.journal_entry_id == response.json()["id"]
+                    ExpenseClaimItem.journal_entry_id == uuid.UUID(response.json()["id"])
                 )
             )
         ).scalars()
@@ -132,8 +134,8 @@ async def test_create_expense_claim_without_permission_returns_403(
 async def test_update_expense_account_name_with_manage_permission(
     db_session, member_user, authed_client_factory
 ) -> None:
-    await _grant(db_session, member_user, "finance:manage")
-    ledger, _, _, expense = await _make_ledger(db_session)
+    org = await _grant(db_session, member_user, "finance:manage")
+    ledger, _, _, expense = await _make_ledger(db_session, org)
     ac = authed_client_factory(member_user)
 
     response = await ac.patch(

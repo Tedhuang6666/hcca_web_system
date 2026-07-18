@@ -2,7 +2,7 @@
 # 一鍵拉取 + 部署（GHCR 預建映像版）。在 VPS 的 repo 目錄執行：
 #   ./scripts/prod-pull-deploy.sh
 #
-# 流程：git pull → compose pull → 起穩定核心 → 起 email-worker → ps → smoke test。
+# 流程：git pull → 設定檢查 → compose pull → 預部署 DB 備份 → migration → 起服務 → smoke test。
 # 預設「不」啟動 celery-worker / celery-beat（重背景任務）；要一起開：
 #   WITH_WORKERS=1 ./scripts/prod-pull-deploy.sh
 #
@@ -26,6 +26,33 @@ if [[ "${WITH_WORKERS:-0}" == "1" ]]; then
 fi
 
 step() { printf '\n\033[1;36m▶ %s\033[0m\n' "$1"; }
+
+require_env_value() {
+  local key="$1" value
+  value="$(grep -E "^${key}=" "$env_file" | tail -n 1 | cut -d= -f2- || true)"
+  if [[ -z "$value" || "$value" == *"CHANGE_ME"* || "$value" == *"your-"* ]]; then
+    echo "❌ $env_file 的 $key 未設定為正式值" >&2
+    exit 1
+  fi
+}
+
+if [[ ! -f "$env_file" ]]; then
+  echo "❌ 找不到部署設定檔：$env_file" >&2
+  exit 1
+fi
+
+step "驗證正式環境設定"
+for key in SECRET_KEY POSTGRES_PASSWORD REDIS_PASSWORD BACKUP_GPG_PASSPHRASE; do
+  require_env_value "$key"
+done
+if ! grep -q '^TRUST_CLOUDFLARE_PROXY=true$' "$env_file"; then
+  echo "❌ 正式環境必須啟用 TRUST_CLOUDFLARE_PROXY=true" >&2
+  exit 1
+fi
+if grep -q '^CF_TRUSTED_PROXIES=\[\]$' "$env_file"; then
+  echo "❌ 必須設定 Caddy Docker network 的 CF_TRUSTED_PROXIES CIDR" >&2
+  exit 1
+fi
 
 if [[ "${SKIP_GIT:-0}" != "1" && -d .git ]]; then
   step "git pull"
@@ -60,6 +87,25 @@ export WEB_IMAGE="ghcr.io/tedhuang6666/hcca_web_system-web:${release_sha}"
 
 step "docker compose pull（拉指定 commit 映像）"
 "${compose[@]}" "${profiles[@]}" pull
+
+# 每次 migration 前強制做邏輯備份；失敗即停止，避免不可逆 schema / data migration
+# 在沒有可還原點時繼續部署。備份檔僅限 owner 讀取，請由既有離站備份程序同步保存。
+step "啟動資料庫並建立 migration 前備份"
+"${compose[@]}" up -d db
+backup_dir="${PREDEPLOY_BACKUP_DIR:-backups/predeploy}"
+mkdir -p "$backup_dir"
+umask 077
+backup_file="$backup_dir/predeploy-${release_sha}-$(date -u +%Y%m%dT%H%M%SZ).sql.gz"
+if ! "${compose[@]}" exec -T db sh -ec 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
+  | gzip -c > "$backup_file"; then
+  echo "❌ 預部署資料庫備份失敗，中止部署" >&2
+  exit 1
+fi
+if [[ ! -s "$backup_file" ]] || ! gzip -t "$backup_file"; then
+  echo "❌ 預部署資料庫備份無法驗證，中止部署" >&2
+  exit 1
+fi
+echo "✓ 預部署備份完成：$backup_file"
 
 # 套用資料庫 migration（alembic upgrade head）必須在起 api/web 前先跑，否則新映像會對
 # 舊 schema 查詢而整路由 500（例：column elections.slug does not exist）。

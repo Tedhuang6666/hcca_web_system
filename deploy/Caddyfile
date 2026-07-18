@@ -1,3 +1,10 @@
+{
+	# 僅接受 Cloudflare 已驗證來源提供的 client IP，避免偽造 CF-Connecting-IP。
+	servers {
+		trusted_proxies cloudflare
+	}
+}
+
 {$SITE_DOMAIN} {
 	encode zstd gzip
 
@@ -14,6 +21,18 @@
 
 	handle_path /api/* {
 		reverse_proxy api:8000 {
+			header_up CF-Connecting-IP {client_ip}
+			health_uri /ready
+			health_interval 15s
+			health_timeout 3s
+		}
+	}
+
+	# 異地主機的 Discord Bot 只需要這組內部 API；路由本身仍由 FastAPI
+	# 的 X-API-Key + discord:bot scope 保護，不把整個 API 面暴露給 Bot。
+	handle /internal/discord/* {
+		reverse_proxy api:8000 {
+			header_up CF-Connecting-IP {client_ip}
 			health_uri /ready
 			health_interval 15s
 			health_timeout 3s
@@ -21,10 +40,17 @@
 	}
 
 	handle /ws/* {
-		reverse_proxy api:8000
+		reverse_proxy api:8000 {
+			header_up CF-Connecting-IP {client_ip}
+		}
 	}
 
 	# 使用者上傳檔案（公告圖、問卷圖等公開素材）：快取 1 天
+	# 財務憑證必須通過 /api/finance/journals/{id}/evidence 的帳本權限檢查，
+	# 不可由靜態 uploads 路徑繞過。
+	@private_finance_evidence path /uploads/finance/evidence/*
+	respond @private_finance_evidence 404
+
 	handle /uploads/* {
 		header Cache-Control "public, max-age=86400"
 		reverse_proxy api:8000

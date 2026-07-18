@@ -110,3 +110,4 @@ nuclei-*.txt
 # 本機部署啟動器（含主機連線資訊，勿進 git）
 scripts/deploy.local.sh
 .dev-launch.log
+backups/predeploy/

@@ -1,6 +1,7 @@
 """FastAPI 依賴注入 - 身份驗證相關"""
 
 import asyncio
+import uuid
 from typing import TYPE_CHECKING
 
 from fastapi import Depends, HTTPException, Request, status
@@ -40,14 +41,18 @@ async def _user_from_access_token(token: str, db: AsyncSession) -> User | None:
         return None
     if payload.get("type") != "access":
         return None
-    user_id: str | None = payload.get("sub")
-    if not user_id:
+    raw_user_id: str | None = payload.get("sub")
+    if not raw_user_id:
+        return None
+    try:
+        user_id = uuid.UUID(raw_user_id)
+    except (TypeError, ValueError):
         return None
     # register_active_token 只寫 Redis、不碰 db session，可與 DB 查詢並行以省一趟往返延遲。
     result, _ = await asyncio.gather(
         db.execute(select(User).where(User.id == user_id)),
         register_active_token(
-            user_id, payload.get("jti"), settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+            str(user_id), payload.get("jti"), settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
         ),
     )
     user = result.scalar_one_or_none()
@@ -105,16 +110,20 @@ async def get_current_user(
     if payload.get("type") != "access":
         raise _CREDENTIALS_EXCEPTION
 
-    user_id: str | None = payload.get("sub")
-    if user_id is None:
+    raw_user_id: str | None = payload.get("sub")
+    if raw_user_id is None:
         raise _CREDENTIALS_EXCEPTION
+    try:
+        user_id = uuid.UUID(raw_user_id)
+    except (TypeError, ValueError) as e:
+        raise _CREDENTIALS_EXCEPTION from e
 
     # 查詢使用者；register_active_token 只寫 Redis、不碰 db session，
     # 與 DB 查詢並行以省一趟往返延遲（使用即註冊 jti，供 admin 端 revoke_user 強制登出）。
     result, _ = await asyncio.gather(
         db.execute(select(User).where(User.id == user_id)),
         register_active_token(
-            user_id, payload.get("jti"), settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+            str(user_id), payload.get("jti"), settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
         ),
     )
     user = result.scalar_one_or_none()

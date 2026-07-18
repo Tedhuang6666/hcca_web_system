@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import uuid
 from datetime import UTC, date, datetime
 
@@ -43,6 +44,22 @@ DEFAULT_ACCOUNTS = (
     ("5102", "行政支出", FinanceAccountType.EXPENSE),
     ("5103", "退款支出", FinanceAccountType.EXPENSE),
 )
+
+_EVIDENCE_KEY_RE = re.compile(r"^[0-9a-f]{32}\.(?:jpg|jpeg|png|webp|pdf)$")
+
+
+def validate_evidence_key(evidence_key: str | None, ledger_id: uuid.UUID) -> None:
+    """僅接受由本帳本私有上傳端點建立的儲存鍵，拒絕外部 URL 與跨帳本附件。"""
+    if evidence_key is None:
+        return
+    prefix = f"finance/evidence/{ledger_id}/"
+    filename = evidence_key.removeprefix(prefix)
+    if (
+        not evidence_key.startswith(prefix)
+        or "/" in filename
+        or not _EVIDENCE_KEY_RE.fullmatch(filename)
+    ):
+        raise HTTPException(400, "憑證必須透過本帳本的私有上傳端點取得")
 
 
 async def initialize_ledger(db: AsyncSession, org_id: uuid.UUID, name: str) -> FinanceLedger:
@@ -125,6 +142,7 @@ async def create_journal(
     pending: bool = False,
 ) -> JournalEntry:
     await validate_period(db, ledger_id, body.period_id, body.entry_date)
+    validate_evidence_key(body.evidence_url, ledger_id)
     if body.source_type == "council_proposal":
         from api.models.council_proposal import CouncilProposal
 

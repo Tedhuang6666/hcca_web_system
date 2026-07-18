@@ -165,8 +165,9 @@ async def test_room_access_org_non_member_denied(member_user: User) -> None:
         pass
 
 
-async def test_room_access_meeting_room_any_logged_in_user_allowed(member_user: User) -> None:
-    await _assert_room_access(f"meeting:{uuid.uuid4()}", str(member_user.id))
+async def test_room_access_meeting_room_non_attendee_denied(member_user: User) -> None:
+    with pytest.raises(PermissionError):
+        await _assert_room_access(f"meeting:{uuid.uuid4()}", str(member_user.id))
 
 
 async def test_room_access_unknown_room_default_denied(member_user: User) -> None:
@@ -193,8 +194,8 @@ async def test_list_ws_rooms_requires_login(client) -> None:
     assert response.status_code == 401
 
 
-async def test_list_ws_rooms_returns_stats(authed_client_factory, member_user: User) -> None:
-    ac = authed_client_factory(member_user)
+async def test_list_ws_rooms_admin_returns_stats(authed_client_factory, admin_user: User) -> None:
+    ac = authed_client_factory(admin_user)
     response = await ac.get("/ws/rooms")
     assert response.status_code == 200
     body = response.json()

@@ -16,16 +16,43 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
+from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
+from api.core.security import redis_client
 from api.models.api_key import ApiKey
 from api.services import api_key as api_key_svc
 
 logger = logging.getLogger(__name__)
+
+
+async def _enforce_rate_limit(api_key: ApiKey) -> None:
+    """以 API key ID 做跨 worker 的固定視窗限流；Redis 故障時拒絕對外 API。"""
+    minute = int(time.time() // 60)
+    key = f"api_key_rate:{api_key.id}:{minute}"
+    try:
+        pipe = redis_client.pipeline()
+        pipe.incr(key)
+        pipe.expire(key, 120)
+        count, _ = await pipe.execute()
+    except (RedisError, TimeoutError) as exc:
+        logger.error("API key rate limit Redis 不可用，拒絕請求 key_id=%s", api_key.id)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="API key 限流服務暫時不可用",
+        ) from exc
+    if int(count) > api_key.rate_limit_per_minute:
+        retry_after = 60 - (int(time.time()) % 60)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="已超過此 API key 的每分鐘請求上限",
+            headers={"Retry-After": str(retry_after)},
+        )
 
 
 async def api_key_required(
@@ -46,6 +73,7 @@ async def api_key_required(
             detail="API key 無效、已撤銷或已過期",
             headers={"WWW-Authenticate": "ApiKey"},
         )
+    await _enforce_rate_limit(row)
     # 更新 last_used（best effort、不阻擋）
     try:
         ip = request.client.host if request.client else None
