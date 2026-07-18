@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.models.email_message import EmailMessage
 from api.models.meeting import (
     Meeting,
     MeetingAgendaItem,
@@ -302,10 +303,10 @@ async def _create_notice_email_draft(
     meeting: Meeting,
     *,
     actor_id: uuid.UUID,
-) -> "EmailMessage":
+) -> EmailMessage:
     """在現有事務中建立開會通知信草稿（DRAFT），格式與歷史通知信一致。"""
     from api.core.config import settings
-    from api.models.email_message import EmailCampaignRecipient, EmailMessage, EmailStatus
+    from api.models.email_message import EmailCampaignRecipient, EmailStatus
 
     starts_label = _roc_datetime_label(meeting.starts_at) if meeting.starts_at else "（待定）"
     location = meeting.location or "（待定）"
@@ -323,8 +324,7 @@ async def _create_notice_email_draft(
         f"**開會時間**：{starts_label}\n\n"
         f"**開會地點**：{location}\n\n"
         f"**主持人**：{chair}\\\n\\\n\n"
-        f"**議事日程**\n\n"
-        + (agenda_lines if agenda_lines else "> （議程待補）")
+        f"**議事日程**\n\n" + (agenda_lines if agenda_lines else "> （議程待補）")
     )
 
     base = settings.FRONTEND_BASE_URL.rstrip("/")
@@ -349,7 +349,9 @@ async def _create_notice_email_draft(
         "content_background_color": "#ffffff",
     }
 
-    recipients = [att for att in meeting.attendance_records if att.user is not None and att.user.email]
+    recipients = [
+        att for att in meeting.attendance_records if att.user is not None and att.user.email
+    ]
     external_emails = [att.user.email for att in recipients]
     recipient_variables = [
         {
@@ -369,7 +371,9 @@ async def _create_notice_email_draft(
         template="generic",
         context=context,
         recipient_spec={"external_emails": external_emails},
-        variable_definitions=[{"key": "姓名", "label": "姓名", "required": False, "default_value": "您"}],
+        variable_definitions=[
+            {"key": "姓名", "label": "姓名", "required": False, "default_value": "您"}
+        ],
         default_variables={"姓名": "您"},
         recipient_variables=recipient_variables,
         resolved_emails=external_emails,

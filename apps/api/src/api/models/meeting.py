@@ -307,7 +307,7 @@ class Meeting(Base, TimestampMixin):
     notice_document: Mapped[Document | None] = relationship(
         "Document", foreign_keys=[notice_document_id]
     )
-    notice_email_message: Mapped["EmailMessage | None"] = relationship(
+    notice_email_message: Mapped[EmailMessage | None] = relationship(
         "EmailMessage", foreign_keys=[notice_email_message_id]
     )
     agenda_items: Mapped[list[MeetingAgendaItem]] = relationship(

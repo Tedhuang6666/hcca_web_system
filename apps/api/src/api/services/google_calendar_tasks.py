@@ -39,14 +39,15 @@ def push_event(self, event_id: str, operation: str, org_id: str) -> dict:  # noq
     async def _run() -> dict:
         import uuid
 
+        from sqlalchemy import select
+
         from api.core.database import task_session
         from api.models.calendar import CalendarEvent
         from api.services.google_calendar_service import (
             GoogleCalendarAuthError,
-            push_event_to_google,
             get_config_for_org,
+            push_event_to_google,
         )
-        from sqlalchemy import select
 
         event_uuid = uuid.UUID(event_id)
         org_uuid = uuid.UUID(org_id)
@@ -69,9 +70,7 @@ def push_event(self, event_id: str, operation: str, org_id: str) -> dict:  # noq
                 await session.commit()
                 return {"google_event_id": google_event_id, "operation": operation}
             except GoogleCalendarAuthError as exc:
-                logger.warning(
-                    "[GoogleCalendar push] org=%s token 失效：%s", org_id, exc
-                )
+                logger.warning("[GoogleCalendar push] org=%s token 失效：%s", org_id, exc)
                 await session.rollback()
                 return {"error": "auth_error", "detail": str(exc)}
             except Exception:
@@ -81,7 +80,9 @@ def push_event(self, event_id: str, operation: str, org_id: str) -> dict:  # noq
     try:
         return asyncio.run(_run())
     except Exception as exc:
-        logger.error("[GoogleCalendar push] 失敗 event=%s operation=%s: %s", event_id, operation, exc)
+        logger.error(
+            "[GoogleCalendar push] 失敗 event=%s operation=%s: %s", event_id, operation, exc
+        )
         raise self.retry(exc=exc) from exc
 
 
@@ -129,9 +130,7 @@ def pull_all_orgs(self) -> dict:  # noqa: ANN001
                     await session.commit()
                     for key in ("created", "updated", "deleted", "errors"):
                         total[key] += stats.get(key, 0)
-                    logger.info(
-                        "[GoogleCalendar pull] org=%s 完成：%s", config.org_id, stats
-                    )
+                    logger.info("[GoogleCalendar pull] org=%s 完成：%s", config.org_id, stats)
                 except GoogleCalendarAuthError as exc:
                     await session.rollback()
                     logger.warning(
@@ -140,9 +139,7 @@ def pull_all_orgs(self) -> dict:  # noqa: ANN001
                     total["errors"] += 1
                 except Exception:
                     await session.rollback()
-                    logger.exception(
-                        "[GoogleCalendar pull] org=%s 發生未預期錯誤", config.org_id
-                    )
+                    logger.exception("[GoogleCalendar pull] org=%s 發生未預期錯誤", config.org_id)
                     total["errors"] += 1
 
         return total

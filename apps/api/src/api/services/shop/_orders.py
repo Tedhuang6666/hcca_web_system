@@ -6,7 +6,7 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import and_, func, or_, select, text
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -28,8 +28,6 @@ from api.schemas.shop import (
     CartItemOut,
     CartOut,
     ClassOrderUpsert,
-    CloseStatusItem,
-    CloseStatusOut,
     OrderItemCreate,
     OrderItemOut,
     OrderListItem,
@@ -754,13 +752,17 @@ async def get_close_status(
     """
     if not category_ids:
         return {}
-    q = select(ShopOrderClose).options(selectinload(ShopOrderClose.closed_by)).where(
-        ShopOrderClose.is_active.is_(True),
-        ShopOrderClose.category_id.in_(category_ids),
-        or_(
-            ShopOrderClose.class_id == class_id,
-            ShopOrderClose.class_id.is_(None),
-        ),
+    q = (
+        select(ShopOrderClose)
+        .options(selectinload(ShopOrderClose.closed_by))
+        .where(
+            ShopOrderClose.is_active.is_(True),
+            ShopOrderClose.category_id.in_(category_ids),
+            or_(
+                ShopOrderClose.class_id == class_id,
+                ShopOrderClose.class_id.is_(None),
+            ),
+        )
     )
     rows = (await session.execute(q)).scalars().all()
     result: dict[uuid.UUID, ShopOrderClose | None] = {cid: None for cid in category_ids}
@@ -855,7 +857,6 @@ async def order_quantities(
     status: OrderStatus | None = None,
 ) -> list[OrderQuantityRow]:
     """回傳各商品規格組合的訂購數量（用於採購彙總）。"""
-    from api.models.school_class import SchoolClass
 
     q = (
         select(Order)
@@ -866,11 +867,7 @@ async def order_quantities(
             .selectinload(ProductSeries.category),
             selectinload(Order.school_class),
         )
-        .where(
-            Order.status != OrderStatus.CANCELLED
-            if status is None
-            else Order.status == status
-        )
+        .where(Order.status != OrderStatus.CANCELLED if status is None else Order.status == status)
     )
     if grade is not None:
         q = q.where(Order.school_class.has(grade=grade))
@@ -883,9 +880,7 @@ async def order_quantities(
     if category_id:
         q = q.where(
             Order.items.any(
-                OrderItem.product.has(
-                    Product.series.has(ProductSeries.category_id == category_id)
-                )
+                OrderItem.product.has(Product.series.has(ProductSeries.category_id == category_id))
             )
         )
     orders = (await session.execute(q)).scalars().unique().all()

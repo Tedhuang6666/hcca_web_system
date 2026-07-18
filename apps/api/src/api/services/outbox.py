@@ -171,17 +171,33 @@ def _handle_meeting_minutes_ready(payload: dict) -> None:
         users = session.execute(select(User).where(User.id.in_(ids))).scalars().all()
         external_emails = [u.email for u in users if u.email]
         rv = [
-            {"user_id": str(u.id), "email": u.email, "name": u.display_name or u.email, "variables": {"姓名": u.display_name or u.email}}
-            for u in users if u.email
+            {
+                "user_id": str(u.id),
+                "email": u.email,
+                "name": u.display_name or u.email,
+                "variables": {"姓名": u.display_name or u.email},
+            }
+            for u in users
+            if u.email
         ]
         context = {
-            "blocks": [], "buttons": [{"url": f"{base}/meetings/{meeting_id}", "label": "查看會議", "style": "primary"}],
-            "cta_url": "", "heading": f"「{meeting_title}」已圓滿結束",
+            "blocks": [],
+            "buttons": [
+                {"url": f"{base}/meetings/{meeting_id}", "label": "查看會議", "style": "primary"}
+            ],
+            "cta_url": "",
+            "heading": f"「{meeting_title}」已圓滿結束",
             "card_rows": [{"label": "會議", "value": meeting_title}],
-            "cta_label": "", "footer_text": "",
-            "accent_color": "#111827", "preview_text": f"{meeting_title} 會議紀錄整理中",
-            "background_color": "#eef2f7", "banner_image_alt": "", "banner_image_url": "",
-            "body_line_height": 1.6, "paragraph_spacing": 18, "show_system_footer": True,
+            "cta_label": "",
+            "footer_text": "",
+            "accent_color": "#111827",
+            "preview_text": f"{meeting_title} 會議紀錄整理中",
+            "background_color": "#eef2f7",
+            "banner_image_alt": "",
+            "banner_image_url": "",
+            "body_line_height": 1.6,
+            "paragraph_spacing": 18,
+            "show_system_footer": True,
             "content_background_color": "#ffffff",
         }
         msg = EmailMessage(
@@ -192,7 +208,9 @@ def _handle_meeting_minutes_ready(payload: dict) -> None:
             template="generic",
             context=context,
             recipient_spec={"external_emails": external_emails},
-            variable_definitions=[{"key": "姓名", "label": "姓名", "required": False, "default_value": "您"}],
+            variable_definitions=[
+                {"key": "姓名", "label": "姓名", "required": False, "default_value": "您"}
+            ],
             default_variables={"姓名": "您"},
             recipient_variables=rv,
             resolved_emails=external_emails,
@@ -203,10 +221,16 @@ def _handle_meeting_minutes_ready(payload: dict) -> None:
         session.add(msg)
         session.flush()
         for r in rv:
-            session.add(EmailCampaignRecipient(
-                message_id=msg.id, user_id=_uuid.UUID(r["user_id"]),
-                email=r["email"], name=r["name"], variables=r["variables"], status="queued",
-            ))
+            session.add(
+                EmailCampaignRecipient(
+                    message_id=msg.id,
+                    user_id=_uuid.UUID(r["user_id"]),
+                    email=r["email"],
+                    name=r["name"],
+                    variables=r["variables"],
+                    status="queued",
+                )
+            )
         session.commit()
 
 
@@ -221,7 +245,6 @@ def _handle_regulation_published(payload: dict) -> None:
     from api.services.notification_pref import normalize_preferences
 
     reg_title = payload.get("regulation_title", "法規")
-    org_id = payload.get("org_id")
     base = settings.FRONTEND_BASE_URL.rstrip("/")
     engine = _make_sync_engine()
     with Session(engine) as session:

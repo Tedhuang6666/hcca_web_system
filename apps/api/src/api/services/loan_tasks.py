@@ -54,8 +54,8 @@ async def _scan_overdue_async() -> dict:
 
 async def _send_reminders_async() -> dict:
     from api.core.database import task_session
-    from api.email.sender import enqueue_rendered
     from api.email.renderer import render_email
+    from api.email.sender import enqueue_rendered
 
     now = datetime.now(UTC)
     tomorrow = now + timedelta(days=1)
@@ -114,18 +114,21 @@ async def _send_reminders_async() -> dict:
                         f"{record.due_at.strftime('%Y/%m/%d')} 已過期，請盡快歸還。\n\n謝謝！"
                     )
 
-                html = render_email("generic", {
-                    "subject": subject,
-                    "preview_text": body[:80],
-                    "body_html": f"<p>{body.replace(chr(10), '<br>')}</p>",
-                    "card_rows": [],
-                    "cta_url": None,
-                    "cta_label": None,
-                    "buttons": [],
-                    "blocks": [],
-                    "banner_image_url": None,
-                    "banner_image_alt": "",
-                })
+                html = render_email(
+                    "generic",
+                    {
+                        "subject": subject,
+                        "preview_text": body[:80],
+                        "body_html": f"<p>{body.replace(chr(10), '<br>')}</p>",
+                        "card_rows": [],
+                        "cta_url": None,
+                        "cta_label": None,
+                        "buttons": [],
+                        "blocks": [],
+                        "banner_image_url": None,
+                        "banner_image_alt": "",
+                    },
+                )
                 enqueue_rendered([record.borrower_email], subject, html)
 
                 record.reminder_sent_count += 1

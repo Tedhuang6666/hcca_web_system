@@ -230,10 +230,10 @@ async def list_items(db: DbDep, _: CheckoutUser) -> list[LoanItemOut]:
         (
             await db.execute(
                 select(LoanItemCategory)
-                .where(LoanItemCategory.is_active == True)
+                .where(LoanItemCategory.is_active)
                 .order_by(LoanItemCategory.created_at)
             )
-        )  # noqa: E712
+        )
         .scalars()
         .all()
     )
