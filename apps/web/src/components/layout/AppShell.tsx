@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { PermissionProvider } from "@/contexts/PermissionContext";
@@ -19,6 +19,8 @@ import UrgentAnnouncementPopup from "@/components/announcements/UrgentAnnounceme
 const CommandMenu = dynamic(() => import("./CommandMenu"), { ssr: false });
 import { PolicyConsentBanner } from "@/components/legal/PolicyConsentBanner";
 import { isPublicRoute, requiresAuthentication } from "@/lib/route-access";
+import { authApi } from "@/lib/api";
+import { cacheCurrentUser, clearAuthCache } from "@/lib/auth-cache";
 
 /** 完全裸頁（不渲染 Shell）：公開官網、login、auth callback、Email 退訂落地頁 */
 const BARE_PATHS = [
@@ -60,26 +62,55 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
   // 造成 effect ↔ 導航無限互相觸發。
   const redirectedFrom = useRef<string | null>(null);
 
-  // useLayoutEffect 在 DOM 更新後、瀏覽器繪圖前同步執行，
-  // 讓 authReady 在首次繪圖前完成，消除空白幕閃爍。
-  useLayoutEffect(() => {
+  useEffect(() => {
+    let cancelled = false;
     const loggedIn = Boolean(localStorage.getItem("user_id"));
-    setIsLoggedIn(loggedIn);
 
-    if (!requiresAuthentication(pathname) || loggedIn) {
+    if (!requiresAuthentication(pathname)) {
+      setIsLoggedIn(loggedIn);
       redirectedFrom.current = null;
       setRedirecting(false);
       setAuthReady(true);
-      return;
+      return () => {
+        cancelled = true;
+      };
     }
 
-    // 需要登入但未登入：導向 /login（同一路徑只導一次）
-    setRedirecting(true);
-    setAuthReady(true);
-    if (redirectedFrom.current !== pathname) {
-      redirectedFrom.current = pathname;
-      router.replace(`/login?next=${encodeURIComponent(pathname)}`);
-    }
+    setAuthReady(false);
+    const verifySession = async () => {
+      if (!loggedIn) {
+        if (cancelled) return;
+        setRedirecting(true);
+        setAuthReady(true);
+        if (redirectedFrom.current !== pathname) {
+          redirectedFrom.current = pathname;
+          router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+        }
+        return;
+      }
+
+      try {
+        const me = await authApi.me();
+        if (cancelled) return;
+        cacheCurrentUser(me);
+        setIsLoggedIn(true);
+        redirectedFrom.current = null;
+        setRedirecting(false);
+        setAuthReady(true);
+      } catch {
+        if (cancelled) return;
+        clearAuthCache();
+        setIsLoggedIn(false);
+        setRedirecting(true);
+        setAuthReady(true);
+        router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+      }
+    };
+
+    void verifySession();
+    return () => {
+      cancelled = true;
+    };
   }, [pathname, router]);
 
   // 路由變更時自動關閉行動版側邊欄

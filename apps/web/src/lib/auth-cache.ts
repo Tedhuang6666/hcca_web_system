@@ -11,6 +11,8 @@ export interface CurrentUserCache {
   allow_external_login?: boolean;
 }
 
+export const AUTH_CACHE_EVENT = "hcca:auth-cache-updated";
+
 // SECURITY: 敏感權限資料（is_superuser、is_owner、permissions）改存 sessionStorage，
 // 在瀏覽器關閉後自動清除，減少 XSS 或本機存取攻擊的曝露窗口。
 // 識別資料（user_id、email、name、avatar）仍存 localStorage 以維持跨 tab 一致性。
@@ -21,6 +23,10 @@ function ls(): Storage | null {
 }
 function ss(): Storage | null {
   return typeof window !== "undefined" ? window.sessionStorage : null;
+}
+
+function notifyAuthCacheUpdated(): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(AUTH_CACHE_EVENT));
 }
 
 export function cacheCurrentUser(me: CurrentUserCache): void {
@@ -39,6 +45,7 @@ export function cacheCurrentUser(me: CurrentUserCache): void {
   ls()?.removeItem("is_superuser");
   ls()?.removeItem("is_owner");
   ls()?.removeItem("permissions");
+  notifyAuthCacheUpdated();
 }
 
 export function clearAuthCache(): void {
@@ -55,6 +62,7 @@ export function clearAuthCache(): void {
   ss()?.removeItem("is_superuser");
   ss()?.removeItem("is_owner");
   ss()?.removeItem("permissions");
+  notifyAuthCacheUpdated();
 }
 
 /**
