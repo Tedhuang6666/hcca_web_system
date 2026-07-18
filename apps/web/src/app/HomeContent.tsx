@@ -6,7 +6,6 @@ import {
   BellRing,
   Database,
   ExternalLink,
-  FileClock,
   Landmark,
   Megaphone,
   Radio,
@@ -56,7 +55,6 @@ export default function HomeContent({
       <section className="public-hero">
         <div className="public-hero-inner">
           <div className="public-hero-copy">
-            <p className="public-eyebrow">學生自治公開網站</p>
             <h1>{heroTitle}</h1>
             {heroSubtitle && <p className="public-hero-subtitle">{heroSubtitle}</p>}
             <div className="public-hero-actions">
@@ -69,8 +67,7 @@ export default function HomeContent({
               </Link>
             </div>
           </div>
-          <div className="public-signboard" aria-label="班聯會招牌">
-            <div className="public-signboard-topline" />
+          <div className="public-signboard public-identity-panel" aria-label={`${siteTitle}識別標誌`}>
             <div className="public-signboard-emblem">
               {settings?.site_logo_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -79,10 +76,7 @@ export default function HomeContent({
                 <BrandEmblem className="h-full w-full" size={256} priority />
               )}
             </div>
-            <div className="public-signboard-copy">
-              <p>{siteTitle}</p>
-              <span>Campus Self-Governance</span>
-            </div>
+            <p className="public-identity-caption">校園自治公開資訊</p>
           </div>
         </div>
       </section>
@@ -91,9 +85,8 @@ export default function HomeContent({
         <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6" aria-labelledby="public-now-title" data-reveal>
           <div className="mb-5 flex items-end justify-between gap-4">
             <div>
-              <p className="public-section-kicker">Now & New</p>
-              <h2 id="public-now-title" className="mt-2 text-2xl font-semibold sm:text-3xl">
-                現在發生中
+              <h2 id="public-now-title" className="text-2xl font-semibold sm:text-3xl">
+                最新動態
               </h2>
             </div>
             <Link href="/news" className="public-text-link">查看全部公告</Link>
@@ -190,17 +183,17 @@ export default function HomeContent({
                   <Link
                     key={page.id}
                     href={`/pages/${page.slug}`}
-                    className="group flex items-start gap-3 py-3 first:pt-0 last:pb-0"
+                    className="group flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0"
                   >
-                    <FileClock size={17} className="mt-0.5 shrink-0 text-[var(--public-accent)]" aria-hidden />
-                    <span>
+                    <span className="min-w-0">
                       <span className="block text-sm font-semibold group-hover:text-[var(--public-accent)]">
                         {page.title}
                       </span>
                       <span className="mt-1 block text-xs text-[var(--public-muted)]">
-                        公開頁面最近更新
+                        {new Date(page.updated_at).toLocaleDateString("zh-TW")} 更新
                       </span>
                     </span>
+                    <ArrowRight size={15} className="mt-1 shrink-0 text-[var(--public-muted)]" aria-hidden />
                   </Link>
                 ))}
               </div>
@@ -209,42 +202,40 @@ export default function HomeContent({
         </section>
       )}
 
-      <section className="public-quick-grid" aria-label="公開網站主要入口">
+      <nav className="public-quick-grid" aria-label="公開網站主要入口">
         {[
-          { href: "/news", title: "最新公告", desc: "查看班聯會發布的公開消息。", icon: Megaphone },
-          { href: "/officers", title: "幹部名單", desc: "認識目前任期的公開幹部。", icon: UsersRound },
+          { href: "/news", title: "最新公告", desc: "班聯會公開消息", icon: Megaphone },
+          { href: "/officers", title: "幹部名單", desc: "本屆幹部與職務", icon: UsersRound },
           {
             href: "/public",
             title: "公開資料庫",
-            desc: publicDatabaseDescription || "公開法規、公文與治理資料。",
+            desc: publicDatabaseDescription || "法規、公文與治理資料",
             icon: Database,
           },
-          { href: "/about", title: "關於班聯會", desc: "理解本會任務、沿革與公共角色。", icon: Landmark },
-        ].map((item, i) => {
+          { href: "/about", title: "關於班聯會", desc: "任務、組織與沿革", icon: Landmark },
+        ].map((item) => {
           const Icon = item.icon;
           return (
             <Link
               key={item.href}
               href={item.href}
               className="public-feature-card"
-              data-reveal
-              style={{ "--reveal-delay": `${i * 80}ms` } as React.CSSProperties}
             >
               <span className="public-feature-icon"><Icon size={21} aria-hidden /></span>
-              <span>
+              <span className="min-w-0 flex-1">
                 <span className="block text-base font-semibold">{item.title}</span>
-                <span className="mt-1 block text-sm leading-6 text-[var(--public-secondary)]">
+                <span className="mt-0.5 block text-sm text-[var(--public-secondary)]">
                   {item.desc}
                 </span>
               </span>
+              <ArrowRight className="public-feature-arrow" size={17} aria-hidden />
             </Link>
           );
         })}
-      </section>
+      </nav>
 
       <section className="public-editorial">
         <div className="public-panel public-about-panel" data-reveal>
-          <p className="public-section-kicker">About</p>
           {aboutTitle && <h2>{aboutTitle}</h2>}
           <MarkdownBlock markdown={settings?.about_body_md ?? ""} />
         </div>

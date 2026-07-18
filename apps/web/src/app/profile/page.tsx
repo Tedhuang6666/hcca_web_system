@@ -301,7 +301,6 @@ export default function ProfilePage() {
       <div className="space-y-5 max-w-2xl mx-auto">
         <div>
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>個人資料</h1>
-          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>管理您的帳號資訊與職位記錄</p>
         </div>
         <div
           className="flex gap-1 rounded-lg border p-1"
@@ -329,7 +328,6 @@ export default function ProfilePage() {
       <div className="space-y-5 max-w-2xl mx-auto">
         <div>
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>個人資料</h1>
-          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>管理您的帳號資訊與職位記錄</p>
         </div>
         <section className="card p-6 text-center">
           <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
@@ -351,7 +349,6 @@ export default function ProfilePage() {
       {/* 頁首 */}
       <div>
         <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>個人資料</h1>
-        <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>管理您的帳號資訊與職位記錄</p>
       </div>
 
       <div

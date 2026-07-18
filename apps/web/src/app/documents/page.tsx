@@ -587,14 +587,12 @@ export default function DocumentListPage() {
     <div className="space-y-5 max-w-6xl mx-auto">
 
       {/* 頁首 */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="workspace-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
-            公文系統
+            公文
           </h1>
-          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            管理所有公文的建立、送審與追蹤
-          </p>
+          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>建立、簽核與追蹤公文。</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
           {can("document:approve") && (

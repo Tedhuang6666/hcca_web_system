@@ -44,11 +44,11 @@ export default function PetitionsPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="workspace-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>陳情系統</h1>
+          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>陳情</h1>
           <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            送出建議、申訴或問題回報，並追蹤承辦進度
+            提出陳情或查詢案件進度。
           </p>
         </div>
         <Link href="/petitions/new" className="btn btn-primary">我要陳情</Link>

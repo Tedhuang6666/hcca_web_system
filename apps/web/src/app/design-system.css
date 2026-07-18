@@ -1095,13 +1095,340 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
   transform: translateY(-1px) !important;
 }
 
+/* Professional interaction pass: preserve the palette, sharpen structure and feedback. */
+.workspace-header {
+  position: relative;
+  padding-bottom: 1.15rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.workspace-header h1 {
+  font-size: 1.45rem;
+  font-weight: 680;
+  letter-spacing: -0.025em;
+}
+
+.workspace-header p {
+  max-width: 62ch;
+  line-height: 1.55;
+}
+
+.workspace-header .btn,
+.workspace-header .btn-sm,
+.workspace-header .btn-lg {
+  min-height: 38px;
+}
+
+.app-main {
+  scrollbar-gutter: stable;
+}
+
+.app-page-transition {
+  transform-origin: 50% 0;
+  animation-duration: 220ms;
+}
+
+.sidebar-nav-item {
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.sidebar-nav-item > span:first-child {
+  display: grid;
+  place-items: center;
+  transition: transform var(--transition), color var(--transition);
+}
+
+.sidebar-nav-item:hover > span:first-child {
+  transform: translateX(2px);
+}
+
+.sidebar-nav-item[aria-current="page"] > span:first-child {
+  transform: scale(1.06);
+}
+
+.sidebar-section > div[id^="nav-section-"] {
+  transform-origin: 50% 0;
+  animation: disclosure-enter 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.topbar-icon-btn svg,
+.dashboard-text-link svg,
+.dashboard-widget-footer svg {
+  transition: transform var(--transition);
+}
+
+.topbar-icon-btn:hover svg {
+  transform: scale(1.06);
+}
+
+.dashboard-text-link:hover svg,
+.dashboard-widget-footer:hover svg {
+  transform: translateX(2px);
+}
+
+.table-row td,
+.dashboard-task-row,
+.dashboard-action-card {
+  transition:
+    background-color var(--transition),
+    color var(--transition),
+    border-color var(--transition);
+}
+
+.public-hero-inner {
+  grid-template-columns: minmax(0, 1fr) minmax(15rem, 0.7fr);
+  gap: clamp(2rem, 7vw, 6rem);
+  padding-top: clamp(4rem, 8vw, 6.5rem);
+  padding-bottom: clamp(4rem, 8vw, 6rem);
+}
+
+.public-hero-copy h1 {
+  max-width: 13ch;
+  font-size: clamp(2.6rem, 5.8vw, 4.6rem);
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+}
+
+.public-hero-subtitle {
+  max-width: 34rem;
+  line-height: 1.75;
+}
+
+.public-signboard.public-identity-panel {
+  display: grid;
+  width: min(100%, 23rem);
+  justify-self: end;
+  place-items: center;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.public-signboard.public-identity-panel::before {
+  display: none;
+}
+
+.public-identity-panel .public-signboard-emblem {
+  width: min(100%, 18rem);
+  min-height: 0;
+  aspect-ratio: 1;
+  padding: 1.5rem;
+}
+
+.public-identity-panel .public-signboard-emblem img,
+.public-identity-panel .public-signboard-emblem svg {
+  width: 100%;
+  max-width: 15rem;
+  max-height: 15rem;
+  filter: none;
+  transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.public-identity-panel:hover .public-signboard-emblem img,
+.public-identity-panel:hover .public-signboard-emblem svg {
+  transform: scale(1.025);
+}
+
+.public-identity-caption {
+  width: 100%;
+  border-top: 1px solid var(--public-border);
+  padding-top: 0.9rem;
+  color: var(--public-muted);
+  font-size: 0.78rem;
+  font-weight: 650;
+  text-align: center;
+}
+
+.public-quick-grid {
+  gap: 0;
+  margin-top: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-top: 1px solid var(--public-border);
+  border-bottom: 1px solid var(--public-border);
+}
+
+.public-feature-card {
+  min-height: 104px;
+  align-items: center;
+  border: 0;
+  border-right: 1px solid var(--public-border);
+  border-radius: 0;
+  background: transparent;
+  padding: 1.35rem 1.25rem;
+}
+
+.public-feature-card:last-child {
+  border-right: 0;
+}
+
+.public-feature-card:hover,
+.public-feature-card:focus-visible {
+  border-color: var(--public-border);
+  background: var(--public-soft);
+}
+
+.public-feature-icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 7px;
+}
+
+.public-feature-arrow {
+  flex: 0 0 auto;
+  color: var(--public-muted);
+  transition: transform var(--transition), color var(--transition);
+}
+
+.public-feature-card:hover .public-feature-arrow,
+.public-feature-card:focus-visible .public-feature-arrow {
+  color: var(--public-accent);
+  transform: translateX(3px);
+}
+
+.public-editorial {
+  gap: 2.5rem;
+  padding-top: 3.5rem;
+}
+
+.public-panel {
+  border: 0;
+  border-top: 1px solid var(--public-border);
+  border-radius: 0;
+  background: transparent;
+}
+
+.public-about-panel,
+.public-side-panel {
+  padding: 1.35rem 0 0;
+}
+
+.public-about-panel:hover,
+.public-side-panel:hover {
+  border-color: var(--public-border);
+  background: transparent;
+}
+
+.public-mini-item,
+.public-link-row {
+  border: 0;
+  border-bottom: 1px solid var(--public-border);
+  border-radius: 0;
+  background: transparent;
+  padding-inline: 0;
+}
+
+.public-mini-item:last-child,
+.public-link-row:last-child {
+  border-bottom: 0;
+}
+
+.public-link-row:hover,
+.public-link-row:focus-visible {
+  padding-inline: 0.25rem;
+}
+
+.login-brand-stage {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+}
+
+.login-brand-stage > :first-child {
+  transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.login-brand-stage:hover > :first-child {
+  transform: scale(1.025);
+}
+
+.public-header-actions > .public-system-button.hidden {
+  display: none;
+}
+
+@media (min-width: 640px) {
+  .public-header-actions > .public-system-button.hidden {
+    display: inline-flex;
+  }
+}
+
+@media (max-width: 767px) {
+  .workspace-header {
+    align-items: stretch;
+  }
+
+  .workspace-header > :last-child:not(:first-child) {
+    width: 100%;
+  }
+
+  .public-hero-inner {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    padding-top: 3.5rem;
+    padding-bottom: 3rem;
+  }
+
+  .public-signboard.public-identity-panel {
+    width: min(56vw, 13rem);
+    justify-self: center;
+  }
+
+  .public-identity-panel .public-signboard-emblem {
+    padding: 0.75rem;
+  }
+
+  .public-quick-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .public-feature-card {
+    border-right: 0;
+    border-bottom: 1px solid var(--public-border);
+  }
+
+  .public-feature-card:last-child {
+    border-bottom: 0;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .public-quick-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .public-feature-card:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .public-feature-card:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--public-border);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .app-page-transition,
   .animate-scale-in,
   details[open] > :not(summary),
+  .sidebar-section > div[id^="nav-section-"],
   button[aria-pressed="true"],
   [role="tab"][aria-selected="true"] {
     animation: none !important;
+  }
+
+  .public-identity-panel:hover .public-signboard-emblem img,
+  .public-identity-panel:hover .public-signboard-emblem svg,
+  .login-brand-stage:hover > :first-child,
+  .public-feature-card:hover .public-feature-arrow,
+  .public-feature-card:focus-visible .public-feature-arrow,
+  .dashboard-text-link:hover svg,
+  .dashboard-widget-footer:hover svg,
+  .topbar-icon-btn:hover svg,
+  .sidebar-nav-item:hover > span:first-child,
+  .sidebar-nav-item[aria-current="page"] > span:first-child {
+    transform: none;
   }
 
   html {

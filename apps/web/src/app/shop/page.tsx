@@ -352,11 +352,11 @@ export default function ShopPage() {
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="workspace-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>商品訂購</h1>
           <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            依主題與系列選購，加入購物車後一次送單
+            選好商品後，至購物車一次送單。
           </p>
         </div>
         <div className="flex gap-2">

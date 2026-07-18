@@ -341,19 +341,13 @@ export default function DashboardPage() {
 
       {/* 一次性引導：首次進站時提示 */}
       <OnboardingHint id="hint.dashboard.first-visit">
-        從「先處理這些」開始；其他服務可隨時從底部選單、側欄或搜尋開啟。
+        優先事項會集中顯示在首頁，其餘功能可從導覽或搜尋開啟。
       </OnboardingHint>
 
       {/* 頁首 */}
       <section className="dashboard-hero">
         <div className="dashboard-hero-content">
           <div className="min-w-0">
-            <div className="dashboard-kicker">
-              <span className="dashboard-kicker-icon">
-                <Inbox size={12} aria-hidden={true} />
-              </span>
-              {dashboardContent.kicker}
-            </div>
             <div className="dashboard-heading-row">
               <h1 className="dashboard-title">
                 {greeting}，{userName || "使用者"}
@@ -372,7 +366,7 @@ export default function DashboardPage() {
           </div>
           <div className="dashboard-hero-actions">
             <p className="dashboard-updated">
-              {urgentCount > 0 ? `${urgentCount} 件需要優先處理` : "內容依你的權限與角色整理"}
+              {urgentCount > 0 ? `${urgentCount} 件需要優先處理` : "已依權限整理"}
             </p>
             <Link href={primaryAction.href} className="dashboard-primary-action">
               <primaryAction.icon size={14} aria-hidden={true} />
@@ -386,10 +380,7 @@ export default function DashboardPage() {
       <section className="dashboard-focus-grid" aria-label="今日重點">
         <div className="dashboard-focus-main">
           <div className="dashboard-section-heading">
-            <div>
-              <p className="dashboard-eyebrow">下一步</p>
-              <h2>先處理這些</h2>
-            </div>
+            <h2>優先處理</h2>
             <Link href="/tasks" className="dashboard-text-link">
               全部待辦 <ChevronRight size={14} aria-hidden={true} />
             </Link>
@@ -410,7 +401,7 @@ export default function DashboardPage() {
               <ShieldCheck size={24} aria-hidden={true} />
               <div>
                 <p>目前沒有需要立即處理的事項</p>
-                <span>有新簽核、問卷、訂單或通知時會出現在這裡。</span>
+                <span>新待辦會顯示在這裡。</span>
               </div>
             </div>
           )}
@@ -418,10 +409,7 @@ export default function DashboardPage() {
 
         <aside className="dashboard-actions-panel" aria-label={dashboardContent.actionHeading}>
           <div className="dashboard-section-heading">
-            <div>
-              <p className="dashboard-eyebrow">{dashboardContent.actionEyebrow}</p>
-              <h2>{dashboardContent.actionHeading}</h2>
-            </div>
+            <h2>{dashboardContent.actionHeading}</h2>
           </div>
           <div className="dashboard-action-list">
             {quickActions.slice(0, 3).map((action) => (
@@ -440,9 +428,6 @@ export default function DashboardPage() {
             <span className="block text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
               {dashboardContent.serviceTitle}
             </span>
-            <span className="mt-0.5 block text-xs" style={{ color: "var(--text-muted)" }}>
-              {dashboardContent.serviceEyebrow}，需要時再展開。
-            </span>
           </span>
           <ChevronRight size={16} aria-hidden={true} style={{ color: "var(--text-muted)" }} />
         </summary>
@@ -456,7 +441,6 @@ export default function DashboardPage() {
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
           <span>
             <span className="block text-sm font-semibold" style={{ color: "var(--text-primary)" }}>活動與事情</span>
-            <span className="mt-0.5 block text-xs" style={{ color: "var(--text-muted)" }}>跨模組進度與關聯，必要時再查看。</span>
           </span>
           <ChevronRight size={16} aria-hidden={true} style={{ color: "var(--text-muted)" }} />
         </summary>
@@ -621,15 +605,12 @@ type DashboardAction = {
 };
 
 type DashboardContent = {
-  kicker: string;
   emptySubtitle: string;
   busySubtitle: string;
   actionHeading: string;
-  actionEyebrow: string;
   primaryAction: DashboardAction;
   quickActions: DashboardAction[];
   serviceTitle: string;
-  serviceEyebrow: string;
   services: DashboardAction[];
   showGovernance: boolean;
 };
@@ -643,66 +624,51 @@ function getDashboardContent(
   const primaryAction = getPrimaryAction(profile, can, isOperator);
   return {
     default: {
-      kicker: "治理工作台",
-      busySubtitle: "需要你動作的事項已排在最前面，正在進行的活動與事情放在同一個工作流裡。",
-      emptySubtitle: "今天沒有急迫待辦，可以從活動、事情或常用入口直接開始。",
-      actionEyebrow: "管理捷徑",
-      actionHeading: "少走幾層選單",
+      busySubtitle: "待辦已依優先順序排列。",
+      emptySubtitle: "目前沒有急迫待辦。",
+      actionHeading: "常用操作",
       primaryAction,
       quickActions: getQuickActions(profile, can, canAny, isOperator),
-      serviceEyebrow: "服務目錄",
       serviceTitle: "常用治理入口",
       services: getServiceActions("default", can, canAny),
       showGovernance: true,
     },
     student: {
-      kicker: "學生服務台",
-      busySubtitle: "需要填寫、確認或追蹤的事項已排在最前面。",
-      emptySubtitle: "今天沒有急迫事項，可以從公告、問卷、餐點或陳情直接開始。",
-      actionEyebrow: "常用服務",
-      actionHeading: "直接開始",
+      busySubtitle: "待填寫與待確認事項已排在最前面。",
+      emptySubtitle: "目前沒有急迫事項。",
+      actionHeading: "常用服務",
       primaryAction,
       quickActions: getQuickActions(profile, can, canAny, isOperator),
-      serviceEyebrow: "服務目錄",
       serviceTitle: "你常用的校園服務",
       services: getServiceActions("student", can, canAny),
       showGovernance: false,
     },
     teacher: {
-      kicker: "師長工作台",
-      busySubtitle: "班級、問卷、題庫與通知相關事項已集中在這裡。",
-      emptySubtitle: "目前沒有急迫事項，可以查看班級收單、問卷或公告。",
-      actionEyebrow: "教職員入口",
+      busySubtitle: "班級、問卷與通知待辦已集中在這裡。",
+      emptySubtitle: "目前沒有急迫事項。",
       actionHeading: "班級與教學服務",
       primaryAction,
       quickActions: getQuickActions(profile, can, canAny, isOperator),
-      serviceEyebrow: "服務目錄",
       serviceTitle: "師長常用工具",
       services: getServiceActions("teacher", can, canAny),
       showGovernance: false,
     },
     vendor: {
-      kicker: "合作夥伴工作台",
-      busySubtitle: "合作資料、特約內容與待處理事項會集中顯示。",
-      emptySubtitle: "目前沒有急迫事項，可以管理特約資訊或查看公告。",
-      actionEyebrow: "合作入口",
+      busySubtitle: "合作資料與待處理事項已集中在這裡。",
+      emptySubtitle: "目前沒有急迫事項。",
       actionHeading: "商家與合作事項",
       primaryAction,
       quickActions: getQuickActions(profile, can, canAny, isOperator),
-      serviceEyebrow: "服務目錄",
       serviceTitle: "合作夥伴服務",
       services: getServiceActions("vendor", can, canAny),
       showGovernance: false,
     },
     mealVendor: {
-      kicker: "餐商工作台",
-      busySubtitle: "菜單、訂單、核銷與結單提醒已排在最前面。",
-      emptySubtitle: "目前沒有急迫事項，可以查看今日訂單或管理菜單。",
-      actionEyebrow: "餐商入口",
+      busySubtitle: "訂單、核銷與結單提醒已排在最前面。",
+      emptySubtitle: "目前沒有急迫事項。",
       actionHeading: "今日供餐工作",
       primaryAction,
       quickActions: getQuickActions(profile, can, canAny, isOperator),
-      serviceEyebrow: "服務目錄",
       serviceTitle: "餐商營運服務",
       services: getServiceActions("mealVendor", can, canAny),
       showGovernance: false,

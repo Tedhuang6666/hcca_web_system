@@ -160,10 +160,10 @@ export default function MeetingsPage() {
 
   return (
     <main className="mx-auto w-full max-w-6xl px-5 py-6">
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="workspace-header mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-normal">議事系統</h1>
-          <p className="mt-1 text-sm text-[var(--muted)]">管理會議、議程、出列席與現場投票。</p>
+          <h1 className="text-2xl font-semibold tracking-normal">會議</h1>
+          <p className="mt-1 text-sm text-[var(--muted)]">安排議程、出席與表決。</p>
         </div>
         <Link
           href="/meetings/calendar"
