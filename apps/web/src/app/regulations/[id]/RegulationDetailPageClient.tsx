@@ -559,9 +559,9 @@ export default function RegulationDetailPageClient() {
               <WorkflowStatusBadge status={reg.workflow_status} />
             </div>
 
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex flex-col gap-3 2xl:flex-row 2xl:items-start 2xl:justify-between">
               <h1
-                className="w-full min-w-0 break-words text-lg font-semibold leading-snug sm:text-xl lg:w-auto"
+                className="w-full min-w-0 break-words text-lg font-semibold leading-snug sm:text-xl 2xl:w-auto"
                 style={{
                   color: "var(--text-primary)",
                   overflowWrap: "anywhere",
@@ -573,7 +573,7 @@ export default function RegulationDetailPageClient() {
               </h1>
 
               {/* 工具列 */}
-              <div className="no-print flex w-full flex-wrap items-center justify-start gap-2 lg:w-auto lg:flex-shrink-0 lg:justify-end">
+              <div className="no-print flex w-full flex-wrap items-center justify-start gap-2 2xl:w-auto 2xl:flex-shrink-0 2xl:justify-end">
                 <GovernanceLinkPanel
                   entityType="regulation"
                   entityId={reg.id}

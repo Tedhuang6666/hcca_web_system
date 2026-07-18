@@ -370,7 +370,7 @@ export default function DocumentDetailPage() {
       ]} />
       {/* 頂部 */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex min-w-0 items-start gap-3">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
           <Link href="/documents"
             className="w-8 h-8 rounded-lg flex flex-shrink-0 items-center justify-center  hover:"
             style={{ border: "1px solid var(--border)" }}>←</Link>
