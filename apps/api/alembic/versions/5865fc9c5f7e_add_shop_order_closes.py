@@ -55,10 +55,65 @@ def upgrade() -> None:
     op.create_index(
         op.f("ix_shop_order_closes_is_active"), "shop_order_closes", ["is_active"], unique=False
     )
+    op.drop_index(op.f("ix_audit_logs_actor_email_created_at"), table_name="audit_logs")
+    op.drop_index(op.f("ix_document_revisions_changed_by"), table_name="document_revisions")
+    op.drop_index(op.f("ix_email_messages_created_at_status"), table_name="email_messages")
+    op.drop_index(
+        op.f("ix_inventory_procurement_items_item_id"), table_name="inventory_procurement_items"
+    )
+    op.drop_index(op.f("ix_inventory_transactions_created_at"), table_name="inventory_transactions")
+    op.drop_index(op.f("ix_meeting_agenda_items_regulation_id"), table_name="meeting_agenda_items")
+    op.drop_index(op.f("ix_meetings_created_by"), table_name="meetings")
+    op.drop_index(
+        op.f("ix_person_affiliations_person_kind_status"), table_name="person_affiliations"
+    )
 
 
 def downgrade() -> None:
     """Downgrade schema."""
+    op.create_index(
+        op.f("ix_person_affiliations_person_kind_status"),
+        "person_affiliations",
+        ["person_id", "kind", "status"],
+        unique=False,
+    )
+    op.create_index(op.f("ix_meetings_created_by"), "meetings", ["created_by"], unique=False)
+    op.create_index(
+        op.f("ix_meeting_agenda_items_regulation_id"),
+        "meeting_agenda_items",
+        ["regulation_id"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_inventory_transactions_created_at"),
+        "inventory_transactions",
+        ["created_at"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_inventory_procurement_items_item_id"),
+        "inventory_procurement_items",
+        ["item_id"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_email_messages_created_at_status"),
+        "email_messages",
+        ["created_at", "status"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_document_revisions_changed_by"),
+        "document_revisions",
+        ["changed_by"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_audit_logs_actor_email_created_at"),
+        "audit_logs",
+        ["actor_email", "created_at"],
+        unique=False,
+    )
     op.drop_index(op.f("ix_shop_order_closes_is_active"), table_name="shop_order_closes")
     op.drop_index(op.f("ix_shop_order_closes_class_id"), table_name="shop_order_closes")
     op.drop_index(op.f("ix_shop_order_closes_category_id"), table_name="shop_order_closes")

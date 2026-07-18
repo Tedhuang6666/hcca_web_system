@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
 from api.models.base import TimestampMixin
+from api.models.types import JSONDict
 
 
 class NavigationProfile(Base, TimestampMixin):
@@ -31,12 +32,12 @@ class NavigationProfile(Base, TimestampMixin):
     is_system: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )
-    match_any_permissions: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
-    match_any_prefixes: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
-    exclude_permissions: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
-    exclude_prefixes: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
-    desktop_sections: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
-    mobile_order: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    match_any_permissions: Mapped[list[str]] = mapped_column(JSONDict, nullable=False, default=list)
+    match_any_prefixes: Mapped[list[str]] = mapped_column(JSONDict, nullable=False, default=list)
+    exclude_permissions: Mapped[list[str]] = mapped_column(JSONDict, nullable=False, default=list)
+    exclude_prefixes: Mapped[list[str]] = mapped_column(JSONDict, nullable=False, default=list)
+    desktop_sections: Mapped[list[dict]] = mapped_column(JSONDict, nullable=False, default=list)
+    mobile_order: Mapped[list[str]] = mapped_column(JSONDict, nullable=False, default=list)
 
     positions: Mapped[list[NavigationProfilePosition]] = relationship(
         "NavigationProfilePosition",
