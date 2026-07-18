@@ -781,6 +781,20 @@ if [[ $NEED_INSTALL -eq 1 ]]; then
     fi
 fi
 
+if ! (cd "${WEB_DIR}" && node -e "require('@tailwindcss/oxide')" >/dev/null 2>&1); then
+    warn "Tailwind CSS 原生 binding 無法載入，清理前端依賴與編譯快取後重建"
+    rm -rf "${WEB_DIR}/node_modules" "${WEB_DIR}/.next" 2>/dev/null || true
+    if ! (cd "${WEB_DIR}" && npm install --include=optional --no-audit --no-fund); then
+        error "Tailwind CSS 依賴重建失敗，請檢查 npm error log"
+        exit 1
+    fi
+    if ! (cd "${WEB_DIR}" && node -e "require('@tailwindcss/oxide')" >/dev/null 2>&1); then
+        error "Tailwind CSS 原生 binding 仍無法載入"
+        exit 1
+    fi
+    fix "Tailwind CSS 原生 binding 與 Next.js 編譯快取已重建"
+fi
+
 if [[ -d "${WEB_DIR}/.next/dev/cache/turbopack" ]]; then
     warn "清理 Next.js Turbopack dev cache，避免快取資料庫損壞導致啟動 panic"
     rm -rf "${WEB_DIR}/.next/dev/cache/turbopack" 2>/dev/null || true
