@@ -28,7 +28,10 @@ _DEFAULT_RELEASE_VERSION = "01.00.00.00.00"
 
 def _read_release_version() -> str:
     """讀取 repository 的五段式版本；容器與本機開發均可用。"""
-    candidates = (Path("/app/VERSION"), Path(__file__).resolve().parents[5] / "VERSION")
+    candidates = [Path("/app/VERSION")]
+    parents = Path(__file__).resolve().parents
+    if len(parents) > 5:
+        candidates.append(parents[5] / "VERSION")
     for path in candidates:
         try:
             value = path.read_text(encoding="utf-8").strip()
