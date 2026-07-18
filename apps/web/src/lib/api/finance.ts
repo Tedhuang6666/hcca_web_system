@@ -3,6 +3,7 @@ import type {
   ChartAccountOut,
   ChartAccountUpdate,
   ExpenseClaimCreate,
+  FinanceEvidenceUploadOut,
   FundAccountOut,
   JournalCreate,
   JournalOut,
@@ -11,9 +12,23 @@ import type {
   PeriodOut,
   TransferCreate,
 } from "@/lib/types";
-import { get, patch, post } from "./core";
+import { ApiError, BASE, csrfHeaders, errorMessageFromResponse, get, patch, post, silentRefresh } from "./core";
 
 export const financeApi = {
+  uploadEvidence: async (file: File): Promise<FinanceEvidenceUploadOut> => {
+    const form = new FormData();
+    form.append("file", file);
+    const doFetch = () => fetch(`${BASE}/finance/evidence`, {
+      method: "POST",
+      credentials: "include",
+      headers: csrfHeaders("POST"),
+      body: form,
+    });
+    let response = await doFetch();
+    if (response.status === 401 && await silentRefresh()) response = await doFetch();
+    if (!response.ok) throw new ApiError(response.status, await errorMessageFromResponse(response));
+    return response.json();
+  },
   getLedger: (id: string) => get<LedgerOut>(`/finance/ledgers/${id}`),
   createLedger: (body: { org_id: string; name: string }) => post<LedgerOut>("/finance/ledgers", body),
   listAccounts: (ledgerId: string) => get<ChartAccountOut[]>(`/finance/ledgers/${ledgerId}/accounts`),

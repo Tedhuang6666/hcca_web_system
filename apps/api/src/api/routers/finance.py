@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import uuid
+from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,6 +28,7 @@ from api.schemas.finance import (
     ChartAccountOut,
     ChartAccountUpdate,
     ExpenseClaimCreate,
+    FinanceEvidenceUploadOut,
     FundAccountCreate,
     FundAccountOut,
     GoogleSheetsExportIn,
@@ -40,6 +42,7 @@ from api.schemas.finance import (
 )
 from api.services import audit as audit_svc
 from api.services import finance as service
+from api.services.storage import get_storage
 
 router = APIRouter(prefix="/finance", tags=["財務總帳"])
 DbDep = Annotated[AsyncSession, Depends(get_db)]
@@ -48,6 +51,29 @@ CurrentUser = Annotated[User, Depends(get_current_active_user)]
 
 def _journal_out(data: dict) -> JournalOut:
     return JournalOut(**data)
+
+
+@router.post(
+    "/evidence",
+    response_model=FinanceEvidenceUploadOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[
+        Depends(require_any(PermissionCode.FINANCE_EXPENSE_CLAIM, PermissionCode.FINANCE_RECORD))
+    ],
+)
+async def upload_evidence(file: UploadFile = File(...)) -> FinanceEvidenceUploadOut:
+    if Path(file.filename or "").suffix.lower() not in {".jpg", ".jpeg", ".png", ".webp", ".pdf"}:
+        raise HTTPException(422, "憑證僅支援 JPG、PNG、WebP 圖片或 PDF")
+    try:
+        stored = await get_storage().save(file, prefix="finance/evidence")
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return FinanceEvidenceUploadOut(
+        url=stored.url,
+        filename=stored.filename,
+        content_type=stored.content_type,
+        file_size=stored.file_size,
+    )
 
 
 @router.post(
