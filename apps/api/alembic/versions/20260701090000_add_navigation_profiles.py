@@ -34,8 +34,18 @@ def upgrade() -> None:
         sa.Column("exclude_prefixes", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column("desktop_sections", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column("mobile_order", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
     )
     op.create_index("ix_navigation_profiles_key", "navigation_profiles", ["key"], unique=True)
 
@@ -61,9 +71,8 @@ def upgrade() -> None:
         unique=False,
     )
 
-    op.execute(
-        sa.text(
-            """
+    op.get_bind().exec_driver_sql(
+        """
             INSERT INTO navigation_profiles (
                 id, key, label, description, audience, priority, is_active, is_system,
                 match_any_permissions, match_any_prefixes, exclude_permissions, exclude_prefixes,
@@ -95,14 +104,17 @@ def upgrade() -> None:
                 '[{"id":"main","heading":"主要","items":["dashboard","tasks","announcements","calendar"],"collapsible":false,"default_collapsed":false},{"id":"platform","heading":"自治與服務","items":["governanceHub","documents","councilProposals","regulations","meetings","judicialPetitions","surveys","petitions","meal","shop","shopOrders","partnerMap","examPapers"],"collapsible":false,"default_collapsed":false},{"id":"workbench","heading":"工作後台","items":["operations","moduleBackoffice","adminDashboard","navigationProfiles","settings","about"],"collapsible":true,"default_collapsed":true}]'::jsonb,
                 '["dashboard","tasks","governanceHub","calendar","councilProposals","documents","regulations","judicialPetitions","examPapers","meal","shop","shopOrders","surveys","announcements","partnerMap","petitions","settings"]'::jsonb
             )
-            """
-        )
+        """
     )
 
 
 def downgrade() -> None:
-    op.drop_index("ix_navigation_profile_positions_profile_id", table_name="navigation_profile_positions")
-    op.drop_index("ix_navigation_profile_positions_position_id", table_name="navigation_profile_positions")
+    op.drop_index(
+        "ix_navigation_profile_positions_profile_id", table_name="navigation_profile_positions"
+    )
+    op.drop_index(
+        "ix_navigation_profile_positions_position_id", table_name="navigation_profile_positions"
+    )
     op.drop_table("navigation_profile_positions")
     op.drop_index("ix_navigation_profiles_key", table_name="navigation_profiles")
     op.drop_table("navigation_profiles")
