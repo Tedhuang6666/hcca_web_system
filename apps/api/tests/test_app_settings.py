@@ -8,10 +8,10 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.main import app
 from api.core import app_settings as app_settings_svc
 from api.core.config import settings
 from api.dependencies.auth import get_current_active_user
+from api.main import app
 from api.models.user import User
 from api.services import mfa as mfa_svc
 

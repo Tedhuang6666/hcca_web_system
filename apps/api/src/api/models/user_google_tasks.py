@@ -27,9 +27,7 @@ class UserGoogleTasksConfig(Base, TimestampMixin):
     """
 
     __tablename__ = "user_google_tasks_configs"
-    __table_args__ = (
-        UniqueConstraint("user_id", name="uq_user_google_tasks_configs_user"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", name="uq_user_google_tasks_configs_user"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
@@ -40,15 +38,9 @@ class UserGoogleTasksConfig(Base, TimestampMixin):
     )
 
     # --- OAuth Tokens（加密存放）---
-    _access_token_enc: Mapped[str | None] = mapped_column(
-        "access_token_enc", Text, nullable=True
-    )
-    _refresh_token_enc: Mapped[str | None] = mapped_column(
-        "refresh_token_enc", Text, nullable=True
-    )
-    token_expiry: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    _access_token_enc: Mapped[str | None] = mapped_column("access_token_enc", Text, nullable=True)
+    _refresh_token_enc: Mapped[str | None] = mapped_column("refresh_token_enc", Text, nullable=True)
+    token_expiry: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # --- 授權帳號資訊 ---
     authorized_email: Mapped[str | None] = mapped_column(String(254), nullable=True)

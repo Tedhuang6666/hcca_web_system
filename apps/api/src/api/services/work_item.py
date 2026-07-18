@@ -164,6 +164,7 @@ async def _push_to_google_tasks(db: AsyncSession, item: WorkItem) -> None:
         pass
     except Exception:
         import logging
+
         logging.getLogger(__name__).warning(
             "[GoogleTasks] push 靜默失敗（item=%s）", item.id, exc_info=True
         )

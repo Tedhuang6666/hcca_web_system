@@ -136,8 +136,10 @@ async def get_user_org_ids_with_permission(
     all_org_ids = await get_user_org_ids(db, user_id, on_date=check_date)
     if all_org_ids:
         per_org_codes = await asyncio.gather(
-            *[get_user_permission_codes_for_org(db, user_id, oid, on_date=check_date)
-              for oid in all_org_ids]
+            *[
+                get_user_permission_codes_for_org(db, user_id, oid, on_date=check_date)
+                for oid in all_org_ids
+            ]
         )
         for oid, codes in zip(all_org_ids, per_org_codes, strict=False):
             if permission_code in codes:
@@ -171,8 +173,10 @@ async def get_user_org_ids_with_any_permission(
     all_org_ids = await get_user_org_ids(db, user_id, on_date=check_date)
     if all_org_ids:
         per_org_codes = await asyncio.gather(
-            *[get_user_permission_codes_for_org(db, user_id, oid, on_date=check_date)
-              for oid in all_org_ids]
+            *[
+                get_user_permission_codes_for_org(db, user_id, oid, on_date=check_date)
+                for oid in all_org_ids
+            ]
         )
         for oid, codes in zip(all_org_ids, per_org_codes, strict=False):
             if permission_codes & set(codes):

@@ -225,7 +225,9 @@ class WAFMiddleware:
         )
         if hit is not None:
             name, severity = hit
-            should_block = severity == "high" or (severity == "medium" and settings.WAF_BLOCK_MEDIUM)
+            should_block = severity == "high" or (
+                severity == "medium" and settings.WAF_BLOCK_MEDIUM
+            )
             if settings.WAF_BLOCK_MODE and should_block:
                 await self._reject(scope, send, name, severity)
                 if severity == "high":
@@ -264,9 +266,7 @@ class WAFMiddleware:
 
         await self.app(scope, receive, send)
 
-    async def _buffer_body(
-        self, receive: Receive
-    ) -> tuple[bytes, Receive]:
+    async def _buffer_body(self, receive: Receive) -> tuple[bytes, Receive]:
         """讀取並緩衝 request body（最多 64 KB），回傳 body bytes 與可重播的 receive callable。"""
         chunks: list[bytes] = []
         total = 0
@@ -327,7 +327,9 @@ class WAFMiddleware:
             # SECURITY: Redis 故障時 fallback 到 in-memory 計數，
             # 避免 autoblock 在 Redis 不可用時完全失效（fail-open 攻擊面）。
             count = self._local_incr(ip)
-            logger.warning("WAF offender counter using local fallback for ip=%s count=%s", ip, count)
+            logger.warning(
+                "WAF offender counter using local fallback for ip=%s count=%s", ip, count
+            )
         if count >= settings.WAF_AUTOBLOCK_THRESHOLD:
             with contextlib.suppress(Exception):
                 await ip_block(

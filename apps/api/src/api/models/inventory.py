@@ -22,25 +22,25 @@ if TYPE_CHECKING:
 
 class InventoryItemType(enum.StrEnum):
     CONSUMABLE = "consumable"  # 消耗品（紙張、電池等）
-    EQUIPMENT = "equipment"   # 設備（延長線、麥克風等）
-    LOANABLE = "loanable"     # 可借用物品（連結借用模組）
+    EQUIPMENT = "equipment"  # 設備（延長線、麥克風等）
+    LOANABLE = "loanable"  # 可借用物品（連結借用模組）
 
 
 class InventoryTxnType(enum.StrEnum):
-    INITIAL = "initial"       # 期初建帳
-    IN = "in"                 # 進貨/補充
-    OUT = "out"               # 耗用/發放
-    ADJUSTMENT = "adjustment" # 盤點調整
-    DAMAGED = "damaged"       # 損耗
-    LOST = "lost"             # 遺失
+    INITIAL = "initial"  # 期初建帳
+    IN = "in"  # 進貨/補充
+    OUT = "out"  # 耗用/發放
+    ADJUSTMENT = "adjustment"  # 盤點調整
+    DAMAGED = "damaged"  # 損耗
+    LOST = "lost"  # 遺失
 
 
 class InventoryProcurementStatus(enum.StrEnum):
-    DRAFT = "draft"           # 草稿
-    SUBMITTED = "submitted"   # 已提交待審
-    APPROVED = "approved"     # 已核准
-    REJECTED = "rejected"     # 已駁回
-    RECEIVED = "received"     # 已收貨入庫
+    DRAFT = "draft"  # 草稿
+    SUBMITTED = "submitted"  # 已提交待審
+    APPROVED = "approved"  # 已核准
+    REJECTED = "rejected"  # 已駁回
+    RECEIVED = "received"  # 已收貨入庫
 
 
 class InventoryCategory(Base, TimestampMixin):
@@ -98,7 +98,9 @@ class InventoryItem(Base, TimestampMixin):
     )
 
     org: Mapped[Org] = relationship("Org")
-    category: Mapped[InventoryCategory | None] = relationship("InventoryCategory", back_populates="items")
+    category: Mapped[InventoryCategory | None] = relationship(
+        "InventoryCategory", back_populates="items"
+    )
     loan_item: Mapped[LoanItemCategory | None] = relationship("LoanItemCategory")
     transactions: Mapped[list[InventoryTransaction]] = relationship(
         "InventoryTransaction", back_populates="item", cascade="all, delete-orphan"
@@ -121,10 +123,8 @@ class InventoryTransaction(Base, TimestampMixin):
         nullable=False,
         index=True,
     )
-    txn_type: Mapped[InventoryTxnType] = mapped_column(
-        String(20), nullable=False, index=True
-    )
-    quantity: Mapped[int] = mapped_column(Integer, nullable=False)        # delta（正=入庫，負=出庫）
+    txn_type: Mapped[InventoryTxnType] = mapped_column(String(20), nullable=False, index=True)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)  # delta（正=入庫，負=出庫）
     quantity_before: Mapped[int] = mapped_column(Integer, nullable=False)
     quantity_after: Mapped[int] = mapped_column(Integer, nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)

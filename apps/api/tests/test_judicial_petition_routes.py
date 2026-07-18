@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 from httpx import AsyncClient
 
-from api.main import app
 from api.dependencies.auth import get_current_active_user
+from api.main import app
 from api.models.user import User
 
 PETITION_BODY = {

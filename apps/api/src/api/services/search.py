@@ -114,7 +114,9 @@ async def _sql_fallback(
     )
 
     meetings = (
-        await db.execute(select(Meeting).where(Meeting.title.ilike(pattern, escape="\\")).limit(limit))
+        await db.execute(
+            select(Meeting).where(Meeting.title.ilike(pattern, escape="\\")).limit(limit)
+        )
     ).scalars()
     results.extend(
         {
@@ -156,8 +158,10 @@ async def rebuild_index(db: AsyncSession) -> dict[str, Any]:
     # 分批載入避免 OOM：每次最多 _REBUILD_BATCH_SIZE 筆
     for offset in range(0, 10_000_000, _REBUILD_BATCH_SIZE):
         batch = (
-            await db.execute(select(Document).offset(offset).limit(_REBUILD_BATCH_SIZE))
-        ).scalars().all()
+            (await db.execute(select(Document).offset(offset).limit(_REBUILD_BATCH_SIZE)))
+            .scalars()
+            .all()
+        )
         for doc in batch:
             documents.append(
                 {
@@ -175,8 +179,10 @@ async def rebuild_index(db: AsyncSession) -> dict[str, Any]:
 
     for offset in range(0, 10_000_000, _REBUILD_BATCH_SIZE):
         batch = (
-            await db.execute(select(Regulation).offset(offset).limit(_REBUILD_BATCH_SIZE))
-        ).scalars().all()
+            (await db.execute(select(Regulation).offset(offset).limit(_REBUILD_BATCH_SIZE)))
+            .scalars()
+            .all()
+        )
         for reg in batch:
             documents.append(
                 {
@@ -194,8 +200,10 @@ async def rebuild_index(db: AsyncSession) -> dict[str, Any]:
 
     for offset in range(0, 10_000_000, _REBUILD_BATCH_SIZE):
         batch = (
-            await db.execute(select(Meeting).offset(offset).limit(_REBUILD_BATCH_SIZE))
-        ).scalars().all()
+            (await db.execute(select(Meeting).offset(offset).limit(_REBUILD_BATCH_SIZE)))
+            .scalars()
+            .all()
+        )
         for meeting in batch:
             documents.append(
                 {
@@ -213,8 +221,10 @@ async def rebuild_index(db: AsyncSession) -> dict[str, Any]:
 
     for offset in range(0, 10_000_000, _REBUILD_BATCH_SIZE):
         batch = (
-            await db.execute(select(Announcement).offset(offset).limit(_REBUILD_BATCH_SIZE))
-        ).scalars().all()
+            (await db.execute(select(Announcement).offset(offset).limit(_REBUILD_BATCH_SIZE)))
+            .scalars()
+            .all()
+        )
         for ann in batch:
             documents.append(
                 {

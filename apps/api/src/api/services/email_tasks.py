@@ -57,8 +57,10 @@ async def _dispatch_scheduled() -> dict:
             senders: dict = {}
             if sender_ids:
                 sender_rows = (
-                    await session.execute(select(User).where(User.id.in_(sender_ids)))
-                ).scalars().all()
+                    (await session.execute(select(User).where(User.id.in_(sender_ids))))
+                    .scalars()
+                    .all()
+                )
                 senders = {u.id: u for u in sender_rows}
 
             for msg in rows:

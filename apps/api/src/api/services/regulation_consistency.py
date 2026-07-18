@@ -26,13 +26,17 @@ async def audit_regulation_document_consistency(session: AsyncSession) -> dict[s
     total_regs = 0
     while True:
         chunk = (
-            await session.execute(
-                select(Regulation)
-                .where(Regulation.workflow_status == RegulationWorkflowStatus.PUBLISHED)
-                .limit(_CHUNK)
-                .offset(reg_offset)
+            (
+                await session.execute(
+                    select(Regulation)
+                    .where(Regulation.workflow_status == RegulationWorkflowStatus.PUBLISHED)
+                    .limit(_CHUNK)
+                    .offset(reg_offset)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         if not chunk:
             break
 
@@ -40,8 +44,10 @@ async def audit_regulation_document_consistency(session: AsyncSession) -> dict[s
         docs_by_id: dict = {}
         if doc_ids:
             rows = (
-                await session.execute(select(Document).where(Document.id.in_(doc_ids)))
-            ).scalars().all()
+                (await session.execute(select(Document).where(Document.id.in_(doc_ids))))
+                .scalars()
+                .all()
+            )
             docs_by_id = {d.id: d for d in rows}
 
         for reg in chunk:
@@ -88,13 +94,17 @@ async def audit_regulation_document_consistency(session: AsyncSession) -> dict[s
     total_docs = 0
     while True:
         chunk_docs = (
-            await session.execute(
-                select(Document)
-                .where(Document.category == DocumentCategory.DECREE)
-                .limit(_CHUNK)
-                .offset(doc_offset)
+            (
+                await session.execute(
+                    select(Document)
+                    .where(Document.category == DocumentCategory.DECREE)
+                    .limit(_CHUNK)
+                    .offset(doc_offset)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         if not chunk_docs:
             break
 
@@ -102,13 +112,17 @@ async def audit_regulation_document_consistency(session: AsyncSession) -> dict[s
         regs_by_id: dict = {}
         if reg_ids:
             rows = (
-                await session.execute(select(Regulation).where(Regulation.id.in_(reg_ids)))
-            ).scalars().all()
+                (await session.execute(select(Regulation).where(Regulation.id.in_(reg_ids))))
+                .scalars()
+                .all()
+            )
             regs_by_id = {r.id: r for r in rows}
 
         for doc in chunk_docs:
             if doc.regulation_id is None:
-                problems.append({"type": "decree_missing_regulation_id", "document_id": str(doc.id)})
+                problems.append(
+                    {"type": "decree_missing_regulation_id", "document_id": str(doc.id)}
+                )
                 continue
             reg = regs_by_id.get(doc.regulation_id)
             if reg is None:

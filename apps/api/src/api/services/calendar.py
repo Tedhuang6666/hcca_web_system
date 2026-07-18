@@ -77,6 +77,7 @@ async def _trigger_google_push(
             push_task.delay(str(event.id), operation, str(event.org_id))
     except Exception:
         import logging
+
         logging.getLogger(__name__).exception(
             "觸發 Google Calendar push 失敗（event=%s operation=%s）", event.id, operation
         )

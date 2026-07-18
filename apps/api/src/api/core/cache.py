@@ -41,7 +41,11 @@ async def cache_invalidate(pattern: str, max_iterations: int = 500) -> None:
             if cursor == 0:
                 break
         else:
-            logger.warning("cache_invalidate iteration limit reached pattern=%s keys_so_far=%d", pattern, len(keys))
+            logger.warning(
+                "cache_invalidate iteration limit reached pattern=%s keys_so_far=%d",
+                pattern,
+                len(keys),
+            )
         if keys:
             await redis_client.unlink(*keys)
     except Exception:

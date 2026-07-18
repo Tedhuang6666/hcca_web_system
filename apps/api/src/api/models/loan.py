@@ -59,9 +59,7 @@ class LoanUnit(Base, TimestampMixin):
     """物品個體，每個實際物品有唯一人工編號。"""
 
     __tablename__ = "loan_units"
-    __table_args__ = (
-        UniqueConstraint("item_id", "unit_code", name="uq_loan_unit_code_per_item"),
-    )
+    __table_args__ = (UniqueConstraint("item_id", "unit_code", name="uq_loan_unit_code_per_item"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     item_id: Mapped[uuid.UUID] = mapped_column(
@@ -103,7 +101,9 @@ class LoanRecord(Base, TimestampMixin):
         String(20), nullable=False, default=LoanRecordStatus.ACTIVE, index=True
     )
     reminder_sent_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    last_reminder_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_reminder_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     handled_by_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
