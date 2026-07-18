@@ -1,9 +1,14 @@
-import { renderHook } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, renderHook } from "@testing-library/react";
+import { beforeEach, describe, expect, it } from "vitest";
 
+import { cacheCurrentUser } from "@/lib/auth-cache";
 import { usePermissions } from "./usePermissions";
 
 describe("usePermissions", () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+  });
+
   it("supports direct and compatibility permissions", () => {
     sessionStorage.setItem(
       "permissions",
@@ -35,5 +40,16 @@ describe("usePermissions", () => {
 
     expect(result.current.permissions.size).toBe(0);
     expect(result.current.can("document:create")).toBe(false);
+  });
+
+  it("refreshes after the current user cache is updated", () => {
+    const { result } = renderHook(() => usePermissions());
+
+    act(() => {
+      cacheCurrentUser({ id: "admin-1", is_superuser: true });
+    });
+
+    expect(result.current.isAdmin).toBe(true);
+    expect(result.current.can("anything:at-all")).toBe(true);
   });
 });

@@ -1,5 +1,24 @@
 "use client";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { AUTH_CACHE_EVENT } from "@/lib/auth-cache";
+
+type PermissionState = {
+  permissions: Set<string>;
+  isAdmin: boolean;
+  isOwner: boolean;
+};
+
+function readPermissionState(): PermissionState {
+  if (typeof window === "undefined") {
+    return { permissions: new Set<string>(), isAdmin: false, isOwner: false };
+  }
+  const raw = sessionStorage.getItem("permissions");
+  const superuser = sessionStorage.getItem("is_superuser") === "true";
+  const owner = sessionStorage.getItem("is_owner") === "true";
+  let perms: string[] = [];
+  try { perms = raw ? JSON.parse(raw) : []; } catch { /* ignore */ }
+  return { permissions: new Set<string>(perms), isAdmin: superuser || owner, isOwner: owner };
+}
 
 /**
  * 讀取使用者權限列表（由 /auth/me 在登入時寫入 sessionStorage）。
@@ -10,16 +29,14 @@ import { useCallback, useMemo } from "react";
  *   if (can("document:create")) { ... }
  */
 export function usePermissions() {
-  const { permissions, isAdmin, isOwner } = useMemo(() => {
-    if (typeof window === "undefined") return { permissions: new Set<string>(), isAdmin: false, isOwner: false };
-    // SECURITY: 敏感欄位改存 sessionStorage（由 auth-cache.ts 負責寫入）
-    const raw = sessionStorage.getItem("permissions");
-    const superuser = sessionStorage.getItem("is_superuser") === "true";
-    const owner = sessionStorage.getItem("is_owner") === "true";
-    let perms: string[] = [];
-    try { perms = raw ? JSON.parse(raw) : []; } catch { /* ignore */ }
-    // Owner 視為超管：自動擁有所有權限
-    return { permissions: new Set<string>(perms), isAdmin: superuser || owner, isOwner: owner };
+  const [permissionState, setPermissionState] = useState<PermissionState>(readPermissionState);
+  const { permissions, isAdmin, isOwner } = permissionState;
+
+  useEffect(() => {
+    const refresh = () => setPermissionState(readPermissionState());
+    refresh();
+    window.addEventListener(AUTH_CACHE_EVENT, refresh);
+    return () => window.removeEventListener(AUTH_CACHE_EVENT, refresh);
   }, []);
 
   /** 是否擁有指定權限（超管自動通過） */
