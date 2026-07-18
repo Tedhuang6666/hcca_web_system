@@ -325,6 +325,15 @@ export default function Sidebar() {
         style={{ scrollbarWidth: "none" }}
         aria-label="主要導覽">
         <div className="space-y-0.5">
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event("hcca:open-command-menu"))}
+            className="sidebar-nav-item w-full text-left"
+            style={{ background: "var(--sidebar-hover)", color: "var(--sidebar-text-hover)" }}
+            aria-label="開啟所有功能">
+            <span className="flex-shrink-0"><NavIcon iconKey="modules" size={15} /></span>
+            <span className="flex-1 truncate">所有功能</span>
+          </button>
           {navSections.map((entry, i) => {
             if (!isSection(entry)) {
               return (
