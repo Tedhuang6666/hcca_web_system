@@ -91,6 +91,7 @@ class PermissionCode(StrEnum):
     SHOP_MANAGE_ORDERS = "shop:manage_orders"
     SHOP_VIEW_ALL = "shop:view_all"
     FINANCE_VIEW = "finance:view"
+    FINANCE_EXPENSE_CLAIM = "finance:expense_claim"
     FINANCE_RECORD = "finance:record"
     FINANCE_REVIEW = "finance:review"
     FINANCE_MANAGE = "finance:manage"
@@ -607,19 +608,25 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
     {
         "group": "財務系統",
         "code": PermissionCode.FINANCE_VIEW,
-        "label": "財務查閱",
-        "desc": "查看財務報表與統計",
+        "label": "查看財務帳本",
+        "desc": "查看帳本、餘額、傳票與財務報表，不能建立或覆核傳票",
+    },
+    {
+        "group": "財務系統",
+        "code": PermissionCode.FINANCE_EXPENSE_CLAIM,
+        "label": "登錄支出／報帳",
+        "desc": "建立支出與報帳傳票並送覆核；另需「查看財務帳本」以使用帳本頁面",
     },
     {
         "group": "財務系統",
         "code": PermissionCode.FINANCE_RECORD,
-        "label": "財務登錄",
-        "desc": "建立、修改與送審財務傳票及資金移轉",
+        "label": "登錄一般財務傳票",
+        "desc": "登錄期初餘額、收入與資金移轉並送覆核；包含支出／報帳權限",
     },
     {
         "group": "財務系統",
         "code": PermissionCode.FINANCE_REVIEW,
-        "label": "財務覆核",
+        "label": "覆核財務傳票",
         "desc": "覆核並過帳他人登錄的財務傳票",
     },
     {

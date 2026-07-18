@@ -55,6 +55,11 @@ class ChartAccountOut(ChartAccountCreate):
     balance: int = 0
 
 
+class ChartAccountUpdate(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=120)
+    is_active: bool | None = None
+
+
 class FundAccountCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     storage_type: FundStorageType
@@ -110,6 +115,23 @@ class TransferCreate(BaseModel):
     to_fund_account_id: uuid.UUID
     amount: int = Field(gt=0)
     description: str = Field(min_length=1, max_length=300)
+    note: str | None = None
+
+
+class ExpenseClaimItemCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    unit_price: int = Field(gt=0)
+    quantity: int = Field(gt=0)
+
+
+class ExpenseClaimCreate(BaseModel):
+    period_id: uuid.UUID
+    entry_date: date
+    fund_account_id: uuid.UUID
+    expense_account_id: uuid.UUID
+    description: str = Field(min_length=1, max_length=300)
+    items: list[ExpenseClaimItemCreate] = Field(min_length=1, max_length=100)
+    evidence_url: str | None = Field(None, max_length=500)
     note: str | None = None
 
 

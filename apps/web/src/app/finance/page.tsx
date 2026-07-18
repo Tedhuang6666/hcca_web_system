@@ -1,79 +1,372 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { financeApi } from "@/lib/api";
-import { orgsApi } from "@/lib/api";
-import type { FundAccountOut, JournalOut, LedgerOut, OrgRead, PeriodOut } from "@/lib/types";
+import { usePermissions } from "@/hooks/usePermissions";
+import { financeApi, orgsApi } from "@/lib/api";
+import type {
+  ChartAccountOut,
+  ExpenseClaimItemCreate,
+  FundAccountOut,
+  JournalOut,
+  LedgerOut,
+  OrgRead,
+  PeriodOut,
+} from "@/lib/types";
 
 const storageLabel = { petty_cash: "零用金", safe: "保險箱", bank: "銀行帳戶" } as const;
+const entryTypes = {
+  opening: { label: "設定期初餘額", help: "將既有資金登錄為期初餘額，不是資金移轉。" },
+  income: { label: "登錄收入", help: "記錄實際收款，例如活動報名費或補助款。" },
+  expense: { label: "支出／報帳", help: "一張報帳可登錄多個購買品項，系統會自動計算總額。" },
+} as const;
+type EntryType = keyof typeof entryTypes;
+type FinanceTab = "ledger" | "entry" | "funds" | "accounts" | "review";
+
+const emptyClaimItem = (): ExpenseClaimItemCreate => ({ name: "", unit_price: 0, quantity: 1 });
 const today = new Date().toISOString().slice(0, 10);
 
 export default function FinancePage() {
+  const { can } = usePermissions();
+  const canRecord = can("finance:record");
+  const canClaimExpense = canRecord || can("finance:expense_claim");
+  const canManage = can("finance:manage");
+  const canReview = can("finance:review");
   const [ledger, setLedger] = useState<LedgerOut | null>(null);
   const [orgs, setOrgs] = useState<OrgRead[]>([]);
   const [orgId, setOrgId] = useState("");
   const [ledgerName, setLedgerName] = useState("班聯會財務帳本");
+  const [accounts, setAccounts] = useState<ChartAccountOut[]>([]);
   const [funds, setFunds] = useState<FundAccountOut[]>([]);
   const [periods, setPeriods] = useState<PeriodOut[]>([]);
   const [journals, setJournals] = useState<JournalOut[]>([]);
   const [periodId, setPeriodId] = useState("");
+  const [activeTab, setActiveTab] = useState<FinanceTab>("entry");
+  const [isPeriodSetupOpen, setIsPeriodSetupOpen] = useState(false);
+  const [entryType, setEntryType] = useState<EntryType>("expense");
+  const [fundId, setFundId] = useState("");
+  const [counterAccountId, setCounterAccountId] = useState("");
+  const [entryAmount, setEntryAmount] = useState("");
+  const [entryDate, setEntryDate] = useState(today);
+  const [entryDescription, setEntryDescription] = useState("");
+  const [evidenceUrl, setEvidenceUrl] = useState("");
+  const [claimItems, setClaimItems] = useState<ExpenseClaimItemCreate[]>([emptyClaimItem()]);
   const [fromId, setFromId] = useState("");
   const [toId, setToId] = useState("");
-  const [amount, setAmount] = useState("");
-  const [newPeriod, setNewPeriod] = useState({ name: "", starts_on: `${new Date().getFullYear()}-01-01`, ends_on: `${new Date().getFullYear()}-12-31` });
+  const [transferAmount, setTransferAmount] = useState("");
+  const [newExpenseAccount, setNewExpenseAccount] = useState({ code: "", name: "" });
+  const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
+  const [editingAccountName, setEditingAccountName] = useState("");
+  const [newPeriod, setNewPeriod] = useState({
+    name: "",
+    starts_on: `${new Date().getFullYear()}-01-01`,
+    ends_on: `${new Date().getFullYear()}-12-31`,
+  });
 
-  const load = async (id = ledger?.id) => {
-    if (!id) return;
+  const load = useCallback(async (id: string) => {
     try {
-      const [info, nextFunds, nextPeriods, nextJournals] = await Promise.all([
-        financeApi.getLedger(id), financeApi.listFunds(id), financeApi.listPeriods(id), financeApi.listJournals(id),
+      const [info, nextAccounts, nextFunds, nextPeriods, nextJournals] = await Promise.all([
+        financeApi.getLedger(id),
+        financeApi.listAccounts(id),
+        financeApi.listFunds(id),
+        financeApi.listPeriods(id),
+        financeApi.listJournals(id),
       ]);
-      setLedger(info); setFunds(nextFunds); setPeriods(nextPeriods); setJournals(nextJournals);
-      setPeriodId((current) => current || nextPeriods.find((p) => !p.is_closed)?.id || "");
+      setLedger(info);
+      setAccounts(nextAccounts);
+      setFunds(nextFunds);
+      setPeriods(nextPeriods);
+      setJournals(nextJournals);
+      setPeriodId((current) => current || nextPeriods.find((period) => !period.is_closed)?.id || "");
+      setFundId((current) => current || nextFunds[0]?.id || "");
+      setFromId((current) => current || nextFunds[0]?.id || "");
+      setToId((current) => current || nextFunds[1]?.id || "");
+      setIsPeriodSetupOpen(nextPeriods.length === 0);
+      if (nextPeriods.length === 0) setActiveTab("ledger");
       localStorage.setItem("finance.ledger_id", id);
-    } catch (error) { toast.error(error instanceof Error ? error.message : "載入財務帳失敗"); }
-  };
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "載入財務帳本失敗");
+    }
+  }, []);
 
-  useEffect(() => { const id = localStorage.getItem("finance.ledger_id"); if (id) void load(id); }, []);
+  useEffect(() => {
+    const id = localStorage.getItem("finance.ledger_id");
+    if (id) void load(id);
+  }, [load]);
+
   useEffect(() => {
     void orgsApi.list({ active_only: true }).then(setOrgs).catch((error) => {
       toast.error(error instanceof Error ? error.message : "無法載入組織清單");
     });
   }, []);
 
+  const counterpartAccounts = useMemo(() => accounts.filter((account) => {
+    if (!account.is_active) return false;
+    if (entryType === "opening") return account.account_type === "equity";
+    return account.account_type === (entryType === "income" ? "revenue" : "expense");
+  }), [accounts, entryType]);
+  const expenseAccounts = accounts.filter((account) => account.account_type === "expense");
+  const claimTotal = claimItems.reduce(
+    (total, item) => total + Number(item.unit_price || 0) * Number(item.quantity || 0),
+    0,
+  );
+
+  useEffect(() => {
+    setCounterAccountId((current) =>
+      counterpartAccounts.some((account) => account.id === current)
+        ? current
+        : counterpartAccounts[0]?.id || "",
+    );
+  }, [counterpartAccounts]);
+
   const initialize = async () => {
-    if (!orgId.trim()) { toast.error("請填入組織 ID；可從組織管理頁複製"); return; }
-    try { const created = await financeApi.createLedger({ org_id: orgId.trim(), name: ledgerName.trim() || "班聯會財務帳本" }); setLedger(created); await load(created.id); toast.success("帳本已建立，下一步請建立會計期間"); }
-    catch (error) { toast.error(error instanceof Error ? error.message : "建立帳本失敗"); }
+    if (!orgId) return toast.error("請選擇要使用的組織");
+    try {
+      const created = await financeApi.createLedger({
+        org_id: orgId,
+        name: ledgerName.trim() || "班聯會財務帳本",
+      });
+      await load(created.id);
+      toast.success("帳本已建立，請先新增會計期間，再登錄期初餘額或日常收支");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "建立帳本失敗");
+    }
   };
 
   const addPeriod = async () => {
-    if (!ledger || !newPeriod.name.trim()) { toast.error("請填寫會計期間名稱"); return; }
-    try { await financeApi.createPeriod(ledger.id, newPeriod); toast.success("會計期間已建立"); await load(ledger.id); }
-    catch (error) { toast.error(error instanceof Error ? error.message : "建立會計期間失敗"); }
+    if (!ledger || !newPeriod.name.trim()) return toast.error("請填寫會計期間名稱");
+    try {
+      await financeApi.createPeriod(ledger.id, newPeriod);
+      setIsPeriodSetupOpen(false);
+      toast.success("會計期間已建立");
+      await load(ledger.id);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "建立會計期間失敗");
+    }
+  };
+
+  const createEntry = async () => {
+    const fund = funds.find((item) => item.id === fundId);
+    const counterpart = accounts.find((item) => item.id === counterAccountId);
+    if (!ledger || !periodId || !fund || !counterpart || !entryDescription.trim()) {
+      return toast.error("請選擇期間、資金保管點與科目，並填寫摘要");
+    }
+
+    try {
+      if (entryType === "expense") {
+        if (!canClaimExpense) return toast.error("你沒有登錄支出／報帳的權限");
+        if (!claimItems.every((item) => item.name.trim() && item.unit_price > 0 && item.quantity > 0)) {
+          return toast.error("請完整填寫每個品項、單價與數量");
+        }
+        await financeApi.createExpenseClaim(ledger.id, {
+          period_id: periodId,
+          entry_date: entryDate,
+          fund_account_id: fund.id,
+          expense_account_id: counterpart.id,
+          description: entryDescription.trim(),
+          items: claimItems.map((item) => ({ ...item, name: item.name.trim() })),
+          evidence_url: evidenceUrl.trim() || undefined,
+        });
+        setClaimItems([emptyClaimItem()]);
+        toast.success("報帳已送覆核");
+      } else {
+        if (!canRecord) return toast.error("你沒有登錄期初餘額或收入的權限");
+        const amount = Number(entryAmount);
+        if (!amount) return toast.error("請填寫金額");
+        const fundLine = entryType === "opening"
+          ? { account_id: fund.chart_account_id, debit: amount }
+          : { account_id: fund.chart_account_id, debit: amount };
+        const counterpartLine = entryType === "opening"
+          ? { account_id: counterpart.id, credit: amount }
+          : { account_id: counterpart.id, credit: amount };
+        const prefix = entryType === "opening" ? "期初餘額" : "收入";
+        const entry = await financeApi.createJournal(ledger.id, {
+          period_id: periodId,
+          entry_date: entryDate,
+          description: `${prefix}｜${entryDescription.trim()}`,
+          source_type: "manual_entry",
+          source_event: entryType,
+          evidence_url: evidenceUrl.trim() || undefined,
+          lines: [fundLine, counterpartLine],
+        });
+        await financeApi.submit(entry.id);
+        setEntryAmount("");
+        toast.success(`${entryTypes[entryType].label}已送覆核`);
+      }
+      setEntryDescription("");
+      setEvidenceUrl("");
+      await load(ledger.id);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "建立傳票失敗");
+    }
   };
 
   const transfer = async () => {
-    if (!ledger || !periodId || !fromId || !toId || !amount) { toast.error("請選擇會計期間、轉出帳戶、轉入帳戶並填寫金額"); return; }
-    if (fromId === toId) { toast.error("轉出與轉入帳戶不可相同"); return; }
-    try { await financeApi.createTransfer(ledger.id, { period_id: periodId, entry_date: today, from_fund_account_id: fromId, to_fund_account_id: toId, amount: Number(amount), description: `${funds.find((f) => f.id === fromId)?.name} → ${funds.find((f) => f.id === toId)?.name}` }); toast.success("已建立待覆核轉帳傳票"); setAmount(""); await load(ledger.id); }
-    catch (error) { toast.error(error instanceof Error ? error.message : "建立轉帳失敗"); }
+    const amount = Number(transferAmount);
+    if (!ledger || !periodId || !fromId || !toId || !amount) {
+      return toast.error("請選擇會計期間、轉出與轉入保管點，並填寫金額");
+    }
+    if (fromId === toId) return toast.error("轉出與轉入保管點不可相同");
+    if (!canRecord) return toast.error("你沒有登錄資金移轉的權限");
+    try {
+      const entry = await financeApi.createTransfer(ledger.id, {
+        period_id: periodId,
+        entry_date: today,
+        from_fund_account_id: fromId,
+        to_fund_account_id: toId,
+        amount,
+        description: `${funds.find((fund) => fund.id === fromId)?.name} → ${funds.find((fund) => fund.id === toId)?.name}`,
+      });
+      await financeApi.submit(entry.id);
+      setTransferAmount("");
+      toast.success("資金移轉已送覆核");
+      await load(ledger.id);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "建立移轉傳票失敗");
+    }
   };
 
-  return <main className="mx-auto max-w-7xl space-y-6 p-6">
-    <header><p className="text-sm" style={{ color: "var(--text-muted)" }}>班聯會財務總帳</p><h1 className="text-2xl font-semibold">複式總帳與資金保管</h1><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>依照下方三個步驟設定。班級／校商收款請使用側邊欄的另一個入口。</p></header>
+  const createExpenseAccount = async () => {
+    if (!ledger || !newExpenseAccount.code.trim() || !newExpenseAccount.name.trim()) {
+      return toast.error("請填寫科目代碼與名稱");
+    }
+    try {
+      await financeApi.createAccount(ledger.id, {
+        code: newExpenseAccount.code.trim(),
+        name: newExpenseAccount.name.trim(),
+        account_type: "expense",
+      });
+      setNewExpenseAccount({ code: "", name: "" });
+      toast.success("支出科目已新增");
+      await load(ledger.id);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "新增支出科目失敗");
+    }
+  };
 
-    {!ledger ? <section className="rounded border p-5" style={{ borderColor: "var(--border)" }}><Step n="1" title="建立組織帳本" text="第一次使用時建立一次即可，之後系統會記住帳本。"><div className="grid gap-3 md:grid-cols-2"><label className="text-sm">選擇組織<select className="input mt-1 w-full" value={orgId} onChange={(e) => setOrgId(e.target.value)}><option value="">請選擇要建立帳本的組織</option>{orgs.map((org) => <option key={org.id} value={org.id}>{org.prefix ? `${org.prefix}｜` : ""}{org.name}</option>)}</select></label><label className="text-sm">帳本名稱<input className="input mt-1 w-full" value={ledgerName} onChange={(e) => setLedgerName(e.target.value)} /></label></div><button className="btn btn-primary mt-4" disabled={!orgId} onClick={() => void initialize()}>建立帳本並繼續</button>{orgs.length === 0 && <p className="mt-3 text-sm" style={{ color: "var(--warning)" }}>目前沒有可用組織，請先確認你的組織權限。</p>}</Step></section> : <>
-      <section className="rounded border p-5" style={{ borderColor: "var(--border)" }}><Step n="1" title={ledger.name} text="帳本已設定完成。若要切換組織，可清除瀏覽器中的 finance.ledger_id 後重新建立。" /></section>
-      <section className="rounded border p-5" style={{ borderColor: "var(--border)" }}><Step n="2" title="建立會計期間" text="例如：2026 年度。所有傳票都必須落在未關閉的會計期間內。"><div className="grid gap-3 md:grid-cols-3"><input className="input" value={newPeriod.name} onChange={(e) => setNewPeriod({ ...newPeriod, name: e.target.value })} placeholder="期間名稱，例如 2026 年度" /><input className="input" type="date" value={newPeriod.starts_on} onChange={(e) => setNewPeriod({ ...newPeriod, starts_on: e.target.value })} /><input className="input" type="date" value={newPeriod.ends_on} onChange={(e) => setNewPeriod({ ...newPeriod, ends_on: e.target.value })} /></div><button className="btn btn-secondary mt-3" onClick={() => void addPeriod()}>新增會計期間</button>{periods.length > 0 && <select className="input mt-3 w-full" value={periodId} onChange={(e) => setPeriodId(e.target.value)}><option value="">請選擇使用中的會計期間</option>{periods.map((p) => <option key={p.id} value={p.id} disabled={p.is_closed}>{p.name}（{p.starts_on}～{p.ends_on}）{p.is_closed ? "／已關閉" : ""}</option>)}</select>}</Step></section>
-      <section className="rounded border p-5" style={{ borderColor: "var(--border)" }}><Step n="3" title="管理資金保管點" text="帳本初始化後會自動建立零用金、保險箱與銀行帳戶。資金移轉送出後須由另一位有覆核權限的人員過帳。"><div className="grid gap-3 md:grid-cols-3">{funds.map((fund) => <article key={fund.id} className="rounded border p-4" style={{ borderColor: "var(--border)" }}><p className="text-sm" style={{ color: "var(--text-muted)" }}>{storageLabel[fund.storage_type]}</p><h3 className="font-semibold">{fund.name}</h3><p className="mt-2 text-xl font-semibold">NT${fund.balance.toLocaleString()}</p></article>)}</div><div className="mt-5 grid gap-3 md:grid-cols-4"><select className="input" value={fromId} onChange={(e) => setFromId(e.target.value)}><option value="">轉出哪裡？</option>{funds.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select><select className="input" value={toId} onChange={(e) => setToId(e.target.value)}><option value="">轉入哪裡？</option>{funds.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select><input className="input" type="number" min="1" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="移轉金額（NT$）" /><button className="btn btn-primary" onClick={() => void transfer()}>建立移轉傳票</button></div></Step></section>
-      <section className="overflow-x-auto rounded border" style={{ borderColor: "var(--border)" }}><table className="w-full min-w-[720px] text-sm"><thead style={{ background: "var(--bg-elevated)" }}><tr><th className="px-3 py-2 text-left">日期</th><th className="px-3 py-2 text-left">摘要</th><th className="px-3 py-2 text-left">狀態</th><th className="px-3 py-2 text-left">來源</th></tr></thead><tbody>{journals.map((item) => <tr key={item.id} className="border-t" style={{ borderColor: "var(--border)" }}><td className="px-3 py-2">{item.entry_date}</td><td className="px-3 py-2">{item.description}</td><td className="px-3 py-2">{item.status === "pending_review" ? "待覆核" : item.status === "posted" ? "已過帳" : item.status}</td><td className="px-3 py-2">{item.source_type ?? "手動登錄"}</td></tr>)}</tbody></table></section>
-    </>}
-  </main>;
+  const saveExpenseAccount = async (account: ChartAccountOut) => {
+    if (!ledger || !editingAccountName.trim()) return toast.error("請填寫科目名稱");
+    try {
+      await financeApi.updateAccount(ledger.id, account.id, { name: editingAccountName.trim() });
+      setEditingAccountId(null);
+      toast.success("支出科目已更新");
+      await load(ledger.id);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "更新支出科目失敗");
+    }
+  };
+
+  const changeLedger = () => {
+    localStorage.removeItem("finance.ledger_id");
+    setLedger(null);
+    setAccounts([]);
+    setFunds([]);
+    setPeriods([]);
+    setJournals([]);
+    setPeriodId("");
+  };
+
+  const reviewEntry = async (entryId: string) => {
+    try {
+      await financeApi.post(entryId);
+      toast.success("傳票已過帳");
+      if (ledger) await load(ledger.id);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "覆核傳票失敗");
+    }
+  };
+
+  const updateClaimItem = (index: number, patch: Partial<ExpenseClaimItemCreate>) => {
+    setClaimItems((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
+  };
+  const activePeriod = periods.find((period) => period.id === periodId && !period.is_closed);
+  const availableEntryTypes = (Object.keys(entryTypes) as EntryType[]).filter((type) =>
+    type === "expense" ? canClaimExpense : canRecord,
+  );
+
+  return (
+    <main className="mx-auto max-w-7xl space-y-6 p-6">
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>班聯會財務總帳</p>
+          <h1 className="text-2xl font-semibold">財務帳本</h1>
+          <p className="mt-1 max-w-2xl text-sm" style={{ color: "var(--text-muted)" }}>
+            建立帳本與會計期間後，可登錄期初餘額、收入、支出與報帳；資金在保管點之間流動時才使用移轉。
+          </p>
+        </div>
+        {ledger && <button className="btn btn-secondary" onClick={changeLedger}>切換組織帳本</button>}
+      </header>
+
+      {!ledger ? (
+        <section className="rounded border p-5" style={{ borderColor: "var(--border)" }}>
+          <h2 className="font-semibold">先選擇要管理的組織</h2>
+          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>每個組織各有一套帳本與資金餘額；已建立的帳本會直接開啟。</p>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <label className="text-sm">組織<select className="input mt-1" value={orgId} onChange={(event) => setOrgId(event.target.value)}><option value="">請選擇組織</option>{orgs.map((org) => <option key={org.id} value={org.id}>{org.prefix ? `${org.prefix}｜` : ""}{org.name}</option>)}</select></label>
+            <label className="text-sm">帳本名稱<input className="input mt-1" value={ledgerName} onChange={(event) => setLedgerName(event.target.value)} /></label>
+          </div>
+          <button className="btn btn-primary mt-4" disabled={!orgId} onClick={() => void initialize()}>開啟帳本</button>
+        </section>
+      ) : (
+        <>
+          <nav className="flex flex-wrap gap-2" aria-label="財務功能">
+            {([
+              ["ledger", "班聯會財務帳本"],
+              ["entry", "登錄收支與報帳"],
+              ["funds", "資金保管點"],
+              ["accounts", "支出科目"],
+              ["review", "覆核"],
+            ] as const).map(([tab, label]) => <button key={tab} className={`btn ${activeTab === tab ? "btn-primary" : "btn-secondary"}`} aria-pressed={activeTab === tab} onClick={() => setActiveTab(tab)}>{label}</button>)}
+          </nav>
+
+          <section hidden={activeTab !== "ledger"} className="rounded border p-5" style={{ borderColor: "var(--border)" }}>
+            <div className="flex flex-wrap items-baseline justify-between gap-3">
+              <div><h2 className="font-semibold">{ledger.name}</h2><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>目前傳票使用的會計期間。</p></div>
+              {activePeriod && <span className="text-sm" style={{ color: "var(--success)" }}>使用中：{activePeriod.name}</span>}
+            </div>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <select className="input max-w-md" value={periodId} onChange={(event) => setPeriodId(event.target.value)}><option value="">請選擇使用中的會計期間</option>{periods.map((period) => <option key={period.id} value={period.id} disabled={period.is_closed}>{period.name}（{period.starts_on}～{period.ends_on}）{period.is_closed ? "／已關閉" : ""}</option>)}</select>
+              {canManage && <button className="btn btn-secondary" onClick={() => setIsPeriodSetupOpen((open) => !open)}>{isPeriodSetupOpen ? "收合期間設定" : "新增會計期間"}</button>}
+            </div>
+            {(isPeriodSetupOpen || periods.length === 0) && canManage && <div className="mt-4 border-t pt-4" style={{ borderColor: "var(--border)" }}><div className="grid gap-3 md:grid-cols-3"><input className="input" value={newPeriod.name} onChange={(event) => setNewPeriod({ ...newPeriod, name: event.target.value })} placeholder="期間名稱，例如 115 學年度上學期" /><input className="input" type="date" value={newPeriod.starts_on} onChange={(event) => setNewPeriod({ ...newPeriod, starts_on: event.target.value })} /><input className="input" type="date" value={newPeriod.ends_on} onChange={(event) => setNewPeriod({ ...newPeriod, ends_on: event.target.value })} /></div><button className="btn btn-primary mt-3" onClick={() => void addPeriod()}>儲存會計期間</button></div>}
+          </section>
+
+          <div hidden={activeTab !== "entry"}>
+          {!activePeriod ? (
+            <section className="rounded border p-5 text-sm" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>請先新增並選擇一個尚未關閉的會計期間，才能登錄傳票。</section>
+          ) : availableEntryTypes.length > 0 ? (
+            <section className="rounded border p-5" style={{ borderColor: "var(--border)" }}>
+              <div className="flex flex-wrap items-baseline justify-between gap-3"><div><h2 className="font-semibold">登錄收支與報帳</h2><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>{entryTypes[entryType].help}</p></div><p className="text-sm" style={{ color: "var(--text-muted)" }}>送出後由另一位覆核人員過帳</p></div>
+              <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="傳票類型">{availableEntryTypes.map((type) => <button key={type} className={`btn ${entryType === type ? "btn-primary" : "btn-secondary"}`} aria-pressed={entryType === type} onClick={() => setEntryType(type)}>{entryTypes[type].label}</button>)}</div>
+              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <label className="text-sm">日期<input className="input mt-1" type="date" value={entryDate} onChange={(event) => setEntryDate(event.target.value)} /></label>
+                <label className="text-sm">付款／收款保管點<select className="input mt-1" value={fundId} onChange={(event) => setFundId(event.target.value)}>{funds.map((fund) => <option key={fund.id} value={fund.id}>{fund.name}</option>)}</select></label>
+                <label className="text-sm">{entryType === "opening" ? "對應科目" : entryType === "income" ? "收入科目" : "支出科目"}<select className="input mt-1" value={counterAccountId} onChange={(event) => setCounterAccountId(event.target.value)}>{counterpartAccounts.map((account) => <option key={account.id} value={account.id}>{account.code}｜{account.name}</option>)}</select></label>
+                {entryType !== "expense" && <label className="text-sm">金額（NT$）<input className="input mt-1" type="number" min="1" value={entryAmount} onChange={(event) => setEntryAmount(event.target.value)} /></label>}
+                <label className={`text-sm ${entryType === "expense" ? "xl:col-span-2" : ""}`}>摘要<input className="input mt-1" value={entryDescription} onChange={(event) => setEntryDescription(event.target.value)} placeholder={entryType === "expense" ? "例如：社團博覽會文具採購" : "請說明這筆款項"} /></label>
+                <label className="text-sm md:col-span-2">憑證連結（選填）<input className="input mt-1" type="url" value={evidenceUrl} onChange={(event) => setEvidenceUrl(event.target.value)} placeholder="收據、發票或核銷文件網址" /></label>
+              </div>
+              {entryType === "expense" && <div className="mt-5 overflow-x-auto"><table className="w-full min-w-[620px] text-sm"><thead style={{ background: "var(--bg-elevated)" }}><tr><th className="px-3 py-2 text-left">品項</th><th className="px-3 py-2 text-right">單價</th><th className="px-3 py-2 text-right">數量</th><th className="px-3 py-2 text-right">小計</th><th className="w-20 px-3 py-2" aria-label="移除品項" /></tr></thead><tbody>{claimItems.map((item, index) => <tr key={index} className="border-t" style={{ borderColor: "var(--border)" }}><td className="p-2"><input aria-label={`第 ${index + 1} 項品項`} className="input" value={item.name} onChange={(event) => updateClaimItem(index, { name: event.target.value })} placeholder="例如：原子筆" /></td><td className="p-2"><input aria-label={`第 ${index + 1} 項單價`} className="input text-right" type="number" min="1" value={item.unit_price || ""} onChange={(event) => updateClaimItem(index, { unit_price: Number(event.target.value) })} /></td><td className="p-2"><input aria-label={`第 ${index + 1} 項數量`} className="input text-right" type="number" min="1" value={item.quantity || ""} onChange={(event) => updateClaimItem(index, { quantity: Number(event.target.value) })} /></td><td className="px-3 text-right tabular-nums">NT${(item.unit_price * item.quantity).toLocaleString()}</td><td className="p-2 text-center"><button className="btn btn-secondary" disabled={claimItems.length === 1} onClick={() => setClaimItems((items) => items.filter((_, itemIndex) => itemIndex !== index))}>移除</button></td></tr>)}</tbody><tfoot><tr className="border-t" style={{ borderColor: "var(--border)" }}><td className="px-3 py-3" colSpan={3}>合計</td><td className="px-3 py-3 text-right text-base font-semibold tabular-nums">NT${claimTotal.toLocaleString()}</td><td /></tr></tfoot></table><button className="btn btn-secondary mt-3" onClick={() => setClaimItems((items) => [...items, emptyClaimItem()])}>新增品項</button></div>}
+              <button className="btn btn-primary mt-4" onClick={() => void createEntry}>{entryType === "expense" ? `送出報帳（NT$${claimTotal.toLocaleString()}）` : `${entryTypes[entryType].label}並送覆核`}</button>
+            </section>
+          ) : <section className="rounded border p-5 text-sm" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>你目前只有查看權限。若要報帳，請指派「登錄支出／報帳」；登錄收入、期初與移轉則需要「登錄一般財務傳票」。</section>}
+          </div>
+
+          <section hidden={activeTab !== "funds"} className="rounded border p-5" style={{ borderColor: "var(--border)" }}>
+            <h2 className="font-semibold">資金保管點</h2><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>餘額只計入已過帳傳票。請用收支／報帳登錄金額；只有在保管位置改變時才建立移轉。</p>
+            <div className="mt-4 grid gap-3 md:grid-cols-3">{funds.map((fund) => <article key={fund.id} className="rounded border p-4" style={{ borderColor: "var(--border)" }}><p className="text-sm" style={{ color: "var(--text-muted)" }}>{storageLabel[fund.storage_type]}</p><h3 className="font-semibold">{fund.name}</h3><p className="mt-2 text-xl font-semibold">NT${fund.balance.toLocaleString()}</p></article>)}</div>
+            {activePeriod && canRecord && <div className="mt-5 border-t pt-5" style={{ borderColor: "var(--border)" }}><h3 className="font-medium">資金移轉</h3><div className="mt-3 grid gap-3 md:grid-cols-4"><select className="input" value={fromId} onChange={(event) => setFromId(event.target.value)}><option value="">轉出保管點</option>{funds.map((fund) => <option key={fund.id} value={fund.id}>{fund.name}</option>)}</select><select className="input" value={toId} onChange={(event) => setToId(event.target.value)}><option value="">轉入保管點</option>{funds.map((fund) => <option key={fund.id} value={fund.id}>{fund.name}</option>)}</select><input className="input" type="number" min="1" value={transferAmount} onChange={(event) => setTransferAmount(event.target.value)} placeholder="移轉金額（NT$）" /><button className="btn btn-secondary" onClick={() => void transfer()}>移轉並送覆核</button></div></div>}
+          </section>
+
+          {activeTab === "accounts" && (canManage ? <section className="rounded border p-5" style={{ borderColor: "var(--border)" }}><h2 className="font-semibold">支出科目</h2><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>報帳時從這裡選擇科目。預設科目可改名；自訂科目也可停用，歷史傳票不會受影響。</p><div className="mt-4 grid gap-3 md:grid-cols-[180px_1fr_auto]"><input className="input" value={newExpenseAccount.code} onChange={(event) => setNewExpenseAccount({ ...newExpenseAccount, code: event.target.value })} placeholder="科目代碼，例如 5104" /><input className="input" value={newExpenseAccount.name} onChange={(event) => setNewExpenseAccount({ ...newExpenseAccount, name: event.target.value })} placeholder="新增支出科目名稱" /><button className="btn btn-secondary" onClick={() => void createExpenseAccount()}>新增科目</button></div><div className="mt-4 overflow-x-auto"><table className="w-full min-w-[560px] text-sm"><thead style={{ background: "var(--bg-elevated)" }}><tr><th className="px-3 py-2 text-left">代碼</th><th className="px-3 py-2 text-left">名稱</th><th className="px-3 py-2 text-left">狀態</th><th className="px-3 py-2 text-right">操作</th></tr></thead><tbody>{expenseAccounts.map((account) => <tr key={account.id} className="border-t" style={{ borderColor: "var(--border)" }}><td className="px-3 py-2">{account.code}</td><td className="px-3 py-2">{editingAccountId === account.id ? <input className="input" value={editingAccountName} onChange={(event) => setEditingAccountName(event.target.value)} /> : account.name}</td><td className="px-3 py-2">{account.is_active ? "使用中" : "已停用"}</td><td className="px-3 py-2 text-right">{editingAccountId === account.id ? <span className="inline-flex gap-2"><button className="btn btn-primary" onClick={() => void saveExpenseAccount(account)}>儲存</button><button className="btn btn-secondary" onClick={() => setEditingAccountId(null)}>取消</button></span> : <button className="btn btn-secondary" onClick={() => { setEditingAccountId(account.id); setEditingAccountName(account.name); }}>改名</button>}</td></tr>)}</tbody></table></div></section> : <section className="rounded border p-5 text-sm" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>管理支出科目需要「管理財務設定」權限。</section>)}
+
+          {activeTab === "review" && <section className="overflow-x-auto rounded border" style={{ borderColor: "var(--border)" }}><table className="w-full min-w-[720px] text-sm"><thead style={{ background: "var(--bg-elevated)" }}><tr><th className="px-3 py-2 text-left">日期</th><th className="px-3 py-2 text-left">摘要</th><th className="px-3 py-2 text-left">來源</th><th className="px-3 py-2 text-right">操作</th></tr></thead><tbody>{journals.filter((item) => item.status === "pending_review").length > 0 ? journals.filter((item) => item.status === "pending_review").map((item) => <tr key={item.id} className="border-t" style={{ borderColor: "var(--border)" }}><td className="px-3 py-2">{item.entry_date}</td><td className="px-3 py-2">{item.description}</td><td className="px-3 py-2">{sourceLabel(item.source_type)}</td><td className="px-3 py-2 text-right">{canReview ? <button className="btn btn-primary" onClick={() => void reviewEntry(item.id)}>覆核並過帳</button> : <span style={{ color: "var(--text-muted)" }}>需要覆核權限</span>}</td></tr>) : <tr><td className="px-3 py-6 text-center" colSpan={4} style={{ color: "var(--text-muted)" }}>目前沒有待覆核傳票。</td></tr>}</tbody></table></section>}
+        </>
+      )}
+    </main>
+  );
 }
 
-function Step({ n, title, text, children }: { n: string; title: string; text: string; children?: ReactNode }) {
-  return <><div className="flex items-start gap-3"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full" style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>{n}</span><div className="min-w-0 flex-1"><h2 className="font-semibold">{title}</h2><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>{text}</p>{children && <div className="mt-4">{children}</div>}</div></div></>;
+function sourceLabel(source: string | null) {
+  return source === "fund_transfer" ? "資金移轉" : source === "expense_claim" ? "報帳" : "手動登錄";
 }
