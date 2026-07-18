@@ -23,6 +23,12 @@ const entryTypes = {
 } as const;
 type EntryType = keyof typeof entryTypes;
 type FinanceTab = "ledger" | "entry" | "funds" | "accounts" | "review";
+type ManagedAccountType = "expense" | "revenue";
+
+const managedAccountLabels: Record<ManagedAccountType, { title: string; singular: string }> = {
+  expense: { title: "支出科目", singular: "支出" },
+  revenue: { title: "收入科目", singular: "收入" },
+};
 
 const emptyClaimItem = (): ExpenseClaimItemCreate => ({
   name: "",
@@ -78,7 +84,8 @@ export default function FinancePage() {
   const [fromId, setFromId] = useState("");
   const [toId, setToId] = useState("");
   const [transferAmount, setTransferAmount] = useState("");
-  const [newExpenseAccount, setNewExpenseAccount] = useState({ code: "", name: "" });
+  const [managedAccountType, setManagedAccountType] = useState<ManagedAccountType>("expense");
+  const [newAccount, setNewAccount] = useState({ code: "", name: "" });
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
   const [editingAccountName, setEditingAccountName] = useState("");
   const [newPeriod, setNewPeriod] = useState({
@@ -129,7 +136,7 @@ export default function FinancePage() {
     if (entryType === "opening") return account.account_type === "equity";
     return account.account_type === (entryType === "income" ? "revenue" : "expense");
   }), [accounts, entryType]);
-  const expenseAccounts = accounts.filter((account) => account.account_type === "expense");
+  const managedAccounts = accounts.filter((account) => account.account_type === managedAccountType);
   const claimTotal = claimItems.reduce(
     (total, item) => total + claimItemTotal(item),
     0,
@@ -314,33 +321,33 @@ export default function FinancePage() {
     }
   };
 
-  const createExpenseAccount = async () => {
-    if (!ledger || !newExpenseAccount.code.trim() || !newExpenseAccount.name.trim()) {
+  const createAccount = async () => {
+    if (!ledger || !newAccount.code.trim() || !newAccount.name.trim()) {
       return toast.error("請填寫科目代碼與名稱");
     }
     try {
       await financeApi.createAccount(ledger.id, {
-        code: newExpenseAccount.code.trim(),
-        name: newExpenseAccount.name.trim(),
-        account_type: "expense",
+        code: newAccount.code.trim(),
+        name: newAccount.name.trim(),
+        account_type: managedAccountType,
       });
-      setNewExpenseAccount({ code: "", name: "" });
-      toast.success("支出科目已新增");
+      setNewAccount({ code: "", name: "" });
+      toast.success(`${managedAccountLabels[managedAccountType].singular}科目已新增`);
       await load(ledger.id);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "新增支出科目失敗");
+      toast.error(error instanceof Error ? error.message : "新增科目失敗");
     }
   };
 
-  const saveExpenseAccount = async (account: ChartAccountOut) => {
+  const saveAccount = async (account: ChartAccountOut) => {
     if (!ledger || !editingAccountName.trim()) return toast.error("請填寫科目名稱");
     try {
       await financeApi.updateAccount(ledger.id, account.id, { name: editingAccountName.trim() });
       setEditingAccountId(null);
-      toast.success("支出科目已更新");
+      toast.success("科目已更新");
       await load(ledger.id);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "更新支出科目失敗");
+      toast.error(error instanceof Error ? error.message : "更新科目失敗");
     }
   };
 
@@ -402,7 +409,7 @@ export default function FinancePage() {
               ["ledger", "班聯會財務帳本"],
               ["entry", "登錄收支與報帳"],
               ["funds", "資金保管點"],
-              ["accounts", "支出科目"],
+              ["accounts", "收支科目"],
               ["review", "覆核"],
             ] as const).map(([tab, label]) => <button key={tab} className={`btn ${activeTab === tab ? "btn-primary" : "btn-secondary"}`} aria-pressed={activeTab === tab} onClick={() => setActiveTab(tab)}>{label}</button>)}
           </nav>
@@ -448,7 +455,69 @@ export default function FinancePage() {
             {activePeriod && canRecord && <div className="mt-5 border-t pt-5" style={{ borderColor: "var(--border)" }}><h3 className="font-medium">資金移轉</h3><div className="mt-3 grid gap-3 md:grid-cols-4"><select className="input" value={fromId} onChange={(event) => setFromId(event.target.value)}><option value="">轉出保管點</option>{funds.map((fund) => <option key={fund.id} value={fund.id}>{fund.name}</option>)}</select><select className="input" value={toId} onChange={(event) => setToId(event.target.value)}><option value="">轉入保管點</option>{funds.map((fund) => <option key={fund.id} value={fund.id}>{fund.name}</option>)}</select><input className="input" type="number" min="1" value={transferAmount} onChange={(event) => setTransferAmount(event.target.value)} placeholder="移轉金額（NT$）" /><button className="btn btn-secondary" onClick={() => void transfer()}>移轉並送覆核</button></div></div>}
           </section>
 
-          {activeTab === "accounts" && (canManage ? <section className="rounded border p-5" style={{ borderColor: "var(--border)" }}><h2 className="font-semibold">支出科目</h2><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>報帳時從這裡選擇科目。預設科目可改名；自訂科目也可停用，歷史傳票不會受影響。</p><div className="mt-4 grid gap-3 md:grid-cols-[180px_1fr_auto]"><input className="input" value={newExpenseAccount.code} onChange={(event) => setNewExpenseAccount({ ...newExpenseAccount, code: event.target.value })} placeholder="科目代碼，例如 5104" /><input className="input" value={newExpenseAccount.name} onChange={(event) => setNewExpenseAccount({ ...newExpenseAccount, name: event.target.value })} placeholder="新增支出科目名稱" /><button className="btn btn-secondary" onClick={() => void createExpenseAccount()}>新增科目</button></div><div className="mt-4 overflow-x-auto"><table className="w-full min-w-[560px] text-sm"><thead style={{ background: "var(--bg-elevated)" }}><tr><th className="px-3 py-2 text-left">代碼</th><th className="px-3 py-2 text-left">名稱</th><th className="px-3 py-2 text-left">狀態</th><th className="px-3 py-2 text-right">操作</th></tr></thead><tbody>{expenseAccounts.map((account) => <tr key={account.id} className="border-t" style={{ borderColor: "var(--border)" }}><td className="px-3 py-2">{account.code}</td><td className="px-3 py-2">{editingAccountId === account.id ? <input className="input" value={editingAccountName} onChange={(event) => setEditingAccountName(event.target.value)} /> : account.name}</td><td className="px-3 py-2">{account.is_active ? "使用中" : "已停用"}</td><td className="px-3 py-2 text-right">{editingAccountId === account.id ? <span className="inline-flex gap-2"><button className="btn btn-primary" onClick={() => void saveExpenseAccount(account)}>儲存</button><button className="btn btn-secondary" onClick={() => setEditingAccountId(null)}>取消</button></span> : <button className="btn btn-secondary" onClick={() => { setEditingAccountId(account.id); setEditingAccountName(account.name); }}>改名</button>}</td></tr>)}</tbody></table></div></section> : <section className="rounded border p-5 text-sm" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>管理支出科目需要「管理財務設定」權限。</section>)}
+          {activeTab === "accounts" && (canManage ? (
+            <section className="rounded border p-5" style={{ borderColor: "var(--border)" }}>
+              <div className="flex flex-wrap items-baseline justify-between gap-3">
+                <div>
+                  <h2 className="font-semibold">收支科目</h2>
+                  <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+                    收入與支出分開管理；登錄收入及報帳時會依類型顯示可用科目。
+                  </p>
+                </div>
+                <div className="flex gap-2" role="group" aria-label="科目類型">
+                  {(Object.keys(managedAccountLabels) as ManagedAccountType[]).map((type) => (
+                    <button
+                      key={type}
+                      className={`btn ${managedAccountType === type ? "btn-primary" : "btn-secondary"}`}
+                      aria-pressed={managedAccountType === type}
+                      onClick={() => {
+                        setManagedAccountType(type);
+                        setEditingAccountId(null);
+                      }}
+                    >
+                      {managedAccountLabels[type].title}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-[180px_1fr_auto]">
+                <input
+                  className="input"
+                  value={newAccount.code}
+                  onChange={(event) => setNewAccount({ ...newAccount, code: event.target.value })}
+                  placeholder={`科目代碼，例如 ${managedAccountType === "expense" ? "5104" : "4104"}`}
+                />
+                <input
+                  className="input"
+                  value={newAccount.name}
+                  onChange={(event) => setNewAccount({ ...newAccount, name: event.target.value })}
+                  placeholder={`新增${managedAccountLabels[managedAccountType].singular}科目名稱`}
+                />
+                <button className="btn btn-secondary" onClick={() => void createAccount()}>新增科目</button>
+              </div>
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full min-w-[560px] text-sm">
+                  <thead style={{ background: "var(--bg-elevated)" }}>
+                    <tr><th className="px-3 py-2 text-left">代碼</th><th className="px-3 py-2 text-left">名稱</th><th className="px-3 py-2 text-left">狀態</th><th className="px-3 py-2 text-right">操作</th></tr>
+                  </thead>
+                  <tbody>
+                    {managedAccounts.map((account) => (
+                      <tr key={account.id} className="border-t" style={{ borderColor: "var(--border)" }}>
+                        <td className="px-3 py-2">{account.code}</td>
+                        <td className="px-3 py-2">{editingAccountId === account.id ? <input className="input" value={editingAccountName} onChange={(event) => setEditingAccountName(event.target.value)} /> : account.name}</td>
+                        <td className="px-3 py-2">{account.is_active ? "使用中" : "已停用"}</td>
+                        <td className="px-3 py-2 text-right">
+                          {editingAccountId === account.id ? (
+                            <span className="inline-flex gap-2"><button className="btn btn-primary" onClick={() => void saveAccount(account)}>儲存</button><button className="btn btn-secondary" onClick={() => setEditingAccountId(null)}>取消</button></span>
+                          ) : <button className="btn btn-secondary" onClick={() => { setEditingAccountId(account.id); setEditingAccountName(account.name); }}>改名</button>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          ) : <section className="rounded border p-5 text-sm" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>管理收支科目需要「管理財務設定」權限。</section>)}
 
           {activeTab === "review" && <section className="overflow-x-auto rounded border" style={{ borderColor: "var(--border)" }}><table className="w-full min-w-[720px] text-sm"><thead style={{ background: "var(--bg-elevated)" }}><tr><th className="px-3 py-2 text-left">日期</th><th className="px-3 py-2 text-left">摘要</th><th className="px-3 py-2 text-left">來源</th><th className="px-3 py-2 text-right">操作</th></tr></thead><tbody>{journals.filter((item) => item.status === "pending_review").length > 0 ? journals.filter((item) => item.status === "pending_review").map((item) => <tr key={item.id} className="border-t" style={{ borderColor: "var(--border)" }}><td className="px-3 py-2">{item.entry_date}</td><td className="px-3 py-2">{item.description}</td><td className="px-3 py-2">{sourceLabel(item.source_type)}</td><td className="px-3 py-2 text-right">{canReview ? <button className="btn btn-primary" onClick={() => void reviewEntry(item.id)}>覆核並過帳</button> : <span style={{ color: "var(--text-muted)" }}>需要覆核權限</span>}</td></tr>) : <tr><td className="px-3 py-6 text-center" colSpan={4} style={{ color: "var(--text-muted)" }}>目前沒有待覆核傳票。</td></tr>}</tbody></table></section>}
         </>
