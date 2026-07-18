@@ -58,9 +58,7 @@ def _refresh_credentials_sync(config: UserGoogleTasksConfig):
         try:
             creds.refresh(Request())
         except google.auth.exceptions.RefreshError as exc:
-            raise GoogleTasksAuthError(
-                f"Google Tasks token 刷新失敗（{exc}），請重新授權"
-            ) from exc
+            raise GoogleTasksAuthError(f"Google Tasks token 刷新失敗（{exc}），請重新授權") from exc
     return creds
 
 
@@ -115,7 +113,9 @@ def _work_item_to_google_task(item: WorkItem) -> dict:
         "notes": f"{_HCCA_MARKER}\n{item.description or ''}".strip(),
     }
     if item.due_at:
-        due_utc = item.due_at.astimezone(UTC) if item.due_at.tzinfo else item.due_at.replace(tzinfo=UTC)
+        due_utc = (
+            item.due_at.astimezone(UTC) if item.due_at.tzinfo else item.due_at.replace(tzinfo=UTC)
+        )
         body["due"] = due_utc.strftime("%Y-%m-%dT00:00:00.000Z")
     if item.status == WorkItemStatus.DONE:
         body["status"] = "completed"
@@ -151,9 +151,11 @@ async def push_work_item(
 
         if item.google_task_id:
             try:
-                result = service.tasks().patch(
-                    tasklist=tasklist_id, task=item.google_task_id, body=body
-                ).execute()
+                result = (
+                    service.tasks()
+                    .patch(tasklist=tasklist_id, task=item.google_task_id, body=body)
+                    .execute()
+                )
                 return result["id"]
             except HttpError as exc:
                 if exc.resp.status == 404:
@@ -214,11 +216,15 @@ async def pull_from_google(
         service = _build_service(creds)
         tasklist_id = await ensure_tasklist(session, config)
 
-        result = service.tasks().list(
-            tasklist=tasklist_id,
-            showCompleted=False,
-            maxResults=100,
-        ).execute()
+        result = (
+            service.tasks()
+            .list(
+                tasklist=tasklist_id,
+                showCompleted=False,
+                maxResults=100,
+            )
+            .execute()
+        )
         tasks = result.get("items", [])
 
         existing_task_ids: set[str] = set(

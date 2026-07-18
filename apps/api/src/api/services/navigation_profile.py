@@ -50,7 +50,9 @@ def _profile_out(profile: NavigationProfile) -> NavigationProfileOut:
     )
 
 
-async def list_profiles(db: AsyncSession, include_inactive: bool = True) -> list[NavigationProfileOut]:
+async def list_profiles(
+    db: AsyncSession, include_inactive: bool = True
+) -> list[NavigationProfileOut]:
     stmt = (
         select(NavigationProfile)
         .options(selectinload(NavigationProfile.positions))
@@ -135,7 +137,9 @@ async def resolve_for_user(db: AsyncSession, user: User) -> NavigationProfileRes
     )
     permissions = await get_user_permission_codes(db, user.id)
 
-    default_profile = next((profile for profile in profiles if profile.key == "default"), profiles[-1])
+    default_profile = next(
+        (profile for profile in profiles if profile.key == "default"), profiles[-1]
+    )
     for profile in profiles:
         if profile.key == "default":
             continue
@@ -149,7 +153,10 @@ async def resolve_for_user(db: AsyncSession, user: User) -> NavigationProfileRes
             return NavigationProfileResolveOut(
                 profile=_profile_out(profile),
                 source="position",
-                matched={"position_ids": [str(pid) for pid in matched_positions], "positions": names},
+                matched={
+                    "position_ids": [str(pid) for pid in matched_positions],
+                    "positions": names,
+                },
             )
         if _has_match(permissions, profile.match_any_permissions, profile.match_any_prefixes):
             return NavigationProfileResolveOut(
@@ -199,4 +206,6 @@ def _has_match(
 ) -> bool:
     if any(code in permissions for code in (codes or [])):
         return True
-    return any(permission.startswith(prefix) for prefix in (prefixes or []) for permission in permissions)
+    return any(
+        permission.startswith(prefix) for prefix in (prefixes or []) for permission in permissions
+    )

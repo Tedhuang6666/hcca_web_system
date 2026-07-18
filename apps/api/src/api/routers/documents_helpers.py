@@ -149,7 +149,9 @@ async def org_ids_with_document_permissions(session: AsyncSession, user: User) -
     for org_id, code in rows:
         org_direct_codes.setdefault(org_id, set()).add(code)
 
-    qualified: set[uuid.UUID] = {oid for oid, codes in org_direct_codes.items() if doc_codes & codes}
+    qualified: set[uuid.UUID] = {
+        oid for oid, codes in org_direct_codes.items() if doc_codes & codes
+    }
     remaining = [oid for oid in org_direct_codes if oid not in qualified]
 
     if remaining:
@@ -159,7 +161,9 @@ async def org_ids_with_document_permissions(session: AsyncSession, user: User) -
                 await session.execute(
                     select(Org.id).where(Org.id.in_(remaining), Org.leader_user_id == user.id)
                 )
-            ).scalars().all()
+            )
+            .scalars()
+            .all()
         )
         # Auto-leaders (no explicit leader_user_id set) — typically very few
         auto_candidates = [oid for oid in remaining if oid not in explicit_leader_ids]
@@ -170,16 +174,20 @@ async def org_ids_with_document_permissions(session: AsyncSession, user: User) -
         if explicit_leader_ids:
             # Leader gets all org permissions — qualify if org has any doc codes
             leader_qualified = (
-                await session.execute(
-                    select(Position.org_id)
-                    .join(Permission, Permission.position_id == Position.id)
-                    .where(
-                        Position.org_id.in_(explicit_leader_ids),
-                        Permission.code.in_(doc_codes),
+                (
+                    await session.execute(
+                        select(Position.org_id)
+                        .join(Permission, Permission.position_id == Position.id)
+                        .where(
+                            Position.org_id.in_(explicit_leader_ids),
+                            Permission.code.in_(doc_codes),
+                        )
+                        .distinct()
                     )
-                    .distinct()
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             qualified.update(leader_qualified)
 
     return list(qualified)

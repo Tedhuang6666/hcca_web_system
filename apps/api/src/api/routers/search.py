@@ -43,7 +43,9 @@ async def global_search(
 ) -> list[SearchResultOut]:
     return [
         SearchResultOut.model_validate(item)
-        for item in await search_service.search(db, q, limit=limit, is_superuser=current_user.is_superuser)
+        for item in await search_service.search(
+            db, q, limit=limit, is_superuser=current_user.is_superuser
+        )
     ]
 
 

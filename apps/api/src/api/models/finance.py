@@ -178,9 +178,7 @@ class ExpenseClaimItem(Base, TimestampMixin):
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     unit_price: Mapped[int] = mapped_column(Integer, nullable=False)
-    tax_rate: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0, server_default="0"
-    )
+    tax_rate: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
 
 

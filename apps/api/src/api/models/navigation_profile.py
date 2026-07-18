@@ -22,9 +22,15 @@ class NavigationProfile(Base, TimestampMixin):
     label: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     audience: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100, server_default="100")
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
-    is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    priority: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=100, server_default="100"
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+    is_system: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     match_any_permissions: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     match_any_prefixes: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     exclude_permissions: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)

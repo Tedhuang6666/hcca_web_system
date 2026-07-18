@@ -84,11 +84,15 @@ async def callback(request: Request, session: DbDep) -> RedirectResponse:
     from api.core.field_crypto import FieldEncryptionNotConfigured
     from api.core.oauth import google_tasks as gtasks_client
 
-    frontend_origin = settings.ALLOWED_ORIGINS[0] if settings.ALLOWED_ORIGINS else "http://localhost:3000"
+    frontend_origin = (
+        settings.ALLOWED_ORIGINS[0] if settings.ALLOWED_ORIGINS else "http://localhost:3000"
+    )
 
     user_id_str = request.session.pop("gtasks_user_id", None)
     if not user_id_str:
-        return RedirectResponse(url=f"{frontend_origin}/settings/integrations?error=session_expired")
+        return RedirectResponse(
+            url=f"{frontend_origin}/settings/integrations?error=session_expired"
+        )
 
     try:
         token_data = await gtasks_client.authorize_access_token(request)
@@ -134,7 +138,9 @@ async def callback(request: Request, session: DbDep) -> RedirectResponse:
         await session.commit()
     except FieldEncryptionNotConfigured:
         logger.error("Google Tasks callback：FIELD_ENCRYPTION_KEYS 未設定")
-        return RedirectResponse(url=f"{frontend_origin}/settings/integrations?error=encryption_not_configured")
+        return RedirectResponse(
+            url=f"{frontend_origin}/settings/integrations?error=encryption_not_configured"
+        )
     except Exception:
         await session.rollback()
         logger.exception("Google Tasks callback：儲存 token 失敗")
@@ -143,7 +149,9 @@ async def callback(request: Request, session: DbDep) -> RedirectResponse:
     return RedirectResponse(url=f"{frontend_origin}/settings/integrations?connected=true")
 
 
-@router.delete("/disconnect", status_code=status.HTTP_204_NO_CONTENT, summary="解除 Google Tasks 連結")
+@router.delete(
+    "/disconnect", status_code=status.HTTP_204_NO_CONTENT, summary="解除 Google Tasks 連結"
+)
 async def disconnect(session: DbDep, current_user: CurrentUser) -> None:
     config = await session.scalar(
         select(UserGoogleTasksConfig).where(

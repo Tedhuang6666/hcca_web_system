@@ -158,7 +158,9 @@ async def test_filter_by_system_code_narrows_entity_types(
     admin_user: User,
     db_session: AsyncSession,
 ) -> None:
-    db_session.add(_make_log(entity_type="regulation", entity_id=str(uuid.uuid4()), action="publish"))
+    db_session.add(
+        _make_log(entity_type="regulation", entity_id=str(uuid.uuid4()), action="publish")
+    )
     db_session.add(_make_log(entity_type="document", entity_id=str(uuid.uuid4()), action="issue"))
     await db_session.flush()
 

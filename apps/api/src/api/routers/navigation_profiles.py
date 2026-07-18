@@ -37,7 +37,9 @@ async def list_navigation_profiles(
 
 
 @router.get("/me", response_model=NavigationProfileResolveOut)
-async def resolve_my_navigation_profile(db: DbDep, current_user: CurrentUser) -> NavigationProfileResolveOut:
+async def resolve_my_navigation_profile(
+    db: DbDep, current_user: CurrentUser
+) -> NavigationProfileResolveOut:
     return await service.resolve_for_user(db, current_user)
 
 
