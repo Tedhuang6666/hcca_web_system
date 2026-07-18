@@ -5,6 +5,7 @@ import { cleanup } from "@testing-library/react";
 afterEach(() => {
   cleanup();
   localStorage.clear();
+  sessionStorage.clear();
   vi.restoreAllMocks();
 });
 
