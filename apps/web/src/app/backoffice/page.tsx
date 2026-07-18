@@ -129,7 +129,7 @@ export default function BackofficePage() {
                 className="rounded-md border p-4 transition-colors hover:bg-[var(--bg-hover)]"
                 style={{ borderColor: "var(--border)", textDecoration: "none" }}
               >
-                <Icon size={18} aria-hidden={true} style={{ color: "var(--primary)" }} />
+                <Icon size={18} aria-hidden={true} style={{ color: "var(--info)" }} />
                 <h2 className="mt-3 text-sm font-semibold">{tool.label}</h2>
                 <p className="mt-1 text-xs leading-5" style={{ color: "var(--text-muted)" }}>
                   {tool.desc}

@@ -141,16 +141,16 @@ export default function PublicHomePage() {
         </div>
       </section>
 
-      <section className="flex flex-col gap-4 rounded-2xl bg-[#26193d] px-6 py-7 text-[#f7f4fa] sm:flex-row sm:items-center sm:justify-between sm:px-8">
+      <section className="flex flex-col gap-4 rounded-2xl bg-[#173654] px-6 py-7 text-[#f8f3e5] sm:flex-row sm:items-center sm:justify-between sm:px-8">
         <div>
           <h2 className="text-lg font-semibold">需要處理內部業務？</h2>
-          <p className="mt-1 text-sm leading-6 text-[#d4cfda]">
+          <p className="mt-1 text-sm leading-6 text-[#cdd8e0]">
             文件建立、簽核、內容發布與系統管理會在登入後依權限開放。
           </p>
         </div>
         <Link
           href="/login?next=%2Fdashboard"
-          className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg bg-[#c79f3f] px-4 text-sm font-semibold text-[#26193d] transition-colors hover:bg-[#dbc37f]"
+          className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg bg-[#e8c970] px-4 text-sm font-semibold text-[#173654] transition-colors hover:bg-[#f2dc95]"
         >
           登入管理系統
           <ArrowRight size={16} aria-hidden />
