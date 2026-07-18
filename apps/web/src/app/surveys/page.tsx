@@ -66,10 +66,10 @@ export default function SurveysPage() {
   return (
     <div className="space-y-5 max-w-4xl mx-auto">
       {/* 頁首 */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="workspace-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>問卷系統</h1>
-          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>填答問卷，表達您的意見</p>
+          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>問卷</h1>
+          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>查看可填問卷與截止時間。</p>
         </div>
         {canManage && (
           <Link href="/surveys/new" className="btn btn-primary self-start sm:self-auto">

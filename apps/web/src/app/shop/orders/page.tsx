@@ -97,7 +97,6 @@ export default function OrdersPage() {
             <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
               {canManageOrders ? "校商營運工作台" : "訂單記錄"}
             </h1>
-            <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>查看並管理訂單</p>
           </div>
         </div>
 

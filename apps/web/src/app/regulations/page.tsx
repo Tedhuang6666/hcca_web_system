@@ -140,11 +140,11 @@ export default function RegulationsPage() {
     <div className="space-y-5 max-w-6xl mx-auto">
 
       {/* 頁首 */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="workspace-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>法規查詢</h1>
+          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>法規</h1>
           <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            瀏覽憲章、條例與辦法
+            查詢現行規章與歷史版本。
           </p>
         </div>
         <div className="flex items-center gap-2">

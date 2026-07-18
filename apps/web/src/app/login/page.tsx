@@ -3,18 +3,12 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, ArrowRight, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 
 import BrandEmblem from "@/components/brand/BrandEmblem";
 import { BRANDING } from "@/lib/branding";
 import { apiUrl } from "@/lib/config";
 import { useModuleStatus } from "@/contexts/ModuleStatusContext";
-
-const GOVERNANCE_POINTS = [
-  { title: "資訊透明", description: "公告、法規與議事紀錄清楚可查" },
-  { title: "協作有序", description: "文件流轉與組織權責留下脈絡" },
-  { title: "服務整合", description: "校園參與和日常服務集中在同一處" },
-];
 
 export default function LoginPage() {
   const searchParams = useSearchParams();
@@ -65,78 +59,26 @@ export default function LoginPage() {
           className="login-aside relative hidden overflow-hidden px-12 py-10 lg:flex lg:flex-col lg:justify-between xl:px-20 xl:py-14"
           style={{ background: "#173654", color: "#f8f3e5" }}
         >
-          <div
-            className="login-ring pointer-events-none absolute -left-32 bottom-[-15rem] h-[34rem] w-[34rem] rounded-full"
-            style={{ border: "1px solid rgba(232, 201, 112, 0.28)" }}
-          />
-          <div
-            className="login-ring login-ring-2 pointer-events-none absolute -left-16 bottom-[-11rem] h-[25rem] w-[25rem] rounded-full"
-            style={{ border: "1px solid rgba(232, 201, 112, 0.22)" }}
-          />
-          <div
-            className="login-orb pointer-events-none absolute right-[-7rem] top-[-8rem] h-80 w-80 rounded-full blur-3xl"
-            style={{ background: "rgba(201, 168, 76, 0.2)" }}
-          />
-
           <header className="relative z-10 flex items-center gap-3">
             <BrandEmblem size={46} priority />
             <div>
-              <p className="text-sm font-semibold tracking-[0.08em]">{BRANDING.orgShortName}</p>
-              <p className="mt-0.5 text-[11px] tracking-[0.14em] text-[#cdd8e0]">
-                {BRANDING.englishName}
-              </p>
+              <p className="text-sm font-semibold">{BRANDING.orgShortName}</p>
+              <p className="mt-0.5 text-xs text-[#cdd8e0]">{BRANDING.acronym}</p>
             </div>
           </header>
 
-          <div className="login-rise relative z-10 max-w-2xl py-16">
-            <p className="mb-6 flex items-center gap-3 text-xs font-semibold tracking-[0.2em] text-[#e8c970]">
-              <span className="login-rule h-px w-10 bg-[#e8c970]" />
-              HCCA CAMPUS GOVERNANCE
-            </p>
-            <h1
-              className="max-w-xl text-[2.5rem] font-semibold leading-[1.28] tracking-[-0.04em] xl:text-5xl 2xl:text-6xl"
-              style={{
-                color: "#f8f3e5",
-                fontFamily: "var(--font-noto-serif-tc), serif",
-              }}
-            >
-              <span className="block whitespace-nowrap">
-                讓校園自治<span className="text-[#e8c970]">更透明，</span>
-              </span>
-              <span className="block whitespace-nowrap text-[#e8c970]">也更靠近每個人。</span>
-            </h1>
-            <p className="mt-7 max-w-lg text-base leading-8 text-[#cdd8e0]">
-              從議事協作到校園服務，將制度、紀錄與參與整合在同一個可信賴的入口。
-            </p>
-
-            <div className="mt-12 grid max-w-2xl grid-cols-3 border-y border-white/15">
-              {GOVERNANCE_POINTS.map((point) => (
-                <div
-                  key={point.title}
-                  className="border-r border-white/15 py-5 pr-5 last:border-r-0 [&:not(:first-child)]:pl-5"
-                >
-                  <p className="text-sm font-semibold text-[#f8f3e5]">{point.title}</p>
-                  <p className="mt-1.5 text-xs leading-5 text-[#aebeca]">{point.description}</p>
-                </div>
-              ))}
-            </div>
+          <div className="login-brand-stage relative z-10 py-16">
+            <BrandEmblem size={172} priority />
+            <p className="mt-8 text-2xl font-semibold text-[#f8f3e5]">校園自治整合平台</p>
+            <p className="mt-2 text-sm text-[#cdd8e0]">公文、會議與校園服務</p>
           </div>
 
-          <footer className="relative z-10 flex items-center justify-between text-[11px] text-[#91a5b5]">
+          <footer className="relative z-10 text-[11px] text-[#91a5b5]">
             <span>© {new Date().getFullYear()} {BRANDING.orgName}</span>
-            <span>竹嶺 · 班聯</span>
           </footer>
         </section>
 
         <section className="relative flex min-h-screen items-center justify-center px-5 py-24 sm:px-10 lg:py-16">
-          <div
-            className="pointer-events-none absolute inset-x-0 top-0 h-72 opacity-70 lg:hidden"
-            style={{
-              background:
-                "radial-gradient(circle at 20% 0%, color-mix(in srgb, var(--primary) 22%, transparent), transparent 60%)",
-            }}
-          />
-
           <main className="relative z-10 w-full max-w-md animate-slide-in">
             <div className="mb-12 flex items-center gap-3 lg:hidden">
               <BrandEmblem size={44} priority />
@@ -151,27 +93,14 @@ export default function LoginPage() {
             </div>
 
             <div className="mb-8">
-              <div
-                className="mb-5 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium"
-                style={{
-                  background: "var(--primary-dim)",
-                  color: "var(--primary-text)",
-                }}
+              <h1
+                className="text-3xl font-semibold tracking-[-0.025em] sm:text-4xl"
+                style={{ color: "var(--text-primary)" }}
               >
-                <ShieldCheck size={14} aria-hidden="true" />
-                安全登入
-              </div>
-              <h2
-                className="text-3xl font-semibold tracking-[-0.035em] sm:text-4xl"
-                style={{
-                  color: "var(--text-primary)",
-                  fontFamily: "var(--font-noto-serif-tc), serif",
-                }}
-              >
-                歡迎回來
-              </h2>
+                登入管理系統
+              </h1>
               <p className="mt-3 text-sm leading-6" style={{ color: "var(--text-muted)" }}>
-                使用竹中 Google 帳戶，或以已綁定的 Discord 帳號繼續。
+                請使用竹中 Google 帳戶；已完成綁定者也可使用 Discord。
               </p>
             </div>
 
@@ -223,7 +152,7 @@ export default function LoginPage() {
                   <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
                   <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
                 </svg>
-                使用 Google 帳戶登入
+                使用 Google 登入
               </span>
               <ArrowRight
                 size={17}
@@ -237,7 +166,7 @@ export default function LoginPage() {
                 <div className="my-7 flex items-center gap-4">
                   <div className="h-px flex-1" style={{ background: "var(--border)" }} />
                   <span className="text-[11px] tracking-[0.12em]" style={{ color: "var(--text-muted)" }}>
-                    或使用 DISCORD
+                    其他登入方式
                   </span>
                   <div className="h-px flex-1" style={{ background: "var(--border)" }} />
                 </div>
@@ -255,7 +184,7 @@ export default function LoginPage() {
                     <svg width="20" height="16" viewBox="0 0 24 18" fill="currentColor" aria-hidden="true">
                       <path d="M20.3 1.5A18.4 18.4 0 0 0 15.8.1l-.6 1.2a16.8 16.8 0 0 0-6.4 0L8.2.1a18.7 18.7 0 0 0-4.5 1.4C.9 5.6.1 9.6.5 13.5a18.2 18.2 0 0 0 5.6 2.8l1.4-1.9a11.8 11.8 0 0 1-2.1-1l.5-.4a13.1 13.1 0 0 0 12.2 0l.5.4a13 13 0 0 1-2.1 1l1.4 1.9a18.2 18.2 0 0 0 5.6-2.8c.5-4.5-.8-8.5-3.2-12ZM8.2 11.1c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.1 1.1 2.1 2.4-.9 2.4-2.1 2.4Zm7.6 0c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.1 1.1 2.1 2.4-.9 2.4-2.1 2.4Z" />
                     </svg>
-                    使用 Discord 帳號登入
+                    使用 Discord 登入
                   </span>
                   <ArrowRight
                     size={17}
@@ -264,7 +193,7 @@ export default function LoginPage() {
                   />
                 </a>
                 <p className="mt-3 text-center text-xs" style={{ color: "var(--text-muted)" }}>
-                  Discord 帳號須先在個人資料完成綁定。
+                  須先在個人資料完成帳號綁定。
                 </p>
               </>
             )}
