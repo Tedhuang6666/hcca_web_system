@@ -83,18 +83,17 @@ export default function SurveysPage() {
       </div>
 
       {/* 搜尋 + 排序 + 分頁 */}
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center flex-wrap">
-        <div className="min-w-52">
-          <ActivitySelect
-            value={activityId}
-            onChange={setActivityId}
-            label="活動"
-            noneLabel="全部問卷"
-            scope="all"
-            onActivitiesLoaded={setActivities}
-          />
-        </div>
-        <div className="relative flex-1 min-w-48">
+      <div className="flex flex-col gap-3 md:flex-row md:items-end">
+        <ActivitySelect
+          value={activityId}
+          onChange={setActivityId}
+          label="活動"
+          noneLabel="全部問卷"
+          scope="all"
+          className="w-full shrink-0 md:w-52"
+          onActivitiesLoaded={setActivities}
+        />
+        <div className="relative w-full min-w-0 flex-1">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
             width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             strokeWidth="2" strokeLinecap="round" style={{ color: "var(--text-muted)" }} aria-hidden="true">
@@ -112,17 +111,17 @@ export default function SurveysPage() {
         <select
           value={sortKey}
           onChange={e => setSortKey(e.target.value)}
-          className="input w-36 flex-shrink-0"
+          className="input w-full shrink-0 md:w-36"
           aria-label="排序方式"
           style={{ cursor: "pointer" }}>
           {SURVEY_SORT.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
         </select>
-        <div className="flex gap-1 p-1 rounded-xl flex-shrink-0" style={{ background: "var(--bg-elevated)" }}>
+        <div className="flex w-full gap-1 rounded-xl p-1 md:w-auto md:shrink-0" style={{ background: "var(--bg-elevated)" }}>
           {(["open", "all"] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
+              className="flex min-h-11 flex-1 items-center justify-center rounded-lg px-3 py-1.5 text-sm font-medium transition-all md:flex-none"
               style={tab === t
                 ? { background: "var(--bg-surface)", color: "var(--text-primary)", boxShadow: "var(--shadow-sm)" }
                 : { color: "var(--text-muted)" }}>
