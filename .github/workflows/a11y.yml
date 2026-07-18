@@ -133,7 +133,8 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
-          node-version: "20"
+          # Lighthouse 13 支援 runner 的 Chrome 150，並要求 Node 22.19 以上。
+          node-version: "22"
           cache: "npm"
           cache-dependency-path: apps/web/package-lock.json
 
@@ -149,8 +150,7 @@ jobs:
         working-directory: apps/web
         run: |
           # 同 axe job：output:standalone 不能用 `next start`，改跑 standalone server。
-          # treosh action 沒有可靠的 startServerCommand 輸入（原本的 START_SERVER_COMMAND
-          # env 根本不會被讀），所以這裡自行把 server 拉起來，action 只負責對既有 URL 收數據。
+          # Lighthouse CLI 不負責啟動網站，因此先自行啟動 standalone server。
           cp -r .next/static .next/standalone/.next/static
           cp -r public .next/standalone/public
           HOSTNAME=127.0.0.1 PORT=3000 node .next/standalone/server.js > /tmp/next-server.log 2>&1 &
@@ -170,12 +170,59 @@ jobs:
           cat /tmp/next-server.log
           exit 1
 
-      - name: Lighthouse CI
-        uses: treosh/lighthouse-ci-action@3e7e23fb74242897f95c0ba9cabad3d0227b9b18 # 12.6.2
+      - name: Run Lighthouse
+        run: |
+          mkdir -p .lighthouseci/reports
+          for path in / /legal/privacy; do
+            name=$(echo "$path" | tr '/' '-' | sed 's/^-//; s/-$//' | sed 's/^$/home/')
+            for run in 1 2; do
+              npx --yes lighthouse@13.4.0 "http://127.0.0.1:3000$path" \
+                --config-path=.lighthouseci/config.json \
+                --output=json \
+                --output-path=".lighthouseci/reports/$name-$run.json" \
+                --chrome-flags="--headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu"
+            done
+          done
+
+      - name: Validate Lighthouse thresholds
+        run: |
+          node --input-type=module <<'NODE'
+          import { readdir, readFile } from "node:fs/promises";
+
+          const thresholds = [
+            [["categories", "performance", "score"], 0.7, "warn"],
+            [["categories", "accessibility", "score"], 0.9, "error"],
+            [["categories", "best-practices", "score"], 0.9, "warn"],
+            [["categories", "seo", "score"], 0.9, "warn"],
+            [["audits", "first-contentful-paint", "numericValue"], 2500, "warn", "max"],
+            [["audits", "largest-contentful-paint", "numericValue"], 2500, "warn", "max"],
+            [["audits", "cumulative-layout-shift", "numericValue"], 0.1, "error", "max"],
+            [["audits", "total-blocking-time", "numericValue"], 300, "warn", "max"],
+          ];
+          const reports = await Promise.all(
+            (await readdir(".lighthouseci/reports"))
+              .filter((file) => file.endsWith(".json"))
+              .map(async (file) => [file, JSON.parse(await readFile(`.lighthouseci/reports/${file}`, "utf8"))]),
+          );
+          let failed = false;
+          for (const [file, report] of reports) {
+            for (const [pathParts, limit, level, direction = "min"] of thresholds) {
+              const value = pathParts.reduce((current, part) => current?.[part], report);
+              const path = pathParts.join(".");
+              const passed = direction === "min" ? value >= limit : value <= limit;
+              const message = `${file}: ${path}=${value} (${direction} ${limit})`;
+              if (passed) console.log(`PASS ${message}`);
+              else if (level === "error") { console.error(`FAIL ${message}`); failed = true; }
+              else console.warn(`WARN ${message}`);
+            }
+          }
+          if (failed) process.exit(1);
+          NODE
+
+      - name: Upload Lighthouse reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          urls: |
-            http://127.0.0.1:3000/
-            http://127.0.0.1:3000/legal/privacy
-          configPath: ./.lighthouseci/config.json
-          uploadArtifacts: true
-          temporaryPublicStorage: true
+          name: lighthouse-reports
+          path: .lighthouseci/reports
+          retention-days: 30
