@@ -79,7 +79,7 @@ async def test_expense_claim_with_multiple_items_creates_pending_journal(
             "expense_account_id": str(expense.id),
             "description": "文具採購",
             "items": [
-                {"name": "原子筆", "unit_price": 12, "quantity": 5},
+                {"name": "原子筆", "unit_price": 200, "tax_rate": 5, "quantity": 1},
                 {"name": "立可帶", "unit_price": 35, "quantity": 2},
                 {"name": "膠帶", "unit_price": 20, "quantity": 1},
             ],
@@ -88,7 +88,7 @@ async def test_expense_claim_with_multiple_items_creates_pending_journal(
 
     assert response.status_code == 201
     assert response.json()["status"] == "pending_review"
-    assert response.json()["lines"][0]["debit"] == 150
+    assert response.json()["lines"][0]["debit"] == 300
     items = list(
         (
             await db_session.execute(
@@ -98,10 +98,10 @@ async def test_expense_claim_with_multiple_items_creates_pending_journal(
             )
         ).scalars()
     )
-    assert [(item.name, item.unit_price, item.quantity) for item in items] == [
-        ("原子筆", 12, 5),
-        ("立可帶", 35, 2),
-        ("膠帶", 20, 1),
+    assert [(item.name, item.unit_price, item.tax_rate, item.quantity) for item in items] == [
+        ("原子筆", 200, 5, 1),
+        ("立可帶", 35, 0, 2),
+        ("膠帶", 20, 0, 1),
     ]
 
 

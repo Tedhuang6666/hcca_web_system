@@ -241,7 +241,10 @@ async def create_expense_claim(
         or not expense_account.is_active
     ):
         raise HTTPException(400, "支出科目不存在、非支出科目或已停用")
-    amount = sum(item.unit_price * item.quantity for item in body.items)
+    amount = sum(
+        ((item.unit_price * (100 + item.tax_rate) + 50) // 100) * item.quantity
+        for item in body.items
+    )
     entry = await create_journal(
         db,
         ledger_id,
@@ -267,6 +270,7 @@ async def create_expense_claim(
                 journal_entry_id=entry.id,
                 name=item.name,
                 unit_price=item.unit_price,
+                tax_rate=item.tax_rate,
                 quantity=item.quantity,
             )
             for item in body.items

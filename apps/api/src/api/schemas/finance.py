@@ -121,6 +121,7 @@ class TransferCreate(BaseModel):
 class ExpenseClaimItemCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     unit_price: int = Field(gt=0)
+    tax_rate: int = Field(default=0, ge=0, le=100)
     quantity: int = Field(gt=0)
 
 
@@ -133,6 +134,13 @@ class ExpenseClaimCreate(BaseModel):
     items: list[ExpenseClaimItemCreate] = Field(min_length=1, max_length=100)
     evidence_url: str | None = Field(None, max_length=500)
     note: str | None = None
+
+
+class FinanceEvidenceUploadOut(BaseModel):
+    url: str
+    filename: str
+    content_type: str
+    file_size: int
 
 
 class JournalLineOut(JournalLineIn):

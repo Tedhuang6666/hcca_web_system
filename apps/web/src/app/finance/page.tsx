@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { useDraftAutosave, useFileDraftAutosave } from "@/hooks/useDraftAutosave";
 import { usePermissions } from "@/hooks/usePermissions";
 import { financeApi, orgsApi } from "@/lib/api";
 import type {
@@ -23,8 +24,28 @@ const entryTypes = {
 type EntryType = keyof typeof entryTypes;
 type FinanceTab = "ledger" | "entry" | "funds" | "accounts" | "review";
 
-const emptyClaimItem = (): ExpenseClaimItemCreate => ({ name: "", unit_price: 0, quantity: 1 });
+const emptyClaimItem = (): ExpenseClaimItemCreate => ({
+  name: "",
+  unit_price: 0,
+  tax_rate: 0,
+  quantity: 1,
+});
 const today = new Date().toISOString().slice(0, 10);
+
+type ExpenseClaimDraft = {
+  periodId: string;
+  fundId: string;
+  expenseAccountId: string;
+  entryDate: string;
+  description: string;
+  note: string;
+  evidenceUrl: string;
+  items: ExpenseClaimItemCreate[];
+};
+
+function claimItemTotal(item: ExpenseClaimItemCreate): number {
+  return Math.round(item.unit_price * (1 + (item.tax_rate || 0) / 100)) * item.quantity;
+}
 
 export default function FinancePage() {
   const { can } = usePermissions();
@@ -49,7 +70,10 @@ export default function FinancePage() {
   const [entryAmount, setEntryAmount] = useState("");
   const [entryDate, setEntryDate] = useState(today);
   const [entryDescription, setEntryDescription] = useState("");
+  const [claimNote, setClaimNote] = useState("");
   const [evidenceUrl, setEvidenceUrl] = useState("");
+  const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
+  const [isEvidenceUploading, setIsEvidenceUploading] = useState(false);
   const [claimItems, setClaimItems] = useState<ExpenseClaimItemCreate[]>([emptyClaimItem()]);
   const [fromId, setFromId] = useState("");
   const [toId, setToId] = useState("");
@@ -107,7 +131,7 @@ export default function FinancePage() {
   }), [accounts, entryType]);
   const expenseAccounts = accounts.filter((account) => account.account_type === "expense");
   const claimTotal = claimItems.reduce(
-    (total, item) => total + Number(item.unit_price || 0) * Number(item.quantity || 0),
+    (total, item) => total + claimItemTotal(item),
     0,
   );
 
@@ -118,6 +142,54 @@ export default function FinancePage() {
         : counterpartAccounts[0]?.id || "",
     );
   }, [counterpartAccounts]);
+
+  const expenseDraftKey = ledger ? `finance:${ledger.id}:expense-claim` : "finance:expense-claim";
+  const restoreExpenseDraft = useCallback((draft: ExpenseClaimDraft) => {
+    setPeriodId(draft.periodId);
+    setFundId(draft.fundId);
+    setCounterAccountId(draft.expenseAccountId);
+    setEntryDate(draft.entryDate);
+    setEntryDescription(draft.description);
+    setClaimNote(draft.note);
+    setEvidenceUrl(draft.evidenceUrl);
+    setClaimItems(
+      draft.items.length > 0
+        ? draft.items.map((item) => ({ ...item, tax_rate: item.tax_rate || 0 }))
+        : [emptyClaimItem()],
+    );
+    toast.info("已復原未送出的報帳草稿");
+  }, []);
+  const isExpenseDraftEmpty = useCallback((draft: ExpenseClaimDraft) => (
+    !draft.description
+    && !draft.note
+    && !draft.evidenceUrl
+    && draft.items.every((item) => !item.name && !item.unit_price)
+  ), []);
+  const { clearDraft: clearExpenseDraft, lastSavedAt: expenseDraftSavedAt } = useDraftAutosave<ExpenseClaimDraft>({
+    key: expenseDraftKey,
+    enabled: Boolean(ledger) && entryType === "expense",
+    value: {
+      periodId,
+      fundId,
+      expenseAccountId: counterAccountId,
+      entryDate,
+      description: entryDescription,
+      note: claimNote,
+      evidenceUrl,
+      items: claimItems,
+    },
+    onRestore: restoreExpenseDraft,
+    isEmpty: isExpenseDraftEmpty,
+  });
+  const restoreEvidenceDraft = useCallback((files: File[]) => {
+    setEvidenceFile(files[0] ?? null);
+  }, []);
+  const { clearDraftFiles: clearEvidenceDraft } = useFileDraftAutosave({
+    key: `${expenseDraftKey}:evidence`,
+    files: evidenceFile ? [evidenceFile] : [],
+    enabled: Boolean(ledger) && entryType === "expense",
+    onRestore: restoreEvidenceDraft,
+  });
 
   const initialize = async () => {
     if (!orgId) return toast.error("請選擇要使用的組織");
@@ -151,10 +223,20 @@ export default function FinancePage() {
     if (!ledger || !periodId || !fund || !counterpart || !entryDescription.trim()) {
       return toast.error("請選擇期間、資金保管點與科目，並填寫摘要");
     }
+    if (entryType === "expense" && !canClaimExpense) {
+      return toast.error("你沒有登錄支出／報帳的權限");
+    }
+    if (entryType !== "expense" && !canRecord) {
+      return toast.error("你沒有登錄期初餘額或收入的權限");
+    }
 
     try {
+      let finalEvidenceUrl = evidenceUrl.trim() || undefined;
+      if (evidenceFile) {
+        setIsEvidenceUploading(true);
+        finalEvidenceUrl = (await financeApi.uploadEvidence(evidenceFile)).url;
+      }
       if (entryType === "expense") {
-        if (!canClaimExpense) return toast.error("你沒有登錄支出／報帳的權限");
         if (!claimItems.every((item) => item.name.trim() && item.unit_price > 0 && item.quantity > 0)) {
           return toast.error("請完整填寫每個品項、單價與數量");
         }
@@ -165,12 +247,15 @@ export default function FinancePage() {
           expense_account_id: counterpart.id,
           description: entryDescription.trim(),
           items: claimItems.map((item) => ({ ...item, name: item.name.trim() })),
-          evidence_url: evidenceUrl.trim() || undefined,
+          evidence_url: finalEvidenceUrl,
+          note: claimNote.trim() || undefined,
         });
         setClaimItems([emptyClaimItem()]);
+        setClaimNote("");
+        clearExpenseDraft();
+        clearEvidenceDraft();
         toast.success("報帳已送覆核");
       } else {
-        if (!canRecord) return toast.error("你沒有登錄期初餘額或收入的權限");
         const amount = Number(entryAmount);
         if (!amount) return toast.error("請填寫金額");
         const fundLine = entryType === "opening"
@@ -186,7 +271,7 @@ export default function FinancePage() {
           description: `${prefix}｜${entryDescription.trim()}`,
           source_type: "manual_entry",
           source_event: entryType,
-          evidence_url: evidenceUrl.trim() || undefined,
+          evidence_url: finalEvidenceUrl,
           lines: [fundLine, counterpartLine],
         });
         await financeApi.submit(entry.id);
@@ -195,9 +280,12 @@ export default function FinancePage() {
       }
       setEntryDescription("");
       setEvidenceUrl("");
+      setEvidenceFile(null);
       await load(ledger.id);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "建立傳票失敗");
+    } finally {
+      setIsEvidenceUploading(false);
     }
   };
 
@@ -344,10 +432,12 @@ export default function FinancePage() {
                 <label className="text-sm">{entryType === "opening" ? "對應科目" : entryType === "income" ? "收入科目" : "支出科目"}<select className="input mt-1" value={counterAccountId} onChange={(event) => setCounterAccountId(event.target.value)}>{counterpartAccounts.map((account) => <option key={account.id} value={account.id}>{account.code}｜{account.name}</option>)}</select></label>
                 {entryType !== "expense" && <label className="text-sm">金額（NT$）<input className="input mt-1" type="number" min="1" value={entryAmount} onChange={(event) => setEntryAmount(event.target.value)} /></label>}
                 <label className={`text-sm ${entryType === "expense" ? "xl:col-span-2" : ""}`}>摘要<input className="input mt-1" value={entryDescription} onChange={(event) => setEntryDescription(event.target.value)} placeholder={entryType === "expense" ? "例如：社團博覽會文具採購" : "請說明這筆款項"} /></label>
-                <label className="text-sm md:col-span-2">憑證連結（選填）<input className="input mt-1" type="url" value={evidenceUrl} onChange={(event) => setEvidenceUrl(event.target.value)} placeholder="收據、發票或核銷文件網址" /></label>
+                <label className="text-sm md:col-span-2">上傳憑證（選填）<input className="input mt-1" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => setEvidenceFile(event.target.files?.[0] ?? null)} />{evidenceFile && <span className="mt-1 block text-xs" style={{ color: "var(--text-muted)" }}>已選擇：{evidenceFile.name}</span>}<span className="mt-1 block text-xs" style={{ color: "var(--text-muted)" }}>支援 JPG、PNG、WebP 或 PDF，最大 20 MB。</span></label>
+                <label className="text-sm md:col-span-2">外部憑證連結（選填）<input className="input mt-1" type="url" value={evidenceUrl} onChange={(event) => setEvidenceUrl(event.target.value)} placeholder="若憑證已存放於雲端，可貼上連結" /></label>
               </div>
-              {entryType === "expense" && <div className="mt-5 overflow-x-auto"><table className="w-full min-w-[620px] text-sm"><thead style={{ background: "var(--bg-elevated)" }}><tr><th className="px-3 py-2 text-left">品項</th><th className="px-3 py-2 text-right">單價</th><th className="px-3 py-2 text-right">數量</th><th className="px-3 py-2 text-right">小計</th><th className="w-20 px-3 py-2" aria-label="移除品項" /></tr></thead><tbody>{claimItems.map((item, index) => <tr key={index} className="border-t" style={{ borderColor: "var(--border)" }}><td className="p-2"><input aria-label={`第 ${index + 1} 項品項`} className="input" value={item.name} onChange={(event) => updateClaimItem(index, { name: event.target.value })} placeholder="例如：原子筆" /></td><td className="p-2"><input aria-label={`第 ${index + 1} 項單價`} className="input text-right" type="number" min="1" value={item.unit_price || ""} onChange={(event) => updateClaimItem(index, { unit_price: Number(event.target.value) })} /></td><td className="p-2"><input aria-label={`第 ${index + 1} 項數量`} className="input text-right" type="number" min="1" value={item.quantity || ""} onChange={(event) => updateClaimItem(index, { quantity: Number(event.target.value) })} /></td><td className="px-3 text-right tabular-nums">NT${(item.unit_price * item.quantity).toLocaleString()}</td><td className="p-2 text-center"><button className="btn btn-secondary" disabled={claimItems.length === 1} onClick={() => setClaimItems((items) => items.filter((_, itemIndex) => itemIndex !== index))}>移除</button></td></tr>)}</tbody><tfoot><tr className="border-t" style={{ borderColor: "var(--border)" }}><td className="px-3 py-3" colSpan={3}>合計</td><td className="px-3 py-3 text-right text-base font-semibold tabular-nums">NT${claimTotal.toLocaleString()}</td><td /></tr></tfoot></table><button className="btn btn-secondary mt-3" onClick={() => setClaimItems((items) => [...items, emptyClaimItem()])}>新增品項</button></div>}
-              <button className="btn btn-primary mt-4" onClick={() => void createEntry}>{entryType === "expense" ? `送出報帳（NT$${claimTotal.toLocaleString()}）` : `${entryTypes[entryType].label}並送覆核`}</button>
+              {entryType === "expense" && <div className="mt-5 overflow-x-auto"><table className="w-full min-w-[720px] text-sm"><thead style={{ background: "var(--bg-elevated)" }}><tr><th className="px-3 py-2 text-left">品項</th><th className="px-3 py-2 text-right">未稅單價</th><th className="px-3 py-2 text-right">稅率（選填）</th><th className="px-3 py-2 text-right">數量</th><th className="px-3 py-2 text-right">含稅小計</th><th className="w-20 px-3 py-2" aria-label="移除品項" /></tr></thead><tbody>{claimItems.map((item, index) => <tr key={index} className="border-t" style={{ borderColor: "var(--border)" }}><td className="p-2"><input aria-label={`第 ${index + 1} 項品項`} className="input" value={item.name} onChange={(event) => updateClaimItem(index, { name: event.target.value })} placeholder="例如：原子筆" /></td><td className="p-2"><input aria-label={`第 ${index + 1} 項未稅單價`} className="input text-right" type="number" min="1" value={item.unit_price || ""} onChange={(event) => updateClaimItem(index, { unit_price: Number(event.target.value) })} /></td><td className="p-2"><input aria-label={`第 ${index + 1} 項稅率`} className="input text-right" type="number" min="0" max="100" value={item.tax_rate || ""} onChange={(event) => updateClaimItem(index, { tax_rate: Number(event.target.value) })} placeholder="0" /></td><td className="p-2"><input aria-label={`第 ${index + 1} 項數量`} className="input text-right" type="number" min="1" value={item.quantity || ""} onChange={(event) => updateClaimItem(index, { quantity: Number(event.target.value) })} /></td><td className="px-3 text-right tabular-nums">NT${claimItemTotal(item).toLocaleString()}</td><td className="p-2 text-center"><button className="btn btn-secondary" disabled={claimItems.length === 1} onClick={() => setClaimItems((items) => items.filter((_, itemIndex) => itemIndex !== index))}>移除</button></td></tr>)}</tbody><tfoot><tr className="border-t" style={{ borderColor: "var(--border)" }}><td className="px-3 py-3" colSpan={4}>合計</td><td className="px-3 py-3 text-right text-base font-semibold tabular-nums">NT${claimTotal.toLocaleString()}</td><td /></tr></tfoot></table><div className="mt-3 flex flex-wrap items-center justify-between gap-3"><button className="btn btn-secondary" onClick={() => setClaimItems((items) => [...items, emptyClaimItem()])}>新增品項</button>{expenseDraftSavedAt && <span className="text-xs" style={{ color: "var(--text-muted)" }}>草稿已自動暫存</span>}</div></div>}
+              {entryType === "expense" && <label className="mt-4 block text-sm">報帳備註（選填）<textarea className="input mt-1 min-h-24" value={claimNote} onChange={(event) => setClaimNote(event.target.value)} placeholder="例如：採購用途、核銷注意事項或其他內部說明" /></label>}
+              <button className="btn btn-primary mt-4" disabled={isEvidenceUploading} onClick={() => void createEntry()}>{isEvidenceUploading ? "上傳憑證中…" : entryType === "expense" ? `送出報帳（NT$${claimTotal.toLocaleString()}）` : `${entryTypes[entryType].label}並送覆核`}</button>
             </section>
           ) : <section className="rounded border p-5 text-sm" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>你目前只有查看權限。若要報帳，請指派「登錄支出／報帳」；登錄收入、期初與移轉則需要「登錄一般財務傳票」。</section>}
           </div>
