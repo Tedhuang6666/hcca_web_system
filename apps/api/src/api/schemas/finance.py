@@ -78,8 +78,8 @@ class FundAccountOut(FundAccountCreate):
 
 class JournalLineIn(BaseModel):
     account_id: uuid.UUID
-    debit: int = Field(default=0, ge=0)
-    credit: int = Field(default=0, ge=0)
+    debit: int = Field(default=0, ge=0, le=2_000_000_000)
+    credit: int = Field(default=0, ge=0, le=2_000_000_000)
     memo: str | None = Field(None, max_length=240)
 
     @model_validator(mode="after")
@@ -113,16 +113,16 @@ class TransferCreate(BaseModel):
     entry_date: date
     from_fund_account_id: uuid.UUID
     to_fund_account_id: uuid.UUID
-    amount: int = Field(gt=0)
+    amount: int = Field(gt=0, le=2_000_000_000)
     description: str = Field(min_length=1, max_length=300)
     note: str | None = None
 
 
 class ExpenseClaimItemCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
-    unit_price: int = Field(gt=0)
+    unit_price: int = Field(gt=0, le=2_000_000_000)
     tax_rate: int = Field(default=0, ge=0, le=100)
-    quantity: int = Field(gt=0)
+    quantity: int = Field(gt=0, le=100_000)
 
 
 class ExpenseClaimCreate(BaseModel):

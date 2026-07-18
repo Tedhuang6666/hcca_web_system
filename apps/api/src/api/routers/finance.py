@@ -13,10 +13,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
-from api.dependencies.permissions import require_any, require_permission
+from api.dependencies.permissions import require_any
 from api.models.finance import (
     ChartAccount,
     FinanceAccountType,
+    FinanceLedger,
     FiscalPeriod,
     FundAccount,
     JournalEntry,
@@ -42,6 +43,7 @@ from api.schemas.finance import (
 )
 from api.services import audit as audit_svc
 from api.services import finance as service
+from api.services.permission import get_user_permission_codes_for_org
 from api.services.storage import get_storage
 
 router = APIRouter(prefix="/finance", tags=["財務總帳"])
@@ -51,6 +53,63 @@ CurrentUser = Annotated[User, Depends(get_current_active_user)]
 
 def _journal_out(data: dict) -> JournalOut:
     return JournalOut(**data)
+
+
+async def _assert_ledger_permission(
+    db: AsyncSession, user: User, ledger: FinanceLedger, *permissions: PermissionCode
+) -> None:
+    if user.is_superuser:
+        return
+    codes = await get_user_permission_codes_for_org(db, user.id, ledger.org_id)
+    if not codes.intersection(map(str, permissions)):
+        raise HTTPException(status_code=403, detail="沒有此組織的財務權限")
+
+
+class LedgerPermissionChecker:
+    def __init__(self, *permissions: PermissionCode) -> None:
+        self.permissions = permissions
+
+    async def __call__(self, ledger_id: uuid.UUID, db: DbDep, user: CurrentUser) -> FinanceLedger:
+        ledger = await service.get_ledger(db, ledger_id)
+        await _assert_ledger_permission(db, user, ledger, *self.permissions)
+        return ledger
+
+
+class JournalPermissionChecker:
+    def __init__(self, *permissions: PermissionCode) -> None:
+        self.permissions = permissions
+
+    async def __call__(self, entry_id: uuid.UUID, db: DbDep, user: CurrentUser) -> JournalEntry:
+        entry = await db.get(JournalEntry, entry_id)
+        if not entry:
+            raise HTTPException(404, "傳票不存在")
+        ledger = await service.get_ledger(db, entry.ledger_id)
+        await _assert_ledger_permission(db, user, ledger, *self.permissions)
+        return entry
+
+
+class PeriodPermissionChecker:
+    def __init__(self, *permissions: PermissionCode) -> None:
+        self.permissions = permissions
+
+    async def __call__(self, period_id: uuid.UUID, db: DbDep, user: CurrentUser) -> None:
+        period = await db.get(FiscalPeriod, period_id)
+        if not period:
+            raise HTTPException(404, "會計期間不存在")
+        ledger = await service.get_ledger(db, period.ledger_id)
+        await _assert_ledger_permission(db, user, ledger, *self.permissions)
+
+
+def require_ledger_permission(*permissions: PermissionCode) -> LedgerPermissionChecker:
+    return LedgerPermissionChecker(*permissions)
+
+
+def require_journal_permission(*permissions: PermissionCode) -> JournalPermissionChecker:
+    return JournalPermissionChecker(*permissions)
+
+
+def require_period_permission(*permissions: PermissionCode) -> PeriodPermissionChecker:
+    return PeriodPermissionChecker(*permissions)
 
 
 @router.post(
@@ -80,9 +139,11 @@ async def upload_evidence(file: UploadFile = File(...)) -> FinanceEvidenceUpload
     "/ledgers",
     response_model=LedgerOut,
     status_code=201,
-    dependencies=[Depends(require_permission(PermissionCode.FINANCE_MANAGE))],
+    dependencies=[Depends(require_any(PermissionCode.FINANCE_MANAGE))],
 )
-async def create_ledger(body: LedgerCreate, db: DbDep, _: CurrentUser) -> LedgerOut:
+async def create_ledger(body: LedgerCreate, db: DbDep, user: CurrentUser) -> LedgerOut:
+    candidate = FinanceLedger(org_id=body.org_id, name=body.name)
+    await _assert_ledger_permission(db, user, candidate, PermissionCode.FINANCE_MANAGE)
     ledger = await service.initialize_ledger(db, body.org_id, body.name)
     await db.commit()
     return LedgerOut.model_validate(ledger)
@@ -91,7 +152,7 @@ async def create_ledger(body: LedgerCreate, db: DbDep, _: CurrentUser) -> Ledger
 @router.get(
     "/ledgers/{ledger_id}",
     response_model=LedgerOut,
-    dependencies=[Depends(require_permission(PermissionCode.FINANCE_VIEW))],
+    dependencies=[Depends(require_ledger_permission(PermissionCode.FINANCE_VIEW))],
 )
 async def get_ledger(ledger_id: uuid.UUID, db: DbDep, _: CurrentUser) -> LedgerOut:
     return LedgerOut.model_validate(await service.get_ledger(db, ledger_id))
@@ -101,7 +162,7 @@ async def get_ledger(ledger_id: uuid.UUID, db: DbDep, _: CurrentUser) -> LedgerO
     "/ledgers/{ledger_id}/periods",
     response_model=PeriodOut,
     status_code=201,
-    dependencies=[Depends(require_permission(PermissionCode.FINANCE_MANAGE))],
+    dependencies=[Depends(require_period_permission(PermissionCode.FINANCE_MANAGE))],
 )
 async def create_period(
     ledger_id: uuid.UUID, body: PeriodCreate, db: DbDep, _: CurrentUser
@@ -117,7 +178,7 @@ async def create_period(
 @router.post(
     "/periods/{period_id}/close",
     response_model=PeriodOut,
-    dependencies=[Depends(require_permission(PermissionCode.FINANCE_MANAGE))],
+    dependencies=[Depends(require_ledger_permission(PermissionCode.FINANCE_MANAGE))],
 )
 async def close_period(period_id: uuid.UUID, db: DbDep, _: CurrentUser) -> PeriodOut:
     period = await db.get(FiscalPeriod, period_id)
@@ -132,7 +193,7 @@ async def close_period(period_id: uuid.UUID, db: DbDep, _: CurrentUser) -> Perio
 @router.get(
     "/ledgers/{ledger_id}/periods",
     response_model=list[PeriodOut],
-    dependencies=[Depends(require_permission(PermissionCode.FINANCE_VIEW))],
+    dependencies=[Depends(require_ledger_permission(PermissionCode.FINANCE_VIEW))],
 )
 async def list_periods(ledger_id: uuid.UUID, db: DbDep, _: CurrentUser) -> list[PeriodOut]:
     await service.get_ledger(db, ledger_id)
@@ -149,7 +210,7 @@ async def list_periods(ledger_id: uuid.UUID, db: DbDep, _: CurrentUser) -> list[
 @router.get(
     "/ledgers/{ledger_id}/accounts",
     response_model=list[ChartAccountOut],
-    dependencies=[Depends(require_permission(PermissionCode.FINANCE_VIEW))],
+    dependencies=[Depends(require_ledger_permission(PermissionCode.FINANCE_VIEW))],
 )
 async def list_accounts(ledger_id: uuid.UUID, db: DbDep, _: CurrentUser) -> list[ChartAccountOut]:
     balances = await service.account_balances(db, ledger_id)
@@ -177,7 +238,7 @@ async def list_accounts(ledger_id: uuid.UUID, db: DbDep, _: CurrentUser) -> list
     "/ledgers/{ledger_id}/accounts",
     response_model=ChartAccountOut,
     status_code=201,
-    dependencies=[Depends(require_permission(PermissionCode.FINANCE_MANAGE))],
+    dependencies=[Depends(require_ledger_permission(PermissionCode.FINANCE_MANAGE))],
 )
 async def create_account(
     ledger_id: uuid.UUID, body: ChartAccountCreate, db: DbDep, _: CurrentUser
@@ -192,7 +253,7 @@ async def create_account(
 @router.patch(
     "/ledgers/{ledger_id}/accounts/{account_id}",
     response_model=ChartAccountOut,
-    dependencies=[Depends(require_permission(PermissionCode.FINANCE_MANAGE))],
+    dependencies=[Depends(require_ledger_permission(PermissionCode.FINANCE_MANAGE))],
 )
 async def update_account(
     ledger_id: uuid.UUID,
@@ -210,7 +271,7 @@ async def update_account(
 @router.get(
     "/ledgers/{ledger_id}/funds",
     response_model=list[FundAccountOut],
-    dependencies=[Depends(require_permission(PermissionCode.FINANCE_VIEW))],
+    dependencies=[Depends(require_ledger_permission(PermissionCode.FINANCE_VIEW))],
 )
 async def list_funds(ledger_id: uuid.UUID, db: DbDep, _: CurrentUser) -> list[FundAccountOut]:
     balances = await service.account_balances(db, ledger_id)
@@ -237,7 +298,7 @@ async def list_funds(ledger_id: uuid.UUID, db: DbDep, _: CurrentUser) -> list[Fu
     "/ledgers/{ledger_id}/funds",
     response_model=FundAccountOut,
     status_code=201,
-    dependencies=[Depends(require_permission(PermissionCode.FINANCE_MANAGE))],
+    dependencies=[Depends(require_ledger_permission(PermissionCode.FINANCE_MANAGE))],
 )
 async def create_fund(
     ledger_id: uuid.UUID, body: FundAccountCreate, db: DbDep, _: CurrentUser
@@ -260,7 +321,7 @@ async def create_fund(
     "/ledgers/{ledger_id}/journals",
     response_model=JournalOut,
     status_code=201,
-    dependencies=[Depends(require_permission(PermissionCode.FINANCE_RECORD))],
+    dependencies=[Depends(require_ledger_permission(PermissionCode.FINANCE_RECORD))],
 )
 async def create_journal(
     ledger_id: uuid.UUID, body: JournalCreate, db: DbDep, user: CurrentUser
@@ -275,7 +336,11 @@ async def create_journal(
     response_model=JournalOut,
     status_code=201,
     dependencies=[
-        Depends(require_any(PermissionCode.FINANCE_EXPENSE_CLAIM, PermissionCode.FINANCE_RECORD))
+        Depends(
+            require_ledger_permission(
+                PermissionCode.FINANCE_EXPENSE_CLAIM, PermissionCode.FINANCE_RECORD
+            )
+        )
     ],
 )
 async def create_expense_claim(
@@ -290,7 +355,7 @@ async def create_expense_claim(
     "/ledgers/{ledger_id}/transfers",
     response_model=JournalOut,
     status_code=201,
-    dependencies=[Depends(require_permission(PermissionCode.FINANCE_RECORD))],
+    dependencies=[Depends(require_ledger_permission(PermissionCode.FINANCE_RECORD))],
 )
 async def create_transfer(
     ledger_id: uuid.UUID, body: TransferCreate, db: DbDep, user: CurrentUser
@@ -303,7 +368,7 @@ async def create_transfer(
 @router.get(
     "/ledgers/{ledger_id}/journals",
     response_model=list[JournalOut],
-    dependencies=[Depends(require_permission(PermissionCode.FINANCE_VIEW))],
+    dependencies=[Depends(require_ledger_permission(PermissionCode.FINANCE_VIEW))],
 )
 async def list_journals(
     ledger_id: uuid.UUID, db: DbDep, _: CurrentUser, status: JournalStatus | None = None
@@ -321,7 +386,7 @@ async def list_journals(
 @router.post(
     "/journals/{entry_id}/submit",
     response_model=JournalOut,
-    dependencies=[Depends(require_permission(PermissionCode.FINANCE_RECORD))],
+    dependencies=[Depends(require_journal_permission(PermissionCode.FINANCE_RECORD))],
 )
 async def submit_journal(entry_id: uuid.UUID, db: DbDep, _: CurrentUser) -> JournalOut:
     entry = await db.get(JournalEntry, entry_id)
@@ -335,7 +400,7 @@ async def submit_journal(entry_id: uuid.UUID, db: DbDep, _: CurrentUser) -> Jour
 @router.post(
     "/journals/{entry_id}/post",
     response_model=JournalOut,
-    dependencies=[Depends(require_permission(PermissionCode.FINANCE_REVIEW))],
+    dependencies=[Depends(require_journal_permission(PermissionCode.FINANCE_REVIEW))],
 )
 async def post_journal(entry_id: uuid.UUID, db: DbDep, user: CurrentUser) -> JournalOut:
     entry = await db.get(JournalEntry, entry_id)
@@ -357,7 +422,7 @@ async def post_journal(entry_id: uuid.UUID, db: DbDep, user: CurrentUser) -> Jou
 
 @router.post(
     "/ledgers/{ledger_id}/google-sheets/export",
-    dependencies=[Depends(require_permission(PermissionCode.FINANCE_MANAGE))],
+    dependencies=[Depends(require_ledger_permission(PermissionCode.FINANCE_MANAGE))],
 )
 async def export_google_sheets(
     ledger_id: uuid.UUID, body: GoogleSheetsExportIn, db: DbDep, _: CurrentUser

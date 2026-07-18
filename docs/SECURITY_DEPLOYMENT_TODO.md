@@ -19,11 +19,11 @@
 
 ## P0 — 仍需完成才可公開部署
 
-- [ ] 財務 API 改為依 `ledger.org_id` 驗證組織範圍；涵蓋帳本、期間、科目、資金帳戶、
+- [x] 財務 API 改為依 `ledger.org_id` 驗證組織範圍；涵蓋帳本、期間、科目、資金帳戶、
   傳票送審／過帳與 Google Sheets 匯出。驗收：跨組織 UUID 一律 403。
 - [ ] 財務憑證改為「帳本／傳票授權下載」端點；不可把 `finance/evidence` 加入公開 uploads。
   驗收：未授權 404/403、授權使用者可下載、資料庫不保存任意外部 evidence URL。
-- [ ] 財務過帳以 `SELECT ... FOR UPDATE` 或 version 欄位保護，並新增併發過帳測試。
+- [x] 財務過帳以 `SELECT ... FOR UPDATE` 保護；仍需在 PostgreSQL CI 補併發過帳測試。
 - [ ] production `.env.production` 以 secret manager／部署機密提供，執行
   `docker compose --env-file .env.production ... config`，核對網域、CORS、cookie、
   Cloudflare、SECRET_KEY 與 Redis 密碼；不得提交該檔。
