@@ -1,114 +1,115 @@
 /*
  * HCCA Design System v4 — institutional clarity
- * 冷中性工作區 × 會徽深紫導覽 × 少量金色品牌識別
+ * 原始暖白中性色 × 霧金品牌識別 × 深色薰衣草層次
  * 動效只回應狀態、導覽與操作，不作持續裝飾。
  */
 
 :root {
-  --brand-ink: #26193d;
-  --brand-gold: #c79f3f;
-  --brand-lavender: #b5b0bf;
+  --brand-ink: #1a1a2e;
+  --brand-gold: #c9a84c;
+  --brand-lavender: #9896a8;
 
-  --bg-base: #f6f5f7;
-  --bg-surface: #ffffff;
+  --bg-base: #faf8f3;
+  --bg-surface: #fffef9;
   --bg-elevated: #ffffff;
-  --bg-hover: #f1eff4;
-  --bg-active: #e8e4ed;
-  --bg-overlay: rgba(20, 13, 31, 0.66);
+  --bg-hover: #f5f2ea;
+  --bg-active: #ede9dc;
+  --bg-overlay: rgba(26, 26, 46, 0.55);
   --bg: var(--bg-surface);
 
-  --text-primary: #211d27;
-  --text-secondary: #514b5a;
-  --text-muted: #716b79;
-  --text-disabled: #96909d;
+  --text-primary: #1a1a2e;
+  --text-secondary: #475569;
+  --text-muted: #5f6b7e;
+  --text-disabled: #94a3b8;
 
-  --border: #e3e0e7;
-  --border-strong: #cbc6d1;
-  --border-focus: #5f447e;
+  --border: #e8e2d6;
+  --border-strong: #d5cfc4;
+  --border-focus: #c9a84c;
 
-  --primary: #3d285d;
-  --primary-hover: #2f1e49;
-  --primary-fg: #ffffff;
-  --primary-dim: #eee9f4;
-  --primary-text: #432b62;
+  --primary: #c9a84c;
+  --primary-hover: #b8962f;
+  --primary-fg: #1a1a2e;
+  --primary-dim: #faf4e4;
+  --primary-text: #856518;
   --brand-accent: var(--brand-gold);
-  --brand-accent-dim: #f6efdf;
+  --brand-accent-dim: #faf4e4;
 
   --success: #20724d;
   --success-dim: #e9f5ef;
   --success-border: #acd3bd;
-  --warning: #89650f;
-  --warning-dim: #f8f0de;
-  --warning-border: #dac38d;
-  --danger: #ad342f;
-  --danger-dim: #fbeceb;
-  --danger-border: #e7b2ae;
-  --info: #5f447e;
-  --info-dim: #eee9f4;
-  --info-border: #cbbddd;
+  --warning: #856518;
+  --warning-dim: #faf4e4;
+  --warning-border: #e8d49c;
+  --danger: #b83a30;
+  --danger-dim: #fef2f2;
+  --danger-border: #f5b8b4;
+  --info: #4a72b8;
+  --info-dim: #eff4ff;
+  --info-border: #b8ccf0;
 
-  --shadow-xs: 0 1px 2px rgba(38, 25, 61, 0.05);
-  --shadow-sm: 0 2px 6px rgba(38, 25, 61, 0.06);
-  --shadow-md: 0 6px 14px rgba(38, 25, 61, 0.1);
-  --shadow-lg: 0 12px 26px rgba(38, 25, 61, 0.14);
-  --shadow-xl: 0 18px 36px rgba(38, 25, 61, 0.18);
+  --shadow-xs: 0 1px 2px rgba(26, 26, 46, 0.04);
+  --shadow-sm: 0 2px 6px rgba(26, 26, 46, 0.06);
+  --shadow-md: 0 6px 14px rgba(26, 26, 46, 0.09);
+  --shadow-lg: 0 12px 26px rgba(26, 26, 46, 0.12);
+  --shadow-xl: 0 18px 36px rgba(26, 26, 46, 0.16);
   --shadow-gold: none;
 
   --sidebar-w: 248px;
-  --sidebar-bg: var(--brand-ink);
-  --sidebar-border: #3b2e50;
-  --sidebar-text: #c0bac9;
-  --sidebar-text-hover: #ffffff;
-  --sidebar-text-active: #ffffff;
-  --sidebar-hover: #322347;
-  --sidebar-active: #46325f;
-  --sidebar-active-border: #b5a4ca;
-  --sidebar-section-label: #aaa2b4;
+  --sidebar-bg: #fffef9;
+  --sidebar-border: #e8e2d6;
+  --sidebar-text: #6f6a5d;
+  --sidebar-text-hover: #1a1a2e;
+  --sidebar-text-active: #856518;
+  --sidebar-hover: #f5f2ea;
+  --sidebar-active: rgba(201, 168, 76, 0.11);
+  --sidebar-active-border: #c9a84c;
+  --sidebar-section-label: #78725f;
 
   --topbar-bg: rgba(255, 255, 255, 0.94);
-  --topbar-border: #e3e0e7;
+  --topbar-bg: rgba(255, 254, 249, 0.92);
+  --topbar-border: #e8e2d6;
 
   --transition: 180ms cubic-bezier(0.22, 1, 0.36, 1);
   --transition-slow: 240ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 [data-theme="dark"] {
-  --bg-base: #100d14;
-  --bg-surface: #18141d;
-  --bg-elevated: #211b28;
-  --bg-hover: #292230;
-  --bg-active: #352b40;
-  --bg-overlay: rgba(4, 2, 7, 0.78);
+  --bg-base: #0f1117;
+  --bg-surface: #1a1d27;
+  --bg-elevated: #21253a;
+  --bg-hover: #252a3a;
+  --bg-active: #2d3350;
+  --bg-overlay: rgba(0, 0, 0, 0.65);
 
-  --text-primary: #f2eff4;
-  --text-secondary: #cec8d3;
-  --text-muted: #aaa3b0;
-  --text-disabled: #7c7484;
+  --text-primary: #e8e6f0;
+  --text-secondary: #b8b5c5;
+  --text-muted: #aaa8ba;
+  --text-disabled: #89879a;
 
-  --border: #342d3b;
-  --border-strong: #4a4054;
-  --border-focus: #c0afd2;
+  --border: #2a2d3e;
+  --border-strong: #3d425d;
+  --border-focus: #c9a84c;
 
-  --primary: #c0afd2;
-  --primary-hover: #d0c2dd;
-  --primary-fg: #21152f;
-  --primary-dim: #332741;
-  --primary-text: #cfbfdd;
-  --brand-accent: #d2ad55;
-  --brand-accent-dim: #3a3324;
+  --primary: #c9a84c;
+  --primary-hover: #d4b45e;
+  --primary-fg: #0f1117;
+  --primary-dim: rgba(201, 168, 76, 0.12);
+  --primary-text: #d4b45e;
+  --brand-accent: #c9a84c;
+  --brand-accent-dim: rgba(201, 168, 76, 0.12);
 
   --success: #72bd91;
   --success-dim: #1d362a;
   --success-border: #38654c;
-  --warning: #d2ad55;
-  --warning-dim: #3b3321;
-  --warning-border: #675631;
-  --danger: #ee817a;
-  --danger-dim: #402625;
-  --danger-border: #71403d;
-  --info: #c0afd2;
-  --info-dim: #332741;
-  --info-border: #5d496f;
+  --warning: #d4b45e;
+  --warning-dim: rgba(201, 168, 76, 0.1);
+  --warning-border: rgba(201, 168, 76, 0.28);
+  --danger: #e06460;
+  --danger-dim: rgba(224, 100, 96, 0.1);
+  --danger-border: rgba(224, 100, 96, 0.28);
+  --info: #6b94d4;
+  --info-dim: rgba(107, 148, 212, 0.1);
+  --info-border: rgba(107, 148, 212, 0.28);
 
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.18);
   --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.2);
@@ -116,18 +117,18 @@
   --shadow-lg: 0 12px 26px rgba(0, 0, 0, 0.34);
   --shadow-xl: 0 18px 36px rgba(0, 0, 0, 0.42);
 
-  --sidebar-bg: #0c0910;
-  --sidebar-border: #30263a;
-  --sidebar-text: #aaa2b2;
-  --sidebar-text-hover: #f6f2f8;
-  --sidebar-text-active: #ffffff;
-  --sidebar-hover: #211827;
-  --sidebar-active: #352544;
-  --sidebar-active-border: #c0afd2;
-  --sidebar-section-label: #8e8596;
+  --sidebar-bg: #12141e;
+  --sidebar-border: #22253a;
+  --sidebar-text: #9896a8;
+  --sidebar-text-hover: #e8e6f0;
+  --sidebar-text-active: #d4b45e;
+  --sidebar-hover: rgba(255, 255, 255, 0.04);
+  --sidebar-active: rgba(201, 168, 76, 0.1);
+  --sidebar-active-border: #c9a84c;
+  --sidebar-section-label: #89879a;
 
-  --topbar-bg: rgba(24, 20, 29, 0.94);
-  --topbar-border: #342d3b;
+  --topbar-bg: rgba(26, 29, 39, 0.92);
+  --topbar-border: #22253a;
 }
 
 body {
@@ -664,10 +665,12 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
   display: none;
 }
 
+.dashboard-action-icon,
+.dashboard-action-card.tone-primary .dashboard-action-icon,
 .dashboard-action-card.tone-warning .dashboard-action-icon {
   border-color: var(--info-border);
-  background: var(--primary-dim);
-  color: var(--primary);
+  background: var(--info-dim);
+  color: var(--info);
 }
 
 .dashboard-widget {

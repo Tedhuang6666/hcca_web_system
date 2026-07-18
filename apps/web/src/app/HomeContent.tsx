@@ -103,16 +103,16 @@ export default function HomeContent({
             {activeElection && (
               <Link
                 href={`/live/elections/${encodeURIComponent(activeElection.summary?.slug ?? activeElection.id)}`}
-                className="group overflow-hidden rounded-2xl bg-[#26193d] p-6 text-[#f7f4fa] shadow-lg shadow-slate-950/10 transition-colors hover:bg-[#35244d] sm:p-8"
+                className="group overflow-hidden rounded-2xl bg-[#173654] p-6 text-[#f8f3e5] shadow-lg shadow-slate-950/10 transition-colors hover:bg-[#1d4265] sm:p-8"
               >
                 <div className="flex items-center justify-between gap-4">
                   <span className="inline-flex min-h-9 items-center gap-2 rounded-full bg-emerald-400/10 px-3 text-xs font-semibold text-emerald-300">
                     <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" aria-hidden />
                     {activeElection.status === "live" ? "即時開票中" : "開票暫停"}
                   </span>
-                  <Radio size={22} className="text-[#c79f3f]" aria-hidden />
+                  <Radio size={22} className="text-[#e8c970]" aria-hidden />
                 </div>
-                <h3 className="mt-8 font-serif text-2xl font-semibold leading-snug sm:text-3xl" style={{ color: "#f7f4fa" }}>
+                <h3 className="mt-8 font-serif text-2xl font-semibold leading-snug sm:text-3xl" style={{ color: "#f8f3e5" }}>
                   {activeElection.title}
                 </h3>
                 {liveSummary ? (
@@ -137,7 +137,7 @@ export default function HomeContent({
                         <div key={candidate.candidate_id}>
                           <div className="flex items-center justify-between text-xs">
                             <span className="font-medium">{candidate.number}. {candidate.name}</span>
-                            <span className="text-[#d4cfda]">
+                            <span className="text-[#cdd8e0]">
                               {candidate.votes.toLocaleString("zh-TW")} 票 · {Math.round(candidate.percentage)}%
                             </span>
                           </div>
@@ -152,11 +152,11 @@ export default function HomeContent({
                     </div>
                   </>
                 ) : (
-                  <p className="mt-3 max-w-xl text-sm leading-7 text-[#d4cfda]">
+                  <p className="mt-3 max-w-xl text-sm leading-7 text-[#cdd8e0]">
                     查看候選人得票、整體開票率與各票匭進度，頁面會自動同步現場紀錄。
                   </p>
                 )}
-                <span className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-[#c79f3f]">
+                <span className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-[#e8c970]">
                   前往即時開票看完整票數
                   <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" aria-hidden />
                 </span>
