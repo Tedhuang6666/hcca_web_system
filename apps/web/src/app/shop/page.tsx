@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import Link from "next/link";
+import { Package, ShoppingBag } from "lucide-react";
 import { classApi, shopApi, apiErrorMessage } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
 import type { CatalogCategoryOut, CatalogProductOut, CloseStatusItem, ProductOut } from "@/lib/types";
@@ -254,38 +255,49 @@ function ProductCard({ product, onClick }: { product: CatalogProductOut; onClick
   return (
     <button
       onClick={onClick}
-      className="card card-hover overflow-hidden text-left"
-      style={{ opacity: soldOut ? 0.6 : 1 }}>
-      <div className="aspect-square w-full overflow-hidden" style={{ background: "var(--bg-elevated)" }}>
+      className="group relative overflow-hidden rounded-xl border text-left transition-[border-color,background-color,transform] duration-200 hover:-translate-y-0.5"
+      style={{
+        opacity: soldOut ? 0.6 : 1,
+        background: "var(--bg-surface)",
+        borderColor: "var(--border)",
+      }}
+      aria-label={`查看商品：${product.name}`}>
+      <div className="relative aspect-[4/5] w-full overflow-hidden" style={{ background: "var(--bg-elevated)" }}>
         {product.image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={uploadUrl(product.image_url)} alt={product.name} className="h-full w-full object-cover" />
+          <img
+            src={uploadUrl(product.image_url)}
+            alt={product.name}
+            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.025]"
+          />
         ) : (
-          <div className="h-full w-full flex items-center justify-center" style={{ color: "var(--text-disabled)" }}>
-            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" />
-              <path d="m21 15-3.6-3.6a2 2 0 0 0-2.8 0L6 21" />
-            </svg>
+          <div className="flex h-full w-full items-center justify-center" style={{ color: "var(--text-disabled)" }}>
+            <Package size={34} strokeWidth={1.35} aria-hidden="true" />
           </div>
         )}
+        <span
+          className="absolute left-3 top-3 rounded-md px-2 py-1 text-xs font-medium"
+          style={{
+            background: soldOut ? "var(--bg-elevated)" : "var(--primary-dim)",
+            color: soldOut ? "var(--text-secondary)" : "var(--primary-text)",
+          }}>
+          {soldOut ? "已售完" : product.is_unlimited ? "供應中" : `剩 ${product.stock_quantity}`}
+        </span>
       </div>
-      <div className="p-3">
-        <h3 className="font-semibold text-sm truncate" style={{ color: "var(--text-primary)" }}>
+      <div className="space-y-2 px-3.5 py-3.5">
+        <h3 className="truncate text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
           {product.name}
         </h3>
-        <div className="flex items-center justify-between mt-1.5">
-          <span className="text-base font-bold" style={{ color: "var(--primary)" }}>
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-base font-bold tracking-tight" style={{ color: "var(--primary-text)" }}>
             NT${product.price.toLocaleString()}
             {product.has_variants && (
               <span className="text-xs font-normal ml-1" style={{ color: "var(--text-muted)" }}>起</span>
             )}
           </span>
-          <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-            {soldOut ? "已售完" : product.is_unlimited ? "供應中" : `剩 ${product.stock_quantity}`}
-          </span>
         </div>
         {product.sale_end && (
-          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
             截止 {new Date(product.sale_end).toLocaleString("zh-TW")}
           </p>
         )}
@@ -306,6 +318,7 @@ export default function ShopPage() {
   const [cartCount, setCartCount] = useState(0);
   const [closeStatus, setCloseStatus] = useState<Record<string, CloseStatusItem>>({});
   const [selectedCategoryId, setSelectedCategoryId] = usePersistedState<string | null>("hcca:pref:shop:category:v1", null);
+  const [selectedSeriesId, setSelectedSeriesId] = useState<string | null>(null);
 
   const loadCatalog = useCallback(() => {
     if (!cacheHas(catalogCacheKey)) setLoading(true);
@@ -343,28 +356,26 @@ export default function ShopPage() {
   const selectedCategory =
     catalog.find((category) => category.id === selectedCategoryId) ?? catalog[0] ?? null;
 
-  const scrollToSeries = (seriesId: string) => {
-    document.getElementById(`shop-series-${seriesId}`)?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
-  };
+  const visibleSeries = selectedCategory?.series.filter(
+    (series) => !selectedSeriesId || series.id === selectedSeriesId,
+  ) ?? [];
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="mx-auto max-w-7xl space-y-7">
       <div className="workspace-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>商品訂購</h1>
           <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            選好商品後，至購物車一次送單。
+            選好想要的商品，統一在購物車確認送單。
           </p>
         </div>
         <div className="flex gap-2">
           <Link href="/shop/orders" className="btn btn-ghost">我的訂單</Link>
           <Link
             href="/shop/cart"
-            className="btn"
+            className="btn inline-flex items-center gap-2"
             style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
+            <ShoppingBag size={16} aria-hidden="true" />
             購物車{cartCount > 0 ? `（${cartCount}）` : ""}
           </Link>
         </div>
@@ -375,94 +386,110 @@ export default function ShopPage() {
       ) : catalog.length === 0 ? (
         <SmartEmptyState reason="none" subject="上架商品" message="店家還沒上架任何商品，請稍後再來看看" />
       ) : selectedCategory && (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[220px_1fr]">
+        <div className="grid grid-cols-1 gap-7 lg:grid-cols-[15rem_minmax(0,1fr)]">
           <aside className="lg:sticky lg:top-20 lg:self-start">
-            <div className="card overflow-hidden">
-              <div className="px-4 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
-                <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>
-                  主題
-                </p>
-              </div>
-              <div className="flex gap-2 overflow-x-auto p-2 lg:block lg:space-y-1">
-                {catalog.map((category) => (
+            <p className="mb-3 text-xs font-semibold" style={{ color: "var(--text-muted)" }}>選擇主題</p>
+            <div className="flex gap-2 overflow-x-auto pb-1 lg:block lg:space-y-1.5 lg:overflow-visible">
+              {catalog.map((category) => {
+                const isSelected = category.id === selectedCategory.id;
+                return (
                   <button
                     key={category.id}
-                    onClick={() => setSelectedCategoryId(category.id)}
-                    className="flex min-w-40 items-center gap-2 rounded-lg p-2 text-left lg:w-full lg:min-w-0"
-                    style={category.id === selectedCategory.id
-                      ? { background: "var(--primary-dim)", color: "var(--primary)" }
-                      : { color: "var(--text-secondary)" }}>
-                    <Thumb url={category.image_url ?? null} alt={category.name} size={34} />
+                    onClick={() => {
+                      setSelectedCategoryId(category.id);
+                      setSelectedSeriesId(null);
+                    }}
+                    aria-pressed={isSelected}
+                    className="flex min-w-44 items-center gap-3 rounded-lg p-2.5 text-left lg:w-full lg:min-w-0"
+                    style={{
+                      background: isSelected ? "var(--primary-dim)" : "transparent",
+                      color: isSelected ? "var(--primary-text)" : "var(--text-secondary)",
+                    }}>
+                    <Thumb url={category.image_url ?? null} alt="" size={38} />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium">{category.name}</span>
-                      <span className="block text-[11px]" style={{ color: "var(--text-muted)" }}>
+                      <span className="block truncate text-sm font-semibold">{category.name}</span>
+                      <span className="block pt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
                         {category.series.reduce((sum, series) => sum + series.products.length, 0)} 件商品
                       </span>
                     </span>
                   </button>
-                ))}
-              </div>
+                );
+              })}
             </div>
           </aside>
 
-          <section className="grid grid-cols-1 gap-4 xl:grid-cols-[160px_1fr]">
-            <aside className="xl:sticky xl:top-20 xl:self-start">
-              <div className="card p-2">
-                <p className="px-2 py-2 text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>
-                  系列
-                </p>
-                <div className="flex gap-2 overflow-x-auto xl:block xl:space-y-1">
-                  {selectedCategory.series.map((series) => (
-                    <button key={series.id} onClick={() => scrollToSeries(series.id)}
-                      className="min-w-32 rounded-lg px-3 py-2 text-left text-xs xl:w-full xl:min-w-0"
-                      style={{ color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
-                      <span className="block truncate font-medium">{series.name}</span>
-                      <span style={{ color: "var(--text-muted)" }}>{series.products.length} 件</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </aside>
-
-            <div className="space-y-8">
-              <div className="flex items-end justify-between gap-4">
-                <div className="min-w-0">
-                  <h2 className="text-2xl font-semibold truncate" style={{ color: "var(--text-primary)" }}>
+          <section className="min-w-0 space-y-6">
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <h2 className="text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
                     {selectedCategory.name}
                   </h2>
-                  <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-                    {selectedCategory.series.length} 個系列
+                  <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+                    從 {selectedCategory.series.length} 個系列中挑選商品
                   </p>
                 </div>
               </div>
+              <div className="flex gap-2 overflow-x-auto pb-1" aria-label="篩選商品系列">
+                <button
+                  onClick={() => setSelectedSeriesId(null)}
+                  aria-pressed={!selectedSeriesId}
+                  className="shrink-0 rounded-md px-3 py-2 text-sm font-medium"
+                  style={{
+                    background: !selectedSeriesId ? "var(--primary)" : "var(--bg-surface)",
+                    border: !selectedSeriesId ? "1px solid var(--primary)" : "1px solid var(--border)",
+                    color: !selectedSeriesId ? "var(--primary-fg)" : "var(--text-secondary)",
+                  }}>
+                  全部商品
+                </button>
+                {selectedCategory.series.map((series) => {
+                  const isSelected = selectedSeriesId === series.id;
+                  return (
+                    <button
+                      key={series.id}
+                      onClick={() => setSelectedSeriesId(series.id)}
+                      aria-pressed={isSelected}
+                      className="shrink-0 rounded-md px-3 py-2 text-sm font-medium"
+                      style={{
+                        background: isSelected ? "var(--primary-dim)" : "var(--bg-surface)",
+                        border: `1px solid ${isSelected ? "var(--primary)" : "var(--border)"}`,
+                        color: isSelected ? "var(--primary-text)" : "var(--text-secondary)",
+                      }}>
+                      {series.name} <span style={{ color: "var(--text-muted)" }}>({series.products.length})</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
               {closeStatus[selectedCategory.id]?.is_closed && (
-                <div className="rounded-lg px-4 py-3 text-sm" style={{
-                  border: "1px solid rgba(239,68,68,0.3)",
-                  background: "rgba(239,68,68,0.06)",
-                  color: "#b91c1c",
-                }}>
-                  <strong>您的班級已結單</strong>
-                  {closeStatus[selectedCategory.id].closed_at && (
-                    <span className="ml-1 text-xs">
-                      （{new Date(closeStatus[selectedCategory.id].closed_at!).toLocaleString("zh-TW")}）
-                    </span>
-                  )}
-                  ，如需更改請聯繫班級幹部。
-                </div>
-              )}
-              {selectedCategory.series.map((series) => (
-                <section key={series.id} id={`shop-series-${series.id}`} className="scroll-mt-24 space-y-3">
+              <div className="rounded-lg px-4 py-3 text-sm" style={{
+                border: "1px solid var(--danger-border)",
+                background: "var(--danger-dim)",
+                color: "var(--danger)",
+              }}>
+                <strong>您的班級已結單</strong>
+                {closeStatus[selectedCategory.id].closed_at && (
+                  <span className="ml-1 text-xs">
+                    （{new Date(closeStatus[selectedCategory.id].closed_at!).toLocaleString("zh-TW")}）
+                  </span>
+                )}
+                ，如需更改請聯繫班級幹部。
+              </div>
+            )}
+            <div className="space-y-8">
+              {visibleSeries.map((series) => (
+                <section key={series.id} className="space-y-4">
                   <div className="flex items-center gap-3">
-                    <Thumb url={series.image_url ?? null} alt={series.name} size={42} />
+                    <Thumb url={series.image_url ?? null} alt="" size={42} />
                     <div>
                       <h3 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>{series.name}</h3>
                       <p className="text-xs" style={{ color: "var(--text-muted)" }}>{series.products.length} 件商品</p>
                     </div>
                   </div>
                   {series.products.length === 0 ? (
-                    <p className="text-xs pl-1" style={{ color: "var(--text-muted)" }}>尚無商品</p>
+                    <p className="py-4 text-sm" style={{ color: "var(--text-muted)" }}>這個系列暫時沒有商品</p>
                   ) : (
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-3 2xl:grid-cols-4">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
                       {series.products.map((product) => (
                         <ProductCard key={product.id} product={product} onClick={() => setOpenProduct(product.id)} />
                       ))}
