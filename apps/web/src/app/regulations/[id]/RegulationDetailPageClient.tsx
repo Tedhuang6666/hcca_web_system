@@ -36,6 +36,7 @@ import {
   type Tab,
 } from "@/components/regulations/RegulationDetailSections";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { DetailPageLoading } from "@/components/ui/LoadingState";
 import { RegulationCategoryBadge } from "@/components/ui/StatusBadge";
 import { usePermissions } from "@/hooks/usePermissions";
 import { usePersistedZoom } from "@/hooks/usePersistedZoom";
@@ -510,7 +511,14 @@ export default function RegulationDetailPageClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deepLinkRefs, reg, tab]);
 
-  if (loading) return <div className="py-20 text-center" style={{ color: "var(--text-muted)" }}>載入中...</div>;
+  if (loading) {
+    return (
+      <DetailPageLoading
+        title="法規詳情載入中"
+        description="正在準備條文、版本與修正紀錄。"
+      />
+    );
+  }
   if (!reg) return <div className="py-20 text-center" style={{ color: "var(--danger)" }}>法規不存在或無法存取</div>;
 
   const sortedRevisions = [...(reg.revisions ?? [])].sort(

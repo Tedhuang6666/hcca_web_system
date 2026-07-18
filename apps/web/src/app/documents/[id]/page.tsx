@@ -10,6 +10,7 @@ import type { DocumentOut } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
 import { DocumentStatusBadge, UrgencyBadge } from "@/components/ui/StatusBadge";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { DetailPageLoading } from "@/components/ui/LoadingState";
 import { OfficialText } from "@/components/ui/OfficialText";
 import { ApprovalPanel } from "@/components/documents/ApprovalPanel";
 import { VersionHistory } from "@/components/documents/VersionHistory";
@@ -311,7 +312,14 @@ export default function DocumentDetailPage() {
     }
   };
 
-  if (loading) return <div className="flex items-center justify-center h-64">載入中...</div>;
+  if (loading) {
+    return (
+      <DetailPageLoading
+        title="公文詳情載入中"
+        description="正在取得簽核、附件與版本紀錄。"
+      />
+    );
+  }
   if (forbidden) return (
     <div className="flex flex-col items-center justify-center h-64 gap-3 text-center">
       <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor"
