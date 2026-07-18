@@ -13,6 +13,7 @@ jobs:
   build:
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-latest
 
@@ -31,7 +32,7 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: main
 
       - uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4
         with:
@@ -51,11 +52,11 @@ jobs:
             echo "VERSION 必須為 XX.XX.XX.XX，例如 01.00.00.00" >&2
             exit 1
           fi
-          commit="${{ github.event.workflow_run.head_sha }}"
+          commit="$(git rev-parse HEAD)"
           app_version="${version_base}.$(printf '%02d' "$(git rev-list --count "$commit")")"
           echo "app_version=${app_version}" >> "$GITHUB_OUTPUT"
           echo "commit=${commit}" >> "$GITHUB_OUTPUT"
-          echo "ref=${{ github.event.workflow_run.head_branch }}" >> "$GITHUB_OUTPUT"
+          echo "ref=main" >> "$GITHUB_OUTPUT"
           echo "built_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
 
       - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
@@ -64,7 +65,7 @@ jobs:
           file: ${{ matrix.dockerfile }}
           push: true
           tags: |
-            ${{ matrix.image }}:${{ github.event.workflow_run.head_sha }}
+            ${{ matrix.image }}:${{ steps.version.outputs.commit }}
             ${{ matrix.image }}:${{ steps.version.outputs.app_version }}
           build-args: |
             NEXT_PUBLIC_API_URL=
