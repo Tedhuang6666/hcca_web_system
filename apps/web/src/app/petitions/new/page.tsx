@@ -127,6 +127,7 @@ export default function NewPetitionPage() {
           <button
             type="button"
             onClick={() => setIsNamed(true)}
+            aria-pressed={isNamed}
             className="rounded-lg p-4 text-left transition-all"
             style={{
               border: `1px solid ${isNamed ? "var(--primary)" : "var(--border)"}`,
@@ -138,6 +139,7 @@ export default function NewPetitionPage() {
           <button
             type="button"
             onClick={() => setIsNamed(false)}
+            aria-pressed={!isNamed}
             className="rounded-lg p-4 text-left transition-all"
             style={{
               border: `1px solid ${!isNamed ? "var(--primary)" : "var(--border)"}`,

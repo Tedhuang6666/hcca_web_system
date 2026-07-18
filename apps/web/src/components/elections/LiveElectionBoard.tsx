@@ -28,7 +28,7 @@ const statusInfo = {
   closed: { label: "開票完成", icon: CheckCircle2, tone: "text-sky-300 bg-sky-400/10" },
 };
 
-const CONFETTI_COLORS = ["#e8c970", "#f8f3e5", "#6ee7b7", "#7cc4ff", "#f2a6c2", "#c9a84c"];
+const CONFETTI_COLORS = ["#c79f3f", "#f7f4fa", "#6ee7b7", "#7cc4ff", "#f2a6c2", "#c79f3f"];
 
 function AnimatedNumber({ value, className }: { value: number; className?: string }) {
   const display = useCountUp(value);
@@ -50,7 +50,7 @@ function MemberAvatars({ candidate, size = 44 }: { candidate: CandidateTally; si
           width={size}
           height={size}
           unoptimized
-          className="rounded-full object-cover ring-2 ring-[#173654]"
+          className="rounded-full object-cover ring-2 ring-[#26193d]"
           style={{ width: size, height: size, background: "#0d1f31" }}
         />
       ))}
@@ -229,10 +229,10 @@ export default function LiveElectionBoard({
 
   if (!summary) {
     return (
-      <div className="grid min-h-screen place-items-center bg-[#0d1f31] px-6 text-[#f8f3e5]">
+      <div className="grid min-h-screen place-items-center bg-[#0d1f31] px-6 text-[#f7f4fa]">
         <div className="text-center">
-          <RefreshCw className="mx-auto animate-spin text-[#e8c970]" size={28} aria-hidden />
-          <p className="mt-4 text-sm text-[#cdd8e0]">正在載入開票資料...</p>
+          <RefreshCw className="mx-auto animate-spin text-[#c79f3f]" size={28} aria-hidden />
+          <p className="mt-4 text-sm text-[#d4cfda]">正在載入開票資料...</p>
         </div>
       </div>
     );
@@ -249,7 +249,7 @@ export default function LiveElectionBoard({
 
   return (
     <main
-      className={`live-board relative min-h-screen bg-[#0d1f31] text-[#f8f3e5] ${
+      className={`live-board relative min-h-screen bg-[#0d1f31] text-[#f7f4fa] ${
         vertical ? "mx-auto w-full max-w-[1080px]" : ""
       }`}
     >
@@ -281,7 +281,7 @@ export default function LiveElectionBoard({
         <nav className="mb-6 flex items-center justify-between gap-4">
           <Link
             href="/public/elections"
-            className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-white/15 px-3 text-sm font-medium text-[#cdd8e0] transition-colors hover:bg-white/8 hover:text-white"
+            className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-white/15 px-3 text-sm font-medium text-[#d4cfda] transition-colors hover:bg-white/8 hover:text-white"
           >
             <ArrowLeft size={16} aria-hidden />
             所有開票場次
@@ -290,12 +290,12 @@ export default function LiveElectionBoard({
             <button
               type="button"
               onClick={copyLink}
-              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-white/15 px-3 text-sm font-medium text-[#cdd8e0] transition-colors hover:bg-white/8 hover:text-white"
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-white/15 px-3 text-sm font-medium text-[#d4cfda] transition-colors hover:bg-white/8 hover:text-white"
             >
               {copied ? <Check size={16} className="text-emerald-300" aria-hidden /> : <Link2 size={16} aria-hidden />}
               {copied ? "已複製連結" : "複製分享連結"}
             </button>
-            <div className="hidden items-center gap-2 text-xs text-[#91a5b5] sm:flex">
+            <div className="hidden items-center gap-2 text-xs text-[#aaa2b4] sm:flex">
               <BrandEmblem size={30} priority />
               <span>HCCA 即時開票</span>
             </div>
@@ -304,12 +304,12 @@ export default function LiveElectionBoard({
 
         <header
           className={`rounded-2xl border p-5 shadow-2xl shadow-black/20 sm:p-7 lg:p-8 ${
-            isClosed ? "border-[#e8c970]/50 bg-gradient-to-br from-[#1c3e5e] to-[#173654]" : "border-white/10 bg-[#173654]"
+            isClosed ? "border-[#c79f3f]/50 bg-gradient-to-br from-[#3b2a52] to-[#26193d]" : "border-white/10 bg-[#26193d]"
           }`}
         >
           <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#e8c970]">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#c79f3f]">
                 {isClosed ? "Final Result" : "HCCA Election Live"}
               </p>
               <h1 className={`${vertical ? "text-5xl" : "text-3xl sm:text-4xl lg:text-5xl"} mt-3 font-semibold leading-tight`}>
@@ -325,7 +325,7 @@ export default function LiveElectionBoard({
                 {state.label}
               </span>
               {!isClosed && (
-                <span className="inline-flex min-h-10 items-center gap-2 rounded-full bg-white/8 px-4 text-sm text-[#cdd8e0]">
+                <span className="inline-flex min-h-10 items-center gap-2 rounded-full bg-white/8 px-4 text-sm text-[#d4cfda]">
                   <span
                     className={`h-2.5 w-2.5 rounded-full ${connected ? "bg-emerald-400" : "bg-amber-400"}`}
                     aria-hidden
@@ -339,13 +339,13 @@ export default function LiveElectionBoard({
             <div className="mt-7">
               <div className="flex items-center justify-between gap-4 text-sm">
                 <span className="text-[#aebeca]">整體開票率</span>
-                <strong className="text-lg tabular-nums text-[#e8c970]">
+                <strong className="text-lg tabular-nums text-[#c79f3f]">
                   {summary.progress_percentage.toFixed(1)}%
                 </strong>
               </div>
               <div className="live-bar-sheen mt-2 h-2.5 overflow-hidden rounded-full bg-white/10">
                 <div
-                  className="h-full rounded-full bg-[#e8c970] transition-[width] duration-700"
+                  className="h-full rounded-full bg-[#c79f3f] transition-[width] duration-700"
                   style={{ width: `${Math.min(summary.progress_percentage, 100)}%` }}
                 />
               </div>
@@ -357,8 +357,8 @@ export default function LiveElectionBoard({
         {electedCandidates.length > 0 && (
           <section className="live-result-enter mt-5">
             <div className="mb-3 flex items-center gap-2">
-              <Trophy className="text-[#e8c970]" size={22} aria-hidden />
-              <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#e8c970]">
+              <Trophy className="text-[#c79f3f]" size={22} aria-hidden />
+              <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#c79f3f]">
                 當選名單{summary.seats > 1 ? `（共 ${electedCandidates.length} 名）` : ""}
               </p>
             </div>
@@ -376,12 +376,12 @@ export default function LiveElectionBoard({
                 return (
                   <article
                     key={winner.candidate_id}
-                    className="live-winner-pop overflow-hidden rounded-2xl border border-[#e8c970]/45 bg-gradient-to-br from-[#e8c970]/[0.14] to-transparent p-5 sm:p-6"
+                    className="live-winner-pop overflow-hidden rounded-2xl border border-[#c79f3f]/45 bg-gradient-to-br from-[#c79f3f]/[0.14] to-transparent p-5 sm:p-6"
                     style={{ animationDelay: `${i * 120}ms` }}
                   >
                     <div className={`flex items-center gap-4 ${single ? "flex-col text-center sm:flex-row sm:text-left" : ""}`}>
                       <div className="relative grid shrink-0 place-items-center">
-                        {single && <Trophy className="absolute -top-7 text-[#e8c970]" size={32} aria-hidden />}
+                        {single && <Trophy className="absolute -top-7 text-[#c79f3f]" size={32} aria-hidden />}
                         <div
                           className={`grid place-items-center rounded-2xl font-black text-white shadow-xl ${
                             single ? "h-24 w-24 text-3xl sm:h-28 sm:w-28" : "h-16 w-16 text-2xl"
@@ -394,7 +394,7 @@ export default function LiveElectionBoard({
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           {!single && (
-                            <span className="rounded-full bg-[#e8c970] px-2 py-0.5 text-[11px] font-bold text-[#173654]">
+                            <span className="rounded-full bg-[#c79f3f] px-2 py-0.5 text-[11px] font-bold text-[#26193d]">
                               第 {winner.rank} 名
                             </span>
                           )}
@@ -416,12 +416,12 @@ export default function LiveElectionBoard({
                         </div>
                         <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-0.5">
                           <p>
-                            <AnimatedNumber value={winner.votes} className={`font-black tabular-nums text-[#e8c970] ${single ? "text-4xl sm:text-5xl" : "text-3xl"}`} />
+                            <AnimatedNumber value={winner.votes} className={`font-black tabular-nums text-[#c79f3f] ${single ? "text-4xl sm:text-5xl" : "text-3xl"}`} />
                             <span className="ml-1.5 text-sm text-[#aebeca]">票</span>
                           </p>
-                          <p className="text-base tabular-nums text-[#cdd8e0]">得票率 {winner.percentage.toFixed(1)}%</p>
+                          <p className="text-base tabular-nums text-[#d4cfda]">得票率 {winner.percentage.toFixed(1)}%</p>
                           {i === 0 && championMargin !== null && (
-                            <p className="text-xs tabular-nums text-[#91a5b5]">領先次高 {championMargin.toLocaleString("zh-TW")} 票</p>
+                            <p className="text-xs tabular-nums text-[#aaa2b4]">領先次高 {championMargin.toLocaleString("zh-TW")} 票</p>
                           )}
                         </div>
                       </div>
@@ -451,12 +451,12 @@ export default function LiveElectionBoard({
             { label: "廢票", value: summary.invalid_votes },
           ].map((item) => (
             <div key={item.label} className="rounded-xl border border-white/10 bg-white/[0.045] p-4 sm:p-5">
-              <p className="text-xs text-[#91a5b5]">{item.label}</p>
+              <p className="text-xs text-[#aaa2b4]">{item.label}</p>
               <AnimatedNumber value={item.value} className="mt-2 block text-2xl font-semibold tabular-nums sm:text-3xl" />
             </div>
           ))}
           <div className="rounded-xl border border-white/10 bg-white/[0.045] p-4 sm:p-5">
-            <p className="text-xs text-[#91a5b5]">完成票匭</p>
+            <p className="text-xs text-[#aaa2b4]">完成票匭</p>
             <p className="mt-2 text-2xl font-semibold tabular-nums sm:text-3xl">{completedBallotBoxes} / {totalBallotBoxes}</p>
           </div>
         </section>
@@ -466,8 +466,8 @@ export default function LiveElectionBoard({
           summary.turnout_threshold_pct !== null ||
           summary.turnout_pct !== null) && (
           <section className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/12 bg-white/[0.045] px-3 py-1.5 text-[#cdd8e0]">
-              應選名額 <strong className="text-[#e8c970]">{summary.seats}</strong> 名
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/12 bg-white/[0.045] px-3 py-1.5 text-[#d4cfda]">
+              應選名額 <strong className="text-[#c79f3f]">{summary.seats}</strong> 名
             </span>
             {summary.turnout_pct !== null && (
               <span
@@ -486,10 +486,10 @@ export default function LiveElectionBoard({
               </span>
             )}
             {summary.vote_threshold_pct !== null && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/12 bg-white/[0.045] px-3 py-1.5 text-[#cdd8e0]">
-                得票率門檻 <strong className="text-[#e8c970]">{summary.vote_threshold_pct}%</strong>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/12 bg-white/[0.045] px-3 py-1.5 text-[#d4cfda]">
+                得票率門檻 <strong className="text-[#c79f3f]">{summary.vote_threshold_pct}%</strong>
                 {summary.threshold_votes !== null && summary.threshold_votes > 0 && (
-                  <span className="text-[#91a5b5]">（需 {summary.threshold_votes.toLocaleString("zh-TW")} 票）</span>
+                  <span className="text-[#aaa2b4]">（需 {summary.threshold_votes.toLocaleString("zh-TW")} 票）</span>
                 )}
               </span>
             )}
@@ -506,10 +506,10 @@ export default function LiveElectionBoard({
           <div className="space-y-3">
             <div className="mb-4 flex items-end justify-between gap-4">
               <div>
-                <p className="text-xs font-semibold tracking-[0.16em] text-[#e8c970]">{isClosed ? "FINAL STANDINGS" : "RESULTS"}</p>
+                <p className="text-xs font-semibold tracking-[0.16em] text-[#c79f3f]">{isClosed ? "FINAL STANDINGS" : "RESULTS"}</p>
                 <h2 className="mt-1 text-xl font-semibold">{isClosed ? "最終名次" : "候選人得票"}</h2>
               </div>
-              <p className="text-xs text-[#91a5b5]">依目前票數排序</p>
+              <p className="text-xs text-[#aaa2b4]">依目前票數排序</p>
             </div>
             {sortedCandidates.map((candidate, index) => {
               const leader = candidate.candidate_id === summary.leader_candidate_id;
@@ -517,7 +517,7 @@ export default function LiveElectionBoard({
               const flashing = flashIds.has(candidate.candidate_id);
               const surging = surgeIds.has(candidate.candidate_id);
               const fly = flyIns.get(candidate.candidate_id);
-              const medal = index === 0 ? "#e8c970" : index === 1 ? "#cbd5e1" : index === 2 ? "#d8a06a" : null;
+              const medal = index === 0 ? "#c79f3f" : index === 1 ? "#cbd5e1" : index === 2 ? "#d8a06a" : null;
               return (
                 <article
                   key={candidate.candidate_id}
@@ -527,7 +527,7 @@ export default function LiveElectionBoard({
                   }}
                   className={`live-candidate-row relative rounded-2xl border p-4 sm:p-5 ${flashing ? "live-row-flash" : ""} ${
                     (leader && !isClosed) || (isClosed && index === 0)
-                      ? "live-leader-glow border-[#e8c970]/60 bg-[#e8c970]/[0.08]"
+                      ? "live-leader-glow border-[#c79f3f]/60 bg-[#c79f3f]/[0.08]"
                       : "border-white/10 bg-white/[0.045]"
                   }`}
                 >
@@ -551,7 +551,7 @@ export default function LiveElectionBoard({
                         className="grid h-9 w-9 place-items-center rounded-full text-sm font-black"
                         style={{
                           background: medal ?? "rgba(255,255,255,0.08)",
-                          color: medal ? "#173654" : "#cdd8e0",
+                          color: medal ? "#26193d" : "#d4cfda",
                         }}
                         aria-label={`第 ${index + 1} 名`}
                       >
@@ -573,7 +573,7 @@ export default function LiveElectionBoard({
                         <div>
                           {candidate.members.length > 0 ? candidate.members.map((member) => (
                             <p key={member.id} className="flex flex-wrap items-baseline gap-2">
-                              <span className="text-xs font-medium text-[#91a5b5] sm:text-sm">
+                              <span className="text-xs font-medium text-[#aaa2b4] sm:text-sm">
                                 {member.position}
                               </span>
                               <span className={`${vertical ? "text-3xl" : "text-lg sm:text-2xl"} font-semibold`}>
@@ -587,12 +587,12 @@ export default function LiveElectionBoard({
                           )}
                         </div>
                         {candidate.is_elected && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[#e8c970] px-2.5 py-1 text-[11px] font-bold text-[#173654]">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[#c79f3f] px-2.5 py-1 text-[11px] font-bold text-[#26193d]">
                             <Crown size={12} aria-hidden /> {isClosed ? "當選" : "暫居當選"}
                           </span>
                         )}
                         {!candidate.is_elected && leader && index === 0 && !isClosed && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[#e8c970] px-2.5 py-1 text-[11px] font-bold text-[#173654]">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[#c79f3f] px-2.5 py-1 text-[11px] font-bold text-[#26193d]">
                             <Crown size={12} aria-hidden /> 目前領先
                           </span>
                         )}
@@ -633,7 +633,7 @@ export default function LiveElectionBoard({
 
           <aside className={`${vertical ? "mt-auto" : ""} space-y-4`}>
             <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-5">
-              <p className="text-xs font-semibold tracking-[0.16em] text-[#e8c970]">BALLOT BOXES</p>
+              <p className="text-xs font-semibold tracking-[0.16em] text-[#c79f3f]">BALLOT BOXES</p>
               <h2 className="mt-1 text-lg font-semibold">票匭進度</h2>
               <div className="mt-4 space-y-3">
                 {summary.ballot_boxes.map((box) => (
@@ -648,7 +648,7 @@ export default function LiveElectionBoard({
                     {box.progress_percentage !== null && (
                       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
                         <div
-                          className="h-full rounded-full bg-[#e8c970] transition-[width] duration-700"
+                          className="h-full rounded-full bg-[#c79f3f] transition-[width] duration-700"
                           style={{ width: `${Math.min(box.progress_percentage, 100)}%` }}
                         />
                       </div>
@@ -660,12 +660,12 @@ export default function LiveElectionBoard({
 
             {!isClosed && (
               <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-5">
-                <p className="text-xs text-[#91a5b5]">目前開票票匭</p>
+                <p className="text-xs text-[#aaa2b4]">目前開票票匭</p>
                 <p className="mt-2 text-base font-semibold leading-7">
                   {summary.current_ballot_boxes.join("、") || "目前沒有票匭正在開票"}
                 </p>
                 {summary.expected_total_votes !== null && (
-                  <p className="mt-3 text-xs text-[#91a5b5]">
+                  <p className="mt-3 text-xs text-[#aaa2b4]">
                     預計總票數 {summary.expected_total_votes.toLocaleString("zh-TW")}
                   </p>
                 )}
@@ -674,7 +674,7 @@ export default function LiveElectionBoard({
           </aside>
         </section>
 
-        <footer className={`${vertical ? "mt-10" : "mt-6"} flex flex-col gap-2 border-t border-white/10 pt-5 text-xs text-[#91a5b5] sm:flex-row sm:items-center sm:justify-between`}>
+        <footer className={`${vertical ? "mt-10" : "mt-6"} flex flex-col gap-2 border-t border-white/10 pt-5 text-xs text-[#aaa2b4] sm:flex-row sm:items-center sm:justify-between`}>
           <span>公開數據僅呈現已登錄的開票事件</span>
           <span>
             最後更新 {new Date(summary.last_updated_at).toLocaleString("zh-TW")}

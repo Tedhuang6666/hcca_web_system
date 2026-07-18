@@ -58,20 +58,20 @@ export default async function PublicElectionsPage() {
 
   return (
     <div className="space-y-8 pb-8">
-      <header className="rounded-2xl bg-[#173654] px-6 py-9 text-[#f8f3e5] sm:px-9">
+      <header className="rounded-2xl bg-[#26193d] px-6 py-9 text-[#f7f4fa] sm:px-9">
         <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-xs font-semibold tracking-[0.18em] text-[#e8c970]">
+            <p className="text-xs font-semibold tracking-[0.18em] text-[#c79f3f]">
               ELECTION LIVE
             </p>
-            <h1 className="mt-3 font-serif text-3xl font-semibold sm:text-4xl" style={{ color: "#f8f3e5" }}>即時開票中心</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-7 text-[#cdd8e0] sm:text-base">
+            <h1 className="mt-3 font-serif text-3xl font-semibold sm:text-4xl" style={{ color: "#f7f4fa" }}>即時開票中心</h1>
+            <p className="mt-3 max-w-2xl text-sm leading-7 text-[#d4cfda] sm:text-base">
               集中查看目前進行中、暫停或已完成的公開選舉。票數由現場開票紀錄即時計算。
             </p>
           </div>
           <div className="rounded-xl border border-white/15 bg-white/5 px-5 py-4">
             <p className="text-xs text-[#aebeca]">目前進行中</p>
-            <p className="mt-1 text-3xl font-semibold tabular-nums text-[#e8c970]">{liveCount}</p>
+            <p className="mt-1 text-3xl font-semibold tabular-nums text-[#c79f3f]">{liveCount}</p>
           </div>
         </div>
       </header>

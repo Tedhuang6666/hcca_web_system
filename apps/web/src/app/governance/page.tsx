@@ -8,14 +8,11 @@ import {
   AlertTriangle,
   ChevronRight,
   Clock,
-  Filter,
   FolderKanban,
   GitBranch,
   Loader2,
   Plus,
   Search,
-  ShieldCheck,
-  Sparkles,
   X,
 } from "lucide-react";
 import { adminApi, governanceApi, orgsApi, withFallback } from "@/lib/api";
@@ -189,17 +186,13 @@ export default function GovernancePage() {
   const warningCount = smartMatters.filter((item) => item.insight.risk_level === "warning").length;
 
   return (
-    <div className="mx-auto max-w-7xl space-y-5">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <div className="governance-page mx-auto max-w-7xl">
+      <header className="governance-header flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold" style={{ color: "var(--primary)" }}>
-            <Sparkles size={13} aria-hidden={true} />
-            營運工作台
-          </p>
-          <h1 className="text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
+          <h1 className="text-[1.65rem] font-semibold" style={{ color: "var(--text-primary)" }}>
             治理中樞
           </h1>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+          <p className="mt-1.5 max-w-2xl text-sm" style={{ color: "var(--text-muted)" }}>
             依期限、任務、關聯與決議狀態排序，先看到最需要處理的跨模組事項
           </p>
         </div>
@@ -209,7 +202,7 @@ export default function GovernancePage() {
         </button>
       </header>
 
-      <section className="grid grid-cols-2 gap-2 lg:grid-cols-6" aria-label="治理摘要">
+      <section className="governance-summary" aria-label="治理摘要">
         <Summary label="進行中" value={stats?.active_matters ?? 0} />
         <Summary label="逾期" value={stats?.overdue_matters ?? 0} danger />
         <Summary label="開放案件" value={stats?.open_cases ?? 0} />
@@ -287,27 +280,69 @@ export default function GovernancePage() {
         </section>
       )}
 
-      <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <div
-          className="overflow-hidden rounded-lg"
-          style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
-        >
-          <div className="flex items-center justify-between gap-3 p-4" style={{ borderBottom: "1px solid var(--border)" }}>
-            <div>
-              <p className="text-xs font-semibold" style={{ color: "var(--primary)" }}>智慧工作佇列</p>
-              <h2 className="mt-1 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                依風險與下一步排序
-              </h2>
-            </div>
-            {topInsight && (
-              <span
-                className="rounded px-2 py-1 text-[11px] font-semibold"
-                style={{ background: "var(--bg-hover)", color: riskColor(topInsight.risk_level), border: "1px solid var(--border)" }}
-              >
-                最高風險：{topInsight.risk_label}
-              </span>
-            )}
+      {topInsight && (
+        <div className="governance-next-step" role="status">
+          <span>建議下一步</span>
+          <strong>{topInsight.recommended_action.label}</strong>
+          <p>{topInsight.recommended_action.reason}</p>
+        </div>
+      )}
+
+      <section className="governance-queue">
+        <div className="governance-queue-toolbar">
+          <div>
+            <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>工作佇列</h2>
+            <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
+              {smartMatters.length} 件事情，依風險與下一步排序
+            </p>
           </div>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void load();
+            }}
+            className="governance-filters"
+          >
+            <label className="relative block min-w-0 flex-1 sm:w-56 sm:flex-none">
+              <Search
+                size={14}
+                aria-hidden={true}
+                className="absolute left-3 top-1/2 -translate-y-1/2"
+                style={{ color: "var(--text-muted)" }}
+              />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                className="input w-full"
+                style={{ paddingLeft: "2.25rem" }}
+                placeholder="搜尋事情"
+                aria-label="搜尋事情"
+              />
+            </label>
+            <select
+              value={status}
+              onChange={(event) => setStatus(event.target.value)}
+              className="input min-w-32"
+              aria-label="狀態篩選"
+            >
+              <option value="">全部狀態</option>
+              <option value="active">進行中</option>
+              <option value="paused">暫停</option>
+              <option value="completed">完成</option>
+              <option value="archived">歸檔</option>
+            </select>
+            <button type="submit" className="btn btn-secondary">套用</button>
+          </form>
+        </div>
+
+        <div className="governance-list-header" aria-hidden="true">
+          <span>事情</span>
+          <span>狀態</span>
+          <span>進度</span>
+          <span>期限</span>
+          <span>工作量</span>
+          <span />
+        </div>
 
           {loading ? (
             <div className="p-10 text-center">
@@ -319,77 +354,12 @@ export default function GovernancePage() {
               <p className="mt-2 text-sm" style={{ color: "var(--text-muted)" }}>沒有符合條件的事情</p>
             </div>
           ) : (
-            <div className="divide-y" style={{ borderColor: "var(--border)" }}>
+            <div>
               {smartMatters.map(({ matter, insight }) => (
                 <MatterRow key={matter.id} matter={matter} insight={insight} />
               ))}
             </div>
           )}
-        </div>
-
-        <aside className="space-y-4">
-          <section
-            className="rounded-lg p-4"
-            style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
-          >
-            <div className="mb-3 flex items-center gap-2">
-              <Filter size={15} aria-hidden={true} style={{ color: "var(--primary)" }} />
-              <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>篩選與搜尋</h2>
-            </div>
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                void load();
-              }}
-              className="space-y-2"
-            >
-              <label className="relative block">
-                <Search
-                  size={14}
-                  aria-hidden={true}
-                  className="absolute left-3 top-1/2 -translate-y-1/2"
-                  style={{ color: "var(--text-muted)" }}
-                />
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  className="input w-full"
-                  style={{ paddingLeft: "2.25rem" }}
-                  placeholder="搜尋事情"
-                />
-              </label>
-              <select value={status} onChange={(event) => setStatus(event.target.value)} className="input w-full">
-                <option value="">全部狀態</option>
-                <option value="active">進行中</option>
-                <option value="paused">暫停</option>
-                <option value="completed">完成</option>
-                <option value="archived">歸檔</option>
-              </select>
-              <button type="submit" className="btn btn-secondary w-full justify-center">套用篩選</button>
-            </form>
-          </section>
-
-          <section
-            className="rounded-lg p-4"
-            style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
-          >
-            <div className="mb-3 flex items-center gap-2">
-              <ShieldCheck size={15} aria-hidden={true} style={{ color: "var(--primary)" }} />
-              <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>營運摘要</h2>
-            </div>
-            <div className="space-y-2 text-xs" style={{ color: "var(--text-muted)" }}>
-              <p>待辦：{stats?.open_tasks ?? 0} 件，決議待處理：{stats?.pending_decisions ?? 0} 筆。</p>
-              <p>企劃審查中：{stats?.plans_in_review ?? 0} 件，我的任務：{stats?.my_tasks ?? 0} 件。</p>
-              {topInsight ? (
-                <p style={{ color: riskColor(topInsight.risk_level) }}>
-                  下一步：{topInsight.recommended_action.label}
-                </p>
-              ) : (
-                <p>目前沒有需要排序的治理事項。</p>
-              )}
-            </div>
-          </section>
-        </aside>
       </section>
     </div>
   );
@@ -397,9 +367,9 @@ export default function GovernancePage() {
 
 function Summary({ label, value, danger = false }: { label: string; value: number; danger?: boolean }) {
   return (
-    <div className="rounded-lg px-4 py-3" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
-      <p className="text-xs" style={{ color: "var(--text-muted)" }}>{label}</p>
-      <p className="mt-1 text-xl font-semibold" style={{ color: danger && value > 0 ? "var(--danger)" : "var(--text-primary)" }}>
+    <div className="governance-summary-item">
+      <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>{label}</p>
+      <p className="mt-0.5 text-lg font-semibold" style={{ color: danger && value > 0 ? "var(--danger)" : "var(--text-primary)" }}>
         {value}
       </p>
     </div>
@@ -426,7 +396,7 @@ function MatterRow({
   return (
     <Link
       href={`/governance/${matter.slug ?? matter.id}`}
-      className="grid gap-3 px-4 py-3 transition-colors hover:bg-[var(--bg-hover)] sm:grid-cols-[minmax(0,1.2fr)_120px_150px_130px_140px_20px] sm:items-center"
+      className="governance-matter-row grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1.2fr)_120px_150px_130px_140px_20px] sm:items-center"
       style={{ textDecoration: "none" }}
     >
       <div className="min-w-0">

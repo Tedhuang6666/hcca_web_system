@@ -18,7 +18,7 @@ export default function BrandEmblem({
   return (
     <span
       className={`inline-flex shrink-0 items-center justify-center overflow-hidden ${
-        framed ? "rounded-xl bg-[#1f3a5f] p-1 shadow-sm" : ""
+        framed ? "rounded-xl bg-[#26193d] p-1 shadow-sm" : ""
       } ${className}`}
       style={{ width: size, height: size }}
     >

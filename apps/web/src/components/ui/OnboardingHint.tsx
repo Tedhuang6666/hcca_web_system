@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, type ReactNode } from "react";
-import { X, Sparkles } from "lucide-react";
+import { Info, X } from "lucide-react";
 
 interface OnboardingHintProps {
   /** 唯一識別字串；按 X 後存進 localStorage 永久不再顯示。 */
@@ -80,13 +80,13 @@ export default function OnboardingHint({
   return (
     <div
       role="status"
-      className="flex items-start gap-3 px-4 py-3 rounded-lg mb-4 animate-slide-in"
+      className="onboarding-hint flex items-start gap-3 px-4 py-3 rounded-lg mb-4 animate-slide-in"
       style={{
         background: sev.bg,
         border: `1px solid ${sev.border}`,
       }}>
       <span className="flex-shrink-0 mt-0.5" style={{ color: sev.color }} aria-hidden="true">
-        {icon ?? <Sparkles size={16} aria-hidden={true} />}
+        {icon ?? <Info size={16} aria-hidden={true} />}
       </span>
       <div className="flex-1 text-sm" style={{ color: "var(--text-primary)" }}>
         {children}

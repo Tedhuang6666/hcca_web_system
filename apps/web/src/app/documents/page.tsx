@@ -633,7 +633,7 @@ export default function DocumentListPage() {
               key={item.label}
               type="button"
               onClick={() => applyQuickFilter(item.tab, item)}
-              className="rounded-full px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80"
+              className="document-quick-filter rounded-full px-3 py-1.5 text-xs font-medium"
               style={{
                 background: "var(--bg-surface)",
                 border: "1px solid var(--border)",
@@ -653,7 +653,7 @@ export default function DocumentListPage() {
               <button
                 key={sf.id}
                 onClick={() => applySavedFilter(sf)}
-                className="text-xs px-2.5 py-1 rounded-full hover:opacity-80 inline-flex items-center gap-1.5"
+                className="document-quick-filter text-xs px-2.5 py-1 rounded-full inline-flex items-center gap-1.5"
                 style={{ color: "var(--text-secondary)", border: "1px solid var(--border)", background: "var(--bg-surface)" }}
                 title={sf.description ?? sf.share_path ?? sf.name}
               >
@@ -670,7 +670,7 @@ export default function DocumentListPage() {
             ))}
             <button
               onClick={saveCurrentFilter}
-              className="text-xs px-3 py-1.5 rounded-lg hover:opacity-80"
+              className="document-quick-filter text-xs px-3 py-1.5 rounded-lg"
               style={{ color: "var(--primary)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }}
             >
               ＋ 儲存目前查詢
@@ -692,7 +692,7 @@ export default function DocumentListPage() {
           </div>
 
           {/* Tab 切換 */}
-          <div className="flex gap-0.5 p-1 rounded-xl overflow-x-auto"
+          <div className="document-tabs flex gap-0.5 p-1 rounded-xl overflow-x-auto"
             style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
             role="tablist" aria-label="公文狀態篩選">
             {TABS.map(({ key, label }) => {
@@ -700,7 +700,7 @@ export default function DocumentListPage() {
               return (
                 <button key={key} role="tab" aria-selected={active}
                   onClick={() => setActiveTab(key)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap"
+                  className="document-tab px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap"
                   style={active
                     ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--primary-dim)" }
                     : { color: "var(--text-muted)", border: "1px solid transparent" }}>
@@ -712,7 +712,7 @@ export default function DocumentListPage() {
 
           {/* 進階篩選開關 */}
           <button onClick={() => setShowFilters(f => !f)}
-            className="relative px-3 py-1.5 rounded-lg text-xs font-medium transition-all inline-flex items-center gap-1.5 hover:opacity-80"
+            className="document-filter-toggle relative px-3 py-1.5 rounded-lg text-xs font-medium inline-flex items-center gap-1.5"
             style={showFilters || hasActiveFilters
               ? { color: "var(--primary)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }
               : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
@@ -728,7 +728,7 @@ export default function DocumentListPage() {
 
           {hasActiveFilters && (
             <button onClick={clearFilters}
-              className="text-xs px-2.5 py-1.5 rounded-lg hover:opacity-80"
+              className="document-filter-toggle text-xs px-2.5 py-1.5 rounded-lg"
               style={{ color: "var(--danger)", border: "1px solid rgba(220,38,38,0.3)", background: "rgba(220,38,38,0.06)" }}>
               清除篩選
             </button>

@@ -51,7 +51,7 @@ const TYPE_COLOR: Record<CalendarEventType, string> = {
   preparation: "#f59e0b",
   rehearsal: "#8b5cf6",
   interschool_meeting: "#14b8a6",
-  formal_meeting: "#b8962f",
+  formal_meeting: "#a47b20",
   deadline: "#ef4444",
   other: "#64748b",
 };

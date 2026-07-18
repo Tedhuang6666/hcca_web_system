@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { Suspense } from "react";
 import "./globals.css";
 import "./accessibility.css";
+import "./design-system.css";
 import { Toaster } from "sonner";
 import AppShell from "@/components/layout/AppShell";
 import GoogleOneTap from "@/components/auth/GoogleOneTap";
