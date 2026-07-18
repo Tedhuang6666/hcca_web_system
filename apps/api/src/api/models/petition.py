@@ -80,6 +80,7 @@ class PetitionCase(Base, TimestampMixin):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     case_number: Mapped[str] = mapped_column(String(7), nullable=False, unique=True, index=True)
     verification_code_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    share_token_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
 
     type_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),

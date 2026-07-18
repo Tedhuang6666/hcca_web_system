@@ -5,6 +5,8 @@ from __future__ import annotations
 import hashlib
 import hmac
 
+import pytest
+
 from api.services import webhook
 
 
@@ -46,3 +48,8 @@ def test_serialize_payload_sort_keys_stable():
     a = {"b": 2, "a": 1}
     b = {"a": 1, "b": 2}
     assert webhook.serialize_payload(a) == webhook.serialize_payload(b)
+
+
+async def test_validate_delivery_url_rejects_private_address() -> None:
+    with pytest.raises(webhook.UnsafeWebhookUrlError):
+        await webhook.validate_delivery_url("https://127.0.0.1/webhook")

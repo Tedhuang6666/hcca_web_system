@@ -116,10 +116,16 @@ async def document_efficiency(
     completed_q = base.where(Document.completed_at.isnot(None))
     completed = await db.scalar(select(func.count()).select_from(completed_q.subquery()))
 
+    completed_subquery = completed_q.subquery()
     avg_seconds = await db.scalar(
         select(
-            func.avg(func.extract("epoch", Document.completed_at - Document.submitted_at))
-        ).select_from(completed_q.subquery())
+            func.avg(
+                func.extract(
+                    "epoch",
+                    completed_subquery.c.completed_at - completed_subquery.c.submitted_at,
+                )
+            )
+        )
     )
     avg_hours = float(avg_seconds) / 3600 if avg_seconds else None
 

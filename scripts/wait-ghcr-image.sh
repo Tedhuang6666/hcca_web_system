@@ -2,9 +2,8 @@
 # 等 GitHub Actions 把「指定 commit」的映像建好並推上 GHCR。
 # 用法: ./scripts/wait-ghcr-image.sh <git-sha> [timeout_sec]
 #
-# docker.yml 每次 push 會同時推 :latest 與 :<sha> 兩個 tag（同一個 build-push step），
-# 所以只要 api/web 的 :<sha> manifest 都查得到，就代表這個 commit 的映像已就緒，
-# 接著 compose pull :latest 拉到的就是這個 commit 的版本。
+# docker.yml 僅發布不可變的 :<sha> tag。兩個 manifest 都查得到，才代表
+# 指定 commit 的映像可安全部署；compose 會明確拉取該 SHA，不使用 mutable latest。
 set -uo pipefail
 
 sha="${1:?用法: wait-ghcr-image.sh <git-sha> [timeout_sec]}"

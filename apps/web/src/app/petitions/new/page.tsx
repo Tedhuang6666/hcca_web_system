@@ -60,7 +60,8 @@ export default function NewPetitionPage() {
   };
 
   if (created) {
-    const shareHref = `/petitions/${created.case_number}/${created.verification_code}`;
+    // fragment 不會送至伺服器或寫入 access log；頁面再以 POST body 送 token 查詢。
+    const shareHref = `/petitions/share#${created.share_token}`;
     return (
       <div className="max-w-2xl mx-auto space-y-5">
         <div className="card p-6 space-y-4">

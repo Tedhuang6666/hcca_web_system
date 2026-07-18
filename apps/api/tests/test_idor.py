@@ -318,7 +318,7 @@ async def test_petition_case_idor_returns_403(db_session: AsyncSession) -> None:
     user_a = await _make_user(db_session)
     user_b = await _make_user(db_session)
 
-    case_obj, _code = await petition_svc.create_case(
+    case_obj, _code, _share_token = await petition_svc.create_case(
         db_session,
         data=PetitionCreate(
             type_id=petition_type.id,

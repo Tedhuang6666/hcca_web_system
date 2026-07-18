@@ -34,7 +34,7 @@ from sqlalchemy.ext.asyncio import (  # noqa: E402
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.pool import NullPool  # noqa: E402
+from sqlalchemy.pool import NullPool, StaticPool  # noqa: E402
 
 from api.core.config import settings  # noqa: E402
 from api.core.database import Base, get_db  # noqa: E402
@@ -122,7 +122,12 @@ def _worker_schema_name() -> str:
 _SCHEMA_NAME = _worker_schema_name()
 # 跨 worker 序列化 schema 建立/砍除用的 advisory lock key（任意常數，只要不撞 app 自己用的即可）。
 _SCHEMA_DDL_LOCK_KEY = 947210001
-_SCHEMA_ENGINE_KWARGS: dict[str, Any] = {"echo": False, "poolclass": NullPool}
+_SCHEMA_ENGINE_KWARGS: dict[str, Any] = {
+    "echo": False,
+    # SQLite :memory: 的資料庫生命週期綁定在 connection；NullPool 每次重開新連線
+    # 會讓 schema fixture 建出的表消失。PostgreSQL 維持 NullPool 避免跨 event loop。
+    "poolclass": NullPool if _IS_POSTGRES else StaticPool,
+}
 if _IS_POSTGRES:
     # NullPool：每次 connect() 都建全新連線，不同 test 各自的 event loop 不會共用到
     # 同一條底層 asyncpg 連線，因此可以放心讓 schema engine 跨越整個 session／多個

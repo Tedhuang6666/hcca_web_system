@@ -58,12 +58,13 @@ async def _deliver_one_async(delivery_id: str) -> dict:
         }
 
         try:
+            await webhook_svc.validate_delivery_url(sub.url)
             async with httpx.AsyncClient(
                 timeout=HTTP_TIMEOUT_SECONDS, follow_redirects=False
             ) as client:
                 resp = await client.post(sub.url, content=body_bytes, headers=headers)
             snippet = resp.text[:2000] if resp.text else None
-        except httpx.RequestError as exc:
+        except (httpx.RequestError, webhook_svc.UnsafeWebhookUrlError) as exc:
             ok = await webhook_svc.mark_failed_and_schedule_retry(
                 db,
                 delivery.id,

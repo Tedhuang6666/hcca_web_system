@@ -47,8 +47,7 @@ export const petitionsApi = {
     get<PetitionCaseOut>(
       `/petitions/lookup?${new URLSearchParams({ case_number: caseNumber, verification_code: verificationCode }).toString()}`
     ),
-  directLookup: (caseNumber: string, verificationCode: string) =>
-    get<PetitionCaseOut>(`/petitions/${caseNumber}/${verificationCode}`),
+  lookupShare: (shareToken: string) => post<PetitionCaseOut>("/petitions/share", { share_token: shareToken }),
   my: (params?: { status?: PetitionStatus; keyword?: string }) => {
     const qs = params ? `?${new URLSearchParams(Object.entries(params).filter(([, v]) => Boolean(v)) as [string, string][]).toString()}` : "";
     return get<PetitionCaseListItem[]>(`/petitions/my${qs}`);

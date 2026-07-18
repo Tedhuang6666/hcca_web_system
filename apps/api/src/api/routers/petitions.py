@@ -51,6 +51,7 @@ from api.schemas.petition import (
     PetitionInternalNoteCreate,
     PetitionLookupOut,
     PetitionReplyCreate,
+    PetitionShareLookup,
     PetitionStatsOut,
     PetitionStatusUpdate,
     PetitionSubmitterOut,
@@ -283,7 +284,7 @@ async def create_petition(
     current_user: OptionalUser,
 ) -> PetitionCreatedOut:
     try:
-        case_obj, code = await petition_svc.create_case(
+        case_obj, code, share_token = await petition_svc.create_case(
             session, data=payload, submitter=current_user
         )
     except ValueError as e:
@@ -319,6 +320,7 @@ async def create_petition(
         id=case_obj.id,
         case_number=case_obj.case_number,
         verification_code=code,
+        share_token=share_token,
         status=case_obj.status,
         title=case_obj.title,
         status_label=petition_svc.STATUS_LABELS[case_obj.status],
@@ -358,7 +360,7 @@ async def lookup_case(
     await record_success(ip_key)
     await record_success(case_key)
     return PetitionLookupOut.model_validate(
-        await _decorate_case(case_obj, include_internal=False, can_view_submitter=True)
+        await _decorate_case(case_obj, include_internal=False, can_view_submitter=False)
     )
 
 
@@ -933,23 +935,18 @@ async def download_attachment(
     return RedirectResponse(url=url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
 
 
-@router.get(
-    "/{case_number}/{verification_code}",
+@router.post(
+    "/share",
     response_model=PetitionLookupOut,
-    summary="以分享連結查詢案件",
+    summary="以分享 token 查詢案件",
 )
-async def lookup_case_by_share_link(
-    case_number: str,
-    verification_code: str,
+async def lookup_case_by_share_token(
+    body: PetitionShareLookup,
     session: DbDep,
 ) -> PetitionLookupOut:
-    if not case_number.isdigit() or len(case_number) != 7:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="案號或驗證碼錯誤")
-    if not verification_code.isdigit() or len(verification_code) != 5:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="案號或驗證碼錯誤")
-    case_obj = await petition_svc.get_case_by_number(session, case_number)
-    if case_obj is None or not petition_svc.verify_code(case_obj, verification_code):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="案號或驗證碼錯誤")
+    case_obj = await petition_svc.get_case_by_share_token(session, body.share_token)
+    if case_obj is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="分享連結無效")
     return PetitionLookupOut.model_validate(
-        await _decorate_case(case_obj, include_internal=False, can_view_submitter=True)
+        await _decorate_case(case_obj, include_internal=False, can_view_submitter=False)
     )

@@ -91,6 +91,15 @@ def verify_code(case: PetitionCase, code: str) -> bool:
     return hmac.compare_digest(case.verification_code_hash, expected)
 
 
+def generate_share_token() -> str:
+    """產生僅顯示一次的高熵 bearer token，取代可暴力猜測的五位數分享碼。"""
+    return secrets.token_urlsafe(32)
+
+
+def hash_share_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
 _CASE_NUMBER_LOCK_KEY = 0x7065_7463  # "petc"
 
 
@@ -180,7 +189,7 @@ async def create_case(
     *,
     data: PetitionCreate,
     submitter: User | None,
-) -> tuple[PetitionCase, str]:
+) -> tuple[PetitionCase, str, str]:
     petition_type = await get_type(session, data.type_id)
     if petition_type is None or not petition_type.is_active:
         raise ValueError("陳情類型不存在或已停用")
@@ -193,10 +202,12 @@ async def create_case(
         contact_email = submitter.email
 
     code = generate_verification_code()
+    share_token = generate_share_token()
     case_number = await _next_case_number(session)
     case_obj = PetitionCase(
         case_number=case_number,
         verification_code_hash=hash_verification_code(case_number, code),
+        share_token_hash=hash_share_token(share_token),
         type_id=data.type_id,
         is_named=data.is_named,
         submitter_id=submitter.id if submitter else None,
@@ -217,7 +228,24 @@ async def create_case(
         content=STATUS_MESSAGES[PetitionStatus.SUBMITTED],
         actor_id=submitter.id if submitter else None,
     )
-    return case_obj, code
+    return case_obj, code, share_token
+
+
+async def get_case_by_share_token(session: AsyncSession, share_token: str) -> PetitionCase | None:
+    """以雜湊後的高熵 token 查詢案件，避免資料庫保存 bearer token 明文。"""
+    result = await session.execute(
+        select(PetitionCase)
+        .where(PetitionCase.share_token_hash == hash_share_token(share_token))
+        .options(
+            selectinload(PetitionCase.type),
+            selectinload(PetitionCase.current_org),
+            selectinload(PetitionCase.submitter),
+            selectinload(PetitionCase.assigned_to),
+            selectinload(PetitionCase.events),
+            selectinload(PetitionCase.attachments),
+        )
+    )
+    return result.scalar_one_or_none()
 
 
 async def get_case(session: AsyncSession, case_id: uuid.UUID) -> PetitionCase | None:

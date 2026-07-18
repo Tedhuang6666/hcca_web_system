@@ -65,6 +65,7 @@ class PetitionCreatedOut(BaseModel):
     id: uuid.UUID
     case_number: str
     verification_code: str
+    share_token: str
     status: PetitionStatus
     title: str
     status_label: str
@@ -159,6 +160,12 @@ class PetitionCaseOut(PetitionCaseListItem):
 
 class PetitionLookupOut(PetitionCaseOut):
     pass
+
+
+class PetitionShareLookup(BaseModel):
+    """以高熵分享 token 查詢案件；token 僅透過 request body 傳送。"""
+
+    share_token: str = Field(..., min_length=32, max_length=256)
 
 
 class PetitionSupplementCreate(BaseModel):

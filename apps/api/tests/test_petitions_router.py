@@ -8,7 +8,7 @@ from datetime import date
 from api.models.org import Org, Permission, Position, UserPosition
 from api.models.petition import PetitionType
 from api.models.user import User
-from api.schemas.petition import PetitionStatusUpdate
+from api.schemas.petition import PetitionCreate, PetitionStatusUpdate
 from api.services import petition as petition_svc
 
 # ── 測試輔助 ──────────────────────────────────────────────────────────────────
@@ -60,7 +60,9 @@ async def _create_case(db, petition_type: PetitionType, *, submitter: User | Non
         title="教室冷氣故障",
         content="B302 教室冷氣無法啟動，請盡快派員維修。",
     )
-    case_obj, code = await petition_svc.create_case(db, data=data, submitter=submitter)
+    case_obj, code, _share_token = await petition_svc.create_case(
+        db, data=data, submitter=submitter
+    )
     return case_obj, code
 
 
@@ -160,11 +162,20 @@ async def test_lookup_case_with_wrong_code_returns_404(db_session, client) -> No
     assert resp.status_code == 404
 
 
-async def test_lookup_case_by_share_link_succeeds(db_session, client) -> None:
+async def test_lookup_case_by_share_token_succeeds(db_session, client) -> None:
     _, petition_type = await _make_org_and_type(db_session)
-    case_obj, code = await _create_case(db_session, petition_type)
+    data = PetitionCreate(
+        type_id=petition_type.id,
+        contact_email="guest@example.com",
+        contact_name="訪客",
+        title="教室冷氣故障",
+        content="B302 教室冷氣無法啟動，請盡快派員維修。",
+    )
+    case_obj, _code, share_token = await petition_svc.create_case(
+        db_session, data=data, submitter=None
+    )
 
-    resp = await client.get(f"/petitions/{case_obj.case_number}/{code}")
+    resp = await client.post("/petitions/share", json={"share_token": share_token})
     assert resp.status_code == 200
     assert resp.json()["title"] == "教室冷氣故障"
 

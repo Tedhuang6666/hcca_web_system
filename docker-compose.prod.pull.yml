@@ -9,7 +9,7 @@
 #   docker compose --env-file .env.production -f docker-compose.prod.pull.yml --profile workers up -d
 
 x-api-common: &api-common
-  image: ghcr.io/tedhuang6666/hcca_web_system-api:latest
+  image: ${API_IMAGE:?set API_IMAGE to an immutable GHCR image tag}
   env_file:
     - ${PROD_ENV_FILE:-.env.production}
   environment:
@@ -231,7 +231,7 @@ services:
       disable: true
 
   web:
-    image: ghcr.io/tedhuang6666/hcca_web_system-web:latest
+    image: ${WEB_IMAGE:?set WEB_IMAGE to an immutable GHCR image tag}
     restart: unless-stopped
     # 記憶體護欄：吃到上限只 OOM-kill 自己（memswap=mem 即禁用 swap）。
     mem_limit: ${WEB_MEM_LIMIT:-768m}

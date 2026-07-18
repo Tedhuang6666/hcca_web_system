@@ -13,6 +13,40 @@
 
 // ── 自動生成型別（從 OpenAPI schema 衍生，do not edit）─────────────────────────
 export type {
+  ChartAccountCreate,
+  ChartAccountOut,
+  ChartAccountUpdate,
+  ExpenseClaimCreate,
+  ExpenseClaimItemCreate,
+  FinanceAccountType,
+  FinanceEvidenceUploadOut,
+  FundAccountOut,
+  FundStorageType,
+  JournalCreate,
+  JournalLineIn,
+  JournalOut,
+  JournalStatus,
+  LedgerOut,
+  PeriodCreate,
+  PeriodOut,
+  TransferCreate
+} from './api-bridge'
+
+/**
+ * types.ts — 型別薄層（部分自動生成）
+ *
+ * 本檔案的主要型別從 api-bridge.ts 再匯出（api-bridge.ts 由 openapi-typescript 自動生成）。
+ * 只有無法對應到 OpenAPI schema 的前端特有型別才在此手寫。
+ *
+ * 更新型別：
+ *   ./scripts/update-openapi.sh              # 從 FastAPI 匯出最新 openapi.json
+ *   cd apps/web && npm run generate:types     # 重建 api-types.ts
+ *   node ../../scripts/generate-bridge.mjs > /tmp/bridge_coverage.json
+ *   python3 ../../scripts/rewrite-types-ts.py # 重建本檔
+ */
+
+// ── 自動生成型別（從 OpenAPI schema 衍生，do not edit）─────────────────────────
+export type {
   Activity,
   ActivityClosingReportOut,
   ActivityConvener,
@@ -730,23 +764,6 @@ export interface ApiError { detail: string; status: number }
 export interface PaginatedResponse<T> { items: T[]; total: number; page: number; size: number }
 
 // ── 財務總帳 ─────────────────────────────────────────────────────────────────
-export type FinanceAccountType = "asset" | "liability" | "equity" | "revenue" | "expense";
-export type FundStorageType = "petty_cash" | "safe" | "bank";
-export type JournalStatus = "draft" | "pending_review" | "posted" | "returned" | "reversed";
-export interface LedgerOut { id: string; org_id: string; name: string; currency: string }
-export interface PeriodCreate { name: string; starts_on: string; ends_on: string }
-export interface PeriodOut extends PeriodCreate { id: string; ledger_id: string; is_closed: boolean }
-export interface ChartAccountCreate { code: string; name: string; account_type: FinanceAccountType }
-export interface ChartAccountOut extends ChartAccountCreate { id: string; ledger_id: string; is_active: boolean; is_system: boolean; balance: number }
-export interface ChartAccountUpdate { name?: string; is_active?: boolean }
-export interface FundAccountOut { id: string; ledger_id: string; name: string; storage_type: FundStorageType; chart_account_id: string; bank_name: string | null; account_last_four: string | null; is_active: boolean; balance: number }
-export interface JournalLineIn { account_id: string; debit?: number; credit?: number; memo?: string }
-export interface JournalCreate { period_id: string; entry_date: string; description: string; lines: JournalLineIn[]; source_type?: string; source_id?: string; source_event?: string; source_url?: string; evidence_url?: string; note?: string }
-export interface TransferCreate { period_id: string; entry_date: string; from_fund_account_id: string; to_fund_account_id: string; amount: number; description: string; note?: string }
-export interface ExpenseClaimItemCreate { name: string; unit_price: number; tax_rate: number; quantity: number }
-export interface ExpenseClaimCreate { period_id: string; entry_date: string; fund_account_id: string; expense_account_id: string; description: string; items: ExpenseClaimItemCreate[]; evidence_url?: string; note?: string }
-export interface FinanceEvidenceUploadOut { url: string; filename: string; content_type: string; file_size: number }
-export interface JournalOut { id: string; ledger_id: string; period_id: string; entry_date: string; description: string; status: JournalStatus; created_by_id: string; reviewed_by_id: string | null; posted_at: string | null; source_type: string | null; source_id: string | null; source_event: string | null; source_url: string | null; evidence_url: string | null; note: string | null; lines: (JournalLineIn & { id: string; account_name: string })[] }
 
 // ── 常用篩選（Saved Filters）──────────────────────────────────────────────────
 

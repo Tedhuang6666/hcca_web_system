@@ -18,6 +18,7 @@ from __future__ import annotations
 import pytest
 from fastapi.routing import APIRoute
 
+from api.dependencies.api_key_auth import ApiScopeChecker, api_key_required
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import (
     AdminMFAChecker,
@@ -75,14 +76,6 @@ KNOWN_PUBLIC_ROUTES: set[tuple[str, str]] = {
     ("/line/open", "GET"),
     ("/line/webhook", "POST"),
     ("/email/resend/webhook", "POST"),
-    # Discord 內部 bot 指令（帶 X-Internal-Token header 驗證）
-    ("/internal/discord/commands/{operation}", "POST"),
-    ("/internal/discord/events/claim", "GET"),
-    ("/internal/discord/events/{event_id}/ack", "POST"),
-    ("/internal/discord/inventory", "PUT"),
-    ("/internal/discord/members/joined", "POST"),
-    ("/internal/discord/members/updated", "POST"),
-    ("/internal/discord/status", "GET"),
     # 公開資訊（法規、公文、公告等刻意對外公開）
     ("/documents", "GET"),
     ("/documents/{doc_id}", "GET"),
@@ -112,7 +105,7 @@ KNOWN_PUBLIC_ROUTES: set[tuple[str, str]] = {
     ("/petitions/{case_id}/attachments", "POST"),
     ("/petitions/{case_id}/attachments/{attachment_id}/download", "GET"),
     ("/petitions/{case_id}/supplement", "POST"),
-    ("/petitions/{case_number}/{verification_code}", "GET"),
+    ("/petitions/share", "POST"),
     # 議案（公開查閱）
     ("/council-proposals", "POST"),
     # 問卷（公開填答）
@@ -134,10 +127,6 @@ KNOWN_PUBLIC_ROUTES: set[tuple[str, str]] = {
     ("/partner-map/tags", "GET"),
     # 公開會議看板
     ("/public/meetings/screen/{token}", "GET"),
-    # 公開 API v1
-    ("/public/v1/announcements", "GET"),
-    ("/public/v1/announcements/{announcement_id}/content", "GET"),
-    ("/public/v1/regulations", "GET"),
     # 政策同意（公開版本瀏覽）
     ("/policies/public/{kind}", "GET"),
     ("/policies/public/{kind}/versions", "GET"),
@@ -185,11 +174,29 @@ def _classify_route(route: APIRoute) -> str:
         for c in calls
     ):
         return "PERMISSION"
+    if any(isinstance(c, ApiScopeChecker) or c is api_key_required for c in calls):
+        return "API_KEY"
     if any(isinstance(c, AdminMFAChecker) for c in calls):
         return "MFA_ADMIN"
     if get_current_active_user in calls:
         return "LOGIN"
     return "PUBLIC"
+
+
+def _iter_api_routes(routes: list[object]) -> list[APIRoute]:
+    """遞迴展開 FastAPI include_router 產生的巢狀 router。"""
+    found: list[APIRoute] = []
+    for route in routes:
+        if isinstance(route, APIRoute):
+            found.append(route)
+            continue
+        children = getattr(route, "routes", None)
+        if not children:
+            original_router = getattr(route, "original_router", None)
+            children = getattr(original_router, "routes", None)
+        if isinstance(children, list):
+            found.extend(_iter_api_routes(children))
+    return found
 
 
 def test_all_public_routes_are_declared() -> None:
@@ -200,9 +207,7 @@ def test_all_public_routes_are_declared() -> None:
     """
     undeclared: list[str] = []
 
-    for route in app.routes:
-        if not isinstance(route, APIRoute):
-            continue
+    for route in _iter_api_routes(list(app.routes)):
         if _classify_route(route) != "PUBLIC":
             continue
         for method in sorted(route.methods):
@@ -223,9 +228,7 @@ def test_all_public_routes_are_declared() -> None:
 def test_known_public_routes_all_exist() -> None:
     """白名單中的路由必須真實存在於 app 中（防止白名單腐化）。"""
     existing: set[tuple[str, str]] = set()
-    for route in app.routes:
-        if not isinstance(route, APIRoute):
-            continue
+    for route in _iter_api_routes(list(app.routes)):
         for method in route.methods:
             existing.add((route.path, method))
 
@@ -237,10 +240,14 @@ def test_known_public_routes_all_exist() -> None:
 
 def test_permission_coverage_report() -> None:
     """列出各保護等級的數量（不斷言，僅作報告用途）。"""
-    counts: dict[str, int] = {"PERMISSION": 0, "MFA_ADMIN": 0, "LOGIN": 0, "PUBLIC": 0}
-    for route in app.routes:
-        if not isinstance(route, APIRoute):
-            continue
+    counts: dict[str, int] = {
+        "PERMISSION": 0,
+        "API_KEY": 0,
+        "MFA_ADMIN": 0,
+        "LOGIN": 0,
+        "PUBLIC": 0,
+    }
+    for route in _iter_api_routes(list(app.routes)):
         level = _classify_route(route)
         counts[level] += len(route.methods)
 
