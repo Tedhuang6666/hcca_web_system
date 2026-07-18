@@ -354,11 +354,15 @@ export default function DashboardPage() {
               </span>
               {dashboardContent.kicker}
             </div>
-            <div className="mt-4 flex items-center gap-2 flex-wrap">
+            <div className="dashboard-heading-row">
               <h1 className="dashboard-title">
                 {greeting}，{userName || "使用者"}
               </h1>
-            {data && <span className="dashboard-role-badge">{HINT_LABEL[profile] ?? HINT_LABEL[layoutHint] ?? "個人化視角"}</span>}
+              {data && (
+                <span className="dashboard-role-badge">
+                  {HINT_LABEL[profile] ?? HINT_LABEL[layoutHint] ?? "個人化視角"}
+                </span>
+              )}
             </div>
             <p className="dashboard-subtitle">
               {priorityTasks.length > 0
@@ -366,17 +370,16 @@ export default function DashboardPage() {
                 : dashboardContent.emptySubtitle}
             </p>
           </div>
-        </div>
-
-        <div className="dashboard-hero-footer">
-          <p className="dashboard-updated">
-            {urgentCount > 0 ? `${urgentCount} 件需要優先處理` : "內容依你的權限與角色整理"}
-          </p>
-          <Link href={primaryAction.href} className="dashboard-primary-action">
-            <primaryAction.icon size={14} aria-hidden={true} />
-            {primaryAction.label}
-            <ArrowUpRight size={14} aria-hidden={true} />
-          </Link>
+          <div className="dashboard-hero-actions">
+            <p className="dashboard-updated">
+              {urgentCount > 0 ? `${urgentCount} 件需要優先處理` : "內容依你的權限與角色整理"}
+            </p>
+            <Link href={primaryAction.href} className="dashboard-primary-action">
+              <primaryAction.icon size={14} aria-hidden={true} />
+              {primaryAction.label}
+              <ArrowUpRight size={14} aria-hidden={true} />
+            </Link>
+          </div>
         </div>
       </section>
 

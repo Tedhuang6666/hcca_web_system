@@ -521,6 +521,7 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
   box-shadow: none;
   color: var(--text-primary);
   animation: none;
+  padding: 0 0 1.1rem;
 }
 
 [data-theme="dark"] .dashboard-hero {
@@ -556,6 +557,14 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
   letter-spacing: -0.025em;
 }
 
+.dashboard-heading-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 0.65rem;
+}
+
 .dashboard-role-badge {
   background: var(--bg-hover);
   border-color: var(--border);
@@ -568,8 +577,12 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
 }
 
 .dashboard-hero-content {
-  min-height: 0;
-  padding: 0.25rem 0 1rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 1.5rem;
+  min-height: 0 !important;
+  padding: 0 !important;
 }
 
 .dashboard-subtitle {
@@ -579,13 +592,17 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
   line-height: 1.55;
 }
 
-.dashboard-hero-footer {
-  min-height: 0;
+.dashboard-hero-actions {
+  display: flex;
+  align-items: center;
   justify-content: flex-end;
-  border-top: 0;
-  padding: 0 0 1rem;
-  background: transparent;
-  backdrop-filter: none;
+  gap: 0.85rem;
+  padding-bottom: 0.1rem;
+}
+
+.dashboard-updated {
+  margin: 0;
+  white-space: nowrap;
 }
 
 .dashboard-primary-action {
@@ -866,6 +883,24 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
 }
 
 @media (max-width: 900px) {
+  .dashboard-hero-content {
+    grid-template-columns: 1fr;
+    gap: 0.9rem;
+  }
+
+  .dashboard-hero-actions {
+    justify-content: space-between;
+  }
+
+  .dashboard-updated {
+    width: auto;
+    order: initial;
+  }
+
+  .dashboard-primary-action {
+    margin-left: 0;
+  }
+
   .governance-summary {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -890,6 +925,19 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
 }
 
 @media (max-width: 560px) {
+  .dashboard-hero-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .dashboard-primary-action {
+    justify-content: center;
+  }
+
+  .dashboard-updated {
+    white-space: normal;
+  }
+
   .governance-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
