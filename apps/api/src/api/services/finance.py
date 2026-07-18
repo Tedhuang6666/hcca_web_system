@@ -166,6 +166,13 @@ async def submit_journal(db: AsyncSession, entry: JournalEntry) -> JournalEntry:
 async def post_journal(
     db: AsyncSession, entry: JournalEntry, reviewer_id: uuid.UUID
 ) -> JournalEntry:
+    # 財務過帳是不可逆的狀態轉換；鎖定傳票避免兩個覆核者同時通過檢查後重複過帳。
+    locked_entry = await db.scalar(
+        select(JournalEntry).where(JournalEntry.id == entry.id).with_for_update()
+    )
+    if locked_entry is None:
+        raise HTTPException(404, "傳票不存在")
+    entry = locked_entry
     if entry.status != JournalStatus.PENDING_REVIEW:
         raise HTTPException(400, "僅待覆核傳票可過帳")
     if entry.created_by_id == reviewer_id:
