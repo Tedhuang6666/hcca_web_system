@@ -26,6 +26,7 @@ from api.models.calendar import (
     CalendarEventType,
     CalendarVisibility,
 )
+from api.models.google_calendar import OrgGoogleCalendarConfig
 from api.models.user import User
 from api.routers._common import or_404
 from api.schemas.calendar import (
@@ -428,9 +429,7 @@ def _require_calendar_admin(user: User, codes: frozenset[str]) -> None:
 
 async def _get_google_config_or_404(
     session: AsyncSession, org_id: uuid.UUID
-) -> "OrgGoogleCalendarConfig":
-    from api.models.google_calendar import OrgGoogleCalendarConfig
-
+) -> OrgGoogleCalendarConfig:
     config = await session.scalar(
         select(OrgGoogleCalendarConfig).where(
             OrgGoogleCalendarConfig.org_id == org_id,
@@ -509,9 +508,7 @@ async def google_calendar_callback(
     request: Request,
     session: DbDep,
 ) -> RedirectResponse:
-    from datetime import UTC, datetime
-
-    import sqlalchemy
+    from datetime import datetime
 
     from api.core.config import settings
     from api.core.field_crypto import FieldEncryptionNotConfigured
@@ -645,11 +642,11 @@ async def list_google_calendars(
     try:
         items = await list_calendars(session, config)
     except GoogleCalendarAuthError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY, detail=f"無法取得日曆清單：{exc}"
-        )
+        ) from exc
 
     return [GoogleCalendarItem(**item) for item in items]
 
