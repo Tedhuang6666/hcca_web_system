@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -52,6 +53,8 @@ CurrentUser = Annotated[User, Depends(get_current_active_user)]
 
 
 def _journal_out(data: dict) -> JournalOut:
+    if data["evidence_url"]:
+        data["evidence_url"] = f"/finance/journals/{data['id']}/evidence"
     return JournalOut(**data)
 
 
@@ -113,22 +116,28 @@ def require_period_permission(*permissions: PermissionCode) -> PeriodPermissionC
 
 
 @router.post(
-    "/evidence",
+    "/ledgers/{ledger_id}/evidence",
     response_model=FinanceEvidenceUploadOut,
     status_code=status.HTTP_201_CREATED,
     dependencies=[
-        Depends(require_any(PermissionCode.FINANCE_EXPENSE_CLAIM, PermissionCode.FINANCE_RECORD))
+        Depends(
+            require_ledger_permission(
+                PermissionCode.FINANCE_EXPENSE_CLAIM, PermissionCode.FINANCE_RECORD
+            )
+        )
     ],
 )
-async def upload_evidence(file: UploadFile = File(...)) -> FinanceEvidenceUploadOut:
+async def upload_evidence(
+    ledger_id: uuid.UUID, file: UploadFile = File(...)
+) -> FinanceEvidenceUploadOut:
     if Path(file.filename or "").suffix.lower() not in {".jpg", ".jpeg", ".png", ".webp", ".pdf"}:
         raise HTTPException(422, "憑證僅支援 JPG、PNG、WebP 圖片或 PDF")
     try:
-        stored = await get_storage().save(file, prefix="finance/evidence")
+        stored = await get_storage().save(file, prefix=f"finance/evidence/{ledger_id}")
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     return FinanceEvidenceUploadOut(
-        url=stored.url,
+        storage_key=stored.storage_key,
         filename=stored.filename,
         content_type=stored.content_type,
         file_size=stored.file_size,
@@ -162,7 +171,7 @@ async def get_ledger(ledger_id: uuid.UUID, db: DbDep, _: CurrentUser) -> LedgerO
     "/ledgers/{ledger_id}/periods",
     response_model=PeriodOut,
     status_code=201,
-    dependencies=[Depends(require_period_permission(PermissionCode.FINANCE_MANAGE))],
+    dependencies=[Depends(require_ledger_permission(PermissionCode.FINANCE_MANAGE))],
 )
 async def create_period(
     ledger_id: uuid.UUID, body: PeriodCreate, db: DbDep, _: CurrentUser
@@ -178,7 +187,7 @@ async def create_period(
 @router.post(
     "/periods/{period_id}/close",
     response_model=PeriodOut,
-    dependencies=[Depends(require_ledger_permission(PermissionCode.FINANCE_MANAGE))],
+    dependencies=[Depends(require_period_permission(PermissionCode.FINANCE_MANAGE))],
 )
 async def close_period(period_id: uuid.UUID, db: DbDep, _: CurrentUser) -> PeriodOut:
     period = await db.get(FiscalPeriod, period_id)
@@ -418,6 +427,32 @@ async def post_journal(entry_id: uuid.UUID, db: DbDep, user: CurrentUser) -> Jou
     )
     await db.commit()
     return _journal_out(await service.journal_with_lines(db, entry))
+
+
+@router.get(
+    "/journals/{entry_id}/evidence",
+    dependencies=[Depends(require_journal_permission(PermissionCode.FINANCE_VIEW))],
+)
+async def download_evidence(entry_id: uuid.UUID, db: DbDep, _: CurrentUser):
+    entry = await db.get(JournalEntry, entry_id)
+    if not entry or not entry.evidence_url:
+        raise HTTPException(404, "憑證不存在")
+    service.validate_evidence_key(entry.evidence_url, entry.ledger_id)
+    storage = get_storage()
+    local_path = storage.local_path(entry.evidence_url)
+    if local_path is not None:
+        if not local_path.is_file():
+            raise HTTPException(404, "憑證檔案不存在")
+        return FileResponse(
+            local_path,
+            filename=local_path.name,
+            content_disposition_type="attachment",
+            headers={"Cache-Control": "private, no-store"},
+        )
+    return RedirectResponse(
+        await storage.get_url(entry.evidence_url, disposition="attachment"),
+        headers={"Cache-Control": "private, no-store"},
+    )
 
 
 @router.post(

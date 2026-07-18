@@ -346,31 +346,13 @@ services:
       retries: 3
       start_period: 20s
 
-  # ── 智慧自動重啟 ──────────────────────────────────────────────────────────
-  # 監看所有帶 label autoheal=true 的容器，healthcheck 變 unhealthy 就自動重啟它。
-  # 補足 Docker 原生 restart policy 只在 process exit 時才重啟的缺口。
-  autoheal:
-    image: willfarrell/autoheal:latest
-    restart: unless-stopped
-    mem_limit: ${AUTOHEAL_MEM_LIMIT:-32m}
-    cpus: 0.1
-    logging: *default-logging
-    environment:
-      AUTOHEAL_CONTAINER_LABEL: autoheal
-      AUTOHEAL_INTERVAL: "10"        # 每 10 秒檢查一次
-      AUTOHEAL_START_PERIOD: "60"    # 容器啟動後 60 秒才開始監看
-      AUTOHEAL_DEFAULT_STOP_TIMEOUT: "20"
-      DOCKER_SOCK: /var/run/docker.sock
-    volumes:
-      # 需可寫才能呼叫 docker restart；屬受信任本機運維元件。
-      - /var/run/docker.sock:/var/run/docker.sock
-
   # ── PgBouncer 連線池（Phase D，預設不啟用）────────────────────────────────
-  # 啟用方式：在 .env.production 設 DB_HOST=pgbouncer DB_PORT=6432 DB_USE_PGBOUNCER=true
-  # 後重啟。⚠️ 上線前務必照計畫 Phase D 驗證 auth 與 migration（migration 仍直連 db）。
+  # 啟用方式：在 .env.production 設 DB_HOST=pgbouncer DB_PORT=6432，並以
+  # `--profile pgbouncer` 啟動。⚠️ 上線前務必驗證 auth 與 migration（migration 仍直連 db）。
   pgbouncer:
     image: edoburu/pgbouncer:latest
     restart: unless-stopped
+    profiles: ["pgbouncer"]
     mem_limit: ${PGBOUNCER_MEM_LIMIT:-64m}
     mem_reservation: 16m
     cpus: ${PGBOUNCER_CPUS:-0.25}

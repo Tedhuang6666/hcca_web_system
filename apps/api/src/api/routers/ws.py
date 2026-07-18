@@ -107,7 +107,7 @@ async def _assert_room_access(room: str, user_id: str) -> None:
     房間授權規則（預設拒絕 default-deny）：
     - user:{uuid}：只能加入自己的房間；admin:all 例外
     - org:{uuid}：必須是該 org 成員；admin:all 例外
-    - meeting:{uuid}：已登入者可加入（即時議程/投票頁使用）
+    - meeting:{uuid}：必須在該會議的出席名冊中
     - 其餘房間（election/document/petition/survey/...）：僅 admin:all
 
     安全：先前為「其他房間任何已登入者可加入」的 default-allow，導致任何已登入者
@@ -146,7 +146,19 @@ async def _assert_room_access(room: str, user_id: str) -> None:
             return
 
         if room.startswith("meeting:"):
-            # 即時議程/投票頁使用；保留已登入者可加入。
+            from api.models.meeting import MeetingAttendance
+
+            meeting_id = uuid.UUID(room.split(":", 1)[1])
+            is_attendee = await db.scalar(
+                select(MeetingAttendance.id)
+                .where(
+                    MeetingAttendance.meeting_id == meeting_id,
+                    MeetingAttendance.user_id == user_uuid,
+                )
+                .limit(1)
+            )
+            if not is_attendee:
+                raise PermissionError("無權加入此會議房間")
             return
 
         # 預設拒絕：未明確授權的房間一律不得加入。

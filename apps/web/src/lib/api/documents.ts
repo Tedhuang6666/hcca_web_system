@@ -126,8 +126,7 @@ export const documentsApi = {
     `${BASE}/documents/${id}/attachments/${attachmentId}/download`,
   attachmentPreviewUrl: (id: string, attachmentId: string) =>
     `${BASE}/documents/${id}/attachments/${attachmentId}/preview`,
-  /** 後端列印 / 下載 PDF（一般使用者由身份自動判定正/影本；管理員可指定）。
-   *  以 fetch + Bearer token 取得 blob，由呼叫端決定預覽或下載。 */
+  /** 後端列印 / 下載 PDF（一般使用者由身份自動判定正/影本；管理員可指定）。 */
   printPdf: async (
     id: string,
     opts?: { recipientId?: string; variant?: "primary" | "copy" },
@@ -136,11 +135,8 @@ export const documentsApi = {
     if (opts?.recipientId) qs.set("recipient_id", opts.recipientId);
     if (opts?.variant) qs.set("variant", opts.variant);
     const url = `${BASE}/documents/${id}/print${qs.toString() ? `?${qs}` : ""}`;
-    const token =
-      typeof window !== "undefined" ? (localStorage.getItem("access_token") ?? "") : "";
     const res = await fetch(url, {
       credentials: "include",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     if (!res.ok) throw new ApiError(res.status, await errorMessageFromResponse(res));
     return res.blob();

@@ -98,12 +98,12 @@ async def add_to_blacklist(token: str) -> None:
         await redis_client.setex(f"{BLACKLIST_JTI_PREFIX}{jti}", ttl, "1")
 
 
-async def is_blacklisted(token: str) -> bool:
+async def is_blacklisted(token: str, *, fail_closed: bool = False) -> bool:
     """檢查 Token jti 是否已被撤銷。
 
-    Redis 不可用時採「fail-open」：回傳 False（視為未撤銷），讓 API 進入降級模式
-    而非每個帶 token 的請求都 500。撤銷檢查是縱深防禦的一層，短暫失效可接受——
-    token 本身仍有簽章與過期驗證把關，且 Redis 恢復後撤銷立即重新生效。
+    一般 access token 可採 fail-open，避免 Redis 暫時故障造成全站不可用；會換發
+    長效憑證的 refresh 流程必須傳入 ``fail_closed=True``，避免撤銷狀態不可驗證時
+    繼續延長 session。
     """
     try:
         payload = decode_token(token)
@@ -116,12 +116,13 @@ async def is_blacklisted(token: str) -> bool:
         return bool(await redis_client.exists(f"{BLACKLIST_JTI_PREFIX}{jti}"))
     except (RedisError, TimeoutError):
         logger.error(
-            "is_blacklisted: Redis 不可用，fail-open 放行已撤銷 token jti=%s type=%s",
+            "is_blacklisted: Redis 不可用，%s token jti=%s type=%s",
+            "fail-closed 拒絕" if fail_closed else "fail-open 放行",
             jti,
             payload.get("type"),
             extra={"alert": "blacklist_fail_open"},
         )
-        return False
+        return fail_closed
 
 
 # ── User-level token 追蹤與撤銷 ──────────────────────────────────────────────

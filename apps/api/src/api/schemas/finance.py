@@ -137,7 +137,7 @@ class ExpenseClaimCreate(BaseModel):
 
 
 class FinanceEvidenceUploadOut(BaseModel):
-    url: str
+    storage_key: str
     filename: str
     content_type: str
     file_size: int

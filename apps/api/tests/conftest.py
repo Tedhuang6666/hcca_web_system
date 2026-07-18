@@ -300,6 +300,13 @@ async def db_session(_build_schema_once: None) -> AsyncGenerator[AsyncSession, N
 
     await outer_transaction.rollback()
     await connection.close()
+    if not _IS_POSTGRES:
+        # SQLite 對「外層 transaction + released savepoint」的 rollback 語意與 PostgreSQL
+        # 不同：路由內 commit 的 savepoint 可能已永久寫入 StaticPool 共用的 :memory: DB。
+        # 逐 test 清表，避免固定 email 的共用 fixture 汙染下一個案例。
+        async with _schema_engine.begin() as cleanup_connection:
+            for table in reversed(Base.metadata.sorted_tables):
+                await cleanup_connection.execute(table.delete())
 
 
 def _make_override_get_db(
