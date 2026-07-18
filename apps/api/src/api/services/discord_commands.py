@@ -515,7 +515,7 @@ async def execute(
         if not types:
             raise DiscordCommandError("目前沒有可用的陳情類型。")
         anonymous = bool(arguments.get("anonymous"))
-        case_obj, code = await petition_svc.create_case(
+        case_obj, code, _share_token = await petition_svc.create_case(
             db,
             data=PetitionCreate(
                 type_id=types[0].id,

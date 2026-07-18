@@ -28,7 +28,7 @@ from api.core.permission_codes import (
     PermissionCode,
     validate_permission_codes,
 )
-from api.dependencies.permissions import require_permission
+from api.dependencies.permissions import require_admin_mfa, require_permission
 from api.models.org import Org, Permission, Position, PositionCategory, UserPosition
 from api.models.person import PersonAffiliationKind, PersonAffiliationSource
 from api.models.user import User
@@ -40,7 +40,11 @@ from api.services.discord_bot import enqueue_role_sync
 from api.services.permission import get_user_permission_codes
 from api.services.user_registration import UserRegistrationError
 
-router = APIRouter(prefix="/admin", tags=["管理員"])
+router = APIRouter(
+    prefix="/admin",
+    tags=["管理員"],
+    dependencies=[Depends(require_admin_mfa)],
+)
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 AdminUser = Annotated[User, Depends(require_permission(PermissionCode.ADMIN_ALL))]

@@ -14,16 +14,50 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import ipaddress
 import json
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from urllib.parse import urlsplit
 
 from sqlalchemy import desc, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.webhook import DeliveryStatus, WebhookDelivery, WebhookSubscription
+
+
+class UnsafeWebhookUrlError(ValueError):
+    """Webhook 目標不是可安全對外投遞的 URL。"""
+
+
+async def validate_delivery_url(url: str) -> str:
+    """拒絕私有／保留網段與非 HTTPS webhook，降低 SSRF 風險。
+
+    建立、更新與每次投遞前均重新解析 DNS；網路層仍須以 egress policy 阻擋
+    私網，避免 DNS rebinding 在解析與連線間改變結果。
+    """
+    parts = urlsplit(url)
+    if parts.scheme != "https" or not parts.hostname or parts.username or parts.password:
+        raise UnsafeWebhookUrlError("Webhook URL 必須是無帳密的 HTTPS 公開網址")
+    host = parts.hostname.rstrip(".")
+    try:
+        addresses = [ipaddress.ip_address(host)]
+    except ValueError:
+        try:
+            import asyncio
+            import socket
+
+            records = await asyncio.get_running_loop().getaddrinfo(
+                host, parts.port or 443, type=socket.SOCK_STREAM
+            )
+            addresses = list({ipaddress.ip_address(record[4][0]) for record in records})
+        except OSError as exc:
+            raise UnsafeWebhookUrlError("Webhook 網域無法解析") from exc
+    if not addresses or any(not address.is_global for address in addresses):
+        raise UnsafeWebhookUrlError("Webhook URL 不可指向私有、保留或本機網段")
+    return url
 
 
 def generate_signing_secret() -> str:
@@ -68,6 +102,7 @@ async def create_subscription(
     max_retries: int,
 ) -> tuple[WebhookSubscription, str]:
     """建立 subscription、回傳 (model row, 一次性 secret 明文)。"""
+    await validate_delivery_url(url)
     raw_secret = generate_signing_secret()
     row = WebhookSubscription(
         name=name,
@@ -121,6 +156,7 @@ async def update_subscription(
     if name is not None:
         row.name = name
     if url is not None:
+        await validate_delivery_url(url)
         row.url = url
     if events is not None:
         row.events = list(events)

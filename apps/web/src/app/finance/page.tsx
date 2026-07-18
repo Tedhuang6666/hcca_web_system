@@ -266,11 +266,11 @@ export default function FinancePage() {
         const amount = Number(entryAmount);
         if (!amount) return toast.error("請填寫金額");
         const fundLine = entryType === "opening"
-          ? { account_id: fund.chart_account_id, debit: amount }
-          : { account_id: fund.chart_account_id, debit: amount };
+          ? { account_id: fund.chart_account_id, debit: amount, credit: 0 }
+          : { account_id: fund.chart_account_id, debit: amount, credit: 0 };
         const counterpartLine = entryType === "opening"
-          ? { account_id: counterpart.id, credit: amount }
-          : { account_id: counterpart.id, credit: amount };
+          ? { account_id: counterpart.id, debit: 0, credit: amount }
+          : { account_id: counterpart.id, debit: 0, credit: amount };
         const prefix = entryType === "opening" ? "期初餘額" : "收入";
         const entry = await financeApi.createJournal(ledger.id, {
           period_id: periodId,

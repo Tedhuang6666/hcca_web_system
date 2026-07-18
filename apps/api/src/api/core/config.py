@@ -547,6 +547,8 @@ class Settings(BaseSettings):
             raise ValueError(
                 "生產環境必須設定強 SECRET_KEY，不能使用已知不安全值（dev/CI 固定字串）"
             )
+        if is_prod and len(self.SECRET_KEY.encode("utf-8")) < 32:
+            raise ValueError("生產環境 SECRET_KEY 至少需要 32 bytes 的隨機值")
         if is_prod and self.DEBUG:
             raise ValueError("生產環境不可啟用 DEBUG")
         if is_prod and self.ENABLE_API_DOCS:

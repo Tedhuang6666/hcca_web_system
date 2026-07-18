@@ -11,7 +11,7 @@ from api.core.config import settings
 from api.core.database import AsyncSessionLocal
 from api.core.security import decode_token, is_blacklisted
 from api.core.ws_manager import WSCapacityError, manager
-from api.dependencies.auth import get_current_active_user
+from api.dependencies.permissions import require_permission
 from api.services.permission import get_user_permission_codes
 
 logger = logging.getLogger(__name__)
@@ -52,13 +52,19 @@ async def public_election_websocket(websocket: WebSocket, election_id: uuid.UUID
 
 
 def _ws_token_from_websocket(websocket: WebSocket) -> str | None:
-    token_qs = websocket.query_params.get("token")
-    if token_qs:
-        return token_qs
     auth = websocket.headers.get("authorization", "")
     if auth.lower().startswith("bearer "):
         return auth[7:]
     return websocket.cookies.get(settings.ACCESS_TOKEN_COOKIE_NAME)
+
+
+async def _validate_ws_origin(websocket: WebSocket) -> bool:
+    """Cookie 驗證的 WebSocket 必須來自明確允許的前端 origin。"""
+    origin = websocket.headers.get("origin")
+    if origin and origin in settings.ALLOWED_ORIGINS:
+        return True
+    await websocket.close(code=WS_CLOSE_FORBIDDEN, reason="不允許的 WebSocket Origin")
+    return False
 
 
 def _client_ip(websocket: WebSocket) -> str:
@@ -159,7 +165,7 @@ async def websocket_room(
     加入指定房間的 WebSocket 連線。
 
     連線 URL 範例：
-        ws://localhost:8000/ws/general?token=<access_token>
+        使用 HttpOnly auth cookie 或 Authorization header；不接受 URL query token。
 
     訊息格式（客戶端送出）：
         { "type": "message", "data": { "text": "Hello" } }
@@ -170,6 +176,8 @@ async def websocket_room(
           "data": { "text": "Hello" }, "timestamp": "..." }
         { "type": "ping" }                          # 伺服器心跳（前端必須回 pong）
     """
+    if not await _validate_ws_origin(websocket):
+        return
     user_id = await _authenticate_ws(websocket)
     if user_id is None:
         return
@@ -226,7 +234,7 @@ async def websocket_room(
 @router.get(
     "/ws/rooms",
     summary="列出所有活躍 WebSocket 房間",
-    dependencies=[Depends(get_current_active_user)],
+    dependencies=[Depends(require_permission("admin:all"))],
 )
 async def list_ws_rooms() -> dict[str, object]:
     """回傳目前所有活躍房間與連線統計"""

@@ -10,6 +10,7 @@
 #   ENV_FILE=.env.production COMPOSE_FILE=docker-compose.prod.pull.yml
 #   WITH_WORKERS=1     # 連 celery-worker / celery-beat 一起起
 #   SKIP_GIT=1         # 跳過 git pull（例如手動同步檔案時）
+#   RELEASE_SHA=<sha>  # 指定已通過 CI 且已推送到 GHCR 的 commit（預設目前 HEAD）
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -46,7 +47,18 @@ if [[ "${SKIP_GIT:-0}" != "1" && -d .git ]]; then
   fi
 fi
 
-step "docker compose pull（拉最新映像）"
+release_sha="${RELEASE_SHA:-$(git rev-parse HEAD)}"
+if ! [[ "$release_sha" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "❌ RELEASE_SHA 必須是完整 40 字元 commit SHA" >&2
+  exit 1
+fi
+
+step "確認指定 commit 的不可變 GHCR 映像已就緒"
+./scripts/wait-ghcr-image.sh "$release_sha"
+export API_IMAGE="ghcr.io/tedhuang6666/hcca_web_system-api:${release_sha}"
+export WEB_IMAGE="ghcr.io/tedhuang6666/hcca_web_system-web:${release_sha}"
+
+step "docker compose pull（拉指定 commit 映像）"
 "${compose[@]}" "${profiles[@]}" pull
 
 # 套用資料庫 migration（alembic upgrade head）必須在起 api/web 前先跑，否則新映像會對

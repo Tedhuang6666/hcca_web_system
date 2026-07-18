@@ -64,11 +64,16 @@ def _location_out(location: PartnerLocation, *, include_private: bool) -> Partne
     return out
 
 
-def _business_out(business: PartnerBusiness, *, include_private: bool) -> PartnerBusinessOut:
+def _business_out(
+    business: PartnerBusiness,
+    *,
+    include_private: bool,
+    include_internal: bool = False,
+) -> PartnerBusinessOut:
     out = PartnerBusinessOut.model_validate(business)
     rating_avg, rating_count = map_svc.rating_stats(business)
     out.can_view_private_details = include_private
-    out.internal_note = business.internal_note if include_private else None
+    out.internal_note = business.internal_note if include_internal else None
     out.rating_avg = rating_avg
     out.rating_count = rating_count
     out.popularity_score = map_svc.popularity_score(business)
@@ -342,7 +347,7 @@ async def admin_create_business(
         actor_email=user.email,
         summary=f"建立特約店家「{business.name}」",
     )
-    return _business_out(business, include_private=True)
+    return _business_out(business, include_private=True, include_internal=True)
 
 
 @router.get(
@@ -353,7 +358,9 @@ async def admin_create_business(
 async def admin_get_business(
     business_id: uuid.UUID, db: DbDep, _: ManagerUser
 ) -> PartnerBusinessOut:
-    return _business_out(await _business_or_404(db, business_id), include_private=True)
+    return _business_out(
+        await _business_or_404(db, business_id), include_private=True, include_internal=True
+    )
 
 
 @router.patch(
@@ -378,7 +385,7 @@ async def admin_update_business(
         actor_email=user.email,
         summary=f"更新特約店家「{business.name}」",
     )
-    return _business_out(business, include_private=True)
+    return _business_out(business, include_private=True, include_internal=True)
 
 
 @router.delete(

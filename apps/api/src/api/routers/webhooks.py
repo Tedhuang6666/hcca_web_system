@@ -57,15 +57,20 @@ async def admin_create_subscription(
     db: DbDep,
     user=Depends(require_permission("webhook:admin")),
 ) -> WebhookSubscriptionCreatedResponse:
-    row, secret = await webhook_svc.create_subscription(
-        db,
-        owner_user_id=user.id,
-        name=body.name,
-        url=str(body.url),
-        events=body.events,
-        description=body.description,
-        max_retries=body.max_retries,
-    )
+    try:
+        row, secret = await webhook_svc.create_subscription(
+            db,
+            owner_user_id=user.id,
+            name=body.name,
+            url=str(body.url),
+            events=body.events,
+            description=body.description,
+            max_retries=body.max_retries,
+        )
+    except webhook_svc.UnsafeWebhookUrlError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
     await db.commit()
     return WebhookSubscriptionCreatedResponse(
         subscription=WebhookSubscriptionOut.model_validate(row),

@@ -8,6 +8,9 @@
 		Permissions-Policy "camera=(), microphone=(), geolocation=()"
 	}
 
+	@public_metrics path /api/metrics
+	respond @public_metrics 404
+
 	handle_path /api/* {
 		reverse_proxy api-blue:8000 {
 			health_uri /ready

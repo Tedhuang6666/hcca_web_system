@@ -78,7 +78,11 @@ from api.services import mfa as mfa_svc
 from api.services import version as version_svc
 from api.services.discord_bot import emit_security_alert
 
-router = APIRouter(prefix="/admin/system", tags=["管理員 / 系統"])
+router = APIRouter(
+    prefix="/admin/system",
+    tags=["管理員 / 系統"],
+    dependencies=[Depends(require_admin_mfa)],
+)
 public_router = APIRouter(prefix="/system", tags=["系統"])
 logger = logging.getLogger(__name__)
 

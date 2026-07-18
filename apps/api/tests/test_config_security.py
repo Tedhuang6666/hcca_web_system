@@ -5,7 +5,8 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from api.core.config import _FALLBACK_SIGNING_KEY as _DEFAULT_SECRET, Settings
+from api.core.config import _FALLBACK_SIGNING_KEY as _DEFAULT_SECRET
+from api.core.config import Settings
 
 
 def _make(**overrides: object) -> Settings:
@@ -38,6 +39,11 @@ def test_production_rejects_default_secret() -> None:
             COOKIE_SECURE=True,
         )
     assert "SECRET_KEY" in str(exc.value)
+
+
+def test_production_rejects_short_secret() -> None:
+    with pytest.raises(ValidationError, match="至少需要 32 bytes"):
+        _make(ENVIRONMENT="production", SECRET_KEY="too-short", COOKIE_SECURE=True)
 
 
 def test_production_rejects_debug_true() -> None:

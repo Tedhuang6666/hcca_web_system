@@ -62,9 +62,9 @@ class FakeWebSocket:
 # ── token 擷取 ────────────────────────────────────────────────────────────────
 
 
-def test_ws_token_from_websocket_prefers_query_param() -> None:
+def test_ws_token_from_websocket_ignores_query_param() -> None:
     ws = FakeWebSocket(query_token="q", header_token="h", cookie_token="c")
-    assert _ws_token_from_websocket(ws) == "q"  # type: ignore[arg-type]
+    assert _ws_token_from_websocket(ws) == "h"  # type: ignore[arg-type]
 
 
 def test_ws_token_from_websocket_falls_back_to_header() -> None:
@@ -94,7 +94,7 @@ async def test_authenticate_ws_missing_token_closes_with_auth_error() -> None:
 
 async def test_authenticate_ws_valid_token_returns_subject(member_user: User) -> None:
     token = create_access_token(str(member_user.id))
-    ws = FakeWebSocket(query_token=token)
+    ws = FakeWebSocket(header_token=token)
     user_id = await _authenticate_ws(ws)  # type: ignore[arg-type]
     assert user_id == str(member_user.id)
     assert ws.closed_with is None
@@ -102,7 +102,7 @@ async def test_authenticate_ws_valid_token_returns_subject(member_user: User) ->
 
 async def test_authenticate_ws_wrong_token_type_rejected(member_user: User) -> None:
     token = create_refresh_token(str(member_user.id))
-    ws = FakeWebSocket(query_token=token)
+    ws = FakeWebSocket(header_token=token)
     user_id = await _authenticate_ws(ws)  # type: ignore[arg-type]
     assert user_id is None
     assert ws.closed_with == (4001, "無效的 Token 類型")
@@ -111,7 +111,7 @@ async def test_authenticate_ws_wrong_token_type_rejected(member_user: User) -> N
 async def test_authenticate_ws_blacklisted_token_rejected(member_user: User) -> None:
     token = create_access_token(str(member_user.id))
     await add_to_blacklist(token)
-    ws = FakeWebSocket(query_token=token)
+    ws = FakeWebSocket(header_token=token)
     user_id = await _authenticate_ws(ws)  # type: ignore[arg-type]
     assert user_id is None
     assert ws.closed_with == (4001, "Token 已登出")

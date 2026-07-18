@@ -1005,6 +1005,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/system/version": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 運行與 GitHub 版本 */
+        get: operations["system_version_admin_system_version_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/system/diagnostics": {
         parameters: {
             query?: never;
@@ -2432,6 +2449,248 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/finance/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload Evidence */
+        post: operations["upload_evidence_finance_evidence_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finance/ledgers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Ledger */
+        post: operations["create_ledger_finance_ledgers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finance/ledgers/{ledger_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ledger */
+        get: operations["get_ledger_finance_ledgers__ledger_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finance/ledgers/{ledger_id}/periods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Periods */
+        get: operations["list_periods_finance_ledgers__ledger_id__periods_get"];
+        put?: never;
+        /** Create Period */
+        post: operations["create_period_finance_ledgers__ledger_id__periods_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finance/periods/{period_id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Close Period */
+        post: operations["close_period_finance_periods__period_id__close_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finance/ledgers/{ledger_id}/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Accounts */
+        get: operations["list_accounts_finance_ledgers__ledger_id__accounts_get"];
+        put?: never;
+        /** Create Account */
+        post: operations["create_account_finance_ledgers__ledger_id__accounts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finance/ledgers/{ledger_id}/accounts/{account_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Account */
+        patch: operations["update_account_finance_ledgers__ledger_id__accounts__account_id__patch"];
+        trace?: never;
+    };
+    "/finance/ledgers/{ledger_id}/funds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Funds */
+        get: operations["list_funds_finance_ledgers__ledger_id__funds_get"];
+        put?: never;
+        /** Create Fund */
+        post: operations["create_fund_finance_ledgers__ledger_id__funds_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finance/ledgers/{ledger_id}/journals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Journals */
+        get: operations["list_journals_finance_ledgers__ledger_id__journals_get"];
+        put?: never;
+        /** Create Journal */
+        post: operations["create_journal_finance_ledgers__ledger_id__journals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finance/ledgers/{ledger_id}/expense-claims": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Expense Claim */
+        post: operations["create_expense_claim_finance_ledgers__ledger_id__expense_claims_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finance/ledgers/{ledger_id}/transfers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Transfer */
+        post: operations["create_transfer_finance_ledgers__ledger_id__transfers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finance/journals/{entry_id}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit Journal */
+        post: operations["submit_journal_finance_journals__entry_id__submit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finance/journals/{entry_id}/post": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Journal */
+        post: operations["post_journal_finance_journals__entry_id__post_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finance/ledgers/{ledger_id}/google-sheets/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Export Google Sheets */
+        post: operations["export_google_sheets_finance_ledgers__ledger_id__google_sheets_export_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/publications": {
         parameters: {
             query?: never;
@@ -3603,17 +3862,17 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/petitions/{case_number}/{verification_code}": {
+    "/petitions/share": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** 以分享連結查詢案件 */
-        get: operations["lookup_case_by_share_link_petitions__case_number___verification_code__get"];
+        get?: never;
         put?: never;
-        post?: never;
+        /** 以分享 token 查詢案件 */
+        post: operations["lookup_case_by_share_token_petitions_share_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6214,6 +6473,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shop/orders/quantities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 商品規格訂購數量彙總（採購用） */
+        get: operations["order_quantities_shop_orders_quantities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/shop/orders/{order_id}": {
         parameters: {
             query?: never;
@@ -6327,23 +6603,6 @@ export interface paths {
         };
         /** 查詢各分類結單狀態 */
         get: operations["get_close_status_shop_close_status_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/shop/orders/quantities": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 商品規格訂購數量彙總（採購用） */
-        get: operations["order_quantities_shop_orders_quantities_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -11839,23 +12098,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/impersonate/{target_user_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Start Impersonation */
-        post: operations["start_impersonation_admin_impersonate__target_user_id__post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/admin/impersonate/end": {
         parameters: {
             query?: never;
@@ -11867,6 +12109,23 @@ export interface paths {
         put?: never;
         /** End Impersonation */
         post: operations["end_impersonation_admin_impersonate_end_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/impersonate/{target_user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Impersonation */
+        post: operations["start_impersonation_admin_impersonate__target_user_id__post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -13998,6 +14257,11 @@ export interface components {
             /** File */
             file: string;
         };
+        /** Body_upload_evidence_finance_evidence_post */
+        Body_upload_evidence_finance_evidence_post: {
+            /** File */
+            file: string;
+        };
         /** Body_upload_image_shop_images_post */
         Body_upload_image_shop_images_post: {
             /** File */
@@ -14786,6 +15050,48 @@ export interface components {
              * @default false
              */
             discord: boolean;
+        };
+        /** ChartAccountCreate */
+        ChartAccountCreate: {
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+            account_type: components["schemas"]["FinanceAccountType"];
+        };
+        /** ChartAccountOut */
+        ChartAccountOut: {
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+            account_type: components["schemas"]["FinanceAccountType"];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Ledger Id
+             * Format: uuid
+             */
+            ledger_id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Is System */
+            is_system: boolean;
+            /**
+             * Balance
+             * @default 0
+             */
+            balance: number;
+        };
+        /** ChartAccountUpdate */
+        ChartAccountUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
         };
         /** CheckoutRequest */
         CheckoutRequest: {
@@ -18645,6 +18951,51 @@ export interface components {
             /** Unsupported Reason */
             unsupported_reason?: string | null;
         };
+        /** ExpenseClaimCreate */
+        ExpenseClaimCreate: {
+            /**
+             * Period Id
+             * Format: uuid
+             */
+            period_id: string;
+            /**
+             * Entry Date
+             * Format: date
+             */
+            entry_date: string;
+            /**
+             * Fund Account Id
+             * Format: uuid
+             */
+            fund_account_id: string;
+            /**
+             * Expense Account Id
+             * Format: uuid
+             */
+            expense_account_id: string;
+            /** Description */
+            description: string;
+            /** Items */
+            items: components["schemas"]["ExpenseClaimItemCreate"][];
+            /** Evidence Url */
+            evidence_url?: string | null;
+            /** Note */
+            note?: string | null;
+        };
+        /** ExpenseClaimItemCreate */
+        ExpenseClaimItemCreate: {
+            /** Name */
+            name: string;
+            /** Unit Price */
+            unit_price: number;
+            /**
+             * Tax Rate
+             * @default 0
+             */
+            tax_rate: number;
+            /** Quantity */
+            quantity: number;
+        };
         /** ExportFileOut */
         ExportFileOut: {
             /** Filename */
@@ -18741,6 +19092,22 @@ export interface components {
             /** Enabled Permission Codes */
             enabled_permission_codes?: string[] | null;
         };
+        /**
+         * FinanceAccountType
+         * @enum {string}
+         */
+        FinanceAccountType: "asset" | "liability" | "equity" | "revenue" | "expense";
+        /** FinanceEvidenceUploadOut */
+        FinanceEvidenceUploadOut: {
+            /** Url */
+            url: string;
+            /** Filename */
+            filename: string;
+            /** Content Type */
+            content_type: string;
+            /** File Size */
+            file_size: number;
+        };
         /** FreezeRequest */
         FreezeRequest: {
             /**
@@ -18753,6 +19120,77 @@ export interface components {
              * @description 凍結依據公文 ID（選填）
              */
             freeze_document_id?: string | null;
+        };
+        /** FundAccountCreate */
+        FundAccountCreate: {
+            /** Name */
+            name: string;
+            storage_type: components["schemas"]["FundStorageType"];
+            /**
+             * Chart Account Id
+             * Format: uuid
+             */
+            chart_account_id: string;
+            /** Bank Name */
+            bank_name?: string | null;
+            /** Account Last Four */
+            account_last_four?: string | null;
+        };
+        /** FundAccountOut */
+        FundAccountOut: {
+            /** Name */
+            name: string;
+            storage_type: components["schemas"]["FundStorageType"];
+            /**
+             * Chart Account Id
+             * Format: uuid
+             */
+            chart_account_id: string;
+            /** Bank Name */
+            bank_name?: string | null;
+            /** Account Last Four */
+            account_last_four?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Ledger Id
+             * Format: uuid
+             */
+            ledger_id: string;
+            /** Is Active */
+            is_active: boolean;
+            /**
+             * Balance
+             * @default 0
+             */
+            balance: number;
+        };
+        /**
+         * FundStorageType
+         * @enum {string}
+         */
+        FundStorageType: "petty_cash" | "safe" | "bank";
+        /** GitHubVersionView */
+        GitHubVersionView: {
+            /** Repository */
+            repository: string;
+            /** Branch */
+            branch: string;
+            /** Sha */
+            sha: string | null;
+            /** Short Sha */
+            short_sha: string | null;
+            /** Message */
+            message: string | null;
+            /** Pushed At */
+            pushed_at: string | null;
+            /** Url */
+            url: string | null;
+            /** Version */
+            version: string | null;
         };
         /** GoogleCalendarItem */
         GoogleCalendarItem: {
@@ -18794,6 +19232,11 @@ export interface components {
             credential: string;
             /** Next */
             next?: string | null;
+        };
+        /** GoogleSheetsExportIn */
+        GoogleSheetsExportIn: {
+            /** Spreadsheet Id */
+            spreadsheet_id: string;
         };
         /** GoogleTasksStatusOut */
         GoogleTasksStatusOut: {
@@ -19465,6 +19908,139 @@ export interface components {
             /** Is Active */
             is_active?: boolean | null;
         };
+        /** JournalCreate */
+        JournalCreate: {
+            /**
+             * Period Id
+             * Format: uuid
+             */
+            period_id: string;
+            /**
+             * Entry Date
+             * Format: date
+             */
+            entry_date: string;
+            /** Description */
+            description: string;
+            /** Lines */
+            lines: components["schemas"]["JournalLineIn"][];
+            /** Source Type */
+            source_type?: string | null;
+            /** Source Id */
+            source_id?: string | null;
+            /** Source Event */
+            source_event?: string | null;
+            /** Source Url */
+            source_url?: string | null;
+            /** Evidence Url */
+            evidence_url?: string | null;
+            /** Note */
+            note?: string | null;
+        };
+        /** JournalLineIn */
+        JournalLineIn: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /**
+             * Debit
+             * @default 0
+             */
+            debit: number;
+            /**
+             * Credit
+             * @default 0
+             */
+            credit: number;
+            /** Memo */
+            memo?: string | null;
+        };
+        /** JournalLineOut */
+        JournalLineOut: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /**
+             * Debit
+             * @default 0
+             */
+            debit: number;
+            /**
+             * Credit
+             * @default 0
+             */
+            credit: number;
+            /** Memo */
+            memo?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Account Name
+             * @default
+             */
+            account_name: string;
+        };
+        /** JournalOut */
+        JournalOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Ledger Id
+             * Format: uuid
+             */
+            ledger_id: string;
+            /**
+             * Period Id
+             * Format: uuid
+             */
+            period_id: string;
+            /**
+             * Entry Date
+             * Format: date
+             */
+            entry_date: string;
+            /** Description */
+            description: string;
+            status: components["schemas"]["JournalStatus"];
+            /**
+             * Created By Id
+             * Format: uuid
+             */
+            created_by_id: string;
+            /** Reviewed By Id */
+            reviewed_by_id: string | null;
+            /** Posted At */
+            posted_at: string | null;
+            /** Source Type */
+            source_type: string | null;
+            /** Source Id */
+            source_id: string | null;
+            /** Source Event */
+            source_event: string | null;
+            /** Source Url */
+            source_url: string | null;
+            /** Evidence Url */
+            evidence_url: string | null;
+            /** Note */
+            note: string | null;
+            /** Lines */
+            lines: components["schemas"]["JournalLineOut"][];
+        };
+        /**
+         * JournalStatus
+         * @enum {string}
+         */
+        JournalStatus: "draft" | "pending_review" | "posted" | "returned" | "reversed";
         /** JudicialPetitionCreate */
         JudicialPetitionCreate: {
             /** Petitioner Name */
@@ -19595,6 +20171,33 @@ export interface components {
          * @enum {string}
          */
         JudicialPetitionType: "constitutional_norm_review" | "org_dispute" | "election_dispute" | "disciplinary_appeal" | "other";
+        /** LedgerCreate */
+        LedgerCreate: {
+            /**
+             * Org Id
+             * Format: uuid
+             */
+            org_id: string;
+            /** Name */
+            name: string;
+        };
+        /** LedgerOut */
+        LedgerOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Org Id
+             * Format: uuid
+             */
+            org_id: string;
+            /** Name */
+            name: string;
+            /** Currency */
+            currency: string;
+        };
         /** LifecycleActionBody */
         LifecycleActionBody: {
             /**
@@ -23357,6 +23960,48 @@ export interface components {
             /** Requires Explicit Consent */
             requires_explicit_consent: boolean;
         };
+        /** PeriodCreate */
+        PeriodCreate: {
+            /** Name */
+            name: string;
+            /**
+             * Starts On
+             * Format: date
+             */
+            starts_on: string;
+            /**
+             * Ends On
+             * Format: date
+             */
+            ends_on: string;
+        };
+        /** PeriodOut */
+        PeriodOut: {
+            /** Name */
+            name: string;
+            /**
+             * Starts On
+             * Format: date
+             */
+            starts_on: string;
+            /**
+             * Ends On
+             * Format: date
+             */
+            ends_on: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Ledger Id
+             * Format: uuid
+             */
+            ledger_id: string;
+            /** Is Closed */
+            is_closed: boolean;
+        };
         /** PermissionCatalogItem */
         PermissionCatalogItem: {
             /** Group */
@@ -23947,6 +24592,8 @@ export interface components {
             case_number: string;
             /** Verification Code */
             verification_code: string;
+            /** Share Token */
+            share_token: string;
             status: components["schemas"]["PetitionStatus"];
             /** Title */
             title: string;
@@ -24182,6 +24829,14 @@ export interface components {
             related_activities?: components["schemas"]["ContextLink"][];
             /** Recommended Actions */
             recommended_actions?: string[];
+        };
+        /**
+         * PetitionShareLookup
+         * @description 以高熵分享 token 查詢案件；token 僅透過 request body 傳送。
+         */
+        PetitionShareLookup: {
+            /** Share Token */
+            share_token: string;
         };
         /** PetitionStatsOut */
         PetitionStatsOut: {
@@ -27492,6 +28147,19 @@ export interface components {
             /** Matched Count */
             matched_count: number;
         };
+        /** RuntimeVersionView */
+        RuntimeVersionView: {
+            /** App Version */
+            app_version: string;
+            /** Commit */
+            commit: string | null;
+            /** Ref */
+            ref: string | null;
+            /** Built At */
+            built_at: string | null;
+            /** Environment */
+            environment: string;
+        };
         /** SampleTestSendOut */
         SampleTestSendOut: {
             /** Status */
@@ -29159,6 +29827,35 @@ export interface components {
              */
             created_at: string;
         };
+        /** TransferCreate */
+        TransferCreate: {
+            /**
+             * Period Id
+             * Format: uuid
+             */
+            period_id: string;
+            /**
+             * Entry Date
+             * Format: date
+             */
+            entry_date: string;
+            /**
+             * From Fund Account Id
+             * Format: uuid
+             */
+            from_fund_account_id: string;
+            /**
+             * To Fund Account Id
+             * Format: uuid
+             */
+            to_fund_account_id: string;
+            /** Amount */
+            amount: number;
+            /** Description */
+            description: string;
+            /** Note */
+            note?: string | null;
+        };
         /** TrashEntryOut */
         TrashEntryOut: {
             /**
@@ -29596,6 +30293,18 @@ export interface components {
              * Format: uuid
              */
             user_position_id: string;
+        };
+        /** VersionStatusView */
+        VersionStatusView: {
+            runtime: components["schemas"]["RuntimeVersionView"];
+            github: components["schemas"]["GitHubVersionView"] | null;
+            /**
+             * Sync Status
+             * @enum {string}
+             */
+            sync_status: "current" | "outdated" | "unknown";
+            /** Github Error */
+            github_error?: string | null;
         };
         /** VoteCreate */
         VoteCreate: {
@@ -32749,6 +33458,26 @@ export interface operations {
             };
         };
     };
+    system_version_admin_system_version_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionStatusView"];
+                };
+            };
+        };
+    };
     system_diagnostics_admin_system_diagnostics_get: {
         parameters: {
             query?: never;
@@ -35767,6 +36496,605 @@ export interface operations {
             };
         };
     };
+    upload_evidence_finance_evidence_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_evidence_finance_evidence_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceEvidenceUploadOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_ledger_finance_ledgers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LedgerCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ledger_finance_ledgers__ledger_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledger_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_periods_finance_ledgers__ledger_id__periods_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledger_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PeriodOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_period_finance_ledgers__ledger_id__periods_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledger_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PeriodCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PeriodOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    close_period_finance_periods__period_id__close_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                period_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PeriodOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_accounts_finance_ledgers__ledger_id__accounts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledger_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChartAccountOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_account_finance_ledgers__ledger_id__accounts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledger_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChartAccountCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChartAccountOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_account_finance_ledgers__ledger_id__accounts__account_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledger_id: string;
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChartAccountUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChartAccountOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_funds_finance_ledgers__ledger_id__funds_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledger_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FundAccountOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_fund_finance_ledgers__ledger_id__funds_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledger_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FundAccountCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FundAccountOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_journals_finance_ledgers__ledger_id__journals_get: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["JournalStatus"] | null;
+            };
+            header?: never;
+            path: {
+                ledger_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_journal_finance_ledgers__ledger_id__journals_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledger_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JournalCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_expense_claim_finance_ledgers__ledger_id__expense_claims_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledger_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExpenseClaimCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_transfer_finance_ledgers__ledger_id__transfers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledger_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransferCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_journal_finance_journals__entry_id__submit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_journal_finance_journals__entry_id__post_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_google_sheets_finance_ledgers__ledger_id__google_sheets_export_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledger_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoogleSheetsExportIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_publications_publications_get: {
         parameters: {
             query?: {
@@ -38522,17 +39850,18 @@ export interface operations {
             };
         };
     };
-    lookup_case_by_share_link_petitions__case_number___verification_code__get: {
+    lookup_case_by_share_token_petitions_share_post: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                case_number: string;
-                verification_code: string;
-            };
+            path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PetitionShareLookup"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -45164,6 +46493,42 @@ export interface operations {
             };
         };
     };
+    order_quantities_shop_orders_quantities_get: {
+        parameters: {
+            query?: {
+                grade?: number | null;
+                class_id?: string | null;
+                category_id?: string | null;
+                product_id?: string | null;
+                is_paid?: boolean | null;
+                status?: components["schemas"]["OrderStatus"] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderQuantityRow"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_order_shop_orders__order_id__get: {
         parameters: {
             query?: never;
@@ -45450,42 +46815,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CloseStatusOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    order_quantities_shop_orders_quantities_get: {
-        parameters: {
-            query?: {
-                grade?: number | null;
-                class_id?: string | null;
-                category_id?: string | null;
-                product_id?: string | null;
-                is_paid?: boolean | null;
-                status?: components["schemas"]["OrderStatus"] | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OrderQuantityRow"][];
                 };
             };
             /** @description Validation Error */
@@ -58072,6 +59401,37 @@ export interface operations {
             };
         };
     };
+    end_impersonation_admin_impersonate_end_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImpersonationEndBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     start_impersonation_admin_impersonate__target_user_id__post: {
         parameters: {
             query?: never;
@@ -58095,37 +59455,6 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ImpersonationStartResponse"];
                 };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    end_impersonation_admin_impersonate_end_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ImpersonationEndBody"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Validation Error */
             422: {

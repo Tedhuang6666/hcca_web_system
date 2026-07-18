@@ -8,6 +8,10 @@
 		Permissions-Policy "camera=(), microphone=(), geolocation=()"
 	}
 
+	# Prometheus 只透過 Docker 內網直接抓取 api:8000/metrics；不得從公開 /api 暴露。
+	@public_metrics path /api/metrics
+	respond @public_metrics 404
+
 	handle_path /api/* {
 		reverse_proxy api:8000 {
 			health_uri /ready
