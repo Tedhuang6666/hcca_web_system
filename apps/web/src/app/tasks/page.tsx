@@ -203,6 +203,7 @@ export default function TasksPage() {
                 key={filter.key}
                 type="button"
                 onClick={() => setQuickFilter(filter.key)}
+                aria-pressed={active}
                 className="flex-shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium"
                 style={{
                   background: active ? "var(--primary-dim)" : "transparent",

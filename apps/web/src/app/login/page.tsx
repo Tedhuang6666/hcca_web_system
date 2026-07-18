@@ -11,9 +11,9 @@ import { apiUrl } from "@/lib/config";
 import { useModuleStatus } from "@/contexts/ModuleStatusContext";
 
 const GOVERNANCE_POINTS = [
-  { number: "01", title: "資訊透明", description: "讓公告、法規與議事紀錄清楚可查" },
-  { number: "02", title: "協作有序", description: "讓文件流轉與組織權責留下脈絡" },
-  { number: "03", title: "服務整合", description: "讓校園參與和日常服務集中在同一處" },
+  { title: "資訊透明", description: "公告、法規與議事紀錄清楚可查" },
+  { title: "協作有序", description: "文件流轉與組織權責留下脈絡" },
+  { title: "服務整合", description: "校園參與和日常服務集中在同一處" },
 ];
 
 export default function LoginPage() {
@@ -63,7 +63,7 @@ export default function LoginPage() {
       <div className="grid min-h-screen lg:grid-cols-[minmax(0,1.12fr)_minmax(440px,0.88fr)]">
         <section
           className="login-aside relative hidden overflow-hidden px-12 py-10 lg:flex lg:flex-col lg:justify-between xl:px-20 xl:py-14"
-          style={{ background: "#173654", color: "#f8f3e5" }}
+          style={{ background: "#26193d", color: "#f7f4fa" }}
         >
           <div
             className="login-ring pointer-events-none absolute -left-32 bottom-[-15rem] h-[34rem] w-[34rem] rounded-full"
@@ -82,50 +82,47 @@ export default function LoginPage() {
             <BrandEmblem size={46} priority />
             <div>
               <p className="text-sm font-semibold tracking-[0.08em]">{BRANDING.orgShortName}</p>
-              <p className="mt-0.5 text-[11px] tracking-[0.14em] text-[#cdd8e0]">
+              <p className="mt-0.5 text-[11px] tracking-[0.14em] text-[#d4cfda]">
                 {BRANDING.englishName}
               </p>
             </div>
           </header>
 
           <div className="login-rise relative z-10 max-w-2xl py-16">
-            <p className="mb-6 flex items-center gap-3 text-xs font-semibold tracking-[0.2em] text-[#e8c970]">
-              <span className="login-rule h-px w-10 bg-[#e8c970]" />
+            <p className="mb-6 flex items-center gap-3 text-xs font-semibold tracking-[0.2em] text-[#c79f3f]">
+              <span className="login-rule h-px w-10 bg-[#c79f3f]" />
               HCCA CAMPUS GOVERNANCE
             </p>
             <h1
               className="max-w-xl text-[2.5rem] font-semibold leading-[1.28] tracking-[-0.04em] xl:text-5xl 2xl:text-6xl"
               style={{
-                color: "#f8f3e5",
+                color: "#f7f4fa",
                 fontFamily: "var(--font-noto-serif-tc), serif",
               }}
             >
               <span className="block whitespace-nowrap">
-                讓校園自治<span className="text-[#e8c970]">更透明，</span>
+                讓校園自治<span className="text-[#c79f3f]">更透明，</span>
               </span>
-              <span className="block whitespace-nowrap text-[#e8c970]">也更靠近每個人。</span>
+              <span className="block whitespace-nowrap text-[#c79f3f]">也更靠近每個人。</span>
             </h1>
-            <p className="mt-7 max-w-lg text-base leading-8 text-[#cdd8e0]">
+            <p className="mt-7 max-w-lg text-base leading-8 text-[#d4cfda]">
               從議事協作到校園服務，將制度、紀錄與參與整合在同一個可信賴的入口。
             </p>
 
             <div className="mt-12 grid max-w-2xl grid-cols-3 border-y border-white/15">
               {GOVERNANCE_POINTS.map((point) => (
                 <div
-                  key={point.number}
+                  key={point.title}
                   className="border-r border-white/15 py-5 pr-5 last:border-r-0 [&:not(:first-child)]:pl-5"
                 >
-                  <p className="text-[11px] font-semibold tracking-[0.16em] text-[#e8c970]">
-                    {point.number}
-                  </p>
-                  <p className="mt-3 text-sm font-semibold">{point.title}</p>
+                  <p className="text-sm font-semibold text-[#f7f4fa]">{point.title}</p>
                   <p className="mt-1.5 text-xs leading-5 text-[#aebeca]">{point.description}</p>
                 </div>
               ))}
             </div>
           </div>
 
-          <footer className="relative z-10 flex items-center justify-between text-[11px] text-[#91a5b5]">
+          <footer className="relative z-10 flex items-center justify-between text-[11px] text-[#aaa2b4]">
             <span>© {new Date().getFullYear()} {BRANDING.orgName}</span>
             <span>竹嶺 · 班聯</span>
           </footer>
@@ -213,7 +210,7 @@ export default function LoginPage() {
               className="login-oauth group flex h-13 w-full cursor-pointer items-center justify-between rounded-xl px-4 text-sm font-semibold transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2"
               style={{
                 background: "#ffffff",
-                color: "#173654",
+                color: "#26193d",
                 border: "1px solid #d9dee3",
                 boxShadow: "0 8px 24px rgba(23, 54, 84, 0.08)",
                 textDecoration: "none",

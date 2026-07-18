@@ -210,6 +210,7 @@ export default function CouncilProposalsPage() {
                 <button
                   key={option.value}
                   type="button"
+                  aria-pressed={form.case_type === option.value}
                   className="rounded-lg p-3 text-left"
                   onClick={() => setForm({ ...form, case_type: option.value })}
                   style={{
@@ -238,6 +239,7 @@ export default function CouncilProposalsPage() {
                     <button
                       key={option.value}
                       type="button"
+                      aria-pressed={form.kind === option.value}
                       className="rounded-lg p-3 text-left"
                       onClick={() => setForm({ ...form, kind: option.value, regulation_id: option.value === "enact" ? "" : form.regulation_id })}
                       style={{

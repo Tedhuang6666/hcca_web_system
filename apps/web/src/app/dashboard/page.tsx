@@ -852,7 +852,7 @@ function getAdminActions(
     actions.push({ href: "/meal/vendor", label: "餐商管理", detail: "菜單、取餐與供應商", icon: Utensils });
   }
   if (isAdmin || can("admin:all")) {
-    actions.push({ href: "/admin/modules", label: "模組維護", detail: "開關、維護與公告", icon: Wrench, tone: "warning" });
+    actions.push({ href: "/admin/modules", label: "模組維護", detail: "開關、維護與公告", icon: Wrench });
   }
   return actions.slice(0, 6);
 }
