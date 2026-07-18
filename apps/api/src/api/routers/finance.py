@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
-from api.dependencies.permissions import require_permission
+from api.dependencies.permissions import require_any, require_permission
 from api.models.finance import (
     ChartAccount,
     FinanceAccountType,
@@ -25,6 +25,8 @@ from api.models.user import User
 from api.schemas.finance import (
     ChartAccountCreate,
     ChartAccountOut,
+    ChartAccountUpdate,
+    ExpenseClaimCreate,
     FundAccountCreate,
     FundAccountOut,
     GoogleSheetsExportIn,
@@ -108,7 +110,13 @@ async def close_period(period_id: uuid.UUID, db: DbDep, _: CurrentUser) -> Perio
 )
 async def list_periods(ledger_id: uuid.UUID, db: DbDep, _: CurrentUser) -> list[PeriodOut]:
     await service.get_ledger(db, ledger_id)
-    rows = (await db.execute(select(FiscalPeriod).where(FiscalPeriod.ledger_id == ledger_id).order_by(FiscalPeriod.starts_on.desc()))).scalars()
+    rows = (
+        await db.execute(
+            select(FiscalPeriod)
+            .where(FiscalPeriod.ledger_id == ledger_id)
+            .order_by(FiscalPeriod.starts_on.desc())
+        )
+    ).scalars()
     return [PeriodOut.model_validate(row) for row in rows]
 
 
@@ -150,6 +158,24 @@ async def create_account(
 ) -> ChartAccountOut:
     row = ChartAccount(ledger_id=ledger_id, **body.model_dump())
     db.add(row)
+    await db.commit()
+    await db.refresh(row)
+    return ChartAccountOut.model_validate(row)
+
+
+@router.patch(
+    "/ledgers/{ledger_id}/accounts/{account_id}",
+    response_model=ChartAccountOut,
+    dependencies=[Depends(require_permission(PermissionCode.FINANCE_MANAGE))],
+)
+async def update_account(
+    ledger_id: uuid.UUID,
+    account_id: uuid.UUID,
+    body: ChartAccountUpdate,
+    db: DbDep,
+    _: CurrentUser,
+) -> ChartAccountOut:
+    row = await service.update_chart_account(db, ledger_id, account_id, body)
     await db.commit()
     await db.refresh(row)
     return ChartAccountOut.model_validate(row)
@@ -214,6 +240,22 @@ async def create_journal(
     ledger_id: uuid.UUID, body: JournalCreate, db: DbDep, user: CurrentUser
 ) -> JournalOut:
     entry = await service.create_journal(db, ledger_id, body, user.id)
+    await db.commit()
+    return _journal_out(await service.journal_with_lines(db, entry))
+
+
+@router.post(
+    "/ledgers/{ledger_id}/expense-claims",
+    response_model=JournalOut,
+    status_code=201,
+    dependencies=[
+        Depends(require_any(PermissionCode.FINANCE_EXPENSE_CLAIM, PermissionCode.FINANCE_RECORD))
+    ],
+)
+async def create_expense_claim(
+    ledger_id: uuid.UUID, body: ExpenseClaimCreate, db: DbDep, user: CurrentUser
+) -> JournalOut:
+    entry = await service.create_expense_claim(db, ledger_id, body, user.id)
     await db.commit()
     return _journal_out(await service.journal_with_lines(db, entry))
 

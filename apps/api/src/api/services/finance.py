@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.finance import (
     ChartAccount,
+    ExpenseClaimItem,
     FinanceAccountType,
     FinanceLedger,
     FiscalPeriod,
@@ -21,7 +22,12 @@ from api.models.finance import (
     JournalLine,
     JournalStatus,
 )
-from api.schemas.finance import JournalCreate, TransferCreate
+from api.schemas.finance import (
+    ChartAccountUpdate,
+    ExpenseClaimCreate,
+    JournalCreate,
+    TransferCreate,
+)
 
 DEFAULT_ACCOUNTS = (
     ("1101", "零用金", FinanceAccountType.ASSET),
@@ -76,6 +82,25 @@ async def get_ledger(db: AsyncSession, ledger_id: uuid.UUID) -> FinanceLedger:
     if not ledger:
         raise HTTPException(404, "帳本不存在")
     return ledger
+
+
+async def update_chart_account(
+    db: AsyncSession,
+    ledger_id: uuid.UUID,
+    account_id: uuid.UUID,
+    body: ChartAccountUpdate,
+) -> ChartAccount:
+    account = await db.get(ChartAccount, account_id)
+    if not account or account.ledger_id != ledger_id:
+        raise HTTPException(404, "會計科目不存在")
+    if body.name is not None:
+        account.name = body.name
+    if body.is_active is not None:
+        if account.is_system and not body.is_active:
+            raise HTTPException(400, "系統預設科目不可停用")
+        account.is_active = body.is_active
+    await db.flush()
+    return account
 
 
 async def validate_period(
@@ -200,6 +225,55 @@ async def create_transfer(
         ),
         user_id,
     )
+
+
+async def create_expense_claim(
+    db: AsyncSession, ledger_id: uuid.UUID, body: ExpenseClaimCreate, user_id: uuid.UUID
+) -> JournalEntry:
+    fund = await db.get(FundAccount, body.fund_account_id)
+    if not fund or fund.ledger_id != ledger_id or not fund.is_active:
+        raise HTTPException(400, "付款資金保管點不存在或已停用")
+    expense_account = await db.get(ChartAccount, body.expense_account_id)
+    if (
+        not expense_account
+        or expense_account.ledger_id != ledger_id
+        or expense_account.account_type != FinanceAccountType.EXPENSE
+        or not expense_account.is_active
+    ):
+        raise HTTPException(400, "支出科目不存在、非支出科目或已停用")
+    amount = sum(item.unit_price * item.quantity for item in body.items)
+    entry = await create_journal(
+        db,
+        ledger_id,
+        JournalCreate(
+            period_id=body.period_id,
+            entry_date=body.entry_date,
+            description=f"報帳｜{body.description}（{len(body.items)} 項）",
+            source_type="expense_claim",
+            source_event="expense_claim",
+            evidence_url=body.evidence_url,
+            note=body.note,
+            lines=[
+                {"account_id": expense_account.id, "debit": amount},
+                {"account_id": fund.chart_account_id, "credit": amount},
+            ],
+        ),
+        user_id,
+        pending=True,
+    )
+    db.add_all(
+        [
+            ExpenseClaimItem(
+                journal_entry_id=entry.id,
+                name=item.name,
+                unit_price=item.unit_price,
+                quantity=item.quantity,
+            )
+            for item in body.items
+        ]
+    )
+    await db.flush()
+    return entry
 
 
 async def account_balances(db: AsyncSession, ledger_id: uuid.UUID) -> dict[uuid.UUID, int]:

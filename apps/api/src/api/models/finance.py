@@ -164,6 +164,23 @@ class JournalLine(Base, TimestampMixin):
     memo: Mapped[str | None] = mapped_column(String(240), nullable=True)
 
 
+class ExpenseClaimItem(Base, TimestampMixin):
+    """報帳傳票的逐項明細，保留品項、單價與數量供日後稽核。"""
+
+    __tablename__ = "finance_expense_claim_items"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    journal_entry_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("finance_journal_entries.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    unit_price: Mapped[int] = mapped_column(Integer, nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
 class BankTransaction(Base, TimestampMixin):
     __tablename__ = "finance_bank_transactions"
     __table_args__ = (

@@ -738,10 +738,13 @@ export interface PeriodCreate { name: string; starts_on: string; ends_on: string
 export interface PeriodOut extends PeriodCreate { id: string; ledger_id: string; is_closed: boolean }
 export interface ChartAccountCreate { code: string; name: string; account_type: FinanceAccountType }
 export interface ChartAccountOut extends ChartAccountCreate { id: string; ledger_id: string; is_active: boolean; is_system: boolean; balance: number }
+export interface ChartAccountUpdate { name?: string; is_active?: boolean }
 export interface FundAccountOut { id: string; ledger_id: string; name: string; storage_type: FundStorageType; chart_account_id: string; bank_name: string | null; account_last_four: string | null; is_active: boolean; balance: number }
 export interface JournalLineIn { account_id: string; debit?: number; credit?: number; memo?: string }
 export interface JournalCreate { period_id: string; entry_date: string; description: string; lines: JournalLineIn[]; source_type?: string; source_id?: string; source_event?: string; source_url?: string; evidence_url?: string; note?: string }
 export interface TransferCreate { period_id: string; entry_date: string; from_fund_account_id: string; to_fund_account_id: string; amount: number; description: string; note?: string }
+export interface ExpenseClaimItemCreate { name: string; unit_price: number; quantity: number }
+export interface ExpenseClaimCreate { period_id: string; entry_date: string; fund_account_id: string; expense_account_id: string; description: string; items: ExpenseClaimItemCreate[]; evidence_url?: string; note?: string }
 export interface JournalOut { id: string; ledger_id: string; period_id: string; entry_date: string; description: string; status: JournalStatus; created_by_id: string; reviewed_by_id: string | null; posted_at: string | null; source_type: string | null; source_id: string | null; source_event: string | null; source_url: string | null; evidence_url: string | null; note: string | null; lines: (JournalLineIn & { id: string; account_name: string })[] }
 
 // ── 常用篩選（Saved Filters）──────────────────────────────────────────────────
