@@ -4559,3 +4559,202 @@ html[data-reveal-ready] [data-reveal].is-reveal-in {
   }
   .live-ballot { display: none; }
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Print Stylesheet
+   適用文件類型：公文（/documents/[id]）、會議紀錄（/meetings/[id]）、法規（/regulations/[id]）
+   使用方式：瀏覽器 Ctrl+P 或程式呼叫 window.print()
+   ────────────────────────────────────────────────────────────────────────── */
+
+@media print {
+  /* ── 基本重設 ── */
+  *,
+  *::before,
+  *::after {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 11pt;
+    line-height: 1.6;
+    font-family: 'Times New Roman', '標楷體', serif;
+  }
+
+  /* ── 隱藏非列印元素 ── */
+  .no-print,
+  nav,
+  aside,
+  [data-sidebar],
+  [data-topbar],
+  .topbar,
+  .sidebar,
+  .AppShell-sidebar,
+  [class*='Sidebar'],
+  [class*='sidebar'],
+  [class*='Topbar'],
+  [class*='topbar'],
+  button:not(.print-include),
+  .btn:not(.print-include),
+  [role='toolbar'],
+  [role='navigation'],
+  .toast,
+  [data-toast],
+  [class*='Toast'],
+  [class*='Modal'],
+  [class*='Drawer'],
+  [class*='dropdown'],
+  [class*='Dropdown'],
+  .floating-action,
+  [class*='fab'],
+  .pagination,
+  [aria-label*='頁碼'],
+  [aria-label*='篩選'],
+  footer:not(.print-include) {
+    display: none !important;
+  }
+
+  /* ── 主內容區撐滿 ── */
+  main,
+  [data-main-content],
+  .main-content,
+  [class*='PageContent'],
+  [class*='page-content'] {
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* ── 超連結顯示 URL ── */
+  a[href]::after {
+    content: ' (' attr(href) ')';
+    font-size: 8pt;
+    color: #555;
+  }
+  a[href^='#']::after,
+  a[href^='javascript']::after,
+  [class*='icon-btn']::after,
+  button::after {
+    content: '';
+  }
+
+  /* ── 分頁控制 ── */
+  h1, h2, h3 {
+    page-break-after: avoid;
+  }
+  table, figure, pre {
+    page-break-inside: avoid;
+  }
+  p {
+    orphans: 3;
+    widows: 3;
+  }
+
+  /* ── 公文（Document）列印樣式 ── */
+  .document-print-header {
+    text-align: center;
+    border-bottom: 2px solid black;
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+  }
+  .document-print-header h1 {
+    font-size: 16pt;
+    font-weight: bold;
+  }
+  .document-meta-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.25rem 1rem;
+    font-size: 10pt;
+    border: 1px solid #ccc;
+    padding: 0.5rem;
+    margin-bottom: 1rem;
+  }
+  .document-approval-chain {
+    border: 1px solid #888;
+    padding: 0.5rem;
+    margin-top: 1rem;
+    page-break-inside: avoid;
+  }
+  .document-approval-chain th {
+    background: #eee !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* ── 法規（Regulation）列印樣式 ── */
+  .regulation-print-cover {
+    text-align: center;
+    page-break-after: always;
+  }
+  .regulation-print-cover h1 {
+    font-size: 20pt;
+    font-weight: bold;
+    margin-bottom: 1rem;
+  }
+  .law-chapter {
+    page-break-before: auto;
+  }
+  .law-article {
+    page-break-inside: avoid;
+  }
+  .law-article-number {
+    font-weight: bold;
+  }
+
+  /* ── 會議紀錄（Meeting）列印樣式 ── */
+  .meeting-print-header {
+    text-align: center;
+    margin-bottom: 1.5rem;
+  }
+  .meeting-print-header h1 {
+    font-size: 16pt;
+  }
+  .meeting-agenda-item {
+    page-break-inside: avoid;
+    border-top: 1px solid #ddd;
+    padding: 0.4rem 0;
+  }
+  .meeting-resolution {
+    background: #f5f5f5 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    border-left: 3px solid #333;
+    padding: 0.3rem 0.5rem;
+    margin: 0.3rem 0;
+  }
+  .meeting-attendance-table td,
+  .meeting-attendance-table th {
+    font-size: 9pt;
+    padding: 2px 4px;
+  }
+
+  /* ── 表格基本樣式 ── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10pt;
+  }
+  th, td {
+    border: 1px solid #aaa;
+    padding: 3px 6px;
+    text-align: left;
+  }
+  th {
+    background: #efefef !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    font-weight: bold;
+  }
+
+  /* ── 頁首 / 頁尾 ── */
+  @page {
+    margin: 2cm 2.5cm;
+    size: A4 portrait;
+  }
+  @page :first {
+    margin-top: 2cm;
+  }
+}
