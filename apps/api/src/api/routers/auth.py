@@ -133,7 +133,12 @@ def _safe_next_path(value: str | None) -> str:
     return safe_next_path(value, default="/")
 
 
-def _email_can_login(email: str, existing_user: User | None = None) -> bool:
+def _email_can_login(
+    email: str,
+    existing_user: User | None = None,
+    *,
+    is_linked_email: bool = False,
+) -> bool:
     # 開放外校/校外帳號登入：登入後無任何 RBAC 權限，等同公開頁檢視層級，
     # 並可使用陳情送件功能。如需恢復校內限定，將 LOGIN_ALLOW_EXTERNAL_USERS 設為 False。
     if settings.LOGIN_ALLOW_EXTERNAL_USERS:
@@ -145,7 +150,8 @@ def _email_can_login(email: str, existing_user: User | None = None) -> bool:
         or normalized in settings.LOGIN_EMAIL_ALLOWLIST
         or normalized in settings.OWNER_EMAILS
         or normalized in settings.SUPERUSER_EMAILS
-        or False
+        # 僅限管理員已連結的私人信箱，不能只憑既有帳戶或超管身份略過網域政策。
+        or bool(existing_user and existing_user.is_active and is_linked_email)
     )
 
 
@@ -225,7 +231,7 @@ async def _upsert_google_user(
         )
     login_user = linked_user or existing_user_by_email
 
-    if not _email_can_login(email, login_user):
+    if not _email_can_login(email, login_user, is_linked_email=identity_by_email is not None):
         logger.warning(
             "Rejected Google login from disallowed email domain",
             extra={"email": email, "client_ip": client_ip},

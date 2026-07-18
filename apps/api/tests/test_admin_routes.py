@@ -24,6 +24,7 @@ async def _seed_admin_data(db: AsyncSession) -> tuple[User, User, Org, Position,
         is_active=True,
         is_verified=True,
         is_superuser=True,
+        mfa_enabled=True,
     )
     member = User(
         email="member@school.edu",
