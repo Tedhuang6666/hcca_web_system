@@ -131,20 +131,6 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
-  if (!authReady || redirecting) {
-    return (
-      <div
-        className="grid min-h-screen place-items-center px-6"
-        style={{ background: "var(--bg-base)" }}
-      >
-        <LoadingState
-          title={redirecting ? "正在前往登入頁" : "正在確認登入狀態"}
-          description="系統正在確認身分與頁面權限。"
-        />
-      </div>
-    );
-  }
-
   return (
     <PermissionProvider can={can}>
       <InboxCountsProvider value={inboxCounts}>
@@ -185,8 +171,16 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
           <main
             id="main-content"
             className="app-main flex-1 overflow-y-auto p-5 pb-20 md:p-6 md:pb-6"
+            aria-busy={!authReady || redirecting}
           >
-            {moduleDown && moduleId && (!isAdmin || moduleInfo?.mode === "closed") ? (
+            {!authReady || redirecting ? (
+              <div className="app-content-loading" aria-live="polite">
+                <LoadingState
+                  title={redirecting ? "正在前往登入頁" : "正在確認登入狀態"}
+                  description="系統正在確認身分與頁面權限。"
+                />
+              </div>
+            ) : moduleDown && moduleId && (!isAdmin || moduleInfo?.mode === "closed") ? (
               <ModuleMaintenance moduleId={moduleId} />
             ) : (
               <PageTransition>

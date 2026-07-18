@@ -2948,6 +2948,22 @@ details[open] > :not(summary) {
   background-attachment: local;
 }
 
+/* 驗證登入與權限時只鎖定主內容，保留導覽列作為穩定的空間錨點。 */
+.app-content-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  min-height: 100%;
+  place-items: center;
+  padding: 1.5rem;
+  background: color-mix(in srgb, var(--bg-base) 94%, transparent);
+}
+
+.app-content-loading .loading-state {
+  box-shadow: 0 16px 36px color-mix(in srgb, var(--text-primary) 12%, transparent);
+}
+
 .app-main::before {
   position: fixed;
   z-index: -1;
