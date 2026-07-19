@@ -149,10 +149,21 @@ async def _upsert_projection(
     )
     if event is None:
         candidate = CalendarEvent(
+            org_id=org_id,
             source_module=source_module,
             source_id=source_id,
             source_key=source_key,
+            title=title[:200],
+            description=description,
+            event_type=event_type,
+            status=status,
+            visibility=visibility,
+            location=location[:200] if location else None,
+            starts_at=starts_at,
+            ends_at=ends_at,
+            href=href,
             created_by=created_by,
+            is_active=True,
         )
         session.add(candidate)
         try:
