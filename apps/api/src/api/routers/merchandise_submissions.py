@@ -6,6 +6,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
@@ -30,12 +31,17 @@ from api.schemas.merchandise_submission import (
 )
 from api.services import audit as audit_svc
 from api.services import merchandise_submission as submission_svc
+from api.services.permission import get_user_permission_codes
 from api.services.storage import get_storage
 
 router = APIRouter(prefix="/merchandise-submissions", tags=["校商投稿"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
+
+
+def _upload_preview_url(storage_key: str) -> str:
+    return f"/merchandise-submissions/uploads/{storage_key}"
 
 
 def _serialize_submission(submission, *, include_submitter: bool):
@@ -53,7 +59,7 @@ def _serialize_submission(submission, *, include_submitter: bool):
                 "filename": file.filename,
                 "content_type": file.content_type,
                 "file_size": file.file_size,
-                "url": f"/uploads/{file.storage_key}",
+                "url": _upload_preview_url(file.storage_key),
             }
             for file in submission.files
         ],
@@ -142,8 +148,42 @@ async def upload_submission_file(
         filename=stored.filename,
         content_type=stored.content_type,
         file_size=stored.file_size,
-        url=stored.url,
+        url=_upload_preview_url(stored.storage_key),
     )
+
+
+@router.get("/uploads/{storage_key:path}", summary="預覽投稿圖稿")
+async def preview_submission_file(
+    storage_key: str, session: DbDep, current_user: CurrentUser
+):
+    own_prefix = f"merchandise-submissions/{current_user.id}/"
+    stored_file = await submission_svc.get_submission_file(session, storage_key)
+    if stored_file is None:
+        if not storage_key.startswith(own_prefix):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權檢視此投稿圖稿")
+        filename = None
+        content_type = None
+    else:
+        is_owner = stored_file.submission.user_id == current_user.id
+        if not is_owner and not current_user.is_superuser:
+            codes = await get_user_permission_codes(session, current_user.id)
+            if str(PermissionCode.SHOP_MANAGE) not in codes:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權檢視此投稿圖稿")
+        filename = stored_file.filename
+        content_type = stored_file.content_type
+
+    storage = get_storage()
+    local_path = storage.local_path(storage_key)
+    if local_path is not None:
+        if not local_path.is_file():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到投稿圖稿")
+        return FileResponse(
+            local_path,
+            media_type=content_type,
+            filename=filename,
+            content_disposition_type="inline",
+        )
+    return RedirectResponse(await storage.get_url(storage_key, disposition="inline", download_name=filename))
 
 
 @router.post(
