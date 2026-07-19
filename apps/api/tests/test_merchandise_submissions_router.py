@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from unittest.mock import patch
 
 from httpx import AsyncClient
 
@@ -94,16 +95,42 @@ async def test_merchandise_submission_flow_uses_school_account_and_notifies_subm
     assert submission["account_snapshot"]["email"] == member_user.email
     assert submission["files"][0]["filename"] == "design.png"
 
-    review_response = await admin.patch(
-        f"/merchandise-submissions/admin/submissions/{submission['id']}/review",
-        json={"status": "revision_requested", "review_note": "請補上背面圖稿"},
-    )
-    assert review_response.status_code == 200
-    assert review_response.json()["status"] == "revision_requested"
+    with patch("api.email.sender.enqueue_email", return_value="task-id") as enqueue_email:
+        review_response = await admin.patch(
+            f"/merchandise-submissions/admin/submissions/{submission['id']}/review",
+            json={"status": "revision_requested", "review_note": "請補上背面圖稿"},
+        )
+        assert review_response.status_code == 200
+        assert review_response.json()["status"] == "revision_requested"
+        assert review_response.json()["review_note"] == "請補上背面圖稿"
+
+        resubmit_response = await student.patch(
+            f"/merchandise-submissions/submissions/{submission['id']}?submit=true",
+            json={
+                "item_id": item_id,
+                "field_values": {"design_name": "校園動能修正版"},
+                "files": [uploaded],
+            },
+        )
+        assert resubmit_response.status_code == 200
+        assert resubmit_response.json()["status"] == "submitted"
+
+        approve_response = await admin.patch(
+            f"/merchandise-submissions/admin/submissions/{submission['id']}/review",
+            json={"status": "approved"},
+        )
+        assert approve_response.status_code == 200
+        assert approve_response.json()["status"] == "approved"
+
+    assert enqueue_email.call_count == 2
+    subjects = [call.args[1] for call in enqueue_email.call_args_list]
+    assert "需要補件" in subjects[0]
+    assert "已採用" in subjects[1]
 
     mine_response = await student.get("/merchandise-submissions/submissions/me")
     assert mine_response.status_code == 200
-    assert mine_response.json()[0]["review_note"] == "請補上背面圖稿"
+    assert mine_response.json()[0]["status"] == "approved"
+    assert mine_response.json()[0]["review_note"] is None
 
 
 async def test_merchandise_submission_rejects_non_school_email_when_required(
