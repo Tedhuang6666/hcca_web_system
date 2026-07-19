@@ -91,7 +91,7 @@ export default function MattersPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4">
+    <div className="matters-page mx-auto max-w-6xl space-y-4">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>

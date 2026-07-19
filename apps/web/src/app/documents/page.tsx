@@ -584,7 +584,7 @@ export default function DocumentListPage() {
   };
 
   return (
-    <div className="space-y-5 max-w-6xl mx-auto">
+    <div className="documents-page space-y-5 max-w-6xl mx-auto">
 
       {/* 頁首 */}
       <div className="workspace-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">

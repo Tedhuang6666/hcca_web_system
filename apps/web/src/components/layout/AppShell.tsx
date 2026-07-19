@@ -192,7 +192,7 @@ function AppShellContent({
           <Topbar onMenuClick={toggleSidebar} />
           <main
             id="main-content"
-            className="app-main flex-1 overflow-y-auto p-5 pb-20 md:p-6 md:pb-6"
+            className="app-main min-w-0 flex-1 overflow-y-auto p-5 pb-[calc(5rem+env(safe-area-inset-bottom))] md:p-6 md:pb-6"
             aria-busy="false"
           >
             {moduleDown && moduleId && (!isAdmin || moduleInfo?.mode === "closed") ? (

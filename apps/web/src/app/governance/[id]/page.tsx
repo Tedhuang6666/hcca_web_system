@@ -234,10 +234,10 @@ export default function GovernanceMatterPage() {
         const uuid = String(matterRes.id);
         setMatterId(uuid);
         const [taskRes, automationRes, templateRes, metaRes, orgRows, userRows] = await Promise.all([
-          governanceApi.listTasks(uuid),
-          governanceApi.listAutomationRules(uuid),
-          governanceApi.listWorkflowTemplates(),
-          governanceApi.automationMeta().catch(() => null),
+          withFallback(governanceApi.listTasks(uuid), []),
+          withFallback(governanceApi.listAutomationRules(uuid), []),
+          withFallback(governanceApi.listWorkflowTemplates(), []),
+          withFallback(governanceApi.automationMeta(), null),
           withFallback(orgsApi.list({ active_only: true }), []),
           withFallback(adminApi.listUsers({ active_only: true, limit: 200 }), []),
         ]);
@@ -834,7 +834,7 @@ export default function GovernanceMatterPage() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-5">
+    <div className="governance-matter-page mx-auto max-w-7xl space-y-5">
       <header className="rounded-lg p-5" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">

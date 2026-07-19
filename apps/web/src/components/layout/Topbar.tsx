@@ -64,7 +64,7 @@ function MobileBreadcrumb({ items, fallbackTitle }: { items: Crumb[]; fallbackTi
         </nav>
       )}
       <h1
-        className="truncate text-sm leading-tight"
+        className="block w-full truncate whitespace-nowrap text-sm leading-tight"
         style={{ color: "var(--text-primary)", fontWeight: 650 }}>
         {current}
       </h1>
@@ -187,7 +187,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
 
   return (
     <header
-      className="flex items-center justify-between px-4 md:px-5 flex-shrink-0 gap-2"
+      className="topbar-header flex items-center justify-between px-4 md:px-5 flex-shrink-0 gap-2"
       style={{
         height: "56px",
         background: "var(--topbar-bg)",
@@ -202,7 +202,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
       role="banner">
 
       {/* 左側：選單 + 返回 + 麵包屑/標題 */}
-      <div className="flex items-center gap-2 min-w-0 flex-1">
+      <div className="topbar-leading flex items-center gap-2 min-w-0 flex-1">
         <button
           onClick={onMenuClick}
           className="topbar-icon-btn"
@@ -231,18 +231,18 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
         </div>
 
         {/* 行動裝置：上層小字、當前頁突出顯示 */}
-        <div className="md:hidden min-w-0 flex-1">
+        <div className="topbar-mobile-title md:hidden min-w-0 flex-1">
           <MobileBreadcrumb items={compactCrumbs} fallbackTitle={pageTitle} />
         </div>
       </div>
 
       {/* 右側：搜尋 + 通知 + 主題 + 使用者 */}
-      <div className="flex items-center gap-1.5">
+      <div className="topbar-actions flex items-center gap-1.5">
         {isLoggedIn && (
           <button
             type="button"
             onClick={() => window.dispatchEvent(new Event(OPEN_COMMAND_MENU_EVENT))}
-            className="topbar-icon-btn"
+            className="topbar-icon-btn topbar-search-action"
             aria-label="搜尋或執行操作"
             title="搜尋或執行操作（Ctrl K）"
           >
@@ -415,12 +415,14 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
         </div>
         )}
 
-        <ThemeToggle />
+        <div className="topbar-theme-action">
+          <ThemeToggle />
+        </div>
 
-        <div className="w-px h-4 mx-1" style={{ background: "var(--border)" }} aria-hidden="true" />
+        <div className="topbar-divider w-px h-4 mx-1" style={{ background: "var(--border)" }} aria-hidden="true" />
 
         {isLoggedIn ? (
-          <div className="relative" ref={menuRef}>
+          <div className="topbar-user-menu relative" ref={menuRef}>
             <button
               onClick={() => setShowMenu((p) => !p)}
               className="flex items-center gap-2 h-9 px-2 rounded-lg transition-colors cursor-pointer"

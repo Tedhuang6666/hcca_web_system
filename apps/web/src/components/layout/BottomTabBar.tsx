@@ -181,9 +181,10 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
   return (
     <nav
       aria-label="底部主選單"
-      className="md:hidden fixed bottom-0 left-0 right-0 z-30 flex"
+      className="bottom-tab-bar md:hidden fixed bottom-0 left-0 right-0 z-30 flex"
       style={{
-        height: "56px",
+        height: "calc(56px + env(safe-area-inset-bottom))",
+        boxSizing: "border-box",
         background: "var(--bg-elevated)",
         borderTop: "1px solid var(--border)",
         paddingBottom: "env(safe-area-inset-bottom)",

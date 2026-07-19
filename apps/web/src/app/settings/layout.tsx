@@ -17,7 +17,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
   const pathname = usePathname();
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5">
+    <div className="settings-page mx-auto max-w-6xl space-y-5">
       <header className="flex flex-col gap-3">
         <div>
           <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--primary)" }}>

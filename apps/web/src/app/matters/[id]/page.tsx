@@ -105,7 +105,7 @@ export default function MatterDetailPage({ params }: { params: Promise<{ id: str
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4">
+    <div className="matter-detail-page mx-auto max-w-6xl space-y-4">
       <header className="space-y-2">
         <Link href="/matters" className="text-xs" style={{ color: "var(--accent)" }}>
           返回整合工作台
