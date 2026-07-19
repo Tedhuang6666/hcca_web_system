@@ -4,9 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Clock3,
+  CheckCircle2,
   Download,
   FileText,
   LoaderCircle,
+  Package,
   Pencil,
   Plus,
   Send,
@@ -521,12 +523,15 @@ export default function MerchandiseSubmissionsPage() {
                 }}
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <label
-                    htmlFor="submission-item"
-                    className="text-sm font-semibold"
-                  >
-                    選擇投稿品項
-                  </label>
+                  <div>
+                    <h2 className="text-lg font-semibold">可投稿品項</h2>
+                    <p
+                      className="mt-1 text-sm"
+                      style={{ color: "var(--text-secondary)" }}
+                    >
+                      請先選擇要設計的商品；每個品項都有自己的規格與範本。
+                    </p>
+                  </div>
                   {editingId && (
                     <button
                       type="button"
@@ -542,20 +547,79 @@ export default function MerchandiseSubmissionsPage() {
                     </button>
                   )}
                 </div>
-                <select
-                  id="submission-item"
-                  className="input mt-3 w-full"
-                  value={selectedId}
-                  disabled={Boolean(editingId)}
-                  onChange={(event) => choose(event.target.value)}
+                <div
+                  className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3"
+                  role="group"
+                  aria-label="可投稿品項"
                 >
                   {portal.items.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                      {item.is_accepting ? "" : "（目前未開放）"}
-                    </option>
+                    <button
+                      type="button"
+                      key={item.id}
+                      aria-pressed={selectedId === item.id}
+                      disabled={Boolean(editingId)}
+                      onClick={() => choose(item.id)}
+                      className="relative min-h-36 rounded-xl border p-4 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                      style={{
+                        background:
+                          selectedId === item.id
+                            ? "var(--primary-dim)"
+                            : "var(--bg-elevated)",
+                        borderColor:
+                          selectedId === item.id
+                            ? "var(--primary)"
+                            : "var(--border)",
+                        outlineColor: "var(--primary)",
+                      }}
+                    >
+                      <span
+                        className="flex h-10 w-10 items-center justify-center rounded-lg"
+                        style={{
+                          background:
+                            selectedId === item.id
+                              ? "var(--bg-surface)"
+                              : "var(--primary-dim)",
+                          color: "var(--primary-text)",
+                        }}
+                      >
+                        <Package size={20} />
+                      </span>
+                      {selectedId === item.id && (
+                        <CheckCircle2
+                          size={20}
+                          className="absolute right-4 top-4"
+                          style={{ color: "var(--primary-text)" }}
+                          aria-label="已選擇"
+                        />
+                      )}
+                      <span className="mt-4 block text-base font-semibold">
+                        {item.name}
+                      </span>
+                      <span
+                        className="mt-1 block text-sm"
+                        style={{ color: "var(--text-secondary)" }}
+                      >
+                        {item.description ||
+                          (item.specification
+                            ? "已提供詳細規格"
+                            : "請依品項需求上傳圖稿")}
+                      </span>
+                      <span
+                        className="mt-3 inline-flex rounded px-2 py-1 text-xs font-semibold"
+                        style={{
+                          background: item.is_accepting
+                            ? "var(--success-dim)"
+                            : "var(--danger-dim)",
+                          color: item.is_accepting
+                            ? "var(--success)"
+                            : "var(--danger)",
+                        }}
+                      >
+                        {item.is_accepting ? "開放投稿" : "目前未開放"}
+                      </span>
+                    </button>
                   ))}
-                </select>
+                </div>
                 {selected?.description && (
                   <p
                     className="mt-3 text-sm"
