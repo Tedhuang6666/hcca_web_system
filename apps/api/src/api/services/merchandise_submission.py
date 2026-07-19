@@ -73,15 +73,7 @@ async def update_settings(
 
 
 def _announcement_content(message: str) -> dict:
-    return {
-        "type": "doc",
-        "content": [
-            {
-                "type": "paragraph",
-                "content": [{"type": "text", "text": message}],
-            }
-        ],
-    }
+    return {"format": "markdown", "markdown": message}
 
 
 async def sync_announcement(
@@ -114,11 +106,8 @@ async def sync_announcement(
     announcement.link_label = "前往投稿"
     announcement.show_on_every_visit = settings.show_announcement_popup
     announcement.org_id = None
-    announcement.audience_type = (
-        AnnouncementAudience.SCHOOL.value
-        if settings.require_school_email
-        else AnnouncementAudience.ALL.value
-    )
+    # 投稿資格可限定校務信箱，但公告仍是全站公告，確保公告模組可正常檢視。
+    announcement.audience_type = AnnouncementAudience.ALL.value
     if announcement.published_at is None:
         announcement.published_at = datetime.now(UTC)
 
@@ -212,6 +201,17 @@ async def get_submission(
             selectinload(MerchandiseSubmission.files),
         )
         .where(MerchandiseSubmission.id == submission_id)
+    )
+    return (await session.execute(query)).scalar_one_or_none()
+
+
+async def get_submission_file(
+    session: AsyncSession, storage_key: str
+) -> MerchandiseSubmissionFile | None:
+    query = (
+        select(MerchandiseSubmissionFile)
+        .options(selectinload(MerchandiseSubmissionFile.submission))
+        .where(MerchandiseSubmissionFile.storage_key == storage_key)
     )
     return (await session.execute(query)).scalar_one_or_none()
 

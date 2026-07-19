@@ -58,6 +58,8 @@ async def test_merchandise_submission_flow_uses_school_account_and_notifies_subm
     )
     assert upload_response.status_code == 200
     uploaded = upload_response.json()
+    preview_response = await student.get(uploaded["url"])
+    assert preview_response.status_code == 200
 
     draft_response = await student.post(
         "/merchandise-submissions/submissions?submit=false",
@@ -126,6 +128,14 @@ async def test_merchandise_submission_rejects_non_school_email_when_required(
     assert settings_response.status_code == 200
     assert settings_response.json()["announcement_id"]
     assert settings_response.json()["show_announcement_popup"] is True
+    announcement_id = settings_response.json()["announcement_id"]
+
+    announcement_response = await admin.get(f"/announcements/{announcement_id}")
+    assert announcement_response.status_code == 200
+    assert announcement_response.json()["content"] == {
+        "format": "markdown",
+        "markdown": "請把握投稿時間。",
+    }
 
     item_response = await admin.post(
         "/merchandise-submissions/admin/items",
