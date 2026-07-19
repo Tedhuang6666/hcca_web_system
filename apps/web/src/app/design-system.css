@@ -1598,3 +1598,176 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
     min-width: 6rem;
   }
 }
+
+/* ── Narrow viewport corrections ─────────────────────────────────────────
+   Keep shared navigation single-line and let page-specific controls reflow
+   before they can widen the app viewport. */
+.topbar-mobile-title,
+.topbar-mobile-title > div {
+  min-width: 0;
+  width: 100%;
+}
+
+.topbar-mobile-title h1 {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  white-space: nowrap !important;
+}
+
+.module-tabs-scroll {
+  min-width: 0;
+  width: 100%;
+  overscroll-behavior-inline: contain;
+  scroll-padding-inline: 0.75rem;
+}
+
+.module-tabs-scroll::after {
+  display: none;
+}
+
+.module-tabs-list {
+  display: flex;
+  width: max-content;
+  max-width: none;
+}
+
+.module-tab-link {
+  white-space: nowrap;
+}
+
+.dashboard-recents-panel {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.dashboard-recents-label {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.dashboard-recents-list {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: 0.5rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.dashboard-recents-list::-webkit-scrollbar {
+  display: none;
+}
+
+.dashboard-recent-chip {
+  display: block;
+  min-width: 0;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 78%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-elevated) 82%, transparent);
+  color: var(--text-secondary);
+  text-decoration: none;
+  box-shadow: var(--shadow-xs);
+  transition: border-color var(--transition), color var(--transition), transform var(--transition);
+}
+
+.calendar-page,
+.calendar-page > *,
+.calendar-heading > *,
+.calendar-toolbar > *,
+.calendar-filters > *,
+.shop-class-orders-page,
+.shop-class-orders-page > * {
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.calendar-actions > *,
+.calendar-filters select,
+.calendar-mine-filter {
+  max-width: 100%;
+}
+
+.calendar-period-label {
+  white-space: nowrap;
+}
+
+@media (max-width: 767px) {
+  .topbar-mobile-title {
+    flex: 1 1 0%;
+    min-width: 0 !important;
+  }
+
+  .module-tabs-scroll {
+    margin-inline: -0.75rem;
+    padding-inline: 0.75rem !important;
+  }
+
+  .dashboard-recents-panel {
+    display: block;
+    padding: 0.85rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: color-mix(in srgb, var(--bg-surface) 92%, transparent);
+  }
+
+  .dashboard-recents-label {
+    display: flex;
+    margin-bottom: 0.65rem;
+    font-weight: 650;
+  }
+
+  .dashboard-recents-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: visible;
+  }
+
+  .dashboard-recent-chip {
+    max-width: none;
+    padding: 0.7rem 0.75rem;
+    border-radius: var(--radius-md);
+    white-space: nowrap;
+  }
+
+  .calendar-actions {
+    width: 100%;
+  }
+
+  .calendar-actions > * {
+    flex: 1 1 0;
+    justify-content: center;
+  }
+
+  .calendar-toolbar {
+    align-items: stretch;
+  }
+
+  .calendar-period-controls {
+    display: grid;
+    width: 100%;
+    grid-template-columns: 2.75rem minmax(0, 1fr) 2.75rem auto;
+  }
+
+  .calendar-period-controls > button,
+  .calendar-period-label {
+    min-width: 0;
+  }
+
+  .calendar-view-switcher {
+    display: flex;
+    width: 100%;
+  }
+
+  .calendar-view-switcher > button {
+    min-width: 0;
+    flex: 1 1 0;
+  }
+
+  .calendar-mine-filter {
+    width: 100%;
+  }
+}

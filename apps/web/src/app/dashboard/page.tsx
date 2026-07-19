@@ -500,21 +500,23 @@ export default function DashboardPage() {
 
       {/* 最近開啟：個人化捷徑，少翻選單 */}
       {recents.length > 0 && (
-        <div className="dashboard-recents flex items-center gap-2 overflow-x-auto pb-1 -mb-1">
-          <span className="flex items-center gap-1 text-xs flex-shrink-0" style={{ color: "var(--text-muted)" }}>
+        <section className="dashboard-recents-panel" aria-label="最近開啟">
+          <span className="dashboard-recents-label flex items-center gap-1 text-xs" style={{ color: "var(--text-muted)" }}>
             <Clock size={12} aria-hidden={true} />
             最近開啟
           </span>
-          {recents.map((item) => (
-            <Link
-              key={`${item.kind}-${item.id}`}
-              href={item.href}
-              className="dashboard-recent-chip flex-shrink-0 max-w-[180px] truncate px-3 py-1.5 rounded-full text-xs font-medium"
-              title={item.title}>
-              {item.title}
-            </Link>
-          ))}
-        </div>
+          <div className="dashboard-recents-list">
+            {recents.map((item) => (
+              <Link
+                key={`${item.kind}-${item.id}`}
+                href={item.href}
+                className="dashboard-recent-chip max-w-[180px] truncate px-3 py-1.5 text-xs font-medium"
+                title={item.title}>
+                {item.title}
+              </Link>
+            ))}
+          </div>
+        </section>
       )}
 
       <details className="rounded-lg p-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
