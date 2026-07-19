@@ -146,7 +146,7 @@ function AppShellContent({
   }, [pathname]);
 
   const toggleSidebar = () => {
-    if (window.matchMedia("(min-width: 768px)").matches) {
+    if (window.matchMedia("(min-width: 1024px)").matches) {
       setDesktopSidebarOpen((open) => !open);
       return;
     }
@@ -165,10 +165,10 @@ function AppShellContent({
         >
           跳至主要內容
         </a>
-        {/* 行動版側邊欄遮罩 */}
+        {/* 平板與行動版側邊欄遮罩 */}
         {sidebarOpen && (
           <div
-            className="fixed inset-0 z-40 md:hidden"
+            className="fixed inset-0 z-40 lg:hidden"
             style={{ background: "var(--bg-overlay)" }}
             onClick={() => setSidebarOpen(false)}
             aria-hidden="true"
@@ -179,9 +179,9 @@ function AppShellContent({
         <div
           className={`
             fixed inset-y-0 left-0 z-50 transition-transform duration-300
-            md:relative md:z-auto
+            lg:relative lg:z-auto
             ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
-            ${desktopSidebarOpen ? "md:block md:translate-x-0" : "md:hidden"}
+            ${desktopSidebarOpen ? "lg:block lg:translate-x-0" : "lg:hidden"}
           `}
           style={{ width: "var(--sidebar-w, 240px)" }}>
           <Sidebar />
@@ -192,7 +192,7 @@ function AppShellContent({
           <Topbar onMenuClick={toggleSidebar} />
           <main
             id="main-content"
-            className="app-main min-w-0 flex-1 overflow-y-auto p-5 pb-[calc(5rem+env(safe-area-inset-bottom))] md:p-6 md:pb-6"
+            className="app-main min-w-0 flex-1 overflow-y-auto p-5 pb-[calc(5rem+env(safe-area-inset-bottom))] md:p-6 lg:pb-6"
             aria-busy="false"
           >
             {moduleDown && moduleId && (!isAdmin || moduleInfo?.mode === "closed") ? (

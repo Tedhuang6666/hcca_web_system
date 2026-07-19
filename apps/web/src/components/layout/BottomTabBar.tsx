@@ -40,7 +40,7 @@ type Role = "guest" | "student" | "cadre";
 const CADRE_PREFIXES = ["document:", "regulation:", "audit:"] as const;
 
 /**
- * 手機底部 tab bar（< md 顯示）。
+ * 平板與手機底部 tab bar（< lg 顯示）。
  * 依使用者身分顯示三套不同 tab：
  *  - guest：法規/公告/特約/陳情/登入（皆公開可讀）
  *  - student：依個人導覽偏好取前四個項目
@@ -181,7 +181,7 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
   return (
     <nav
       aria-label="底部主選單"
-      className="bottom-tab-bar md:hidden fixed bottom-0 left-0 right-0 z-30 flex"
+      className="bottom-tab-bar lg:hidden fixed bottom-0 left-0 right-0 z-30 flex"
       style={{
         height: "calc(56px + env(safe-area-inset-bottom))",
         boxSizing: "border-box",
