@@ -83,7 +83,7 @@ export default function SurveysPage() {
       </div>
 
       {/* 搜尋 + 排序 + 分頁 */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-end">
+      <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-end">
         <ActivitySelect
           value={activityId}
           onChange={setActivityId}
@@ -108,14 +108,16 @@ export default function SurveysPage() {
             style={{ paddingLeft: "2.25rem" }}
             aria-label="搜尋問卷" />
         </div>
-        <select
-          value={sortKey}
-          onChange={e => setSortKey(e.target.value)}
-          className="input w-full shrink-0 md:w-36"
-          aria-label="排序方式"
-          style={{ cursor: "pointer" }}>
-          {SURVEY_SORT.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
-        </select>
+        <div className="w-full shrink-0 md:w-36">
+          <select
+            value={sortKey}
+            onChange={e => setSortKey(e.target.value)}
+            className="input w-full"
+            aria-label="排序方式"
+            style={{ cursor: "pointer" }}>
+            {SURVEY_SORT.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+          </select>
+        </div>
         <div className="flex w-full gap-1 rounded-xl p-1 md:w-auto md:shrink-0" style={{ background: "var(--bg-elevated)" }}>
           {(["open", "all"] as const).map(t => (
             <button
