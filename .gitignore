@@ -111,3 +111,4 @@ nuclei-*.txt
 scripts/deploy.local.sh
 .dev-launch.log
 backups/predeploy/
+apps/web/public/brand/hcca-emblem.pngZone.Identifier
