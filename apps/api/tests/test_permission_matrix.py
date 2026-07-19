@@ -54,6 +54,7 @@ KNOWN_PUBLIC_ROUTES: set[tuple[str, str]] = {
     ("/matters/__module_health__", "GET"),
     ("/meal/__module_health__", "GET"),
     ("/meetings/__module_health__", "GET"),
+    ("/merchandise-submissions/__module_health__", "GET"),
     ("/partner-map/__module_health__", "GET"),
     ("/petitions/__module_health__", "GET"),
     ("/regulations/__module_health__", "GET"),
