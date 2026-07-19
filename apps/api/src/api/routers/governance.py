@@ -512,7 +512,9 @@ async def spawn_artifact(
             db, matter=matter, data=WorkItemCreate(title=title), user=user
         )
         # 任務以 source_type=matter 連動，已顯示於任務面板，無需額外 EntityRelation。
-        return MatterSpawnOut(kind="task", id=item.id, title=title, href="/tasks")
+        return MatterSpawnOut(
+            kind="task", id=item.id, title=title, href=f"/governance/{matter.id}#tasks"
+        )
 
     if body.kind == "announcement":
         artifact = await announcement_svc.create(

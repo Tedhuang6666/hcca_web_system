@@ -77,6 +77,16 @@ function generateNonce(): string {
 function buildCsp(nonce: string): string {
   // 開發模式 Next.js Fast Refresh (HMR) 需要 eval；正式環境不含 'unsafe-eval'。
   const devEval = process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'";
+  const wsSources = new Set(["ws://localhost:8000", "wss://localhost:8000"]);
+  const configuredWsUrl = process.env.NEXT_PUBLIC_WS_URL;
+  if (configuredWsUrl) {
+    try {
+      const parsed = new URL(configuredWsUrl.replace(/^http/, "ws"));
+      wsSources.add(`${parsed.protocol}//${parsed.host}`);
+    } catch {
+      // 無效的公開 WebSocket URL 由前端設定檢查處理，不讓 CSP 建立失敗。
+    }
+  }
   return [
     "default-src 'self'",
     "base-uri 'self'",
@@ -87,7 +97,7 @@ function buildCsp(nonce: string): string {
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com",
     "font-src 'self' https://fonts.gstatic.com data:",
     "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://*.googleusercontent.com https://hcca.buckets.hct.works",
-    "connect-src 'self' https://accounts.google.com https://us.i.posthog.com https://us-assets.i.posthog.com https://cdn.jsdelivr.net https://fonts.googleapis.com https://static.cloudflareinsights.com",
+    `connect-src 'self' ${[...wsSources].join(" ")} https://accounts.google.com https://us.i.posthog.com https://us-assets.i.posthog.com https://cdn.jsdelivr.net https://fonts.googleapis.com https://static.cloudflareinsights.com`,
     "frame-src 'self' https://accounts.google.com",
     "worker-src 'self' blob:",
     "manifest-src 'self'",

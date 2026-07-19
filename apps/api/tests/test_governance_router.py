@@ -622,7 +622,7 @@ async def test_spawn_task_artifact_succeeds(db_session, member_user, authed_clie
     )
     assert resp.status_code == 201
     assert resp.json()["kind"] == "task"
-    assert resp.json()["href"] == "/tasks"
+    assert resp.json()["href"] == f"/governance/{matter.id}#tasks"
 
 
 async def test_spawn_announcement_artifact_creates_relation(

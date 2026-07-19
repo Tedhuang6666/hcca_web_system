@@ -69,6 +69,16 @@ def _severity_by_due(due_at: datetime | None) -> str:
     return "info"
 
 
+def _work_item_href(item: WorkItem) -> str:
+    """回到工作項目的來源頁；沒有來源時才回待辦中心。"""
+    if item.source_id is not None:
+        if item.source_type == "matter":
+            return f"/governance/{item.source_id}#tasks"
+        if item.source_type == "activity":
+            return f"/activities/{item.source_id}"
+    return "/tasks"
+
+
 # ── Builders ─────────────────────────────────────────────────────────────────
 
 
@@ -497,7 +507,7 @@ async def _work_items_assigned(db: AsyncSession, user: User) -> list[TaskItem]:
             action="complete",
             title=f"工作：{item.title}",
             subtitle=item.description[:80] if item.description else None,
-            href="/tasks",
+            href=_work_item_href(item),
             due_at=item.due_at,
             severity=_severity_by_due(item.due_at),
             created_at=item.created_at,
