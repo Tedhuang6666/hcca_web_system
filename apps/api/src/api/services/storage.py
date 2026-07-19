@@ -191,14 +191,15 @@ class LocalStorageBackend(StorageBackend):
         file: UploadFile,
         prefix: str = "",
         *,
-        max_file_size: int = MAX_FILE_SIZE,
+        max_file_size: int | None = None,
         allowed_content_types: set[str] | frozenset[str] | None = None,
     ) -> StoredFile:
         """讀取上傳內容、驗證類型與大小、存至本地目錄"""
+        effective_max_file_size = max_file_size if max_file_size is not None else MAX_FILE_SIZE
         # 讀取全部內容（限制大小）
-        content = await file.read(max_file_size + 1)
-        if len(content) > max_file_size:
-            msg = f"檔案超過最大限制 {max_file_size // 1024 // 1024} MB"
+        content = await file.read(effective_max_file_size + 1)
+        if len(content) > effective_max_file_size:
+            msg = f"檔案超過最大限制 {effective_max_file_size // 1024 // 1024} MB"
             raise ValueError(msg)
 
         # 偵測 MIME type；若兩者皆無法提供白名單內的類型，直接拒絕（不 fallback 到 octet-stream）。
@@ -290,12 +291,13 @@ class S3StorageBackend(StorageBackend):
         file: UploadFile,
         prefix: str = "",
         *,
-        max_file_size: int = MAX_FILE_SIZE,
+        max_file_size: int | None = None,
         allowed_content_types: set[str] | frozenset[str] | None = None,
     ) -> StoredFile:
-        content = await file.read(max_file_size + 1)
-        if len(content) > max_file_size:
-            msg = f"檔案超過最大限制 {max_file_size // 1024 // 1024} MB"
+        effective_max_file_size = max_file_size if max_file_size is not None else MAX_FILE_SIZE
+        content = await file.read(effective_max_file_size + 1)
+        if len(content) > effective_max_file_size:
+            msg = f"檔案超過最大限制 {effective_max_file_size // 1024 // 1024} MB"
             raise ValueError(msg)
 
         # 與 LocalStorageBackend 共用同一份判定順序：驗證 MIME 白名單 + magic bytes
