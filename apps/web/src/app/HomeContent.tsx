@@ -3,6 +3,7 @@
 import Link from "next/link";
 import {
   ArrowRight,
+  AlertTriangle,
   BellRing,
   Database,
   ExternalLink,
@@ -17,14 +18,16 @@ import MarkdownBlock from "@/components/site/MarkdownBlock";
 import { liveLeader, useLiveElection } from "@/components/site/useLiveElection";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
 import { sanitizeCustomCss } from "@/lib/sanitize";
-import type { AnnouncementListItem, PublicSiteBundleOut } from "@/lib/types";
+import type { AnnouncementListItem, AnnouncementOut, PublicSiteBundleOut } from "@/lib/types";
 
 export default function HomeContent({
   bundle,
   announcements,
+  urgentAnnouncement,
 }: {
   bundle: PublicSiteBundleOut | null;
   announcements: AnnouncementListItem[];
+  urgentAnnouncement: AnnouncementOut | null;
 }) {
   const activeElection = useLiveElection();
   useScrollReveal([activeElection]);
@@ -34,18 +37,24 @@ export default function HomeContent({
   const officers = bundle?.featured_officers ?? [];
   const liveSummary = activeElection?.summary ?? null;
   const liveLeading = liveLeader(liveSummary);
-  const latestAnnouncements = announcements.slice(0, 2);
+  const latestAnnouncements = announcements
+    .filter((item) => item.id !== urgentAnnouncement?.id)
+    .slice(0, 2);
   const recentlyUpdatedPages = [...(bundle?.nav_pages ?? [])]
     .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
     .slice(0, 2);
-  const siteTitle = settings?.site_title?.trim() ?? "";
+  const siteTitle = settings?.site_title?.trim() || "新竹高中班聯會";
   const heroTitle = settings?.hero_title?.trim() || siteTitle;
-  const heroSubtitle = settings?.hero_subtitle?.trim() ?? "";
+  const heroSubtitle = settings?.hero_subtitle?.trim()
+    || (!settings ? "公開資料暫時無法取得；您仍可瀏覽最新公告與班聯會公開服務。" : "");
   const ctaHref = settings?.cta_href?.trim() || "/links";
   const ctaLabel = settings?.cta_label?.trim() || "查看連結";
   const publicDatabaseDescription = settings?.public_database_description?.trim();
   const aboutTitle = settings?.about_title?.trim();
   const emblemAlt = settings?.site_logo_alt?.trim() || (siteTitle ? `${siteTitle}會徽` : "網站會徽");
+  const hasEditorialContent = Boolean(
+    aboutTitle || settings?.about_body_md?.trim() || officers.length > 0 || links.length > 0,
+  );
 
   return (
     <>
@@ -80,6 +89,37 @@ export default function HomeContent({
           </div>
         </div>
       </section>
+
+      {urgentAnnouncement && (
+        <section className="public-urgent-region" aria-labelledby="urgent-announcement-title">
+          <div className="public-urgent-heading">
+            <AlertTriangle size={19} aria-hidden />
+            <p>緊急公告</p>
+          </div>
+          <Link
+            href={urgentAnnouncement.link_url || `/news/${urgentAnnouncement.id}`}
+            className="public-urgent-link"
+          >
+            <span className="min-w-0">
+              <span id="urgent-announcement-title" className="block text-lg font-bold leading-snug">
+                {urgentAnnouncement.title}
+              </span>
+              <time
+                className="mt-2 block text-sm"
+                dateTime={urgentAnnouncement.published_at ?? urgentAnnouncement.created_at}
+              >
+                發布於 {new Date(
+                  urgentAnnouncement.published_at ?? urgentAnnouncement.created_at,
+                ).toLocaleDateString("zh-TW")}
+              </time>
+            </span>
+            <span className="public-urgent-action">
+              查看公告
+              <ArrowRight size={16} aria-hidden />
+            </span>
+          </Link>
+        </section>
+      )}
 
       {(activeElection || latestAnnouncements.length > 0 || recentlyUpdatedPages.length > 0) && (
         <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6" aria-labelledby="public-now-title" data-reveal>
@@ -234,12 +274,15 @@ export default function HomeContent({
         })}
       </nav>
 
-      <section className="public-editorial">
-        <div className="public-panel public-about-panel" data-reveal>
-          {aboutTitle && <h2>{aboutTitle}</h2>}
-          <MarkdownBlock markdown={settings?.about_body_md ?? ""} />
-        </div>
-        <aside className="public-side-stack">
+      {hasEditorialContent && (
+        <section className="public-editorial">
+          {(aboutTitle || settings?.about_body_md?.trim()) && (
+            <div className="public-panel public-about-panel" data-reveal>
+              {aboutTitle && <h2>{aboutTitle}</h2>}
+              <MarkdownBlock markdown={settings?.about_body_md ?? ""} />
+            </div>
+          )}
+          {(officers.length > 0 || links.length > 0) && <aside className="public-side-stack">
           {officers.length > 0 && (
             <div className="public-panel public-side-panel" data-reveal style={{ "--reveal-delay": "90ms" } as React.CSSProperties}>
               <div className="flex items-center justify-between gap-3">
@@ -279,8 +322,9 @@ export default function HomeContent({
               </div>
             </div>
           )}
-        </aside>
-      </section>
+          </aside>}
+        </section>
+      )}
     </>
   );
 }
