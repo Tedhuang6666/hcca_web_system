@@ -356,7 +356,9 @@ async def update_submission(
         if storage_key not in submitted_keys:
             await session.delete(existing)
     submission.field_values = {key: value.strip() for key, value in data.field_values.items()}
-    submission.status = MerchandiseSubmissionStatus.SUBMITTED if submit else MerchandiseSubmissionStatus.DRAFT
+    submission.status = (
+        MerchandiseSubmissionStatus.SUBMITTED if submit else MerchandiseSubmissionStatus.DRAFT
+    )
     submission.submitted_at = datetime.now(UTC) if submit else None
     for file in data.files:
         existing = existing_files.get(file.storage_key)
