@@ -58,19 +58,21 @@ export default function AnnouncementDetailPageClient({
   }
 
   return (
-    <article className="mx-auto max-w-3xl space-y-5">
-      <div className="flex items-center justify-between gap-3">
-        <Link href="/announcements" className="btn btn-ghost">返回公告檢視</Link>
-        <div className="flex flex-wrap justify-end gap-2">
-          <GovernanceLinkPanel
-            entityType="announcement"
-            entityId={item.id}
-            title={item.title}
-            href={`/announcements/${item.id}`}
-            compact
-          />
+    <article className="mx-auto min-w-0 max-w-3xl space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <Link href="/announcements" className="btn btn-ghost self-start">返回公告檢視</Link>
+        <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:items-end">
+          <div className="w-full sm:w-auto">
+            <GovernanceLinkPanel
+              entityType="announcement"
+              entityId={item.id}
+              title={item.title}
+              href={`/announcements/${item.id}`}
+              compact
+            />
+          </div>
           {canManage && (
-            <Link href={`/announcements/${item.id}/edit`} className="btn btn-secondary">
+            <Link href={`/announcements/${item.id}/edit`} className="btn btn-secondary self-end sm:self-auto">
               編輯公告
             </Link>
           )}
