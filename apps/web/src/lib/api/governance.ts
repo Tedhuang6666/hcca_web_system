@@ -1,7 +1,7 @@
 import type {
   AutomationMeta, AutomationRuleCreate, AutomationRuleOut, AutomationRuleUpdate, DecisionCreate, DecisionOut, DecisionUpdate, EntityRelationCreate, EntityRelationGraphOut, EntityRelationOut, GovernanceCaseCreate, GovernanceCaseOut, GovernanceCaseUpdate, GovernanceDashboardOut, GovernanceDiscordEventRouteIn, GovernanceDiscordEventRouteOut, GovernanceDiscordWorkspaceIn, GovernanceDiscordWorkspaceOut, GovernanceModuleCapabilityOut, GovernanceResourceSearchOut, GovernanceWorkflowTemplateCreate, GovernanceWorkflowTemplateOut, MatterCreate, MatterLinkRef, MatterListItem, MatterOut, MatterResourceCreate, MatterResourceOut, MatterResourceUpdate, MatterRoleAssignmentCreate, MatterRoleAssignmentOut, MatterRoleAssignmentUpdate, MatterSpawnKind, MatterSpawnResult, MatterUpdate, PlanningDocumentAttachmentOut, PlanningDocumentCreate, PlanningDocumentOut, PlanningDocumentRevisionCreate, PlanningDocumentRevisionOut, PlanningDocumentUpdate, ProgramCreate, ProgramOut, ProgramUpdate, TimelineEventCreate, TimelineEventOut, WorkItemCreate, WorkItemOut,
 } from "../types";
-import { BASE, get, post, patch, put, del, csrfHeaders, silentRefresh, formatErrorDetail, ApiError } from "./core";
+import { BASE, get, post, patch, put, del, pathSegment, csrfHeaders, silentRefresh, formatErrorDetail, ApiError } from "./core";
 
 export const governanceApi = {
   dashboard: () => get<GovernanceDashboardOut>("/governance/dashboard"),
@@ -23,7 +23,7 @@ export const governanceApi = {
   },
   createMatter: (body: MatterCreate) => post<MatterOut>("/governance/matters", body),
   getMatter: (id: string) => get<MatterOut>(`/governance/matters/${id}`),
-  getMatterBySlug: (slug: string) => get<MatterOut>(`/governance/matters/by-slug/${encodeURIComponent(slug)}`),
+  getMatterBySlug: (slug: string) => get<MatterOut>(`/governance/matters/by-slug/${pathSegment(slug)}`),
   discordWorkspace: (id: string) =>
     get<GovernanceDiscordWorkspaceOut | null>(
       `/governance/matters/${id}/discord-workspace`,
