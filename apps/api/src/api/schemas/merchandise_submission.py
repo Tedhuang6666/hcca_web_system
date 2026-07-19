@@ -33,6 +33,8 @@ class MerchandiseSubmissionSettingsUpdate(BaseModel):
     max_file_size_mb: int | None = Field(None, ge=1, le=250)
     require_school_email: bool | None = None
     announcement: str | None = Field(None, max_length=3000)
+    announcement_title: str | None = Field(None, max_length=200)
+    show_announcement_popup: bool | None = None
 
 
 class MerchandiseSubmissionSettingsOut(BaseModel):
@@ -45,6 +47,9 @@ class MerchandiseSubmissionSettingsOut(BaseModel):
     max_file_size_mb: int
     require_school_email: bool
     announcement: str | None
+    announcement_title: str | None
+    show_announcement_popup: bool
+    announcement_id: uuid.UUID | None
     updated_at: datetime
 
 

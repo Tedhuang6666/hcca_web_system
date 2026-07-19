@@ -94,9 +94,19 @@ async def test_merchandise_submission_rejects_non_school_email_when_required(
     student = authed_client_factory(member_user)
     settings_response = await admin.patch(
         "/merchandise-submissions/admin/settings",
-        json={"is_open": True, "require_school_email": True},
+        json={
+            "is_open": False,
+            "opens_at": "2020-01-01T00:00:00Z",
+            "closes_at": "2099-01-01T00:00:00Z",
+            "require_school_email": True,
+            "announcement_title": "校商投稿已開放",
+            "announcement": "請把握投稿時間。",
+            "show_announcement_popup": True,
+        },
     )
     assert settings_response.status_code == 200
+    assert settings_response.json()["announcement_id"]
+    assert settings_response.json()["show_announcement_popup"] is True
 
     item_response = await admin.post(
         "/merchandise-submissions/admin/items",
@@ -108,6 +118,7 @@ async def test_merchandise_submission_rejects_non_school_email_when_required(
     portal_response = await student.get("/merchandise-submissions/portal")
     assert portal_response.status_code == 200
     assert portal_response.json()["is_eligible_submitter"] is False
+    assert portal_response.json()["items"][0]["is_accepting"] is True
 
     upload_response = await student.post(
         f"/merchandise-submissions/uploads?item_id={item_id}",

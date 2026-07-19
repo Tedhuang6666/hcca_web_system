@@ -16,6 +16,7 @@ import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import { LoadingState } from "@/components/ui/LoadingState";
 import ModuleMaintenance from "@/components/ui/ModuleMaintenance";
 import UrgentAnnouncementPopup from "@/components/announcements/UrgentAnnouncementPopup";
+import MerchandiseSubmissionAnnouncementPopup from "@/components/announcements/MerchandiseSubmissionAnnouncementPopup";
 const CommandMenu = dynamic(() => import("./CommandMenu"), { ssr: false });
 import { PolicyConsentBanner } from "@/components/legal/PolicyConsentBanner";
 import { isPublicRoute, requiresAuthentication } from "@/lib/route-access";
@@ -203,6 +204,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
         </div>
         {!sidebarOpen && <BottomTabBar onMoreClick={() => setSidebarOpen((p) => !p)} />}
         <UrgentAnnouncementPopup />
+        <MerchandiseSubmissionAnnouncementPopup />
         <CommandMenu />
         <PolicyConsentBanner
           isAuthenticated={isLoggedIn && !suppressPolicyConsent && !isPublicRoute(pathname)}

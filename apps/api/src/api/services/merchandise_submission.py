@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.core.config import settings as app_settings
+from api.models.announcement import Announcement, AnnouncementAudience
 from api.models.merchandise_submission import (
     MerchandiseSubmission,
     MerchandiseSubmissionFile,
@@ -50,6 +51,10 @@ def require_eligible_submitter(settings: MerchandiseSubmissionSettings, user: Us
         raise PermissionError("本次校商投稿僅限使用校務信箱登入的帳號")
 
 
+def _as_utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
 async def update_settings(
     session: AsyncSession,
     settings: MerchandiseSubmissionSettings,
@@ -62,14 +67,67 @@ async def update_settings(
     if settings.opens_at and settings.closes_at and settings.opens_at >= settings.closes_at:
         raise ValueError("全站截止時間必須晚於開放時間")
     settings.updated_by_id = updated_by_id
+    await sync_announcement(session, settings, author_id=updated_by_id)
     await session.flush()
     return settings
+
+
+def _announcement_content(message: str) -> dict:
+    return {
+        "type": "doc",
+        "content": [
+            {
+                "type": "paragraph",
+                "content": [{"type": "text", "text": message}],
+            }
+        ],
+    }
+
+
+async def sync_announcement(
+    session: AsyncSession,
+    settings: MerchandiseSubmissionSettings,
+    *,
+    author_id: uuid.UUID,
+) -> None:
+    message = (settings.announcement or "").strip()
+    announcement = (
+        await session.get(Announcement, settings.announcement_id)
+        if settings.announcement_id
+        else None
+    )
+    if not message:
+        if announcement:
+            announcement.is_published = False
+            announcement.is_urgent = False
+        return
+    if announcement is None:
+        announcement = Announcement(id=uuid.uuid4(), author_id=author_id)
+        session.add(announcement)
+        settings.announcement_id = announcement.id
+    announcement.title = (settings.announcement_title or "校商投稿公告").strip()
+    announcement.content = _announcement_content(message)
+    announcement.is_published = True
+    announcement.is_urgent = False
+    announcement.urgent_until = None
+    announcement.org_id = None
+    announcement.audience_type = (
+        AnnouncementAudience.SCHOOL.value
+        if settings.require_school_email
+        else AnnouncementAudience.ALL.value
+    )
+    if announcement.published_at is None:
+        announcement.published_at = datetime.now(UTC)
 
 
 def effective_config(
     settings: MerchandiseSubmissionSettings, item: MerchandiseSubmissionItem
 ) -> tuple[bool, datetime | None, datetime | None, int]:
-    is_open = item.is_open_override if item.is_open_override is not None else settings.is_open
+    is_open = (
+        item.is_open_override
+        if item.is_open_override is not None
+        else settings.is_open or settings.opens_at is not None or settings.closes_at is not None
+    )
     opens_at = item.opens_at_override if item.opens_at_override is not None else settings.opens_at
     closes_at = (
         item.closes_at_override if item.closes_at_override is not None else settings.closes_at
@@ -79,8 +137,8 @@ def effective_config(
     accepting = (
         item.is_active
         and is_open
-        and (opens_at is None or now >= opens_at)
-        and (closes_at is None or now <= closes_at)
+        and (opens_at is None or now >= _as_utc(opens_at))
+        and (closes_at is None or now <= _as_utc(closes_at))
     )
     return accepting, opens_at, closes_at, max_mb
 

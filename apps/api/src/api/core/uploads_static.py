@@ -31,6 +31,7 @@ from starlette.types import Scope
 # 唯一允許未認證靜態存取的前綴（對應公開媒體上傳路徑）。
 PUBLIC_UPLOAD_PREFIXES: tuple[str, ...] = (
     "announcements/",
+    "merchandise-submissions/templates/",
     "surveys/",
     "public-site/",
 )

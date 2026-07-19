@@ -729,6 +729,9 @@ export interface MerchandiseSubmissionSettingsOut {
   max_file_size_mb: number;
   require_school_email: boolean;
   announcement: string | null;
+  announcement_title: string | null;
+  show_announcement_popup: boolean;
+  announcement_id: string | null;
   updated_at: string;
 }
 
@@ -739,6 +742,8 @@ export interface MerchandiseSubmissionSettingsUpdate {
   max_file_size_mb?: number;
   require_school_email?: boolean;
   announcement?: string | null;
+  announcement_title?: string | null;
+  show_announcement_popup?: boolean;
 }
 
 export interface MerchandiseSubmissionItemCreate {
