@@ -185,9 +185,7 @@ async def upload_submission_file(
 
 
 @router.get("/uploads/{storage_key:path}", summary="預覽投稿圖稿")
-async def preview_submission_file(
-    storage_key: str, session: DbDep, current_user: CurrentUser
-):
+async def preview_submission_file(storage_key: str, session: DbDep, current_user: CurrentUser):
     own_prefix = f"merchandise-submissions/{current_user.id}/"
     stored_file = await submission_svc.get_submission_file(session, storage_key)
     if stored_file is None:
@@ -200,7 +198,9 @@ async def preview_submission_file(
         if not is_owner and not current_user.is_superuser:
             codes = await get_user_permission_codes(session, current_user.id)
             if str(PermissionCode.SHOP_MANAGE) not in codes:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權檢視此投稿圖稿")
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN, detail="無權檢視此投稿圖稿"
+                )
         filename = stored_file.filename
         content_type = stored_file.content_type
 
@@ -215,7 +215,9 @@ async def preview_submission_file(
             filename=filename,
             content_disposition_type="inline",
         )
-    return RedirectResponse(await storage.get_url(storage_key, disposition="inline", download_name=filename))
+    return RedirectResponse(
+        await storage.get_url(storage_key, disposition="inline", download_name=filename)
+    )
 
 
 @router.post(
