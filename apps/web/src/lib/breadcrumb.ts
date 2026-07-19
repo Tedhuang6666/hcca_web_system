@@ -33,6 +33,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   email: "電子郵件",
   settings: "設定",
   about: "關於本系統",
+  governance: "工作中心",
 };
 
 const PATH_OVERRIDES: Record<string, string> = {
@@ -105,18 +106,28 @@ function looksLikeId(segment: string): boolean {
   return false;
 }
 
+function decodeSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
 function labelFor(pathname: string, segment: string, parentSegment?: string): string {
+  const decodedSegment = decodeSegment(segment);
+  const decodedParentSegment = parentSegment ? decodeSegment(parentSegment) : undefined;
   if (PATH_OVERRIDES[pathname]) return PATH_OVERRIDES[pathname];
   for (const { re, label } of DYNAMIC_PATTERNS) {
     if (re.test(pathname)) return label;
   }
-  if (SEGMENT_LABELS[segment]) return SEGMENT_LABELS[segment];
-  if (looksLikeId(segment)) {
-    const parentLabel = parentSegment ? SEGMENT_LABELS[parentSegment] : undefined;
+  if (SEGMENT_LABELS[decodedSegment]) return SEGMENT_LABELS[decodedSegment];
+  if (looksLikeId(decodedSegment)) {
+    const parentLabel = decodedParentSegment ? SEGMENT_LABELS[decodedParentSegment] : undefined;
     return parentLabel ? `${parentLabel}詳情` : "詳情";
   }
   // 未知 segment：原樣顯示（首字大寫）
-  return segment.charAt(0).toUpperCase() + segment.slice(1);
+  return decodedSegment.charAt(0).toUpperCase() + decodedSegment.slice(1);
 }
 
 /**
