@@ -370,14 +370,14 @@ export default function DocumentDetailPage() {
 
   return (
     <>
-    <div className="max-w-5xl mx-auto space-y-5">
+    <div className="document-detail-page max-w-5xl mx-auto space-y-5">
       {/* 麵包屑 */}
       <Breadcrumb items={[
         { label: "公文系統", href: "/documents" },
         { label: doc.serial_number ?? doc.title },
       ]} />
       {/* 頂部 */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="document-detail-heading flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 flex-1 items-start gap-3">
           <Link href="/documents"
             className="w-8 h-8 rounded-lg flex flex-shrink-0 items-center justify-center  hover:"
@@ -392,11 +392,11 @@ export default function DocumentDetailPage() {
                 <UrgencyBadge urgency={doc.urgency} />
               </div>
             </div>
-            <h1 className="text-lg font-semibold leading-snug break-words sm:text-xl">{doc.title}</h1>
+            <h1 className="document-detail-title text-lg font-semibold leading-snug break-words sm:text-xl">{doc.title}</h1>
           </div>
         </div>
 
-        <div className="flex w-full flex-wrap justify-start gap-2 sm:w-auto sm:flex-shrink-0 sm:justify-end">
+        <div className="document-detail-actions flex w-full flex-wrap justify-start gap-2 sm:w-auto sm:flex-shrink-0 sm:justify-end">
           <GovernanceLinkPanel
             entityType="document"
             entityId={doc.id}

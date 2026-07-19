@@ -1435,3 +1435,166 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
     scroll-behavior: auto;
   }
 }
+
+/* ── Mobile workspace guardrails ──────────────────────────────────────── */
+.topbar-leading,
+.topbar-mobile-title,
+.topbar-actions,
+.dashboard-page,
+.governance-page,
+.governance-matter-page,
+.matters-page,
+.matter-detail-page,
+.documents-page,
+.document-detail-page,
+.regulations-page,
+.regulation-detail-page,
+.settings-page {
+  min-width: 0;
+}
+
+.public-site,
+.public-hero-inner,
+.public-quick-grid,
+.public-editorial {
+  min-width: 0;
+}
+
+.public-hero-inner > *,
+.public-feature-card > * {
+  min-width: 0;
+}
+
+.public-feature-card {
+  box-sizing: border-box;
+}
+
+.topbar-leading {
+  flex: 1 1 auto;
+}
+
+.topbar-actions {
+  flex: 0 0 auto;
+}
+
+.topbar-mobile-title h1 {
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-page {
+  width: 100%;
+}
+
+.governance-page,
+.governance-matter-page,
+.matters-page,
+.matter-detail-page {
+  width: 100%;
+}
+
+.dashboard-focus-grid,
+.dashboard-task-row,
+.dashboard-action-card {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.dashboard-hero-content > *,
+.dashboard-focus-grid > *,
+.dashboard-task-row > *,
+.dashboard-action-card > * {
+  min-width: 0;
+}
+
+.module-tabs-scroll {
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.document-detail-title,
+.regulation-detail-page h1 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 767px) {
+  .topbar-header {
+    gap: 0.25rem;
+    padding-inline: 0.5rem !important;
+  }
+
+  .topbar-leading,
+  .topbar-actions {
+    gap: 0.125rem;
+  }
+
+  .topbar-mobile-title {
+    min-width: 5.5rem;
+  }
+
+  .topbar-actions .topbar-icon-btn,
+  .topbar-user-menu > button {
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+
+  .topbar-user-menu > button {
+    justify-content: center;
+    padding-inline: 0.25rem;
+  }
+
+  .topbar-divider {
+    margin-inline: 0.125rem;
+  }
+
+  .module-tabs-scroll {
+    padding-inline: 0 !important;
+  }
+
+  .documents-page,
+  .regulations-page,
+  .governance-page,
+  .governance-matter-page,
+  .matters-page,
+  .matter-detail-page,
+  .document-detail-page,
+  .regulation-detail-page,
+  .settings-page {
+    width: 100%;
+  }
+
+  .documents-page .document-tabs {
+    max-width: 100%;
+  }
+
+  .document-detail-heading,
+  .regulation-detail-heading {
+    min-width: 0;
+  }
+
+  .document-detail-actions,
+  .regulation-detail-toolbar {
+    width: 100%;
+    min-width: 0;
+    justify-content: flex-start;
+  }
+
+  .document-detail-actions > *,
+  .regulation-detail-toolbar > * {
+    min-height: 2.75rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .topbar-search-action,
+  .topbar-divider {
+    display: none;
+  }
+
+  .topbar-mobile-title {
+    min-width: 6rem;
+  }
+}

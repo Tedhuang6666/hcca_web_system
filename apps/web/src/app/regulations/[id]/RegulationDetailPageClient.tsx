@@ -546,14 +546,14 @@ export default function RegulationDetailPageClient() {
         }
       `}</style>
 
-      <div className="max-w-5xl mx-auto space-y-5">
+      <div className="regulation-detail-page max-w-5xl mx-auto space-y-5">
         {/* 麵包屑 */}
         <Breadcrumb items={[
           { label: "法規查詢", href: "/regulations" },
           { label: reg.title },
         ]} />
         {/* ── 頂部標題列 ───────────────────────────────────────────────────── */}
-        <div className="flex items-start gap-3">
+        <div className="regulation-detail-heading flex items-start gap-3">
           <Link href="/regulations"
             className="no-print mt-1 w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center hover:opacity-80"
             style={{ border: "1px solid var(--border)" }}>←</Link>
@@ -581,7 +581,7 @@ export default function RegulationDetailPageClient() {
               </h1>
 
               {/* 工具列 */}
-              <div className="no-print flex w-full flex-wrap items-center justify-start gap-2 2xl:w-auto 2xl:flex-shrink-0 2xl:justify-end">
+              <div className="regulation-detail-toolbar no-print flex w-full flex-wrap items-center justify-start gap-2 2xl:w-auto 2xl:flex-shrink-0 2xl:justify-end">
                 <GovernanceLinkPanel
                   entityType="regulation"
                   entityId={reg.id}
