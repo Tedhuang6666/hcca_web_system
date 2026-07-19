@@ -27,6 +27,13 @@ router = APIRouter(prefix="/analytics", tags=["數據分析"])
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 
 
+def _epoch_seconds(db: AsyncSession, later: object, earlier: object):
+    """Return a portable SQL expression for the duration between two timestamps."""
+    if db.get_bind().dialect.name == "sqlite":
+        return (func.julianday(later) - func.julianday(earlier)) * 86400
+    return func.extract("epoch", later - earlier)
+
+
 class DocumentEfficiencyOut(BaseModel):
     avg_processing_hours: float | None
     total_documents: int
@@ -117,17 +124,11 @@ async def document_efficiency(
     completed = await db.scalar(select(func.count()).select_from(completed_q.subquery()))
 
     completed_subquery = completed_q.subquery()
-    avg_seconds = await db.scalar(
-        select(
-            func.avg(
-                func.extract(
-                    "epoch",
-                    completed_subquery.c.completed_at - completed_subquery.c.submitted_at,
-                )
-            )
-        )
+    duration_expr = _epoch_seconds(
+        db, completed_subquery.c.completed_at, completed_subquery.c.submitted_at
     )
-    avg_hours = float(avg_seconds) / 3600 if avg_seconds else None
+    avg_seconds = await db.scalar(select(func.avg(duration_expr)))
+    avg_hours = round(float(avg_seconds) / 3600, 6) if avg_seconds else None
 
     overdue = await db.scalar(
         select(func.count()).select_from(
@@ -162,19 +163,18 @@ async def dept_ranking(
     date_from: datetime | None = Query(None),
     date_to: datetime | None = Query(None),
 ) -> list[DeptRankingItem]:
+    duration_expr = _epoch_seconds(db, Document.completed_at, Document.submitted_at)
     q = (
         select(
             Document.org_id,
             Org.name.label("org_name"),
             func.count(Document.id).label("total_docs"),
-            func.avg(func.extract("epoch", Document.completed_at - Document.submitted_at)).label(
-                "avg_seconds"
-            ),
+            func.avg(duration_expr).label("avg_seconds"),
         )
         .join(Org, Org.id == Document.org_id)
         .where(Document.submitted_at.isnot(None))
         .group_by(Document.org_id, Org.name)
-        .order_by(func.avg(func.extract("epoch", Document.completed_at - Document.submitted_at)))
+        .order_by(func.avg(duration_expr))
     )
     if date_from:
         q = q.where(Document.submitted_at >= date_from)
@@ -206,20 +206,19 @@ async def pending_alerts(
     from api.models.document import ApprovalStepStatus
 
     threshold_seconds = threshold_hours * 3600
+    waiting_expr = _epoch_seconds(db, func.now(), DocumentApproval.created_at)
     q = (
         select(
             DocumentApproval.id,
             DocumentApproval.document_id,
             Document.title.label("document_title"),
             DocumentApproval.step_order,
-            func.extract("epoch", func.now() - DocumentApproval.created_at).label(
-                "waiting_seconds"
-            ),
+            waiting_expr.label("waiting_seconds"),
         )
         .join(Document, Document.id == DocumentApproval.document_id)
         .where(DocumentApproval.status == ApprovalStepStatus.PENDING)
-        .where(func.extract("epoch", func.now() - DocumentApproval.created_at) > threshold_seconds)
-        .order_by(func.extract("epoch", func.now() - DocumentApproval.created_at).desc())
+        .where(waiting_expr > threshold_seconds)
+        .order_by(waiting_expr.desc())
     )
     rows = (await db.execute(q)).all()
     return [
@@ -249,7 +248,7 @@ async def governance_insights(
     now = datetime.now(UTC)
     items: list[InsightItem] = []
 
-    pending_wait_expr = func.extract("epoch", func.now() - DocumentApproval.created_at)
+    pending_wait_expr = _epoch_seconds(db, func.now(), DocumentApproval.created_at)
     pending_rows = (
         await db.execute(
             select(

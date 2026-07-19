@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from api.core.clock import now_local
 from api.models.shop import (
+    Order,
     Product,
     ProductCategory,
     ProductSeries,
@@ -40,8 +41,17 @@ logger = logging.getLogger(__name__)
 
 async def generate_order_serial(session: AsyncSession) -> str:
     """使用 PostgreSQL Sequence 原子性生成訂單字號：ORD-YYYY-NNNNNN。"""
-    result = await session.execute(text("SELECT nextval('order_serial_seq')"))
-    seq_val: int = result.scalar_one()
+    if session.get_bind().dialect.name == "sqlite":
+        last_serial = await session.scalar(
+            select(Order.serial_number).order_by(Order.serial_number.desc()).limit(1)
+        )
+        try:
+            seq_val = int(last_serial.rsplit("-", maxsplit=1)[-1]) + 1 if last_serial else 1
+        except ValueError:
+            seq_val = 1
+    else:
+        result = await session.execute(text("SELECT nextval('order_serial_seq')"))
+        seq_val = result.scalar_one()
     year = now_local().year
     return f"ORD-{year}-{seq_val:06d}"
 

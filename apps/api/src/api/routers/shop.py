@@ -654,7 +654,7 @@ async def list_orders(
 ) -> list[OrderListItem]:
     is_admin = current_user.is_superuser
     if not is_admin:
-        codes = await get_user_permission_codes(session, str(current_user.id))
+        codes = await get_user_permission_codes(session, current_user.id)
         is_admin = bool(_ADMIN_VIEW_CODES & set(codes))
     if is_admin or (
         activity_id
@@ -858,7 +858,7 @@ async def order_quantities(
 async def get_order(order_id: uuid.UUID, session: DbDep, current_user: CurrentUser) -> OrderOut:
     order = await _get_order_or_404(order_id, session)
     if order.user_id != current_user.id and not current_user.is_superuser:
-        codes = await get_user_permission_codes(session, str(current_user.id))
+        codes = await get_user_permission_codes(session, current_user.id)
         cadre_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
         is_cadre = order.class_id is not None and order.class_id in cadre_ids
         is_activity_manager = await activity_svc.can_manage_activity_resource(
@@ -882,7 +882,7 @@ async def cancel_order(
         cadre_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
         bypass = order.class_id is not None and order.class_id in cadre_ids
         if not bypass:
-            codes = await get_user_permission_codes(session, str(current_user.id))
+            codes = await get_user_permission_codes(session, current_user.id)
             bypass = bool(_ADMIN_VIEW_CODES & set(codes))
         if not bypass:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權取消此訂單")
@@ -944,7 +944,7 @@ async def update_order_payment(
 ) -> OrderOut:
     order = await _get_order_or_404(order_id, session)
     if not current_user.is_superuser:
-        codes = await get_user_permission_codes(session, str(current_user.id))
+        codes = await get_user_permission_codes(session, current_user.id)
         cadre_ids = await class_svc.get_cadre_class_ids(session, current_user.id)
         is_cadre = order.class_id is not None and order.class_id in cadre_ids
         is_activity_manager = await activity_svc.can_manage_activity_resource(
@@ -1050,7 +1050,7 @@ async def _assert_close_permission(
     """
     if current_user.is_superuser:
         return
-    codes = await get_user_permission_codes(session, str(current_user.id))
+    codes = await get_user_permission_codes(session, current_user.id)
     if _COUNCIL_CODES & set(codes):
         return
     cadre_ids = await class_svc.get_cadre_class_ids(session, current_user.id)

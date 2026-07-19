@@ -47,8 +47,17 @@ async def generate_meal_serial(session: AsyncSession) -> str:
     使用 PostgreSQL Sequence 原子性生成學餐訂單字號：MEAL-YYYY-NNNNNN。
     Sequence `meal_serial_seq` 在 Alembic migration 中建立。
     """
-    result = await session.execute(text("SELECT nextval('meal_serial_seq')"))
-    seq_val: int = result.scalar_one()
+    if session.get_bind().dialect.name == "sqlite":
+        last_serial = await session.scalar(
+            select(MealOrder.serial_number).order_by(MealOrder.serial_number.desc()).limit(1)
+        )
+        try:
+            seq_val = int(last_serial.rsplit("-", maxsplit=1)[-1]) + 1 if last_serial else 1
+        except ValueError:
+            seq_val = 1
+    else:
+        result = await session.execute(text("SELECT nextval('meal_serial_seq')"))
+        seq_val = result.scalar_one()
     year = now_local().year
     return f"MEAL-{year}-{seq_val:06d}"
 

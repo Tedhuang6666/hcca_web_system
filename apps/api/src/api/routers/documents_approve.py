@@ -513,7 +513,7 @@ async def set_step_delegate(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
-    return await doc_svc.get_document(session, doc_id)  # type: ignore[return-value]
+    return await doc_svc.get_document(session, doc.id)  # type: ignore[return-value]
 
 
 # ── 簽核代理授權 (management/delegations) ─────────────────────────────────────
