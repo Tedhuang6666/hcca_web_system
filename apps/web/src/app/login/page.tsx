@@ -136,6 +136,7 @@ export default function LoginPage() {
 
             <a
               href={googleLoginHref}
+              data-no-prefetch="true"
               className="login-oauth group flex h-13 w-full cursor-pointer items-center justify-between rounded-xl px-4 text-sm font-semibold transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2"
               style={{
                 background: "#ffffff",
@@ -173,6 +174,7 @@ export default function LoginPage() {
 
                 <a
                   href={discordLoginHref}
+                  data-no-prefetch="true"
                   className="login-oauth group flex h-13 w-full cursor-pointer items-center justify-between rounded-xl px-4 text-sm font-semibold text-white transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2"
                   style={{
                     background: "#5865f2",

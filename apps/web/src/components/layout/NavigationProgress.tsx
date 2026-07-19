@@ -105,6 +105,9 @@ export default function NavigationProgress() {
       if (!prefetchOnIntent) return;
       const anchor = (target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
       if (!anchor) return;
+      // OAuth login endpoints create a server-side state/session and redirect
+      // to the provider; prefetching them starts an unintended login flow.
+      if (anchor.dataset.noPrefetch === "true") return;
       const href = internalPathFromAnchor(anchor);
       if (!href || prefetched.current.has(href)) return;
       prefetched.current.add(href);
