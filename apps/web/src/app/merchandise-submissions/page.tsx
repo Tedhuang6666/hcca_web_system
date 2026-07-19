@@ -31,10 +31,12 @@ function UploadBox({
   item,
   files,
   onChange,
+  disabled,
 }: {
   item: MerchandiseSubmissionItemPortalOut;
   files: MerchandiseSubmissionUploadOut[];
   onChange: (files: MerchandiseSubmissionUploadOut[]) => void;
+  disabled: boolean;
 }) {
   const [uploading, setUploading] = useState(false);
 
@@ -72,7 +74,7 @@ function UploadBox({
           accept="image/jpeg,image/png,image/webp,application/pdf"
           multiple
           className="sr-only"
-          disabled={uploading}
+          disabled={uploading || disabled}
           onChange={(event) => uploadFiles(event.target.files)}
         />
       </label>
@@ -190,6 +192,11 @@ export default function MerchandiseSubmissionsPage() {
           {portal.settings.announcement}
         </p>
       )}
+      {portal?.settings.require_school_email && !portal.is_eligible_submitter && (
+        <p className="rounded-lg border px-4 py-3 text-sm" style={{ background: "var(--danger-dim)", borderColor: "var(--danger-border)", color: "var(--danger)" }}>
+          本次校商投稿僅限使用校務信箱登入的帳號。請改用校務帳戶登入後再送出。
+        </p>
+      )}
 
       {!portal?.items.length ? (
         <section className="py-16 text-center"><h2 className="font-semibold" style={{ color: "var(--text-primary)" }}>目前尚未建立投稿品項</h2><p className="mt-2 text-sm" style={{ color: "var(--text-muted)" }}>請等待管理員建立品項後再回來投稿。</p></section>
@@ -212,7 +219,7 @@ export default function MerchandiseSubmissionsPage() {
                 </span>
               </div>
               {!selected.is_accepting && <p className="mt-3 text-sm" style={{ color: "var(--danger)" }}>此品項目前未開放。開放時間：{formatDate(selected.effective_opens_at)}；截止時間：{formatDate(selected.effective_closes_at)}。</p>}
-              <div className="mt-4"><UploadBox item={selected} files={files} onChange={setFiles} /></div>
+              <div className="mt-4"><UploadBox item={selected} files={files} onChange={setFiles} disabled={!selected.is_accepting || !portal?.is_eligible_submitter} /></div>
             </div>}
 
             {selected && <div className="rounded-xl border p-5 sm:p-6" style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}>
@@ -232,8 +239,8 @@ export default function MerchandiseSubmissionsPage() {
                 ))}
               </div>
               <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-                <button type="button" disabled={saving} onClick={() => void save(false)} className="btn btn-ghost min-h-11">儲存草稿</button>
-                <button type="button" disabled={saving || !selected.is_accepting} onClick={() => void save(true)} className="btn min-h-11" style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
+                <button type="button" disabled={saving || !portal?.is_eligible_submitter} onClick={() => void save(false)} className="btn btn-ghost min-h-11">儲存草稿</button>
+                <button type="button" disabled={saving || !selected.is_accepting || !portal?.is_eligible_submitter} onClick={() => void save(true)} className="btn min-h-11" style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
                   {saving ? <LoaderCircle className="animate-spin" size={16} aria-hidden="true" /> : <Send size={16} aria-hidden="true" />}
                   確認送出投稿
                 </button>

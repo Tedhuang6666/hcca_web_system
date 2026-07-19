@@ -31,6 +31,7 @@ class MerchandiseSubmissionSettingsUpdate(BaseModel):
     opens_at: datetime | None = None
     closes_at: datetime | None = None
     max_file_size_mb: int | None = Field(None, ge=1, le=250)
+    require_school_email: bool | None = None
     announcement: str | None = Field(None, max_length=3000)
 
 
@@ -42,6 +43,7 @@ class MerchandiseSubmissionSettingsOut(BaseModel):
     opens_at: datetime | None
     closes_at: datetime | None
     max_file_size_mb: int
+    require_school_email: bool
     announcement: str | None
     updated_at: datetime
 
@@ -146,6 +148,7 @@ class MerchandiseSubmissionOut(BaseModel):
 class MerchandiseSubmissionPortalOut(BaseModel):
     settings: MerchandiseSubmissionSettingsOut
     items: list[MerchandiseSubmissionItemPortalOut]
+    is_eligible_submitter: bool
 
 
 class MerchandiseSubmissionAdminListItem(MerchandiseSubmissionOut):

@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.core.config import settings as app_settings
 from api.models.merchandise_submission import (
     MerchandiseSubmission,
     MerchandiseSubmissionFile,
@@ -33,6 +34,20 @@ async def get_settings(session: AsyncSession) -> MerchandiseSubmissionSettings:
         session.add(settings)
         await session.flush()
     return settings
+
+
+def is_school_email(user: User) -> bool:
+    domain = user.email.rsplit("@", 1)[-1].lower() if "@" in user.email else ""
+    return domain in {item.lower().lstrip("@") for item in app_settings.LOGIN_ALLOWED_EMAIL_DOMAINS}
+
+
+def can_submit(settings: MerchandiseSubmissionSettings, user: User) -> bool:
+    return not settings.require_school_email or is_school_email(user)
+
+
+def require_eligible_submitter(settings: MerchandiseSubmissionSettings, user: User) -> None:
+    if not can_submit(settings, user):
+        raise PermissionError("本次校商投稿僅限使用校務信箱登入的帳號")
 
 
 async def update_settings(
@@ -195,6 +210,7 @@ async def save_submission(
     if item is None:
         raise LookupError("找不到投稿品項")
     settings = await get_settings(session)
+    require_eligible_submitter(settings, user)
     accepting, _, _, _ = effective_config(settings, item)
     if submit and not accepting:
         raise ValueError("此品項目前未開放投稿")

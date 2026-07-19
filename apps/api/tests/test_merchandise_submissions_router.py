@@ -23,7 +23,7 @@ async def test_merchandise_submission_flow_uses_school_account_and_notifies_subm
     student = authed_client_factory(member_user)
     settings_response = await admin.patch(
         "/merchandise-submissions/admin/settings",
-        json={"is_open": True, "max_file_size_mb": 100},
+        json={"is_open": True, "max_file_size_mb": 100, "require_school_email": False},
     )
     assert settings_response.status_code == 200
 
@@ -83,3 +83,40 @@ async def test_merchandise_submission_flow_uses_school_account_and_notifies_subm
     mine_response = await student.get("/merchandise-submissions/submissions/me")
     assert mine_response.status_code == 200
     assert mine_response.json()[0]["review_note"] == "請補上背面圖稿"
+
+
+async def test_merchandise_submission_rejects_non_school_email_when_required(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+    member_user: User,
+) -> None:
+    admin = authed_client_factory(admin_user)
+    student = authed_client_factory(member_user)
+    settings_response = await admin.patch(
+        "/merchandise-submissions/admin/settings",
+        json={"is_open": True, "require_school_email": True},
+    )
+    assert settings_response.status_code == 200
+
+    item_response = await admin.post(
+        "/merchandise-submissions/admin/items",
+        json={"name": "校務信箱限定品項"},
+    )
+    assert item_response.status_code == 201
+    item_id = item_response.json()["id"]
+
+    portal_response = await student.get("/merchandise-submissions/portal")
+    assert portal_response.status_code == 200
+    assert portal_response.json()["is_eligible_submitter"] is False
+
+    upload_response = await student.post(
+        f"/merchandise-submissions/uploads?item_id={item_id}",
+        files={"file": ("design.png", b"\x89PNG\r\n\x1a\nminimal", "image/png")},
+    )
+    assert upload_response.status_code == 403
+
+    submit_response = await student.post(
+        "/merchandise-submissions/submissions",
+        json={"item_id": item_id, "field_values": {}, "files": []},
+    )
+    assert submit_response.status_code == 403

@@ -76,7 +76,7 @@ def _serialize_submission(submission, *, include_submitter: bool):
 
 
 @router.get("/portal", response_model=MerchandiseSubmissionPortalOut, summary="取得投稿入口資料")
-async def portal(session: DbDep, _: CurrentUser) -> dict:
+async def portal(session: DbDep, current_user: CurrentUser) -> dict:
     settings = await submission_svc.get_settings(session)
     items = await submission_svc.list_items(session, include_inactive=False)
     result = []
@@ -91,7 +91,11 @@ async def portal(session: DbDep, _: CurrentUser) -> dict:
                 "effective_max_file_size_mb": max_mb,
             }
         )
-    return {"settings": settings, "items": result}
+    return {
+        "settings": settings,
+        "items": result,
+        "is_eligible_submitter": submission_svc.can_submit(settings, current_user),
+    }
 
 
 @router.get("/submissions/me", response_model=list[MerchandiseSubmissionOut], summary="我的投稿")
@@ -111,6 +115,10 @@ async def upload_submission_file(
 ) -> MerchandiseSubmissionUploadOut:
     item = or_404(await submission_svc.get_item(session, item_id), "找不到投稿品項")
     settings = await submission_svc.get_settings(session)
+    try:
+        submission_svc.require_eligible_submitter(settings, current_user)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     accepting, _, _, max_mb = submission_svc.effective_config(settings, item)
     if not accepting:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="此品項目前未開放投稿")
@@ -127,6 +135,8 @@ async def upload_submission_file(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
         ) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     return MerchandiseSubmissionUploadOut(
         storage_key=stored.storage_key,
         filename=stored.filename,
@@ -151,6 +161,8 @@ async def create_submission(
         )
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
