@@ -55,6 +55,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "regulations", href: "/regulations", iconKey: "regulations", label: "法規查詢" },
   { id: "meal", href: "/meal", iconKey: "meal", label: "學餐訂購" },
   { id: "shop", href: "/shop", iconKey: "shop", label: "商品訂購" },
+  { id: "merchandiseSubmissions", href: "/merchandise-submissions", iconKey: "shop", label: "校商投稿" },
   {
     id: "inventoryAdmin",
     href: "/admin/inventory",
@@ -199,6 +200,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "email", href: "/email", iconKey: "email", label: "電子郵件", perm: "email:*" },
   { id: "examPaperAdmin", href: "/exam-papers/admin", iconKey: "examPaperAdmin", label: "題庫管理", perm: "exam:manage" },
   { id: "shopAdmin", href: "/shop/admin", iconKey: "shopAdmin", label: "商品後台", perm: "shop:manage" },
+  { id: "merchandiseSubmissionsAdmin", href: "/merchandise-submissions/admin", iconKey: "shopAdmin", label: "校商投稿管理", perm: "shop:manage" },
   { id: "mealVendor", href: "/meal/vendor", iconKey: "mealVendor", label: "餐商管理", perm: "meal:manage" },
   {
     id: "partnerMapAdmin",
@@ -279,7 +281,7 @@ export const NAV_DEF: NavEntry[] = [
   {
     id: "services",
     heading: "校園服務",
-    items: byIds(["shop", "meal", "surveys", "partnerMap", "examPapers"]),
+    items: byIds(["shop", "merchandiseSubmissions", "meal", "surveys", "partnerMap", "examPapers"]),
   },
   {
     id: "operations",
@@ -330,7 +332,7 @@ export const NAV_DEF_TEACHER: NavEntry[] = [
   {
     id: "teacher-services",
     heading: "常用模組",
-    items: byIds(["surveys", "examPapers", "shop", "meal", "settings"]),
+    items: byIds(["surveys", "examPapers", "shop", "merchandiseSubmissions", "meal", "settings"]),
   },
 ];
 
@@ -343,7 +345,7 @@ export const NAV_DEF_STUDENT: NavEntry[] = [
   {
     id: "student-services",
     heading: "常用入口",
-    items: byIds(["meal", "shop", "partnerMap", "examPapers", "settings"]),
+    items: byIds(["meal", "shop", "merchandiseSubmissions", "partnerMap", "examPapers", "settings"]),
   },
 ];
 
@@ -389,6 +391,7 @@ export const DEFAULT_MOBILE_ORDER = [
   "meetings",
   "receivables",
   "shop",
+  "merchandiseSubmissions",
   "meal",
   "surveys",
   "petitions",
@@ -420,7 +423,7 @@ export const NAVIGATION_PROFILES: Record<NavigationProfile, NavigationProfileCon
     description: "把一般學生常用的公告、問卷、陳情、學餐、商品與特約地圖集中成服務入口。",
     audience: "一般學生、未持有行政或商家權限的登入使用者",
     desktopSections: NAV_DEF_STUDENT,
-    mobileOrder: ["dashboard", "announcements", "surveys", "meal", "shop", "petitions", "partnerMap", "settings"],
+    mobileOrder: ["dashboard", "announcements", "surveys", "meal", "shop", "merchandiseSubmissions", "petitions", "partnerMap", "settings"],
   },
   teacher: {
     id: "teacher",
@@ -430,7 +433,7 @@ export const NAVIGATION_PROFILES: Record<NavigationProfile, NavigationProfileCon
     matchAnyPrefixes: ["class:", "exam:"],
     matchAnyPermissions: ["survey:review", "survey:manage"],
     desktopSections: NAV_DEF_TEACHER,
-    mobileOrder: ["dashboard", "tasks", "surveys", "examPapers", "shop", "meal", "settings"],
+    mobileOrder: ["dashboard", "tasks", "surveys", "examPapers", "shop", "merchandiseSubmissions", "meal", "settings"],
   },
   vendor: {
     id: "vendor",

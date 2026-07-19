@@ -83,6 +83,7 @@ from api.routers import (
     matters,
     meal,
     meetings,
+    merchandise_submissions,
     metrics_endpoint,
     mfa,
     navigation_profiles,
@@ -348,6 +349,7 @@ def create_app() -> FastAPI:
     attach_module_health(judicial_petitions.router, module_id="judicialPetitions")
     attach_module_health(announcements.router, module_id="announcements")
     attach_module_health(shop.router, module_id="shop")
+    attach_module_health(merchandise_submissions.router, module_id="shop")
     attach_module_health(meal.router, module_id="meal")
     attach_module_health(survey.router, module_id="surveys")
     attach_module_health(petitions.router, module_id="petitions")
@@ -428,6 +430,7 @@ def create_app() -> FastAPI:
     app.include_router(search.router)
     app.include_router(site.router)
     app.include_router(shop.router)
+    app.include_router(merchandise_submissions.router)
     app.include_router(seating.router)
     app.include_router(school_class.router)
     app.include_router(meal.router)

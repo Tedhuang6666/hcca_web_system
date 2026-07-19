@@ -7,6 +7,7 @@ export * from "./api/core";
 export * from "./api/elections";
 export * from "./api/documents";
 export * from "./api/shop";
+export * from "./api/merchandise-submissions";
 export * from "./api/seating";
 export * from "./api/partner-map";
 export * from "./api/class";

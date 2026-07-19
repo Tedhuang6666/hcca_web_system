@@ -25,7 +25,14 @@ class StorageBackend(abc.ABC):
     """
 
     @abc.abstractmethod
-    async def save(self, file: UploadFile, prefix: str = "") -> StoredFile:
+    async def save(
+        self,
+        file: UploadFile,
+        prefix: str = "",
+        *,
+        max_file_size: int | None = None,
+        allowed_content_types: set[str] | frozenset[str] | None = None,
+    ) -> StoredFile:
         """
         儲存上傳的檔案，回傳 StoredFile（含 storage_key）。
 
@@ -179,12 +186,19 @@ class LocalStorageBackend(StorageBackend):
         self._base = Path(base_dir)
         self._base.mkdir(parents=True, exist_ok=True)
 
-    async def save(self, file: UploadFile, prefix: str = "") -> StoredFile:
+    async def save(
+        self,
+        file: UploadFile,
+        prefix: str = "",
+        *,
+        max_file_size: int = MAX_FILE_SIZE,
+        allowed_content_types: set[str] | frozenset[str] | None = None,
+    ) -> StoredFile:
         """讀取上傳內容、驗證類型與大小、存至本地目錄"""
         # 讀取全部內容（限制大小）
-        content = await file.read(MAX_FILE_SIZE + 1)
-        if len(content) > MAX_FILE_SIZE:
-            msg = f"檔案超過最大限制 {MAX_FILE_SIZE // 1024 // 1024} MB"
+        content = await file.read(max_file_size + 1)
+        if len(content) > max_file_size:
+            msg = f"檔案超過最大限制 {max_file_size // 1024 // 1024} MB"
             raise ValueError(msg)
 
         # 偵測 MIME type；若兩者皆無法提供白名單內的類型，直接拒絕（不 fallback 到 octet-stream）。
@@ -192,6 +206,8 @@ class LocalStorageBackend(StorageBackend):
         if not content_type or content_type not in _ALLOWED_TYPES:
             msg = f"不支援的檔案類型：{content_type}"
             raise ValueError(msg)
+        if allowed_content_types is not None and content_type not in allowed_content_types:
+            raise ValueError(f"此投稿僅接受：{', '.join(sorted(allowed_content_types))}")
 
         if not _validate_magic_bytes(content, content_type):
             msg = f"檔案內容與宣告的類型 {content_type} 不符"
@@ -269,10 +285,17 @@ class S3StorageBackend(StorageBackend):
             msg = "請先安裝 boto3：uv add boto3"
             raise RuntimeError(msg) from e
 
-    async def save(self, file: UploadFile, prefix: str = "") -> StoredFile:
-        content = await file.read(MAX_FILE_SIZE + 1)
-        if len(content) > MAX_FILE_SIZE:
-            msg = "檔案超過最大限制"
+    async def save(
+        self,
+        file: UploadFile,
+        prefix: str = "",
+        *,
+        max_file_size: int = MAX_FILE_SIZE,
+        allowed_content_types: set[str] | frozenset[str] | None = None,
+    ) -> StoredFile:
+        content = await file.read(max_file_size + 1)
+        if len(content) > max_file_size:
+            msg = f"檔案超過最大限制 {max_file_size // 1024 // 1024} MB"
             raise ValueError(msg)
 
         # 與 LocalStorageBackend 共用同一份判定順序：驗證 MIME 白名單 + magic bytes
@@ -280,6 +303,8 @@ class S3StorageBackend(StorageBackend):
         if not content_type or content_type not in _ALLOWED_TYPES:
             msg = f"不支援的檔案類型：{content_type}"
             raise ValueError(msg)
+        if allowed_content_types is not None and content_type not in allowed_content_types:
+            raise ValueError(f"此投稿僅接受：{', '.join(sorted(allowed_content_types))}")
 
         if not _validate_magic_bytes(content, content_type):
             msg = f"檔案內容與宣告的類型 {content_type} 不符"
