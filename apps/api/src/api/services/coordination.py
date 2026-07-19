@@ -7,6 +7,7 @@ from collections.abc import Iterable
 from datetime import datetime
 
 from sqlalchemy import and_, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -147,13 +148,30 @@ async def _upsert_projection(
         )
     )
     if event is None:
-        event = CalendarEvent(
+        candidate = CalendarEvent(
             source_module=source_module,
             source_id=source_id,
             source_key=source_key,
             created_by=created_by,
         )
-        session.add(event)
+        session.add(candidate)
+        try:
+            # Two calendar reads can project the same source concurrently.  The
+            # unique constraint is the final arbiter; use a savepoint so a race
+            # rolls back only this candidate, not the caller's transaction.
+            async with session.begin_nested():
+                await session.flush()
+            event = candidate
+        except IntegrityError:
+            event = await session.scalar(
+                select(CalendarEvent).where(
+                    CalendarEvent.source_module == source_module,
+                    CalendarEvent.source_id == source_id,
+                    CalendarEvent.source_key == source_key,
+                )
+            )
+            if event is None:
+                raise
     event.org_id = org_id
     event.title = title[:200]
     event.description = description

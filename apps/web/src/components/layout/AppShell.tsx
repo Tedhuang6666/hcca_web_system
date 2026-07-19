@@ -43,23 +43,12 @@ function isBare(pathname: string) {
   return BARE_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }
 
-function AppShellContent({ children }: { children: React.ReactNode }) {
-  const { can, isAdmin } = usePermissions();
-  const { isModuleDown, moduleInfo: getModuleInfo } = useModuleStatus();
-  const router = useRouter();
+function SessionGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const moduleId = moduleForPath(pathname);
-  const moduleDown = isModuleDown(moduleId);
-  const moduleInfo = getModuleInfo(moduleId);
-  const suppressPolicyConsent = pathname.startsWith("/legal");
+  const router = useRouter();
   const [authReady, setAuthReady] = useState(false);
   const [redirecting, setRedirecting] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const inboxCounts = useInboxCounts(isLoggedIn);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
-  // 記住已對哪個 pathname 觸發過導向，避免同一路徑重複呼叫 router.replace
-  // 造成 effect ↔ 導航無限互相觸發。
   const redirectedFrom = useRef<string | null>(null);
 
   useEffect(() => {
@@ -68,7 +57,6 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
 
     if (!requiresAuthentication(pathname)) {
       setIsLoggedIn(loggedIn);
-      redirectedFrom.current = null;
       setRedirecting(false);
       setAuthReady(true);
       return () => {
@@ -103,7 +91,10 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
         setIsLoggedIn(false);
         setRedirecting(true);
         setAuthReady(true);
-        router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+        if (redirectedFrom.current !== pathname) {
+          redirectedFrom.current = pathname;
+          router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+        }
       }
     };
 
@@ -112,6 +103,42 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
       cancelled = true;
     };
   }, [pathname, router]);
+
+  if (!authReady || redirecting) {
+    return (
+      <div className="app-content-loading" aria-live="polite">
+        <LoadingState
+          title={redirecting ? "正在前往登入頁" : "正在確認登入狀態"}
+          description="系統正在確認身分與頁面權限。"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <ModuleStatusProvider authenticated={isLoggedIn}>
+      <AppShellContent isLoggedIn={isLoggedIn}>{children}</AppShellContent>
+    </ModuleStatusProvider>
+  );
+}
+
+function AppShellContent({
+  children,
+  isLoggedIn,
+}: {
+  children: React.ReactNode;
+  isLoggedIn: boolean;
+}) {
+  const { can, isAdmin } = usePermissions();
+  const { isModuleDown, moduleInfo: getModuleInfo } = useModuleStatus();
+  const pathname = usePathname();
+  const moduleId = moduleForPath(pathname);
+  const moduleDown = isModuleDown(moduleId);
+  const moduleInfo = getModuleInfo(moduleId);
+  const suppressPolicyConsent = pathname.startsWith("/legal");
+  const inboxCounts = useInboxCounts(isLoggedIn);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
 
   // 路由變更時自動關閉行動版側邊欄
   useEffect(() => {
@@ -125,11 +152,6 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
     }
     setSidebarOpen((open) => !open);
   };
-
-  // 公開頁（login、官網、維護頁等）不需要等 authReady，立即渲染
-  if (isBare(pathname)) {
-    return <>{children}</>;
-  }
 
   return (
     <PermissionProvider can={can}>
@@ -171,16 +193,9 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
           <main
             id="main-content"
             className="app-main flex-1 overflow-y-auto p-5 pb-20 md:p-6 md:pb-6"
-            aria-busy={!authReady || redirecting}
+            aria-busy="false"
           >
-            {!authReady || redirecting ? (
-              <div className="app-content-loading" aria-live="polite">
-                <LoadingState
-                  title={redirecting ? "正在前往登入頁" : "正在確認登入狀態"}
-                  description="系統正在確認身分與頁面權限。"
-                />
-              </div>
-            ) : moduleDown && moduleId && (!isAdmin || moduleInfo?.mode === "closed") ? (
+            {moduleDown && moduleId && (!isAdmin || moduleInfo?.mode === "closed") ? (
               <ModuleMaintenance moduleId={moduleId} />
             ) : (
               <PageTransition>
@@ -221,9 +236,5 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
-  return (
-    <ModuleStatusProvider>
-      <AppShellContent>{children}</AppShellContent>
-    </ModuleStatusProvider>
-  );
+  return <SessionGate>{children}</SessionGate>;
 }
