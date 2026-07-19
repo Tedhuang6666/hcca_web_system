@@ -216,13 +216,13 @@ export default function CalendarPage() {
   );
 
   return (
-    <main className="mx-auto w-full max-w-7xl px-3 py-4 sm:px-5 sm:py-6">
-      <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-center gap-2">
+    <main className="calendar-page mx-auto min-w-0 w-full max-w-7xl overflow-x-clip px-3 py-4 sm:px-5 sm:py-6">
+      <div className="calendar-heading mb-5 flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 items-center gap-2">
           <CalendarDays size={24} aria-hidden="true" />
-          <h1 className="text-2xl font-semibold">行事曆</h1>
+          <h1 className="min-w-0 truncate text-2xl font-semibold">行事曆</h1>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="calendar-actions flex flex-wrap items-center gap-2">
           <button
             onClick={() => setCreateFor(new Date())}
             className="inline-flex items-center gap-2 rounded-md bg-[var(--primary)] px-3 py-2 text-sm font-medium text-black">
@@ -238,15 +238,15 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-1">
+      <div className="calendar-toolbar mb-4 flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <div className="calendar-period-controls flex min-w-0 items-center gap-1">
           <button
             onClick={() => move(-1)}
             className="rounded-md border border-[var(--border)] p-2"
             aria-label="上一段">
             <ChevronLeft size={16} aria-hidden="true" />
           </button>
-          <span className="min-w-[10rem] text-center text-base font-medium">{label}</span>
+          <span className="calendar-period-label min-w-0 text-center text-base font-medium">{label}</span>
           <button
             onClick={() => move(1)}
             className="rounded-md border border-[var(--border)] p-2"
@@ -259,18 +259,18 @@ export default function CalendarPage() {
             今天
           </button>
         </div>
-        <div className="inline-flex rounded-md border border-[var(--border)] p-0.5 text-sm">
+        <div className="calendar-view-switcher inline-flex rounded-md border border-[var(--border)] p-0.5 text-sm">
           <ModeButton active={view === "month"} onClick={() => setView("month")} label="月" />
           <ModeButton active={view === "week"} onClick={() => setView("week")} label="週" />
           <ModeButton active={view === "list"} onClick={() => setView("list")} label="列表" />
         </div>
       </div>
 
-      <div className="mb-4 grid gap-2 md:grid-cols-[1fr_1fr_1fr_auto]">
+      <div className="calendar-filters mb-4 grid min-w-0 gap-2 md:grid-cols-[1fr_1fr_1fr_auto]">
         <select
           value={orgId}
           onChange={(e) => setOrgId(e.target.value)}
-          className="rounded-md border border-[var(--border)] bg-transparent px-3 py-2 text-sm">
+          className="min-w-0 w-full rounded-md border border-[var(--border)] bg-transparent px-3 py-2 text-sm">
           <option value="">全部組織</option>
           {orgs.map((org) => (
             <option key={org.id} value={org.id}>{orgDisplayName(org, orgs)}</option>
@@ -279,7 +279,7 @@ export default function CalendarPage() {
         <select
           value={type}
           onChange={(e) => setType(e.target.value as CalendarEventType | "")}
-          className="rounded-md border border-[var(--border)] bg-transparent px-3 py-2 text-sm">
+          className="min-w-0 w-full rounded-md border border-[var(--border)] bg-transparent px-3 py-2 text-sm">
           <option value="">全部類型</option>
           {Object.entries(TYPE_LABEL).map(([value, text]) => (
             <option key={value} value={value}>{text}</option>
@@ -288,7 +288,7 @@ export default function CalendarPage() {
         <select
           value={visibility}
           onChange={(e) => setVisibility(e.target.value as CalendarVisibility | "")}
-          className="rounded-md border border-[var(--border)] bg-transparent px-3 py-2 text-sm">
+          className="min-w-0 w-full rounded-md border border-[var(--border)] bg-transparent px-3 py-2 text-sm">
           <option value="">全部可見度</option>
           {Object.entries(VISIBILITY_LABEL).map(([value, text]) => (
             <option key={value} value={value}>{text}</option>
@@ -296,7 +296,7 @@ export default function CalendarPage() {
         </select>
         <button
           onClick={() => setMine((value) => !value)}
-          className={`inline-flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm ${
+          className={`calendar-mine-filter inline-flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm ${
             mine ? "border-[var(--primary)] bg-[var(--primary)] text-black" : "border-[var(--border)]"
           }`}>
           <Users size={16} aria-hidden="true" />
