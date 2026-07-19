@@ -66,6 +66,7 @@ class PolicyDocument(Base, TimestampMixin):
             "kind",
             unique=True,
             postgresql_where=text("is_active IS true"),
+            sqlite_where=text("is_active = 1"),
         ),
     )
 

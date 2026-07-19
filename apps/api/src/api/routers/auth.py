@@ -1,6 +1,7 @@
 """身份驗證路由 - Google / Discord OAuth2 + JWT Token 管理"""
 
 import logging
+import uuid
 from datetime import UTC, datetime
 from urllib.parse import urlencode, urlsplit
 
@@ -665,15 +666,19 @@ async def refresh_token(
     if payload.get("type") != "refresh":
         raise credentials_exception
 
-    user_id: str | None = payload.get("sub")
-    if not user_id:
+    raw_user_id: str | None = payload.get("sub")
+    if not raw_user_id:
         raise credentials_exception
+    try:
+        user_id = uuid.UUID(raw_user_id)
+    except (TypeError, ValueError) as e:
+        raise credentials_exception from e
 
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if user is None or not user.is_active:
         raise credentials_exception
-    user_block = await find_identity_block(user_id=str(user.id), emails={user.email})
+    user_block = await find_identity_block(user_id=str(user_id), emails={user.email})
     if user_block:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
