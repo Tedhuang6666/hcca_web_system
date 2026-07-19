@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from typing import Annotated
 
@@ -9,10 +10,12 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, 
 from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.config import settings
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_permission
+from api.email.sender import send_branded_email
 from api.models.merchandise_submission import MerchandiseSubmissionStatus
 from api.models.user import User
 from api.routers._common import or_404
@@ -39,9 +42,38 @@ router = APIRouter(prefix="/merchandise-submissions", tags=["校商投稿"])
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
 
+logger = logging.getLogger(__name__)
+
+_REVIEW_STATUS_LABELS = {
+    MerchandiseSubmissionStatus.REVIEWING: "進入審核",
+    MerchandiseSubmissionStatus.APPROVED: "已採用",
+    MerchandiseSubmissionStatus.REVISION_REQUESTED: "需要補件",
+    MerchandiseSubmissionStatus.REJECTED: "未採用",
+}
+
 
 def _upload_preview_url(storage_key: str) -> str:
     return f"/merchandise-submissions/uploads/{storage_key}"
+
+
+def _notify_review_result_by_email(submission) -> None:
+    status_label = _REVIEW_STATUS_LABELS.get(submission.status, str(submission.status))
+    note = submission.review_note or "請前往校商投稿頁查看最新狀態。"
+    send_branded_email(
+        to=[submission.user.email],
+        subject=f"【校商投稿】「{submission.item.name}」審核結果：{status_label}",
+        template="notification",
+        context={
+            "heading": f"您的投稿{status_label}",
+            "body_text": (
+                f"您投稿的「{submission.item.name}」審核狀態已更新為「{status_label}」。\n\n"
+                f"審核備註：{note}"
+            ),
+            "preview_text": f"校商投稿「{submission.item.name}」{status_label}",
+            "cta_url": f"{settings.FRONTEND_BASE_URL.rstrip('/')}/merchandise-submissions",
+            "cta_label": "前往查看投稿",
+        },
+    )
 
 
 def _serialize_submission(submission, *, include_submitter: bool):
@@ -390,6 +422,17 @@ async def review_admin_submission(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     from api.routers.notifications import create_notification
+
+    if submission.user.email:
+        try:
+            _notify_review_result_by_email(submission)
+        except Exception:
+            logger.warning(
+                "校商投稿審核結果 Email 排程失敗 submission=%s user=%s",
+                submission.id,
+                submission.user_id,
+                exc_info=True,
+            )
 
     await create_notification(
         session,
