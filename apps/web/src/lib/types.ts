@@ -696,6 +696,128 @@ export interface PermissionCodeInfo {
   desc: string;
 }
 
+// ── 校商投稿 ─────────────────────────────────────────────────────────────────
+
+export type MerchandiseSubmissionStatus =
+  | "draft"
+  | "submitted"
+  | "reviewing"
+  | "approved"
+  | "revision_requested"
+  | "rejected";
+
+export interface TemplateImage {
+  url: string;
+  label: string;
+}
+
+export interface SubmissionCustomField {
+  key: string;
+  label: string;
+  field_type: "text" | "textarea";
+  required: boolean;
+  placeholder: string | null;
+  help_text: string | null;
+  max_length: number;
+}
+
+export interface MerchandiseSubmissionSettingsOut {
+  id: string;
+  is_open: boolean;
+  opens_at: string | null;
+  closes_at: string | null;
+  max_file_size_mb: number;
+  announcement: string | null;
+  updated_at: string;
+}
+
+export interface MerchandiseSubmissionSettingsUpdate {
+  is_open?: boolean;
+  opens_at?: string | null;
+  closes_at?: string | null;
+  max_file_size_mb?: number;
+  announcement?: string | null;
+}
+
+export interface MerchandiseSubmissionItemCreate {
+  name: string;
+  description?: string | null;
+  specification?: string | null;
+  template_images: TemplateImage[];
+  custom_fields: SubmissionCustomField[];
+  sort_order?: number;
+  is_active?: boolean;
+  is_open_override?: boolean | null;
+  opens_at_override?: string | null;
+  closes_at_override?: string | null;
+  max_file_size_mb_override?: number | null;
+}
+
+export interface MerchandiseSubmissionItemOut extends MerchandiseSubmissionItemCreate {
+  id: string;
+  description: string | null;
+  specification: string | null;
+  sort_order: number;
+  is_active: boolean;
+  is_open_override: boolean | null;
+  opens_at_override: string | null;
+  closes_at_override: string | null;
+  max_file_size_mb_override: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MerchandiseSubmissionItemPortalOut extends MerchandiseSubmissionItemOut {
+  is_accepting: boolean;
+  effective_opens_at: string | null;
+  effective_closes_at: string | null;
+  effective_max_file_size_mb: number;
+}
+
+export interface MerchandiseSubmissionUploadOut {
+  storage_key: string;
+  filename: string;
+  content_type: string;
+  file_size: number;
+  url: string;
+}
+
+export interface MerchandiseSubmissionFileOut extends MerchandiseSubmissionUploadOut {
+  id: string;
+}
+
+export interface MerchandiseSubmissionOut {
+  id: string;
+  item_id: string;
+  item_name: string;
+  status: MerchandiseSubmissionStatus;
+  account_snapshot: Record<string, string>;
+  field_values: Record<string, string>;
+  files: MerchandiseSubmissionFileOut[];
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  reviewer_name: string | null;
+  review_note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MerchandiseSubmissionAdminListItem extends MerchandiseSubmissionOut {
+  submitter_name: string;
+  submitter_email: string;
+  submitter_student_id: string | null;
+}
+
+export interface MerchandiseSubmissionReview {
+  status: "reviewing" | "approved" | "revision_requested" | "rejected";
+  review_note?: string | null;
+}
+
+export interface MerchandiseSubmissionPortalOut {
+  settings: MerchandiseSubmissionSettingsOut;
+  items: MerchandiseSubmissionItemPortalOut[];
+}
+
 
 export interface AdminUserDetail {
   id: string;

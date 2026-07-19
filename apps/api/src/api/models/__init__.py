@@ -218,6 +218,13 @@ from api.models.meeting import (  # noqa: F401
     VoteStatus,
     VoteVisibility,
 )
+from api.models.merchandise_submission import (  # noqa: F401
+    MerchandiseSubmission,
+    MerchandiseSubmissionFile,
+    MerchandiseSubmissionItem,
+    MerchandiseSubmissionSettings,
+    MerchandiseSubmissionStatus,
+)
 from api.models.navigation_profile import NavigationProfile, NavigationProfilePosition  # noqa: F401
 from api.models.notification import Notification  # noqa: F401
 from api.models.org import Org, Permission, Position, UserPosition  # noqa: F401
