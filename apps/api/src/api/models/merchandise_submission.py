@@ -42,6 +42,9 @@ class MerchandiseSubmissionSettings(Base, TimestampMixin):
     max_file_size_mb: Mapped[int] = mapped_column(
         Integer, nullable=False, default=100, server_default="100"
     )
+    require_school_email: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
     announcement: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_by_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True

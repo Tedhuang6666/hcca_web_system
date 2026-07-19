@@ -727,6 +727,7 @@ export interface MerchandiseSubmissionSettingsOut {
   opens_at: string | null;
   closes_at: string | null;
   max_file_size_mb: number;
+  require_school_email: boolean;
   announcement: string | null;
   updated_at: string;
 }
@@ -736,6 +737,7 @@ export interface MerchandiseSubmissionSettingsUpdate {
   opens_at?: string | null;
   closes_at?: string | null;
   max_file_size_mb?: number;
+  require_school_email?: boolean;
   announcement?: string | null;
 }
 
@@ -816,6 +818,7 @@ export interface MerchandiseSubmissionReview {
 export interface MerchandiseSubmissionPortalOut {
   settings: MerchandiseSubmissionSettingsOut;
   items: MerchandiseSubmissionItemPortalOut[];
+  is_eligible_submitter: boolean;
 }
 
 
