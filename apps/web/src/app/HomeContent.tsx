@@ -85,7 +85,6 @@ export default function HomeContent({
                 <BrandEmblem className="h-full w-full" size={256} priority />
               )}
             </div>
-            <p className="public-identity-caption">校園自治公開資訊</p>
           </div>
         </div>
       </section>

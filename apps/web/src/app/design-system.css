@@ -1197,6 +1197,7 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
 
 .public-signboard.public-identity-panel {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   width: min(100%, 23rem);
   justify-self: end;
   place-items: center;
@@ -1212,10 +1213,24 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
 }
 
 .public-identity-panel .public-signboard-emblem {
+  box-sizing: border-box;
+  grid-template-columns: minmax(0, 1fr);
   width: min(100%, 18rem);
+  max-width: 100%;
+  min-width: 0;
   min-height: 0;
   aspect-ratio: 1;
   padding: 1.5rem;
+}
+
+.public-identity-panel > * {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.public-identity-panel .public-signboard-emblem > * {
+  max-width: 100%;
+  min-width: 0;
 }
 
 .public-identity-panel .public-signboard-emblem img,
@@ -1230,16 +1245,6 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
 .public-identity-panel:hover .public-signboard-emblem img,
 .public-identity-panel:hover .public-signboard-emblem svg {
   transform: scale(1.025);
-}
-
-.public-identity-caption {
-  width: 100%;
-  border-top: 1px solid var(--public-border);
-  padding-top: 0.9rem;
-  color: var(--public-muted);
-  font-size: 0.78rem;
-  font-weight: 650;
-  text-align: center;
 }
 
 .public-quick-grid {
@@ -1369,6 +1374,22 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
     gap: 1.5rem;
     padding-top: 3.5rem;
     padding-bottom: 3rem;
+  }
+
+  .public-hero-copy {
+    width: min(100%, 34rem);
+    margin-inline: auto;
+    text-align: center;
+  }
+
+  .public-hero-copy h1,
+  .public-hero-subtitle {
+    margin-inline: auto;
+  }
+
+  .public-hero-actions {
+    width: min(100%, 22rem);
+    margin-inline: auto;
   }
 
   .public-signboard.public-identity-panel {
