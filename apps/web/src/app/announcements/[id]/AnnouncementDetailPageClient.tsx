@@ -80,8 +80,8 @@ export default function AnnouncementDetailPageClient({
       <header className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           {item.is_urgent && (
-            <span className="badge" style={{ color: "var(--danger)", background: "var(--danger-dim)", borderColor: "var(--danger-border)" }}>
-              緊急公告
+            <span className="badge" style={{ color: "var(--warning)", background: "var(--warning-dim)", borderColor: "var(--warning-border)" }}>
+              重要公告
             </span>
           )}
           {!item.is_published && (
@@ -134,6 +134,16 @@ export default function AnnouncementDetailPageClient({
 
       <div className="card p-5 md:p-7">
         <AnnouncementMarkdown content={item.content} />
+        {item.link_url && (
+          <a
+            href={item.link_url}
+            className="btn btn-primary mt-6"
+            target={/^https?:\/\//.test(item.link_url) ? "_blank" : undefined}
+            rel={/^https?:\/\//.test(item.link_url) ? "noreferrer" : undefined}
+          >
+            {item.link_label || "前往連結"}
+          </a>
+        )}
         <div className="mt-8 border-t pt-4 text-sm" style={{ borderColor: "var(--border)", color: "var(--text-secondary)" }}>
           公告人：{item.author_name || "未命名"}
         </div>

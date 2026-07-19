@@ -112,7 +112,7 @@ const ACTION_LABELS: Record<string, string> = {
   "announcement.update": "更新公告",
   "announcement.publish": "發布公告",
   "announcement.unpublish": "取消發布公告",
-  "announcement.set_urgent": "設定緊急公告",
+  "announcement.set_urgent": "設定重要公告",
   "announcement.delete": "刪除公告",
   "announcement.media_upload": "上傳公告媒體",
   "announcement.media_delete": "刪除公告媒體",

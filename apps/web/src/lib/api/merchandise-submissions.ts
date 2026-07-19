@@ -36,6 +36,11 @@ export const merchandiseSubmissionsApi = {
     field_values: Record<string, string>;
     files: MerchandiseSubmissionUploadOut[];
   }, submit = true) => post<MerchandiseSubmissionOut>(`/merchandise-submissions/submissions?submit=${submit}`, body),
+  updateSubmission: (id: string, body: {
+    item_id: string;
+    field_values: Record<string, string>;
+    files: MerchandiseSubmissionUploadOut[];
+  }, submit = true) => patch<MerchandiseSubmissionOut>(`/merchandise-submissions/submissions/${id}?submit=${submit}`, body),
   getSettings: () => get<MerchandiseSubmissionSettingsOut>("/merchandise-submissions/admin/settings"),
   updateSettings: (body: MerchandiseSubmissionSettingsUpdate) =>
     patch<MerchandiseSubmissionSettingsOut>("/merchandise-submissions/admin/settings", body),

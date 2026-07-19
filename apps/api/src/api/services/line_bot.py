@@ -623,7 +623,7 @@ async def _announcements_text(db: AsyncSession, user: User) -> str:
         return "目前沒有可見公告。"
     lines = ["最新公告："]
     for ann in visible:
-        urgent = "【緊急】" if ann.is_urgent else ""
+        urgent = "【重要】" if ann.is_urgent else ""
         lines.append(
             f"- {urgent}{ann.title}\n  {await create_open_url(user.id, f'/announcements/{ann.id}')}"
         )

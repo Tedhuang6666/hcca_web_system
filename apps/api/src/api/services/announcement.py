@@ -140,6 +140,9 @@ async def create(
         content=body.content,
         is_urgent=body.is_urgent,
         urgent_until=body.urgent_until,
+        link_url=body.link_url,
+        link_label=body.link_label,
+        show_on_every_visit=body.show_on_every_visit,
         org_id=body.org_id,
         activity_id=body.activity_id,
         author_id=author.id,
@@ -209,6 +212,14 @@ async def update(
         ann.is_urgent = body.is_urgent
     if "urgent_until" in fields:
         ann.urgent_until = body.urgent_until
+    if "link_url" in fields:
+        ann.link_url = body.link_url
+        if body.link_url is None and "link_label" not in fields:
+            ann.link_label = None
+    if "link_label" in fields:
+        ann.link_label = body.link_label
+    if body.show_on_every_visit is not None:
+        ann.show_on_every_visit = body.show_on_every_visit
     if "activity_id" in fields:
         ann.activity_id = body.activity_id
     if body.audience_type is not None:

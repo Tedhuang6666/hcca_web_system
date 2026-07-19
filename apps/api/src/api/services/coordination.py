@@ -291,7 +291,7 @@ async def _project_announcements(
     for ann in rows:
         for key, at, label in [
             ("published_at", ann.published_at, "公告發布"),
-            ("urgent_until", ann.urgent_until, "緊急公告期限"),
+            ("urgent_until", ann.urgent_until, "重要公告期限"),
         ]:
             if not at:
                 continue

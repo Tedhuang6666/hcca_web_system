@@ -208,6 +208,45 @@ async def test_create_announcement_succeeds(client: AsyncClient, db_session: Asy
 
 
 @pytest.mark.asyncio
+async def test_create_announcement_with_action_link_returns_normalized_link(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await _seed_user_with_codes(db_session, "ann-link@school.edu", ["announcement:create"])
+    _override_user(user)
+
+    resp = await client.post(
+        "/announcements",
+        json={
+            "title": "校商徵件",
+            "content": {},
+            "link_url": "  /merchandise-submissions  ",
+            "link_label": " 前往投稿 ",
+        },
+    )
+
+    assert resp.status_code == 201
+    assert resp.json()["link_url"] == "/merchandise-submissions"
+    assert resp.json()["link_label"] == "前往投稿"
+
+
+@pytest.mark.asyncio
+async def test_create_announcement_with_unsafe_link_returns_422(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await _seed_user_with_codes(
+        db_session, "ann-link-invalid@school.edu", ["announcement:create"]
+    )
+    _override_user(user)
+
+    resp = await client.post(
+        "/announcements",
+        json={"title": "不安全連結", "content": {}, "link_url": "javascript:alert(1)"},
+    )
+
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_update_announcement_without_permission_returns_403(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
@@ -297,12 +336,17 @@ async def test_set_urgent_only_changes_urgent_fields(
 
     resp = await client.patch(
         f"/announcements/{ann_id}/urgent",
-        json={"is_urgent": True, "title": "不該生效的標題"},
+        json={
+            "is_urgent": True,
+            "show_on_every_visit": True,
+            "title": "不該生效的標題",
+        },
     )
 
     assert resp.status_code == 200
     body = resp.json()
     assert body["is_urgent"] is True
+    assert body["show_on_every_visit"] is True
     assert body["title"] == "緊急公告"
 
 

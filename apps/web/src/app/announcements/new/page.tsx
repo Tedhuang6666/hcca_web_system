@@ -31,6 +31,9 @@ type AnnouncementDraft = {
   markdown: string;
   isUrgent: boolean;
   urgentUntil: string;
+  linkUrl: string;
+  linkLabel: string;
+  showOnEveryVisit: boolean;
   activityId: string;
 };
 
@@ -46,6 +49,9 @@ export default function NewAnnouncementPage() {
   const [markdown, setMarkdown] = useState("");
   const [isUrgent, setIsUrgent] = useState(false);
   const [urgentUntil, setUrgentUntil] = useState("");
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkLabel, setLinkLabel] = useState("");
+  const [showOnEveryVisit, setShowOnEveryVisit] = useState(false);
   const [audience, setAudience] = useState<AudienceValue>(DEFAULT_AUDIENCE);
   const [activityId, setActivityId] = useState("");
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -58,13 +64,19 @@ export default function NewAnnouncementPage() {
     markdown,
     isUrgent,
     urgentUntil,
+    linkUrl,
+    linkLabel,
+    showOnEveryVisit,
     activityId,
-  }), [activityId, isUrgent, markdown, title, urgentUntil]);
+  }), [activityId, isUrgent, linkLabel, linkUrl, markdown, showOnEveryVisit, title, urgentUntil]);
   const restoreDraft = useCallback((draft: AnnouncementDraft) => {
     setTitle(draft.title ?? "");
     setMarkdown(draft.markdown ?? "");
     setIsUrgent(Boolean(draft.isUrgent));
     setUrgentUntil(draft.urgentUntil ?? "");
+    setLinkUrl(draft.linkUrl ?? "");
+    setLinkLabel(draft.linkLabel ?? "");
+    setShowOnEveryVisit(Boolean(draft.showOnEveryVisit));
     setActivityId(draft.activityId ?? "");
     toast.info("已復原未送出的公告草稿");
   }, []);
@@ -77,6 +89,9 @@ export default function NewAnnouncementPage() {
       && !(draft.markdown ?? "").trim()
       && !draft.isUrgent
       && !draft.urgentUntil
+      && !draft.linkUrl
+      && !draft.linkLabel
+      && !draft.showOnEveryVisit
       && !draft.activityId
     ), []),
   });
@@ -108,6 +123,9 @@ export default function NewAnnouncementPage() {
         urgent_until: canUrgent && isUrgent && urgentUntil
           ? new Date(urgentUntil).toISOString()
           : null,
+        link_url: linkUrl.trim() || null,
+        link_label: linkUrl.trim() ? linkLabel.trim() || null : null,
+        show_on_every_visit: canUrgent && isUrgent && showOnEveryVisit,
         audience_type: audience.audience_type,
         audience_org_ids: audience.audience_org_ids,
         audience_user_ids: audience.audience_user_ids,
@@ -165,6 +183,39 @@ export default function NewAnnouncementPage() {
 
       <AnnouncementAudiencePicker onChange={setAudience} />
 
+      <section className="card space-y-3 p-4">
+        <div>
+          <h2 className="text-sm font-semibold">行動連結</h2>
+          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            選填。可填入站內路徑或完整 HTTP(S) 網址，讓讀者直接前往下一步。
+          </p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem]">
+          <label className="space-y-1 text-sm">
+            <span>連結網址</span>
+            <input
+              type="url"
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              className="input w-full"
+              placeholder="https://example.com 或 /merchandise-submissions"
+              maxLength={500}
+            />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span>按鈕文字</span>
+            <input
+              value={linkLabel}
+              onChange={(e) => setLinkLabel(e.target.value)}
+              className="input w-full"
+              placeholder="前往連結"
+              maxLength={60}
+              disabled={!linkUrl.trim()}
+            />
+          </label>
+        </div>
+      </section>
+
       <section className="card p-4">
         <ActivitySelect
           value={activityId}
@@ -183,7 +234,7 @@ export default function NewAnnouncementPage() {
                 checked={isUrgent}
                 onChange={(e) => setIsUrgent(e.target.checked)}
               />
-              緊急公告
+              設為重要公告
             </label>
             <input
               type="datetime-local"
@@ -194,8 +245,17 @@ export default function NewAnnouncementPage() {
             />
           </div>
           <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
-            不設定截止時間時，緊急公告會持續顯示到手動關閉。
+            不設定截止時間時，重要公告會持續顯示到手動關閉。
           </p>
+          <label className="mt-3 flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={showOnEveryVisit}
+              onChange={(e) => setShowOnEveryVisit(e.target.checked)}
+              disabled={!isUrgent}
+            />
+            每次進入系統時顯示
+          </label>
         </section>
       )}
 

@@ -20,8 +20,8 @@ const AUDIENCE_LABEL: Record<string, string> = {
 function StatusBadge({ item }: { item: AnnouncementListItem }) {
   if (item.is_urgent) {
     return (
-      <span className="badge" style={{ color: "var(--danger)", background: "var(--danger-dim)", borderColor: "var(--danger-border)" }}>
-        緊急
+      <span className="badge" style={{ color: "var(--warning)", background: "var(--warning-dim)", borderColor: "var(--warning-border)" }}>
+        重要
       </span>
     );
   }

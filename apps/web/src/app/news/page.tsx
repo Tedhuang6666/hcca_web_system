@@ -33,8 +33,8 @@ export default async function NewsPage() {
               style={{ "--reveal-delay": `${Math.min(i, 8) * 55}ms` } as React.CSSProperties}>
               <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
                 {item.is_urgent && (
-                  <span className="badge" style={{ color: "var(--danger)", background: "var(--danger-dim)", borderColor: "var(--danger-border)" }}>
-                    緊急
+                  <span className="badge" style={{ color: "var(--warning)", background: "var(--warning-dim)", borderColor: "var(--warning-border)" }}>
+                    重要
                   </span>
                 )}
                 <time dateTime={item.published_at ?? item.created_at}>

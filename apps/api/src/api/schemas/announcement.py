@@ -4,10 +4,32 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from urllib.parse import urlparse
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from api.models.announcement import AnnouncementAudience
+
+
+def _normalize_link_url(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    if normalized.startswith("/") and not normalized.startswith("//"):
+        return normalized
+    parsed = urlparse(normalized)
+    if parsed.scheme in {"http", "https"} and parsed.netloc:
+        return normalized
+    raise ValueError("連結須為站內路徑（/開頭）或完整 HTTP(S) 網址")
+
+
+def _normalize_link_label(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized or None
 
 
 class AnnouncementMediaOut(BaseModel):
@@ -33,8 +55,11 @@ class AnnouncementAudienceRef(BaseModel):
 class AnnouncementCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     content: dict = Field(default_factory=dict, description="Tiptap JSON 內容")
-    is_urgent: bool = Field(False, description="是否為緊急公告（觸發首頁 Popup）")
-    urgent_until: datetime | None = Field(None, description="緊急公告截止時間（None=永久）")
+    is_urgent: bool = Field(False, description="是否為重要公告（觸發首頁 Popup）")
+    urgent_until: datetime | None = Field(None, description="重要公告截止時間（None=永久）")
+    link_url: str | None = Field(None, max_length=500, description="公告的主要導向")
+    link_label: str | None = Field(None, max_length=60, description="連結按鈕文字")
+    show_on_every_visit: bool = Field(False, description="每次進入系統都顯示重要公告")
     org_id: uuid.UUID | None = Field(None, description="所屬組織（None=全站公告）")
     activity_id: uuid.UUID | None = Field(None, description="所屬活動（選填）")
     audience_type: AnnouncementAudience = Field(
@@ -47,17 +72,26 @@ class AnnouncementCreate(BaseModel):
         default_factory=list, description="對象=特定成員時的目標使用者 ID"
     )
 
+    _validate_link_url = field_validator("link_url")(_normalize_link_url)
+    _validate_link_label = field_validator("link_label")(_normalize_link_label)
+
 
 class AnnouncementUpdate(BaseModel):
     title: str | None = Field(None, min_length=1, max_length=200)
     content: dict | None = None
     is_urgent: bool | None = None
     urgent_until: datetime | None = None
+    link_url: str | None = Field(None, max_length=500)
+    link_label: str | None = Field(None, max_length=60)
+    show_on_every_visit: bool | None = None
     is_published: bool | None = None
     activity_id: uuid.UUID | None = None
     audience_type: AnnouncementAudience | None = None
     audience_org_ids: list[uuid.UUID] | None = None
     audience_user_ids: list[uuid.UUID] | None = None
+
+    _validate_link_url = field_validator("link_url")(_normalize_link_url)
+    _validate_link_label = field_validator("link_label")(_normalize_link_label)
 
 
 class AnnouncementOut(BaseModel):
@@ -68,6 +102,9 @@ class AnnouncementOut(BaseModel):
     content: dict
     is_urgent: bool
     urgent_until: datetime | None
+    link_url: str | None
+    link_label: str | None
+    show_on_every_visit: bool
     is_published: bool
     published_at: datetime | None
     org_id: uuid.UUID | None
