@@ -226,12 +226,12 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
         )}
 
         {/* 桌面：完整麵包屑 */}
-        <div className="hidden md:block min-w-0 flex-1">
+        <div className="hidden lg:block min-w-0 flex-1">
           <Breadcrumb items={crumbs} />
         </div>
 
         {/* 行動裝置：上層小字、當前頁突出顯示 */}
-        <div className="topbar-mobile-title md:hidden min-w-0 flex-1">
+        <div className="topbar-mobile-title lg:hidden min-w-0 flex-1">
           <MobileBreadcrumb items={compactCrumbs} fallbackTitle={pageTitle} />
         </div>
       </div>
