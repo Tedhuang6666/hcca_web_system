@@ -760,12 +760,39 @@ export default function MerchandiseSubmissionsPage() {
               )}
             </>
           ) : (
-            <p
-              className="py-16 text-center text-sm"
-              style={{ color: "var(--text-muted)" }}
+            <section
+              className="rounded-xl border p-8 text-center"
+              style={{
+                background: "var(--bg-surface)",
+                borderColor: "var(--border)",
+              }}
             >
-              目前尚未建立投稿品項。
-            </p>
+              <Package
+                size={30}
+                className="mx-auto"
+                style={{ color: "var(--text-muted)" }}
+              />
+              <h2 className="mt-4 font-semibold">目前尚未建立投稿品項</h2>
+              <p
+                className="mx-auto mt-2 max-w-lg text-sm"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                管理員需要先建立投稿品項並設定開放時間，這裡才會出現可投稿的商品。
+              </p>
+              {can("shop:manage") && (
+                <Link
+                  href="/merchandise-submissions/admin"
+                  className="btn mt-5 inline-flex min-h-10"
+                  style={{
+                    background: "var(--primary)",
+                    color: "var(--primary-fg)",
+                    border: "none",
+                  }}
+                >
+                  前往建立投稿品項
+                </Link>
+              )}
+            </section>
           )}
         </div>
       )}
