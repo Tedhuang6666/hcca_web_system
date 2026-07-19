@@ -1,5 +1,6 @@
 import type {
   AnnouncementListItem,
+  AnnouncementOut,
   PublicOfficerOut,
   PublicSiteBundleOut,
   PublicSitePageOut,
@@ -27,6 +28,18 @@ export async function fetchAnnouncements(limit = 100): Promise<AnnouncementListI
     return res.json();
   } catch {
     return [];
+  }
+}
+
+export async function fetchActiveUrgentAnnouncement(): Promise<AnnouncementOut | null> {
+  try {
+    const res = await fetch(serverApiUrl("/announcements/active-urgent"), {
+      next: { revalidate: REVALIDATE },
+    });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
   }
 }
 
