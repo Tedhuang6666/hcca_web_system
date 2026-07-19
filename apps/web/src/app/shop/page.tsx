@@ -361,19 +361,19 @@ export default function ShopPage() {
   ) ?? [];
 
   return (
-    <div className="mx-auto max-w-7xl space-y-7">
-      <div className="workspace-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="mx-auto min-w-0 max-w-7xl space-y-7">
+      <div className="workspace-header flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>商品訂購</h1>
           <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
             選好想要的商品，統一在購物車確認送單。
           </p>
         </div>
-        <div className="flex gap-2">
-          <Link href="/shop/orders" className="btn btn-ghost">我的訂單</Link>
+        <div className="flex w-full gap-2 sm:w-auto">
+          <Link href="/shop/orders" className="btn btn-ghost flex-1 justify-center sm:flex-none">我的訂單</Link>
           <Link
             href="/shop/cart"
-            className="btn inline-flex items-center gap-2"
+            className="btn inline-flex flex-1 items-center justify-center gap-2 sm:flex-none"
             style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
             <ShoppingBag size={16} aria-hidden="true" />
             購物車{cartCount > 0 ? `（${cartCount}）` : ""}
@@ -387,7 +387,7 @@ export default function ShopPage() {
         <SmartEmptyState reason="none" subject="上架商品" message="店家還沒上架任何商品，請稍後再來看看" />
       ) : selectedCategory && (
         <div className="grid grid-cols-1 gap-7 lg:grid-cols-[15rem_minmax(0,1fr)]">
-          <aside className="lg:sticky lg:top-20 lg:self-start">
+          <aside className="min-w-0 lg:sticky lg:top-20 lg:self-start">
             <p className="mb-3 text-xs font-semibold" style={{ color: "var(--text-muted)" }}>選擇主題</p>
             <div className="flex gap-2 overflow-x-auto pb-1 lg:block lg:space-y-1.5 lg:overflow-visible">
               {catalog.map((category) => {
@@ -418,7 +418,7 @@ export default function ShopPage() {
             </div>
           </aside>
 
-          <section className="min-w-0 space-y-6">
+          <section className="min-w-0 space-y-6 overflow-hidden">
             <div className="space-y-4">
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>

@@ -79,7 +79,7 @@ export default function OrdersPage() {
   return (
     <div className="space-y-5 max-w-5xl mx-auto">
       {/* 頁首 */}
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center sm:gap-4">
         <div className="flex items-center gap-3">
           <Link
             href="/shop"
@@ -101,18 +101,18 @@ export default function OrdersPage() {
         </div>
 
         {canManageOrders && (
-          <div className="flex gap-2">
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
             <button onClick={() => downloadReport("xlsx")} disabled={downloading}
-              className="px-3 py-2 rounded-lg text-xs font-medium disabled:opacity-50 transition-colors"
+              className="flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors disabled:opacity-50 sm:flex-none"
               style={{ background: "rgba(34,211,238,0.1)", color: "#22d3ee", border: "1px solid rgba(34,211,238,0.3)" }}>
               匯出 Excel
             </button>
             <button onClick={() => downloadReport("csv")} disabled={downloading}
-              className="px-3 py-2 rounded-lg text-xs font-medium disabled:opacity-50 transition-colors"
+              className="flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors disabled:opacity-50 sm:flex-none"
               style={{ background: "rgba(34,211,238,0.05)", color: "#22d3ee", border: "1px solid rgba(34,211,238,0.2)" }}>
               匯出 CSV
             </button>
-            <Link href="/shop/admin" className="px-3 py-2 rounded-lg text-xs font-medium"
+            <Link href="/shop/admin" className="flex-1 rounded-lg px-3 py-2 text-center text-xs font-medium sm:flex-none"
               style={{ border: "1px solid var(--border)", color: "var(--text-primary)" }}>
               商品與統計
             </Link>
@@ -224,7 +224,56 @@ export default function OrdersPage() {
             message="還沒下過任何訂單，先去選購喜歡的商品吧"
           />
         ) : (
-          <table className="w-full text-sm" role="table" aria-label="訂單列表">
+          <>
+          <div className="divide-y md:hidden" role="list" aria-label="訂單列表">
+            {orders.map((order) => (
+              <div key={order.id} className="space-y-3 px-4 py-4" role="listitem">
+                <div className="flex items-start justify-between gap-3">
+                  <Link
+                    href={`/shop/orders/${order.id}`}
+                    className="min-w-0 break-all text-xs font-mono hover:underline"
+                    style={{ color: "var(--primary)" }}
+                  >
+                    {order.serial_number}
+                  </Link>
+                  <OrderStatusBadge status={order.status} />
+                </div>
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                  {tab === "all" && (
+                    <div className="min-w-0">
+                      <dt style={{ color: "var(--text-muted)" }}>用戶</dt>
+                      <dd className="mt-0.5 truncate" style={{ color: "var(--text-secondary)" }}>
+                        {order.user_name ?? `${order.user_id.slice(0, 8)}…`}
+                      </dd>
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <dt style={{ color: "var(--text-muted)" }}>班級</dt>
+                    <dd className="mt-0.5 truncate" style={{ color: "var(--text-secondary)" }}>
+                      {order.class_label ?? "—"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt style={{ color: "var(--text-muted)" }}>繳費</dt>
+                    <dd className="mt-0.5 font-medium" style={{ color: order.is_paid ? "#16a34a" : "var(--text-muted)" }}>
+                      {order.is_paid ? "已繳費" : "未繳費"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt style={{ color: "var(--text-muted)" }}>金額</dt>
+                    <dd className="mt-0.5 font-medium" style={{ color: "var(--text-primary)" }}>
+                      NT${order.total_price.toLocaleString()}
+                    </dd>
+                  </div>
+                </dl>
+                <time className="block text-[11px]" style={{ color: "var(--text-muted)" }}>
+                  {new Date(order.created_at).toLocaleString("zh-TW")}
+                </time>
+              </div>
+            ))}
+          </div>
+          <div className="hidden overflow-x-auto md:block">
+          <table className="w-full min-w-[700px] text-sm" role="table" aria-label="訂單列表">
             <thead>
               <tr style={{ borderBottom: "1px solid var(--border)" }}>
                 {["訂單編號", tab === "all" ? "用戶" : null, "班級", "狀態", "繳費", "金額", "下單時間"]
@@ -275,6 +324,8 @@ export default function OrdersPage() {
               ))}
             </tbody>
           </table>
+          </div>
+          </>
         )}
       </div>
     </div>
