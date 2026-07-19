@@ -12,6 +12,7 @@ export const BRANDING = {
   platformName: "校園自治整合平台",
   description: "新竹高中班聯會的整合平台，整合公文、法規、公告、會議、購票、學餐與問卷等等班聯服務",
   emblemPath: "/brand/hcca-emblem.png",
+  publicEmblemUrl: "https://hcca.buckets.hct.works/hcca-emblem.png",
   emblemAlt: "新竹高中班聯會會徽",
 } as const;
 
