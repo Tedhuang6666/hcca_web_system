@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import BrandEmblem from "@/components/brand/BrandEmblem";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
 import LiveElectionBanner from "@/components/site/LiveElectionBanner";
 import { useTheme } from "@/components/providers/ThemeProvider";
@@ -74,6 +73,7 @@ export default function PublicSiteShell({
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const { theme, toggleTheme } = useTheme();
   const pathname = usePathname();
+  const publicEmblemUrl = settings?.site_logo_url?.trim() || BRANDING.publicEmblemUrl;
   useScrollReveal([]);
   const back = getPublicBack(pathname);
   const menuRef = useRef<HTMLDetailsElement>(null);
@@ -150,17 +150,13 @@ export default function PublicSiteShell({
         <LiveElectionBanner />
         <div className="public-header-inner">
           <Link href="/" className="public-brand" onClick={() => setOpen(false)}>
-            <span className="public-brand-mark" aria-hidden={!settings?.site_logo_url}>
-              {settings?.site_logo_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={settings.site_logo_url}
-                  alt={settings.site_logo_alt || `${BRANDING.orgShortName}會徽`}
-                  className="public-brand-logo"
-                />
-              ) : (
-                <BrandEmblem size={42} />
-              )}
+            <span className="public-brand-mark">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={publicEmblemUrl}
+                alt={settings?.site_logo_alt || `${BRANDING.orgShortName}會徽`}
+                className="public-brand-logo"
+              />
             </span>
             <span className="min-w-0">
               <span className="block truncate">{BRANDING.orgShortName}</span>
@@ -328,13 +324,35 @@ export default function PublicSiteShell({
         {children}
       </main>
       <footer className="public-footer">
-        <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-8 text-sm sm:px-6 md:flex-row md:items-center md:justify-between">
-          <p>{BRANDING.orgName}</p>
-          <div className="flex flex-wrap gap-3">
-            <Link href="/legal/accessibility" className="hover:underline">無障礙聲明</Link>
-            <Link href="/legal/privacy" className="hover:underline">隱私政策</Link>
-            <Link href="/public" className="hover:underline">公開資料庫</Link>
+        <div className="public-footer-inner">
+          <div className="public-footer-brand">
+            <Link href="/" className="public-footer-brand-link">
+              <span className="public-footer-mark" aria-hidden="true">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={publicEmblemUrl} alt="" className="h-full w-full object-contain" />
+              </span>
+              <span>
+                <strong>{BRANDING.orgName}</strong>
+                <span>校園自治公開資訊</span>
+              </span>
+            </Link>
+            <p>把重要的自治資訊，留在校園裡每個人都能抵達的地方。</p>
           </div>
+          <nav className="public-footer-links" aria-label="頁尾導覽">
+            <span className="public-footer-label">快速連結</span>
+            <Link href="/news">最新公告</Link>
+            <Link href="/about">關於班聯會</Link>
+            <Link href="/public">公開資料庫</Link>
+          </nav>
+          <nav className="public-footer-links" aria-label="法律與無障礙資訊">
+            <span className="public-footer-label">網站資訊</span>
+            <Link href="/legal/accessibility">無障礙聲明</Link>
+            <Link href="/legal/privacy">隱私政策</Link>
+          </nav>
+        </div>
+        <div className="public-footer-bottom">
+          <span>HCCA · {BRANDING.schoolName}</span>
+          <span>學生自治，從公開開始。</span>
         </div>
       </footer>
     </div>

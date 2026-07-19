@@ -13,10 +13,10 @@ import {
   UsersRound,
 } from "lucide-react";
 
-import BrandEmblem from "@/components/brand/BrandEmblem";
 import MarkdownBlock from "@/components/site/MarkdownBlock";
 import { liveLeader, useLiveElection } from "@/components/site/useLiveElection";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
+import { BRANDING } from "@/lib/branding";
 import { sanitizeCustomCss } from "@/lib/sanitize";
 import type { AnnouncementListItem, AnnouncementOut, PublicSiteBundleOut } from "@/lib/types";
 
@@ -51,10 +51,12 @@ export default function HomeContent({
   const ctaLabel = settings?.cta_label?.trim() || "查看連結";
   const publicDatabaseDescription = settings?.public_database_description?.trim();
   const aboutTitle = settings?.about_title?.trim();
+  const publicEmblemUrl = settings?.site_logo_url?.trim() || BRANDING.publicEmblemUrl;
   const emblemAlt = settings?.site_logo_alt?.trim() || (siteTitle ? `${siteTitle}會徽` : "網站會徽");
   const hasEditorialContent = Boolean(
     aboutTitle || settings?.about_body_md?.trim() || officers.length > 0 || links.length > 0,
   );
+  const hasEditorialSideContent = officers.length > 0 || links.length > 0;
 
   return (
     <>
@@ -78,12 +80,8 @@ export default function HomeContent({
           </div>
           <div className="public-signboard public-identity-panel" aria-label={`${siteTitle}識別標誌`}>
             <div className="public-signboard-emblem">
-              {settings?.site_logo_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={settings.site_logo_url} alt={emblemAlt} />
-              ) : (
-                <BrandEmblem className="h-full w-full" size={256} priority />
-              )}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={publicEmblemUrl} alt={emblemAlt} />
             </div>
           </div>
         </div>
@@ -241,44 +239,68 @@ export default function HomeContent({
         </section>
       )}
 
-      <nav className="public-quick-grid" aria-label="公開網站主要入口">
-        {[
-          { href: "/news", title: "最新公告", desc: "班聯會公開消息", icon: Megaphone },
-          { href: "/officers", title: "幹部名單", desc: "本屆幹部與職務", icon: UsersRound },
-          {
-            href: "/public",
-            title: "公開資料庫",
-            desc: publicDatabaseDescription || "法規、公文與治理資料",
-            icon: Database,
-          },
-          { href: "/about", title: "關於班聯會", desc: "任務、組織與沿革", icon: Landmark },
-        ].map((item) => {
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="public-feature-card"
-            >
-              <span className="public-feature-icon"><Icon size={21} aria-hidden /></span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-base font-semibold">{item.title}</span>
-                <span className="mt-0.5 block text-sm text-[var(--public-secondary)]">
-                  {item.desc}
+      <section className="public-home-entry-section" aria-labelledby="public-entry-title">
+        <div className="public-home-entry-heading">
+          <div>
+            <p className="public-home-section-label">快速進入</p>
+            <h2 id="public-entry-title">從這裡開始了解班聯會</h2>
+          </div>
+          <p>公開消息、組織資訊與治理資料，集中在幾個清楚的入口。</p>
+        </div>
+        <nav className="public-quick-grid public-home-quick-grid" aria-label="公開網站主要入口">
+          {[
+            { href: "/news", title: "最新公告", desc: "班聯會公開消息", icon: Megaphone },
+            { href: "/officers", title: "幹部名單", desc: "本屆幹部與職務", icon: UsersRound },
+            {
+              href: "/public",
+              title: "公開資料庫",
+              desc: publicDatabaseDescription || "法規、公文與治理資料",
+              icon: Database,
+            },
+            { href: "/about", title: "關於班聯會", desc: "任務、組織與沿革", icon: Landmark },
+          ].map((item, index) => {
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="public-feature-card public-home-feature-card"
+              >
+                <span className="public-home-feature-index">0{index + 1}</span>
+                <span className="public-feature-icon"><Icon size={20} aria-hidden /></span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-base font-semibold">{item.title}</span>
+                  <span className="mt-0.5 block text-sm text-[var(--public-secondary)]">
+                    {item.desc}
+                  </span>
                 </span>
-              </span>
-              <ArrowRight className="public-feature-arrow" size={17} aria-hidden />
-            </Link>
-          );
-        })}
-      </nav>
+                <ArrowRight className="public-feature-arrow" size={17} aria-hidden />
+              </Link>
+            );
+          })}
+        </nav>
+      </section>
 
       {hasEditorialContent && (
-        <section className="public-editorial">
+        <section
+          className={`public-editorial public-home-editorial ${
+            hasEditorialSideContent ? "public-home-editorial-with-side" : "public-home-editorial-solo"
+          }`}
+        >
           {(aboutTitle || settings?.about_body_md?.trim()) && (
-            <div className="public-panel public-about-panel" data-reveal>
-              {aboutTitle && <h2>{aboutTitle}</h2>}
-              <MarkdownBlock markdown={settings?.about_body_md ?? ""} />
+            <div className="public-panel public-about-panel public-home-about-panel" data-reveal>
+              <div className="public-home-about-intro">
+                <p className="public-home-section-label">認識我們</p>
+                {aboutTitle && <h2>{aboutTitle}</h2>}
+                <p className="public-home-about-note">讓學生的聲音成為校園裡可以被看見、被追蹤的公共紀錄。</p>
+              </div>
+              <div className="public-home-about-copy">
+                <MarkdownBlock markdown={settings?.about_body_md ?? ""} />
+                <Link href="/about" className="public-home-about-link">
+                  了解班聯會的任務與沿革
+                  <ArrowRight size={16} aria-hidden />
+                </Link>
+              </div>
             </div>
           )}
           {(officers.length > 0 || links.length > 0) && <aside className="public-side-stack">
