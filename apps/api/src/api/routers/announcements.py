@@ -120,10 +120,10 @@ def _enrich(ann: object, storage_url_fn: object = None) -> AnnouncementOut:
 
 
 @router.get(
-    "/active-urgent", response_model=AnnouncementOut | None, summary="取得目前有效的緊急公告"
+    "/active-urgent", response_model=AnnouncementOut | None, summary="取得目前有效的重要公告"
 )
 async def get_active_urgent(db: DbDep, viewer: OptionalUser) -> AnnouncementOut | None:
-    """回傳目前有效且檢視者可見的緊急公告（首頁 Popup 使用）；無則回傳 null。"""
+    """回傳目前有效且檢視者可見的重要公告（首頁 Popup 使用）；無則回傳 null。"""
     scope = await _viewer_scope(db, viewer)
     ann = await ann_svc.get_active_urgent(db, scope=scope)
     if ann is None:
@@ -384,7 +384,7 @@ async def unpublish_announcement(
 @router.patch(
     "/{ann_id}/urgent",
     response_model=AnnouncementOut,
-    summary="設定緊急狀態（需 announcement:set_urgent）",
+    summary="設定重要公告狀態（需 announcement:set_urgent）",
 )
 async def set_urgent(
     ann_id: uuid.UUID,
@@ -392,12 +392,16 @@ async def set_urgent(
     db: DbDep,
     user: CurrentUser,
 ) -> AnnouncementOut:
-    """僅允許修改 is_urgent 與 urgent_until 欄位。"""
+    """僅允許修改重要公告的顯示與期限設定。"""
     before = await ann_svc.get(db, ann_id)
     await _require_announcement_action(
         db, user, PermissionCode.ANNOUNCEMENT_SET_URGENT, before.activity_id
     )
-    filtered = AnnouncementUpdate(is_urgent=body.is_urgent, urgent_until=body.urgent_until)
+    filtered = AnnouncementUpdate(
+        is_urgent=body.is_urgent,
+        urgent_until=body.urgent_until,
+        show_on_every_visit=body.show_on_every_visit,
+    )
     ann = await ann_svc.update(db, ann_id, filtered, user)
     await audit_svc.record(
         db,
@@ -409,8 +413,9 @@ async def set_urgent(
         meta={
             "is_urgent": ann.is_urgent,
             "urgent_until": ann.urgent_until.isoformat() if ann.urgent_until else None,
+            "show_on_every_visit": ann.show_on_every_visit,
         },
-        summary=f"設定公告「{ann.title}」緊急狀態",
+        summary=f"設定公告「{ann.title}」重要狀態",
     )
     return _enrich(ann)
 

@@ -13135,6 +13135,16 @@ export interface components {
              */
             is_urgent: boolean;
             /**
+             * Link Url
+             * @description 公告的主要導向
+             */
+            link_url?: string | null;
+            /**
+             * Link Label
+             * @description 連結按鈕文字
+             */
+            link_label?: string | null;
+            /**
              * Org Id
              * @description 所屬組織（None=全站公告）
              */
@@ -13146,6 +13156,11 @@ export interface components {
              * @description 緊急公告截止時間（None=永久）
              */
             urgent_until?: string | null;
+            /**
+             * Show On Every Visit
+             * @description 每次進入系統都顯示重要公告
+             */
+            show_on_every_visit?: boolean;
         };
         /** AnnouncementListItem */
         AnnouncementListItem: {
@@ -13252,6 +13267,10 @@ export interface components {
             is_published: boolean;
             /** Is Urgent */
             is_urgent: boolean;
+            /** Link Url */
+            link_url: string | null;
+            /** Link Label */
+            link_label: string | null;
             /**
              * Media
              * @default []
@@ -13263,6 +13282,8 @@ export interface components {
             published_at: string | null;
             /** Title */
             title: string;
+            /** Show On Every Visit */
+            show_on_every_visit: boolean;
             /**
              * Updated At
              * Format: date-time
@@ -13316,6 +13337,12 @@ export interface components {
             is_published?: boolean | null;
             /** Is Urgent */
             is_urgent?: boolean | null;
+            /** Link Url */
+            link_url?: string | null;
+            /** Link Label */
+            link_label?: string | null;
+            /** Show On Every Visit */
+            show_on_every_visit?: boolean | null;
             /** Title */
             title?: string | null;
             /** Urgent Until */

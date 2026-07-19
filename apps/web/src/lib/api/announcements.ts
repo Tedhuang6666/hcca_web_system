@@ -30,7 +30,11 @@ export const announcementsApi = {
   update: (id: string, body: AnnouncementUpdate) => patch<AnnouncementOut>(`/announcements/${id}`, body),
   publish: (id: string) => post<AnnouncementOut>(`/announcements/${id}/publish`, {}),
   unpublish: (id: string) => post<AnnouncementOut>(`/announcements/${id}/unpublish`, {}),
-  setUrgent: (id: string, body: { is_urgent?: boolean; urgent_until?: string | null }) =>
+  setUrgent: (id: string, body: {
+    is_urgent?: boolean;
+    urgent_until?: string | null;
+    show_on_every_visit?: boolean;
+  }) =>
     patch<AnnouncementOut>(`/announcements/${id}/urgent`, body),
   delete: (id: string) => del<void>(`/announcements/${id}`),
   uploadMedia: async (id: string, file: File): Promise<AnnouncementMediaOut> => {

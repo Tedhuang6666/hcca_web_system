@@ -499,7 +499,7 @@ async def emit_announcement_notice(db: AsyncSession, ann: Announcement) -> None:
     if not channel_ids:
         return
     severity = Severity.URGENT if ann.is_urgent else Severity.INFO
-    title_prefix = "【緊急】" if ann.is_urgent else "【最新】"
+    title_prefix = "【重要】" if ann.is_urgent else "【最新】"
     embed = build_embed(
         Domain.ANNOUNCEMENT,
         severity,

@@ -59,15 +59,34 @@ async def test_merchandise_submission_flow_uses_school_account_and_notifies_subm
     assert upload_response.status_code == 200
     uploaded = upload_response.json()
 
-    submit_response = await student.post(
-        "/merchandise-submissions/submissions",
+    draft_response = await student.post(
+        "/merchandise-submissions/submissions?submit=false",
+        json={"item_id": item_id, "field_values": {}, "files": []},
+    )
+    assert draft_response.status_code == 201
+    draft = draft_response.json()
+    assert draft["status"] == "draft"
+
+    update_draft_response = await student.patch(
+        f"/merchandise-submissions/submissions/{draft['id']}?submit=false",
+        json={
+            "item_id": item_id,
+            "field_values": {"design_name": "草稿中的校園動能"},
+            "files": [{**uploaded, "filename": "校園動能草稿.png"}],
+        },
+    )
+    assert update_draft_response.status_code == 200
+    assert update_draft_response.json()["files"][0]["filename"] == "校園動能草稿.png"
+
+    submit_response = await student.patch(
+        f"/merchandise-submissions/submissions/{draft['id']}?submit=true",
         json={
             "item_id": item_id,
             "field_values": {"design_name": "校園動能"},
             "files": [uploaded],
         },
     )
-    assert submit_response.status_code == 201
+    assert submit_response.status_code == 200
     submission = submit_response.json()
     assert submission["status"] == "submitted"
     assert submission["account_snapshot"]["email"] == member_user.email

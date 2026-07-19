@@ -26,6 +26,8 @@ const DEFAULT_AUDIENCE: AudienceValue = {
 type AnnouncementEditDraft = {
   title: string;
   markdown: string;
+  linkUrl: string;
+  linkLabel: string;
 };
 
 export default function EditAnnouncementPage() {
@@ -37,6 +39,9 @@ export default function EditAnnouncementPage() {
   const [markdown, setMarkdown] = useState("");
   const [isUrgent, setIsUrgent] = useState(false);
   const [urgentUntil, setUrgentUntil] = useState("");
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkLabel, setLinkLabel] = useState("");
+  const [showOnEveryVisit, setShowOnEveryVisit] = useState(false);
   const [media, setMedia] = useState<AnnouncementMediaOut[]>([]);
   const [audience, setAudience] = useState<AudienceValue>(DEFAULT_AUDIENCE);
   const [activityId, setActivityId] = useState("");
@@ -48,14 +53,21 @@ export default function EditAnnouncementPage() {
   const canPublish = can("announcement:publish") || managesItemActivity;
   const canUrgent = can("announcement:set_urgent");
   const canMedia = can("announcement:media_manage") || managesItemActivity;
-  const draftValue = useMemo<AnnouncementEditDraft>(() => ({ title, markdown }), [markdown, title]);
+  const draftValue = useMemo<AnnouncementEditDraft>(
+    () => ({ title, markdown, linkUrl, linkLabel }),
+    [linkLabel, linkUrl, markdown, title],
+  );
   const originalDraft = useMemo<AnnouncementEditDraft | null>(() => item ? ({
     title: item.title,
     markdown: markdownFromContent(item.content),
+    linkUrl: item.link_url ?? "",
+    linkLabel: item.link_label ?? "",
   }) : null, [item]);
   const restoreDraft = useCallback((draft: AnnouncementEditDraft) => {
     setTitle(draft.title ?? "");
     setMarkdown(draft.markdown ?? "");
+    setLinkUrl(draft.linkUrl ?? "");
+    setLinkLabel(draft.linkLabel ?? "");
     toast.info("已復原未儲存的公告編輯草稿");
   }, []);
   const { clearDraft, flushDraft } = useDraftAutosave({
@@ -78,6 +90,9 @@ export default function EditAnnouncementPage() {
         setMarkdown(markdownFromContent(data.content));
         setIsUrgent(data.is_urgent);
         setUrgentUntil(data.urgent_until ? data.urgent_until.slice(0, 16) : "");
+        setLinkUrl(data.link_url ?? "");
+        setLinkLabel(data.link_label ?? "");
+        setShowOnEveryVisit(data.show_on_every_visit);
         setMedia(data.media);
         setActivityId(data.activity_id ?? "");
       })
@@ -103,6 +118,8 @@ export default function EditAnnouncementPage() {
       const updated = await announcementsApi.update(item.id, {
         title: title.trim(),
         content: contentFromMarkdown(markdown),
+        link_url: linkUrl.trim() || null,
+        link_label: linkUrl.trim() ? linkLabel.trim() || null : null,
         audience_type: audience.audience_type,
         audience_org_ids: audience.audience_org_ids,
         audience_user_ids: audience.audience_user_ids,
@@ -126,11 +143,12 @@ export default function EditAnnouncementPage() {
       const updated = await announcementsApi.setUrgent(item.id, {
         is_urgent: isUrgent,
         urgent_until: urgentUntil ? new Date(urgentUntil).toISOString() : null,
+        show_on_every_visit: isUrgent && showOnEveryVisit,
       });
       setItem(updated);
-      toast.success("緊急公告設定已更新");
+      toast.success("重要公告設定已更新");
     } catch (e) {
-      toast.error(apiErrorMessage(e, "更新緊急設定失敗"));
+      toast.error(apiErrorMessage(e, "更新重要公告設定失敗"));
     } finally {
       setSaving(false);
     }
@@ -219,6 +237,41 @@ export default function EditAnnouncementPage() {
       />
 
       {canEdit && (
+        <section className="card space-y-3 p-4">
+          <div>
+            <h2 className="text-sm font-semibold">行動連結</h2>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              可填入站內路徑或完整 HTTP(S) 網址，讀者可從公告詳情或重要公告直接前往。
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem]">
+            <label className="space-y-1 text-sm">
+              <span>連結網址</span>
+              <input
+                type="url"
+                value={linkUrl}
+                onChange={(e) => setLinkUrl(e.target.value)}
+                className="input w-full"
+                placeholder="https://example.com 或 /merchandise-submissions"
+                maxLength={500}
+              />
+            </label>
+            <label className="space-y-1 text-sm">
+              <span>按鈕文字</span>
+              <input
+                value={linkLabel}
+                onChange={(e) => setLinkLabel(e.target.value)}
+                className="input w-full"
+                placeholder="前往連結"
+                maxLength={60}
+                disabled={!linkUrl.trim()}
+              />
+            </label>
+          </div>
+        </section>
+      )}
+
+      {canEdit && (
         <>
           <AnnouncementAudiencePicker
             initialType={item.audience_type}
@@ -245,7 +298,7 @@ export default function EditAnnouncementPage() {
                 checked={isUrgent}
                 onChange={(e) => setIsUrgent(e.target.checked)}
               />
-              緊急公告
+              設為重要公告
             </label>
             <input
               type="datetime-local"
@@ -255,9 +308,18 @@ export default function EditAnnouncementPage() {
               disabled={!isUrgent}
             />
             <button type="button" className="btn btn-secondary shrink-0" disabled={saving} onClick={saveUrgent}>
-              更新緊急設定
+              更新重要公告設定
             </button>
           </div>
+          <label className="mt-3 flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={showOnEveryVisit}
+              onChange={(e) => setShowOnEveryVisit(e.target.checked)}
+              disabled={!isUrgent}
+            />
+            每次進入系統時顯示
+          </label>
         </section>
       )}
 

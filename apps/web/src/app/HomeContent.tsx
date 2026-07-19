@@ -91,17 +91,17 @@ export default function HomeContent({
       </section>
 
       {urgentAnnouncement && (
-        <section className="public-urgent-region" aria-labelledby="urgent-announcement-title">
+        <section className="public-urgent-region" aria-labelledby="important-announcement-title">
           <div className="public-urgent-heading">
             <AlertTriangle size={19} aria-hidden />
-            <p>緊急公告</p>
+            <p>重要公告</p>
           </div>
           <Link
             href={urgentAnnouncement.link_url || `/news/${urgentAnnouncement.id}`}
             className="public-urgent-link"
           >
             <span className="min-w-0">
-              <span id="urgent-announcement-title" className="block text-lg font-bold leading-snug">
+              <span id="important-announcement-title" className="block text-lg font-bold leading-snug">
                 {urgentAnnouncement.title}
               </span>
               <time
@@ -114,7 +114,7 @@ export default function HomeContent({
               </time>
             </span>
             <span className="public-urgent-action">
-              查看公告
+              {urgentAnnouncement.link_label || (urgentAnnouncement.link_url ? "前往連結" : "查看公告")}
               <ArrowRight size={16} aria-hidden />
             </span>
           </Link>

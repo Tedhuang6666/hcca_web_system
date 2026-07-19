@@ -180,6 +180,40 @@ async def create_submission(
     return _serialize_submission(submission, include_submitter=False)
 
 
+@router.patch("/submissions/{submission_id}", response_model=MerchandiseSubmissionOut)
+async def update_my_submission(
+    submission_id: uuid.UUID,
+    payload: MerchandiseSubmissionSave,
+    session: DbDep,
+    current_user: CurrentUser,
+    submit: bool = Query(True),
+) -> dict:
+    submission = or_404(await submission_svc.get_submission(session, submission_id), "找不到投稿")
+    try:
+        submission = await submission_svc.update_submission(
+            session, submission, payload, user=current_user, submit=submit
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    await audit_svc.record(
+        session,
+        entity_type="merchandise_submission",
+        entity_id=str(submission.id),
+        action="merchandise_submission.update",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={"status": submission.status.value},
+        summary=f"更新校商投稿「{submission.item.name}」",
+    )
+    return _serialize_submission(submission, include_submitter=False)
+
+
 @router.get(
     "/admin/settings",
     response_model=MerchandiseSubmissionSettingsOut,

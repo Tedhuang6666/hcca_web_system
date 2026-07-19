@@ -108,8 +108,11 @@ async def sync_announcement(
     announcement.title = (settings.announcement_title or "校商投稿公告").strip()
     announcement.content = _announcement_content(message)
     announcement.is_published = True
-    announcement.is_urgent = False
-    announcement.urgent_until = None
+    announcement.is_urgent = settings.show_announcement_popup
+    announcement.urgent_until = settings.closes_at if settings.show_announcement_popup else None
+    announcement.link_url = "/merchandise-submissions"
+    announcement.link_label = "前往投稿"
+    announcement.show_on_every_visit = settings.show_announcement_popup
     announcement.org_id = None
     announcement.audience_type = (
         AnnouncementAudience.SCHOOL.value
@@ -244,14 +247,16 @@ async def list_submissions(
     return list((await session.scalars(query)).all())
 
 
-def validate_submission_values(item: MerchandiseSubmissionItem, values: dict[str, str]) -> None:
+def validate_submission_values(
+    item: MerchandiseSubmissionItem, values: dict[str, str], *, require_required_fields: bool = True
+) -> None:
     configured = {str(field["key"]): field for field in item.custom_fields}
     unexpected = set(values) - set(configured)
     if unexpected:
         raise ValueError("含有未設定的投稿欄位")
     for key, field in configured.items():
         value = values.get(key, "").strip()
-        if field.get("required") and not value:
+        if require_required_fields and field.get("required") and not value:
             raise ValueError(f"請填寫「{field['label']}」")
         if len(value) > int(field.get("max_length", 200)):
             raise ValueError(f"「{field['label']}」超過字數上限")
@@ -272,12 +277,14 @@ async def save_submission(
     accepting, _, _, _ = effective_config(settings, item)
     if submit and not accepting:
         raise ValueError("此品項目前未開放投稿")
-    validate_submission_values(item, data.field_values)
+    validate_submission_values(item, data.field_values, require_required_fields=submit)
     if submit and not data.files:
         raise ValueError("請至少上傳一個圖稿檔案")
     storage_prefix = f"merchandise-submissions/{user.id}/"
     if any(not file.storage_key.startswith(storage_prefix) for file in data.files):
         raise ValueError("投稿檔案來源不正確")
+    if len({file.storage_key for file in data.files}) != len(data.files):
+        raise ValueError("投稿檔案不可重複")
 
     submission = MerchandiseSubmission(
         item_id=item.id,
@@ -306,6 +313,69 @@ async def save_submission(
             )
         )
     await session.flush()
+    session.expire(submission, ["files"])
+    return (await get_submission(session, submission.id)) or submission
+
+
+async def update_submission(
+    session: AsyncSession,
+    submission: MerchandiseSubmission,
+    data: MerchandiseSubmissionSave,
+    *,
+    user: User,
+    submit: bool,
+) -> MerchandiseSubmission:
+    if submission.user_id != user.id:
+        raise PermissionError("只能編輯自己的投稿")
+    if submission.status not in {
+        MerchandiseSubmissionStatus.DRAFT,
+        MerchandiseSubmissionStatus.REVISION_REQUESTED,
+    }:
+        raise ValueError("此投稿已進入審核流程，無法再編輯")
+    if data.item_id != submission.item_id:
+        raise ValueError("編輯投稿時不可更換品項")
+    item = submission.item or await get_item(session, submission.item_id)
+    if item is None:
+        raise LookupError("找不到投稿品項")
+    settings = await get_settings(session)
+    require_eligible_submitter(settings, user)
+    accepting, _, _, _ = effective_config(settings, item)
+    if submit and not accepting:
+        raise ValueError("此品項目前未開放投稿")
+    validate_submission_values(item, data.field_values, require_required_fields=submit)
+    if submit and not data.files:
+        raise ValueError("請至少上傳一個圖稿檔案")
+    storage_prefix = f"merchandise-submissions/{user.id}/"
+    if any(not file.storage_key.startswith(storage_prefix) for file in data.files):
+        raise ValueError("投稿檔案來源不正確")
+    if len({file.storage_key for file in data.files}) != len(data.files):
+        raise ValueError("投稿檔案不可重複")
+    existing_files = {file.storage_key: file for file in submission.files}
+    submitted_keys = {file.storage_key for file in data.files}
+    for storage_key, existing in existing_files.items():
+        if storage_key not in submitted_keys:
+            await session.delete(existing)
+    submission.field_values = {key: value.strip() for key, value in data.field_values.items()}
+    submission.status = MerchandiseSubmissionStatus.SUBMITTED if submit else MerchandiseSubmissionStatus.DRAFT
+    submission.submitted_at = datetime.now(UTC) if submit else None
+    for file in data.files:
+        existing = existing_files.get(file.storage_key)
+        if existing:
+            existing.filename = file.filename
+            existing.content_type = file.content_type
+            existing.file_size = file.file_size
+            continue
+        session.add(
+            MerchandiseSubmissionFile(
+                submission_id=submission.id,
+                storage_key=file.storage_key,
+                filename=file.filename,
+                content_type=file.content_type,
+                file_size=file.file_size,
+            )
+        )
+    await session.flush()
+    session.expire(submission, ["files"])
     return (await get_submission(session, submission.id)) or submission
 
 

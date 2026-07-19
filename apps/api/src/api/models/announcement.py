@@ -81,7 +81,7 @@ class Announcement(Base, TimestampMixin):
     """
     公告主表（Blog 形式）。
     content 為 Tiptap JSON 格式（JSONB 儲存，前端以 @tiptap/react 渲染）。
-    is_urgent=True 時，使用者進入網頁會觸發 Popup 顯示。
+    is_urgent=True 時，使用者進入網頁會觸發重要公告 Popup 顯示。
     公告末端自動附上「公告人：{author.display_name}」（由前端渲染）。
     """
 
@@ -96,10 +96,18 @@ class Announcement(Base, TimestampMixin):
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     # Tiptap JSON 格式內容（PostgreSQL 使用 JSONB，測試 SQLite 使用 JSON）
     content: Mapped[dict] = mapped_column(JSONDict, nullable=False, default=dict)
-    # 是否為緊急公告（觸發首頁 Popup）
+    # 是否為重要公告（觸發首頁 Popup；保留欄位名稱以相容既有 API）
     is_urgent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
-    # 緊急公告有效截止時間（None = 永久有效直到手動關閉）
+    # 重要公告有效截止時間（None = 永久有效直到手動關閉）
     urgent_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # 公告的主要導向（例如校商投稿頁）；空值則導向公告詳情。
+    link_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # 連結按鈕文字；空值時以前端預設文案顯示。
+    link_label: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    # 關閉後仍在下一次進入系統時彈出，適合需反覆提醒的公告。
+    show_on_every_visit: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     # 是否已發布（草稿不公開）
     is_published: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
     published_at: Mapped[datetime | None] = mapped_column(
