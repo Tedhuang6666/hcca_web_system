@@ -316,8 +316,6 @@ export const NAV_DEF_LOGGED_OUT: NavEntry[] = [
       { id: "publicAnnouncements", href: "/announcements", iconKey: "announcement", label: "校內公告" },
       { id: "publicPartnerMap", href: "/partner-map", iconKey: "partnerMap", label: "特約地圖" },
       { id: "publicPetition", href: "/petitions/new", iconKey: "petition", label: "我要陳情" },
-      { id: "publicCouncilProposal", href: "/council-proposals", iconKey: "meetings", label: "議會提案" },
-      { id: "publicJudicialPetition", href: "/judicial-petitions", iconKey: "shield", label: "評議訴訟" },
       { id: "publicAbout", href: "/about", iconKey: "info", label: "關於本系統" },
     ],
   },
