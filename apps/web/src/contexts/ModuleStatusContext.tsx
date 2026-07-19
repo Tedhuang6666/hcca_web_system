@@ -59,7 +59,13 @@ function writeStatusCache(statuses: Record<string, ModuleStatusPublic>) {
   }
 }
 
-export function ModuleStatusProvider({ children }: { children: React.ReactNode }) {
+export function ModuleStatusProvider({
+  children,
+  authenticated = true,
+}: {
+  children: React.ReactNode;
+  authenticated?: boolean;
+}) {
   const [statuses, setStatuses] = useState<Record<string, ModuleStatusPublic>>(
     () => readStatusCache(),
   );
@@ -97,13 +103,14 @@ export function ModuleStatusProvider({ children }: { children: React.ReactNode }
     window.addEventListener("hcca:module-maintenance", onNudge);
     // 取使用者 ID 訂閱 WebSocket（已登入時才連）
     if (typeof window !== "undefined") {
-      const userId = localStorage.getItem("user_id");
+      const userId = authenticated ? localStorage.getItem("user_id") : null;
       if (userId) setWsRoom(`user:${userId}`);
+      else setWsRoom(null);
     }
     return () => {
       window.removeEventListener("hcca:module-maintenance", onNudge);
     };
-  }, [refresh]);
+  }, [authenticated, refresh]);
 
   // 接收後端 broadcast_all 的 module_maintenance 事件，立即重新整理（不等 30s 輪詢）
   useWS(

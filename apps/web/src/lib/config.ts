@@ -8,6 +8,10 @@ export function wsBase(): string {
   if (configured) return configured.replace(/^http/, "ws").replace(/\/$/, "");
   if (typeof window === "undefined") return "ws://localhost:8000";
 
+  // Next.js dev server 不會代理 WebSocket upgrade；未設定公開 WS URL 時，
+  // 本機開發直接連 FastAPI。正式環境則沿用同源 reverse proxy。
+  if (process.env.NODE_ENV !== "production") return "ws://localhost:8000";
+
   const proto = window.location.protocol === "https:" ? "wss" : "ws";
   return `${proto}://${window.location.host}`;
 }
