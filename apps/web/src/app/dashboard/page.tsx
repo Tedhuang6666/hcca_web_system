@@ -510,7 +510,7 @@ export default function DashboardPage() {
               <Link
                 key={`${item.kind}-${item.id}`}
                 href={item.href}
-                className="dashboard-recent-chip max-w-[180px] truncate px-3 py-1.5 text-xs font-medium"
+                className="dashboard-recent-chip px-3 py-1.5 text-xs font-medium"
                 title={item.title}>
                 {item.title}
               </Link>
