@@ -92,6 +92,27 @@ async def test_list_announcements_only_returns_published(
 
 
 @pytest.mark.asyncio
+async def test_get_published_announcement_without_login_is_public(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    author = await _seed_user_with_codes(db_session, "ann-public-detail@school.edu", [])
+    ann = Announcement(
+        title="公開公告詳情",
+        content={"type": "doc", "content": []},
+        author_id=author.id,
+        is_published=True,
+        audience_type="all",
+    )
+    db_session.add(ann)
+    await db_session.flush()
+
+    resp = await client.get(f"/announcements/{ann.id}")
+
+    assert resp.status_code == 200
+    assert resp.json()["title"] == "公開公告詳情"
+
+
+@pytest.mark.asyncio
 async def test_list_all_announcements_without_permission_returns_403(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
