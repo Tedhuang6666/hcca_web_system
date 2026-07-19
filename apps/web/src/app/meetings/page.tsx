@@ -177,17 +177,17 @@ export default function MeetingsPage() {
       <GovernanceLinkNotice context={governanceContext} />
 
       {canCreateMeeting ? (
-        <section className="mb-6 grid gap-3 rounded-lg border border-[var(--border)] p-4 sm:grid-cols-[1fr_1fr_auto]">
+        <section className="mb-6 grid min-w-0 grid-cols-1 gap-3 rounded-lg border border-[var(--border)] p-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="會議名稱"
-            className="rounded-md border border-[var(--border)] bg-transparent px-3 py-2 text-sm"
+            className="min-w-0 w-full rounded-md border border-[var(--border)] bg-transparent px-3 py-2 text-sm"
           />
           <select
             value={orgId}
             onChange={(e) => setOrgId(e.target.value)}
-            className="rounded-md border border-[var(--border)] bg-transparent px-3 py-2 text-sm">
+            className="min-w-0 w-full rounded-md border border-[var(--border)] bg-transparent px-3 py-2 text-sm">
             <option value="">選擇組織</option>
             {orgs.map((org) => (
               <option key={org.id} value={org.id}>
