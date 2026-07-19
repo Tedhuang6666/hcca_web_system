@@ -26,6 +26,18 @@ import type {
 type ItemDraft = MerchandiseSubmissionItemCreate & { id?: string };
 type AdminTab = "review" | "settings" | "items";
 
+const reviewStatusLabels: Record<
+  MerchandiseSubmissionAdminListItem["status"],
+  string
+> = {
+  draft: "草稿",
+  submitted: "已送出",
+  reviewing: "審核中",
+  approved: "已採用",
+  revision_requested: "需要補件",
+  rejected: "未採用",
+};
+
 function isPreviewableImage(file: { content_type: string; filename: string }) {
   return (
     file.content_type.startsWith("image/") ||
@@ -686,6 +698,11 @@ export default function MerchandiseSubmissionsAdminPage() {
   >([]);
   const [draft, setDraft] = useState<ItemDraft>(emptyItem());
   const [tab, setTab] = useState<AdminTab>("review");
+  const [reviewItemId, setReviewItemId] = useState("");
+  const [reviewUserQuery, setReviewUserQuery] = useState("");
+  const [reviewStatus, setReviewStatus] = useState<
+    MerchandiseSubmissionAdminListItem["status"] | ""
+  >("");
   const [loading, setLoading] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
   const load = useCallback(async () => {
@@ -712,6 +729,19 @@ export default function MerchandiseSubmissionsAdminPage() {
     () => items.find((item) => item.id === draft.id),
     [draft.id, items],
   );
+  const filteredSubmissions = useMemo(() => {
+    const query = reviewUserQuery.trim().toLocaleLowerCase("zh-TW");
+    return submissions.filter((submission) => {
+      if (reviewItemId && submission.item_id !== reviewItemId) return false;
+      if (reviewStatus && submission.status !== reviewStatus) return false;
+      if (!query) return true;
+      return [
+        submission.submitter_name,
+        submission.submitter_email,
+        submission.submitter_student_id ?? "",
+      ].some((value) => value.toLocaleLowerCase("zh-TW").includes(query));
+    });
+  }, [reviewItemId, reviewStatus, reviewUserQuery, submissions]);
   const saveSettings = async () => {
     if (!settings) return;
     setSavingSettings(true);
@@ -1035,12 +1065,88 @@ export default function MerchandiseSubmissionsAdminPage() {
           <div>
             <h2 className="font-semibold">投稿審核</h2>
             <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-              更新狀態後，學生會在通知中心收到結果。
+              依品項、投稿者與目前狀態篩選，快速處理需要審核的投稿。
             </p>
           </div>
-          <div className="mt-4">
-            {submissions.length ? (
-              submissions.map((submission) => (
+          <div
+            className="mt-5 grid gap-3 rounded-lg border p-4 md:grid-cols-[minmax(12rem,1fr)_minmax(15rem,1.4fr)_minmax(10rem,0.8fr)_auto]"
+            style={{
+              background: "var(--bg-elevated)",
+              borderColor: "var(--border)",
+            }}
+          >
+            <label>
+              <FieldCaption>投稿品項</FieldCaption>
+              <select
+                value={reviewItemId}
+                onChange={(event) => setReviewItemId(event.target.value)}
+                className="input w-full"
+              >
+                <option value="">全部品項</option>
+                {items.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <FieldCaption>投稿者</FieldCaption>
+              <input
+                value={reviewUserQuery}
+                onChange={(event) => setReviewUserQuery(event.target.value)}
+                className="input w-full"
+                placeholder="搜尋姓名、校務信箱或學號"
+              />
+            </label>
+            <label>
+              <FieldCaption>目前狀態</FieldCaption>
+              <select
+                value={reviewStatus}
+                onChange={(event) =>
+                  setReviewStatus(
+                    event.target.value as
+                      MerchandiseSubmissionAdminListItem["status"] | "",
+                  )
+                }
+                className="input w-full"
+              >
+                <option value="">全部狀態</option>
+                {(
+                  Object.entries(reviewStatusLabels) as Array<
+                    [MerchandiseSubmissionAdminListItem["status"], string]
+                  >
+                ).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="flex items-end">
+              <button
+                type="button"
+                className="btn btn-ghost min-h-11 w-full"
+                disabled={!reviewItemId && !reviewUserQuery && !reviewStatus}
+                onClick={() => {
+                  setReviewItemId("");
+                  setReviewUserQuery("");
+                  setReviewStatus("");
+                }}
+              >
+                清除篩選
+              </button>
+            </div>
+          </div>
+          <p
+            className="mt-4 text-sm"
+            style={{ color: "var(--text-secondary)" }}
+          >
+            顯示 {filteredSubmissions.length} / {submissions.length} 筆投稿
+          </p>
+          <div className="mt-2">
+            {filteredSubmissions.length ? (
+              filteredSubmissions.map((submission) => (
                 <ReviewRow
                   key={submission.id}
                   submission={submission}
@@ -1053,7 +1159,9 @@ export default function MerchandiseSubmissionsAdminPage() {
                 className="py-8 text-center text-sm"
                 style={{ color: "var(--text-muted)" }}
               >
-                目前尚未收到投稿。
+                {submissions.length
+                  ? "沒有符合目前篩選條件的投稿。"
+                  : "目前尚未收到投稿。"}
               </p>
             )}
           </div>
