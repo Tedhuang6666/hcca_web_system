@@ -586,6 +586,7 @@ export default function RegulationDetailPageClient() {
                   />
                 </div>
 
+                <div className="regulation-detail-action-groups">
                 <div className="regulation-detail-tool-group" role="group" aria-label="閱讀工具">
                 {/* 縮放 */}
                 <div className="flex items-center gap-1 rounded-lg overflow-hidden"
@@ -749,6 +750,7 @@ export default function RegulationDetailPageClient() {
                     廢止
                   </button>
                 )}
+                </div>
                 </div>
               </div>
             </div>
