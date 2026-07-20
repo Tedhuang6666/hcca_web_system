@@ -103,7 +103,6 @@ export default function RegulationDetailPageClient() {
   const [showDeleted, setShowDeleted] = useState(false);
   const [tocVisible, setTocVisible] = useState(true);
   const [chapterCollapsedMap, setChapterCollapsedMap] = useState<Record<string, boolean>>({});
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const [amendmentDrafts, setAmendmentDrafts] = useState<Draft[]>([]);
   const [activeAnchorId, setActiveAnchorId] = useState<string | null>(null);
   const [highlightedArticleId, setHighlightedArticleId] = useState<string | null>(null);
@@ -114,12 +113,6 @@ export default function RegulationDetailPageClient() {
   const currentUserId = typeof window !== "undefined" ? localStorage.getItem("user_id") ?? "" : "";
   const isAnonymous = typeof window !== "undefined" && !localStorage.getItem("user_id");
   const currentRegHref = reg ? regulationHref(reg) : `/regulations/${encodeURIComponent(id)}`;
-
-  useEffect(() => {
-    const handler = () => setIsFullscreen(Boolean(document.fullscreenElement));
-    document.addEventListener("fullscreenchange", handler);
-    return () => document.removeEventListener("fullscreenchange", handler);
-  }, []);
 
   const reload = useCallback(() => {
     regulationsApi.get(id).then(setReg).catch(() => {});
@@ -226,15 +219,6 @@ export default function RegulationDetailPageClient() {
       .then(() => toast.success("連結已複製到剪貼簿"))
       .catch(() => toast.error("複製失敗"));
   }, [reg?.title]);
-
-  // 全螢幕切換
-  const handleFullscreen = useCallback(() => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
-    } else {
-      document.exitFullscreen().catch(() => {});
-    }
-  }, []);
 
   // 複製連結
   const handleCopyLink = useCallback(() => {
@@ -623,22 +607,6 @@ export default function RegulationDetailPageClient() {
                     <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
                   </svg>
                   分享
-                </button>
-
-                {/* 全螢幕 */}
-                <button onClick={handleFullscreen}
-                  className="px-2.5 py-1.5 rounded-lg text-xs transition-all hover:opacity-80"
-                  style={{ color: "var(--text-muted)", border: "1px solid var(--border)" }}
-                  title={isFullscreen ? "退出全螢幕" : "全螢幕"}>
-                  {isFullscreen ? (
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                      <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>
-                    </svg>
-                  ) : (
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                      <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
-                    </svg>
-                  )}
                 </button>
 
                 {/* 複製連結 */}
