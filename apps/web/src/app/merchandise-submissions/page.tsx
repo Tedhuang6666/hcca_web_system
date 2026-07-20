@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   Clock3,
   CheckCircle2,
+  ChevronDown,
   Download,
   FileText,
   LoaderCircle,
@@ -253,6 +254,7 @@ export default function MerchandiseSubmissionsPage() {
   const [values, setValues] = useState<Record<string, string>>({});
   const [files, setFiles] = useState<MerchandiseSubmissionUploadOut[]>([]);
   const [tab, setTab] = useState<"submit" | "mine">("submit");
+  const [isPickerOpen, setIsPickerOpen] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -269,7 +271,6 @@ export default function MerchandiseSubmissionsPage() {
       ]);
       setPortal(portalData);
       setSubmissions(mine);
-      setSelectedId((id) => id || portalData.items[0]?.id || "");
     } catch (error) {
       toast.error(apiErrorMessage(error, "無法載入校商投稿"));
     } finally {
@@ -284,12 +285,14 @@ export default function MerchandiseSubmissionsPage() {
     setEditingId(null);
     setValues({});
     setFiles([]);
+    setIsPickerOpen(false);
   };
   const edit = (submission: MerchandiseSubmissionOut) => {
     setSelectedId(submission.item_id);
     setValues(submission.field_values);
     setFiles(submission.files);
     setEditingId(submission.id);
+    setIsPickerOpen(false);
     setTab("submit");
   };
   const save = async (submit: boolean) => {
@@ -540,102 +543,164 @@ export default function MerchandiseSubmissionsPage() {
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <h2 className="text-lg font-semibold">可投稿品項</h2>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-lg font-semibold">
+                        {isPickerOpen ? "可投稿品項" : "已選擇品項"}
+                      </h2>
+                      {!isPickerOpen && selected && (
+                        <span
+                          className="rounded px-2 py-1 text-xs font-semibold"
+                          style={{
+                            background: "var(--success-dim)",
+                            color: "var(--success)",
+                          }}
+                        >
+                          已選擇
+                        </span>
+                      )}
+                    </div>
                     <p
                       className="mt-1 text-sm"
                       style={{ color: "var(--text-secondary)" }}
                     >
-                      請先選擇要設計的商品；每個品項都有自己的規格與範本。
+                      {isPickerOpen
+                        ? "請選擇要設計的商品；每個品項都有自己的規格與範本。"
+                        : `目前選擇：${selected?.name ?? "尚未選擇"}`}
                     </p>
                   </div>
-                  {editingId && (
-                    <button
-                      type="button"
-                      className="btn btn-ghost min-h-10"
-                      onClick={() => {
-                        setEditingId(null);
-                        setValues({});
-                        setFiles([]);
-                      }}
-                    >
-                      <Plus size={15} />
-                      建立新投稿
-                    </button>
-                  )}
+                  <div className="flex flex-wrap gap-2">
+                    {selected && !isPickerOpen && !editingId && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost min-h-10"
+                        aria-expanded={isPickerOpen}
+                        aria-controls="merchandise-item-picker"
+                        onClick={() => setIsPickerOpen(true)}
+                      >
+                        <ChevronDown size={15} />
+                        更換品項
+                      </button>
+                    )}
+                    {editingId && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost min-h-10"
+                        onClick={() => {
+                          setEditingId(null);
+                          setValues({});
+                          setFiles([]);
+                          setIsPickerOpen(true);
+                        }}
+                      >
+                        <Plus size={15} />
+                        建立新投稿
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div
-                  className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3"
-                  role="group"
-                  aria-label="可投稿品項"
-                >
-                  {portal.items.map((item) => (
-                    <button
-                      type="button"
-                      key={item.id}
-                      aria-pressed={selectedId === item.id}
-                      disabled={Boolean(editingId)}
-                      onClick={() => choose(item.id)}
-                      className="relative min-h-36 rounded-xl border p-4 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-                      style={{
-                        background:
-                          selectedId === item.id
-                            ? "var(--primary-dim)"
-                            : "var(--bg-elevated)",
-                        borderColor:
-                          selectedId === item.id
-                            ? "var(--primary)"
-                            : "var(--border)",
-                        outlineColor: "var(--primary)",
-                      }}
-                    >
-                      <span
-                        className="flex h-10 w-10 items-center justify-center rounded-lg"
+                {isPickerOpen ? (
+                  <div
+                    id="merchandise-item-picker"
+                    className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3"
+                    role="group"
+                    aria-label="可投稿品項"
+                  >
+                    {portal.items.map((item) => (
+                      <button
+                        type="button"
+                        key={item.id}
+                        aria-pressed={selectedId === item.id}
+                        disabled={Boolean(editingId)}
+                        onClick={() => choose(item.id)}
+                        className="relative min-h-36 rounded-xl border p-4 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
                         style={{
                           background:
                             selectedId === item.id
-                              ? "var(--bg-surface)"
-                              : "var(--primary-dim)",
-                          color: "var(--primary-text)",
+                              ? "var(--primary-dim)"
+                              : "var(--bg-elevated)",
+                          borderColor:
+                            selectedId === item.id
+                              ? "var(--primary)"
+                              : "var(--border)",
+                          outlineColor: "var(--primary)",
                         }}
                       >
-                        <Package size={20} />
-                      </span>
-                      {selectedId === item.id && (
-                        <CheckCircle2
-                          size={20}
-                          className="absolute right-4 top-4"
-                          style={{ color: "var(--primary-text)" }}
-                          aria-label="已選擇"
-                        />
-                      )}
-                      <span className="mt-4 block text-base font-semibold">
-                        {item.name}
-                      </span>
-                      <span
-                        className="mt-1 block text-sm"
+                        <span
+                          className="flex h-10 w-10 items-center justify-center rounded-lg"
+                          style={{
+                            background:
+                              selectedId === item.id
+                                ? "var(--bg-surface)"
+                                : "var(--primary-dim)",
+                            color: "var(--primary-text)",
+                          }}
+                        >
+                          <Package size={20} />
+                        </span>
+                        {selectedId === item.id && (
+                          <CheckCircle2
+                            size={20}
+                            className="absolute right-4 top-4"
+                            style={{ color: "var(--primary-text)" }}
+                            aria-label="已選擇"
+                          />
+                        )}
+                        <span className="mt-4 block text-base font-semibold">
+                          {item.name}
+                        </span>
+                        <span
+                          className="mt-1 block text-sm"
+                          style={{ color: "var(--text-secondary)" }}
+                        >
+                          {excerpt(item.description, "") ||
+                            (item.specification
+                              ? "已提供詳細規格"
+                              : "請依品項需求上傳圖稿")}
+                        </span>
+                        <span
+                          className="mt-3 inline-flex rounded px-2 py-1 text-xs font-semibold"
+                          style={{
+                            background: item.is_accepting
+                              ? "var(--success-dim)"
+                              : "var(--danger-dim)",
+                            color: item.is_accepting
+                              ? "var(--success)"
+                              : "var(--danger)",
+                          }}
+                        >
+                          {item.is_accepting ? "開放投稿" : "目前未開放"}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : selected ? (
+                  <div
+                    className="mt-5 flex items-center gap-3 rounded-lg border p-3"
+                    style={{
+                      background: "var(--bg-elevated)",
+                      borderColor: "var(--border)",
+                    }}
+                  >
+                    <span
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
+                      style={{
+                        background: "var(--primary-dim)",
+                        color: "var(--primary-text)",
+                      }}
+                    >
+                      <Package size={20} />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold">{selected.name}</p>
+                      <p
+                        className="mt-1 text-sm"
                         style={{ color: "var(--text-secondary)" }}
                       >
-                        {excerpt(item.description, "") ||
-                          (item.specification
-                            ? "已提供詳細規格"
-                            : "請依品項需求上傳圖稿")}
-                      </span>
-                      <span
-                        className="mt-3 inline-flex rounded px-2 py-1 text-xs font-semibold"
-                        style={{
-                          background: item.is_accepting
-                            ? "var(--success-dim)"
-                            : "var(--danger-dim)",
-                          color: item.is_accepting
-                            ? "var(--success)"
-                            : "var(--danger)",
-                        }}
-                      >
-                        {item.is_accepting ? "開放投稿" : "目前未開放"}
-                      </span>
-                    </button>
-                  ))}
-                </div>
+                        下面將顯示品項資訊、規格與設計範本。
+                      </p>
+                    </div>
+                  </div>
+                ) : null}
                 {selected?.description && (
                   <div className="mt-3 text-sm text-[var(--text-secondary)]">
                     <MarkdownBlock markdown={selected.description} />
