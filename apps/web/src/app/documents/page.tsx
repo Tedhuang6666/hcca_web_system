@@ -666,18 +666,11 @@ export default function DocumentListPage() {
                 </span>
               </button>
             ))}
-            <button
-              onClick={saveCurrentFilter}
-              className="document-quick-filter text-xs px-3 py-1.5 rounded-lg"
-              style={{ color: "var(--primary)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }}
-            >
-              ＋ 儲存目前查詢
-            </button>
           </div>
         )}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 flex-wrap">
+        <div className="flex w-full flex-col gap-3">
           {/* 搜尋框 */}
-          <div className="relative">
+          <div className="relative w-full">
             <svg className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
               width="14" height="14" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" strokeWidth="2" strokeLinecap="round"
@@ -686,11 +679,11 @@ export default function DocumentListPage() {
               <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
             <input type="search" value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="搜尋公文標題或字號…" className="input w-full sm:w-64" style={{ paddingLeft: "2.25rem" }} aria-label="搜尋公文" />
+              placeholder="搜尋公文標題或字號…" className="input w-full" style={{ paddingLeft: "2.25rem" }} aria-label="搜尋公文" />
           </div>
 
           {/* Tab 切換 */}
-          <div className="document-tabs flex gap-0.5 p-1 rounded-xl overflow-x-auto"
+          <div className="document-tabs flex w-full gap-0.5 p-1 rounded-xl overflow-x-auto"
             style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
             role="tablist" aria-label="公文狀態篩選">
             {TABS.map(({ key, label }) => {
@@ -698,7 +691,7 @@ export default function DocumentListPage() {
               return (
                 <button key={key} role="tab" aria-selected={active}
                   onClick={() => setActiveTab(key)}
-                  className="document-tab px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap"
+                  className="document-tab min-w-0 flex-1 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap"
                   style={active
                     ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--primary-dim)" }
                     : { color: "var(--text-muted)", border: "1px solid transparent" }}>
@@ -708,31 +701,31 @@ export default function DocumentListPage() {
             })}
           </div>
 
-          {/* 進階篩選開關 */}
-          <button onClick={() => setShowFilters(f => !f)}
-            className="document-filter-toggle relative px-3 py-1.5 rounded-lg text-xs font-medium inline-flex items-center gap-1.5"
-            style={showFilters || hasActiveFilters
-              ? { color: "var(--primary)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }
-              : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
-            </svg>
-            進階篩選
-            {hasActiveFilters && (
-              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full"
-                style={{ background: "var(--primary)" }} />
-            )}
-          </button>
-
-          {hasActiveFilters && (
-            <button onClick={clearFilters}
-              className="document-filter-toggle text-xs px-2.5 py-1.5 rounded-lg"
-              style={{ color: "var(--danger)", border: "1px solid rgba(220,38,38,0.3)", background: "rgba(220,38,38,0.06)" }}>
-              清除篩選
+          <div className="document-filter-actions flex w-full flex-wrap items-center gap-2">
+            {/* 進階篩選開關 */}
+            <button onClick={() => setShowFilters(f => !f)}
+              className="document-filter-toggle relative px-3 py-1.5 rounded-lg text-xs font-medium inline-flex items-center gap-1.5"
+              style={showFilters || hasActiveFilters
+                ? { color: "var(--primary)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }
+                : { color: "var(--text-muted)", border: "1px solid var(--border)" }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+              </svg>
+              進階篩選
+              {hasActiveFilters && (
+                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full"
+                  style={{ background: "var(--primary)" }} />
+              )}
             </button>
-          )}
 
-          {savedFilters.length === 0 && (
+            {hasActiveFilters && (
+              <button onClick={clearFilters}
+                className="document-filter-toggle text-xs px-2.5 py-1.5 rounded-lg"
+                style={{ color: "var(--danger)", border: "1px solid rgba(220,38,38,0.3)", background: "rgba(220,38,38,0.06)" }}>
+                清除篩選
+              </button>
+            )}
+
             <button
               onClick={saveCurrentFilter}
               className="text-xs px-3 py-1.5 rounded-lg hover:opacity-80"
@@ -741,7 +734,7 @@ export default function DocumentListPage() {
             >
               ＋ 儲存目前查詢
             </button>
-          )}
+          </div>
         </div>
 
         {/* 進階篩選面板 */}
