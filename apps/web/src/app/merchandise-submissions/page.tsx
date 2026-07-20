@@ -607,36 +607,12 @@ export default function MerchandiseSubmissionsPage() {
                   </div>
                 </div>
                 {isPickerOpen ? (
-                  <>
-                    <label
-                      htmlFor="merchandise-item-picker-mobile"
-                      className="sr-only"
-                    >
-                      選擇投稿品項
-                    </label>
-                    <select
-                      id="merchandise-item-picker-mobile"
-                      value={selectedId}
-                      onChange={(event) => choose(event.target.value)}
-                      className="input mt-5 min-h-11 w-full sm:hidden"
-                    >
-                      <option value="" disabled>
-                        請選擇商品
-                      </option>
-                      {portal.items.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.name}・
-                          {item.is_accepting ? "開放投稿" : "目前未開放"}
-                          {hasItemDetails(item) ? "・有詳情" : ""}
-                        </option>
-                      ))}
-                    </select>
-                    <div
-                      id="merchandise-item-picker"
-                      className="mt-5 hidden gap-3 sm:grid sm:grid-cols-2 xl:grid-cols-3"
-                      role="group"
-                      aria-label="可投稿品項"
-                    >
+                  <div
+                    id="merchandise-item-picker"
+                    className="mt-5 grid gap-2 sm:grid-cols-2 sm:gap-3 xl:grid-cols-3"
+                    role="group"
+                    aria-label="可投稿品項"
+                  >
                       {portal.items.map((item) => (
                         <button
                           type="button"
@@ -644,7 +620,7 @@ export default function MerchandiseSubmissionsPage() {
                           aria-pressed={selectedId === item.id}
                           disabled={Boolean(editingId)}
                           onClick={() => choose(item.id)}
-                          className="relative min-h-36 rounded-xl border p-4 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="relative flex min-h-0 items-center gap-3 rounded-lg border p-3 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60 sm:block sm:min-h-36 sm:rounded-xl sm:p-4"
                           style={{
                             background:
                               selectedId === item.id
@@ -658,7 +634,7 @@ export default function MerchandiseSubmissionsPage() {
                           }}
                         >
                           <span
-                            className="flex h-10 w-10 items-center justify-center rounded-lg"
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg sm:h-10 sm:w-10"
                             style={{
                               background:
                                 selectedId === item.id
@@ -672,49 +648,52 @@ export default function MerchandiseSubmissionsPage() {
                           {selectedId === item.id && (
                             <CheckCircle2
                               size={20}
-                              className="absolute right-4 top-4"
+                              className="absolute right-3 top-3 sm:right-4 sm:top-4"
                               style={{ color: "var(--primary-text)" }}
                               aria-label="已選擇"
                             />
                           )}
-                          <span className="mt-4 block text-base font-semibold">
-                            {item.name}
-                          </span>
-                          <span
-                            className="mt-1 block text-sm"
-                            style={{ color: "var(--text-secondary)" }}
-                          >
-                            {excerpt(item.description, "") ||
-                              (item.specification
-                                ? "已提供詳細規格"
-                                : "請依品項需求上傳圖稿")}
-                          </span>
-                          <span
-                            className="mt-3 inline-flex rounded px-2 py-1 text-xs font-semibold"
-                            style={{
-                              background: item.is_accepting
-                                ? "var(--success-dim)"
-                                : "var(--danger-dim)",
-                              color: item.is_accepting
-                                ? "var(--success)"
-                                : "var(--danger)",
-                            }}
-                          >
-                            {item.is_accepting ? "開放投稿" : "目前未開放"}
-                          </span>
-                          {hasItemDetails(item) && (
-                            <span
-                              className="mt-2 flex items-center gap-1 text-xs font-medium"
-                              style={{ color: "var(--primary-text)" }}
-                            >
-                              <FileText size={13} />
-                              選擇後查看詳情
+                          <div className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-semibold sm:mt-4 sm:text-base">
+                              {item.name}
                             </span>
-                          )}
+                            <span
+                              className="mt-1 hidden truncate text-sm sm:block"
+                              style={{ color: "var(--text-secondary)" }}
+                            >
+                              {excerpt(item.description, "") ||
+                                (item.specification
+                                  ? "已提供詳細規格"
+                                  : "請依品項需求上傳圖稿")}
+                            </span>
+                            <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 sm:mt-3">
+                              <span
+                                className="inline-flex rounded px-2 py-1 text-xs font-semibold"
+                                style={{
+                                  background: item.is_accepting
+                                    ? "var(--success-dim)"
+                                    : "var(--danger-dim)",
+                                  color: item.is_accepting
+                                    ? "var(--success)"
+                                    : "var(--danger)",
+                                }}
+                              >
+                                {item.is_accepting ? "開放投稿" : "目前未開放"}
+                              </span>
+                              {hasItemDetails(item) && (
+                                <span
+                                  className="flex items-center gap-1 text-xs font-medium"
+                                  style={{ color: "var(--primary-text)" }}
+                                >
+                                  <FileText size={13} />
+                                  有規格與範本
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         </button>
                       ))}
-                    </div>
-                  </>
+                  </div>
                 ) : selected ? (
                   <div
                     className="mt-5 flex items-center gap-3 rounded-lg border p-3"
@@ -739,45 +718,15 @@ export default function MerchandiseSubmissionsPage() {
                         style={{ color: "var(--text-secondary)" }}
                       >
                         {hasItemDetails(selected)
-                          ? "請先查看下方品項資訊、規格與設計範本。"
+                          ? "以下為品項資訊、規格與設計範本。"
                           : "已選擇品項，請準備投稿檔案。"}
                       </p>
                     </div>
                   </div>
                 ) : null}
-                {selected && hasItemDetails(selected) && !isPickerOpen && (
-                  <div
-                    className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3"
-                    style={{
-                      background: "var(--primary-dim)",
-                      borderColor: "var(--border-strong)",
-                    }}
-                  >
-                    <div className="flex items-start gap-2">
-                      <FileText
-                        size={18}
-                        className="mt-0.5 shrink-0"
-                        style={{ color: "var(--primary-text)" }}
-                      />
-                      <p className="text-sm font-medium">
-                        此品項有規格與設計範本，請先查看詳情再準備圖稿。
-                      </p>
-                    </div>
-                    <a
-                      href="#merchandise-item-details"
-                      className="btn btn-ghost min-h-10 shrink-0"
-                    >
-                      <ChevronDown size={15} />
-                      查看詳情
-                    </a>
-                  </div>
-                )}
               </section>
               {selected && hasItemDetails(selected) && (
-                <div
-                  id="merchandise-item-details"
-                  className="scroll-mt-6 space-y-6"
-                >
+                <div className="space-y-6">
                   {selected.description && (
                     <section
                       className="rounded-xl border p-5 sm:p-6"
