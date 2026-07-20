@@ -35,7 +35,6 @@ import {
   isTab,
   type Tab,
 } from "@/components/regulations/RegulationDetailSections";
-import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { DetailPageLoading } from "@/components/ui/LoadingState";
 import { RegulationCategoryBadge } from "@/components/ui/StatusBadge";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -547,11 +546,6 @@ export default function RegulationDetailPageClient() {
       `}</style>
 
       <div className="regulation-detail-page app-page-width space-y-5">
-        {/* 麵包屑 */}
-        <Breadcrumb items={[
-          { label: "法規查詢", href: "/regulations" },
-          { label: reg.title },
-        ]} />
         {/* ── 頂部標題列 ───────────────────────────────────────────────────── */}
         <div className="regulation-detail-heading flex items-start gap-3">
           <Link href="/regulations"
