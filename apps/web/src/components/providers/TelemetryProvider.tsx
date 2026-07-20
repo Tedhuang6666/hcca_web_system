@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import type { PostHog } from "posthog-js";
+import { analyticsApi } from "@/lib/api";
 
 let posthogPromise: Promise<PostHog> | null = null;
 
@@ -40,6 +41,9 @@ export default function TelemetryProvider() {
     if (!key) return;
     const query = searchParams.toString();
     const url = query ? `${pathname}?${query}` : pathname;
+    if (typeof window !== "undefined" && localStorage.getItem("user_id")) {
+      void analyticsApi.trackPageView(pathname).catch(() => undefined);
+    }
 
     if (isFirstRender.current) {
       isFirstRender.current = false;

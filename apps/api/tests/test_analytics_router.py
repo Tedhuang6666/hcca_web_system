@@ -5,6 +5,9 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import select
+
+from api.models.analytics_page_view import AnalyticsPageView
 from api.models.announcement import Announcement
 from api.models.document import ApprovalStepStatus, Document, DocumentApproval, DocumentStatus
 from api.models.org import Org
@@ -286,3 +289,57 @@ async def test_survey_participation_excludes_draft_surveys(
     ids = {row["survey_id"] for row in resp.json()}
     assert str(open_survey.id) in ids
     assert str(draft_survey.id) not in ids
+
+
+async def test_page_view_tracking_does_not_require_analytics_permission(
+    member_user, authed_client_factory, db_session
+) -> None:
+    ac = authed_client_factory(member_user)
+
+    resp = await ac.post("/analytics/page-views", json={"path": "/documents/123"})
+
+    assert resp.status_code == 204
+    result = await db_session.execute(
+        select(AnalyticsPageView).where(AnalyticsPageView.user_id == member_user.id)
+    )
+    assert result.scalar_one().path == "/documents/:id"
+
+
+async def test_product_analytics_returns_daily_users_and_page_metrics(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant(db_session, member_user, "analytics:view")
+    now = datetime.now(UTC)
+    new_user = User(
+        email=f"product-analytics-{uuid.uuid4().hex[:8]}@example.com",
+        display_name="產品統計使用者",
+        created_at=now - timedelta(days=1),
+    )
+    db_session.add(new_user)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            AnalyticsPageView(user_id=member_user.id, path="/documents/:id", created_at=now),
+            AnalyticsPageView(user_id=new_user.id, path="/documents/:id", created_at=now),
+            AnalyticsPageView(user_id=member_user.id, path="/analytics", created_at=now),
+        ]
+    )
+    await db_session.flush()
+
+    resp = await authed_client_factory(member_user).get(
+        "/analytics/product",
+        params={
+            "date_from": (now - timedelta(days=2)).date().isoformat(),
+            "date_to": now.date().isoformat(),
+        },
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total_users"] >= 1
+    assert body["total_page_views"] == 3
+    assert body["active_pages"] == 2
+    documents = next(item for item in body["page_metrics"] if item["path"] == "/documents/:id")
+    assert documents["views"] == 2
+    assert documents["unique_visitors"] == 2
+    assert documents["click_rate"] == 0.6667

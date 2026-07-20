@@ -997,6 +997,29 @@ export interface AnalyticsInsightItem {
   created_at: string;
 }
 
+export interface DailyRegistrationItem {
+  date: string;
+  count: number;
+}
+
+export interface PageMetricItem {
+  path: string;
+  label: string;
+  views: number;
+  unique_visitors: number;
+  click_rate: number;
+}
+
+export interface ProductAnalyticsOut {
+  date_from: string;
+  date_to: string;
+  total_users: number;
+  total_page_views: number;
+  active_pages: number;
+  daily_registrations: DailyRegistrationItem[];
+  page_metrics: PageMetricItem[];
+}
+
 
 // ── 電子郵件 ─────────────────────────────────────────────────────────────────
 
