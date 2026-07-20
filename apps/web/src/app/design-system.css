@@ -1607,6 +1607,15 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
   .regulation-detail-toolbar > * {
     min-height: 2.75rem;
   }
+
+  /* 公文／法規的模組頁籤與內容區同寬；窄螢幕時只在外框內捲動。 */
+  .module-tabs-primary .module-tabs-list {
+    width: 100%;
+  }
+
+  .module-tabs-primary .module-tab-link {
+    flex: 1 0 auto;
+  }
 }
 
 @media (max-width: 480px) {

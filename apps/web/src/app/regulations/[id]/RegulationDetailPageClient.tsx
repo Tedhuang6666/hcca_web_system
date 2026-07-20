@@ -546,7 +546,7 @@ export default function RegulationDetailPageClient() {
         }
       `}</style>
 
-      <div className="regulation-detail-page max-w-5xl mx-auto space-y-5">
+      <div className="regulation-detail-page max-w-6xl mx-auto space-y-5">
         {/* 麵包屑 */}
         <Breadcrumb items={[
           { label: "法規查詢", href: "/regulations" },
@@ -567,9 +567,9 @@ export default function RegulationDetailPageClient() {
               <WorkflowStatusBadge status={reg.workflow_status} />
             </div>
 
-            <div className="flex flex-col gap-3 2xl:flex-row 2xl:items-start 2xl:justify-between">
+            <div className="flex min-w-0 flex-col gap-3">
               <h1
-                className="w-full min-w-0 break-words text-lg font-semibold leading-snug sm:text-xl 2xl:w-auto"
+                className="w-full min-w-0 break-words text-lg font-semibold leading-snug sm:text-xl"
                 style={{
                   color: "var(--text-primary)",
                   overflowWrap: "anywhere",
@@ -581,7 +581,7 @@ export default function RegulationDetailPageClient() {
               </h1>
 
               {/* 工具列 */}
-              <div className="regulation-detail-toolbar no-print flex w-full flex-wrap items-center justify-start gap-2 2xl:w-auto 2xl:flex-shrink-0 2xl:justify-end">
+              <div className="regulation-detail-toolbar no-print flex w-full flex-wrap items-center justify-start gap-2 sm:justify-end">
                 <GovernanceLinkPanel
                   entityType="regulation"
                   entityId={reg.id}
