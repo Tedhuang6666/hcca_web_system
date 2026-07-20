@@ -1541,6 +1541,64 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
   overflow-wrap: anywhere;
 }
 
+/* 法規詳情操作區：治理狀態、閱讀工具、管理動作各自對齊，避免依寬度隨機換行。 */
+.regulation-detail-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  align-items: start;
+  gap: 0.75rem;
+  width: calc(100% + 2.75rem);
+  margin-left: -2.75rem;
+}
+
+.regulation-detail-governance {
+  min-width: 0;
+  grid-column: 1;
+  grid-row: 1 / span 2;
+}
+
+.regulation-detail-tool-group,
+.regulation-detail-management-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  row-gap: 0.75rem;
+  min-width: 0;
+}
+
+.regulation-detail-tool-group {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.regulation-detail-management-group {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+@media (max-width: 1180px) {
+  .regulation-detail-toolbar {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+    row-gap: 1rem;
+  }
+
+  .regulation-detail-governance,
+  .regulation-detail-tool-group,
+  .regulation-detail-management-group {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .regulation-detail-tool-group,
+  .regulation-detail-management-group {
+    justify-content: flex-start;
+  }
+}
+
 @media (max-width: 767px) {
   .topbar-header {
     gap: 0.25rem;
@@ -1603,8 +1661,15 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
     justify-content: flex-start;
   }
 
+  .regulation-detail-toolbar {
+    width: calc(100% + 2.75rem);
+    margin-left: -2.75rem;
+  }
+
   .document-detail-actions > *,
-  .regulation-detail-toolbar > * {
+  .regulation-detail-toolbar > *,
+  .regulation-detail-tool-group > *,
+  .regulation-detail-management-group > * {
     min-height: 2.75rem;
   }
 

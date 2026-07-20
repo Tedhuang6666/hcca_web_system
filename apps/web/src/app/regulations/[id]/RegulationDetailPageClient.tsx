@@ -581,14 +581,18 @@ export default function RegulationDetailPageClient() {
               </h1>
 
               {/* 工具列 */}
-              <div className="regulation-detail-toolbar no-print flex w-full flex-wrap items-center justify-start gap-2 sm:justify-end">
-                <GovernanceLinkPanel
-                  entityType="regulation"
-                  entityId={reg.id}
-                  title={reg.title}
-                  href={currentRegHref}
-                  compact
-                />
+              <div className="regulation-detail-toolbar no-print">
+                <div className="regulation-detail-governance">
+                  <GovernanceLinkPanel
+                    entityType="regulation"
+                    entityId={reg.id}
+                    title={reg.title}
+                    href={currentRegHref}
+                    compact
+                  />
+                </div>
+
+                <div className="regulation-detail-tool-group" role="group" aria-label="閱讀工具">
                 {/* 縮放 */}
                 <div className="flex items-center gap-1 rounded-lg overflow-hidden"
                   style={{ border: "1px solid var(--border)" }}>
@@ -699,6 +703,9 @@ export default function RegulationDetailPageClient() {
                   )}
                   {printingPdf ? "正在處理檔案" : "匯出 PDF"}
                 </button>
+                </div>
+
+                <div className="regulation-detail-management-group" role="group" aria-label="法規管理">
 
                 {/* 編輯（限建立者或管理員） */}
                 {(reg.created_by === currentUserId || isAdmin) && (
@@ -748,6 +755,7 @@ export default function RegulationDetailPageClient() {
                     廢止
                   </button>
                 )}
+                </div>
               </div>
             </div>
 
