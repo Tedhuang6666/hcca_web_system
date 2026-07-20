@@ -66,7 +66,7 @@ export default function SmartTextarea({ value, onChange, className = "", style, 
       />
       {focused && suggestions.length > 0 && (
         <div
-          className="absolute z-20 mt-1 w-full overflow-hidden rounded-lg shadow-lg"
+          className="absolute z-20 mt-1 hidden w-full overflow-hidden rounded-lg shadow-lg md:block"
           style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
         >
           <div className="flex max-h-48 flex-col overflow-y-auto p-1">
