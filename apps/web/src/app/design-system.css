@@ -1758,6 +1758,13 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
     flex-grow: 1;
   }
 
+  .regulation-detail-management-group > * {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 2.25rem;
+    justify-content: center;
+  }
+
   /* 公文／法規的模組頁籤與內容區同寬；窄螢幕時只在外框內捲動。 */
   .module-tabs-primary .module-tabs-list {
     width: 100%;
