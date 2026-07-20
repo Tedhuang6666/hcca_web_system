@@ -3697,13 +3697,13 @@ details[open] > :not(summary) {
   }
 
   .module-tabs-list {
-    width: max-content;
-    min-width: 100%;
+    width: 100%;
+    min-width: 0;
   }
 
   .module-tab-link {
     min-height: 3rem;
-    flex: 0 0 auto;
+    flex: 1 1 0;
     padding: 0 1rem;
     font-size: 0.8125rem;
   }

@@ -396,14 +396,18 @@ export default function DocumentDetailPage() {
           </div>
         </div>
 
-        <div className="document-detail-actions flex w-full flex-wrap justify-start gap-2 sm:justify-end">
-          <GovernanceLinkPanel
-            entityType="document"
-            entityId={doc.id}
-            title={doc.serial_number ? `${doc.serial_number} ${doc.title}` : doc.title}
-            href={`/documents/${doc.id}`}
-            compact
-          />
+        <div className="document-detail-actions">
+          <div className="document-detail-governance">
+            <GovernanceLinkPanel
+              entityType="document"
+              entityId={doc.id}
+              title={doc.serial_number ? `${doc.serial_number} ${doc.title}` : doc.title}
+              href={`/documents/${doc.id}`}
+              compact
+            />
+          </div>
+
+          <div className="document-detail-action-buttons">
           {/* 縮放控制 */}
           <div className="flex items-center gap-0.5 rounded-lg overflow-hidden"
             style={{ border: "1px solid rgba(148,163,184,0.2)" }}>
@@ -467,7 +471,8 @@ export default function DocumentDetailPage() {
           )}
           {/* 直接發文（需 document:issue_direct 權限） */}
           {isDraft && isCreator && can("document:issue_direct") && !submitMode && (
-            <button onClick={handleIssueDirect} className="btn text-sm gap-1.5"
+            <button onClick={handleIssueDirect}
+              className="btn document-detail-direct-issue-action text-sm gap-1.5"
               style={{ background: "var(--success-dim)", color: "var(--success)", border: "1px solid var(--success)" }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
                 <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
@@ -540,6 +545,7 @@ export default function DocumentDetailPage() {
             )}
             {printingPdf ? "正在處理檔案" : "列印公文"}
           </button>
+          </div>
         </div>
       </div>
 
@@ -860,7 +866,7 @@ export default function DocumentDetailPage() {
             </div>
           </div>
 
-          <div className="no-print flex flex-wrap gap-2">
+          <div className="document-detail-section-tabs no-print">
             <button
               type="button"
               onClick={() => setShowDocumentInfo(v => !v)}

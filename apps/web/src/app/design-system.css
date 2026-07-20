@@ -1541,6 +1541,56 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
   overflow-wrap: anywhere;
 }
 
+/* 公文詳情操作區：治理狀態完整佔一側，按鈕群組依可用寬度換行。 */
+.document-detail-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.document-detail-governance {
+  min-width: 0;
+}
+
+.document-detail-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  row-gap: 0.75rem;
+  min-width: 0;
+}
+
+.document-detail-section-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.document-detail-section-tabs > .btn {
+  width: 100%;
+  min-width: 0;
+  justify-content: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 1180px) {
+  .document-detail-actions {
+    grid-template-columns: 1fr;
+    row-gap: 1rem;
+  }
+
+  .document-detail-action-buttons {
+    justify-content: flex-start;
+    width: 100%;
+  }
+}
+
 /* 法規詳情操作區：治理狀態、閱讀工具、管理動作各自對齊，避免依寬度隨機換行。 */
 .regulation-detail-toolbar {
   display: grid;
@@ -1661,16 +1711,29 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
     justify-content: flex-start;
   }
 
+  .document-detail-action-buttons {
+    width: 100%;
+  }
+
   .regulation-detail-toolbar {
     width: calc(100% + 2.75rem);
     margin-left: -2.75rem;
   }
 
   .document-detail-actions > *,
+  .document-detail-action-buttons > *,
   .regulation-detail-toolbar > *,
   .regulation-detail-tool-group > *,
   .regulation-detail-management-group > * {
     min-height: 2.75rem;
+  }
+
+  .document-detail-action-buttons > :last-child {
+    flex: 1 1 100%;
+  }
+
+  .document-detail-direct-issue-action {
+    flex-grow: 1;
   }
 
   /* 公文／法規的模組頁籤與內容區同寬；窄螢幕時只在外框內捲動。 */
@@ -1679,7 +1742,8 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
   }
 
   .module-tabs-primary .module-tab-link {
-    flex: 1 0 auto;
+    min-width: 0;
+    flex: 1 1 0;
   }
 }
 
@@ -1723,7 +1787,7 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
 
 .module-tabs-list {
   display: flex;
-  width: max-content;
+  width: 100%;
   max-width: none;
 }
 
