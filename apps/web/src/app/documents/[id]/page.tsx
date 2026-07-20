@@ -370,7 +370,7 @@ export default function DocumentDetailPage() {
 
   return (
     <>
-    <div className="document-detail-page max-w-6xl mx-auto space-y-5">
+    <div className="document-detail-page app-page-width space-y-5">
       {/* 麵包屑 */}
       <Breadcrumb items={[
         { label: "公文系統", href: "/documents" },

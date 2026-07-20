@@ -354,7 +354,7 @@ export default function EditDocumentPage() {
   const contentLabels = CONTENT_LABELS[category];
 
   return (
-    <div className="max-w-4xl mx-auto space-y-5">
+    <div className="app-page-width space-y-5">
       <div className="flex items-center gap-3">
         <Link href={`/documents/${id}`}
           className="w-8 h-8 rounded-lg flex items-center justify-center  hover:"

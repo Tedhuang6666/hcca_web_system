@@ -141,7 +141,7 @@ export default function DraftAmendmentPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-5">
+    <div className="app-page-width space-y-5">
       {/* 頂部 */}
       <div className="flex items-start gap-3">
         <Link href={currentRegHref}

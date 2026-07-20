@@ -25,7 +25,7 @@ export default function ModuleTabs({
   return (
     <nav
       aria-label={label}
-      className="module-tabs-scroll module-tabs-primary mx-auto mb-5 max-w-6xl overflow-x-auto pt-4"
+      className="module-tabs-scroll module-tabs-primary app-page-width mb-5 overflow-x-auto pt-4"
     >
       <div className="module-tabs-list">
         {tabs.map((tab) => {

@@ -546,7 +546,7 @@ export default function RegulationDetailPageClient() {
         }
       `}</style>
 
-      <div className="regulation-detail-page max-w-6xl mx-auto space-y-5">
+      <div className="regulation-detail-page app-page-width space-y-5">
         {/* 麵包屑 */}
         <Breadcrumb items={[
           { label: "法規查詢", href: "/regulations" },

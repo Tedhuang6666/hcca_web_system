@@ -60,7 +60,7 @@ export default function PendingRegulationsDashboard() {
 
   if (!canSeeAll) {
     return (
-      <main className="container mx-auto p-6">
+      <main className="app-page-width">
         <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>待審議案件集中頁</h1>
         <p className="mt-4 text-sm" style={{ color: "var(--text-muted)" }}>
           您沒有檢視待審議案件的權限（需要議程排入、議會核定或主席公布權限）。
@@ -70,7 +70,7 @@ export default function PendingRegulationsDashboard() {
   }
 
   return (
-    <main className="container mx-auto p-6 space-y-6">
+    <main className="app-page-width space-y-6">
       <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>

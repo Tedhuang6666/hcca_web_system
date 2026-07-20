@@ -219,7 +219,7 @@ export default function NewRegulationPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-5">
+    <div className="app-page-width space-y-5">
       <GovernanceLinkNotice context={governanceContext} />
       <div className="flex items-center gap-3">
         <Link href="/regulations" className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ border: "1px solid var(--border)" }}>←</Link>

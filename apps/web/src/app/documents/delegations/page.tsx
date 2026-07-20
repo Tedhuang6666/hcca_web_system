@@ -147,7 +147,7 @@ export default function DocumentDelegationsPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-5">
+    <div className="app-page-width space-y-5">
       <Breadcrumb items={[
         { label: "公文系統", href: "/documents" },
         { label: "代理設定" },
