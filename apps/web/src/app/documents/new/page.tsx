@@ -507,7 +507,6 @@ export default function NewDocumentPage() {
       setTouched((current) => ({
         ...current,
         org: true,
-        subject: true,
         meetingPurpose: true,
         meetingTime: true,
         meetingLocation: true,
@@ -515,7 +514,6 @@ export default function NewDocumentPage() {
       }));
       const needsBasicInfo = Boolean(
         fieldError.org
-        || fieldError.subject
         || fieldError.meetingPurpose
         || fieldError.meetingTime
         || fieldError.meetingLocation
@@ -526,8 +524,27 @@ export default function NewDocumentPage() {
         return;
       }
     }
-    if (activeStep === 1 && (fieldError.recordDiscussion || fieldError.recordDecision)) {
-      setTouched((current) => ({ ...current, recordDiscussion: true, recordDecision: true }));
+    if (activeStep === 1) {
+      const needsContent = Boolean(
+        fieldError.subject
+        || fieldError.recordDiscussion
+        || fieldError.recordDecision
+      );
+      setTouched((current) => ({
+        ...current,
+        subject: true,
+        recordDiscussion: true,
+        recordDecision: true,
+      }));
+      if (!needsContent) {
+        setActiveStep((step) => Math.min(step + 1, DOCUMENT_STEPS.length - 1));
+        return;
+      }
+      toast.error("請先完成此步驟的必填欄位");
+      return;
+    }
+    if (activeStep === 2 && fieldError.recordAttendees) {
+      setTouched((current) => ({ ...current, recordAttendees: true }));
       toast.error("請先完成此步驟的必填欄位");
       return;
     }
