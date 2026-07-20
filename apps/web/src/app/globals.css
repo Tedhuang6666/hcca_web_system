@@ -2768,7 +2768,8 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 
 .module-tabs-list {
-  display: inline-flex;
+  display: flex;
+  width: 100%;
   min-width: max-content;
   gap: 0.25rem;
   border: 1px solid color-mix(in srgb, var(--border-strong) 76%, transparent);
@@ -2783,6 +2784,7 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
   display: inline-flex;
   min-height: 2.75rem;
   flex-shrink: 0;
+  flex: 1 1 0;
   align-items: center;
   justify-content: center;
   gap: 0.45rem;
@@ -3018,6 +3020,13 @@ details[open] > :not(summary) {
     linear-gradient(90deg, color-mix(in srgb, var(--border) 32%, transparent) 1px, transparent 1px);
   background-size: 32px 32px;
   background-attachment: local;
+}
+
+/* 同一工作區的頁首、工具列、內容與分頁共用同一條左右邊界。 */
+.app-page-width {
+  width: 100%;
+  max-width: 72rem;
+  margin-inline: auto;
 }
 
 /* 驗證登入與權限時只鎖定主內容，保留導覽列作為穩定的空間錨點。 */
@@ -3684,20 +3693,17 @@ details[open] > :not(summary) {
 
 @media (max-width: 640px) {
   .module-tabs-scroll {
-    margin-right: -1.25rem;
-    margin-left: -1.25rem;
-    padding-right: 1.25rem;
-    padding-left: 1.25rem;
+    width: 100%;
   }
 
   .module-tabs-list {
-    display: flex;
     width: max-content;
-    max-width: none;
+    min-width: 100%;
   }
 
   .module-tab-link {
     min-height: 3rem;
+    flex: 0 0 auto;
     padding: 0 1rem;
     font-size: 0.8125rem;
   }

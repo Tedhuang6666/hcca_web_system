@@ -674,7 +674,7 @@ export default function EditRegulationPage() {
         />
       )}
 
-      <div className="w-full max-w-7xl mx-auto space-y-5">
+      <div className="app-page-width space-y-5">
         {/* 頂部 */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-center gap-3 min-w-0">

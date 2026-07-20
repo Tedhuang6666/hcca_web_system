@@ -137,7 +137,7 @@ export default function RegulationsPage() {
   );
 
   return (
-    <div className="regulations-page space-y-5 max-w-6xl mx-auto">
+    <div className="regulations-page app-page-width space-y-5">
 
       {/* 頁首 */}
       <div className="workspace-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">

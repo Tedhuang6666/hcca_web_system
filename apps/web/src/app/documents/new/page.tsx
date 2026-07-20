@@ -565,7 +565,7 @@ export default function NewDocumentPage() {
   const selectStyle = { ...inputStyle, cursor: "pointer" } as React.CSSProperties;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-5">
+    <div className="app-page-width space-y-5">
 
       {/* 頁首 */}
       <div className="flex items-center gap-3">
