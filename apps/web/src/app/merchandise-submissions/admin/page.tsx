@@ -61,6 +61,27 @@ function emptyItem(): ItemDraft {
   };
 }
 
+function emptyField(index: number): SubmissionCustomField {
+  return {
+    key: `field_${Date.now()}_${index}`,
+    label: "新欄位",
+    field_type: "text",
+    required: false,
+    placeholder: null,
+    help_text: null,
+    max_length: 200,
+  };
+}
+
+function mergeFields(
+  globalFields: SubmissionCustomField[],
+  itemFields: SubmissionCustomField[],
+): SubmissionCustomField[] {
+  const fields = new Map(globalFields.map((field) => [field.key, field]));
+  for (const field of itemFields) fields.set(field.key, field);
+  return [...fields.values()];
+}
+
 function toLocal(value: string | null | undefined): string {
   if (!value) return "";
   const date = new Date(value);
@@ -99,15 +120,7 @@ function ItemEditor({
   const addField = () =>
     update("custom_fields", [
       ...draft.custom_fields,
-      {
-        key: `field_${Date.now()}`,
-        label: "新欄位",
-        field_type: "text",
-        required: false,
-        placeholder: null,
-        help_text: null,
-        max_length: 200,
-      },
+      emptyField(draft.custom_fields.length),
     ]);
   const setField = (index: number, next: SubmissionCustomField) =>
     update(
@@ -207,21 +220,21 @@ function ItemEditor({
           />
         </label>
         <label className="sm:col-span-2">
-          <FieldCaption>投稿說明</FieldCaption>
+          <FieldCaption>投稿說明（Markdown）</FieldCaption>
           <textarea
             value={draft.description ?? ""}
             onChange={(event) => update("description", event.target.value)}
             className="input min-h-20 w-full py-2"
-            placeholder="學生選擇品項後會先看到這段說明"
+            placeholder="學生選擇品項後會先看到這段說明，支援 Markdown"
           />
         </label>
         <label className="sm:col-span-2">
-          <FieldCaption>詳細規格</FieldCaption>
+          <FieldCaption>詳細規格（Markdown）</FieldCaption>
           <textarea
             value={draft.specification ?? ""}
             onChange={(event) => update("specification", event.target.value)}
             className="input min-h-36 w-full py-2"
-            placeholder="尺寸、出血、解析度、設計限制等；支援換行"
+            placeholder="尺寸、出血、解析度、設計限制等；支援 Markdown"
           />
         </label>
       </div>
@@ -308,9 +321,9 @@ function ItemEditor({
       >
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h3 className="font-semibold">學生填寫欄位</h3>
+            <h3 className="font-semibold">品項欄位覆寫</h3>
             <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-              明確標示後，學生只會看到需要填寫的資料。
+              留空則沿用全域欄位；相同欄位代碼會覆寫全域設定，新增代碼只套用此品項。
             </p>
           </div>
           <button
@@ -546,11 +559,11 @@ function ItemEditor({
 
 function ReviewRow({
   submission,
-  item,
+  fields,
   onReviewed,
 }: {
   submission: MerchandiseSubmissionAdminListItem;
-  item?: MerchandiseSubmissionItemOut;
+  fields: SubmissionCustomField[];
   onReviewed: () => void;
 }) {
   const [status, setStatus] = useState<
@@ -615,8 +628,7 @@ function ReviewRow({
         {Object.entries(submission.field_values).map(([key, value]) => (
           <div key={key}>
             <dt className="text-xs" style={{ color: "var(--text-muted)" }}>
-              {item?.custom_fields.find((field) => field.key === key)?.label ??
-                key}
+              {fields.find((field) => field.key === key)?.label ?? key}
             </dt>
             <dd style={{ color: "var(--text-secondary)" }}>{value}</dd>
           </div>
@@ -754,6 +766,8 @@ export default function MerchandiseSubmissionsAdminPage() {
         require_school_email: settings.require_school_email,
         announcement: settings.announcement || null,
         announcement_title: settings.announcement_title || null,
+        submission_intro: settings.submission_intro || null,
+        global_fields: settings.global_fields,
         show_announcement_popup: settings.show_announcement_popup,
       });
       setSettings(updated);
@@ -950,7 +964,7 @@ export default function MerchandiseSubmissionsAdminPage() {
               每次進入系統時彈出公告，點擊可前往校商投稿
             </label>
             <label className="sm:col-span-3">
-              <FieldCaption>公告訊息</FieldCaption>
+              <FieldCaption>公告訊息（Markdown）</FieldCaption>
               <textarea
                 value={settings.announcement ?? ""}
                 onChange={(event) =>
@@ -960,9 +974,212 @@ export default function MerchandiseSubmissionsAdminPage() {
                   })
                 }
                 className="input min-h-24 w-full py-2"
-                placeholder="儲存後會自動發布到公告模組。"
+                placeholder="儲存後會自動發布到公告模組，支援 Markdown。"
               />
             </label>
+            <label className="sm:col-span-3">
+              <FieldCaption>投稿前言與說明（Markdown）</FieldCaption>
+              <textarea
+                value={settings.submission_intro ?? ""}
+                onChange={(event) =>
+                  setSettings({
+                    ...settings,
+                    submission_intro: event.target.value || null,
+                  })
+                }
+                className="input min-h-40 w-full py-2"
+                placeholder="例如：請說明設計理念、用色元素、尺寸限制與交稿注意事項。支援 Markdown。"
+              />
+              <span className="mt-1 block text-xs" style={{ color: "var(--text-muted)" }}>
+                儲存後會顯示在所有投稿品項上方。
+              </span>
+            </label>
+          </div>
+          <div
+            className="mt-6 border-t pt-5"
+            style={{ borderColor: "var(--border)" }}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="font-semibold">全域投稿欄位</h3>
+                <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                  例如姓名、座號；所有品項都會顯示。若單一品項需要調整，再到品項設定覆寫。
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost min-h-10"
+                onClick={() =>
+                  setSettings({
+                    ...settings,
+                    global_fields: [
+                      ...settings.global_fields,
+                      emptyField(settings.global_fields.length),
+                    ],
+                  })
+                }
+              >
+                <Plus size={15} />
+                新增全域欄位
+              </button>
+            </div>
+            <div className="mt-4 space-y-3">
+              {settings.global_fields.map((field, index) => (
+                <article
+                  key={`${field.key}-${index}`}
+                  className="rounded-lg border p-4"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_11rem_9rem_auto]">
+                    <label>
+                      <FieldCaption>欄位名稱</FieldCaption>
+                      <input
+                        value={field.label}
+                        onChange={(event) =>
+                          setSettings({
+                            ...settings,
+                            global_fields: settings.global_fields.map((entry, i) =>
+                              i === index ? { ...entry, label: event.target.value } : entry,
+                            ),
+                          })
+                        }
+                        className="input h-10 w-full"
+                        placeholder="例如：姓名"
+                      />
+                    </label>
+                    <label>
+                      <FieldCaption>輸入方式</FieldCaption>
+                      <select
+                        value={field.field_type}
+                        onChange={(event) =>
+                          setSettings({
+                            ...settings,
+                            global_fields: settings.global_fields.map((entry, i) =>
+                              i === index
+                                ? {
+                                    ...entry,
+                                    field_type: event.target.value as SubmissionCustomField["field_type"],
+                                  }
+                                : entry,
+                            ),
+                          })
+                        }
+                        className="input h-10 w-full"
+                      >
+                        <option value="text">單行文字</option>
+                        <option value="textarea">多行文字</option>
+                      </select>
+                    </label>
+                    <label>
+                      <FieldCaption>最多字數</FieldCaption>
+                      <input
+                        type="number"
+                        min="1"
+                        max="2000"
+                        value={field.max_length}
+                        onChange={(event) =>
+                          setSettings({
+                            ...settings,
+                            global_fields: settings.global_fields.map((entry, i) =>
+                              i === index
+                                ? { ...entry, max_length: Number(event.target.value) || 200 }
+                                : entry,
+                            ),
+                          })
+                        }
+                        className="input h-10 w-full"
+                      />
+                    </label>
+                    <div className="flex items-end gap-2">
+                      <label className="flex h-10 items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={field.required}
+                          onChange={(event) =>
+                            setSettings({
+                              ...settings,
+                              global_fields: settings.global_fields.map((entry, i) =>
+                                i === index
+                                  ? { ...entry, required: event.target.checked }
+                                  : entry,
+                              ),
+                            })
+                          }
+                        />
+                        必填
+                      </label>
+                      <button
+                        type="button"
+                        aria-label={`移除 ${field.label}`}
+                        onClick={() =>
+                          setSettings({
+                            ...settings,
+                            global_fields: settings.global_fields.filter((_, i) => i !== index),
+                          })
+                        }
+                        className="topbar-icon-btn h-10 w-10"
+                      >
+                        <X size={15} />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid gap-3 md:grid-cols-3">
+                    <label>
+                      <FieldCaption>欄位代碼（系統用）</FieldCaption>
+                      <input
+                        value={field.key}
+                        onChange={(event) =>
+                          setSettings({
+                            ...settings,
+                            global_fields: settings.global_fields.map((entry, i) =>
+                              i === index
+                                ? { ...entry, key: event.target.value.replace(/[^a-z0-9_]/g, "") }
+                                : entry,
+                            ),
+                          })
+                        }
+                        className="input h-10 w-full"
+                        placeholder="例如：student_name"
+                      />
+                    </label>
+                    <label>
+                      <FieldCaption>輸入框提示</FieldCaption>
+                      <input
+                        value={field.placeholder ?? ""}
+                        onChange={(event) =>
+                          setSettings({
+                            ...settings,
+                            global_fields: settings.global_fields.map((entry, i) =>
+                              i === index
+                                ? { ...entry, placeholder: event.target.value || null }
+                                : entry,
+                            ),
+                          })
+                        }
+                        className="input h-10 w-full"
+                      />
+                    </label>
+                    <label>
+                      <FieldCaption>填寫說明</FieldCaption>
+                      <input
+                        value={field.help_text ?? ""}
+                        onChange={(event) =>
+                          setSettings({
+                            ...settings,
+                            global_fields: settings.global_fields.map((entry, i) =>
+                              i === index
+                                ? { ...entry, help_text: event.target.value || null }
+                                : entry,
+                            ),
+                          })
+                        }
+                        className="input h-10 w-full"
+                      />
+                    </label>
+                  </div>
+                </article>
+              ))}
+            </div>
           </div>
           <div className="mt-5 flex justify-end">
             <button
@@ -1150,7 +1367,10 @@ export default function MerchandiseSubmissionsAdminPage() {
                 <ReviewRow
                   key={submission.id}
                   submission={submission}
-                  item={items.find((item) => item.id === submission.item_id)}
+                  fields={mergeFields(
+                    settings.global_fields,
+                    items.find((item) => item.id === submission.item_id)?.custom_fields ?? [],
+                  )}
                   onReviewed={() => void load()}
                 />
               ))

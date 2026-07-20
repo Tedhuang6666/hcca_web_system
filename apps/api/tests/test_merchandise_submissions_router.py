@@ -24,7 +24,28 @@ async def test_merchandise_submission_flow_uses_school_account_and_notifies_subm
     student = authed_client_factory(member_user)
     settings_response = await admin.patch(
         "/merchandise-submissions/admin/settings",
-        json={"is_open": True, "max_file_size_mb": 100, "require_school_email": False},
+        json={
+            "is_open": True,
+            "max_file_size_mb": 100,
+            "require_school_email": False,
+            "submission_intro": "請說明 **用色元素** 與設計理念。",
+            "global_fields": [
+                {
+                    "key": "student_name",
+                    "label": "姓名",
+                    "field_type": "text",
+                    "required": True,
+                    "max_length": 50,
+                },
+                {
+                    "key": "seat_number",
+                    "label": "座號",
+                    "field_type": "text",
+                    "required": True,
+                    "max_length": 10,
+                },
+            ],
+        },
     )
     assert settings_response.status_code == 200
 
@@ -52,6 +73,14 @@ async def test_merchandise_submission_flow_uses_school_account_and_notifies_subm
     assert portal_response.status_code == 200
     assert portal_response.json()["items"][0]["is_accepting"] is True
     assert portal_response.json()["items"][0]["effective_max_file_size_mb"] == 100
+    assert portal_response.json()["settings"]["submission_intro"] == (
+        "請說明 **用色元素** 與設計理念。"
+    )
+    assert [field["key"] for field in portal_response.json()["items"][0]["custom_fields"]] == [
+        "student_name",
+        "seat_number",
+        "design_name",
+    ]
 
     upload_response = await student.post(
         f"/merchandise-submissions/uploads?item_id={item_id}",
@@ -85,7 +114,11 @@ async def test_merchandise_submission_flow_uses_school_account_and_notifies_subm
         f"/merchandise-submissions/submissions/{draft['id']}?submit=true",
         json={
             "item_id": item_id,
-            "field_values": {"design_name": "校園動能"},
+            "field_values": {
+                "student_name": "王小明",
+                "seat_number": "12",
+                "design_name": "校園動能",
+            },
             "files": [uploaded],
         },
     )
@@ -108,7 +141,11 @@ async def test_merchandise_submission_flow_uses_school_account_and_notifies_subm
             f"/merchandise-submissions/submissions/{submission['id']}?submit=true",
             json={
                 "item_id": item_id,
-                "field_values": {"design_name": "校園動能修正版"},
+                "field_values": {
+                    "student_name": "王小明",
+                    "seat_number": "12",
+                    "design_name": "校園動能修正版",
+                },
                 "files": [uploaded],
             },
         )

@@ -62,7 +62,10 @@ async def update_settings(
     *,
     updated_by_id: uuid.UUID,
 ) -> MerchandiseSubmissionSettings:
-    for field, value in data.model_dump(exclude_unset=True).items():
+    fields = data.model_dump(exclude_unset=True)
+    if "global_fields" in fields and fields["global_fields"] is not None:
+        fields["global_fields"] = [field.model_dump() for field in data.global_fields or []]
+    for field, value in fields.items():
         setattr(settings, field, value)
     if settings.opens_at and settings.closes_at and settings.opens_at >= settings.closes_at:
         raise ValueError("全站截止時間必須晚於開放時間")
@@ -133,6 +136,18 @@ def effective_config(
         and (closes_at is None or now <= _as_utc(closes_at))
     )
     return accepting, opens_at, closes_at, max_mb
+
+
+def effective_custom_fields(
+    settings: MerchandiseSubmissionSettings, item: MerchandiseSubmissionItem
+) -> list[dict]:
+    """合併全域欄位與品項覆寫；同 key 的品項設定優先。"""
+    fields: dict[str, dict] = {}
+    for field in settings.global_fields:
+        fields[str(field["key"])] = dict(field)
+    for field in item.custom_fields:
+        fields[str(field["key"])] = dict(field)
+    return list(fields.values())
 
 
 async def list_items(
@@ -248,9 +263,9 @@ async def list_submissions(
 
 
 def validate_submission_values(
-    item: MerchandiseSubmissionItem, values: dict[str, str], *, require_required_fields: bool = True
+    fields: list[dict], values: dict[str, str], *, require_required_fields: bool = True
 ) -> None:
-    configured = {str(field["key"]): field for field in item.custom_fields}
+    configured = {str(field["key"]): field for field in fields}
     unexpected = set(values) - set(configured)
     if unexpected:
         raise ValueError("含有未設定的投稿欄位")
@@ -277,7 +292,11 @@ async def save_submission(
     accepting, _, _, _ = effective_config(settings, item)
     if submit and not accepting:
         raise ValueError("此品項目前未開放投稿")
-    validate_submission_values(item, data.field_values, require_required_fields=submit)
+    validate_submission_values(
+        effective_custom_fields(settings, item),
+        data.field_values,
+        require_required_fields=submit,
+    )
     if submit and not data.files:
         raise ValueError("請至少上傳一個圖稿檔案")
     storage_prefix = f"merchandise-submissions/{user.id}/"
@@ -342,7 +361,11 @@ async def update_submission(
     accepting, _, _, _ = effective_config(settings, item)
     if submit and not accepting:
         raise ValueError("此品項目前未開放投稿")
-    validate_submission_values(item, data.field_values, require_required_fields=submit)
+    validate_submission_values(
+        effective_custom_fields(settings, item),
+        data.field_values,
+        require_required_fields=submit,
+    )
     if submit and not data.files:
         raise ValueError("請至少上傳一個圖稿檔案")
     storage_prefix = f"merchandise-submissions/{user.id}/"

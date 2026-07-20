@@ -730,6 +730,8 @@ export interface MerchandiseSubmissionSettingsOut {
   require_school_email: boolean;
   announcement: string | null;
   announcement_title: string | null;
+  submission_intro: string | null;
+  global_fields: SubmissionCustomField[];
   show_announcement_popup: boolean;
   announcement_id: string | null;
   updated_at: string;
@@ -743,6 +745,8 @@ export interface MerchandiseSubmissionSettingsUpdate {
   require_school_email?: boolean;
   announcement?: string | null;
   announcement_title?: string | null;
+  submission_intro?: string | null;
+  global_fields?: SubmissionCustomField[];
   show_announcement_popup?: boolean;
 }
 
