@@ -1745,6 +1745,21 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
     min-width: 0;
     flex: 1 1 0;
   }
+
+  .module-tabs-primary.module-tabs-scroll {
+    margin-inline: 0 !important;
+    padding-inline: 0 !important;
+  }
+
+  .module-tabs-primary .module-tabs-list {
+    width: 100%;
+    min-width: 100%;
+  }
+
+  .module-tabs-primary .module-tab-link {
+    min-width: max-content;
+    flex: 1 1 0;
+  }
 }
 
 @media (max-width: 480px) {
