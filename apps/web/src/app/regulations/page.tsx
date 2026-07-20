@@ -147,7 +147,7 @@ export default function RegulationsPage() {
             查詢現行規章與歷史版本。
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="regulation-page-actions flex items-center gap-2">
           {canManage && (
             <Toggle
               checked={showAll}
