@@ -22983,6 +22983,8 @@ export interface components {
             announcement_title: string | null;
             /** Closes At */
             closes_at: string | null;
+            /** Global Fields */
+            global_fields: components["schemas"]["SubmissionCustomField"][];
             /**
              * Id
              * Format: uuid
@@ -22998,6 +23000,8 @@ export interface components {
             require_school_email: boolean;
             /** Show Announcement Popup */
             show_announcement_popup: boolean;
+            /** Submission Intro */
+            submission_intro: string | null;
             /**
              * Updated At
              * Format: date-time
@@ -23012,6 +23016,8 @@ export interface components {
             announcement_title?: string | null;
             /** Closes At */
             closes_at?: string | null;
+            /** Global Fields */
+            global_fields?: components["schemas"]["SubmissionCustomField"][] | null;
             /** Is Open */
             is_open?: boolean | null;
             /** Max File Size Mb */
@@ -23022,6 +23028,8 @@ export interface components {
             require_school_email?: boolean | null;
             /** Show Announcement Popup */
             show_announcement_popup?: boolean | null;
+            /** Submission Intro */
+            submission_intro?: string | null;
         };
         /**
          * MerchandiseSubmissionStatus
