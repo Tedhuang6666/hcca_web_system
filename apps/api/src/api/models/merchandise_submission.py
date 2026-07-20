@@ -47,6 +47,10 @@ class MerchandiseSubmissionSettings(Base, TimestampMixin):
     )
     announcement: Mapped[str | None] = mapped_column(Text, nullable=True)
     announcement_title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    submission_intro: Mapped[str | None] = mapped_column(Text, nullable=True)
+    global_fields: Mapped[list] = mapped_column(
+        JSONList, nullable=False, default=list, server_default="[]"
+    )
     show_announcement_popup: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )

@@ -120,9 +120,11 @@ async def portal(session: DbDep, current_user: CurrentUser) -> dict:
     result = []
     for item in items:
         accepting, opens_at, closes_at, max_mb = submission_svc.effective_config(settings, item)
+        item_payload = MerchandiseSubmissionItemOut.model_validate(item).model_dump()
+        item_payload["custom_fields"] = submission_svc.effective_custom_fields(settings, item)
         result.append(
             {
-                **MerchandiseSubmissionItemOut.model_validate(item).model_dump(),
+                **item_payload,
                 "is_accepting": accepting,
                 "effective_opens_at": opens_at,
                 "effective_closes_at": closes_at,

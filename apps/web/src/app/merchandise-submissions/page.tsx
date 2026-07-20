@@ -19,6 +19,8 @@ import { toast } from "sonner";
 import { apiErrorMessage, merchandiseSubmissionsApi } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
 import { usePermissions } from "@/hooks/usePermissions";
+import MarkdownBlock from "@/components/site/MarkdownBlock";
+import { excerpt } from "@/lib/seo";
 import type {
   MerchandiseSubmissionItemPortalOut,
   MerchandiseSubmissionOut,
@@ -513,6 +515,20 @@ export default function MerchandiseSubmissionsPage() {
         </section>
       ) : (
         <div className="space-y-6">
+          {portal?.settings.submission_intro && (
+            <section
+              className="rounded-xl border p-5 sm:p-6"
+              style={{
+                background: "var(--bg-surface)",
+                borderColor: "var(--border)",
+              }}
+            >
+              <h2 className="text-lg font-semibold">投稿前言與說明</h2>
+              <div className="mt-4 text-sm leading-6 text-[var(--text-secondary)]">
+                <MarkdownBlock markdown={portal.settings.submission_intro} />
+              </div>
+            </section>
+          )}
           {portal?.items.length ? (
             <>
               <section
@@ -599,7 +615,7 @@ export default function MerchandiseSubmissionsPage() {
                         className="mt-1 block text-sm"
                         style={{ color: "var(--text-secondary)" }}
                       >
-                        {item.description ||
+                        {excerpt(item.description, "") ||
                           (item.specification
                             ? "已提供詳細規格"
                             : "請依品項需求上傳圖稿")}
@@ -621,12 +637,9 @@ export default function MerchandiseSubmissionsPage() {
                   ))}
                 </div>
                 {selected?.description && (
-                  <p
-                    className="mt-3 text-sm"
-                    style={{ color: "var(--text-secondary)" }}
-                  >
-                    {selected.description}
-                  </p>
+                  <div className="mt-3 text-sm text-[var(--text-secondary)]">
+                    <MarkdownBlock markdown={selected.description} />
+                  </div>
                 )}
               </section>
               {selected?.specification && (
@@ -638,12 +651,9 @@ export default function MerchandiseSubmissionsPage() {
                   }}
                 >
                   <h2 className="font-semibold">品項規格</h2>
-                  <p
-                    className="mt-3 whitespace-pre-wrap text-sm leading-6"
-                    style={{ color: "var(--text-secondary)" }}
-                  >
-                    {selected.specification}
-                  </p>
+                  <div className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">
+                    <MarkdownBlock markdown={selected.specification} />
+                  </div>
                 </section>
               )}
               {selected && <TemplateGallery item={selected} />}

@@ -34,7 +34,18 @@ class MerchandiseSubmissionSettingsUpdate(BaseModel):
     require_school_email: bool | None = None
     announcement: str | None = Field(None, max_length=3000)
     announcement_title: str | None = Field(None, max_length=200)
+    submission_intro: str | None = Field(None, max_length=10000)
+    global_fields: list[SubmissionCustomField] | None = Field(None, max_length=20)
     show_announcement_popup: bool | None = None
+
+    @field_validator("global_fields")
+    @classmethod
+    def global_field_keys_are_unique(
+        cls, values: list[SubmissionCustomField] | None
+    ) -> list[SubmissionCustomField] | None:
+        if values is not None and len({field.key for field in values}) != len(values):
+            raise ValueError("全域投稿欄位代碼不可重複")
+        return values
 
 
 class MerchandiseSubmissionSettingsOut(BaseModel):
@@ -48,6 +59,8 @@ class MerchandiseSubmissionSettingsOut(BaseModel):
     require_school_email: bool
     announcement: str | None
     announcement_title: str | None
+    submission_intro: str | None
+    global_fields: list[SubmissionCustomField]
     show_announcement_popup: bool
     announcement_id: uuid.UUID | None
     updated_at: datetime
