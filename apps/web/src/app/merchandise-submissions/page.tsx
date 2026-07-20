@@ -266,6 +266,8 @@ export default function MerchandiseSubmissionsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const detailsRef = useRef<HTMLDivElement>(null);
+  const shouldScrollToDetails = useRef(false);
   const selected = useMemo(
     () => portal?.items.find((item) => item.id === selectedId) ?? null,
     [portal, selectedId],
@@ -288,7 +290,23 @@ export default function MerchandiseSubmissionsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+  useEffect(() => {
+    if (!shouldScrollToDetails.current || isPickerOpen || !selectedId) return;
+    shouldScrollToDetails.current = false;
+    if (!selected || !hasItemDetails(selected)) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      detailsRef.current?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "auto"
+          : "smooth",
+        block: "start",
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [isPickerOpen, selected, selectedId]);
   const choose = (id: string) => {
+    shouldScrollToDetails.current = true;
     setSelectedId(id);
     setEditingId(null);
     setValues({});
@@ -296,6 +314,7 @@ export default function MerchandiseSubmissionsPage() {
     setIsPickerOpen(false);
   };
   const edit = (submission: MerchandiseSubmissionOut) => {
+    shouldScrollToDetails.current = true;
     setSelectedId(submission.item_id);
     setValues(submission.field_values);
     setFiles(submission.files);
@@ -726,7 +745,11 @@ export default function MerchandiseSubmissionsPage() {
                 ) : null}
               </section>
               {selected && hasItemDetails(selected) && (
-                <div className="space-y-6">
+                <div
+                  ref={detailsRef}
+                  id="merchandise-item-details"
+                  className="scroll-mt-24 space-y-6"
+                >
                   {selected.description && (
                     <section
                       className="rounded-xl border p-5 sm:p-6"
