@@ -3,16 +3,17 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
+from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_any, require_permission
 from api.models.announcement import Announcement, AnnouncementRead
 from api.models.document import ApprovalStepStatus, Document, DocumentApproval
@@ -21,10 +22,13 @@ from api.models.petition import PetitionCase, PetitionStatus
 from api.models.regulation import Regulation, RegulationWorkflowStatus
 from api.models.survey import Survey, SurveyResponse, SurveyStatus
 from api.models.user import User
+from api.schemas.analytics import PageViewCreate, ProductAnalyticsOut
+from api.services.analytics import get_product_analytics, record_page_view
 
 router = APIRouter(prefix="/analytics", tags=["數據分析"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
+CurrentUser = Annotated[User, Depends(get_current_active_user)]
 
 
 def _epoch_seconds(db: AsyncSession, later: object, earlier: object):
@@ -91,6 +95,26 @@ class InsightItem(BaseModel):
 class AnalyticsInsightsOut(BaseModel):
     items: list[InsightItem]
     total: int
+
+
+@router.post("/page-views", status_code=204, summary="記錄目前使用者的頁面瀏覽")
+async def create_page_view(body: PageViewCreate, db: DbDep, current_user: CurrentUser) -> None:
+    await record_page_view(db, current_user.id, body.path)
+    await db.commit()
+
+
+@router.get("/product", response_model=ProductAnalyticsOut, summary="平台產品使用統計")
+async def product_analytics(
+    db: DbDep,
+    _: Annotated[
+        object, Depends(require_any(PermissionCode.ANALYTICS_VIEW, PermissionCode.ADMIN_ALL))
+    ],
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+) -> ProductAnalyticsOut:
+    if date_from and date_to and date_from > date_to:
+        raise HTTPException(status_code=422, detail="起始日期不得晚於結束日期")
+    return await get_product_analytics(db, date_from, date_to)
 
 
 # ── 公文效率統計 ───────────────────────────────────────────────────────────────

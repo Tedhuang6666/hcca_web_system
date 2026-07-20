@@ -11,6 +11,7 @@ import type {
   DeptRankingItem,
   DocumentEfficiencyOut,
   PendingAlertItem,
+  ProductAnalyticsOut,
   SurveyParticipationItem,
 } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -50,6 +51,8 @@ export default function AnalyticsPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [loading, setLoading] = useState(!cacheHas(ANALYTICS_KEY));
+  const [productLoading, setProductLoading] = useState(true);
+  const [product, setProduct] = useState<ProductAnalyticsOut | null>(null);
   const [efficiency, setEfficiency] = useState<DocumentEfficiencyOut | null>(() => cacheGet<DocumentEfficiencyOut>(ANALYTICS_KEY + "/efficiency") ?? null);
   const [ranking, setRanking] = useState<DeptRankingItem[]>(() => cacheGet<DeptRankingItem[]>(ANALYTICS_KEY + "/ranking") ?? []);
   const [pending, setPending] = useState<PendingAlertItem[]>(() => cacheGet<PendingAlertItem[]>(ANALYTICS_KEY + "/pending") ?? []);
@@ -70,7 +73,9 @@ export default function AnalyticsPage() {
     // 有 filter 條件時強制 loading；無條件且有快取時靜默更新
     const hasCached = cacheHas(ANALYTICS_KEY) && !dateFrom && !dateTo;
     if (!hasCached) setLoading(true);
+    setProductLoading(true);
     const results = await Promise.allSettled([
+      analyticsApi.product({ date_from: dateFrom || undefined, date_to: dateTo || undefined }),
       analyticsApi.documentEfficiency(filterParams),
       analyticsApi.deptRanking(filterParams),
       analyticsApi.insights(12).then((res) => res.items),
@@ -80,14 +85,17 @@ export default function AnalyticsPage() {
         ? analyticsApi.pendingAlerts(48)
         : Promise.resolve([]),
     ] as const);
-    const [effResult, ranksResult, insightsResult, annResult, surveyResult, alertsResult] =
+    const [productResult, effResult, ranksResult, insightsResult, annResult, surveyResult, alertsResult] =
       results;
+    const productData = settledValue(productResult, null);
     const eff = settledValue(effResult, null);
     const ranks = settledValue(ranksResult, []);
     const insightRows = settledValue(insightsResult, []);
     const ann = settledValue(annResult, []);
     const survey = settledValue(surveyResult, []);
     const alerts = settledValue(alertsResult, []);
+    setProduct(productData);
+    setProductLoading(false);
     setEfficiency(eff);
     setRanking(ranks);
     setInsights(insightRows);
@@ -169,6 +177,8 @@ export default function AnalyticsPage() {
           </div>
         </div>
       </section>
+
+      <ProductAnalyticsSection data={product} loading={loading || productLoading} />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4" aria-label="公文效率摘要">
         {[
@@ -342,6 +352,146 @@ export default function AnalyticsPage() {
         </section>
       </div>
     </div>
+  );
+}
+
+function ProductAnalyticsSection({
+  data,
+  loading,
+}: {
+  data: ProductAnalyticsOut | null;
+  loading: boolean;
+}) {
+  const recentDays = data?.daily_registrations.slice(-14) ?? [];
+  const maxRegistrations = Math.max(...recentDays.map((item) => item.count), 1);
+  const maxViews = Math.max(...(data?.page_metrics.map((item) => item.views) ?? []), 1);
+  const number = new Intl.NumberFormat("zh-TW");
+  const avgRegistrations = data
+    ? data.total_users / Math.max(data.daily_registrations.length, 1)
+    : 0;
+
+  return (
+    <section aria-labelledby="product-analytics-heading" className="space-y-4">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h2 id="product-analytics-heading" className="text-base font-semibold">平台使用統計</h2>
+          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+            掌握帳號成長與各頁面的實際使用情形
+          </p>
+        </div>
+        {data && (
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+            {data.date_from} – {data.date_to} · 每 24 小時更新
+          </p>
+        )}
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
+        <section className="card p-5" aria-labelledby="registration-chart-heading">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 id="registration-chart-heading" className="text-sm font-semibold">每日帳號創建量</h3>
+              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>最近 14 天</p>
+            </div>
+            <span className="text-xs font-medium" style={{ color: "var(--primary-text)" }}>
+              平均 {avgRegistrations.toFixed(1)} / 日
+            </span>
+          </div>
+          <div className="mt-6 flex h-44 items-end gap-1.5 sm:gap-2" aria-label="每日帳號創建量圖表">
+            {loading && !data ? (
+              Array.from({ length: 14 }, (_, index) => (
+                <div key={index} className="flex min-w-0 flex-1 flex-col items-center gap-2">
+                  <div className="w-full animate-pulse rounded-sm" style={{ height: `${24 + (index % 4) * 16}px`, background: "var(--bg-hover)" }} />
+                  <span className="h-3 w-7 animate-pulse rounded" style={{ background: "var(--bg-hover)" }} />
+                </div>
+              ))
+            ) : recentDays.length === 0 ? (
+              <p className="self-center text-sm" style={{ color: "var(--text-muted)" }}>目前沒有帳號資料。</p>
+            ) : recentDays.map((item) => (
+              <div key={item.date} className="flex min-w-0 flex-1 flex-col items-center gap-2">
+                <span className="text-[10px] font-medium tabular-nums" style={{ color: "var(--text-secondary)" }}>
+                  {item.count}
+                </span>
+                <div
+                  className="w-full rounded-sm transition-[height] duration-200"
+                  style={{
+                    height: `${Math.max((item.count / maxRegistrations) * 112, item.count ? 8 : 3)}px`,
+                    background: item.count ? "var(--primary)" : "var(--bg-active)",
+                  }}
+                  title={`${item.date}：${item.count} 個帳號`}
+                />
+                <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+                  {item.date.slice(5)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="card overflow-hidden" aria-labelledby="page-summary-heading">
+          <div className="flex flex-wrap items-start justify-between gap-4 px-5 py-4" style={{ borderBottom: "1px solid var(--border)" }}>
+            <div>
+              <h3 id="page-summary-heading" className="text-sm font-semibold">頁面點閱率</h3>
+              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>各頁面佔全部瀏覽量的比例</p>
+            </div>
+            <div className="flex gap-5 text-right">
+              <div>
+                <p className="text-lg font-semibold tabular-nums">{number.format(data?.total_page_views ?? 0)}</p>
+                <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>總瀏覽</p>
+              </div>
+              <div>
+                <p className="text-lg font-semibold tabular-nums">{data?.active_pages ?? 0}</p>
+                <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>活躍頁面</p>
+              </div>
+            </div>
+          </div>
+          {data?.page_metrics.length ? (
+            <div className="divide-y" style={{ borderColor: "var(--border)" }}>
+              {data.page_metrics.slice(0, 8).map((item) => (
+                <div key={item.path} className="px-5 py-3.5">
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{item.label}</p>
+                      <p className="mt-0.5 truncate font-mono text-[11px]" style={{ color: "var(--text-muted)" }}>{item.path}</p>
+                    </div>
+                    <div className="flex shrink-0 items-baseline gap-3 text-right">
+                      <span className="text-sm font-semibold tabular-nums">{number.format(item.views)}</span>
+                      <span className="w-14 text-xs tabular-nums" style={{ color: "var(--primary-text)" }}>
+                        {(item.click_rate * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full" style={{ background: "var(--bg-hover)" }}>
+                    <div className="h-full rounded-full" style={{ width: `${Math.max((item.views / maxViews) * 100, 3)}%`, background: "var(--primary)" }} />
+                  </div>
+                  <p className="mt-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
+                    {number.format(item.unique_visitors)} 位不重複使用者
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="px-5 py-10 text-sm" style={{ color: "var(--text-muted)" }}>
+              尚未收集到頁面瀏覽資料；部署後會從使用者開始瀏覽時累積。
+            </p>
+          )}
+        </section>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3" aria-label="平台使用摘要">
+        {[
+          ["期間新增帳號", number.format(data?.total_users ?? 0), "依帳號建立時間統計"],
+          ["頁面總瀏覽", number.format(data?.total_page_views ?? 0), "已登入使用者的頁面瀏覽"],
+          ["活躍頁面", number.format(data?.active_pages ?? 0), "期間內有瀏覽紀錄的頁面"],
+        ].map(([label, value, description]) => (
+          <div key={label} className="border-t pt-3" style={{ borderColor: "var(--border-strong)" }}>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>{label}</p>
+            <p className="mt-1 text-xl font-semibold tabular-nums">{value}</p>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{description}</p>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
