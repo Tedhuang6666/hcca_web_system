@@ -724,7 +724,7 @@ export default function RegulationDetailPageClient() {
             </div>
 
             {reg.published_at && (
-              <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+              <p className="regulation-detail-published-meta text-xs mt-1" style={{ color: "var(--text-muted)" }}>
                 發布日期：{new Date(reg.published_at).toLocaleDateString("zh-TW")}
                 　｜　最後更新：{new Date(reg.updated_at).toLocaleDateString("zh-TW")}
               </p>
