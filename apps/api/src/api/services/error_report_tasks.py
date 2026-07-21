@@ -22,10 +22,12 @@ from sqlalchemy.pool import NullPool
 
 from api.core.celery_app import celery_app
 from api.core.config import settings
+from api.services import feature_flag
 
 logger = logging.getLogger(__name__)
 
 _QUEUES = ("default", "email", "meal", "backup", "documents", "recovery")
+ERROR_REPORT_EMAIL_FLAG = "email_error_report"
 
 
 @celery_app.task(
@@ -75,6 +77,9 @@ async def _run() -> dict[str, Any]:
         engine = create_async_engine(str(settings.DATABASE_URL), poolclass=NullPool)
         session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
         try:
+            async with session_factory() as session:
+                if not await feature_flag.is_enabled(session, ERROR_REPORT_EMAIL_FLAG):
+                    return {"ok": True, "skipped": "feature_flag_disabled"}
             diagnostics = await _collect_diagnostics(client, session_factory)
         finally:
             await engine.dispose()
