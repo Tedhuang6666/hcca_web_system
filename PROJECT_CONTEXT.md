@@ -19,7 +19,7 @@ FastAPI + PostgreSQL，前端使用 Next.js 16 + React 19。
 | 資料庫 | PostgreSQL 16 + Alembic 遷移 |
 | 快取/佇列 | Redis 7 + Celery 5 |
 | 搜尋 | Meilisearch |
-| 前端 | Next.js 16 App Router + React 19 + TypeScript（Node.js >= 20.9） |
+| 前端 | Next.js 16 App Router + React 19 + TypeScript（Node.js >= 22.13.0） |
 | 樣式 | Tailwind CSS 4 |
 | 套件管理 | uv Workspaces（後端）/ npm（前端） |
 | 可觀測性 | Sentry + PostHog + Prometheus + Grafana |
@@ -169,7 +169,7 @@ uv run --project apps/api pytest apps/api/tests -v --asyncio-mode=auto
 cd apps/web
 npm run lint
 npm run type-check
-npm run build  # 需 Node.js >= 20.9
+npm run build  # 需 Node.js >= 22.13.0
 npm audit --audit-level=moderate --omit=dev
 ```
 
