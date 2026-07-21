@@ -57,6 +57,16 @@ function hasItemDetails(item: MerchandiseSubmissionItemPortalOut) {
   );
 }
 
+function formatDeadline(value: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("zh-TW", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+}
+
 function UploadBox({
   item,
   files,
@@ -559,6 +569,28 @@ export default function MerchandiseSubmissionsPage() {
               </div>
             </section>
           )}
+          {portal?.settings.closes_at && (
+            <section
+              className="flex items-start gap-3 rounded-xl border p-4 sm:p-5"
+              style={{
+                background: "var(--primary-dim)",
+                borderColor: "var(--border-strong)",
+              }}
+            >
+              <Clock3
+                size={20}
+                className="mt-0.5 shrink-0"
+                style={{ color: "var(--primary-text)" }}
+              />
+              <div>
+                <h2 className="font-semibold">全站預設截止時間</h2>
+                <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
+                  請於 {formatDeadline(portal.settings.closes_at)} 前送出投稿；若品項有個別
+                  設定，請以品項卡片標示的時間為準。
+                </p>
+              </div>
+            </section>
+          )}
           {portal?.items.length ? (
             <>
               <section
@@ -699,6 +731,15 @@ export default function MerchandiseSubmissionsPage() {
                               >
                                 {item.is_accepting ? "開放投稿" : "目前未開放"}
                               </span>
+                              {item.effective_closes_at && (
+                                <span
+                                  className="flex items-center gap-1 text-xs font-medium"
+                                  style={{ color: "var(--text-secondary)" }}
+                                >
+                                  <Clock3 size={13} />
+                                  截止 {formatDeadline(item.effective_closes_at)}
+                                </span>
+                              )}
                               {hasItemDetails(item) && (
                                 <span
                                   className="flex items-center gap-1 text-xs font-medium"
@@ -807,6 +848,15 @@ export default function MerchandiseSubmissionsPage() {
                       {selected.is_accepting ? "開放投稿中" : "目前未開放"}
                     </span>
                   </div>
+                  {selected.effective_closes_at && (
+                    <p
+                      className="mt-3 flex items-center gap-1.5 text-sm font-medium"
+                      style={{ color: "var(--primary-text)" }}
+                    >
+                      <Clock3 size={15} />
+                      投稿截止時間：{formatDeadline(selected.effective_closes_at)}
+                    </p>
+                  )}
                   <div className="mt-5">
                     <UploadBox
                       item={selected}
