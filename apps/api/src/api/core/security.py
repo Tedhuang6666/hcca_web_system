@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -34,6 +35,7 @@ redis_client: aioredis.Redis = aioredis.from_url(
 BLACKLIST_JTI_PREFIX = "blacklist_jti:"
 # 每 user 持有的所有 jti（refresh token 期限內）
 USER_TOKENS_PREFIX = "user_tokens:"
+_TOKEN_TRACKING_TIMEOUT_SECONDS = 0.8
 
 
 def _now_ts() -> int:
@@ -137,11 +139,17 @@ async def register_active_token(user_id: str, jti: str | None, ttl_seconds: int)
         return
     key = f"{USER_TOKENS_PREFIX}{user_id}"
     try:
-        await redis_client.sadd(key, jti)
+        await asyncio.wait_for(
+            redis_client.sadd(key, jti),
+            timeout=_TOKEN_TRACKING_TIMEOUT_SECONDS,
+        )
         # 用 refresh token 期限作為集合的存活上限
-        await redis_client.expire(key, settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400)
-    except Exception:
-        logger.warning("jti 追蹤寫入失敗 uid=%s", user_id, exc_info=True)
+        await asyncio.wait_for(
+            redis_client.expire(key, settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400),
+            timeout=_TOKEN_TRACKING_TIMEOUT_SECONDS,
+        )
+    except Exception as exc:
+        logger.warning("jti 追蹤寫入失敗 uid=%s error=%s", user_id, type(exc).__name__)
 
 
 async def revoke_user(user_id: str, *, ttl_seconds: int | None = None) -> int:

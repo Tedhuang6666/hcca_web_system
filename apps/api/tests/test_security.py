@@ -1,8 +1,11 @@
 """JWT 安全機制單元測試"""
 
+import asyncio
+
 import pytest
 from jwt.exceptions import InvalidTokenError
 
+from api.core import security
 from api.core.security import create_access_token, create_refresh_token, decode_token
 
 
@@ -39,3 +42,18 @@ def test_access_token_has_extra_claims() -> None:
 
     assert payload["role"] == "admin"
     assert payload["sub"] == "user-789"
+
+
+async def test_register_active_token_does_not_wait_for_stalled_redis(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class SlowRedis:
+        async def sadd(self, *_args: object) -> None:
+            await asyncio.sleep(2)
+
+    monkeypatch.setattr(security, "redis_client", SlowRedis())
+
+    await asyncio.wait_for(
+        security.register_active_token("user-123", "jti-123", ttl_seconds=60),
+        timeout=1.5,
+    )
