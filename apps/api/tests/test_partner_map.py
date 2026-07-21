@@ -299,3 +299,55 @@ async def test_partner_map_admin_can_create_business(
     assert payload["tags"][0]["name"] == "文具"
     assert payload["offers"][0]["benefit_value"] == "全館 9 折"
     assert len(payload["offers"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_admin_can_parse_google_maps_link(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin = User(
+        email="maps-admin@school.edu",
+        display_name="地圖管理員",
+        is_active=True,
+        is_verified=True,
+        is_superuser=True,
+    )
+    db_session.add(admin)
+    await db_session.flush()
+    _override_current_user(admin)
+
+    response = await client.post(
+        "/partner-map/admin/locations/parse-google-maps",
+        json={"url": "https://www.google.com/maps/search/?api=1&query=24.806,120.968"},
+        headers=HOST_HEADERS,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["latitude"] == 24.806
+    assert response.json()["longitude"] == 120.968
+
+
+@pytest.mark.asyncio
+async def test_admin_rejects_non_google_maps_link(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin = User(
+        email="maps-admin-invalid@school.edu",
+        display_name="地圖管理員",
+        is_active=True,
+        is_verified=True,
+        is_superuser=True,
+    )
+    db_session.add(admin)
+    await db_session.flush()
+    _override_current_user(admin)
+
+    response = await client.post(
+        "/partner-map/admin/locations/parse-google-maps",
+        json={"url": "https://example.com/store"},
+        headers=HOST_HEADERS,
+    )
+
+    assert response.status_code == 422
