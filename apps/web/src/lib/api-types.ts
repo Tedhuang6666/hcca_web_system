@@ -8906,6 +8906,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/partner-map/admin/locations/parse-google-maps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 解析 Google Maps 據點連結 */
+        post: operations["admin_parse_google_maps_link_partner_map_admin_locations_parse_google_maps_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/partner-map/admin/locations/{location_id}": {
         parameters: {
             query?: never;
@@ -24473,6 +24490,8 @@ export interface components {
             cover_image_url?: string | null;
             /** Description */
             description?: string | null;
+            /** Initial Locations */
+            initial_locations?: components["schemas"]["PartnerLocationCreate"][];
             /** Initial Offers */
             initial_offers?: components["schemas"]["PartnerOfferCreate"][];
             /** Instagram Handle */
@@ -24787,6 +24806,24 @@ export interface components {
             /** Tags */
             tags: components["schemas"]["PartnerTagOut"][];
         };
+        /** PartnerGoogleMapsParseIn */
+        PartnerGoogleMapsParseIn: {
+            /** Url */
+            url: string;
+        };
+        /** PartnerGoogleMapsParseOut */
+        PartnerGoogleMapsParseOut: {
+            /** Address */
+            address?: string | null;
+            /** Google Maps Url */
+            google_maps_url: string;
+            /** Latitude */
+            latitude: number;
+            /** Longitude */
+            longitude: number;
+            /** Name */
+            name?: string | null;
+        };
         /** PartnerLocationCreate */
         PartnerLocationCreate: {
             /** Address */
@@ -24795,6 +24832,8 @@ export interface components {
             business_hours?: {
                 [key: string]: unknown;
             };
+            /** Google Maps Url */
+            google_maps_url?: string | null;
             /** Google Place Id */
             google_place_id?: string | null;
             /**
@@ -24834,6 +24873,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Google Maps Url */
+            google_maps_url: string | null;
             /** Google Place Id */
             google_place_id: string | null;
             /**
@@ -24867,6 +24908,8 @@ export interface components {
             business_hours?: {
                 [key: string]: unknown;
             } | null;
+            /** Google Maps Url */
+            google_maps_url?: string | null;
             /** Google Place Id */
             google_place_id?: string | null;
             /** Is Active */
@@ -53755,6 +53798,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PartnerOfferOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_parse_google_maps_link_partner_map_admin_locations_parse_google_maps_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PartnerGoogleMapsParseIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerGoogleMapsParseOut"];
                 };
             };
             /** @description Validation Error */
