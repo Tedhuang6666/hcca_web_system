@@ -256,6 +256,75 @@ async def test_admin_can_link_school_email_to_existing_user_and_extract_student_
 
 
 @pytest.mark.asyncio
+async def test_admin_can_merge_previously_logged_in_secondary_account(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    admin, member, _, _, _ = await _seed_admin_data(db_session)
+    secondary = User(
+        email="secondary.private@gmail.com",
+        display_name="次要帳號",
+        google_sub="secondary-google-sub",
+        is_active=True,
+        is_verified=True,
+    )
+    secondary_email = secondary.email
+    db_session.add(secondary)
+    await db_session.flush()
+    db_session.add(
+        UserIdentity(
+            user_id=secondary.id,
+            provider="google",
+            external_id=secondary.google_sub,
+            email=secondary.email,
+            display_name=secondary.display_name,
+            linked_at=datetime.now(UTC),
+        )
+    )
+    await db_session.flush()
+    _override_user(admin)
+
+    response = await client.post(
+        f"/admin/users/{member.id}/emails",
+        json={"emails": [secondary.email]},
+    )
+
+    assert response.status_code == 200
+    assert secondary_email in response.json()["linked_emails"]
+    await db_session.refresh(secondary)
+    assert secondary.is_active is False
+    assert secondary.email.endswith("@deleted.local")
+    identity = await db_session.scalar(
+        select(UserIdentity).where(
+            UserIdentity.provider == "google",
+            UserIdentity.external_id == "secondary-google-sub",
+        )
+    )
+    assert identity is not None
+    assert identity.user_id == member.id
+
+    async def not_suspicious(*_args: object) -> tuple[bool, None]:
+        return False, None
+
+    async def no_op(*_args: object) -> None:
+        return None
+
+    monkeypatch.setattr(auth_router, "check_suspicious_login", not_suspicious)
+    monkeypatch.setattr(auth_router, "record_login", no_op)
+    logged_in = await auth_router._upsert_google_user(
+        db_session,
+        google_sub="secondary-google-sub",
+        email=secondary_email,
+        display_name="次要帳號",
+        avatar_url=None,
+        client_ip="127.0.0.1",
+        user_agent="pytest",
+    )
+    assert logged_in.id == member.id
+
+
+@pytest.mark.asyncio
 async def test_admin_can_batch_pre_register_with_partial_failure(
     client: AsyncClient,
     db_session: AsyncSession,

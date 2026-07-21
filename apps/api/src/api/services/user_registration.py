@@ -213,26 +213,13 @@ async def link_user_emails(
     user: User,
     emails: list[str],
     actor: User,
+    merge_existing_accounts: bool = False,
 ) -> User:
     normalized_emails = list(
         dict.fromkeys(address.strip().lower() for address in emails if address.strip())
     )
     if not normalized_emails:
         raise UserRegistrationError(422, "請至少提供一個 Email")
-
-    other_user = await db.scalar(
-        select(User).where(User.email.in_(normalized_emails), User.id != user.id)
-    )
-    if other_user:
-        raise UserRegistrationError(409, "其中一個 Email 已是其他帳號的主要 Email")
-    other_identity = await db.scalar(
-        select(UserIdentity).where(
-            UserIdentity.email.in_(normalized_emails),
-            UserIdentity.user_id != user.id,
-        )
-    )
-    if other_identity:
-        raise UserRegistrationError(409, "其中一個 Email 已連結其他帳號")
 
     school_student_ids = {
         parsed
@@ -244,6 +231,32 @@ async def link_user_emails(
     parsed_student_id = next(iter(school_student_ids), None)
     if user.student_id and parsed_student_id and user.student_id != parsed_student_id:
         raise UserRegistrationError(422, "校內 Email 的學號與帳號既有學號不一致")
+
+    other_user_ids = set(
+        (
+            await db.scalars(
+                select(User.id).where(User.email.in_(normalized_emails), User.id != user.id)
+            )
+        ).all()
+    )
+    other_user_ids.update(
+        (
+            await db.scalars(
+                select(UserIdentity.user_id).where(
+                    UserIdentity.email.in_(normalized_emails),
+                    UserIdentity.user_id != user.id,
+                )
+            )
+        ).all()
+    )
+    if other_user_ids and not merge_existing_accounts:
+        raise UserRegistrationError(409, "其中一個 Email 已連結其他帳號")
+    if merge_existing_accounts:
+        for other_user_id in other_user_ids:
+            other_user = await db.get(User, other_user_id)
+            if other_user is not None:
+                await _merge_login_identities(db, user=user, other_user=other_user, actor=actor)
+
     if parsed_student_id and not user.student_id:
         user.student_id = parsed_student_id
 
@@ -282,3 +295,75 @@ async def link_user_emails(
         summary=f"連結使用者「{user.display_name}」的登入 Email",
     )
     return user
+
+
+async def _merge_login_identities(
+    db: AsyncSession,
+    *,
+    user: User,
+    other_user: User,
+    actor: User,
+) -> None:
+    """將已先登入建立的帳號歸戶到管理員指定的主要帳號。
+
+    保留原 User 及其業務資料，只移動登入 identities，並封存原 User，避免刪除歷史外鍵
+    資料；原本的 Google sub 若尚未寫入 UserIdentity，也會轉成 identity 保存。
+    """
+    if other_user.id == user.id:
+        return
+
+    identities = list(
+        (await db.scalars(select(UserIdentity).where(UserIdentity.user_id == other_user.id))).all()
+    )
+    existing_keys = {
+        (provider, external_id)
+        for provider, external_id in (
+            await db.execute(
+                select(UserIdentity.provider, UserIdentity.external_id).where(
+                    UserIdentity.user_id == user.id
+                )
+            )
+        ).all()
+    }
+    for identity in identities:
+        key = (identity.provider, identity.external_id)
+        if key in existing_keys:
+            await db.delete(identity)
+            continue
+        identity.user_id = user.id
+        existing_keys.add(key)
+
+    if other_user.google_sub:
+        google_key = ("google", other_user.google_sub)
+        if google_key in existing_keys:
+            other_user.google_sub = None
+        elif user.google_sub is None:
+            user.google_sub = other_user.google_sub
+            other_user.google_sub = None
+        else:
+            db.add(
+                UserIdentity(
+                    user_id=user.id,
+                    provider="google",
+                    external_id=other_user.google_sub,
+                    email=other_user.email,
+                    display_name=other_user.display_name,
+                    linked_at=datetime.now(UTC),
+                )
+            )
+            existing_keys.add(google_key)
+            other_user.google_sub = None
+
+    other_user.email = f"merged-{other_user.id}@deleted.local"
+    other_user.is_active = False
+    await db.flush()
+    await audit_svc.record(
+        db,
+        entity_type="user",
+        entity_id=str(user.id),
+        action="user.login_identity_merge",
+        actor_id=str(actor.id),
+        actor_email=actor.email,
+        meta={"merged_user_id": str(other_user.id)},
+        summary=f"將已登入帳號「{other_user.display_name}」歸戶至「{user.display_name}」",
+    )

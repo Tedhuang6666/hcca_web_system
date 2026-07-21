@@ -468,6 +468,7 @@ async def link_user_emails(
             user=user,
             emails=body.emails,
             actor=admin_user,
+            merge_existing_accounts=True,
         )
     except UserRegistrationError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
