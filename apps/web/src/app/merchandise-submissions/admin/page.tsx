@@ -12,7 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { apiErrorMessage, merchandiseSubmissionsApi } from "@/lib/api";
+import { apiErrorMessage, merchandiseSubmissionsApi, orgsApi } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
 import { usePermissions } from "@/hooks/usePermissions";
 import type {
@@ -20,6 +20,8 @@ import type {
   MerchandiseSubmissionItemCreate,
   MerchandiseSubmissionItemOut,
   MerchandiseSubmissionSettingsOut,
+  OrgRead,
+  SurveyOut,
   SubmissionCustomField,
 } from "@/lib/types";
 
@@ -33,6 +35,7 @@ const reviewStatusLabels: Record<
   draft: "草稿",
   submitted: "已送出",
   reviewing: "審核中",
+  review_completed: "審核完成",
   approved: "已採用",
   revision_requested: "需要補件",
   rejected: "未採用",
@@ -567,7 +570,11 @@ function ReviewRow({
   onReviewed: () => void;
 }) {
   const [status, setStatus] = useState<
-    "reviewing" | "approved" | "revision_requested" | "rejected"
+    | "reviewing"
+    | "review_completed"
+    | "approved"
+    | "revision_requested"
+    | "rejected"
   >(
     submission.status === "draft" || submission.status === "submitted"
       ? "reviewing"
@@ -575,6 +582,7 @@ function ReviewRow({
   );
   const [note, setNote] = useState(submission.review_note ?? "");
   const [saving, setSaving] = useState(false);
+  const [uploadingFileId, setUploadingFileId] = useState<string | null>(null);
   const review = async () => {
     setSaving(true);
     try {
@@ -588,6 +596,30 @@ function ReviewRow({
       toast.error(apiErrorMessage(error, "無法儲存審核結果"));
     } finally {
       setSaving(false);
+    }
+  };
+  const uploadFiles = async (source: FileList | null, replaceFileId?: string) => {
+    if (!source?.length) return;
+    setUploadingFileId(replaceFileId ?? "new");
+    try {
+      const files = Array.from(source);
+      if (replaceFileId) {
+        await merchandiseSubmissionsApi.replaceSubmissionFile(
+          submission.id,
+          replaceFileId,
+          files[0],
+        );
+      } else {
+        for (const file of files) {
+          await merchandiseSubmissionsApi.addSubmissionFile(submission.id, file);
+        }
+      }
+      toast.success(replaceFileId ? "投稿檔案已替換" : `已增加 ${files.length} 個投稿檔案`);
+      onReviewed();
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "投稿檔案更新失敗"));
+    } finally {
+      setUploadingFileId(null);
     }
   };
   return (
@@ -634,36 +666,92 @@ function ReviewRow({
           </div>
         ))}
       </dl>
+      {submission.voting_survey_title && submission.voting_survey_id && (
+        <p className="mt-3 text-sm" style={{ color: "var(--text-secondary)" }}>
+          已加入票選問卷：
+          <Link
+            href={`/surveys/${submission.voting_survey_id}`}
+            className="ml-1 underline"
+          >
+            {submission.voting_survey_title}
+          </Link>
+          {submission.voting_survey_status === "draft" && "（尚未發布）"}
+        </p>
+      )}
       <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {submission.files.map((file) => (
-          <a
+          <div
             key={file.id}
-            href={uploadUrl(file.url)}
-            target="_blank"
-            rel="noreferrer"
             className="overflow-hidden rounded-lg border p-2 text-xs"
             style={{ borderColor: "var(--border)" }}
           >
-            {isPreviewableImage(file) ? (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img
-                src={uploadUrl(file.url)}
-                alt={`${file.filename} 預覽`}
-                className="aspect-square w-full rounded object-cover"
-              />
-            ) : (
-              <div
-                className="flex aspect-square items-center justify-center rounded"
-                style={{ background: "var(--bg-elevated)" }}
+            <a
+              href={uploadUrl(file.url)}
+              target="_blank"
+              rel="noreferrer"
+              className="block"
+            >
+              {isPreviewableImage(file) ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={uploadUrl(file.url)}
+                  alt={`${file.filename} 預覽`}
+                  className="aspect-square w-full rounded object-cover"
+                />
+              ) : (
+                <div
+                  className="flex aspect-square items-center justify-center rounded"
+                  style={{ background: "var(--bg-elevated)" }}
+                >
+                  <FileImage size={28} />
+                </div>
+              )}
+            </a>
+            <div className="mt-2 flex items-center gap-2">
+              <span className="min-w-0 flex-1 truncate font-medium" title={file.filename}>
+                {file.filename}
+              </span>
+              <label
+                className="shrink-0 cursor-pointer"
+                style={{ color: "var(--primary-text)" }}
+                title="替換檔案"
               >
-                <FileImage size={28} />
-              </div>
-            )}
-            <span className="mt-2 block truncate font-medium">
-              {file.filename}
-            </span>
-          </a>
+                <Upload size={14} />
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,application/pdf"
+                  className="sr-only"
+                  disabled={uploadingFileId !== null}
+                  onChange={(event) => {
+                    void uploadFiles(event.target.files, file.id);
+                    event.target.value = "";
+                  }}
+                />
+              </label>
+            </div>
+          </div>
         ))}
+      </div>
+      <div className="mt-3">
+        <label className="btn btn-ghost min-h-10 cursor-pointer">
+          {uploadingFileId === "new" ? (
+            <LoaderCircle className="animate-spin" size={15} />
+          ) : (
+            <Plus size={15} />
+          )}
+          增加檔案
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp,application/pdf"
+            multiple
+            className="sr-only"
+            disabled={uploadingFileId !== null}
+            onChange={(event) => {
+              void uploadFiles(event.target.files);
+              event.target.value = "";
+            }}
+          />
+        </label>
       </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-[11rem_1fr_auto]">
         <select
@@ -672,6 +760,7 @@ function ReviewRow({
           className="input"
         >
           <option value="reviewing">審核中</option>
+          <option value="review_completed">審核完成（進入全校投票）</option>
           <option value="approved">採用</option>
           <option value="revision_requested">請補件</option>
           <option value="rejected">未採用</option>
@@ -708,6 +797,9 @@ export default function MerchandiseSubmissionsAdminPage() {
   const [submissions, setSubmissions] = useState<
     MerchandiseSubmissionAdminListItem[]
   >([]);
+  const [orgs, setOrgs] = useState<OrgRead[]>([]);
+  const [votingOrgId, setVotingOrgId] = useState("");
+  const [preparedSurvey, setPreparedSurvey] = useState<SurveyOut | null>(null);
   const [draft, setDraft] = useState<ItemDraft>(emptyItem());
   const [tab, setTab] = useState<AdminTab>("review");
   const [reviewItemId, setReviewItemId] = useState("");
@@ -720,14 +812,17 @@ export default function MerchandiseSubmissionsAdminPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [nextSettings, nextItems, nextSubmissions] = await Promise.all([
+      const [nextSettings, nextItems, nextSubmissions, nextOrgs] = await Promise.all([
         merchandiseSubmissionsApi.getSettings(),
         merchandiseSubmissionsApi.listItems(),
         merchandiseSubmissionsApi.listSubmissions(),
+        orgsApi.list({ active_only: true, exclude_class_orgs: true }),
       ]);
       setSettings(nextSettings);
       setItems(nextItems);
       setSubmissions(nextSubmissions);
+      setOrgs(nextOrgs);
+      setVotingOrgId((current) => current || nextOrgs[0]?.id || "");
     } catch (error) {
       toast.error(apiErrorMessage(error, "無法載入投稿管理設定"));
     } finally {
@@ -776,6 +871,24 @@ export default function MerchandiseSubmissionsAdminPage() {
       toast.error(apiErrorMessage(error, "無法儲存全站設定"));
     } finally {
       setSavingSettings(false);
+    }
+  };
+  const prepareVotingSurvey = async () => {
+    if (!votingOrgId) {
+      toast.error("請先選擇票選問卷所屬組織");
+      return;
+    }
+    try {
+      const survey = await merchandiseSubmissionsApi.prepareVotingSurvey({
+        org_id: votingOrgId,
+        title: "校商投稿全校票選",
+        description: "請依序查看每個品項的投稿圖案，選出您喜歡的一個或多個圖案。",
+      });
+      setPreparedSurvey(survey);
+      await load();
+      toast.success("已建立票選問卷草稿，請確認題目後再發布");
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "無法建立票選問卷草稿"));
     }
   };
   if (!can("shop:manage"))
@@ -1284,6 +1397,44 @@ export default function MerchandiseSubmissionsAdminPage() {
             <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
               依品項、投稿者與目前狀態篩選，快速處理需要審核的投稿。
             </p>
+          </div>
+          <div
+            className="mt-5 rounded-lg border p-4"
+            style={{ background: "var(--primary-dim)", borderColor: "var(--border)" }}
+          >
+            <p className="font-semibold">建立全校票選問卷</p>
+            <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
+              將所有「審核完成」的品項彙整成同一份問卷，每個品項一題，讓同學選擇一個或多個喜歡的圖案。
+              建立後請先確認題目與圖稿，再到問卷頁發布。
+            </p>
+            <div className="mt-3 flex flex-wrap items-end gap-3">
+              <label className="min-w-60 flex-1">
+                <FieldCaption>問卷所屬組織</FieldCaption>
+                <select
+                  value={votingOrgId}
+                  onChange={(event) => setVotingOrgId(event.target.value)}
+                  className="input w-full"
+                >
+                  <option value="">選擇組織…</option>
+                  {orgs.map((org) => (
+                    <option key={org.id} value={org.id}>{org.name}</option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={() => void prepareVotingSurvey()}
+                className="btn min-h-11"
+                style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}
+              >
+                建立問卷草稿
+              </button>
+              {preparedSurvey && (
+                <Link href={`/surveys/${preparedSurvey.id}`} className="btn btn-ghost min-h-11">
+                  檢視／確認問卷
+                </Link>
+              )}
+            </div>
           </div>
           <div
             className="mt-5 grid gap-3 rounded-lg border p-4 md:grid-cols-[minmax(12rem,1fr)_minmax(15rem,1.4fr)_minmax(10rem,0.8fr)_auto]"

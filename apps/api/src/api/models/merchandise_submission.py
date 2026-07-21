@@ -16,6 +16,7 @@ from api.models.base import TimestampMixin
 from api.models.types import JSONDict, JSONList
 
 if TYPE_CHECKING:
+    from api.models.survey import Survey
     from api.models.user import User
 
 
@@ -23,6 +24,7 @@ class MerchandiseSubmissionStatus(enum.StrEnum):
     DRAFT = "draft"
     SUBMITTED = "submitted"
     REVIEWING = "reviewing"
+    REVIEW_COMPLETED = "review_completed"
     APPROVED = "approved"
     REVISION_REQUESTED = "revision_requested"
     REJECTED = "rejected"
@@ -130,6 +132,9 @@ class MerchandiseSubmission(Base, TimestampMixin):
     reviewer_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
+    voting_survey_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("surveys.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     item: Mapped[MerchandiseSubmissionItem] = relationship(
@@ -137,6 +142,7 @@ class MerchandiseSubmission(Base, TimestampMixin):
     )
     user: Mapped[User] = relationship("User", foreign_keys=[user_id])
     reviewer: Mapped[User | None] = relationship("User", foreign_keys=[reviewer_id])
+    voting_survey: Mapped[Survey | None] = relationship("Survey", foreign_keys=[voting_survey_id])
     files: Mapped[list[MerchandiseSubmissionFile]] = relationship(
         "MerchandiseSubmissionFile", back_populates="submission", cascade="all, delete-orphan"
     )

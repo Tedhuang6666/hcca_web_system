@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import UTC, datetime
 
+from fastapi import UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -18,6 +20,8 @@ from api.models.merchandise_submission import (
     MerchandiseSubmissionSettings,
     MerchandiseSubmissionStatus,
 )
+from api.models.org import Org
+from api.models.survey import QuestionType, Survey, SurveyQuestion, SurveyStatus
 from api.models.user import User
 from api.schemas.merchandise_submission import (
     MerchandiseSubmissionItemCreate,
@@ -26,6 +30,7 @@ from api.schemas.merchandise_submission import (
     MerchandiseSubmissionSave,
     MerchandiseSubmissionSettingsUpdate,
 )
+from api.services.storage import get_storage
 
 
 async def get_settings(session: AsyncSession) -> MerchandiseSubmissionSettings:
@@ -213,6 +218,7 @@ async def get_submission(
             selectinload(MerchandiseSubmission.item),
             selectinload(MerchandiseSubmission.user),
             selectinload(MerchandiseSubmission.reviewer),
+            selectinload(MerchandiseSubmission.voting_survey),
             selectinload(MerchandiseSubmission.files),
         )
         .where(MerchandiseSubmission.id == submission_id)
@@ -239,6 +245,7 @@ async def list_my_submissions(
         .options(
             selectinload(MerchandiseSubmission.item),
             selectinload(MerchandiseSubmission.reviewer),
+            selectinload(MerchandiseSubmission.voting_survey),
             selectinload(MerchandiseSubmission.files),
         )
         .where(MerchandiseSubmission.user_id == user_id)
@@ -254,6 +261,7 @@ async def list_submissions(
         selectinload(MerchandiseSubmission.item),
         selectinload(MerchandiseSubmission.user),
         selectinload(MerchandiseSubmission.reviewer),
+        selectinload(MerchandiseSubmission.voting_survey),
         selectinload(MerchandiseSubmission.files),
     )
     if status:
@@ -404,6 +412,59 @@ async def update_submission(
     return (await get_submission(session, submission.id)) or submission
 
 
+async def admin_upload_submission_file(
+    session: AsyncSession,
+    submission: MerchandiseSubmission,
+    upload: UploadFile,
+    *,
+    replace_file_id: uuid.UUID | None = None,
+) -> MerchandiseSubmission:
+    """由管理員替投稿增加或替換檔案，不受投稿開放狀態限制。"""
+    if replace_file_id is not None:
+        target = next((file for file in submission.files if file.id == replace_file_id), None)
+        if target is None:
+            raise LookupError("找不到投稿檔案")
+    elif len(submission.files) >= 10:
+        raise ValueError("投稿最多只能有 10 個檔案")
+    else:
+        target = None
+
+    settings = await get_settings(session)
+    item = submission.item or await get_item(session, submission.item_id)
+    if item is None:
+        raise LookupError("找不到投稿品項")
+    _, _, _, max_mb = effective_config(settings, item)
+    storage = get_storage()
+    stored = await storage.save(
+        upload,
+        prefix=f"merchandise-submissions/{submission.user_id}",
+        max_file_size=max_mb * 1024 * 1024,
+        allowed_content_types={"image/jpeg", "image/png", "image/webp", "application/pdf"},
+    )
+
+    old_storage_key = target.storage_key if target else None
+    if target is None:
+        session.add(
+            MerchandiseSubmissionFile(
+                submission_id=submission.id,
+                storage_key=stored.storage_key,
+                filename=stored.filename,
+                content_type=stored.content_type,
+                file_size=stored.file_size,
+            )
+        )
+    else:
+        target.storage_key = stored.storage_key
+        target.filename = stored.filename
+        target.content_type = stored.content_type
+        target.file_size = stored.file_size
+    await session.flush()
+    if old_storage_key:
+        await storage.delete(old_storage_key)
+    session.expire(submission, ["files"])
+    return (await get_submission(session, submission.id)) or submission
+
+
 async def review_submission(
     session: AsyncSession,
     submission: MerchandiseSubmission,
@@ -413,9 +474,100 @@ async def review_submission(
 ) -> MerchandiseSubmission:
     if submission.status == MerchandiseSubmissionStatus.DRAFT:
         raise ValueError("草稿尚未送出，不能審核")
+    if data.voting_survey_id is not None:
+        survey = await session.get(Survey, data.voting_survey_id)
+        if survey is None:
+            raise ValueError("找不到指定的投票問卷")
+        if survey.status not in {SurveyStatus.DRAFT, SurveyStatus.OPEN}:
+            raise ValueError("投票問卷必須是草稿或開放中")
+        submission.voting_survey_id = survey.id
+        submission.voting_survey = survey
     submission.status = MerchandiseSubmissionStatus(data.status)
     submission.review_note = data.review_note.strip() if data.review_note else None
     submission.reviewer_id = reviewer_id
     submission.reviewed_at = datetime.now(UTC)
     await session.flush()
     return (await get_submission(session, submission.id)) or submission
+
+
+async def prepare_voting_survey(
+    session: AsyncSession,
+    *,
+    org_id: uuid.UUID,
+    created_by: uuid.UUID,
+    title: str,
+    description: str | None,
+) -> Survey:
+    org = await session.get(Org, org_id)
+    if org is None:
+        raise ValueError("找不到票選問卷所屬組織")
+    linked_survey = await session.scalar(
+        select(Survey)
+        .join(MerchandiseSubmission, MerchandiseSubmission.voting_survey_id == Survey.id)
+        .where(
+            MerchandiseSubmission.status == MerchandiseSubmissionStatus.REVIEW_COMPLETED,
+            MerchandiseSubmission.voting_survey_id.is_not(None),
+        )
+        .limit(1)
+    )
+    if linked_survey is not None:
+        raise ValueError("目前已有校商投稿票選問卷，請先確認或發布現有問卷")
+    result = await session.execute(
+        select(MerchandiseSubmission)
+        .options(
+            selectinload(MerchandiseSubmission.item),
+            selectinload(MerchandiseSubmission.files),
+        )
+        .where(MerchandiseSubmission.status == MerchandiseSubmissionStatus.REVIEW_COMPLETED)
+        .order_by(MerchandiseSubmission.item_id, MerchandiseSubmission.submitted_at)
+    )
+    submissions = list(result.scalars().all())
+    if not submissions:
+        raise ValueError("目前沒有審核完成、可加入票選的投稿")
+
+    survey = Survey(
+        title=title.strip(),
+        description=description or "請依序查看每個品項的投稿圖案，選出您喜歡的一個或多個圖案。",
+        status=SurveyStatus.DRAFT,
+        is_anonymous=False,
+        allow_multiple=False,
+        org_id=org.id,
+        created_by=created_by,
+    )
+    session.add(survey)
+    await session.flush()
+
+    grouped: dict[uuid.UUID, list[MerchandiseSubmission]] = {}
+    for submission in submissions:
+        grouped.setdefault(submission.item_id, []).append(submission)
+    for order_index, item_submissions in enumerate(grouped.values()):
+        item = item_submissions[0].item
+        options: list[str] = []
+        image_sets: list[list[str]] = []
+        for index, submission in enumerate(item_submissions, start=1):
+            label = f"圖案 {index}｜{submission.account_snapshot.get('display_name') or '匿名投稿'}"
+            options.append(label)
+            image_sets.append(
+                [
+                    f"/merchandise-submissions/uploads/{file.storage_key}"
+                    for file in submission.files
+                ]
+            )
+            submission.voting_survey = survey
+        question_text = item.name
+        if item.description:
+            question_text += f"\n{item.description.strip()}"
+        question_text += "\n請選擇您喜歡的一個或多個圖案。"
+        session.add(
+            SurveyQuestion(
+                survey_id=survey.id,
+                order_index=order_index,
+                question_text=question_text[:1000],
+                question_type=QuestionType.MULTIPLE,
+                is_required=True,
+                options_json=json.dumps(options, ensure_ascii=False),
+                option_image_sets_json=json.dumps(image_sets, ensure_ascii=False),
+            )
+        )
+    await session.flush()
+    return (await session.get(Survey, survey.id)) or survey

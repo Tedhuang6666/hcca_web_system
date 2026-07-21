@@ -33,6 +33,7 @@ const statusLabel: Record<MerchandiseSubmissionOut["status"], string> = {
   draft: "草稿",
   submitted: "已送出",
   reviewing: "審核中",
+  review_completed: "審核完成",
   approved: "已採用",
   revision_requested: "需要補件",
   rejected: "未採用",
@@ -493,6 +494,25 @@ export default function MerchandiseSubmissionsPage() {
                   >
                     {submission.review_note}
                   </p>
+                )}
+                {submission.status === "review_completed" && (
+                  submission.voting_survey_id && submission.voting_survey_status === "open" ? (
+                    <Link
+                      href={`/surveys/${submission.voting_survey_id}`}
+                      className="btn mt-3 min-h-10"
+                      style={{
+                        background: "var(--primary)",
+                        color: "var(--primary-fg)",
+                        border: "none",
+                      }}
+                    >
+                      前往全校投票
+                    </Link>
+                  ) : (
+                    <p className="mt-3 text-sm" style={{ color: "var(--text-muted)" }}>
+                      投票問卷準備中，待管理員確認發布後開放填答。
+                    </p>
+                  )
                 )}
                 <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                   {submission.files.map((file) => (

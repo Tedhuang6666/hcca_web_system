@@ -161,6 +161,8 @@ class SurveyQuestion(Base, TimestampMixin):
     is_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     # 選項 JSON（SINGLE/MULTIPLE/RANKING 題型）
     options_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 選項預覽圖片 URL 陣列，與 options_json 依序對應
+    option_image_sets_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 選項額外設定 JSON：{"exclusive": ["以上皆非"], "other": ["其他"]}
     # exclusive：多選題的互斥選項（勾選後清空其他）
     # other：可附加自由輸入文字的選項

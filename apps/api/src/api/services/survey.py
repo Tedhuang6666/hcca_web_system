@@ -276,6 +276,11 @@ async def add_question(
         question_type=data.question_type,
         is_required=False if data.question_type in DISPLAY_QUESTION_TYPES else data.is_required,
         options_json=json.dumps(data.options, ensure_ascii=False) if data.options else None,
+        option_image_sets_json=(
+            json.dumps(data.option_image_sets, ensure_ascii=False)
+            if data.option_image_sets
+            else None
+        ),
         option_config_json=_serialize_option_config(data.option_config, data.options),
         min_value=data.min_value,
         max_value=data.max_value,
@@ -305,6 +310,11 @@ async def update_question(
     if "options" in fields:
         opts = fields.pop("options")
         question.options_json = json.dumps(opts, ensure_ascii=False) if opts else None
+    if "option_image_sets" in fields:
+        image_sets = fields.pop("option_image_sets")
+        question.option_image_sets_json = (
+            json.dumps(image_sets, ensure_ascii=False) if image_sets else None
+        )
     if "option_config" in fields:
         raw_cfg = fields.pop("option_config")
         # 此處取用 dict（model_dump 已將 OptionConfig 攤平）

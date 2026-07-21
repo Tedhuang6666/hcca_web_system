@@ -141,8 +141,15 @@ class MerchandiseSubmissionSave(BaseModel):
 
 
 class MerchandiseSubmissionReview(BaseModel):
-    status: Literal["reviewing", "approved", "revision_requested", "rejected"]
+    status: Literal["reviewing", "review_completed", "approved", "revision_requested", "rejected"]
+    voting_survey_id: uuid.UUID | None = None
     review_note: str | None = Field(None, max_length=3000)
+
+
+class MerchandiseSubmissionVotingSurveyCreate(BaseModel):
+    org_id: uuid.UUID
+    title: str = Field("校商投稿全校票選", min_length=1, max_length=300)
+    description: str | None = Field(None, max_length=2000)
 
 
 class MerchandiseSubmissionOut(BaseModel):
@@ -158,6 +165,9 @@ class MerchandiseSubmissionOut(BaseModel):
     submitted_at: datetime | None
     reviewed_at: datetime | None
     reviewer_name: str | None = None
+    voting_survey_id: uuid.UUID | None = None
+    voting_survey_title: str | None = None
+    voting_survey_status: str | None = None
     review_note: str | None
     created_at: datetime
     updated_at: datetime
