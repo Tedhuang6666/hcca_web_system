@@ -101,6 +101,7 @@ export const adminApi = {
     prefix?: string | null;
     bill_stage?: MeetingBillStage | null;
     leader_user_id?: string | null;
+    default_permission_codes?: string[];
   }) => post<OrgRead>("/orgs", body),
   updateOrg: (id: string, body: {
     name?: string;
@@ -109,6 +110,7 @@ export const adminApi = {
     prefix?: string | null;
     bill_stage?: MeetingBillStage | null;
     leader_user_id?: string | null;
+    default_permission_codes?: string[];
     note?: string | null;
     remark?: string | null;
     is_active?: boolean;

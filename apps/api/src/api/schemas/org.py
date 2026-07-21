@@ -24,6 +24,9 @@ class OrgBase(BaseModel):
     bill_stage: MeetingBillStage | None = Field(
         None, description="法案審議階段：常務委員會 / 議會，影響此組織會議的議程自動偵測"
     )
+    default_permission_codes: list[str] = Field(
+        default_factory=list, description="建立職位時預設帶入的權限碼"
+    )
     leader_user_id: uuid.UUID | None = Field(
         None, description="指定部門最高權限者；未設定時由同組織最高權限係數任期者遞補"
     )
@@ -41,6 +44,9 @@ class OrgUpdate(BaseModel):
     parent_id: uuid.UUID | None = None
     prefix: str | None = Field(None, max_length=20, description="字號前綴（留空則不更新）")
     bill_stage: MeetingBillStage | None = None
+    default_permission_codes: list[str] | None = Field(
+        None, description="建立職位時預設帶入的權限碼"
+    )
     leader_user_id: uuid.UUID | None = None
     is_active: bool | None = None
 
