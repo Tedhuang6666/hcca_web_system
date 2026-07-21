@@ -116,7 +116,8 @@ def safe_link_url(url: str | None) -> str:
 def _nl2br(value: str | None) -> Markup:
     """純文字換行轉 <br>（先逐行 escape 再以 <br> 連接，輸出 safe Markup）。"""
     # 所有不受信任片段都先 escape，Markup 只標記固定的 <br> 分隔符。
-    return Markup("<br>".join(escape(line) for line in (value or "").splitlines()))
+    # Security: Markup 只接收 escape() 後的文字與固定的 <br> 標籤。
+    return Markup("<br>".join(escape(line) for line in (value or "").splitlines()))  # nosec
 
 
 @lru_cache(maxsize=1)

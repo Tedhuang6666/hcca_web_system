@@ -70,9 +70,11 @@ def push_event(self, event_id: str, operation: str, org_id: str) -> dict:  # noq
                 await session.commit()
                 return {"google_event_id": google_event_id, "operation": operation}
             except GoogleCalendarAuthError as exc:
-                logger.warning("[GoogleCalendar push] org=%s token 失效：%s", org_id, exc)
+                logger.warning(
+                    "[GoogleCalendar push] org=%s 授權失效：%s", org_id, type(exc).__name__
+                )
                 await session.rollback()
-                return {"error": "auth_error", "detail": str(exc)}
+                return {"error": "auth_error"}
             except Exception:
                 await session.rollback()
                 raise
@@ -130,11 +132,13 @@ def pull_all_orgs(self) -> dict:  # noqa: ANN001
                     await session.commit()
                     for key in ("created", "updated", "deleted", "errors"):
                         total[key] += stats.get(key, 0)
-                    logger.info("[GoogleCalendar pull] org=%s 完成：%s", config.org_id, stats)
+                    logger.info("[GoogleCalendar pull] org=%s 完成", config.org_id)
                 except GoogleCalendarAuthError as exc:
                     await session.rollback()
                     logger.warning(
-                        "[GoogleCalendar pull] org=%s token 失效：%s", config.org_id, exc
+                        "[GoogleCalendar pull] org=%s 授權失效：%s",
+                        config.org_id,
+                        type(exc).__name__,
                     )
                     total["errors"] += 1
                 except Exception:

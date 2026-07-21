@@ -22,7 +22,7 @@ _KNOWN_INSECURE_KEYS: frozenset[str] = frozenset(
 )
 
 # 視為「本機預設」的 host；這些值代表尚未為部署環境設定，可被部署網址自動覆寫。
-_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0"})
+_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 _DEFAULT_RELEASE_VERSION = "01.00.00.00.00"
 
 
@@ -51,6 +51,8 @@ def _is_local_url(value: str) -> bool:
 
 
 class Settings(BaseSettings):
+    API_HOST: str = Field(default="127.0.0.1")
+
     model_config = SettingsConfigDict(
         # 依序搜尋：apps/api/.env → 工作區根目錄 .env（monorepo 支援）
         env_file=[".env", "../../.env"],

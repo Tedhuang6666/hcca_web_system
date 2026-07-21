@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import uuid
 from datetime import UTC, datetime
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, unquote, urljoin, urlparse
 
 import httpx
 from sqlalchemy import Select, and_, desc, exists, func, or_, select
@@ -50,6 +50,7 @@ def active_offer_clause(now: datetime | None = None):
 
 
 _GOOGLE_SHORT_HOSTS = {"maps.app.goo.gl", "goo.gl"}
+_MAX_GOOGLE_REDIRECTS = 5
 
 
 def _is_google_maps_host(host: str | None) -> bool:
@@ -105,11 +106,26 @@ async def parse_google_maps_link(url: str) -> dict[str, str | float | None]:
     resolved_url = original
     if parsed.hostname and parsed.hostname.lower() in _GOOGLE_SHORT_HOSTS:
         try:
-            async with httpx.AsyncClient(follow_redirects=True, timeout=8.0) as client:
-                response = await client.get(original)
-                response.raise_for_status()
-                resolved_url = str(response.url)
-        except httpx.HTTPError as exc:
+            async with httpx.AsyncClient(follow_redirects=False, timeout=8.0) as client:
+                for _ in range(_MAX_GOOGLE_REDIRECTS):
+                    response = await client.get(resolved_url)
+                    if response.is_redirect:
+                        location = response.headers.get("location")
+                        if not location:
+                            raise ValueError("Google Maps 短網址缺少導向位置")
+                        next_url = urljoin(resolved_url, location)
+                        next_parsed = urlparse(next_url)
+                        if next_parsed.scheme != "https" or not _is_google_maps_host(
+                            next_parsed.hostname
+                        ):
+                            raise ValueError("連結未導向 Google Maps")
+                        resolved_url = next_url
+                        continue
+                    response.raise_for_status()
+                    break
+                else:
+                    raise ValueError("Google Maps 短網址導向次數過多")
+        except (httpx.HTTPError, ValueError) as exc:
             raise ValueError("無法展開這個 Google Maps 短網址，請改貼完整連結") from exc
 
     parsed = urlparse(resolved_url)
