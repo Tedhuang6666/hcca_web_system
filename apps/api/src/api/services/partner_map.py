@@ -208,10 +208,13 @@ async def create_business(
     db: AsyncSession, data: PartnerBusinessCreate, created_by: uuid.UUID | None
 ) -> PartnerBusiness:
     tags = await _resolve_tags(db, data.tag_ids)
-    fields = data.model_dump(exclude={"tag_ids", "initial_offers"})
+    fields = data.model_dump(exclude={"tag_ids", "initial_offers", "initial_locations"})
     fields["status"] = str(fields["status"])
     business = PartnerBusiness(**fields, created_by=created_by)
     business.tags = tags
+    business.locations = [
+        PartnerLocation(**location.model_dump()) for location in data.initial_locations
+    ]
     business.offers = [PartnerOffer(**offer.model_dump()) for offer in data.initial_offers]
     db.add(business)
     await db.flush()
