@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import AdminWorkbenchTabs from "@/components/admin/AdminWorkbenchTabs";
 
@@ -22,6 +23,7 @@ import type {
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 
 type Mode = "orgs" | "members" | "audit";
+type OrgWithPermissionDefaults = OrgRead & { default_permission_codes: string[] };
 
 // 組織在議事流程的角色：影響此組織所辦會議的議程是否自動偵測待審法案
 const BILL_STAGE_OPTIONS: { value: "" | MeetingBillStage; label: string }[] = [
@@ -151,7 +153,7 @@ export default function PermissionsAdminPage() {
   const [users, setUsers] = useState<AdminUserDetail[]>([]);
   const [positions, setPositions] = useState<PositionSummary[]>([]);
   const [permCodes, setPermCodes] = useState<PermissionCodeInfo[]>([]);
-  const [orgs, setOrgs] = useState<OrgRead[]>([]);
+  const [orgs, setOrgs] = useState<OrgWithPermissionDefaults[]>([]);
   const [classes, setClasses] = useState<SchoolClassListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<Mode>("orgs");
@@ -177,7 +179,7 @@ export default function PermissionsAdminPage() {
     setUsers(loadedUsers);
     setPositions(loadedPositions);
     setPermCodes(ensurePermissionCatalog(loadedPerms));
-    setOrgs(loadedOrgs);
+    setOrgs(loadedOrgs as OrgWithPermissionDefaults[]);
     setClasses(loadedClasses);
     setDetail((current) => {
       const firstActiveOrg = loadedOrgs.find((org) => org.is_active) ?? loadedOrgs[0];
@@ -248,9 +250,16 @@ export default function PermissionsAdminPage() {
             {loading ? "載入中..." : `${activeOrgs.length} 個有效組織 · ${orgs.length - activeOrgs.length} 個停用 · ${activePositions.length} 個可指派職位`}
           </p>
         </div>
-        <div className="grid grid-cols-3 gap-2 sm:flex sm:items-center">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
           <SmallButton onClick={() => setSidebarOpen(true)}><span className="sm:hidden">組織</span><span className="hidden sm:inline">選擇組織</span></SmallButton>
           <SmallButton onClick={() => setShowNewOrg(true)} tone="primary"><Icon name="plus" />新增組織</SmallButton>
+          <Link
+            href="/admin/permissions/positions/new"
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+            style={{ color: "var(--primary)", border: "1px solid var(--border-strong)", background: "var(--primary-dim)" }}
+          >
+            <Icon name="plus" />建立職位
+          </Link>
           <SmallButton onClick={() => setShowWizard(true)} tone="primary"><Icon name="users" />新人上任</SmallButton>
         </div>
       </header>
@@ -620,7 +629,7 @@ function DetailPanel({
   positions: PositionSummary[];
   classes: SchoolClassListItem[];
   permCodes: PermissionCodeInfo[];
-  selectedOrg: OrgRead | null;
+  selectedOrg: OrgWithPermissionDefaults | null;
   selectedPosition: PositionSummary | null;
   selectedUser: AdminUserDetail | null;
   onRefresh: () => Promise<void>;
@@ -640,21 +649,20 @@ function DetailPanel({
     return <UserPanel user={selectedUser} positions={positions} classes={classes} permCodes={permCodes} onRefresh={onRefresh} onConfirm={onConfirm} />;
   }
   if (selectedOrg) {
-    return <OrgPanel org={selectedOrg} orgs={orgs} positions={positions} users={users} permCodes={permCodes} onRefresh={onRefresh} onSelect={onSelect} onConfirm={onConfirm} metrics={metrics} />;
+    return <OrgPanel org={selectedOrg} orgs={orgs} positions={positions} users={users} permCodes={permCodes} onRefresh={onRefresh} onConfirm={onConfirm} metrics={metrics} />;
   }
   return <div className="p-6 text-sm" style={{ color: "var(--text-muted)" }}>尚無可管理資料</div>;
 }
 
 function OrgPanel({
-  org, orgs, positions, users, permCodes, onRefresh, onSelect, onConfirm, metrics,
+  org, orgs, positions, users, permCodes, onRefresh, onConfirm, metrics,
 }: {
-  org: OrgRead;
+  org: OrgWithPermissionDefaults;
   orgs: OrgRead[];
   positions: PositionSummary[];
   users: AdminUserDetail[];
   permCodes: PermissionCodeInfo[];
   onRefresh: () => Promise<void>;
-  onSelect: (detail: Detail) => void;
   onConfirm: (state: ConfirmState) => void;
   metrics: {
     orphanPositions: PositionSummary[];
@@ -669,10 +677,7 @@ function OrgPanel({
   const [billStage, setBillStage] = useState<"" | MeetingBillStage>(org.bill_stage ?? "");
   const [parentId, setParentId] = useState(org.parent_id ?? "");
   const [leaderUserId, setLeaderUserId] = useState(org.leader_user_id ?? "");
-  const [newPositionName, setNewPositionName] = useState("");
-  const [newPositionCategory, setNewPositionCategory] = useState<PositionCategory>("council");
-  const [newWeight, setNewWeight] = useState(0);
-  const [newCodes, setNewCodes] = useState<string[]>([]);
+  const [defaultCodes, setDefaultCodes] = useState<string[]>(org.default_permission_codes ?? []);
   const orgPositions = positions.filter((p) => p.org_id === org.id);
   const orgMembers = users.filter((u) => orgPositions.some((p) => u.positions.some((up) => up.id === p.id)));
   const fallbackLeader = orgMembers
@@ -704,6 +709,7 @@ function OrgPanel({
     setBillStage(org.bill_stage ?? "");
     setParentId(org.parent_id ?? "");
     setLeaderUserId(org.leader_user_id ?? "");
+    setDefaultCodes(org.default_permission_codes ?? []);
   }, [org]);
 
   const save = async () => {
@@ -715,39 +721,12 @@ function OrgPanel({
         bill_stage: billStage || null,
         parent_id: parentId || null,
         leader_user_id: leaderUserId || null,
+        default_permission_codes: defaultCodes,
       });
       toast.success("組織已更新");
       await onRefresh();
     } catch (e) {
       displayError(e, "更新組織失敗");
-    }
-  };
-  const createPosition = async () => {
-    if (!org.is_active) {
-      toast.error("此組織已停用，請先啟用後再建立職位");
-      return;
-    }
-    if (!newPositionName.trim()) {
-      toast.error("請填寫職位名稱");
-      return;
-    }
-    try {
-      const created = await adminApi.createPosition({
-        org_id: org.id,
-        name: newPositionName.trim(),
-        category: newPositionCategory,
-        weight: newWeight,
-        permission_codes: newCodes,
-      });
-      toast.success("職位已建立");
-      setNewPositionName("");
-      setNewPositionCategory("council");
-      setNewWeight(0);
-      setNewCodes([]);
-      await onRefresh();
-      onSelect({ type: "position", id: created.id });
-    } catch (e) {
-      displayError(e, "建立職位失敗");
     }
   };
   const confirmDeactivate = () => {
@@ -849,19 +828,29 @@ function OrgPanel({
         </div>
       </section>
       <section className="rounded-xl p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>組織預設權限</h3>
+            <p className="text-xs mt-1 max-w-2xl" style={{ color: "var(--text-muted)" }}>
+              建立職位時會先套用這組權限，再由職位頁面增加或移除個別權限。變更只影響之後建立的職位。
+            </p>
+          </div>
+          <SmallButton onClick={save} tone="primary">儲存預設</SmallButton>
+        </div>
+        <PermCheckboxes selected={defaultCodes} onChange={setDefaultCodes} permCodes={permCodes} />
+      </section>
+      <section className="rounded-xl p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" style={{ border: "1px solid var(--border)", background: "var(--primary-dim)" }}>
         <div>
-          <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>新增職位</h3>
-          {!org.is_active && (
-            <p className="text-xs mt-1" style={{ color: "#f59e0b" }}>停用組織不可新增職位或指派新任期。</p>
-          )}
+          <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>建立這個組織的職位</h3>
+          <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>從組織預設開始，清楚調整分類、權重與職位專屬權限。</p>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_170px_120px_auto] gap-2 items-end">
-          <label className="text-xs" style={{ color: "var(--text-muted)" }}>職位名稱<TextInput value={newPositionName} onChange={(e) => setNewPositionName(e.target.value)} disabled={!org.is_active} className="mt-1" /></label>
-          <label className="text-xs" style={{ color: "var(--text-muted)" }}>分類<SelectInput value={newPositionCategory} onChange={(e) => setNewPositionCategory(e.target.value as PositionCategory)} disabled={!org.is_active} className="mt-1">{POSITION_CATEGORY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</SelectInput></label>
-          <label className="text-xs" style={{ color: "var(--text-muted)" }}>權重<TextInput type="number" min={0} value={newWeight} onChange={(e) => setNewWeight(Number(e.target.value))} disabled={!org.is_active} className="mt-1" /></label>
-          <SmallButton onClick={createPosition} tone="primary" disabled={!org.is_active}><Icon name="plus" />建立</SmallButton>
-        </div>
-        {org.is_active && <PermCheckboxes selected={newCodes} onChange={setNewCodes} permCodes={permCodes} />}
+        <Link
+          href={`/admin/permissions/positions/new?org_id=${org.id}`}
+          className="inline-flex min-h-11 items-center justify-center gap-1.5 px-3 rounded-lg text-xs font-semibold whitespace-nowrap"
+          style={{ color: "var(--primary-contrast, white)", background: "var(--primary)" }}
+        >
+          <Icon name="plus" />前往建立職位
+        </Link>
       </section>
     </div>
   );

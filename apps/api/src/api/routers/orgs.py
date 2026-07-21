@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.cache import cache_get, cache_invalidate, cache_set
 from api.core.database import get_db
-from api.core.permission_codes import PermissionCode
+from api.core.permission_codes import PermissionCode, validate_permission_codes
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_any
 from api.models.org import Org
@@ -163,6 +163,12 @@ async def get_org(org_id: uuid.UUID, db: DbDep, _: CurrentUser) -> object:
     dependencies=[Depends(require_any(PermissionCode.ORG_MANAGE, PermissionCode.ADMIN_ALL))],
 )
 async def create_org(data: OrgCreate, db: DbDep, current_user: CurrentUser) -> object:
+    invalid_codes = validate_permission_codes(data.default_permission_codes)
+    if invalid_codes:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"存在未知權限碼：{', '.join(invalid_codes)}",
+        )
     org = await org_svc.create_org(db, data)
     await audit_svc.record(
         db,
@@ -197,6 +203,13 @@ async def update_org(
     org = await org_svc.get_org(db, org_id)
     if not org:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="組織節點不存在")
+    if data.default_permission_codes is not None:
+        invalid_codes = validate_permission_codes(data.default_permission_codes)
+        if invalid_codes:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"存在未知權限碼：{', '.join(invalid_codes)}",
+            )
     before = {
         "name": org.name,
         "description": org.description,
@@ -204,6 +217,7 @@ async def update_org(
         "prefix": org.prefix,
         "bill_stage": org.bill_stage,
         "leader_user_id": str(org.leader_user_id) if org.leader_user_id else None,
+        "default_permission_codes": sorted(org.default_permission_codes or []),
         "is_active": org.is_active,
     }
     try:
@@ -226,6 +240,7 @@ async def update_org(
                 "prefix": org.prefix,
                 "bill_stage": org.bill_stage,
                 "leader_user_id": str(org.leader_user_id) if org.leader_user_id else None,
+                "default_permission_codes": sorted(org.default_permission_codes or []),
                 "is_active": org.is_active,
             },
         },

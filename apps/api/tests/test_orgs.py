@@ -254,6 +254,33 @@ async def test_create_org_succeeds(client: AsyncClient, db_session: AsyncSession
 
 
 @pytest.mark.asyncio
+async def test_org_default_permissions_can_be_saved_and_updated(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await _seed_user_with_codes(db_session, "org-default-perms@school.edu", ["org:manage"])
+    _override_user(user)
+
+    created = await client.post(
+        "/orgs",
+        json={"name": "資訊部", "default_permission_codes": ["site:manage"]},
+    )
+
+    assert created.status_code == 201
+    assert created.json()["default_permission_codes"] == ["site:manage"]
+
+    updated = await client.patch(
+        f"/orgs/{created.json()['id']}",
+        json={"default_permission_codes": ["site:manage", "announcement:create"]},
+    )
+
+    assert updated.status_code == 200
+    assert set(updated.json()["default_permission_codes"]) == {
+        "site:manage",
+        "announcement:create",
+    }
+
+
+@pytest.mark.asyncio
 async def test_update_org_missing_returns_404(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
