@@ -10,6 +10,7 @@ export * from "./api/shop";
 export * from "./api/merchandise-submissions";
 export * from "./api/seating";
 export * from "./api/partner-map";
+export * from "./api/recommended-vendors";
 export * from "./api/class";
 export * from "./api/people";
 export * from "./api/regulations";

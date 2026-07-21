@@ -64,6 +64,7 @@ export const NAV_ITEMS: NavItem[] = [
     perm: "inventory:*",
   },
   { id: "partnerMap", href: "/partner-map", iconKey: "partnerMap", label: "特約地圖" },
+  { id: "recommendedVendors", href: "/recommended-vendors", iconKey: "shopOrders", label: "推薦商家" },
   { id: "surveys", href: "/surveys", iconKey: "survey", label: "問卷專區" },
   { id: "petitions", href: "/petitions", iconKey: "petition", label: "陳情中心" },
   { id: "judicialPetitions", href: "/judicial-petitions", iconKey: "shield", label: "評議訴訟" },
@@ -210,6 +211,13 @@ export const NAV_ITEMS: NavItem[] = [
     perm: "partner_map:manage",
   },
   {
+    id: "recommendedVendorsAdmin",
+    href: "/recommended-vendors/admin",
+    iconKey: "shopAdmin",
+    label: "推薦商家管理",
+    perm: "recommended_vendor:manage",
+  },
+  {
     id: "electionsAdmin",
     href: "/admin/elections",
     iconKey: "elections",
@@ -281,7 +289,7 @@ export const NAV_DEF: NavEntry[] = [
   {
     id: "services",
     heading: "校園服務",
-    items: byIds(["shop", "merchandiseSubmissions", "meal", "surveys", "partnerMap", "examPapers"]),
+    items: byIds(["shop", "merchandiseSubmissions", "meal", "surveys", "partnerMap", "recommendedVendors", "examPapers"]),
   },
   {
     id: "operations",
@@ -315,6 +323,7 @@ export const NAV_DEF_LOGGED_OUT: NavEntry[] = [
       { id: "publicDocuments", href: "/documents", iconKey: "documents", label: "公文查詢" },
       { id: "publicAnnouncements", href: "/announcements", iconKey: "announcement", label: "校內公告" },
       { id: "publicPartnerMap", href: "/partner-map", iconKey: "partnerMap", label: "特約地圖" },
+      { id: "publicRecommendedVendors", href: "/recommended-vendors", iconKey: "shopOrders", label: "推薦商家" },
       { id: "publicPetition", href: "/petitions/new", iconKey: "petition", label: "我要陳情" },
       { id: "publicAbout", href: "/about", iconKey: "info", label: "關於本系統" },
     ],
@@ -330,7 +339,7 @@ export const NAV_DEF_TEACHER: NavEntry[] = [
   {
     id: "teacher-services",
     heading: "常用模組",
-    items: byIds(["surveys", "examPapers", "shop", "merchandiseSubmissions", "meal", "settings"]),
+    items: byIds(["surveys", "examPapers", "shop", "merchandiseSubmissions", "meal", "recommendedVendors", "settings"]),
   },
 ];
 
@@ -343,7 +352,7 @@ export const NAV_DEF_STUDENT: NavEntry[] = [
   {
     id: "student-services",
     heading: "常用入口",
-    items: byIds(["meal", "shop", "merchandiseSubmissions", "partnerMap", "examPapers", "settings"]),
+    items: byIds(["meal", "shop", "merchandiseSubmissions", "partnerMap", "recommendedVendors", "examPapers", "settings"]),
   },
 ];
 
@@ -351,7 +360,7 @@ export const NAV_DEF_VENDOR: NavEntry[] = [
   {
     id: "vendor-main",
     heading: "合作夥伴工作台",
-    items: byIds(["dashboard", "tasks", "partnerMap", "partnerMapAdmin"]),
+    items: byIds(["dashboard", "tasks", "partnerMap", "partnerMapAdmin", "recommendedVendors", "recommendedVendorsAdmin"]),
   },
   {
     id: "vendor-services",
@@ -396,6 +405,7 @@ export const DEFAULT_MOBILE_ORDER = [
   "judicialPetitions",
   "examPapers",
   "partnerMap",
+  "recommendedVendors",
   "settings",
 ];
 

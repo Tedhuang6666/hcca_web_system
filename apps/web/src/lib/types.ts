@@ -898,6 +898,111 @@ export interface OrgWithPositions {
 
 // ── 學餐系統型別 ──────────────────────────────────────────────────────────────
 
+export type RecommendedVendorStatus = "draft" | "active" | "hidden" | "archived";
+
+export interface RecommendedVendorProductCreate {
+  name: string;
+  description?: string | null;
+  price_text?: string | null;
+  image_url?: string | null;
+  menu_url?: string | null;
+  sort_order?: number;
+  is_active?: boolean;
+}
+
+export interface RecommendedVendorProductUpdate {
+  name?: string;
+  description?: string | null;
+  price_text?: string | null;
+  image_url?: string | null;
+  menu_url?: string | null;
+  sort_order?: number;
+  is_active?: boolean;
+}
+
+export interface RecommendedVendorProductOut extends RecommendedVendorProductCreate {
+  id: string;
+  vendor_id: string;
+  name: string;
+  description: string | null;
+  price_text: string | null;
+  image_url: string | null;
+  menu_url: string | null;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RecommendedVendorCreate {
+  name: string;
+  summary?: string | null;
+  description?: string | null;
+  category?: string | null;
+  address?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  google_maps_url?: string | null;
+  business_hours_text?: string | null;
+  contact_name?: string | null;
+  contact_phone?: string | null;
+  contact_email?: string | null;
+  line_id?: string | null;
+  social_url?: string | null;
+  website_url?: string | null;
+  ordering_instructions?: string | null;
+  menu_url?: string | null;
+  hygiene_inspection_date?: string | null;
+  hygiene_inspection_expires_at?: string | null;
+  hygiene_certificate_url?: string | null;
+  hygiene_note?: string | null;
+  status?: RecommendedVendorStatus;
+  sort_order?: number;
+  is_active?: boolean;
+  internal_note?: string | null;
+  products?: RecommendedVendorProductCreate[];
+}
+
+export type RecommendedVendorUpdate = Partial<RecommendedVendorCreate>;
+
+export interface RecommendedVendorListItem {
+  id: string;
+  name: string;
+  summary: string | null;
+  category: string | null;
+  address: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  google_maps_url: string | null;
+  business_hours_text: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
+  line_id: string | null;
+  menu_url: string | null;
+  hygiene_inspection_date: string | null;
+  hygiene_inspection_expires_at: string | null;
+  hygiene_verified: boolean;
+  status: string;
+  sort_order: number;
+  is_active: boolean;
+  product_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RecommendedVendorOut extends RecommendedVendorListItem {
+  description: string | null;
+  contact_name: string | null;
+  social_url: string | null;
+  website_url: string | null;
+  ordering_instructions: string | null;
+  hygiene_certificate_url: string | null;
+  hygiene_note: string | null;
+  internal_note: string | null;
+  created_by: string | null;
+  products: RecommendedVendorProductOut[];
+}
+
 
 /** 排程品項訂購統計（熱門排序用） */
 

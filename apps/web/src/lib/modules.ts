@@ -16,6 +16,7 @@ export type ModuleId =
   | "petitions"
   | "examPapers"
   | "partnerMap"
+  | "recommendedVendors"
   | "line"
   | "discord"
   | "governance"
@@ -92,6 +93,11 @@ export const FE_MODULES: Record<ModuleId, FeModuleSpec> = {
     label: "特約地圖",
     routePrefixes: ["/partner-map"],
     navIds: ["partnerMap", "partnerMapAdmin"],
+  },
+  recommendedVendors: {
+    label: "推薦商家",
+    routePrefixes: ["/recommended-vendors"],
+    navIds: ["recommendedVendors", "recommendedVendorsAdmin"],
   },
   line: {
     label: "LINE 通知",

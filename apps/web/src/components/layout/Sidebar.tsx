@@ -227,6 +227,7 @@ export default function Sidebar() {
         || hasPrefix("shop:")
         || hasPrefix("meal:")
         || hasPrefix("partner_map:")
+        || hasPrefix("recommended_vendor:")
         || hasPrefix("election:")
         || hasPrefix("petition:")
         || hasPrefix("org:")
