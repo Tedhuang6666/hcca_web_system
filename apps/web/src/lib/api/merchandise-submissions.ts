@@ -11,11 +11,11 @@ import type {
 } from "../types";
 import { BASE, ApiError, csrfHeaders, errorMessageFromResponse, get, patch, post, silentRefresh } from "./core";
 
-async function upload(path: string, file: File, query = ""): Promise<MerchandiseSubmissionUploadOut> {
+async function upload<T>(path: string, file: File, query = "", method = "POST"): Promise<T> {
   const body = new FormData();
   body.append("file", file);
   const request = () => fetch(`${BASE}${path}${query}`, {
-    method: "POST",
+    method,
     credentials: "include",
     headers: csrfHeaders("POST"),
     body,
@@ -30,7 +30,11 @@ export const merchandiseSubmissionsApi = {
   portal: () => get<MerchandiseSubmissionPortalOut>("/merchandise-submissions/portal"),
   mine: () => get<MerchandiseSubmissionOut[]>("/merchandise-submissions/submissions/me"),
   upload: (itemId: string, file: File) =>
-    upload("/merchandise-submissions/uploads", file, `?item_id=${encodeURIComponent(itemId)}`),
+    upload<MerchandiseSubmissionUploadOut>(
+      "/merchandise-submissions/uploads",
+      file,
+      `?item_id=${encodeURIComponent(itemId)}`,
+    ),
   save: (body: {
     item_id: string;
     field_values: Record<string, string>;
@@ -55,6 +59,20 @@ export const merchandiseSubmissionsApi = {
     ),
   review: (id: string, body: MerchandiseSubmissionReview) =>
     patch<MerchandiseSubmissionAdminListItem>(`/merchandise-submissions/admin/submissions/${id}/review`, body),
+  prepareVotingSurvey: (body: { org_id: string; title?: string; description?: string | null }) =>
+    post<import("../types").SurveyOut>("/merchandise-submissions/admin/voting-survey/prepare", body),
   uploadTemplateImage: (file: File) =>
-    upload("/merchandise-submissions/admin/template-images", file),
+    upload<MerchandiseSubmissionUploadOut>("/merchandise-submissions/admin/template-images", file),
+  addSubmissionFile: (submissionId: string, file: File) =>
+    upload<MerchandiseSubmissionAdminListItem>(
+      `/merchandise-submissions/admin/submissions/${submissionId}/files`,
+      file,
+    ),
+  replaceSubmissionFile: (submissionId: string, fileId: string, file: File) =>
+    upload<MerchandiseSubmissionAdminListItem>(
+      `/merchandise-submissions/admin/submissions/${submissionId}/files/${fileId}`,
+      file,
+      "",
+      "PUT",
+    ),
 };

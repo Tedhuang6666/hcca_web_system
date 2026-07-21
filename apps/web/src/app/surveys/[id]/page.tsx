@@ -218,10 +218,35 @@ function QuestionInput({
   value: AnswerValue;
   onChange: (val: AnswerValue) => void;
 }) {
-  const { question_type: type, options: rawOptions, min_value, max_value, placeholder } = question;
+  const {
+    question_type: type,
+    options: rawOptions,
+    option_image_sets: optionImageSets,
+    min_value,
+    max_value,
+    placeholder,
+  } = question;
   const options = rawOptions ?? [];
+  const imageSets = optionImageSets ?? [];
   const minV = min_value ?? 1;
   const maxV = max_value ?? 5;
+  const optionPreview = (index: number) => {
+    const images = imageSets[index] ?? [];
+    if (!images.length) return null;
+    return (
+      <span className="mt-2 flex flex-wrap gap-2">
+        {images.map((image) => (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            key={image}
+            src={uploadUrl(image)}
+            alt="投稿圖稿預覽"
+            className="h-20 w-20 rounded-lg object-cover"
+          />
+        ))}
+      </span>
+    );
+  };
 
   if (type === "section_text") {
     return (
@@ -310,7 +335,7 @@ function QuestionInput({
   if (type === "single") {
     return (
       <div className="space-y-2">
-        {options.map(opt => (
+        {options.map((opt, index) => (
           <label key={opt} className="flex items-center gap-3 cursor-pointer p-2.5 rounded-xl transition-all"
             style={{
               background: value.options[0] === opt ? "var(--primary-dim)" : "var(--bg-elevated)",
@@ -323,7 +348,10 @@ function QuestionInput({
               onChange={() => onChange({ ...value, options: [opt] })}
               className="accent-sky-400"
             />
-            <span className="text-sm" style={{ color: "var(--text-primary)" }}>{opt}</span>
+              <span className="flex-1 text-sm" style={{ color: "var(--text-primary)" }}>
+                {opt}
+                {optionPreview(index)}
+              </span>
           </label>
         ))}
       </div>
@@ -350,7 +378,7 @@ function QuestionInput({
     };
     return (
       <div className="space-y-2">
-        {options.map(opt => {
+        {options.map((opt, index) => {
           const checked = value.options.includes(opt);
           const isExcl = exclusive.has(opt);
           const isOther = otherSet.has(opt);
@@ -367,7 +395,10 @@ function QuestionInput({
                   onChange={() => toggle(opt)}
                   className="accent-sky-400"
                 />
-                <span className="text-sm flex-1" style={{ color: "var(--text-primary)" }}>{opt}</span>
+                <span className="flex-1 text-sm" style={{ color: "var(--text-primary)" }}>
+                  {opt}
+                  {optionPreview(index)}
+                </span>
                 {isExcl && (
                   <span className="text-xs px-1.5 py-0.5 rounded"
                     style={{ background: "var(--bg-surface)", color: "var(--text-muted)" }}>互斥</span>

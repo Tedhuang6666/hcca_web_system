@@ -6,7 +6,9 @@ from collections.abc import Callable
 from unittest.mock import patch
 
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.models.org import Org
 from api.models.user import User
 
 
@@ -19,6 +21,7 @@ async def test_merchandise_submission_flow_uses_school_account_and_notifies_subm
     authed_client_factory: Callable[[User], AsyncClient],
     admin_user: User,
     member_user: User,
+    db_session: AsyncSession,
 ) -> None:
     admin = authed_client_factory(admin_user)
     student = authed_client_factory(member_user)
@@ -128,6 +131,32 @@ async def test_merchandise_submission_flow_uses_school_account_and_notifies_subm
     assert submission["account_snapshot"]["email"] == member_user.email
     assert submission["files"][0]["filename"] == "design.png"
 
+    student_forbidden_response = await student.post(
+        f"/merchandise-submissions/admin/submissions/{submission['id']}/files",
+        files={"file": ("forbidden.png", b"\x89PNG\r\n\x1a\nminimal", "image/png")},
+    )
+    assert student_forbidden_response.status_code == 403
+
+    add_file_response = await admin.post(
+        f"/merchandise-submissions/admin/submissions/{submission['id']}/files",
+        files={"file": ("back.png", b"\x89PNG\r\n\x1a\nminimal", "image/png")},
+    )
+    assert add_file_response.status_code == 201
+    assert len(add_file_response.json()["files"]) == 2
+    added_file = next(
+        file for file in add_file_response.json()["files"] if file["filename"] == "back.png"
+    )
+
+    replace_file_response = await admin.put(
+        f"/merchandise-submissions/admin/submissions/{submission['id']}/files/{added_file['id']}",
+        files={"file": ("back-revised.png", b"\x89PNG\r\n\x1a\nminimal", "image/png")},
+    )
+    assert replace_file_response.status_code == 200
+    assert len(replace_file_response.json()["files"]) == 2
+    assert any(
+        file["filename"] == "back-revised.png" for file in replace_file_response.json()["files"]
+    )
+
     with patch("api.email.sender.enqueue_email", return_value="task-id") as enqueue_email:
         review_response = await admin.patch(
             f"/merchandise-submissions/admin/submissions/{submission['id']}/review",
@@ -152,6 +181,34 @@ async def test_merchandise_submission_flow_uses_school_account_and_notifies_subm
         assert resubmit_response.status_code == 200
         assert resubmit_response.json()["status"] == "submitted"
 
+        review_completed_response = await admin.patch(
+            f"/merchandise-submissions/admin/submissions/{submission['id']}/review",
+            json={"status": "review_completed"},
+        )
+        assert review_completed_response.status_code == 200
+        assert review_completed_response.json()["status"] == "review_completed"
+
+        voting_org = Org(name="校商投稿投票組織")
+        db_session.add(voting_org)
+        await db_session.flush()
+        survey_response = await admin.post(
+            "/merchandise-submissions/admin/voting-survey/prepare",
+            json={"org_id": str(voting_org.id)},
+        )
+        assert survey_response.status_code == 201
+        survey_id = survey_response.json()["id"]
+        assert len(survey_response.json()["questions"]) == 1
+        assert survey_response.json()["questions"][0]["question_type"] == "multiple"
+        assert len(survey_response.json()["questions"][0]["option_image_sets"]) == 1
+        open_survey_response = await admin.post(f"/surveys/{survey_id}/open")
+        assert open_survey_response.status_code == 200
+        voting_preview_response = await student.get(uploaded["url"])
+        assert voting_preview_response.status_code == 200
+        linked_response = await admin.get("/merchandise-submissions/admin/submissions")
+        linked = next(row for row in linked_response.json() if row["id"] == submission["id"])
+        assert linked["voting_survey_id"] == survey_id
+        assert linked["voting_survey_title"] == "校商投稿全校票選"
+
         approve_response = await admin.patch(
             f"/merchandise-submissions/admin/submissions/{submission['id']}/review",
             json={"status": "approved"},
@@ -159,10 +216,11 @@ async def test_merchandise_submission_flow_uses_school_account_and_notifies_subm
         assert approve_response.status_code == 200
         assert approve_response.json()["status"] == "approved"
 
-    assert enqueue_email.call_count == 2
+    assert enqueue_email.call_count == 3
     subjects = [call.args[1] for call in enqueue_email.call_args_list]
     assert "需要補件" in subjects[0]
-    assert "已採用" in subjects[1]
+    assert "審核完成" in subjects[1]
+    assert "已採用" in subjects[2]
 
     mine_response = await student.get("/merchandise-submissions/submissions/me")
     assert mine_response.status_code == 200

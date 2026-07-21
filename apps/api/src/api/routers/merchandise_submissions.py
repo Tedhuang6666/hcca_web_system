@@ -31,9 +31,12 @@ from api.schemas.merchandise_submission import (
     MerchandiseSubmissionSettingsOut,
     MerchandiseSubmissionSettingsUpdate,
     MerchandiseSubmissionUploadOut,
+    MerchandiseSubmissionVotingSurveyCreate,
 )
+from api.schemas.survey import SurveyOut
 from api.services import audit as audit_svc
 from api.services import merchandise_submission as submission_svc
+from api.services import survey as survey_svc
 from api.services.permission import get_user_permission_codes
 from api.services.storage import get_storage
 
@@ -46,6 +49,7 @@ logger = logging.getLogger(__name__)
 
 _REVIEW_STATUS_LABELS = {
     MerchandiseSubmissionStatus.REVIEWING: "進入審核",
+    MerchandiseSubmissionStatus.REVIEW_COMPLETED: "審核完成，進入全校投票",
     MerchandiseSubmissionStatus.APPROVED: "已採用",
     MerchandiseSubmissionStatus.REVISION_REQUESTED: "需要補件",
     MerchandiseSubmissionStatus.REJECTED: "未採用",
@@ -98,6 +102,11 @@ def _serialize_submission(submission, *, include_submitter: bool):
         "submitted_at": submission.submitted_at,
         "reviewed_at": submission.reviewed_at,
         "reviewer_name": submission.reviewer.display_name if submission.reviewer else None,
+        "voting_survey_id": submission.voting_survey_id,
+        "voting_survey_title": submission.voting_survey.title if submission.voting_survey else None,
+        "voting_survey_status": (
+            submission.voting_survey.status.value if submission.voting_survey else None
+        ),
         "review_note": submission.review_note,
         "created_at": submission.created_at,
         "updated_at": submission.updated_at,
@@ -197,7 +206,10 @@ async def preview_submission_file(storage_key: str, session: DbDep, current_user
         content_type = None
     else:
         is_owner = stored_file.submission.user_id == current_user.id
-        if not is_owner and not current_user.is_superuser:
+        is_voting_asset = (
+            stored_file.submission.status == MerchandiseSubmissionStatus.REVIEW_COMPLETED
+        )
+        if not is_owner and not is_voting_asset and not current_user.is_superuser:
             codes = await get_user_permission_codes(session, current_user.id)
             if str(PermissionCode.SHOP_MANAGE) not in codes:
                 raise HTTPException(
@@ -220,6 +232,42 @@ async def preview_submission_file(storage_key: str, session: DbDep, current_user
     return RedirectResponse(
         await storage.get_url(storage_key, disposition="inline", download_name=filename)
     )
+
+
+@router.post(
+    "/admin/voting-survey/prepare",
+    response_model=SurveyOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="建立校商投稿全校票選問卷草稿",
+    dependencies=[Depends(require_permission(PermissionCode.SHOP_MANAGE))],
+)
+async def prepare_voting_survey(
+    payload: MerchandiseSubmissionVotingSurveyCreate,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> SurveyOut:
+    try:
+        survey = await submission_svc.prepare_voting_survey(
+            session,
+            org_id=payload.org_id,
+            created_by=current_user.id,
+            title=payload.title,
+            description=payload.description,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    await audit_svc.record(
+        session,
+        entity_type="survey",
+        entity_id=str(survey.id),
+        action="survey.create",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={"source": "merchandise_submission_voting", "title": survey.title},
+        summary=f"建立校商投稿票選問卷「{survey.title}」",
+    )
+    result = await survey_svc.get_survey(session, survey.id)
+    return or_404(result, "找不到剛建立的票選問卷")
 
 
 @router.post(
@@ -405,6 +453,76 @@ async def admin_submissions(
 ) -> list[dict]:
     submissions = await submission_svc.list_submissions(session, status=status_filter)
     return [_serialize_submission(submission, include_submitter=True) for submission in submissions]
+
+
+@router.post(
+    "/admin/submissions/{submission_id}/files",
+    response_model=MerchandiseSubmissionAdminListItem,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission(PermissionCode.SHOP_MANAGE))],
+)
+async def add_admin_submission_file(
+    submission_id: uuid.UUID,
+    session: DbDep,
+    current_user: CurrentUser,
+    file: UploadFile = File(...),
+) -> dict:
+    submission = or_404(await submission_svc.get_submission(session, submission_id), "找不到投稿")
+    try:
+        submission = await submission_svc.admin_upload_submission_file(session, submission, file)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    await audit_svc.record(
+        session,
+        entity_type="merchandise_submission",
+        entity_id=str(submission.id),
+        action="merchandise_submission.file_add",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={"file_count": len(submission.files)},
+        summary=f"為校商投稿「{submission.item.name}」增加檔案",
+    )
+    return _serialize_submission(submission, include_submitter=True)
+
+
+@router.put(
+    "/admin/submissions/{submission_id}/files/{file_id}",
+    response_model=MerchandiseSubmissionAdminListItem,
+    dependencies=[Depends(require_permission(PermissionCode.SHOP_MANAGE))],
+)
+async def replace_admin_submission_file(
+    submission_id: uuid.UUID,
+    file_id: uuid.UUID,
+    session: DbDep,
+    current_user: CurrentUser,
+    file: UploadFile = File(...),
+) -> dict:
+    submission = or_404(await submission_svc.get_submission(session, submission_id), "找不到投稿")
+    try:
+        submission = await submission_svc.admin_upload_submission_file(
+            session, submission, file, replace_file_id=file_id
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    await audit_svc.record(
+        session,
+        entity_type="merchandise_submission",
+        entity_id=str(submission.id),
+        action="merchandise_submission.file_replace",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={"file_id": str(file_id)},
+        summary=f"替換校商投稿「{submission.item.name}」檔案",
+    )
+    return _serialize_submission(submission, include_submitter=True)
 
 
 @router.patch(

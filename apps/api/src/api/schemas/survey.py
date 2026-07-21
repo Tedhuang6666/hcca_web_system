@@ -23,6 +23,24 @@ def _parse_json_list(raw: object) -> list[str]:
     return parsed if isinstance(parsed, list) else []
 
 
+def _parse_json_nested_list(raw: object) -> list[list[str]]:
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return []
+    return (
+        [
+            [str(value) for value in values if isinstance(value, str)]
+            for values in parsed
+            if isinstance(values, list)
+        ]
+        if isinstance(parsed, list)
+        else []
+    )
+
+
 # ── 問題 ─────────────────────────────────────────────────────────────────────
 
 
@@ -103,6 +121,7 @@ class SurveyQuestionOut(BaseModel):
     question_type: QuestionType
     is_required: bool
     options: list[str] = Field(default_factory=list)
+    option_image_sets: list[list[str]] = Field(default_factory=list)
     min_value: int | None
     max_value: int | None
     placeholder: str | None
@@ -144,6 +163,9 @@ class SurveyQuestionOut(BaseModel):
         )
         result: dict[str, Any] = {f: getattr(data, f, None) for f in fields}
         result["options"] = _parse_json_list(getattr(data, "options_json", None))
+        result["option_image_sets"] = _parse_json_nested_list(
+            getattr(data, "option_image_sets_json", None)
+        )
         result["condition"] = _parse_condition(getattr(data, "condition_json", None))
         result["option_config"] = _parse_option_config(getattr(data, "option_config_json", None))
         return result
@@ -156,6 +178,9 @@ class SurveyQuestionCreate(BaseModel):
     is_required: bool = True
     options: list[str] = Field(
         default_factory=list, description="選項（SINGLE/MULTIPLE/RANKING 題型）"
+    )
+    option_image_sets: list[list[str]] = Field(
+        default_factory=list, description="各選項的預覽圖片 URL，與 options 依序對應"
     )
     # 評分題：起始/最大分數；排序題：最少/最多必選項數
     min_value: int | None = Field(None, ge=1, le=100, description="評分起始值或排序最少項數")
@@ -179,6 +204,11 @@ class SurveyQuestionCreate(BaseModel):
     @classmethod
     def validate_options(cls, v: list[str], info) -> list[str]:  # type: ignore[misc]
         return [o.strip() for o in v if o.strip()]
+
+    @field_validator("option_image_sets")
+    @classmethod
+    def validate_option_image_sets(cls, v: list[list[str]]) -> list[list[str]]:
+        return [[image.strip() for image in images if image.strip()] for images in v]
 
     @field_validator("is_required")
     @classmethod
@@ -219,6 +249,7 @@ class SurveyQuestionUpdate(BaseModel):
     question_text: str | None = Field(None, max_length=1000)
     is_required: bool | None = None
     options: list[str] | None = None
+    option_image_sets: list[list[str]] | None = None
     min_value: int | None = Field(None, ge=1, le=100)
     max_value: int | None = Field(None, ge=1, le=100)
     placeholder: str | None = None
