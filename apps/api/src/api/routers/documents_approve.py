@@ -27,7 +27,7 @@ from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.core.posthog import get_posthog_client
 from api.dependencies.auth import get_current_active_user
-from api.dependencies.permissions import require_permission
+from api.dependencies.permissions import require_any, require_permission
 from api.models.document import Document, DocumentStatus
 from api.models.user import User
 from api.routers.documents_helpers import (
@@ -50,6 +50,7 @@ from api.schemas.document import (
     DocumentApprovalDelegationCreate,
     DocumentApprovalDelegationOut,
     DocumentApprovalDelegationUpdate,
+    DocumentArchiveSettingsUpdate,
     DocumentOut,
     RecallRequest,
     RejectMode,
@@ -677,6 +678,67 @@ async def archive_document(
         actor_id=str(current_user.id),
         actor_email=current_user.email,
         summary=f"封存公文「{updated.title}」",
+    )
+    bg.add_task(ws_broadcast_bg, updated)
+    return updated
+
+
+@router.put(
+    "/{doc_id}/archive-settings",
+    response_model=DocumentOut,
+    summary="設定或取消公文預約歸檔",
+    responses={
+        403: {"description": "無設定歸檔權限"},
+        409: {"description": "公文非已核准狀態或時間無效"},
+    },
+)
+async def update_archive_settings(
+    doc_id: str,
+    payload: DocumentArchiveSettingsUpdate,
+    session: DbDep,
+    current_user: Annotated[
+        User,
+        Depends(
+            require_any(
+                PermissionCode.DOCUMENT_ARCHIVE_SETTINGS,
+                PermissionCode.DOCUMENT_ADMIN,
+                PermissionCode.ADMIN_ALL,
+            )
+        ),
+    ],
+    bg: BackgroundTasks,
+) -> Document:
+    doc = await get_doc_or_404(doc_id, session)
+    if not current_user.is_superuser:
+        codes = await get_user_permission_codes_for_org(session, current_user.id, doc.org_id)
+        can_manage = bool(
+            {
+                str(PermissionCode.ADMIN_ALL),
+                str(PermissionCode.DOCUMENT_ADMIN),
+                str(PermissionCode.DOCUMENT_ARCHIVE_SETTINGS),
+            }
+            & set(codes)
+        )
+        if not can_manage:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="您無權設定此公文的歸檔",
+            )
+
+    try:
+        updated = await doc_svc.update_archive_settings(session, doc, data=payload)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+
+    await audit_svc.record(
+        session,
+        entity_type="document",
+        entity_id=str(doc.id),
+        action="archive_schedule_updated",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={"archive_at": updated.archive_at.isoformat() if updated.archive_at else None},
+        summary=f"更新公文「{updated.title}」預約歸檔設定",
     )
     bg.add_task(ws_broadcast_bg, updated)
     return updated

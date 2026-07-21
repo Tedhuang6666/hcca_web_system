@@ -51,6 +51,7 @@ from api.services.document._lifecycle import (
     submit_document,
     suggest_approvers,
     update_approval_delegation,
+    update_archive_settings,
     update_document,
     upsert_recipients,
 )
@@ -117,6 +118,7 @@ __all__ = [
     # lifecycle
     "create_document",
     "update_document",
+    "update_archive_settings",
     "submit_document",
     "issue_document_directly",
     "suggest_approvers",

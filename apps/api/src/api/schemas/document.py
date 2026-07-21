@@ -444,6 +444,7 @@ class DocumentOut(BaseModel):
     due_date: datetime | None
     submitted_at: datetime | None
     completed_at: datetime | None
+    archive_at: datetime | None = None
     page_info: str | None = None
     created_at: datetime
     updated_at: datetime
@@ -481,6 +482,7 @@ class DocumentListItem(BaseModel):
     due_date: datetime | None
     submitted_at: datetime | None
     completed_at: datetime | None
+    archive_at: datetime | None = None
     created_at: datetime
     is_redacted: bool = False
 
@@ -632,6 +634,15 @@ class DocumentUpdate(BaseModel):
     page_info: str | None = Field(None, max_length=50)
     change_note: str | None = Field(None, max_length=500, description="修改備註（將記入版本歷程）")
     autosave: bool = Field(False, description="線上自動儲存；不建立版本快照")
+
+
+class DocumentArchiveSettingsUpdate(BaseModel):
+    """已核准公文的預約歸檔設定；傳 null 可取消預約。"""
+
+    archive_at: datetime | None = Field(
+        None,
+        description="預約歸檔時間；未提供或傳 null 時為取消預約",
+    )
 
 
 class SubmitRequest(BaseModel):

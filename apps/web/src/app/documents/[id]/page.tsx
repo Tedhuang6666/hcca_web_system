@@ -5,8 +5,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { documentsApi, usersApi, ApiError, apiErrorMessage } from "@/lib/api";
-import type { UserSummary } from "@/lib/api";
-import type { DocumentOut } from "@/lib/types";
+import type { DocumentWithArchive, UserSummary } from "@/lib/api";
 import { usePermissions } from "@/hooks/usePermissions";
 import { DocumentStatusBadge, UrgencyBadge } from "@/components/ui/StatusBadge";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
@@ -24,6 +23,13 @@ function toROCDate(dateStr: string) {
   const d = new Date(dateStr);
   const y = d.getFullYear() - 1911;
   return `中華民國 ${y} 年 ${d.getMonth() + 1} 月 ${d.getDate()} 日`;
+}
+
+function toDateTimeLocal(dateStr: string | null) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 const CAT_LABEL: Record<string, string> = {
@@ -52,7 +58,7 @@ function filenameFromContentDisposition(disposition: string | null, fallback: st
   return disposition.match(/filename="?([^"]+)"?/i)?.[1] ?? fallback;
 }
 
-function formatActingSignature(step: DocumentOut["approvals"][number] | undefined) {
+function formatActingSignature(step: DocumentWithArchive["approvals"][number] | undefined) {
   if (!step) return null;
   if (!step.is_acting || !step.delegate) {
     const signer = step.approver;
@@ -154,7 +160,7 @@ const UserPicker = memo(function UserPicker({
 export default function DocumentDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const [doc, setDoc] = useState<DocumentOut | null>(null);
+  const [doc, setDoc] = useState<DocumentWithArchive | null>(null);
   const [loading, setLoading] = useState(true);
   const [forbidden, setForbidden] = useState(false);
   const [submitMode, setSubmitMode] = useState(false);
@@ -163,6 +169,8 @@ export default function DocumentDetailPage() {
   const [allUsers, setAllUsers] = useState<UserSummary[]>([]);
   const { zoom, setZoom, zoomStyle } = usePersistedZoom("hcca.viewer.zoom");
   const [printingPdf, setPrintingPdf] = useState(false);
+  const [archiveAtInput, setArchiveAtInput] = useState("");
+  const [archiveSettingsBusy, setArchiveSettingsBusy] = useState(false);
   const { can } = usePermissions();
   const currentUserId = typeof window !== "undefined" ? localStorage.getItem("user_id") ?? "" : "";
 
@@ -186,6 +194,9 @@ export default function DocumentDetailPage() {
   useEffect(() => {
     if (doc) recordRecent({ kind: "document", id, title: doc.serial_number ?? doc.title, href: `/documents/${id}` });
   }, [doc, id]);
+  useEffect(() => {
+    if (doc) setArchiveAtInput(toDateTimeLocal(doc.archive_at));
+  }, [doc]);
 
   // 即時 WebSocket 更新
   useWS(doc ? `org:${doc.org_id}` : null, (msg) => {
@@ -222,6 +233,21 @@ export default function DocumentDetailPage() {
   const handleRecall = async () => {
     try { await documentsApi.recall(id); toast.success("已撤回"); fetchDoc(); }
     catch (e) { toast.error(apiErrorMessage(e, "操作失敗")); }
+  };
+
+  const handleArchiveSettings = async () => {
+    setArchiveSettingsBusy(true);
+    try {
+      await documentsApi.updateArchiveSettings(id, {
+        archive_at: archiveAtInput ? new Date(archiveAtInput).toISOString() : null,
+      });
+      toast.success(archiveAtInput ? "已設定預約歸檔" : "已取消預約歸檔");
+      fetchDoc();
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "歸檔設定更新失敗"));
+    } finally {
+      setArchiveSettingsBusy(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -349,6 +375,7 @@ export default function DocumentDetailPage() {
     ["建立日期", new Date(doc.created_at).toLocaleDateString("zh-TW")],
     ["送審日期", doc.submitted_at ? new Date(doc.submitted_at).toLocaleDateString("zh-TW") : "—"],
     ["限辦日期", doc.due_date ? new Date(doc.due_date).toLocaleDateString("zh-TW") : "—"],
+    ["預約歸檔", doc.archive_at ? new Date(doc.archive_at).toLocaleString("zh-TW") : "—"],
     [
       "承辦人",
       doc.handler_name
@@ -490,7 +517,7 @@ export default function DocumentDetailPage() {
             </button>
           )}
           {/* 已核准：封存（僅建立者） */}
-          {doc.status === "approved" && isCreator && (
+          {doc.status === "approved" && isCreator && can("document:archive") && (
             <button onClick={async () => { await documentsApi.archive(id); fetchDoc(); }}
               className="btn btn-ghost text-sm gap-1.5">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
@@ -568,9 +595,44 @@ export default function DocumentDetailPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      {doc.status === "approved" && (can("document:archive_settings") || can("document:admin")) && (
+        <div className="card p-4 space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+              預約歸檔
+            </h3>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              到期後系統會自動封存公文，封存後不再顯示審核步驟。
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+            <label className="flex-1 text-xs" style={{ color: "var(--text-secondary)" }}>
+              歸檔時間
+              <input
+                type="datetime-local"
+                value={archiveAtInput}
+                min={toDateTimeLocal(new Date().toISOString())}
+                onChange={e => setArchiveAtInput(e.target.value)}
+                className="mt-1 w-full rounded-lg bg-transparent px-3 py-2 text-sm"
+                style={{ border: "1px solid var(--border)" }}
+              />
+            </label>
+            <button
+              type="button"
+              onClick={handleArchiveSettings}
+              disabled={archiveSettingsBusy}
+              className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
+              style={{ background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }}
+            >
+              {archiveSettingsBusy ? "儲存中…" : archiveAtInput ? "儲存時間" : "取消預約"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className={`grid grid-cols-1 gap-5 ${doc.status === "archived" ? "" : "lg:grid-cols-3"}`}>
         {/* 左：公文內容 */}
-        <div className="lg:col-span-2 space-y-4">
+        <div className={doc.status === "archived" ? "space-y-4" : "lg:col-span-2 space-y-4"}>
           {/* 公文本文（官式橫書格式） */}
           <div className="card overflow-hidden" style={zoomStyle}>
             <div className="px-5 py-3 space-y-2" style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
@@ -1152,7 +1214,7 @@ export default function DocumentDetailPage() {
 
         {/* 右：審核面板 */}
         <div className="space-y-4">
-          {doc.approvals.length > 0
+          {doc.status !== "archived" && (doc.approvals.length > 0
             ? <ApprovalPanel
                 steps={doc.approvals}
                 canApprove={canApprove}
@@ -1173,8 +1235,7 @@ export default function DocumentDetailPage() {
                   </button>
                 )}
               </div>
-            )
-          }
+            ))}
         </div>
       </div>
     </div>

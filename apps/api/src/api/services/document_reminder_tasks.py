@@ -160,6 +160,41 @@ async def _process_overdue_async() -> dict:
     }
 
 
+async def _process_scheduled_archives_async() -> dict:
+    """將到期的已核准公文轉為已封存。"""
+    from api.core.database import task_session
+
+    now = datetime.now(UTC)
+    archived = 0
+    async with task_session() as db:
+        result = await db.execute(
+            select(Document)
+            .where(Document.status == DocumentStatus.APPROVED.value)
+            .where(Document.archive_at.is_not(None))
+            .where(Document.archive_at <= now)
+            .order_by(Document.archive_at)
+            .limit(500)
+        )
+        docs = list(result.scalars().all())
+        for doc in docs:
+            doc.status = DocumentStatus.ARCHIVED
+            doc.completed_at = doc.completed_at or now
+            archived += 1
+            await audit_chain.write_audit_log_with_chain(
+                db,
+                entity_type="document",
+                entity_id=str(doc.id),
+                action="archive_scheduled",
+                actor_id=None,
+                actor_email=None,
+                meta={"archive_at": doc.archive_at.isoformat() if doc.archive_at else None},
+                summary=f"公文「{doc.title}」依預約時間自動歸檔",
+            )
+        await db.commit()
+
+    return {"status": "ok", "archived": archived, "now": now.isoformat()}
+
+
 @celery_app.task(
     name="api.services.document_reminder_tasks.send_document_reminders",
     bind=True,
@@ -174,4 +209,18 @@ def send_document_reminders(self) -> dict:  # type: ignore[type-arg]
     return asyncio.run(_process_overdue_async())
 
 
-__all__ = ["send_document_reminders"]
+@celery_app.task(
+    name="api.services.document_reminder_tasks.archive_scheduled_documents",
+    bind=True,
+    max_retries=3,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+)
+def archive_scheduled_documents(self) -> dict:  # type: ignore[type-arg]
+    """每分鐘執行，處理已到期的預約歸檔。"""
+    return asyncio.run(_process_scheduled_archives_async())
+
+
+__all__ = ["send_document_reminders", "archive_scheduled_documents"]
