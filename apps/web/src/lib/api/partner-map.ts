@@ -14,12 +14,19 @@ type PartnerBusinessContactFields = {
   other_contact: string | null;
 };
 export type PartnerBusinessDirectoryItem = PartnerBusinessListItem & PartnerBusinessContactFields;
+export type PartnerLocationWithMapUrl = PartnerLocationOut & { google_maps_url: string | null };
+export type PartnerLocationCreateWithMapUrl = PartnerLocationCreate & {
+  google_maps_url?: string | null;
+};
 export type PartnerOfferDetail = PartnerOfferOut & {
   benefit_type: "discount" | "gift" | "bundle" | "member_price" | "other";
   benefit_value: string | null;
 };
-export type PartnerBusinessDetail = Omit<PartnerBusinessOut, "offers"> &
-  PartnerBusinessContactFields & { offers: PartnerOfferDetail[] };
+export type PartnerBusinessDetail = Omit<PartnerBusinessOut, "offers" | "locations"> &
+  PartnerBusinessContactFields & {
+    offers: PartnerOfferDetail[];
+    locations: PartnerLocationWithMapUrl[];
+  };
 export type PartnerDiscoveryItem = {
   id: string;
   name: string;
@@ -116,8 +123,13 @@ export const partnerMapApi = {
     patch<PartnerTagOut>(`/partner-map/admin/tags/${id}`, body),
   deleteTag: (id: string) => del<void>(`/partner-map/admin/tags/${id}`),
 
-  createLocation: (businessId: string, body: PartnerLocationCreate) =>
-    post<PartnerLocationOut>(`/partner-map/admin/businesses/${businessId}/locations`, body),
+  createLocation: (businessId: string, body: PartnerLocationCreateWithMapUrl) =>
+    post<PartnerLocationWithMapUrl>(`/partner-map/admin/businesses/${businessId}/locations`, body),
+  parseGoogleMaps: (url: string) =>
+    post<{ google_maps_url: string; address: string; latitude: number; longitude: number }>(
+      "/partner-map/admin/locations/parse-google-maps",
+      { url },
+    ),
   updateLocation: (id: string, body: PartnerLocationUpdate) =>
     patch<PartnerLocationOut>(`/partner-map/admin/locations/${id}`, body),
   deleteLocation: (id: string) => del<void>(`/partner-map/admin/locations/${id}`),

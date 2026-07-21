@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import UTC, datetime
+from urllib.parse import parse_qs, unquote, urlparse
 
+import httpx
 from sqlalchemy import Select, and_, desc, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -44,6 +47,78 @@ def active_offer_clause(now: datetime | None = None):
         or_(PartnerOffer.starts_at == None, PartnerOffer.starts_at <= now),  # noqa: E711
         or_(PartnerOffer.ends_at == None, PartnerOffer.ends_at >= now),  # noqa: E711
     )
+
+
+_GOOGLE_SHORT_HOSTS = {"maps.app.goo.gl", "goo.gl"}
+
+
+def _is_google_maps_host(host: str | None) -> bool:
+    host = (host or "").lower().rstrip(".")
+    return host in _GOOGLE_SHORT_HOSTS or host == "maps.google.com" or host.endswith(".google.com")
+
+
+def _extract_coordinates(value: str) -> tuple[float, float] | None:
+    patterns = (
+        r"@(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)",
+        r"!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)",
+        r"(?:^|[^\d-])(-?\d{1,3}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)(?:$|[^\d])",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, value)
+        if not match:
+            continue
+        latitude, longitude = float(match.group(1)), float(match.group(2))
+        if -90 <= latitude <= 90 and -180 <= longitude <= 180:
+            return latitude, longitude
+    return None
+
+
+def _extract_address(parsed_url) -> str | None:
+    query_values = parse_qs(parsed_url.query).get("query", [])
+    for value in query_values:
+        address = unquote(value).replace("+", " ").strip()
+        if address and _extract_coordinates(address) is None:
+            return address[:300]
+    match = re.search(r"/maps/place/([^/@]+)", unquote(parsed_url.path))
+    if match:
+        address = match.group(1).replace("+", " ").strip(" /")
+        if address:
+            return address[:300]
+    return None
+
+
+async def parse_google_maps_link(url: str) -> dict[str, str | float]:
+    """展開 Google Maps 連結並擷取可直接建立據點的地址與座標。"""
+
+    original = url.strip()
+    parsed = urlparse(original)
+    if parsed.scheme != "https" or not _is_google_maps_host(parsed.hostname):
+        raise ValueError("請貼上 https://www.google.com 或 maps.app.goo.gl 的 Google Maps 連結")
+
+    resolved_url = original
+    if parsed.hostname and parsed.hostname.lower() in _GOOGLE_SHORT_HOSTS:
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=8.0) as client:
+                response = await client.get(original)
+                response.raise_for_status()
+                resolved_url = str(response.url)
+        except httpx.HTTPError as exc:
+            raise ValueError("無法展開這個 Google Maps 短網址，請改貼完整連結") from exc
+
+    parsed = urlparse(resolved_url)
+    if not _is_google_maps_host(parsed.hostname):
+        raise ValueError("連結未導向 Google Maps，請確認後再試")
+    coordinates = _extract_coordinates(unquote(resolved_url))
+    if coordinates is None:
+        raise ValueError("連結中找不到座標，請從 Google Maps 的店家頁面重新複製分享連結")
+    latitude, longitude = coordinates
+    address = _extract_address(parsed) or "Google Maps 據點（請補充地址）"
+    return {
+        "google_maps_url": resolved_url,
+        "address": address,
+        "latitude": latitude,
+        "longitude": longitude,
+    }
 
 
 def _as_aware(value: datetime) -> datetime:

@@ -73,12 +73,14 @@ export default function PartnerMapAdminPage() {
   const [tagName, setTagName] = useState("");
   const [tagColor, setTagColor] = useState("#10B981");
   const [saving, setSaving] = useState(false);
+  const [parsingMap, setParsingMap] = useState(false);
   const [locationForm, setLocationForm] = useState({
     name: "",
     address: "",
     latitude: "",
     longitude: "",
     phone: "",
+    google_maps_url: "",
   });
   const [offerForm, setOfferForm] = useState<OfferDraft>(newOfferDraft());
   const [initialOfferForms, setInitialOfferForms] = useState<OfferDraft[]>([newOfferDraft()]);
@@ -260,14 +262,38 @@ export default function PartnerMapAdminPage() {
         latitude,
         longitude,
         phone: locationForm.phone || null,
+        google_maps_url: locationForm.google_maps_url || null,
         sort_order: 0,
         is_active: true,
       });
-      setLocationForm({ name: "", address: "", latitude: "", longitude: "", phone: "" });
+      setLocationForm({ name: "", address: "", latitude: "", longitude: "", phone: "", google_maps_url: "" });
       selectBusiness(selected.id);
       load();
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : "新增點位失敗");
+    }
+  };
+
+  const parseGoogleMaps = async () => {
+    if (!locationForm.google_maps_url.trim()) {
+      toast.error("請先貼上 Google Maps 連結");
+      return;
+    }
+    setParsingMap(true);
+    try {
+      const location = await partnerMapApi.parseGoogleMaps(locationForm.google_maps_url);
+      setLocationForm((form) => ({
+        ...form,
+        google_maps_url: location.google_maps_url,
+        address: location.address,
+        latitude: String(location.latitude),
+        longitude: String(location.longitude),
+      }));
+      toast.success("已帶入地址與座標，請確認後新增據點");
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : "無法解析 Google Maps 連結");
+    } finally {
+      setParsingMap(false);
     }
   };
 
@@ -604,6 +630,10 @@ export default function PartnerMapAdminPage() {
                     <div className="mt-4 grid gap-2 sm:grid-cols-2">
                       <input className="input" placeholder="分店名稱" value={locationForm.name} onChange={(e) => setLocationForm((f) => ({ ...f, name: e.target.value }))} />
                       <input className="input" placeholder="電話" value={locationForm.phone} onChange={(e) => setLocationForm((f) => ({ ...f, phone: e.target.value }))} />
+                      <div className="flex gap-2 sm:col-span-2">
+                        <input className="input min-w-0 flex-1" type="url" placeholder="貼上 Google Maps 分享連結，自動帶入地址與座標" value={locationForm.google_maps_url} onChange={(e) => setLocationForm((f) => ({ ...f, google_maps_url: e.target.value }))} />
+                        <button type="button" className="btn btn-secondary shrink-0" onClick={() => void parseGoogleMaps()} disabled={parsingMap}>{parsingMap ? "解析中…" : "自動擷取"}</button>
+                      </div>
                       <input className="input sm:col-span-2" placeholder="地址" value={locationForm.address} onChange={(e) => setLocationForm((f) => ({ ...f, address: e.target.value }))} />
                       <input className="input" placeholder="緯度" value={locationForm.latitude} onChange={(e) => setLocationForm((f) => ({ ...f, latitude: e.target.value }))} />
                       <input className="input" placeholder="經度" value={locationForm.longitude} onChange={(e) => setLocationForm((f) => ({ ...f, longitude: e.target.value }))} />

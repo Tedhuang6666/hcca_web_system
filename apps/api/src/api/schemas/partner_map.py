@@ -49,6 +49,7 @@ class PartnerLocationCreate(BaseModel):
     phone: str | None = Field(None, max_length=50)
     business_hours: dict = Field(default_factory=dict)
     google_place_id: str | None = Field(None, max_length=255)
+    google_maps_url: str | None = Field(None, max_length=2000)
     sort_order: int = 0
     is_active: bool = True
 
@@ -61,6 +62,7 @@ class PartnerLocationUpdate(BaseModel):
     phone: str | None = Field(None, max_length=50)
     business_hours: dict | None = None
     google_place_id: str | None = Field(None, max_length=255)
+    google_maps_url: str | None = Field(None, max_length=2000)
     sort_order: int | None = None
     is_active: bool | None = None
 
@@ -77,10 +79,22 @@ class PartnerLocationOut(BaseModel):
     phone: str | None
     business_hours: dict
     google_place_id: str | None
+    google_maps_url: str | None
     sort_order: int
     is_active: bool
     created_at: datetime
     updated_at: datetime
+
+
+class PartnerGoogleMapsParseIn(BaseModel):
+    url: str = Field(..., min_length=1, max_length=2000)
+
+
+class PartnerGoogleMapsParseOut(BaseModel):
+    google_maps_url: str
+    address: str
+    latitude: float
+    longitude: float
 
 
 class PartnerOfferCreate(BaseModel):

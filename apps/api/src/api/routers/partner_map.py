@@ -27,6 +27,8 @@ from api.schemas.partner_map import (
     PartnerBusinessOut,
     PartnerBusinessUpdate,
     PartnerDiscoveryItem,
+    PartnerGoogleMapsParseIn,
+    PartnerGoogleMapsParseOut,
     PartnerLocationCreate,
     PartnerLocationOut,
     PartnerLocationUpdate,
@@ -548,6 +550,23 @@ async def admin_update_tag(
 )
 async def admin_delete_tag(tag_id: uuid.UUID, db: DbDep, _: ManagerUser) -> None:
     await map_svc.delete_tag(db, await _tag_or_404(db, tag_id))
+
+
+@router.post(
+    "/admin/locations/parse-google-maps",
+    response_model=PartnerGoogleMapsParseOut,
+    summary="解析 Google Maps 據點連結",
+)
+async def admin_parse_google_maps_link(
+    body: PartnerGoogleMapsParseIn, _: ManagerUser
+) -> PartnerGoogleMapsParseOut:
+    try:
+        parsed = await map_svc.parse_google_maps_link(body.url)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    return PartnerGoogleMapsParseOut.model_validate(parsed)
 
 
 @router.post(
