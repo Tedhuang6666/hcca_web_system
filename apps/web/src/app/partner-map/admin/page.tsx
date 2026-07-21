@@ -45,6 +45,24 @@ const statusLabels: Record<PartnerBusinessStatus, string> = {
   archived: "封存",
 };
 
+type OfferDraft = {
+  title: string;
+  benefit_type: "discount" | "gift" | "bundle" | "member_price" | "other";
+  benefit_value: string;
+  public_summary: string;
+  full_description: string;
+  instructions: string;
+};
+
+const newOfferDraft = (): OfferDraft => ({
+  title: "",
+  benefit_type: "discount",
+  benefit_value: "",
+  public_summary: "",
+  full_description: "",
+  instructions: "",
+});
+
 export default function PartnerMapAdminPage() {
   const [businesses, setBusinesses] = useState<PartnerBusinessDirectoryItem[]>([]);
   const [tags, setTags] = useState<PartnerTagOut[]>([]);
@@ -62,14 +80,8 @@ export default function PartnerMapAdminPage() {
     longitude: "",
     phone: "",
   });
-  const [offerForm, setOfferForm] = useState({
-    title: "",
-    benefit_type: "discount" as "discount" | "gift" | "bundle" | "member_price" | "other",
-    benefit_value: "",
-    public_summary: "",
-    full_description: "",
-    instructions: "",
-  });
+  const [offerForm, setOfferForm] = useState<OfferDraft>(newOfferDraft());
+  const [initialOfferForms, setInitialOfferForms] = useState<OfferDraft[]>([newOfferDraft()]);
 
   const load = useCallback(() => {
     partnerMapApi
@@ -129,6 +141,13 @@ export default function PartnerMapAdminPage() {
   const resetCreate = () => {
     setSelected(null);
     setBusinessForm(emptyBusiness);
+    setInitialOfferForms([newOfferDraft()]);
+  };
+
+  const updateInitialOffer = <K extends keyof OfferDraft>(index: number, key: K, value: OfferDraft[K]) => {
+    setInitialOfferForms((offers) => offers.map((offer, offerIndex) => (
+      offerIndex === index ? { ...offer, [key]: value } : offer
+    )));
   };
 
   const saveBusiness = async () => {
@@ -155,23 +174,28 @@ export default function PartnerMapAdminPage() {
         line_id: businessForm.line_id || null,
         other_contact: businessForm.other_contact || null,
         internal_note: businessForm.internal_note || null,
-        initial_offers: !selected && offerForm.title.trim() ? [{
-          title: offerForm.title.trim(),
-          benefit_type: offerForm.benefit_type,
-          benefit_value: offerForm.benefit_value || null,
-          public_summary: offerForm.public_summary || null,
-          full_description: offerForm.full_description || null,
-          instructions: offerForm.instructions || null,
-          sort_order: 0,
-          is_active: true,
-        }] : [],
+        initial_offers: !selected ? initialOfferForms
+          .filter((offer) => offer.title.trim())
+          .map((offer, index) => ({
+            title: offer.title.trim(),
+            benefit_type: offer.benefit_type,
+            benefit_value: offer.benefit_value || null,
+            public_summary: offer.public_summary || null,
+            full_description: offer.full_description || null,
+            instructions: offer.instructions || null,
+            sort_order: index,
+            is_active: true,
+          })) : [],
       };
       const business = selected
         ? await partnerMapApi.updateBusiness(selected.id, payload)
         : await partnerMapApi.createBusiness(payload);
       toast.success(selected ? "已更新店家" : "已建立店家");
       setSelected(business);
-      if (!selected) setOfferForm({ title: "", benefit_type: "discount", benefit_value: "", public_summary: "", full_description: "", instructions: "" });
+      if (!selected) {
+        setOfferForm(newOfferDraft());
+        setInitialOfferForms([newOfferDraft()]);
+      }
       load();
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : "儲存失敗");
@@ -260,7 +284,7 @@ export default function PartnerMapAdminPage() {
         sort_order: 0,
         is_active: true,
       });
-      setOfferForm({ title: "", benefit_type: "discount", benefit_value: "", public_summary: "", full_description: "", instructions: "" });
+      setOfferForm(newOfferDraft());
       selectBusiness(selected.id);
       load();
     } catch (error) {
@@ -531,17 +555,22 @@ export default function PartnerMapAdminPage() {
               })}
             </div>
             {!selected && <div className="mt-6 border-t pt-5" style={{ borderColor: "var(--border)" }}>
-              <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>首個優惠（可選）</h2>
-              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>建立時一併公開優惠；完整條款會直接顯示給所有訪客。</p>
-              <div className="mt-3 grid gap-2 md:grid-cols-2">
-                <input className="input" placeholder="優惠標題，例如：學生證折扣" value={offerForm.title} onChange={(e) => setOfferForm((f) => ({ ...f, title: e.target.value }))} />
-                <input className="input" placeholder="優惠重點，例如：全館 9 折" value={offerForm.benefit_value} onChange={(e) => setOfferForm((f) => ({ ...f, benefit_value: e.target.value }))} />
-                <select className="input" value={offerForm.benefit_type} onChange={(e) => setOfferForm((f) => ({ ...f, benefit_type: e.target.value as typeof f.benefit_type }))}>
-                  <option value="discount">折扣</option><option value="gift">贈品</option><option value="bundle">組合優惠</option><option value="member_price">學生價</option><option value="other">其他合作優惠</option>
-                </select>
-                <input className="input" placeholder="公開摘要" value={offerForm.public_summary} onChange={(e) => setOfferForm((f) => ({ ...f, public_summary: e.target.value }))} />
-                <textarea className="input min-h-20 md:col-span-2" placeholder="完整優惠條款" value={offerForm.full_description} onChange={(e) => setOfferForm((f) => ({ ...f, full_description: e.target.value }))} />
-                <textarea className="input min-h-20 md:col-span-2" placeholder="使用方式" value={offerForm.instructions} onChange={(e) => setOfferForm((f) => ({ ...f, instructions: e.target.value }))} />
+              <div className="flex items-start justify-between gap-3">
+                <div><h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>建立時加入優惠（可多筆）</h2><p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>可一次建立多個優惠；完整條款會直接顯示給所有訪客。</p></div>
+                <button type="button" className="btn btn-ghost" onClick={() => setInitialOfferForms((offers) => [...offers, newOfferDraft()])}><Plus size={15} aria-hidden="true" />新增優惠</button>
+              </div>
+              <div className="mt-3 space-y-3">
+                {initialOfferForms.map((offer, index) => <div key={index} className="rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
+                  <div className="mb-2 flex items-center justify-between gap-2"><span className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>優惠 {index + 1}</span>{initialOfferForms.length > 1 && <button type="button" className="topbar-icon-btn" onClick={() => setInitialOfferForms((offers) => offers.filter((_, offerIndex) => offerIndex !== index))} aria-label={`移除優惠 ${index + 1}`}><Trash2 size={14} /></button>}</div>
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <input className="input" placeholder="優惠標題，例如：學生證折扣" value={offer.title} onChange={(e) => updateInitialOffer(index, "title", e.target.value)} />
+                    <input className="input" placeholder="優惠重點，例如：全館 9 折" value={offer.benefit_value} onChange={(e) => updateInitialOffer(index, "benefit_value", e.target.value)} />
+                    <select className="input" value={offer.benefit_type} onChange={(e) => updateInitialOffer(index, "benefit_type", e.target.value as OfferDraft["benefit_type"])}><option value="discount">折扣</option><option value="gift">贈品</option><option value="bundle">組合優惠</option><option value="member_price">學生價</option><option value="other">其他合作優惠</option></select>
+                    <input className="input" placeholder="公開摘要" value={offer.public_summary} onChange={(e) => updateInitialOffer(index, "public_summary", e.target.value)} />
+                    <textarea className="input min-h-20 md:col-span-2" placeholder="完整優惠條款" value={offer.full_description} onChange={(e) => updateInitialOffer(index, "full_description", e.target.value)} />
+                    <textarea className="input min-h-20 md:col-span-2" placeholder="使用方式" value={offer.instructions} onChange={(e) => updateInitialOffer(index, "instructions", e.target.value)} />
+                  </div>
+                </div>)}
               </div>
             </div>}
             <div className="mt-4 flex justify-end">

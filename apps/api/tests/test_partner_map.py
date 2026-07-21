@@ -281,7 +281,12 @@ async def test_partner_map_admin_can_create_business(
                     "benefit_type": "discount",
                     "benefit_value": "全館 9 折",
                     "instructions": "結帳前出示學生證。",
-                }
+                },
+                {
+                    "title": "滿額贈品",
+                    "benefit_type": "gift",
+                    "benefit_value": "滿 500 元送飲料",
+                },
             ],
         },
         headers=HOST_HEADERS,
@@ -293,3 +298,4 @@ async def test_partner_map_admin_can_create_business(
     assert payload["name"] == "自治文具"
     assert payload["tags"][0]["name"] == "文具"
     assert payload["offers"][0]["benefit_value"] == "全館 9 折"
+    assert len(payload["offers"]) == 2
