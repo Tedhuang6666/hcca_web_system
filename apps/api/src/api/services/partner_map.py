@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 from api.core.search import like_contains
 from api.models.partner_map import (
     PartnerBusiness,
+    PartnerBusinessListingType,
     PartnerBusinessStatus,
     PartnerLocation,
     PartnerOffer,
@@ -179,6 +180,42 @@ async def list_businesses(
     return list(result.scalars().unique().all())
 
 
+async def list_contact_businesses(
+    db: AsyncSession,
+    *,
+    keyword: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[PartnerBusiness]:
+    q = (
+        select(PartnerBusiness)
+        .where(
+            PartnerBusiness.status == PartnerBusinessStatus.ACTIVE.value,
+            PartnerBusiness.listing_type == PartnerBusinessListingType.CONTACT.value,
+        )
+        .options(*_business_options())
+    )
+    if keyword:
+        term = like_contains(keyword.strip())
+        q = q.where(
+            or_(
+                PartnerBusiness.name.ilike(term),
+                PartnerBusiness.summary.ilike(term),
+                PartnerBusiness.description.ilike(term),
+                PartnerBusiness.category.ilike(term),
+                PartnerBusiness.contact_name.ilike(term),
+                PartnerBusiness.contact_phone.ilike(term),
+                PartnerBusiness.contact_email.ilike(term),
+                PartnerBusiness.instagram_handle.ilike(term),
+                PartnerBusiness.line_id.ilike(term),
+                PartnerBusiness.other_contact.ilike(term),
+            )
+        )
+    q = q.order_by(PartnerBusiness.sort_order, PartnerBusiness.name).offset(offset).limit(limit)
+    result = await db.execute(q)
+    return list(result.scalars().unique().all())
+
+
 async def delete_business(db: AsyncSession, business: PartnerBusiness) -> None:
     await db.delete(business)
 
@@ -201,6 +238,7 @@ async def list_map_locations(
         .join(PartnerLocation.business)
         .where(
             PartnerBusiness.status == PartnerBusinessStatus.ACTIVE.value,
+            PartnerBusiness.listing_type == PartnerBusinessListingType.LOCATION.value,
             PartnerLocation.is_active == True,  # noqa: E712
         )
         .options(
@@ -421,7 +459,10 @@ async def review_submission(
 async def ranking(db: AsyncSession, *, limit: int = 10) -> list[PartnerBusiness]:
     result = await db.execute(
         select(PartnerBusiness)
-        .where(PartnerBusiness.status == PartnerBusinessStatus.ACTIVE.value)
+        .where(
+            PartnerBusiness.status == PartnerBusinessStatus.ACTIVE.value,
+            PartnerBusiness.listing_type == PartnerBusinessListingType.LOCATION.value,
+        )
         .options(*_business_options())
         .order_by(desc(PartnerBusiness.checkin_count), desc(PartnerBusiness.view_count))
         .limit(limit)

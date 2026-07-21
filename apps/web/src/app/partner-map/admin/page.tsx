@@ -5,8 +5,11 @@ import { toast } from "sonner";
 import { CheckCircle, Plus, RefreshCw, Save, Store, Tag, Trash2, XCircle } from "lucide-react";
 import { partnerMapApi, ApiError } from "@/lib/api";
 import type {
-  PartnerBusinessListItem,
-  PartnerBusinessOut,
+  PartnerBusinessDetail,
+  PartnerBusinessDirectoryItem,
+  PartnerBusinessListingType,
+} from "@/lib/api";
+import type {
   PartnerBusinessStatus,
   PartnerSubmissionOut,
   PartnerTagOut,
@@ -22,6 +25,13 @@ const emptyBusiness = {
   cover_image_url: "",
   category: "",
   business_hours_text: "",
+  listing_type: "location" as PartnerBusinessListingType,
+  contact_name: "",
+  contact_phone: "",
+  contact_email: "",
+  instagram_handle: "",
+  line_id: "",
+  other_contact: "",
   status: "draft" as PartnerBusinessStatus,
   sort_order: 0,
   internal_note: "",
@@ -29,11 +39,11 @@ const emptyBusiness = {
 };
 
 export default function PartnerMapAdminPage() {
-  const [businesses, setBusinesses] = useState<PartnerBusinessListItem[]>([]);
+  const [businesses, setBusinesses] = useState<PartnerBusinessDirectoryItem[]>([]);
   const [tags, setTags] = useState<PartnerTagOut[]>([]);
   const [tagDrafts, setTagDrafts] = useState<Record<string, { name: string; color: string; sort_order: number; is_active: boolean }>>({});
   const [submissions, setSubmissions] = useState<PartnerSubmissionOut[]>([]);
-  const [selected, setSelected] = useState<PartnerBusinessOut | null>(null);
+  const [selected, setSelected] = useState<PartnerBusinessDetail | null>(null);
   const [businessForm, setBusinessForm] = useState(emptyBusiness);
   const [tagName, setTagName] = useState("");
   const [tagColor, setTagColor] = useState("#10B981");
@@ -91,6 +101,13 @@ export default function PartnerMapAdminPage() {
           cover_image_url: business.cover_image_url || "",
           category: business.category || "",
           business_hours_text: business.business_hours_text || "",
+          listing_type: business.listing_type as PartnerBusinessListingType,
+          contact_name: business.contact_name || "",
+          contact_phone: business.contact_phone || "",
+          contact_email: business.contact_email || "",
+          instagram_handle: business.instagram_handle || "",
+          line_id: business.line_id || "",
+          other_contact: business.other_contact || "",
           status: business.status as "draft" | "active" | "archived" | "hidden",
           sort_order: business.sort_order,
           internal_note: business.internal_note || "",
@@ -122,6 +139,12 @@ export default function PartnerMapAdminPage() {
         cover_image_url: businessForm.cover_image_url || null,
         category: businessForm.category || null,
         business_hours_text: businessForm.business_hours_text || null,
+        contact_name: businessForm.contact_name || null,
+        contact_phone: businessForm.contact_phone || null,
+        contact_email: businessForm.contact_email || null,
+        instagram_handle: businessForm.instagram_handle || null,
+        line_id: businessForm.line_id || null,
+        other_contact: businessForm.other_contact || null,
         internal_note: businessForm.internal_note || null,
       };
       const business = selected
@@ -267,11 +290,11 @@ export default function PartnerMapAdminPage() {
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate text-sm font-medium">{business.name}</span>
                     <span className="rounded px-1.5 py-0.5 text-[11px]" style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
-                      {business.status}
-                    </span>
-                  </div>
+                    {business.status}
+                  </span>
+                </div>
                   <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                    {business.location_count} 點位 · {business.active_offer_count} 有效優惠
+                    {business.listing_type === "contact" ? "聯絡合作" : `${business.location_count} 點位`} · {business.active_offer_count} 有效優惠
                   </p>
                 </button>
               ))}
@@ -399,6 +422,13 @@ export default function PartnerMapAdminPage() {
                   <option value="archived">archived</option>
                 </select>
               </label>
+              <label className="space-y-1">
+                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>刊登方式</span>
+                <select className="input" value={businessForm.listing_type} onChange={(e) => setBusinessForm((f) => ({ ...f, listing_type: e.target.value as PartnerBusinessListingType }))}>
+                  <option value="location">地圖位置</option>
+                  <option value="contact">僅提供聯絡方式</option>
+                </select>
+              </label>
               <label className="space-y-1 md:col-span-2">
                 <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>摘要</span>
                 <input className="input" value={businessForm.summary} onChange={(e) => setBusinessForm((f) => ({ ...f, summary: e.target.value }))} />
@@ -427,6 +457,30 @@ export default function PartnerMapAdminPage() {
               <label className="space-y-1">
                 <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>社群連結</span>
                 <input className="input" value={businessForm.social_url} onChange={(e) => setBusinessForm((f) => ({ ...f, social_url: e.target.value }))} />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>聯絡人</span>
+                <input className="input" value={businessForm.contact_name} onChange={(e) => setBusinessForm((f) => ({ ...f, contact_name: e.target.value }))} />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>聯絡電話</span>
+                <input className="input" value={businessForm.contact_phone} onChange={(e) => setBusinessForm((f) => ({ ...f, contact_phone: e.target.value }))} />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>聯絡 Email</span>
+                <input className="input" type="email" value={businessForm.contact_email} onChange={(e) => setBusinessForm((f) => ({ ...f, contact_email: e.target.value }))} />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Instagram 帳號</span>
+                <input className="input" placeholder="例如 hcca_store（可含 @）" value={businessForm.instagram_handle} onChange={(e) => setBusinessForm((f) => ({ ...f, instagram_handle: e.target.value }))} />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>LINE ID</span>
+                <input className="input" value={businessForm.line_id} onChange={(e) => setBusinessForm((f) => ({ ...f, line_id: e.target.value }))} />
+              </label>
+              <label className="space-y-1 md:col-span-2">
+                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>其他聯絡方式</span>
+                <textarea className="input min-h-20" placeholder="可自訂輸入 Discord、地址說明或其他聯絡方式" value={businessForm.other_contact} onChange={(e) => setBusinessForm((f) => ({ ...f, other_contact: e.target.value }))} />
               </label>
               <label className="space-y-1">
                 <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Logo URL</span>
@@ -464,9 +518,13 @@ export default function PartnerMapAdminPage() {
           {selected && (
             <div className="grid gap-4 xl:grid-cols-2">
               <section className="card p-5">
-                <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>點位</h2>
-                <div className="mt-3 space-y-2">
-                  {selected.locations.map((location) => (
+                <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{selected.listing_type === "contact" ? "位置設定" : "點位"}</h2>
+                {selected.listing_type === "contact" ? (
+                  <p className="mt-3 text-sm" style={{ color: "var(--text-muted)" }}>此合作夥伴不顯示地圖位置，請使用上方聯絡方式欄位提供聯絡資訊。</p>
+                ) : (
+                  <>
+                    <div className="mt-3 space-y-2">
+                      {selected.locations.map((location) => (
                     <div key={location.id} className="flex items-start justify-between gap-3 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
                       <div>
                         <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{location.name || selected.name}</p>
@@ -476,16 +534,18 @@ export default function PartnerMapAdminPage() {
                         <Trash2 size={14} aria-hidden="true" />
                       </button>
                     </div>
-                  ))}
-                </div>
-                <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                  <input className="input" placeholder="分店名稱" value={locationForm.name} onChange={(e) => setLocationForm((f) => ({ ...f, name: e.target.value }))} />
-                  <input className="input" placeholder="電話" value={locationForm.phone} onChange={(e) => setLocationForm((f) => ({ ...f, phone: e.target.value }))} />
-                  <input className="input sm:col-span-2" placeholder="地址" value={locationForm.address} onChange={(e) => setLocationForm((f) => ({ ...f, address: e.target.value }))} />
-                  <input className="input" placeholder="緯度" value={locationForm.latitude} onChange={(e) => setLocationForm((f) => ({ ...f, latitude: e.target.value }))} />
-                  <input className="input" placeholder="經度" value={locationForm.longitude} onChange={(e) => setLocationForm((f) => ({ ...f, longitude: e.target.value }))} />
-                </div>
-                <button className="btn btn-ghost mt-3" onClick={createLocation}><Plus size={15} aria-hidden="true" />新增點位</button>
+                      ))}
+                    </div>
+                    <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                      <input className="input" placeholder="分店名稱" value={locationForm.name} onChange={(e) => setLocationForm((f) => ({ ...f, name: e.target.value }))} />
+                      <input className="input" placeholder="電話" value={locationForm.phone} onChange={(e) => setLocationForm((f) => ({ ...f, phone: e.target.value }))} />
+                      <input className="input sm:col-span-2" placeholder="地址" value={locationForm.address} onChange={(e) => setLocationForm((f) => ({ ...f, address: e.target.value }))} />
+                      <input className="input" placeholder="緯度" value={locationForm.latitude} onChange={(e) => setLocationForm((f) => ({ ...f, latitude: e.target.value }))} />
+                      <input className="input" placeholder="經度" value={locationForm.longitude} onChange={(e) => setLocationForm((f) => ({ ...f, longitude: e.target.value }))} />
+                    </div>
+                    <button className="btn btn-ghost mt-3" onClick={createLocation}><Plus size={15} aria-hidden="true" />新增點位</button>
+                  </>
+                )}
               </section>
 
               <section className="card p-5">
