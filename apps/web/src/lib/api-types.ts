@@ -3085,6 +3085,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/partner-map/discover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 探索全部特約優惠 */
+        get: operations["discover_partners_partner_map_discover_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/partner-map/directory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出僅提供聯絡方式的合作夥伴 */
+        get: operations["list_contact_directory_partner_map_directory_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/partner-map/rankings": {
         parameters: {
             query?: never;
@@ -4373,6 +4407,23 @@ export interface paths {
         put?: never;
         /** 封存公文（已核准 → 封存終態） */
         post: operations["archive_document_documents__doc_id__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/documents/{doc_id}/archive-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 設定或取消公文預約歸檔 */
+        put: operations["update_archive_settings_documents__doc_id__archive_settings_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -10978,6 +11029,233 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/recommended-vendors/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出推薦商家分類 */
+        get: operations["list_public_categories_recommended_vendors_categories_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/recommended-vendors/admin/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 管理端列出推薦商家分類 */
+        get: operations["admin_list_categories_recommended_vendors_admin_categories_get"];
+        put?: never;
+        /** 建立推薦商家分類 */
+        post: operations["admin_create_category_recommended_vendors_admin_categories_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/recommended-vendors/admin/categories/{category_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 更新推薦商家分類 */
+        patch: operations["admin_update_category_recommended_vendors_admin_categories__category_id__patch"];
+        trace?: never;
+    };
+    "/recommended-vendors/menus/{menu_id}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 預覽推薦商家菜單檔案 */
+        get: operations["preview_public_menu_recommended_vendors_menus__menu_id__file_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/recommended-vendors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出推薦商家 */
+        get: operations["list_public_vendors_recommended_vendors_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/recommended-vendors/{vendor_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 取得推薦商家詳情 */
+        get: operations["get_public_vendor_recommended_vendors__vendor_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/recommended-vendors/admin/vendors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 管理端列出推薦商家 */
+        get: operations["admin_list_vendors_recommended_vendors_admin_vendors_get"];
+        put?: never;
+        /** 建立推薦商家 */
+        post: operations["admin_create_vendor_recommended_vendors_admin_vendors_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/recommended-vendors/admin/vendors/{vendor_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 管理端取得推薦商家詳情 */
+        get: operations["admin_get_vendor_recommended_vendors_admin_vendors__vendor_id__get"];
+        put?: never;
+        post?: never;
+        /** 封存推薦商家 */
+        delete: operations["admin_archive_vendor_recommended_vendors_admin_vendors__vendor_id__delete"];
+        options?: never;
+        head?: never;
+        /** 更新推薦商家 */
+        patch: operations["admin_update_vendor_recommended_vendors_admin_vendors__vendor_id__patch"];
+        trace?: never;
+    };
+    "/recommended-vendors/admin/vendors/{vendor_id}/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 新增菜單或商品 */
+        post: operations["admin_create_product_recommended_vendors_admin_vendors__vendor_id__products_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/recommended-vendors/admin/products/{product_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 刪除菜單或商品 */
+        delete: operations["admin_delete_product_recommended_vendors_admin_products__product_id__delete"];
+        options?: never;
+        head?: never;
+        /** 更新菜單或商品 */
+        patch: operations["admin_update_product_recommended_vendors_admin_products__product_id__patch"];
+        trace?: never;
+    };
+    "/recommended-vendors/admin/vendors/{vendor_id}/menus": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 新增外部連結菜單 */
+        post: operations["admin_create_menu_recommended_vendors_admin_vendors__vendor_id__menus_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/recommended-vendors/admin/vendors/{vendor_id}/menus/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 上傳推薦商家菜單圖片或 PDF */
+        post: operations["admin_upload_menu_recommended_vendors_admin_vendors__vendor_id__menus_upload_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/recommended-vendors/admin/menus/{menu_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 刪除推薦商家菜單 */
+        delete: operations["admin_delete_menu_recommended_vendors_admin_menus__menu_id__delete"];
+        options?: never;
+        head?: never;
+        /** 更新推薦商家菜單 */
+        patch: operations["admin_update_menu_recommended_vendors_admin_menus__menu_id__patch"];
+        trace?: never;
+    };
     "/work-items": {
         parameters: {
             query?: never;
@@ -14513,6 +14791,11 @@ export interface components {
             /** File */
             file: string;
         };
+        /** Body_admin_upload_menu_recommended_vendors_admin_vendors__vendor_id__menus_upload_post */
+        Body_admin_upload_menu_recommended_vendors_admin_vendors__vendor_id__menus_upload_post: {
+            /** File */
+            file: string;
+        };
         /** Body_create_exam_paper_exam_papers_post */
         Body_create_exam_paper_exam_papers_post: {
             /** File */
@@ -17198,6 +17481,17 @@ export interface components {
             is_active?: boolean | null;
         };
         /**
+         * DocumentArchiveSettingsUpdate
+         * @description 已核准公文的預約歸檔設定；傳 null 可取消預約。
+         */
+        DocumentArchiveSettingsUpdate: {
+            /**
+             * Archive At
+             * @description 預約歸檔時間；未提供或傳 null 時為取消預約
+             */
+            archive_at?: string | null;
+        };
+        /**
          * DocumentCategory
          * @description 公文類別
          * @enum {string}
@@ -17415,6 +17709,8 @@ export interface components {
             submitted_at: string | null;
             /** Completed At */
             completed_at: string | null;
+            /** Archive At */
+            archive_at?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -17498,6 +17794,8 @@ export interface components {
             submitted_at: string | null;
             /** Completed At */
             completed_at: string | null;
+            /** Archive At */
+            archive_at?: string | null;
             /** Page Info */
             page_info?: string | null;
             /**
@@ -24009,6 +24307,11 @@ export interface components {
             /** @description 法案審議階段：常務委員會 / 議會，影響此組織會議的議程自動偵測 */
             bill_stage?: components["schemas"]["MeetingBillStage"] | null;
             /**
+             * Default Permission Codes
+             * @description 建立職位時預設帶入的權限碼
+             */
+            default_permission_codes?: string[];
+            /**
              * Leader User Id
              * @description 指定部門最高權限者；未設定時由同組織最高權限係數任期者遞補
              */
@@ -24029,6 +24332,11 @@ export interface components {
             prefix?: string | null;
             /** @description 法案審議階段：常務委員會 / 議會，影響此組織會議的議程自動偵測 */
             bill_stage?: components["schemas"]["MeetingBillStage"] | null;
+            /**
+             * Default Permission Codes
+             * @description 建立職位時預設帶入的權限碼
+             */
+            default_permission_codes?: string[];
             /**
              * Leader User Id
              * @description 指定部門最高權限者；未設定時由同組織最高權限係數任期者遞補
@@ -24070,6 +24378,11 @@ export interface components {
             prefix?: string | null;
             /** @description 法案審議階段：常務委員會 / 議會，影響此組織會議的議程自動偵測 */
             bill_stage?: components["schemas"]["MeetingBillStage"] | null;
+            /**
+             * Default Permission Codes
+             * @description 建立職位時預設帶入的權限碼
+             */
+            default_permission_codes?: string[];
             /**
              * Leader User Id
              * @description 指定部門最高權限者；未設定時由同組織最高權限係數任期者遞補
@@ -24116,6 +24429,11 @@ export interface components {
              */
             prefix?: string | null;
             bill_stage?: components["schemas"]["MeetingBillStage"] | null;
+            /**
+             * Default Permission Codes
+             * @description 建立職位時預設帶入的權限碼
+             */
+            default_permission_codes?: string[] | null;
             /** Leader User Id */
             leader_user_id?: string | null;
             /** Is Active */
@@ -24159,6 +24477,20 @@ export interface components {
             category?: string | null;
             /** Business Hours Text */
             business_hours_text?: string | null;
+            /** @default physical */
+            listing_type: components["schemas"]["PartnerBusinessListingType"];
+            /** Contact Name */
+            contact_name?: string | null;
+            /** Contact Phone */
+            contact_phone?: string | null;
+            /** Contact Email */
+            contact_email?: string | null;
+            /** Instagram Handle */
+            instagram_handle?: string | null;
+            /** Line Id */
+            line_id?: string | null;
+            /** Other Contact */
+            other_contact?: string | null;
             /** @default draft */
             status: components["schemas"]["PartnerBusinessStatus"];
             /**
@@ -24170,6 +24502,8 @@ export interface components {
             internal_note?: string | null;
             /** Tag Ids */
             tag_ids?: string[];
+            /** Initial Offers */
+            initial_offers?: components["schemas"]["PartnerOfferCreate"][];
         };
         /** PartnerBusinessListItem */
         PartnerBusinessListItem: {
@@ -24192,6 +24526,20 @@ export interface components {
             category?: string | null;
             /** Business Hours Text */
             business_hours_text?: string | null;
+            /** Listing Type */
+            listing_type: string;
+            /** Contact Name */
+            contact_name?: string | null;
+            /** Contact Phone */
+            contact_phone?: string | null;
+            /** Contact Email */
+            contact_email?: string | null;
+            /** Instagram Handle */
+            instagram_handle?: string | null;
+            /** Line Id */
+            line_id?: string | null;
+            /** Other Contact */
+            other_contact?: string | null;
             /** Sort Order */
             sort_order: number;
             /**
@@ -24247,6 +24595,12 @@ export interface components {
              */
             updated_at: string;
         };
+        /**
+         * PartnerBusinessListingType
+         * @description 特約合作型態：實體店家或線上合作。
+         * @enum {string}
+         */
+        PartnerBusinessListingType: "physical" | "online";
         /** PartnerBusinessOut */
         PartnerBusinessOut: {
             /**
@@ -24272,6 +24626,20 @@ export interface components {
             category: string | null;
             /** Business Hours Text */
             business_hours_text: string | null;
+            /** Listing Type */
+            listing_type: string;
+            /** Contact Name */
+            contact_name: string | null;
+            /** Contact Phone */
+            contact_phone: string | null;
+            /** Contact Email */
+            contact_email: string | null;
+            /** Instagram Handle */
+            instagram_handle: string | null;
+            /** Line Id */
+            line_id: string | null;
+            /** Other Contact */
+            other_contact: string | null;
             /** Status */
             status: string;
             /** Sort Order */
@@ -24363,6 +24731,19 @@ export interface components {
             category?: string | null;
             /** Business Hours Text */
             business_hours_text?: string | null;
+            listing_type?: components["schemas"]["PartnerBusinessListingType"] | null;
+            /** Contact Name */
+            contact_name?: string | null;
+            /** Contact Phone */
+            contact_phone?: string | null;
+            /** Contact Email */
+            contact_email?: string | null;
+            /** Instagram Handle */
+            instagram_handle?: string | null;
+            /** Line Id */
+            line_id?: string | null;
+            /** Other Contact */
+            other_contact?: string | null;
             status?: components["schemas"]["PartnerBusinessStatus"] | null;
             /** Sort Order */
             sort_order?: number | null;
@@ -24370,6 +24751,41 @@ export interface components {
             internal_note?: string | null;
             /** Tag Ids */
             tag_ids?: string[] | null;
+        };
+        /**
+         * PartnerDiscoveryItem
+         * @description 學生端優惠探索清單：讓實體與線上合作共用同一套入口。
+         */
+        PartnerDiscoveryItem: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Summary */
+            summary: string | null;
+            /** Logo Url */
+            logo_url: string | null;
+            /** Cover Image Url */
+            cover_image_url: string | null;
+            /** Category */
+            category: string | null;
+            /** Listing Type */
+            listing_type: string;
+            /** Tags */
+            tags: components["schemas"]["PartnerTagOut"][];
+            /** Location Count */
+            location_count: number;
+            /** Active Offer Count */
+            active_offer_count: number;
+            /** Featured Offer Title */
+            featured_offer_title: string | null;
+            /** Featured Offer Benefit Type */
+            featured_offer_benefit_type: string | null;
+            /** Featured Offer Benefit Value */
+            featured_offer_benefit_value: string | null;
         };
         /** PartnerLocationCreate */
         PartnerLocationCreate: {
@@ -24529,10 +24945,19 @@ export interface components {
              */
             checkin_count: number;
         };
+        /**
+         * PartnerOfferBenefitType
+         * @enum {string}
+         */
+        PartnerOfferBenefitType: "discount" | "gift" | "bundle" | "member_price" | "other";
         /** PartnerOfferCreate */
         PartnerOfferCreate: {
             /** Title */
             title: string;
+            /** @default other */
+            benefit_type: components["schemas"]["PartnerOfferBenefitType"];
+            /** Benefit Value */
+            benefit_value?: string | null;
             /** Public Summary */
             public_summary?: string | null;
             /** Full Description */
@@ -24570,6 +24995,10 @@ export interface components {
             business_id: string;
             /** Title */
             title: string;
+            /** Benefit Type */
+            benefit_type: string;
+            /** Benefit Value */
+            benefit_value: string | null;
             /** Public Summary */
             public_summary: string | null;
             /** Full Description */
@@ -24606,6 +25035,9 @@ export interface components {
         PartnerOfferUpdate: {
             /** Title */
             title?: string | null;
+            benefit_type?: components["schemas"]["PartnerOfferBenefitType"] | null;
+            /** Benefit Value */
+            benefit_value?: string | null;
             /** Public Summary */
             public_summary?: string | null;
             /** Full Description */
@@ -28226,6 +28658,478 @@ export interface components {
          * @enum {string}
          */
         RecipientType: "main" | "primary" | "copy";
+        /** RecommendedVendorCategoryCreate */
+        RecommendedVendorCategoryCreate: {
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+            /**
+             * Sort Order
+             * @default 0
+             */
+            sort_order: number;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+        };
+        /** RecommendedVendorCategoryOut */
+        RecommendedVendorCategoryOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string | null;
+            /** Sort Order */
+            sort_order: number;
+            /** Is Active */
+            is_active: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** RecommendedVendorCategoryUpdate */
+        RecommendedVendorCategoryUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Sort Order */
+            sort_order?: number | null;
+            /** Is Active */
+            is_active?: boolean | null;
+        };
+        /** RecommendedVendorCreate */
+        RecommendedVendorCreate: {
+            /** Name */
+            name: string;
+            /** Summary */
+            summary?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Category Id */
+            category_id?: string | null;
+            /** Address */
+            address?: string | null;
+            /** Latitude */
+            latitude?: number | null;
+            /** Longitude */
+            longitude?: number | null;
+            /** Google Maps Url */
+            google_maps_url?: string | null;
+            /** Business Hours Text */
+            business_hours_text?: string | null;
+            /** Contact Name */
+            contact_name?: string | null;
+            /** Contact Phone */
+            contact_phone?: string | null;
+            /** Contact Email */
+            contact_email?: string | null;
+            /** Line Id */
+            line_id?: string | null;
+            /** Social Url */
+            social_url?: string | null;
+            /** Website Url */
+            website_url?: string | null;
+            /** Ordering Instructions */
+            ordering_instructions?: string | null;
+            /** Menu Url */
+            menu_url?: string | null;
+            /** Hygiene Inspection Date */
+            hygiene_inspection_date?: string | null;
+            /** Hygiene Inspection Expires At */
+            hygiene_inspection_expires_at?: string | null;
+            /** Hygiene Certificate Url */
+            hygiene_certificate_url?: string | null;
+            /** Hygiene Note */
+            hygiene_note?: string | null;
+            /** @default draft */
+            status: components["schemas"]["RecommendedVendorStatus"];
+            /**
+             * Sort Order
+             * @default 0
+             */
+            sort_order: number;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Internal Note */
+            internal_note?: string | null;
+            /** Products */
+            products?: components["schemas"]["RecommendedVendorProductCreate"][];
+        };
+        /** RecommendedVendorListItem */
+        RecommendedVendorListItem: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Summary */
+            summary: string | null;
+            /** Category */
+            category: string | null;
+            /** Category Id */
+            category_id: string | null;
+            /** Address */
+            address: string | null;
+            /** Latitude */
+            latitude: number | null;
+            /** Longitude */
+            longitude: number | null;
+            /** Google Maps Url */
+            google_maps_url: string | null;
+            /** Business Hours Text */
+            business_hours_text: string | null;
+            /** Contact Phone */
+            contact_phone: string | null;
+            /** Contact Email */
+            contact_email: string | null;
+            /** Line Id */
+            line_id: string | null;
+            /** Menu Url */
+            menu_url: string | null;
+            /** Hygiene Inspection Date */
+            hygiene_inspection_date: string | null;
+            /** Hygiene Inspection Expires At */
+            hygiene_inspection_expires_at: string | null;
+            /**
+             * Hygiene Verified
+             * @default false
+             */
+            hygiene_verified: boolean;
+            /** Status */
+            status: string;
+            /** Sort Order */
+            sort_order: number;
+            /** Is Active */
+            is_active: boolean;
+            /**
+             * Product Count
+             * @default 0
+             */
+            product_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** RecommendedVendorMenuCreate */
+        RecommendedVendorMenuCreate: {
+            /** Title */
+            title: string;
+            /** @default link */
+            kind: components["schemas"]["RecommendedVendorMenuKind"];
+            /** Url */
+            url?: string | null;
+            /**
+             * Sort Order
+             * @default 0
+             */
+            sort_order: number;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+        };
+        /**
+         * RecommendedVendorMenuKind
+         * @enum {string}
+         */
+        RecommendedVendorMenuKind: "link" | "image" | "pdf";
+        /** RecommendedVendorMenuOut */
+        RecommendedVendorMenuOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Vendor Id
+             * Format: uuid
+             */
+            vendor_id: string;
+            /** Title */
+            title: string;
+            kind: components["schemas"]["RecommendedVendorMenuKind"];
+            /** Url */
+            url: string | null;
+            /** Filename */
+            filename: string | null;
+            /** Content Type */
+            content_type: string | null;
+            /** File Size */
+            file_size: number | null;
+            /** Sort Order */
+            sort_order: number;
+            /** Is Active */
+            is_active: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** RecommendedVendorMenuUpdate */
+        RecommendedVendorMenuUpdate: {
+            /** Title */
+            title?: string | null;
+            /** Sort Order */
+            sort_order?: number | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Url */
+            url?: string | null;
+        };
+        /** RecommendedVendorOut */
+        RecommendedVendorOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Summary */
+            summary: string | null;
+            /** Category */
+            category: string | null;
+            /** Category Id */
+            category_id: string | null;
+            /** Address */
+            address: string | null;
+            /** Latitude */
+            latitude: number | null;
+            /** Longitude */
+            longitude: number | null;
+            /** Google Maps Url */
+            google_maps_url: string | null;
+            /** Business Hours Text */
+            business_hours_text: string | null;
+            /** Contact Phone */
+            contact_phone: string | null;
+            /** Contact Email */
+            contact_email: string | null;
+            /** Line Id */
+            line_id: string | null;
+            /** Menu Url */
+            menu_url: string | null;
+            /** Hygiene Inspection Date */
+            hygiene_inspection_date: string | null;
+            /** Hygiene Inspection Expires At */
+            hygiene_inspection_expires_at: string | null;
+            /**
+             * Hygiene Verified
+             * @default false
+             */
+            hygiene_verified: boolean;
+            /** Status */
+            status: string;
+            /** Sort Order */
+            sort_order: number;
+            /** Is Active */
+            is_active: boolean;
+            /**
+             * Product Count
+             * @default 0
+             */
+            product_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Description */
+            description: string | null;
+            /** Contact Name */
+            contact_name: string | null;
+            /** Social Url */
+            social_url: string | null;
+            /** Website Url */
+            website_url: string | null;
+            /** Ordering Instructions */
+            ordering_instructions: string | null;
+            /** Hygiene Certificate Url */
+            hygiene_certificate_url: string | null;
+            /** Hygiene Note */
+            hygiene_note: string | null;
+            /** Internal Note */
+            internal_note?: string | null;
+            /** Created By */
+            created_by: string | null;
+            /** Products */
+            products?: components["schemas"]["RecommendedVendorProductOut"][];
+            /** Menus */
+            menus?: components["schemas"]["RecommendedVendorMenuOut"][];
+        };
+        /** RecommendedVendorProductCreate */
+        RecommendedVendorProductCreate: {
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+            /** Price Text */
+            price_text?: string | null;
+            /** Image Url */
+            image_url?: string | null;
+            /** Menu Url */
+            menu_url?: string | null;
+            /**
+             * Sort Order
+             * @default 0
+             */
+            sort_order: number;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+        };
+        /** RecommendedVendorProductOut */
+        RecommendedVendorProductOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Vendor Id
+             * Format: uuid
+             */
+            vendor_id: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string | null;
+            /** Price Text */
+            price_text: string | null;
+            /** Image Url */
+            image_url: string | null;
+            /** Menu Url */
+            menu_url: string | null;
+            /** Sort Order */
+            sort_order: number;
+            /** Is Active */
+            is_active: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** RecommendedVendorProductUpdate */
+        RecommendedVendorProductUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Price Text */
+            price_text?: string | null;
+            /** Image Url */
+            image_url?: string | null;
+            /** Menu Url */
+            menu_url?: string | null;
+            /** Sort Order */
+            sort_order?: number | null;
+            /** Is Active */
+            is_active?: boolean | null;
+        };
+        /**
+         * RecommendedVendorStatus
+         * @enum {string}
+         */
+        RecommendedVendorStatus: "draft" | "active" | "hidden" | "archived";
+        /** RecommendedVendorUpdate */
+        RecommendedVendorUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Summary */
+            summary?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Category Id */
+            category_id?: string | null;
+            /** Address */
+            address?: string | null;
+            /** Latitude */
+            latitude?: number | null;
+            /** Longitude */
+            longitude?: number | null;
+            /** Google Maps Url */
+            google_maps_url?: string | null;
+            /** Business Hours Text */
+            business_hours_text?: string | null;
+            /** Contact Name */
+            contact_name?: string | null;
+            /** Contact Phone */
+            contact_phone?: string | null;
+            /** Contact Email */
+            contact_email?: string | null;
+            /** Line Id */
+            line_id?: string | null;
+            /** Social Url */
+            social_url?: string | null;
+            /** Website Url */
+            website_url?: string | null;
+            /** Ordering Instructions */
+            ordering_instructions?: string | null;
+            /** Menu Url */
+            menu_url?: string | null;
+            /** Hygiene Inspection Date */
+            hygiene_inspection_date?: string | null;
+            /** Hygiene Inspection Expires At */
+            hygiene_inspection_expires_at?: string | null;
+            /** Hygiene Certificate Url */
+            hygiene_certificate_url?: string | null;
+            /** Hygiene Note */
+            hygiene_note?: string | null;
+            status?: components["schemas"]["RecommendedVendorStatus"] | null;
+            /** Sort Order */
+            sort_order?: number | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Internal Note */
+            internal_note?: string | null;
+        };
         /**
          * RecorderBallotCreate
          * @description 紀錄代登逐人票。
@@ -39007,6 +39911,75 @@ export interface operations {
             };
         };
     };
+    discover_partners_partner_map_discover_get: {
+        parameters: {
+            query?: {
+                listing_type?: components["schemas"]["PartnerBusinessListingType"] | null;
+                tag_ids?: string[] | null;
+                keyword?: string | null;
+                has_active_offer?: boolean;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerDiscoveryItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_contact_directory_partner_map_directory_get: {
+        parameters: {
+            query?: {
+                keyword?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerBusinessListItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_rankings_partner_map_rankings_get: {
         parameters: {
             query?: {
@@ -42263,6 +43236,55 @@ export interface operations {
                 content?: never;
             };
             /** @description 公文非已核准狀態 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_archive_settings_documents__doc_id__archive_settings_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocumentArchiveSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentOut"];
+                };
+            };
+            /** @description 無設定歸檔權限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 公文非已核准狀態或時間無效 */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -57843,6 +58865,609 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InventoryDashboard"];
+                };
+            };
+        };
+    };
+    list_public_categories_recommended_vendors_categories_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendedVendorCategoryOut"][];
+                };
+            };
+        };
+    };
+    admin_list_categories_recommended_vendors_admin_categories_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendedVendorCategoryOut"][];
+                };
+            };
+        };
+    };
+    admin_create_category_recommended_vendors_admin_categories_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecommendedVendorCategoryCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendedVendorCategoryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_update_category_recommended_vendors_admin_categories__category_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                category_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecommendedVendorCategoryUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendedVendorCategoryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_public_menu_recommended_vendors_menus__menu_id__file_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                menu_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_public_vendors_recommended_vendors_get: {
+        parameters: {
+            query?: {
+                keyword?: string | null;
+                category_id?: string | null;
+                map_only?: boolean;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendedVendorListItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_public_vendor_recommended_vendors__vendor_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vendor_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendedVendorOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_list_vendors_recommended_vendors_admin_vendors_get: {
+        parameters: {
+            query?: {
+                keyword?: string | null;
+                include_inactive?: boolean;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendedVendorListItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_create_vendor_recommended_vendors_admin_vendors_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecommendedVendorCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendedVendorOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_get_vendor_recommended_vendors_admin_vendors__vendor_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vendor_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendedVendorOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_archive_vendor_recommended_vendors_admin_vendors__vendor_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vendor_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_update_vendor_recommended_vendors_admin_vendors__vendor_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vendor_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecommendedVendorUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendedVendorOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_create_product_recommended_vendors_admin_vendors__vendor_id__products_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vendor_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecommendedVendorProductCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendedVendorProductOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_delete_product_recommended_vendors_admin_products__product_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_update_product_recommended_vendors_admin_products__product_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecommendedVendorProductUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendedVendorProductOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_create_menu_recommended_vendors_admin_vendors__vendor_id__menus_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vendor_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecommendedVendorMenuCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendedVendorMenuOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_upload_menu_recommended_vendors_admin_vendors__vendor_id__menus_upload_post: {
+        parameters: {
+            query?: {
+                title?: string | null;
+                sort_order?: number;
+            };
+            header?: never;
+            path: {
+                vendor_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_admin_upload_menu_recommended_vendors_admin_vendors__vendor_id__menus_upload_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendedVendorMenuOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_delete_menu_recommended_vendors_admin_menus__menu_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                menu_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_update_menu_recommended_vendors_admin_menus__menu_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                menu_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecommendedVendorMenuUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecommendedVendorMenuOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
