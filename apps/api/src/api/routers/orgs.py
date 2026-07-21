@@ -35,19 +35,26 @@ async def list_orgs(
     db: DbDep,
     _: CurrentUser,
     active_only: bool = Query(False, description="僅回傳啟用中的組織"),
+    exclude_class_orgs: bool = Query(False, description="排除班級系統自動建立的組織"),
 ) -> list:
     # 檢查快取
     cache_key = f"org:list:active_only={active_only}"
-    cached = await cache_get(cache_key)
-    if cached is not None:
-        return cached
+    if not exclude_class_orgs:
+        cached = await cache_get(cache_key)
+        if cached is not None:
+            return cached
 
     # 查詢並序列化
-    orgs = await org_svc.get_orgs(db, active_only=active_only)
+    orgs = await org_svc.get_orgs(
+        db,
+        active_only=active_only,
+        exclude_class_orgs=exclude_class_orgs,
+    )
     result = [OrgRead.model_validate(o).model_dump(mode="json") for o in orgs]
 
     # 快取 300 秒
-    await cache_set(cache_key, result, ttl=300)
+    if not exclude_class_orgs:
+        await cache_set(cache_key, result, ttl=300)
     return result
 
 

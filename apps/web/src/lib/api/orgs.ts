@@ -8,9 +8,14 @@ import { get, patch } from "./core";
 export type { OrgRead } from "../types";
 
 export const orgsApi = {
-  list: (params?: { active_only?: boolean }) => {
-    const qs = params?.active_only ? "?active_only=true" : "";
-    return get<OrgRead[]>(`/orgs${qs}`);
+  list: (params?: { active_only?: boolean; exclude_class_orgs?: boolean }) => {
+    const query = new URLSearchParams();
+    if (params?.active_only !== undefined) query.set("active_only", String(params.active_only));
+    if (params?.exclude_class_orgs !== undefined) {
+      query.set("exclude_class_orgs", String(params.exclude_class_orgs));
+    }
+    const qs = query.toString();
+    return get<OrgRead[]>(`/orgs${qs ? `?${qs}` : ""}`);
   },
   get: (id: string) => get<OrgRead>(`/orgs/${id}`),
   /** 取得組織樹（巢狀結構） */

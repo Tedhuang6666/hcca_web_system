@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import date
 
-from sqlalchemy import select, text
+from sqlalchemy import exists, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -13,6 +13,7 @@ from api.core.clock import local_today
 from api.models.document import Document
 from api.models.org import Org, Permission, Position, UserPosition
 from api.models.regulation import Regulation
+from api.models.school_class import SchoolClass
 from api.schemas.org import (
     OrgCreate,
     OrgTree,
@@ -27,10 +28,16 @@ from api.schemas.org import (
 # ── Org ──────────────────────────────────────────────────────────────────────
 
 
-async def get_orgs(db: AsyncSession, active_only: bool = False) -> list[Org]:
+async def get_orgs(
+    db: AsyncSession,
+    active_only: bool = False,
+    exclude_class_orgs: bool = False,
+) -> list[Org]:
     query = select(Org).order_by(Org.name)
     if active_only:
         query = query.where(Org.is_active.is_(True))
+    if exclude_class_orgs:
+        query = query.where(~exists().where(SchoolClass.org_id == Org.id))
     result = await db.execute(query)
     return list(result.scalars().all())
 

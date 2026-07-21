@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.dependencies.auth import get_current_active_user
 from api.main import app
 from api.models.org import Org, Permission, Position, UserPosition
+from api.models.school_class import SchoolClass
 from api.models.user import User
 
 
@@ -84,6 +85,35 @@ async def test_list_orgs_returns_active_and_inactive(
     assert resp_active.status_code == 200
     active_names = {item["name"] for item in resp_active.json()}
     assert "停用組織" not in active_names
+
+
+@pytest.mark.asyncio
+async def test_list_orgs_can_exclude_class_orgs(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await _seed_user_with_codes(db_session, "org-exclude-class@school.edu", [])
+    regular_org = Org(name="自治組織")
+    class_org = Org(name="115 學年度 101 班")
+    db_session.add_all([regular_org, class_org])
+    await db_session.flush()
+    db_session.add(
+        SchoolClass(
+            academic_year=115,
+            class_code="101",
+            grade=1,
+            created_by=user.id,
+            org_id=class_org.id,
+        )
+    )
+    await db_session.flush()
+    _override_user(user)
+
+    resp = await client.get("/orgs", params={"exclude_class_orgs": True})
+
+    assert resp.status_code == 200
+    names = {item["name"] for item in resp.json()}
+    assert "自治組織" in names
+    assert "115 學年度 101 班" not in names
 
 
 @pytest.mark.asyncio
