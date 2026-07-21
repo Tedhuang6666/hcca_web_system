@@ -24,6 +24,7 @@ import type {
   ClassMemberOut,
   ClassMembershipOut,
   ClassRoleOut,
+  ClassRosterEntryOut,
   ClassStudentRangeOut,
   SchoolClassBulkCreate,
   SchoolClassListItem,
@@ -31,7 +32,7 @@ import type {
   UserSummary,
 } from "@/lib/types";
 
-type TabKey = "overview" | "roles" | "members" | "ranges";
+type TabKey = "overview" | "roles" | "members" | "roster" | "ranges";
 
 const roleAccent: Record<string, string> = {
   class_representative: "#2563eb",
@@ -719,6 +720,206 @@ function RangePanel({
   );
 }
 
+function RosterPanel({
+  entries,
+  onAdd,
+  onBulkImport,
+  onUpdate,
+  onDelete,
+}: {
+  entries: ClassRosterEntryOut[];
+  onAdd: (seatNumber: number, studentId: string) => Promise<void>;
+  onBulkImport: (entries: { seat_number: number; student_id: string }[]) => Promise<void>;
+  onUpdate: (id: string, seatNumber: number, studentId: string) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+}) {
+  const [seatNumber, setSeatNumber] = useState("");
+  const [studentId, setStudentId] = useState("");
+  const [pasteValue, setPasteValue] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editSeat, setEditSeat] = useState("");
+  const [editStudentId, setEditStudentId] = useState("");
+
+  const parseRows = (value: string) => {
+    const rows: { seat_number: number; student_id: string }[] = [];
+    for (const [index, line] of value.split(/\r?\n/).entries()) {
+      if (!line.trim()) continue;
+      const [seat, id] = line.trim().split(/[,;\t ]+/);
+      const number = Number(seat);
+      if (!Number.isInteger(number) || number < 1 || !id) {
+        throw new Error(`第 ${index + 1} 行格式錯誤，請使用「座號,學號」`);
+      }
+      rows.push({ seat_number: number, student_id: id.trim() });
+    }
+    if (rows.length === 0) throw new Error("請先貼上至少一筆名冊資料");
+    return rows;
+  };
+
+  return (
+    <div className="space-y-4">
+      <section className="rounded-md p-4" style={{ border: "1px solid var(--border)" }}>
+        <div>
+          <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+            手動維護座號名冊
+          </h3>
+          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            每筆資料會保存座號與學號；若學號已有帳號，系統會自動連結，尚未註冊也可以先建立。
+          </p>
+        </div>
+        <div className="mt-3 grid grid-cols-[96px_1fr_auto] gap-2">
+          <input
+            className="input"
+            inputMode="numeric"
+            value={seatNumber}
+            onChange={(event) => setSeatNumber(event.target.value)}
+            placeholder="座號"
+            aria-label="座號"
+          />
+          <input
+            className="input font-mono"
+            value={studentId}
+            onChange={(event) => setStudentId(event.target.value)}
+            placeholder="學號"
+            aria-label="學號"
+          />
+          <button
+            type="button"
+            className="inline-flex items-center justify-center gap-1.5 rounded-md px-4 py-2 text-sm font-semibold"
+            style={{ background: "var(--primary)", color: "var(--primary-fg)" }}
+            onClick={async () => {
+              const number = Number(seatNumber);
+              if (!Number.isInteger(number) || number < 1 || !studentId.trim()) {
+                toast.error("請輸入有效座號與學號");
+                return;
+              }
+              await onAdd(number, studentId.trim());
+              setSeatNumber("");
+              setStudentId("");
+            }}
+          >
+            <Plus size={15} /> 新增
+          </button>
+        </div>
+        <div className="mt-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
+          <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+            貼上多筆名冊
+            <textarea
+              className="input mt-1 min-h-24 w-full font-mono text-xs"
+              value={pasteValue}
+              onChange={(event) => setPasteValue(event.target.value)}
+              placeholder={"1,1150101\n2,1150102\n3,1150103"}
+              aria-label="批量貼上座號與學號"
+            />
+          </label>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+              支援逗號、Tab 或空白分隔；相同座號會更新原資料。
+            </span>
+            <button
+              type="button"
+              className="rounded-md px-3 py-2 text-xs font-semibold"
+              style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}
+              onClick={async () => {
+                try {
+                  await onBulkImport(parseRows(pasteValue));
+                  setPasteValue("");
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : "批量匯入失敗");
+                }
+              }}
+            >
+              匯入名冊
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="overflow-hidden rounded-md" style={{ border: "1px solid var(--border)" }}>
+        <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
+          <div>
+            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+              班級座號名冊
+            </h3>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              共 {entries.length} 筆 · 可直接編輯或刪除
+            </p>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr style={{ color: "var(--text-muted)", borderBottom: "1px solid var(--border)" }}>
+                <th className="px-4 py-2 text-left font-medium">座號</th>
+                <th className="px-4 py-2 text-left font-medium">學號</th>
+                <th className="px-4 py-2 text-left font-medium">帳號連結</th>
+                <th className="px-4 py-2 text-right font-medium">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((entry) => {
+                const editing = editingId === entry.id;
+                return (
+                  <tr key={entry.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                    <td className="px-4 py-2" style={{ color: "var(--text-primary)" }}>
+                      {editing ? (
+                        <input className="input w-20" inputMode="numeric" value={editSeat}
+                          onChange={(event) => setEditSeat(event.target.value)} aria-label="編輯座號" />
+                      ) : entry.seat_number}
+                    </td>
+                    <td className="px-4 py-2 font-mono text-xs" style={{ color: "var(--text-primary)" }}>
+                      {editing ? (
+                        <input className="input min-w-36" value={editStudentId}
+                          onChange={(event) => setEditStudentId(event.target.value)} aria-label="編輯學號" />
+                      ) : entry.student_id}
+                    </td>
+                    <td className="px-4 py-2 text-xs" style={{ color: entry.user ? "var(--text-secondary)" : "var(--text-muted)" }}>
+                      {entry.user ? `${entry.user.display_name} · 已連結` : "尚未註冊帳號"}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2 text-right">
+                      {editing ? (
+                        <>
+                          <button type="button" className="mr-3 text-xs font-medium" style={{ color: "var(--primary)" }}
+                            onClick={async () => {
+                              const number = Number(editSeat);
+                              if (!Number.isInteger(number) || number < 1 || !editStudentId.trim()) {
+                                toast.error("請輸入有效座號與學號");
+                                return;
+                              }
+                              await onUpdate(entry.id, number, editStudentId.trim());
+                              setEditingId(null);
+                            }}>儲存</button>
+                          <button type="button" className="text-xs" style={{ color: "var(--text-muted)" }}
+                            onClick={() => setEditingId(null)}>取消</button>
+                        </>
+                      ) : (
+                        <>
+                          <button type="button" className="mr-3 text-xs" style={{ color: "var(--primary)" }}
+                            onClick={() => {
+                              setEditingId(entry.id);
+                              setEditSeat(String(entry.seat_number));
+                              setEditStudentId(entry.student_id);
+                            }}>編輯</button>
+                          <button type="button" className="text-xs" style={{ color: "var(--danger)" }}
+                            onClick={() => onDelete(entry.id)}>刪除</button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+              {entries.length === 0 && (
+                <tr><td colSpan={4} className="px-4 py-8 text-center text-sm" style={{ color: "var(--text-muted)" }}>
+                  尚未建立座號名冊，先輸入一筆或貼上多筆資料。
+                </td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function ClassWorkspace({
   classId,
   onClassChanged,
@@ -729,6 +930,7 @@ function ClassWorkspace({
   const [detail, setDetail] = useState<SchoolClassOut | null>(null);
   const [members, setMembers] = useState<ClassMemberOut[]>([]);
   const [memberships, setMemberships] = useState<ClassMembershipOut[]>([]);
+  const [rosterEntries, setRosterEntries] = useState<ClassRosterEntryOut[]>([]);
   const [roles, setRoles] = useState<ClassRoleOut[]>([]);
   const [tab, setTab] = useState<TabKey>("overview");
   const [loading, setLoading] = useState(true);
@@ -739,12 +941,14 @@ function ClassWorkspace({
       classApi.get(classId),
       classApi.members(classId),
       classApi.memberships(classId),
+      classApi.roster(classId),
       classApi.roles(classId),
     ])
-      .then(([nextDetail, nextMembers, nextMemberships, nextRoles]) => {
+      .then(([nextDetail, nextMembers, nextMemberships, nextRosterEntries, nextRoles]) => {
         setDetail(nextDetail);
         setMembers(nextMembers);
         setMemberships(nextMemberships);
+        setRosterEntries(nextRosterEntries);
         setRoles(nextRoles);
       })
       .catch((error) => toast.error(getErrorMessage(error, "載入班級資料失敗")))
@@ -770,6 +974,7 @@ function ClassWorkspace({
     { key: "overview", label: "總覽" },
     { key: "roles", label: "職位", count: roleHolderCount },
     { key: "members", label: "名冊", count: memberships.filter((item) => item.status === "active").length },
+    { key: "roster", label: "座號名冊", count: rosterEntries.length },
     { key: "ranges", label: "學號區間", count: detail.ranges.length },
   ];
 
@@ -818,6 +1023,50 @@ function ClassWorkspace({
       onClassChanged();
     } catch (error) {
       toast.error(getErrorMessage(error, "新增區間失敗"));
+    }
+  };
+
+  const addRosterEntry = async (seatNumber: number, studentId: string) => {
+    try {
+      await classApi.addRoster(classId, { seat_number: seatNumber, student_id: studentId });
+      toast.success(`座號 ${seatNumber} 已加入名冊`);
+      load();
+    } catch (error) {
+      toast.error(getErrorMessage(error, "新增名冊資料失敗"));
+      throw error;
+    }
+  };
+
+  const bulkImportRoster = async (entries: { seat_number: number; student_id: string }[]) => {
+    try {
+      const result = await classApi.bulkRoster(classId, { entries });
+      toast.success(`名冊匯入完成：新增 ${result.created} 筆、更新 ${result.updated} 筆`);
+      load();
+    } catch (error) {
+      toast.error(getErrorMessage(error, "批量匯入名冊失敗"));
+      throw error;
+    }
+  };
+
+  const updateRosterEntry = async (id: string, seatNumber: number, studentId: string) => {
+    try {
+      await classApi.updateRoster(classId, id, { seat_number: seatNumber, student_id: studentId });
+      toast.success("名冊資料已更新");
+      load();
+    } catch (error) {
+      toast.error(getErrorMessage(error, "更新名冊資料失敗"));
+      throw error;
+    }
+  };
+
+  const deleteRosterEntry = async (id: string) => {
+    if (!confirm("確定要刪除此筆座號名冊資料？")) return;
+    try {
+      await classApi.deleteRoster(classId, id);
+      toast.success("名冊資料已刪除");
+      load();
+    } catch (error) {
+      toast.error(getErrorMessage(error, "刪除名冊資料失敗"));
     }
   };
 
@@ -870,8 +1119,9 @@ function ClassWorkspace({
         <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <StatTile icon={<UsersRound size={15} />} label="推導成員" value={members.length} />
           <StatTile icon={<BookUser size={15} />} label="名冊快照" value={memberships.filter((item) => item.status === "active").length} />
+          <StatTile icon={<ListChecks size={15} />} label="座號名冊" value={rosterEntries.length} />
           <StatTile icon={<ShieldCheck size={15} />} label="已任命職位" value={roleHolderCount} />
-          <StatTile icon={<ListChecks size={15} />} label="學號區間" value={detail.ranges.length} />
+          <StatTile icon={<CalendarDays size={15} />} label="學號區間" value={detail.ranges.length} />
         </div>
       </section>
 
@@ -934,6 +1184,17 @@ function ClassWorkspace({
             members={members}
             onAdd={addMembership}
             onEnd={endMembership}
+          />
+        </div>
+      )}
+      {tab === "roster" && (
+        <div key="roster" className="tab-panel-transition">
+          <RosterPanel
+            entries={rosterEntries}
+            onAdd={addRosterEntry}
+            onBulkImport={bulkImportRoster}
+            onUpdate={updateRosterEntry}
+            onDelete={deleteRosterEntry}
           />
         </div>
       )}

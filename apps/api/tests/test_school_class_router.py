@@ -217,6 +217,52 @@ async def test_add_and_delete_range(
     assert delete_again_resp.status_code == 404
 
 
+async def test_roster_routes_support_single_bulk_update_and_delete(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+    db_session: AsyncSession,
+) -> None:
+    sc = await _make_class(db_session, admin_user)
+    ac = authed_client_factory(admin_user)
+
+    add_resp = await ac.post(
+        f"/classes/{sc.id}/roster",
+        json={"seat_number": 1, "student_id": "91501"},
+    )
+    assert add_resp.status_code == 201
+    entry_id = add_resp.json()["id"]
+    assert add_resp.json()["user_id"] is None
+
+    bulk_resp = await ac.post(
+        f"/classes/{sc.id}/roster/bulk",
+        json={
+            "entries": [
+                {"seat_number": 1, "student_id": "91511"},
+                {"seat_number": 2, "student_id": "91512"},
+            ]
+        },
+    )
+    assert bulk_resp.status_code == 200
+    assert (bulk_resp.json()["created"], bulk_resp.json()["updated"]) == (1, 1)
+
+    update_resp = await ac.patch(
+        f"/classes/{sc.id}/roster/{entry_id}",
+        json={"seat_number": 3, "student_id": "91513"},
+    )
+    assert update_resp.status_code == 200
+    assert update_resp.json()["seat_number"] == 3
+
+    list_resp = await ac.get(f"/classes/{sc.id}/roster")
+    assert list_resp.status_code == 200
+    assert [(row["seat_number"], row["student_id"]) for row in list_resp.json()] == [
+        (2, "91512"),
+        (3, "91513"),
+    ]
+
+    delete_resp = await ac.delete(f"/classes/{sc.id}/roster/{entry_id}")
+    assert delete_resp.status_code == 204
+
+
 async def test_add_manual_member_then_remove(
     authed_client_factory: Callable[[User], AsyncClient],
     admin_user: User,

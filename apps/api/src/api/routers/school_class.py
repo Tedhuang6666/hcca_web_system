@@ -26,6 +26,11 @@ from api.schemas.school_class import (
     ClassMembershipOut,
     ClassRoleAssign,
     ClassRoleOut,
+    ClassRosterBulkCreate,
+    ClassRosterBulkOut,
+    ClassRosterEntryCreate,
+    ClassRosterEntryOut,
+    ClassRosterEntryUpdate,
     ClassStudentRangeCreate,
     ClassStudentRangeOut,
     SchoolClassBulkAction,
@@ -171,6 +176,90 @@ async def list_members(class_id: uuid.UUID, session: DbDep, _: ManagerUser) -> l
 async def list_memberships(class_id: uuid.UUID, session: DbDep, _: ManagerUser) -> list:
     sc = await _get_class_or_404(class_id, session)
     return await class_svc.list_memberships(session, sc)
+
+
+@router.get(
+    "/{class_id}/roster",
+    response_model=list[ClassRosterEntryOut],
+    summary="列出班級座號與學號名冊",
+)
+async def list_roster(
+    class_id: uuid.UUID, session: DbDep, _: ManagerUser
+) -> list[ClassRosterEntryOut]:
+    sc = await _get_class_or_404(class_id, session)
+    entries = await class_svc.list_roster_entries(session, sc)
+    return [ClassRosterEntryOut.model_validate(entry) for entry in entries]
+
+
+@router.post(
+    "/{class_id}/roster",
+    response_model=ClassRosterEntryOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="新增班級座號與學號對照",
+)
+async def add_roster_entry(
+    class_id: uuid.UUID,
+    payload: ClassRosterEntryCreate,
+    session: DbDep,
+    _: ManagerUser,
+) -> ClassRosterEntryOut:
+    sc = await _get_class_or_404(class_id, session)
+    try:
+        entry = await class_svc.add_roster_entry(session, sc, data=payload)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    return ClassRosterEntryOut.model_validate(entry)
+
+
+@router.post(
+    "/{class_id}/roster/bulk",
+    response_model=ClassRosterBulkOut,
+    status_code=status.HTTP_200_OK,
+    summary="批量匯入班級座號與學號名冊",
+)
+async def bulk_roster(
+    class_id: uuid.UUID,
+    payload: ClassRosterBulkCreate,
+    session: DbDep,
+    _: ManagerUser,
+) -> ClassRosterBulkOut:
+    sc = await _get_class_or_404(class_id, session)
+    try:
+        return await class_svc.bulk_upsert_roster(session, sc, data=payload)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+
+
+@router.patch(
+    "/{class_id}/roster/{entry_id}",
+    response_model=ClassRosterEntryOut,
+    summary="更新班級座號與學號對照",
+)
+async def update_roster_entry(
+    class_id: uuid.UUID,
+    entry_id: uuid.UUID,
+    payload: ClassRosterEntryUpdate,
+    session: DbDep,
+    _: ManagerUser,
+) -> ClassRosterEntryOut:
+    sc = await _get_class_or_404(class_id, session)
+    try:
+        entry = await class_svc.update_roster_entry(session, sc, entry_id, data=payload)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    return ClassRosterEntryOut.model_validate(entry)
+
+
+@router.delete(
+    "/{class_id}/roster/{entry_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="刪除班級座號與學號對照",
+)
+async def delete_roster_entry(
+    class_id: uuid.UUID, entry_id: uuid.UUID, session: DbDep, _: ManagerUser
+) -> None:
+    if not await class_svc.delete_roster_entry(session, class_id, entry_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此名冊資料")
 
 
 @router.post(

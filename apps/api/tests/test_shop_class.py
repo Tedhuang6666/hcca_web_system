@@ -12,6 +12,9 @@ from api.models.shop import Order, OrderItem, OrderStatus, Product
 from api.models.user import User
 from api.schemas.school_class import (
     ClassManualMemberCreate,
+    ClassRosterBulkCreate,
+    ClassRosterEntryCreate,
+    ClassRosterEntryUpdate,
     ClassStudentRangeCreate,
     ClassStudentRangeOverride,
     SchoolClassBulkCreate,
@@ -174,6 +177,86 @@ async def test_manual_member_can_be_added_and_promoted_to_cadre(
     assert members[0].source == "manual"
     assert members[0].is_cadre is True
     assert await class_svc.resolve_user_class(db_session, user) is not None
+
+
+async def test_roster_entry_supports_unregistered_student_and_links_existing_user(
+    db_session: AsyncSession,
+) -> None:
+    sc = await _make_class(db_session)
+    linked_user = await _make_user(db_session, student_id="11502")
+
+    unlinked = await class_svc.add_roster_entry(
+        db_session, sc, data=ClassRosterEntryCreate(seat_number=1, student_id="11501")
+    )
+    linked = await class_svc.add_roster_entry(
+        db_session, sc, data=ClassRosterEntryCreate(seat_number=2, student_id="11502")
+    )
+    assert unlinked.user_id is None
+    assert linked.user_id == linked_user.id
+
+    members = await class_svc.list_class_members(
+        db_session, await class_svc.get_class(db_session, sc.id)
+    )
+    assert [(member.seat_number, member.student_id) for member in members] == [(2, "11502")]
+    assert await class_svc.resolve_user_class(db_session, linked_user) is not None
+
+
+async def test_roster_entry_rejects_duplicate_seat_or_student_id(
+    db_session: AsyncSession,
+) -> None:
+    sc = await _make_class(db_session)
+    await class_svc.add_roster_entry(
+        db_session, sc, data=ClassRosterEntryCreate(seat_number=1, student_id="11501")
+    )
+
+    with pytest.raises(ValueError, match="座號 1"):
+        await class_svc.add_roster_entry(
+            db_session, sc, data=ClassRosterEntryCreate(seat_number=1, student_id="11502")
+        )
+    with pytest.raises(ValueError, match="學號 11501"):
+        await class_svc.add_roster_entry(
+            db_session, sc, data=ClassRosterEntryCreate(seat_number=2, student_id="11501")
+        )
+
+
+async def test_bulk_roster_upsert_updates_by_seat_and_creates_new_rows(
+    db_session: AsyncSession,
+) -> None:
+    sc = await _make_class(db_session)
+    await class_svc.add_roster_entry(
+        db_session, sc, data=ClassRosterEntryCreate(seat_number=1, student_id="11501")
+    )
+
+    result = await class_svc.bulk_upsert_roster(
+        db_session,
+        sc,
+        data=ClassRosterBulkCreate(
+            entries=[
+                ClassRosterEntryCreate(seat_number=1, student_id="11511"),
+                ClassRosterEntryCreate(seat_number=2, student_id="11512"),
+            ]
+        ),
+    )
+    assert (result.created, result.updated) == (1, 1)
+    entries = await class_svc.list_roster_entries(db_session, sc)
+    assert [(entry.seat_number, entry.student_id) for entry in entries] == [
+        (1, "11511"),
+        (2, "11512"),
+    ]
+
+
+async def test_roster_entry_can_be_updated(db_session: AsyncSession) -> None:
+    sc = await _make_class(db_session)
+    entry = await class_svc.add_roster_entry(
+        db_session, sc, data=ClassRosterEntryCreate(seat_number=1, student_id="11501")
+    )
+    updated = await class_svc.update_roster_entry(
+        db_session,
+        sc,
+        entry.id,
+        data=ClassRosterEntryUpdate(seat_number=3, student_id="11503"),
+    )
+    assert (updated.seat_number, updated.student_id) == (3, "11503")
 
 
 async def test_cadre_requires_class_member(db_session: AsyncSession) -> None:

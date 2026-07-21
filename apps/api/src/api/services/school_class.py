@@ -29,6 +29,7 @@ from api.models.school_class import (
     ClassMembershipStatus,
     ClassRoleBinding,
     ClassRoleKey,
+    ClassRosterEntry,
     ClassStudentRange,
     SchoolClass,
 )
@@ -40,6 +41,10 @@ from api.schemas.school_class import (
     ClassMemberOut,
     ClassMembershipCreate,
     ClassRoleAssign,
+    ClassRosterBulkCreate,
+    ClassRosterBulkOut,
+    ClassRosterEntryCreate,
+    ClassRosterEntryUpdate,
     ClassStudentRangeCreate,
     SchoolClassBulkActionOut,
     SchoolClassBulkActionResult,
@@ -120,6 +125,7 @@ async def get_class(session: AsyncSession, class_id: uuid.UUID) -> SchoolClass |
         select(SchoolClass)
         .options(
             selectinload(SchoolClass.ranges),
+            selectinload(SchoolClass.roster_entries).selectinload(ClassRosterEntry.user),
             selectinload(SchoolClass.manual_members).selectinload(ClassManualMember.user),
             selectinload(SchoolClass.cadres).selectinload(ClassCadre.user),
             selectinload(SchoolClass.memberships).selectinload(ClassMembership.user),
@@ -138,6 +144,7 @@ async def list_classes(
 ) -> list[SchoolClass]:
     q = select(SchoolClass).options(
         selectinload(SchoolClass.ranges),
+        selectinload(SchoolClass.roster_entries).selectinload(ClassRosterEntry.user),
         selectinload(SchoolClass.manual_members).selectinload(ClassManualMember.user),
         selectinload(SchoolClass.cadres).selectinload(ClassCadre.user),
         selectinload(SchoolClass.memberships).selectinload(ClassMembership.user),
@@ -485,6 +492,197 @@ async def bulk_action_classes(
 # ── 學號區間 ──────────────────────────────────────────────────────────────────
 
 
+async def _find_roster_user(session: AsyncSession, student_id: str) -> User | None:
+    return await session.scalar(select(User).where(User.student_id == student_id))
+
+
+async def _ensure_roster_unique(
+    session: AsyncSession,
+    sc: SchoolClass,
+    *,
+    seat_number: int,
+    student_id: str,
+    exclude_id: uuid.UUID | None = None,
+) -> None:
+    query = select(ClassRosterEntry).where(
+        ClassRosterEntry.class_id == sc.id,
+        (ClassRosterEntry.seat_number == seat_number) | (ClassRosterEntry.student_id == student_id),
+    )
+    if exclude_id is not None:
+        query = query.where(ClassRosterEntry.id != exclude_id)
+    existing = await session.scalar(query)
+    if existing is None:
+        return
+    if existing.seat_number == seat_number:
+        raise ValueError(f"座號 {seat_number} 已有名冊資料")
+    raise ValueError(f"學號 {student_id} 已在此班級名冊")
+
+
+async def _end_roster_membership(
+    session: AsyncSession, class_id: uuid.UUID, user_id: uuid.UUID
+) -> None:
+    membership = await session.scalar(
+        select(ClassMembership).where(
+            ClassMembership.class_id == class_id,
+            ClassMembership.user_id == user_id,
+            ClassMembership.source == "roster",
+            ClassMembership.status == ClassMembershipStatus.ACTIVE,
+        )
+    )
+    if membership is not None:
+        membership.status = ClassMembershipStatus.ENDED
+        membership.end_date = local_today()
+
+
+async def add_roster_entry(
+    session: AsyncSession, sc: SchoolClass, *, data: ClassRosterEntryCreate
+) -> ClassRosterEntry:
+    student_id = data.student_id.strip()
+    await _ensure_roster_unique(session, sc, seat_number=data.seat_number, student_id=student_id)
+    user = await _find_roster_user(session, student_id)
+    entry = ClassRosterEntry(
+        seat_number=data.seat_number,
+        student_id=student_id,
+        user_id=user.id if user else None,
+    )
+    sc.roster_entries.append(entry)
+    await session.flush()
+    if user is not None:
+        await add_membership(
+            session,
+            sc,
+            data=ClassMembershipCreate(user_id=user.id, source="roster"),
+        )
+    await session.refresh(entry, attribute_names=["user"])
+    return entry
+
+
+async def update_roster_entry(
+    session: AsyncSession,
+    sc: SchoolClass,
+    entry_id: uuid.UUID,
+    *,
+    data: ClassRosterEntryUpdate,
+) -> ClassRosterEntry:
+    entry = await session.scalar(
+        select(ClassRosterEntry).where(
+            ClassRosterEntry.id == entry_id,
+            ClassRosterEntry.class_id == sc.id,
+        )
+    )
+    if entry is None:
+        raise ValueError("找不到此名冊資料")
+    previous_user_id = entry.user_id
+    values = data.model_dump(exclude_none=True)
+    seat_number = values.get("seat_number", entry.seat_number)
+    student_id = values.get("student_id", entry.student_id).strip()
+    await _ensure_roster_unique(
+        session,
+        sc,
+        seat_number=seat_number,
+        student_id=student_id,
+        exclude_id=entry.id,
+    )
+    user = await _find_roster_user(session, student_id)
+    entry.seat_number = seat_number
+    entry.student_id = student_id
+    entry.user_id = user.id if user else None
+    await session.flush()
+    if previous_user_id is not None and previous_user_id != entry.user_id:
+        await _end_roster_membership(session, sc.id, previous_user_id)
+    if user is not None:
+        await add_membership(
+            session,
+            sc,
+            data=ClassMembershipCreate(user_id=user.id, source="roster"),
+        )
+    await session.refresh(entry, attribute_names=["user"])
+    return entry
+
+
+async def bulk_upsert_roster(
+    session: AsyncSession, sc: SchoolClass, *, data: ClassRosterBulkCreate
+) -> ClassRosterBulkOut:
+    seen_seats: set[int] = set()
+    seen_student_ids: set[str] = set()
+    entries = []
+    created = 0
+    updated = 0
+    for item in data.entries:
+        student_id = item.student_id.strip()
+        if item.seat_number in seen_seats or student_id in seen_student_ids:
+            raise ValueError("批次資料中有重複的座號或學號")
+        seen_seats.add(item.seat_number)
+        seen_student_ids.add(student_id)
+        existing = await session.scalar(
+            select(ClassRosterEntry).where(
+                ClassRosterEntry.class_id == sc.id,
+                ClassRosterEntry.seat_number == item.seat_number,
+            )
+        )
+        if existing is None:
+            existing = await session.scalar(
+                select(ClassRosterEntry).where(
+                    ClassRosterEntry.class_id == sc.id,
+                    ClassRosterEntry.student_id == student_id,
+                )
+            )
+        if existing is None:
+            entry = await add_roster_entry(
+                session,
+                sc,
+                data=ClassRosterEntryCreate(
+                    seat_number=item.seat_number,
+                    student_id=student_id,
+                ),
+            )
+            created += 1
+        else:
+            entry = await update_roster_entry(
+                session,
+                sc,
+                existing.id,
+                data=ClassRosterEntryUpdate(
+                    seat_number=item.seat_number,
+                    student_id=student_id,
+                ),
+            )
+            updated += 1
+        entries.append(entry)
+    return ClassRosterBulkOut(total=len(entries), created=created, updated=updated, entries=entries)
+
+
+async def list_roster_entries(session: AsyncSession, sc: SchoolClass) -> list[ClassRosterEntry]:
+    result = await session.execute(
+        select(ClassRosterEntry)
+        .options(selectinload(ClassRosterEntry.user))
+        .where(ClassRosterEntry.class_id == sc.id)
+        .order_by(ClassRosterEntry.seat_number)
+    )
+    return list(result.scalars().all())
+
+
+async def delete_roster_entry(
+    session: AsyncSession, class_id: uuid.UUID, entry_id: uuid.UUID
+) -> bool:
+    entry = await session.scalar(
+        select(ClassRosterEntry).where(
+            ClassRosterEntry.id == entry_id,
+            ClassRosterEntry.class_id == class_id,
+        )
+    )
+    if entry is None:
+        return False
+    if entry.user_id is not None:
+        await _end_roster_membership(session, class_id, entry.user_id)
+    await session.delete(entry)
+    await session.flush()
+    return True
+
+
+# ── 學號區間 ──────────────────────────────────────────────────────────────────
+
+
 async def add_range(
     session: AsyncSession, sc: SchoolClass, *, data: ClassStudentRangeCreate
 ) -> ClassStudentRange:
@@ -739,6 +937,11 @@ def _user_in_class_ranges(user: User, sc: SchoolClass) -> bool:
 async def is_class_member(session: AsyncSession, sc: SchoolClass, user: User) -> bool:
     if any(member.user_id == user.id for member in sc.manual_members):
         return True
+    if any(
+        entry.user_id == user.id or (entry.user_id is None and entry.student_id == user.student_id)
+        for entry in sc.roster_entries
+    ):
+        return True
     if not sc.ranges:
         refreshed = await get_class(session, sc.id)
         sc = refreshed or sc
@@ -805,6 +1008,26 @@ async def resolve_user_class(session: AsyncSession, user: User) -> SchoolClass |
     manual_class = manual_result.scalars().first()
     if manual_class is not None:
         return manual_class
+    roster_query = (
+        select(SchoolClass)
+        .join(
+            ClassRosterEntry,
+            ClassRosterEntry.class_id == SchoolClass.id,
+        )
+        .options(selectinload(SchoolClass.ranges))
+        .where(SchoolClass.is_active.is_(True))
+    )
+    if user.student_id:
+        roster_query = roster_query.where(
+            (ClassRosterEntry.user_id == user.id) | (ClassRosterEntry.student_id == user.student_id)
+        )
+    else:
+        roster_query = roster_query.where(ClassRosterEntry.user_id == user.id)
+    roster_class = await session.scalar(
+        roster_query.order_by(SchoolClass.academic_year.desc(), SchoolClass.class_code)
+    )
+    if roster_class is not None:
+        return roster_class
     if not user.student_id:
         return None
     result = await session.execute(
@@ -875,6 +1098,21 @@ async def list_class_members(session: AsyncSession, sc: SchoolClass) -> list[Cla
             source="manual",
             manual_member_id=member.id,
         )
+    for entry in sc.roster_entries:
+        if entry.user is None:
+            continue
+        if entry.user.id in members_by_id:
+            members_by_id[entry.user.id].seat_number = entry.seat_number
+            continue
+        members_by_id[entry.user.id] = ClassMemberOut(
+            id=entry.user.id,
+            display_name=entry.user.display_name,
+            student_id=entry.student_id,
+            email=entry.user.email,
+            seat_number=entry.seat_number,
+            is_cadre=entry.user.id in cadre_ids,
+            source="roster",
+        )
     result = await session.execute(select(User).where(User.student_id.is_not(None)))
     for u in result.scalars():
         if u.id in members_by_id or not _user_in_class_ranges(u, sc):
@@ -888,5 +1126,5 @@ async def list_class_members(session: AsyncSession, sc: SchoolClass) -> list[Cla
             source="range",
         )
     members = list(members_by_id.values())
-    members.sort(key=lambda m: m.student_id or "")
+    members.sort(key=lambda m: (m.seat_number is None, m.seat_number or 0, m.student_id or ""))
     return members

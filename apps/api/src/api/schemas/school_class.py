@@ -36,6 +36,41 @@ class ClassStudentRangeOut(BaseModel):
     student_id_end: str
 
 
+# ── 班級名冊 ──────────────────────────────────────────────────────────────────
+
+
+class ClassRosterEntryCreate(BaseModel):
+    seat_number: int = Field(..., ge=1, le=999, description="座號")
+    student_id: str = Field(..., min_length=1, max_length=20, description="學號")
+
+
+class ClassRosterEntryUpdate(BaseModel):
+    seat_number: int | None = Field(None, ge=1, le=999, description="座號")
+    student_id: str | None = Field(None, min_length=1, max_length=20, description="學號")
+
+
+class ClassRosterEntryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    class_id: uuid.UUID
+    seat_number: int
+    student_id: str
+    user_id: uuid.UUID | None = None
+    user: ClassUserBrief | None = None
+
+
+class ClassRosterBulkCreate(BaseModel):
+    entries: list[ClassRosterEntryCreate] = Field(..., min_length=1, max_length=999)
+
+
+class ClassRosterBulkOut(BaseModel):
+    total: int
+    created: int
+    updated: int
+    entries: list[ClassRosterEntryOut]
+
+
 # ── 班級幹部 ──────────────────────────────────────────────────────────────────
 
 
@@ -223,6 +258,7 @@ class SchoolClassOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     ranges: list[ClassStudentRangeOut] = []
+    roster_entries: list[ClassRosterEntryOut] = []
     cadres: list[ClassCadreOut] = []
     memberships: list[ClassMembershipOut] = []
     role_bindings: list[ClassRoleBindingOut] = []
@@ -272,6 +308,7 @@ class ClassMemberOut(BaseModel):
     display_name: str
     student_id: str | None
     email: str
+    seat_number: int | None = None
     is_cadre: bool = False
     source: str = "range"
     manual_member_id: uuid.UUID | None = None
@@ -285,6 +322,11 @@ __all__ = [
     "ClassMembershipCreate",
     "ClassMembershipOut",
     "ClassMemberOut",
+    "ClassRosterBulkCreate",
+    "ClassRosterBulkOut",
+    "ClassRosterEntryCreate",
+    "ClassRosterEntryOut",
+    "ClassRosterEntryUpdate",
     "ClassRoleAssign",
     "ClassRoleBindingOut",
     "ClassRoleHolderOut",
