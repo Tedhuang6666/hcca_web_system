@@ -40,6 +40,7 @@ class PermissionCode(StrEnum):
     DOCUMENT_ISSUE = "document:issue"
     DOCUMENT_ISSUE_DIRECT = "document:issue_direct"
     DOCUMENT_ARCHIVE = "document:archive"
+    DOCUMENT_ARCHIVE_SETTINGS = "document:archive_settings"
     DOCUMENT_EXPORT = "document:export"
     DOCUMENT_VIEW_ALL = "document:view_all"
     DOCUMENT_ADMIN = "document:admin"
@@ -346,6 +347,12 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "code": PermissionCode.DOCUMENT_ARCHIVE,
         "label": "歸檔公文",
         "desc": "封存已核准的公文",
+    },
+    {
+        "group": "公文系統",
+        "code": PermissionCode.DOCUMENT_ARCHIVE_SETTINGS,
+        "label": "設定公文歸檔",
+        "desc": "設定或取消已核准公文的預約歸檔時間",
     },
     {
         "group": "公文系統",

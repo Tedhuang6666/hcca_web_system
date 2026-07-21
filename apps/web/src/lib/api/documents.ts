@@ -1,7 +1,16 @@
 import type {
-  BatchDocumentOperationOut, DocumentApprovalDelegationOut, DocumentCreate, DocumentListItem, DocumentOut,
+  BatchDocumentOperationOut, DocumentApprovalDelegationOut, DocumentCreate, DocumentListItem,
+  DocumentOut,
 } from "../types";
-import { BASE, get, post, patch, del, request, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
+import { BASE, get, post, put, patch, del, request, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
+
+export type DocumentWithArchive = DocumentOut & {
+  archive_at: string | null;
+};
+
+export interface DocumentArchiveSettingsUpdate {
+  archive_at: string | null;
+}
 
 // ── 公文 ──────────────────────────────────────────────────────────────────────
 
@@ -19,8 +28,8 @@ export const documentsApi = {
     const qs = params ? "?" + new URLSearchParams(params).toString() : "";
     return get<DocumentListItem[]>(`/documents${qs}`);
   },
-  get: (id: string) => get<DocumentOut>(`/documents/${id}`),
-  create: (body: DocumentCreate) => post<DocumentOut>("/documents", body),
+  get: (id: string) => get<DocumentWithArchive>(`/documents/${id}`),
+  create: (body: DocumentCreate) => post<DocumentWithArchive>("/documents", body),
   update: (id: string, body: Partial<DocumentCreate> & { change_note?: string; autosave?: boolean }) =>
     patch<DocumentOut>(`/documents/${id}`, body),
   delete: (id: string) => del<void>(`/documents/${id}`),
@@ -32,6 +41,8 @@ export const documentsApi = {
     post<DocumentOut>(`/documents/${id}/reject`, { comment, mode }),
   recall: (id: string) => post<DocumentOut>(`/documents/${id}/recall`),
   archive: (id: string) => post<DocumentOut>(`/documents/${id}/archive`),
+  updateArchiveSettings: (id: string, body: DocumentArchiveSettingsUpdate) =>
+    put<DocumentWithArchive>(`/documents/${id}/archive-settings`, body),
   batchApprove: (document_ids: string[], comment?: string) =>
     post<BatchDocumentOperationOut>("/documents/batch/approve", { document_ids, comment }),
   batchReject: (

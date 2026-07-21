@@ -243,6 +243,11 @@ celery_app.conf.beat_schedule = {
         "task": "api.services.document_reminder_tasks.send_document_reminders",
         "schedule": crontab(hour="8", minute="0"),
     },
+    # 每 60 秒處理已到期的公文預約歸檔。
+    "archive-scheduled-documents-every-60s": {
+        "task": "api.services.document_reminder_tasks.archive_scheduled_documents",
+        "schedule": 60.0,
+    },
     # 平台健康巡邏：磁碟、備份新鮮度、outbox dead 累積
     # 跨門檻才發告警，恢復後發一次解除（避免洗版）
     "watchdog-every-10min": {

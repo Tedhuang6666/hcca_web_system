@@ -319,6 +319,7 @@ class Document(Base, TimestampMixin):
         Index("ix_documents_org_status", "org_id", "status"),
         Index("ix_documents_created_by_status", "created_by", "status"),
         Index("ix_documents_status_created_at", "status", "created_at"),
+        Index("ix_documents_status_archive_at", "status", "archive_at"),
         Index("ix_documents_created_at_desc", "created_at"),
         # 全文搜尋 GIN 索引（PostgreSQL tsvector，generated column 由 migration 建立）
         Index("ix_documents_search_vector", "search_vector", postgresql_using="gin"),
@@ -425,6 +426,8 @@ class Document(Base, TimestampMixin):
     )  # 限辦日期
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # 預約歸檔時間；到期後由 Celery 將已核准公文轉為已封存。
+    archive_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # 每次自動催辦後遞增，用以判斷升級時機。
     reminder_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"

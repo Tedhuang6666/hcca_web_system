@@ -26,6 +26,7 @@ from api.models.document import (
 from api.schemas.document import (
     DocumentApprovalDelegationCreate,
     DocumentApprovalDelegationUpdate,
+    DocumentArchiveSettingsUpdate,
     DocumentCreate,
     DocumentUpdate,
     RecipientCreate,
@@ -487,6 +488,31 @@ async def archive_document(
     doc.completed_at = doc.completed_at or now
     await session.flush()
     logger.info("公文封存 serial=%s by=%s", doc.serial_number, requested_by)
+    return doc
+
+
+async def update_archive_settings(
+    session: AsyncSession,
+    doc: Document,
+    *,
+    data: DocumentArchiveSettingsUpdate,
+) -> Document:
+    if doc.status != DocumentStatus.APPROVED:
+        raise ValueError(
+            f"公文 {doc.serial_number} 非已核准狀態，無法設定預約歸檔（目前狀態：{doc.status}）"
+        )
+
+    archive_at = data.archive_at
+    if archive_at is not None:
+        if archive_at.tzinfo is None:
+            archive_at = archive_at.replace(tzinfo=UTC)
+        archive_at = archive_at.astimezone(UTC)
+        if archive_at <= datetime.now(UTC):
+            raise ValueError("預約歸檔時間必須晚於現在")
+
+    doc.archive_at = archive_at
+    await session.flush()
+    logger.info("設定公文預約歸檔 serial=%s archive_at=%s", doc.serial_number, archive_at)
     return doc
 
 

@@ -754,6 +754,58 @@ async def test_archive_non_approved_document_returns_409(
     assert resp.status_code == 409
 
 
+@pytest.mark.asyncio
+async def test_schedule_archive_for_approved_document_succeeds(
+    db_session: AsyncSession, authed_client_factory
+) -> None:
+    org = Org(name=f"預約歸檔組織-{uuid.uuid4().hex[:6]}")
+    creator = User(
+        email="archive-schedule-creator@example.com", display_name="Creator", is_active=True
+    )
+    db_session.add_all([org, creator])
+    await db_session.flush()
+    await _grant_permission(db_session, creator, org, "document:archive_settings")
+
+    doc = _make_draft(org, creator, status=DocumentStatus.APPROVED)
+    db_session.add(doc)
+    await db_session.flush()
+
+    archive_at = datetime.now(UTC) + timedelta(hours=2)
+    ac = _authed(authed_client_factory, creator)
+    resp = await ac.put(
+        f"/documents/{doc.id}/archive-settings",
+        json={"archive_at": archive_at.isoformat()},
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["status"] == "approved"
+    assert resp.json()["archive_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_schedule_archive_without_permission_returns_403(
+    db_session: AsyncSession, authed_client_factory
+) -> None:
+    org = Org(name=f"預約歸檔拒絕組織-{uuid.uuid4().hex[:6]}")
+    creator = User(
+        email="archive-schedule-creator2@example.com", display_name="Creator", is_active=True
+    )
+    db_session.add_all([org, creator])
+    await db_session.flush()
+
+    doc = _make_draft(org, creator, status=DocumentStatus.APPROVED)
+    db_session.add(doc)
+    await db_session.flush()
+
+    ac = _authed(authed_client_factory, creator)
+    resp = await ac.put(
+        f"/documents/{doc.id}/archive-settings",
+        json={"archive_at": (datetime.now(UTC) + timedelta(hours=2)).isoformat()},
+    )
+
+    assert resp.status_code == 403
+
+
 # ── 直接發文 ───────────────────────────────────────────────────────────────────
 
 
