@@ -123,10 +123,10 @@ export default function RecommendedVendorsPage() {
           <button type="button" className={`btn ${mode === "map" ? "btn-primary" : "btn-secondary"}`} onClick={() => { setMode("map"); router.replace("/recommended-vendors?view=map"); }}><MapPin size={15} aria-hidden="true" />地圖</button>
         </div>
       </header>
-      <section className="flex flex-col gap-3 md:flex-row">
-        <label className="relative flex-1"><Search size={16} className="absolute left-3 top-3" style={{ color: "var(--text-muted)" }} aria-hidden="true" /><input className="input w-full pl-9" value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="搜尋商家、分類或地址" /></label>
-        <select className="input md:w-48" value={category} onChange={(event) => setCategory(event.target.value)} aria-label="商家分類"><option value="all">全部分類</option>{categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
-        <button type="button" className="btn btn-secondary" onClick={() => void load()}>搜尋</button>
+      <section className="grid min-w-0 gap-3 md:grid-cols-[minmax(0,1fr)_12rem_auto]">
+        <label className="relative block min-w-0"><Search size={16} className="absolute left-3 top-3" style={{ color: "var(--text-muted)" }} aria-hidden="true" /><input className="input w-full pl-9" value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="搜尋商家、分類或地址" /></label>
+        <select className="input w-full" value={category} onChange={(event) => setCategory(event.target.value)} aria-label="商家分類"><option value="all">全部分類</option>{categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
+        <button type="button" className="btn btn-secondary w-full md:w-auto" onClick={() => void load()}>搜尋</button>
       </section>
       {mode === "map" ? <><div className="h-[min(70vh,620px)] min-h-[460px] overflow-hidden rounded-lg border" style={{ borderColor: "var(--border)" }}><RecommendedVendorMap items={vendors} onSelect={(id) => void open(id)} /></div>{selected && <div className="mx-auto mt-5 max-w-xl"><VendorDetail vendor={selected} onClose={() => setSelected(null)} /></div>}</> : (
         <div className={selected ? "grid gap-5 lg:grid-cols-[minmax(0,1fr)_380px]" : ""}>
