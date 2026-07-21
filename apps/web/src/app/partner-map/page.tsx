@@ -78,7 +78,7 @@ function DetailPanel({
   if (!business && !loading) return null;
   return (
     <aside
-      className="fixed inset-x-3 bottom-3 z-20 max-h-[70vh] overflow-y-auto rounded-lg border p-4 shadow-xl lg:absolute lg:inset-y-4 lg:right-4 lg:left-auto lg:w-96"
+      className="fixed inset-x-3 bottom-3 z-[600] max-h-[70vh] overflow-y-auto rounded-lg border p-4 shadow-xl lg:absolute lg:inset-y-4 lg:right-4 lg:left-auto lg:w-96"
       style={{ background: "var(--bg)", borderColor: "var(--border)" }}>
       <div className="flex items-start justify-between gap-3">
         <div>
@@ -330,6 +330,7 @@ export default function PartnerMapPage() {
   }, [load]);
 
   const openBusiness = (businessId: string) => {
+    setSelectedBusiness(null);
     setDetailLoading(true);
     partnerMapApi.recordClick(businessId).catch(() => {});
     partnerMapApi
