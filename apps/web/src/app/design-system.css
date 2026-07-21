@@ -1608,6 +1608,10 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
   grid-row: 1 / span 2;
 }
 
+.regulation-detail-governance > div {
+  min-height: 5.5rem;
+}
+
 .regulation-detail-action-groups {
   display: flex;
   flex-direction: column;
@@ -1622,12 +1626,10 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
 
 .regulation-detail-tool-group,
 .regulation-detail-management-group {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   align-items: center;
-  justify-content: flex-end;
   gap: 0.75rem;
-  row-gap: 0.75rem;
   width: 100%;
   min-width: 0;
   min-height: 2.5rem;
@@ -1635,7 +1637,7 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
 
 .regulation-detail-tool-group > *,
 .regulation-detail-management-group > * {
-  flex: 1 1 0;
+  width: 100%;
   min-width: 0;
   min-height: 2.5rem;
   justify-content: center;
@@ -1666,7 +1668,7 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
   }
 
   .regulation-detail-tool-group > * {
-    flex: 1 1 0;
+    width: 100%;
     min-width: 0;
     justify-content: center;
   }
