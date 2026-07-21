@@ -288,6 +288,15 @@ async def test_partner_map_admin_can_create_business(
                     "benefit_value": "滿 500 元送飲料",
                 },
             ],
+            "initial_locations": [
+                {
+                    "name": "文具店本店",
+                    "address": "新竹市東區光復路一段 2 號",
+                    "latitude": 24.807,
+                    "longitude": 120.969,
+                    "google_maps_url": "https://www.google.com/maps/place/station/@24.807,120.969,17z",
+                }
+            ],
         },
         headers=HOST_HEADERS,
     )
@@ -299,6 +308,7 @@ async def test_partner_map_admin_can_create_business(
     assert payload["tags"][0]["name"] == "文具"
     assert payload["offers"][0]["benefit_value"] == "全館 9 折"
     assert len(payload["offers"]) == 2
+    assert payload["locations"][0]["google_maps_url"].endswith("17z")
 
 
 @pytest.mark.asyncio

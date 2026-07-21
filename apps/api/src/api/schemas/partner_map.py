@@ -174,6 +174,7 @@ class PartnerBusinessCreate(BaseModel):
     internal_note: str | None = None
     tag_ids: list[uuid.UUID] = Field(default_factory=list)
     initial_offers: list[PartnerOfferCreate] = Field(default_factory=list, max_length=20)
+    initial_locations: list[PartnerLocationCreate] = Field(default_factory=list, max_length=20)
 
 
 class PartnerBusinessUpdate(BaseModel):

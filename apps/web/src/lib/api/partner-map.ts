@@ -18,6 +18,9 @@ export type PartnerLocationWithMapUrl = PartnerLocationOut & { google_maps_url: 
 export type PartnerLocationCreateWithMapUrl = PartnerLocationCreate & {
   google_maps_url?: string | null;
 };
+export type PartnerBusinessCreateWithInitialLocations = PartnerBusinessCreate & {
+  initial_locations?: PartnerLocationCreateWithMapUrl[];
+};
 export type PartnerOfferDetail = PartnerOfferOut & {
   benefit_type: "discount" | "gift" | "bundle" | "member_price" | "other";
   benefit_value: string | null;
@@ -105,7 +108,7 @@ export const partnerMapApi = {
     return get<PartnerBusinessDirectoryItem[]>(`/partner-map/admin/businesses${p.size ? `?${p}` : ""}`);
   },
   adminGetBusiness: (id: string) => get<PartnerBusinessDetail>(`/partner-map/admin/businesses/${id}`),
-  createBusiness: (body: PartnerBusinessCreate) =>
+  createBusiness: (body: PartnerBusinessCreateWithInitialLocations) =>
     post<PartnerBusinessDetail>("/partner-map/admin/businesses", body),
   updateBusiness: (id: string, body: PartnerBusinessUpdate) =>
     patch<PartnerBusinessDetail>(`/partner-map/admin/businesses/${id}`, body),

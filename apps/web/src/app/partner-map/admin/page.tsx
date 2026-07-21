@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { CheckCircle, Plus, RefreshCw, Save, Store, Tag, Trash2, XCircle } from "lucide-react";
+import { CheckCircle, MapPin, Plus, RefreshCw, Save, Store, Tag, Trash2, XCircle } from "lucide-react";
 import { partnerMapApi, ApiError } from "@/lib/api";
 import type {
   PartnerBusinessDetail,
@@ -157,6 +157,20 @@ export default function PartnerMapAdminPage() {
       toast.error("請輸入店家名稱");
       return;
     }
+    const hasInitialLocationInput = [
+      locationForm.google_maps_url,
+      locationForm.address,
+      locationForm.latitude,
+      locationForm.longitude,
+    ].some((value) => value.trim());
+    const initialLatitude = Number(locationForm.latitude);
+    const initialLongitude = Number(locationForm.longitude);
+    if (!selected && businessForm.listing_type === "physical" && hasInitialLocationInput) {
+      if (!locationForm.address.trim() || Number.isNaN(initialLatitude) || Number.isNaN(initialLongitude)) {
+        toast.error("請先完成地址與座標，或使用 Google Maps 自動擷取");
+        return;
+      }
+    }
     setSaving(true);
     try {
       const payload = {
@@ -188,6 +202,16 @@ export default function PartnerMapAdminPage() {
             sort_order: index,
             is_active: true,
           })) : [],
+        initial_locations: !selected && businessForm.listing_type === "physical" && hasInitialLocationInput ? [{
+          name: locationForm.name || null,
+          address: locationForm.address.trim(),
+          latitude: initialLatitude,
+          longitude: initialLongitude,
+          phone: locationForm.phone || null,
+          google_maps_url: locationForm.google_maps_url || null,
+          sort_order: 0,
+          is_active: true,
+        }] : [],
       };
       const business = selected
         ? await partnerMapApi.updateBusiness(selected.id, payload)
@@ -580,6 +604,17 @@ export default function PartnerMapAdminPage() {
                 );
               })}
             </div>
+            {!selected && businessForm.listing_type === "physical" && <div className="mt-6 border-t pt-5" style={{ borderColor: "var(--border)" }}>
+              <div className="flex items-start justify-between gap-3"><div><h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>實體店家位置（可選）</h2><p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>新建時可直接設定第一個據點；之後仍可新增多個分店。</p></div><MapPin size={18} style={{ color: "var(--primary)" }} aria-hidden="true" /></div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <input className="input" placeholder="分店名稱（選填）" value={locationForm.name} onChange={(e) => setLocationForm((f) => ({ ...f, name: e.target.value }))} />
+                <input className="input" placeholder="據點電話（選填）" value={locationForm.phone} onChange={(e) => setLocationForm((f) => ({ ...f, phone: e.target.value }))} />
+                <div className="flex gap-2 sm:col-span-2"><input className="input min-w-0 flex-1" type="url" placeholder="貼上 Google Maps 分享連結" value={locationForm.google_maps_url} onChange={(e) => setLocationForm((f) => ({ ...f, google_maps_url: e.target.value }))} /><button type="button" className="btn btn-secondary shrink-0" onClick={() => void parseGoogleMaps()} disabled={parsingMap}>{parsingMap ? "解析中…" : "自動擷取"}</button></div>
+                <input className="input sm:col-span-2" placeholder="地址" value={locationForm.address} onChange={(e) => setLocationForm((f) => ({ ...f, address: e.target.value }))} />
+                <input className="input" inputMode="decimal" placeholder="緯度" value={locationForm.latitude} onChange={(e) => setLocationForm((f) => ({ ...f, latitude: e.target.value }))} />
+                <input className="input" inputMode="decimal" placeholder="經度" value={locationForm.longitude} onChange={(e) => setLocationForm((f) => ({ ...f, longitude: e.target.value }))} />
+              </div>
+            </div>}
             {!selected && <div className="mt-6 border-t pt-5" style={{ borderColor: "var(--border)" }}>
               <div className="flex items-start justify-between gap-3">
                 <div><h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>建立時加入優惠（可多筆）</h2><p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>可一次建立多個優惠；完整條款會直接顯示給所有訪客。</p></div>
