@@ -49,8 +49,13 @@ function BoundsReporter({ onBoundsChange }: { onBoundsChange: (bounds: PartnerMa
   }, [map, onBoundsChange]);
 
   const eventHandlers = useMemo(
-    () => ({ moveend: reportBounds, zoomend: reportBounds }),
-    [reportBounds],
+    () => ({
+      movestart: () => map.closePopup(),
+      zoomstart: () => map.closePopup(),
+      moveend: reportBounds,
+      zoomend: reportBounds,
+    }),
+    [map, reportBounds],
   );
 
   useEffect(() => {
