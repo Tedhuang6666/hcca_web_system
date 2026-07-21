@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from datetime import UTC, date, datetime, time, timedelta
 
-from sqlalchemy import String, cast, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.analytics_page_view import AnalyticsPageView
@@ -75,12 +75,12 @@ async def get_product_analytics(
     start_at = _start_datetime(start)
     end_at = _end_datetime(end)
 
-    user_date = cast(User.created_at, String)
+    user_date = func.date(User.created_at)
     user_rows = (
         await db.execute(
-            select(func.substr(user_date, 1, 10).label("day"), func.count(User.id))
+            select(user_date.label("day"), func.count(User.id))
             .where(User.created_at >= start_at, User.created_at < end_at)
-            .group_by(func.substr(user_date, 1, 10))
+            .group_by(user_date)
         )
     ).all()
     user_counts = {str(row.day): int(row[1]) for row in user_rows}
