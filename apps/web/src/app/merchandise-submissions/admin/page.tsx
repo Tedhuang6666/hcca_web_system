@@ -333,7 +333,7 @@ function ItemEditor({
           <div>
             <h3 className="font-semibold">品項欄位覆寫</h3>
             <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-              留空則沿用全域欄位；相同欄位代碼會覆寫全域設定，新增代碼只套用此品項。
+              留空則沿用全域欄位；這裡新增的欄位只套用此品項。
             </p>
           </div>
           <button
@@ -426,21 +426,7 @@ function ItemEditor({
                   </button>
                 </div>
               </div>
-              <div className="mt-3 grid gap-3 md:grid-cols-3">
-                <label>
-                  <FieldCaption>欄位代碼（系統用）</FieldCaption>
-                  <input
-                    value={field.key}
-                    onChange={(event) =>
-                      setField(index, {
-                        ...field,
-                        key: event.target.value.replace(/[^a-z0-9_]/g, ""),
-                      })
-                    }
-                    className="input h-10 w-full"
-                    placeholder="例如：student_name"
-                  />
-                </label>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
                 <label>
                   <FieldCaption>輸入框提示</FieldCaption>
                   <input
@@ -1243,25 +1229,7 @@ export default function MerchandiseSubmissionsAdminPage() {
                       </button>
                     </div>
                   </div>
-                  <div className="mt-3 grid gap-3 md:grid-cols-3">
-                    <label>
-                      <FieldCaption>欄位代碼（系統用）</FieldCaption>
-                      <input
-                        value={field.key}
-                        onChange={(event) =>
-                          setSettings({
-                            ...settings,
-                            global_fields: settings.global_fields.map((entry, i) =>
-                              i === index
-                                ? { ...entry, key: event.target.value.replace(/[^a-z0-9_]/g, "") }
-                                : entry,
-                            ),
-                          })
-                        }
-                        className="input h-10 w-full"
-                        placeholder="例如：student_name"
-                      />
-                    </label>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
                     <label>
                       <FieldCaption>輸入框提示</FieldCaption>
                       <input
