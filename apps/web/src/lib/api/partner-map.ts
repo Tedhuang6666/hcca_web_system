@@ -3,7 +3,7 @@ import type {
 } from "../types";
 import { get, post, patch, del } from "./core";
 
-export type PartnerBusinessListingType = "location" | "contact";
+export type PartnerBusinessListingType = "physical" | "online";
 type PartnerBusinessContactFields = {
   listing_type: PartnerBusinessListingType;
   contact_name: string | null;
@@ -14,7 +14,27 @@ type PartnerBusinessContactFields = {
   other_contact: string | null;
 };
 export type PartnerBusinessDirectoryItem = PartnerBusinessListItem & PartnerBusinessContactFields;
-export type PartnerBusinessDetail = PartnerBusinessOut & PartnerBusinessContactFields;
+export type PartnerOfferDetail = PartnerOfferOut & {
+  benefit_type: "discount" | "gift" | "bundle" | "member_price" | "other";
+  benefit_value: string | null;
+};
+export type PartnerBusinessDetail = Omit<PartnerBusinessOut, "offers"> &
+  PartnerBusinessContactFields & { offers: PartnerOfferDetail[] };
+export type PartnerDiscoveryItem = {
+  id: string;
+  name: string;
+  summary: string | null;
+  logo_url: string | null;
+  cover_image_url: string | null;
+  category: string | null;
+  listing_type: PartnerBusinessListingType;
+  tags: PartnerTagOut[];
+  location_count: number;
+  active_offer_count: number;
+  featured_offer_title: string | null;
+  featured_offer_benefit_type: PartnerOfferDetail["benefit_type"] | null;
+  featured_offer_benefit_value: string | null;
+};
 
 // ── 特約地圖 ──────────────────────────────────────────────────────────────────
 
@@ -39,6 +59,20 @@ export const partnerMapApi = {
     return get<PartnerMapItem[]>(`/partner-map${p.size ? `?${p.toString()}` : ""}`);
   },
   tags: () => get<PartnerTagOut[]>("/partner-map/tags"),
+  discover: (params?: {
+    listing_type?: PartnerBusinessListingType;
+    tag_ids?: string[];
+    keyword?: string;
+    has_active_offer?: boolean;
+  }) => {
+    const p = new URLSearchParams();
+    params?.tag_ids?.forEach((id) => p.append("tag_ids", id));
+    Object.entries(params ?? {}).forEach(([key, value]) => {
+      if (key === "tag_ids" || value === undefined || value === null || value === "") return;
+      p.set(key, String(value));
+    });
+    return get<PartnerDiscoveryItem[]>(`/partner-map/discover${p.size ? `?${p}` : ""}`);
+  },
   directory: (params?: { keyword?: string; limit?: string; offset?: string }) => {
     const p = new URLSearchParams();
     Object.entries(params ?? {}).forEach(([key, value]) => {

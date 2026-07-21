@@ -13,6 +13,74 @@
 
 // ── 自動生成型別（從 OpenAPI schema 衍生，do not edit）─────────────────────────
 export type {
+
+} from './api-bridge'
+
+/**
+ * types.ts — 型別薄層（部分自動生成）
+ *
+ * 本檔案的主要型別從 api-bridge.ts 再匯出（api-bridge.ts 由 openapi-typescript 自動生成）。
+ * 只有無法對應到 OpenAPI schema 的前端特有型別才在此手寫。
+ *
+ * 更新型別：
+ *   ./scripts/update-openapi.sh              # 從 FastAPI 匯出最新 openapi.json
+ *   cd apps/web && npm run generate:types     # 重建 api-types.ts
+ *   node ../../scripts/generate-bridge.mjs > /tmp/bridge_coverage.json
+ *   python3 ../../scripts/rewrite-types-ts.py # 重建本檔
+ */
+
+// ── 自動生成型別（從 OpenAPI schema 衍生，do not edit）─────────────────────────
+export type {
+  ClassRosterBulkCreate,
+  ClassRosterBulkOut,
+  ClassRosterEntryCreate,
+  ClassRosterEntryOut,
+  ClassRosterEntryUpdate,
+  DailyRegistrationItem,
+  MerchandiseSubmissionAdminListItem,
+  MerchandiseSubmissionFileOut,
+  MerchandiseSubmissionItemCreate,
+  MerchandiseSubmissionItemOut,
+  MerchandiseSubmissionItemPortalOut,
+  MerchandiseSubmissionOut,
+  MerchandiseSubmissionPortalOut,
+  MerchandiseSubmissionReview,
+  MerchandiseSubmissionSettingsOut,
+  MerchandiseSubmissionSettingsUpdate,
+  MerchandiseSubmissionStatus,
+  MerchandiseSubmissionUploadOut,
+  PageMetricItem,
+  ProductAnalyticsOut,
+  RecommendedVendorCategoryOut,
+  RecommendedVendorCreate,
+  RecommendedVendorListItem,
+  RecommendedVendorMenuKind,
+  RecommendedVendorMenuOut,
+  RecommendedVendorOut,
+  RecommendedVendorProductCreate,
+  RecommendedVendorProductOut,
+  RecommendedVendorProductUpdate,
+  RecommendedVendorStatus,
+  RecommendedVendorUpdate,
+  SubmissionCustomField,
+  TemplateImage
+} from './api-bridge'
+
+/**
+ * types.ts — 型別薄層（部分自動生成）
+ *
+ * 本檔案的主要型別從 api-bridge.ts 再匯出（api-bridge.ts 由 openapi-typescript 自動生成）。
+ * 只有無法對應到 OpenAPI schema 的前端特有型別才在此手寫。
+ *
+ * 更新型別：
+ *   ./scripts/update-openapi.sh              # 從 FastAPI 匯出最新 openapi.json
+ *   cd apps/web && npm run generate:types     # 重建 api-types.ts
+ *   node ../../scripts/generate-bridge.mjs > /tmp/bridge_coverage.json
+ *   python3 ../../scripts/rewrite-types-ts.py # 重建本檔
+ */
+
+// ── 自動生成型別（從 OpenAPI schema 衍生，do not edit）─────────────────────────
+export type {
   ChartAccountCreate,
   ChartAccountOut,
   ChartAccountUpdate,
@@ -624,33 +692,6 @@ export interface LayoutDecoration {
 
 export type SchoolClassBulkActionKind = "activate" | "deactivate" | "delete";
 
-export interface ClassRosterEntryCreate {
-  seat_number: number;
-  student_id: string;
-}
-
-export interface ClassRosterEntryUpdate {
-  seat_number?: number | null;
-  student_id?: string | null;
-}
-
-export interface ClassRosterEntryOut extends ClassRosterEntryCreate {
-  id: string;
-  class_id: string;
-  user_id: string | null;
-  user?: ClassUserBrief | null;
-}
-
-export interface ClassRosterBulkCreate {
-  entries: ClassRosterEntryCreate[];
-}
-
-export interface ClassRosterBulkOut {
-  total: number;
-  created: number;
-  updated: number;
-  entries: ClassRosterEntryOut[];
-}
 
 // ── 人員與身分總表 ────────────────────────────────────────────────────────────
 
@@ -728,143 +769,6 @@ export interface PermissionCodeInfo {
 
 // ── 校商投稿 ─────────────────────────────────────────────────────────────────
 
-export type MerchandiseSubmissionStatus =
-  | "draft"
-  | "submitted"
-  | "reviewing"
-  | "review_completed"
-  | "approved"
-  | "revision_requested"
-  | "rejected";
-
-export interface TemplateImage {
-  url: string;
-  label: string;
-}
-
-export interface SubmissionCustomField {
-  key: string;
-  label: string;
-  field_type: "text" | "textarea";
-  required: boolean;
-  placeholder: string | null;
-  help_text: string | null;
-  max_length: number;
-}
-
-export interface MerchandiseSubmissionSettingsOut {
-  id: string;
-  is_open: boolean;
-  opens_at: string | null;
-  closes_at: string | null;
-  max_file_size_mb: number;
-  require_school_email: boolean;
-  announcement: string | null;
-  announcement_title: string | null;
-  submission_intro: string | null;
-  global_fields: SubmissionCustomField[];
-  show_announcement_popup: boolean;
-  announcement_id: string | null;
-  updated_at: string;
-}
-
-export interface MerchandiseSubmissionSettingsUpdate {
-  is_open?: boolean;
-  opens_at?: string | null;
-  closes_at?: string | null;
-  max_file_size_mb?: number;
-  require_school_email?: boolean;
-  announcement?: string | null;
-  announcement_title?: string | null;
-  submission_intro?: string | null;
-  global_fields?: SubmissionCustomField[];
-  show_announcement_popup?: boolean;
-}
-
-export interface MerchandiseSubmissionItemCreate {
-  name: string;
-  description?: string | null;
-  specification?: string | null;
-  template_images: TemplateImage[];
-  custom_fields: SubmissionCustomField[];
-  sort_order?: number;
-  is_active?: boolean;
-  is_open_override?: boolean | null;
-  opens_at_override?: string | null;
-  closes_at_override?: string | null;
-  max_file_size_mb_override?: number | null;
-}
-
-export interface MerchandiseSubmissionItemOut extends MerchandiseSubmissionItemCreate {
-  id: string;
-  description: string | null;
-  specification: string | null;
-  sort_order: number;
-  is_active: boolean;
-  is_open_override: boolean | null;
-  opens_at_override: string | null;
-  closes_at_override: string | null;
-  max_file_size_mb_override: number | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface MerchandiseSubmissionItemPortalOut extends MerchandiseSubmissionItemOut {
-  is_accepting: boolean;
-  effective_opens_at: string | null;
-  effective_closes_at: string | null;
-  effective_max_file_size_mb: number;
-}
-
-export interface MerchandiseSubmissionUploadOut {
-  storage_key: string;
-  filename: string;
-  content_type: string;
-  file_size: number;
-  url: string;
-}
-
-export interface MerchandiseSubmissionFileOut extends MerchandiseSubmissionUploadOut {
-  id: string;
-}
-
-export interface MerchandiseSubmissionOut {
-  id: string;
-  item_id: string;
-  item_name: string;
-  status: MerchandiseSubmissionStatus;
-  account_snapshot: Record<string, string>;
-  field_values: Record<string, string>;
-  files: MerchandiseSubmissionFileOut[];
-  submitted_at: string | null;
-  reviewed_at: string | null;
-  reviewer_name: string | null;
-  voting_survey_id: string | null;
-  voting_survey_title: string | null;
-  voting_survey_status: SurveyStatus | null;
-  review_note: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface MerchandiseSubmissionAdminListItem extends MerchandiseSubmissionOut {
-  submitter_name: string;
-  submitter_email: string;
-  submitter_student_id: string | null;
-}
-
-export interface MerchandiseSubmissionReview {
-  status: "reviewing" | "review_completed" | "approved" | "revision_requested" | "rejected";
-  voting_survey_id?: string | null;
-  review_note?: string | null;
-}
-
-export interface MerchandiseSubmissionPortalOut {
-  settings: MerchandiseSubmissionSettingsOut;
-  items: MerchandiseSubmissionItemPortalOut[];
-  is_eligible_submitter: boolean;
-}
-
 
 export interface AdminUserDetail {
   id: string;
@@ -898,139 +802,6 @@ export interface OrgWithPositions {
 }
 
 // ── 學餐系統型別 ──────────────────────────────────────────────────────────────
-
-export type RecommendedVendorStatus = "draft" | "active" | "hidden" | "archived";
-export type RecommendedVendorMenuKind = "link" | "image" | "pdf";
-
-export interface RecommendedVendorCategoryOut {
-  id: string;
-  name: string;
-  description: string | null;
-  sort_order: number;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface RecommendedVendorMenuOut {
-  id: string;
-  vendor_id: string;
-  title: string;
-  kind: RecommendedVendorMenuKind;
-  url: string | null;
-  filename: string | null;
-  content_type: string | null;
-  file_size: number | null;
-  sort_order: number;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface RecommendedVendorProductCreate {
-  name: string;
-  description?: string | null;
-  price_text?: string | null;
-  image_url?: string | null;
-  menu_url?: string | null;
-  sort_order?: number;
-  is_active?: boolean;
-}
-
-export interface RecommendedVendorProductUpdate {
-  name?: string;
-  description?: string | null;
-  price_text?: string | null;
-  image_url?: string | null;
-  menu_url?: string | null;
-  sort_order?: number;
-  is_active?: boolean;
-}
-
-export interface RecommendedVendorProductOut extends RecommendedVendorProductCreate {
-  id: string;
-  vendor_id: string;
-  name: string;
-  description: string | null;
-  price_text: string | null;
-  image_url: string | null;
-  menu_url: string | null;
-  sort_order: number;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface RecommendedVendorCreate {
-  name: string;
-  summary?: string | null;
-  description?: string | null;
-  category_id?: string | null;
-  address?: string | null;
-  latitude?: number | null;
-  longitude?: number | null;
-  google_maps_url?: string | null;
-  business_hours_text?: string | null;
-  contact_name?: string | null;
-  contact_phone?: string | null;
-  contact_email?: string | null;
-  line_id?: string | null;
-  social_url?: string | null;
-  website_url?: string | null;
-  ordering_instructions?: string | null;
-  menu_url?: string | null;
-  hygiene_inspection_date?: string | null;
-  hygiene_inspection_expires_at?: string | null;
-  hygiene_certificate_url?: string | null;
-  hygiene_note?: string | null;
-  status?: RecommendedVendorStatus;
-  sort_order?: number;
-  is_active?: boolean;
-  internal_note?: string | null;
-  products?: RecommendedVendorProductCreate[];
-}
-
-export type RecommendedVendorUpdate = Partial<RecommendedVendorCreate>;
-
-export interface RecommendedVendorListItem {
-  id: string;
-  name: string;
-  summary: string | null;
-  category: string | null;
-  category_id: string | null;
-  address: string | null;
-  latitude: number | null;
-  longitude: number | null;
-  google_maps_url: string | null;
-  business_hours_text: string | null;
-  contact_phone: string | null;
-  contact_email: string | null;
-  line_id: string | null;
-  menu_url: string | null;
-  hygiene_inspection_date: string | null;
-  hygiene_inspection_expires_at: string | null;
-  hygiene_verified: boolean;
-  status: string;
-  sort_order: number;
-  is_active: boolean;
-  product_count: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface RecommendedVendorOut extends RecommendedVendorListItem {
-  description: string | null;
-  contact_name: string | null;
-  social_url: string | null;
-  website_url: string | null;
-  ordering_instructions: string | null;
-  hygiene_certificate_url: string | null;
-  hygiene_note: string | null;
-  internal_note: string | null;
-  created_by: string | null;
-  products: RecommendedVendorProductOut[];
-  menus: RecommendedVendorMenuOut[];
-}
 
 
 /** 排程品項訂購統計（熱門排序用） */
@@ -1163,29 +934,6 @@ export interface AnalyticsInsightItem {
   reason: string;
   recommended_action: string;
   created_at: string;
-}
-
-export interface DailyRegistrationItem {
-  date: string;
-  count: number;
-}
-
-export interface PageMetricItem {
-  path: string;
-  label: string;
-  views: number;
-  unique_visitors: number;
-  click_rate: number;
-}
-
-export interface ProductAnalyticsOut {
-  date_from: string;
-  date_to: string;
-  total_users: number;
-  total_page_views: number;
-  active_pages: number;
-  daily_registrations: DailyRegistrationItem[];
-  page_metrics: PageMetricItem[];
 }
 
 

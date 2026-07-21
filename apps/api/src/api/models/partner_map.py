@@ -38,10 +38,18 @@ class PartnerBusinessStatus(enum.StrEnum):
 
 
 class PartnerBusinessListingType(enum.StrEnum):
-    """特約刊登方式：地圖點位或僅提供聯絡方式。"""
+    """特約合作型態：實體店家或線上合作。"""
 
-    LOCATION = "location"
-    CONTACT = "contact"
+    PHYSICAL = "physical"
+    ONLINE = "online"
+
+
+class PartnerOfferBenefitType(enum.StrEnum):
+    DISCOUNT = "discount"
+    GIFT = "gift"
+    BUNDLE = "bundle"
+    MEMBER_PRICE = "member_price"
+    OTHER = "other"
 
 
 class PartnerSubmissionStatus(enum.StrEnum):
@@ -105,8 +113,8 @@ class PartnerBusiness(Base, TimestampMixin):
     listing_type: Mapped[str] = mapped_column(
         String(20),
         nullable=False,
-        default=PartnerBusinessListingType.LOCATION.value,
-        server_default=PartnerBusinessListingType.LOCATION.value,
+        default=PartnerBusinessListingType.PHYSICAL.value,
+        server_default=PartnerBusinessListingType.PHYSICAL.value,
         index=True,
     )
     contact_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -190,6 +198,13 @@ class PartnerOffer(Base, TimestampMixin):
         index=True,
     )
     title: Mapped[str] = mapped_column(String(200), nullable=False)
+    benefit_type: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default=PartnerOfferBenefitType.OTHER.value,
+        server_default=PartnerOfferBenefitType.OTHER.value,
+    )
+    benefit_value: Mapped[str | None] = mapped_column(String(120), nullable=True)
     public_summary: Mapped[str | None] = mapped_column(String(300), nullable=True)
     full_description: Mapped[str | None] = mapped_column(Text, nullable=True)
     instructions: Mapped[str | None] = mapped_column(Text, nullable=True)

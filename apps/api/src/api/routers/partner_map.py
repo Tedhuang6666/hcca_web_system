@@ -12,7 +12,13 @@ from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_optional_user
 from api.dependencies.permissions import require_permission
-from api.models.partner_map import PartnerBusiness, PartnerLocation, PartnerOffer, PartnerTag
+from api.models.partner_map import (
+    PartnerBusiness,
+    PartnerBusinessListingType,
+    PartnerLocation,
+    PartnerOffer,
+    PartnerTag,
+)
 from api.models.user import User
 from api.routers._common import or_404
 from api.schemas.partner_map import (
@@ -20,6 +26,7 @@ from api.schemas.partner_map import (
     PartnerBusinessListItem,
     PartnerBusinessOut,
     PartnerBusinessUpdate,
+    PartnerDiscoveryItem,
     PartnerLocationCreate,
     PartnerLocationOut,
     PartnerLocationUpdate,
@@ -51,8 +58,6 @@ def _offer_out(offer: PartnerOffer, *, include_private: bool) -> PartnerOfferOut
     out = PartnerOfferOut.model_validate(offer)
     out.is_current = map_svc.is_offer_current(offer)
     if not include_private:
-        out.full_description = None
-        out.instructions = None
         out.member_note = None
     return out
 
@@ -83,7 +88,7 @@ def _business_out(
             for location in business.locations
             if include_private or location.is_active
         ]
-        if business.listing_type == "location"
+        if business.listing_type == PartnerBusinessListingType.PHYSICAL.value
         else []
     )
     out.offers = [
@@ -103,6 +108,26 @@ def _list_item(business: PartnerBusiness) -> PartnerBusinessListItem:
     out.rating_count = rating_count
     out.popularity_score = map_svc.popularity_score(business)
     return out
+
+
+def _discovery_item(business: PartnerBusiness) -> PartnerDiscoveryItem:
+    offers = [offer for offer in business.offers if map_svc.is_offer_current(offer)]
+    featured = offers[0] if offers else None
+    return PartnerDiscoveryItem(
+        id=business.id,
+        name=business.name,
+        summary=business.summary,
+        logo_url=business.logo_url,
+        cover_image_url=business.cover_image_url,
+        category=business.category,
+        listing_type=business.listing_type,
+        tags=[PartnerTagOut.model_validate(tag) for tag in business.tags if tag.is_active],
+        location_count=len([location for location in business.locations if location.is_active]),
+        active_offer_count=len(offers),
+        featured_offer_title=featured.title if featured else None,
+        featured_offer_benefit_type=featured.benefit_type if featured else None,
+        featured_offer_benefit_value=featured.benefit_value if featured else None,
+    )
 
 
 def _map_item(location: PartnerLocation, *, include_private: bool) -> PartnerMapItem:
@@ -186,6 +211,28 @@ async def list_map_items(
 @router.get("/tags", response_model=list[PartnerTagOut], summary="列出特約標籤")
 async def list_public_tags(db: DbDep) -> list[PartnerTag]:
     return await map_svc.list_tags(db)
+
+
+@router.get("/discover", response_model=list[PartnerDiscoveryItem], summary="探索全部特約優惠")
+async def discover_partners(
+    db: DbDep,
+    listing_type: PartnerBusinessListingType | None = Query(None),
+    tag_ids: list[uuid.UUID] | None = Query(None),
+    keyword: str | None = Query(None, max_length=100),
+    has_active_offer: bool = Query(False),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+) -> list[PartnerDiscoveryItem]:
+    businesses = await map_svc.discover_businesses(
+        db,
+        listing_type=listing_type,
+        tag_ids=tag_ids,
+        keyword=keyword,
+        has_active_offer=has_active_offer,
+        limit=limit,
+        offset=offset,
+    )
+    return [_discovery_item(business) for business in businesses]
 
 
 @router.get(

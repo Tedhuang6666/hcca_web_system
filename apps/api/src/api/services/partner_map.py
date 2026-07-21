@@ -133,10 +133,11 @@ async def create_business(
     db: AsyncSession, data: PartnerBusinessCreate, created_by: uuid.UUID | None
 ) -> PartnerBusiness:
     tags = await _resolve_tags(db, data.tag_ids)
-    fields = data.model_dump(exclude={"tag_ids"})
+    fields = data.model_dump(exclude={"tag_ids", "initial_offers"})
     fields["status"] = str(fields["status"])
     business = PartnerBusiness(**fields, created_by=created_by)
     business.tags = tags
+    business.offers = [PartnerOffer(**offer.model_dump()) for offer in data.initial_offers]
     db.add(business)
     await db.flush()
     await db.refresh(business, ["tags", "locations", "offers", "ratings"])
@@ -191,7 +192,7 @@ async def list_contact_businesses(
         select(PartnerBusiness)
         .where(
             PartnerBusiness.status == PartnerBusinessStatus.ACTIVE.value,
-            PartnerBusiness.listing_type == PartnerBusinessListingType.CONTACT.value,
+            PartnerBusiness.listing_type == PartnerBusinessListingType.ONLINE.value,
         )
         .options(*_business_options())
     )
@@ -220,6 +221,53 @@ async def delete_business(db: AsyncSession, business: PartnerBusiness) -> None:
     await db.delete(business)
 
 
+async def discover_businesses(
+    db: AsyncSession,
+    *,
+    listing_type: PartnerBusinessListingType | None = None,
+    tag_ids: list[uuid.UUID] | None = None,
+    keyword: str | None = None,
+    has_active_offer: bool = False,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[PartnerBusiness]:
+    q = (
+        select(PartnerBusiness)
+        .where(PartnerBusiness.status == PartnerBusinessStatus.ACTIVE.value)
+        .options(*_business_options())
+    )
+    if listing_type is not None:
+        q = q.where(PartnerBusiness.listing_type == listing_type.value)
+    if tag_ids:
+        q = q.where(
+            exists()
+            .where(partner_business_tags.c.business_id == PartnerBusiness.id)
+            .where(partner_business_tags.c.tag_id.in_(set(tag_ids)))
+        )
+    if keyword:
+        term = like_contains(keyword.strip())
+        q = q.where(
+            or_(
+                PartnerBusiness.name.ilike(term),
+                PartnerBusiness.summary.ilike(term),
+                PartnerBusiness.description.ilike(term),
+                PartnerBusiness.category.ilike(term),
+                PartnerBusiness.contact_name.ilike(term),
+                PartnerBusiness.instagram_handle.ilike(term),
+                PartnerBusiness.line_id.ilike(term),
+            )
+        )
+    if has_active_offer:
+        q = q.where(
+            exists()
+            .where(PartnerOffer.business_id == PartnerBusiness.id)
+            .where(active_offer_clause())
+        )
+    q = q.order_by(PartnerBusiness.sort_order, PartnerBusiness.name).offset(offset).limit(limit)
+    result = await db.execute(q)
+    return list(result.scalars().unique().all())
+
+
 async def list_map_locations(
     db: AsyncSession,
     *,
@@ -238,7 +286,7 @@ async def list_map_locations(
         .join(PartnerLocation.business)
         .where(
             PartnerBusiness.status == PartnerBusinessStatus.ACTIVE.value,
-            PartnerBusiness.listing_type == PartnerBusinessListingType.LOCATION.value,
+            PartnerBusiness.listing_type == PartnerBusinessListingType.PHYSICAL.value,
             PartnerLocation.is_active == True,  # noqa: E712
         )
         .options(
@@ -461,7 +509,7 @@ async def ranking(db: AsyncSession, *, limit: int = 10) -> list[PartnerBusiness]
         select(PartnerBusiness)
         .where(
             PartnerBusiness.status == PartnerBusinessStatus.ACTIVE.value,
-            PartnerBusiness.listing_type == PartnerBusinessListingType.LOCATION.value,
+            PartnerBusiness.listing_type == PartnerBusinessListingType.PHYSICAL.value,
         )
         .options(*_business_options())
         .order_by(desc(PartnerBusiness.checkin_count), desc(PartnerBusiness.view_count))

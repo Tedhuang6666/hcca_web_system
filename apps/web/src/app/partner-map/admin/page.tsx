@@ -25,7 +25,7 @@ const emptyBusiness = {
   cover_image_url: "",
   category: "",
   business_hours_text: "",
-  listing_type: "location" as PartnerBusinessListingType,
+  listing_type: "physical" as PartnerBusinessListingType,
   contact_name: "",
   contact_phone: "",
   contact_email: "",
@@ -36,6 +36,13 @@ const emptyBusiness = {
   sort_order: 0,
   internal_note: "",
   tag_ids: [] as string[],
+};
+
+const statusLabels: Record<PartnerBusinessStatus, string> = {
+  draft: "草稿",
+  active: "公開",
+  hidden: "暫時隱藏",
+  archived: "封存",
 };
 
 export default function PartnerMapAdminPage() {
@@ -57,6 +64,8 @@ export default function PartnerMapAdminPage() {
   });
   const [offerForm, setOfferForm] = useState({
     title: "",
+    benefit_type: "discount" as "discount" | "gift" | "bundle" | "member_price" | "other",
+    benefit_value: "",
     public_summary: "",
     full_description: "",
     instructions: "",
@@ -146,12 +155,23 @@ export default function PartnerMapAdminPage() {
         line_id: businessForm.line_id || null,
         other_contact: businessForm.other_contact || null,
         internal_note: businessForm.internal_note || null,
+        initial_offers: !selected && offerForm.title.trim() ? [{
+          title: offerForm.title.trim(),
+          benefit_type: offerForm.benefit_type,
+          benefit_value: offerForm.benefit_value || null,
+          public_summary: offerForm.public_summary || null,
+          full_description: offerForm.full_description || null,
+          instructions: offerForm.instructions || null,
+          sort_order: 0,
+          is_active: true,
+        }] : [],
       };
       const business = selected
         ? await partnerMapApi.updateBusiness(selected.id, payload)
         : await partnerMapApi.createBusiness(payload);
       toast.success(selected ? "已更新店家" : "已建立店家");
       setSelected(business);
+      if (!selected) setOfferForm({ title: "", benefit_type: "discount", benefit_value: "", public_summary: "", full_description: "", instructions: "" });
       load();
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : "儲存失敗");
@@ -232,13 +252,15 @@ export default function PartnerMapAdminPage() {
     try {
       await partnerMapApi.createOffer(selected.id, {
         title: offerForm.title,
+        benefit_type: offerForm.benefit_type,
+        benefit_value: offerForm.benefit_value || null,
         public_summary: offerForm.public_summary || null,
         full_description: offerForm.full_description || null,
         instructions: offerForm.instructions || null,
         sort_order: 0,
         is_active: true,
       });
-      setOfferForm({ title: "", public_summary: "", full_description: "", instructions: "" });
+      setOfferForm({ title: "", benefit_type: "discount", benefit_value: "", public_summary: "", full_description: "", instructions: "" });
       selectBusiness(selected.id);
       load();
     } catch (error) {
@@ -290,11 +312,11 @@ export default function PartnerMapAdminPage() {
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate text-sm font-medium">{business.name}</span>
                     <span className="rounded px-1.5 py-0.5 text-[11px]" style={{ background: "var(--bg-elevated)", color: "var(--text-muted)" }}>
-                    {business.status}
+                    {statusLabels[business.status as PartnerBusinessStatus] ?? business.status}
                   </span>
                 </div>
                   <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                    {business.listing_type === "contact" ? "聯絡合作" : `${business.location_count} 點位`} · {business.active_offer_count} 有效優惠
+                    {business.listing_type === "online" ? "線上合作" : `${business.location_count} 個實體據點`} · {business.active_offer_count} 個優惠
                   </p>
                 </button>
               ))}
@@ -416,17 +438,17 @@ export default function PartnerMapAdminPage() {
               <label className="space-y-1">
                 <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>狀態</span>
                 <select className="input" value={businessForm.status} onChange={(e) => setBusinessForm((f) => ({ ...f, status: e.target.value as PartnerBusinessStatus }))}>
-                  <option value="draft">draft</option>
-                  <option value="active">active</option>
-                  <option value="hidden">hidden</option>
-                  <option value="archived">archived</option>
+                  <option value="draft">草稿</option>
+                  <option value="active">公開</option>
+                  <option value="hidden">暫時隱藏</option>
+                  <option value="archived">封存</option>
                 </select>
               </label>
               <label className="space-y-1">
-                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>刊登方式</span>
+                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>合作型態</span>
                 <select className="input" value={businessForm.listing_type} onChange={(e) => setBusinessForm((f) => ({ ...f, listing_type: e.target.value as PartnerBusinessListingType }))}>
-                  <option value="location">地圖位置</option>
-                  <option value="contact">僅提供聯絡方式</option>
+                  <option value="physical">實體店家（顯示據點）</option>
+                  <option value="online">線上合作（不顯示位置）</option>
                 </select>
               </label>
               <label className="space-y-1 md:col-span-2">
@@ -508,6 +530,20 @@ export default function PartnerMapAdminPage() {
                 );
               })}
             </div>
+            {!selected && <div className="mt-6 border-t pt-5" style={{ borderColor: "var(--border)" }}>
+              <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>首個優惠（可選）</h2>
+              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>建立時一併公開優惠；完整條款會直接顯示給所有訪客。</p>
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                <input className="input" placeholder="優惠標題，例如：學生證折扣" value={offerForm.title} onChange={(e) => setOfferForm((f) => ({ ...f, title: e.target.value }))} />
+                <input className="input" placeholder="優惠重點，例如：全館 9 折" value={offerForm.benefit_value} onChange={(e) => setOfferForm((f) => ({ ...f, benefit_value: e.target.value }))} />
+                <select className="input" value={offerForm.benefit_type} onChange={(e) => setOfferForm((f) => ({ ...f, benefit_type: e.target.value as typeof f.benefit_type }))}>
+                  <option value="discount">折扣</option><option value="gift">贈品</option><option value="bundle">組合優惠</option><option value="member_price">學生價</option><option value="other">其他合作優惠</option>
+                </select>
+                <input className="input" placeholder="公開摘要" value={offerForm.public_summary} onChange={(e) => setOfferForm((f) => ({ ...f, public_summary: e.target.value }))} />
+                <textarea className="input min-h-20 md:col-span-2" placeholder="完整優惠條款" value={offerForm.full_description} onChange={(e) => setOfferForm((f) => ({ ...f, full_description: e.target.value }))} />
+                <textarea className="input min-h-20 md:col-span-2" placeholder="使用方式" value={offerForm.instructions} onChange={(e) => setOfferForm((f) => ({ ...f, instructions: e.target.value }))} />
+              </div>
+            </div>}
             <div className="mt-4 flex justify-end">
               <button className="btn" onClick={saveBusiness} disabled={saving} style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
                 <Save size={15} aria-hidden="true" />{saving ? "儲存中..." : "儲存店家"}
@@ -518,9 +554,9 @@ export default function PartnerMapAdminPage() {
           {selected && (
             <div className="grid gap-4 xl:grid-cols-2">
               <section className="card p-5">
-                <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{selected.listing_type === "contact" ? "位置設定" : "點位"}</h2>
-                {selected.listing_type === "contact" ? (
-                  <p className="mt-3 text-sm" style={{ color: "var(--text-muted)" }}>此合作夥伴不顯示地圖位置，請使用上方聯絡方式欄位提供聯絡資訊。</p>
+                <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{selected.listing_type === "online" ? "線上合作設定" : "實體據點"}</h2>
+                {selected.listing_type === "online" ? (
+                  <p className="mt-3 text-sm" style={{ color: "var(--text-muted)" }}>線上合作不會對學生顯示位置。請在上方補齊網站、Instagram、LINE 或其他聯絡方式。</p>
                 ) : (
                   <>
                     <div className="mt-3 space-y-2">
@@ -565,6 +601,12 @@ export default function PartnerMapAdminPage() {
                 </div>
                 <div className="mt-4 space-y-2">
                   <input className="input" placeholder="優惠標題，例如：學生證折扣" value={offerForm.title} onChange={(e) => setOfferForm((f) => ({ ...f, title: e.target.value }))} />
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <select className="input" value={offerForm.benefit_type} onChange={(e) => setOfferForm((f) => ({ ...f, benefit_type: e.target.value as typeof f.benefit_type }))}>
+                      <option value="discount">折扣</option><option value="gift">贈品</option><option value="bundle">組合優惠</option><option value="member_price">學生價</option><option value="other">其他合作優惠</option>
+                    </select>
+                    <input className="input" placeholder="優惠重點，例如：全品項 9 折" value={offerForm.benefit_value} onChange={(e) => setOfferForm((f) => ({ ...f, benefit_value: e.target.value }))} />
+                  </div>
                   <input className="input" placeholder="公開摘要，例如：出示學生證享 9 折" value={offerForm.public_summary} onChange={(e) => setOfferForm((f) => ({ ...f, public_summary: e.target.value }))} />
                   <textarea className="input min-h-20" placeholder="優惠詳情，例如：全品項 9 折，部分商品除外" value={offerForm.full_description} onChange={(e) => setOfferForm((f) => ({ ...f, full_description: e.target.value }))} />
                   <textarea className="input min-h-20" placeholder="使用方式，例如：聯絡時出示學生證或輸入優惠碼" value={offerForm.instructions} onChange={(e) => setOfferForm((f) => ({ ...f, instructions: e.target.value }))} />

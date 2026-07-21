@@ -69,6 +69,7 @@ async def _seed_partner_map(db: AsyncSession) -> tuple[User, PartnerBusiness, Pa
         public_summary="出示學生證享折扣",
         full_description="全品項九折",
         instructions="結帳前出示學生證",
+        member_note="登入學生可見的補充提醒",
         starts_at=datetime.now(UTC) - timedelta(days=1),
         ends_at=datetime.now(UTC) + timedelta(days=7),
     )
@@ -79,7 +80,7 @@ async def _seed_partner_map(db: AsyncSession) -> tuple[User, PartnerBusiness, Pa
 
 
 @pytest.mark.asyncio
-async def test_public_partner_map_hides_private_offer_details(
+async def test_public_partner_map_shows_full_offer_terms(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
@@ -95,12 +96,13 @@ async def test_public_partner_map_hides_private_offer_details(
     assert detail_response.status_code == 200
     offer = detail_response.json()["offers"][0]
     assert offer["public_summary"] == "出示學生證享折扣"
-    assert offer["full_description"] is None
-    assert offer["instructions"] is None
+    assert offer["full_description"] == "全品項九折"
+    assert offer["instructions"] == "結帳前出示學生證"
+    assert offer["member_note"] is None
 
 
 @pytest.mark.asyncio
-async def test_logged_in_partner_map_shows_private_offer_details(
+async def test_logged_in_partner_map_keeps_member_note_private_to_visitors(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
@@ -119,6 +121,7 @@ async def test_logged_in_partner_map_shows_private_offer_details(
     assert payload["can_view_private_details"] is True
     assert payload["offers"][0]["full_description"] == "全品項九折"
     assert payload["offers"][0]["instructions"] == "結帳前出示學生證"
+    assert payload["offers"][0]["member_note"] == "登入學生可見的補充提醒"
 
 
 @pytest.mark.asyncio
@@ -157,7 +160,7 @@ async def test_contact_business_is_directory_only_and_exposes_contact_methods(
         name="自治服飾合作廠商",
         summary="校服與社團服合作窗口",
         status=PartnerBusinessStatus.ACTIVE.value,
-        listing_type=PartnerBusinessListingType.CONTACT.value,
+        listing_type=PartnerBusinessListingType.ONLINE.value,
         contact_name="合作窗口",
         contact_phone="0912-345-678",
         contact_email="partner@example.com",
@@ -189,7 +192,7 @@ async def test_contact_business_is_directory_only_and_exposes_contact_methods(
     assert map_response.status_code == 200
     assert all(item["business_id"] != str(business.id) for item in map_response.json())
     assert directory_response.status_code == 200
-    assert directory_response.json()[0]["listing_type"] == "contact"
+    assert directory_response.json()[0]["listing_type"] == "online"
     assert directory_response.json()[0]["instagram_handle"] == "@campuswear"
     assert directory_response.json()[0]["active_offer_count"] == 1
     assert detail_response.status_code == 200
@@ -198,7 +201,33 @@ async def test_contact_business_is_directory_only_and_exposes_contact_methods(
     assert detail["line_id"] == "campuswear"
     assert detail["other_contact"] == "可預約看樣，請先私訊。"
     assert detail["offers"][0]["public_summary"] == "出示學生證享 9 折"
-    assert detail["offers"][0]["full_description"] is None
+    assert detail["offers"][0]["full_description"] == "全品項 9 折，部分商品除外。"
+
+
+@pytest.mark.asyncio
+async def test_discovery_lists_physical_and_online_partners(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    _, physical, _ = await _seed_partner_map(db_session)
+    online = PartnerBusiness(
+        name="班服合作商",
+        status=PartnerBusinessStatus.ACTIVE.value,
+        listing_type=PartnerBusinessListingType.ONLINE.value,
+    )
+    db_session.add(online)
+    await db_session.flush()
+
+    response = await client.get("/partner-map/discover", headers=HOST_HEADERS)
+    physical_response = await client.get(
+        "/partner-map/discover", params={"listing_type": "physical"}, headers=HOST_HEADERS
+    )
+
+    assert response.status_code == 200
+    assert {item["id"] for item in response.json()} == {str(physical.id), str(online.id)}
+    assert physical_response.status_code == 200
+    assert [item["id"] for item in physical_response.json()] == [str(physical.id)]
+    assert physical_response.json()[0]["featured_offer_benefit_type"] == "other"
 
 
 @pytest.mark.asyncio
@@ -246,6 +275,14 @@ async def test_partner_map_admin_can_create_business(
             "summary": "議會合作文具店",
             "status": "active",
             "tag_ids": [tag_response.json()["id"]],
+            "initial_offers": [
+                {
+                    "title": "學生用品折扣",
+                    "benefit_type": "discount",
+                    "benefit_value": "全館 9 折",
+                    "instructions": "結帳前出示學生證。",
+                }
+            ],
         },
         headers=HOST_HEADERS,
     )
@@ -255,3 +292,4 @@ async def test_partner_map_admin_can_create_business(
     payload = response.json()
     assert payload["name"] == "自治文具"
     assert payload["tags"][0]["name"] == "文具"
+    assert payload["offers"][0]["benefit_value"] == "全館 9 折"

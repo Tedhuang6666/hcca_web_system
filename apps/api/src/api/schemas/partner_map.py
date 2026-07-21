@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from api.models.partner_map import (
     PartnerBusinessListingType,
     PartnerBusinessStatus,
+    PartnerOfferBenefitType,
     PartnerSubmissionStatus,
 )
 
@@ -84,6 +85,8 @@ class PartnerLocationOut(BaseModel):
 
 class PartnerOfferCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
+    benefit_type: PartnerOfferBenefitType = PartnerOfferBenefitType.OTHER
+    benefit_value: str | None = Field(None, max_length=120)
     public_summary: str | None = Field(None, max_length=300)
     full_description: str | None = None
     instructions: str | None = None
@@ -96,6 +99,8 @@ class PartnerOfferCreate(BaseModel):
 
 class PartnerOfferUpdate(BaseModel):
     title: str | None = Field(None, min_length=1, max_length=200)
+    benefit_type: PartnerOfferBenefitType | None = None
+    benefit_value: str | None = Field(None, max_length=120)
     public_summary: str | None = Field(None, max_length=300)
     full_description: str | None = None
     instructions: str | None = None
@@ -112,6 +117,8 @@ class PartnerOfferOut(BaseModel):
     id: uuid.UUID
     business_id: uuid.UUID
     title: str
+    benefit_type: str
+    benefit_value: str | None
     public_summary: str | None
     full_description: str | None
     instructions: str | None
@@ -135,7 +142,7 @@ class PartnerBusinessCreate(BaseModel):
     cover_image_url: str | None = None
     category: str | None = Field(None, max_length=50)
     business_hours_text: str | None = Field(None, max_length=300)
-    listing_type: PartnerBusinessListingType = PartnerBusinessListingType.LOCATION
+    listing_type: PartnerBusinessListingType = PartnerBusinessListingType.PHYSICAL
     contact_name: str | None = Field(None, max_length=100)
     contact_phone: str | None = Field(None, max_length=50)
     contact_email: EmailStr | None = None
@@ -152,6 +159,7 @@ class PartnerBusinessCreate(BaseModel):
     sort_order: int = 0
     internal_note: str | None = None
     tag_ids: list[uuid.UUID] = Field(default_factory=list)
+    initial_offers: list[PartnerOfferCreate] = Field(default_factory=list, max_length=20)
 
 
 class PartnerBusinessUpdate(BaseModel):
@@ -251,6 +259,24 @@ class PartnerBusinessOut(BaseModel):
     locations: list[PartnerLocationOut] = []
     offers: list[PartnerOfferOut] = []
     can_view_private_details: bool = False
+
+
+class PartnerDiscoveryItem(BaseModel):
+    """學生端優惠探索清單：讓實體與線上合作共用同一套入口。"""
+
+    id: uuid.UUID
+    name: str
+    summary: str | None
+    logo_url: str | None
+    cover_image_url: str | None
+    category: str | None
+    listing_type: str
+    tags: list[PartnerTagOut]
+    location_count: int
+    active_offer_count: int
+    featured_offer_title: str | None
+    featured_offer_benefit_type: str | None
+    featured_offer_benefit_value: str | None
 
 
 class PartnerMapItem(BaseModel):
