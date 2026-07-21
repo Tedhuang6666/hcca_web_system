@@ -5,20 +5,10 @@ target="${1:-auto}"
 keep_old="${KEEP_OLD:-true}"
 maintenance_mode="${MAINTENANCE_MODE:-0}"
 drain_seconds="${DRAIN_SECONDS:-10}"
+migration_compatible="${MIGRATION_COMPATIBLE:-0}"
 compose_file="${COMPOSE_FILE:-docker-compose.bluegreen.yml}"
 env_file="${ENV_FILE:-.env.production}"
 export PROD_ENV_FILE="$env_file"
-
-# 維護模式只保留一個 API slot，預設採用較小的啟動資源，避免新版啟動時再次
-# 以 4 workers + pool 10/20 把低規格主機推入 OOM。正式環境仍可用環境變數覆寫。
-if [[ "$maintenance_mode" == "1" ]]; then
-  export GUNICORN_WORKERS="${GUNICORN_WORKERS:-1}"
-  export DB_POOL_SIZE="${DB_POOL_SIZE:-2}"
-  export DB_MAX_OVERFLOW="${DB_MAX_OVERFLOW:-0}"
-  export CELERY_WORKER_CONCURRENCY="${CELERY_WORKER_CONCURRENCY:-1}"
-  export CELERY_DB_POOL_SIZE="${CELERY_DB_POOL_SIZE:-2}"
-  export CELERY_DB_MAX_OVERFLOW="${CELERY_DB_MAX_OVERFLOW:-0}"
-fi
 
 state_dir="${DEPLOY_STATE_DIR:-.deploy-state}"
 state_file="$state_dir/active-slot"
@@ -45,6 +35,7 @@ if [[ "$target" != "blue" && "$target" != "green" ]]; then
   echo "Usage: $0 [blue|green|auto]"
   echo "Optional env: ENV_FILE=.env.production COMPOSE_FILE=docker-compose.bluegreen.yml"
   echo "  MAINTENANCE_MODE=1 先顯示靜態維護頁，再停止舊 API/Web 以節省資源"
+  echo "  MIGRATION_COMPATIBLE=1 明確確認 migration 可讓舊映像繼續運作"
   echo "  KEEP_OLD=false      blue-green 模式切流後停止舊 slot"
   exit 2
 fi
@@ -56,6 +47,20 @@ else
 fi
 
 compose=(docker compose --env-file "$env_file" -f "$compose_file")
+bootstrap_compose=("${compose[@]}")
+if [[ "$maintenance_mode" == "1" ]]; then
+  # 僅套用在新版 bootstrap 與 migration；不寫入 env/compose，也不成為常駐設定。
+  bootstrap_compose=(
+    env
+    "GUNICORN_WORKERS=${BOOTSTRAP_GUNICORN_WORKERS:-1}"
+    "DB_POOL_SIZE=${BOOTSTRAP_DB_POOL_SIZE:-2}"
+    "DB_MAX_OVERFLOW=${BOOTSTRAP_DB_MAX_OVERFLOW:-0}"
+    "CELERY_WORKER_CONCURRENCY=${BOOTSTRAP_CELERY_WORKER_CONCURRENCY:-1}"
+    "CELERY_DB_POOL_SIZE=${BOOTSTRAP_CELERY_DB_POOL_SIZE:-2}"
+    "CELERY_DB_MAX_OVERFLOW=${BOOTSTRAP_CELERY_DB_MAX_OVERFLOW:-0}"
+    "${compose[@]}"
+  )
+fi
 worker_services=()
 target_services=("api-$target" "web-$target")
 if [[ "${WITH_WORKERS:-0}" == "1" ]]; then
@@ -105,39 +110,19 @@ enter_maintenance() {
   echo "Maintenance page is now active."
 }
 
-restore_old_slot() {
-  if [[ "$has_previous_slot" != "1" ]]; then
-    echo "No previous slot is available for rollback." >&2
-    return 1
-  fi
-
-  echo "Attempting to restore old slot: $old..." >&2
-  if [[ "$maintenance_mode" == "1" ]]; then
-    "${compose[@]}" stop "web-$target" "api-$target" || true
-    if [[ "${WITH_WORKERS:-0}" == "1" ]]; then
-      "${compose[@]}" stop "celery-worker-$target" || true
-    fi
-  fi
-  "${compose[@]}" up -d "api-$old" "web-$old"
-  if [[ "${WITH_WORKERS:-0}" == "1" ]]; then
-    "${compose[@]}" up -d "celery-worker-$old"
-  fi
-  wait_healthy "api-$old" || return 1
-  wait_healthy "web-$old" || return 1
-  reload_caddy "$old"
-  tmp_state="$(mktemp "$state_dir/active-slot.XXXXXX")"
-  printf '%s\n' "$old" > "$tmp_state"
-  mv -f "$tmp_state" "$state_file"
-  echo "Traffic restored to $old." >&2
-}
-
-abort_maintenance_deploy() {
-  echo "Target slot failed; keeping the maintenance page active." >&2
+stop_target_slot() {
   "${compose[@]}" stop "web-$target" "api-$target" || true
   if [[ "${WITH_WORKERS:-0}" == "1" ]]; then
     "${compose[@]}" stop "celery-worker-$target" || true
   fi
-  restore_old_slot || true
+}
+
+abort_deploy() {
+  stop_target_slot
+  if [[ "$maintenance_mode" != "1" ]]; then
+    enter_maintenance || true
+  fi
+  echo "不會自動啟動舊 slot；請先人工確認 migration 與舊映像相容性。" >&2
   exit 1
 }
 
@@ -164,40 +149,42 @@ if [[ "$maintenance_mode" == "1" ]]; then
 fi
 
 echo "Applying backward-compatible migrations..."
-if ! "${compose[@]}" run --rm migrate; then
-  echo "Migration failed; keeping the maintenance page active." >&2
-  if [[ "$maintenance_mode" == "1" ]]; then
-    restore_old_slot || true
+if [[ "$maintenance_mode" != "1" && "$migration_compatible" != "1" ]]; then
+  echo "Refusing to run migration in live blue-green mode without MIGRATION_COMPATIBLE=1." >&2
+  exit 2
+fi
+if ! "${bootstrap_compose[@]}" run --rm migrate; then
+  echo "Migration failed; keeping the maintenance page active and refusing legacy rollback." >&2
+  if [[ "$maintenance_mode" != "1" ]]; then
+    enter_maintenance || true
   fi
   exit 1
 fi
 
 echo "Starting target slot: $target..."
-if ! "${compose[@]}" up -d "${target_services[@]}"; then
-  if [[ "$maintenance_mode" == "1" ]]; then
-    abort_maintenance_deploy
-  fi
-  exit 1
+if ! "${bootstrap_compose[@]}" up -d "${target_services[@]}"; then
+  abort_deploy
 fi
 
 if ! wait_healthy "api-$target"; then
-  if [[ "$maintenance_mode" == "1" ]]; then
-    abort_maintenance_deploy
-  fi
-  exit 1
+  abort_deploy
 fi
 if ! wait_healthy "web-$target"; then
-  if [[ "$maintenance_mode" == "1" ]]; then
-    abort_maintenance_deploy
-  fi
-  exit 1
+  abort_deploy
 fi
 if [[ "${WITH_WORKERS:-0}" == "1" ]]; then
   if ! wait_healthy "celery-worker-$target"; then
-    if [[ "$maintenance_mode" == "1" ]]; then
-      abort_maintenance_deploy
-    fi
-    exit 1
+    abort_deploy
+  fi
+fi
+
+if [[ "$maintenance_mode" == "1" ]]; then
+  echo "Promoting target slot to normal environment resources..."
+  if ! "${compose[@]}" up -d "${target_services[@]}"; then
+    abort_deploy
+  fi
+  if ! wait_healthy "api-$target" || ! wait_healthy "web-$target"; then
+    abort_deploy
   fi
 fi
 
@@ -205,7 +192,9 @@ echo "Starting or reconciling Caddy proxy..."
 "${compose[@]}" up -d proxy
 
 echo "Reloading Caddy to route traffic to $target..."
-reload_caddy "$target"
+if ! reload_caddy "$target"; then
+  abort_deploy
+fi
 
 tmp_state="$(mktemp "$state_dir/active-slot.XXXXXX")"
 printf '%s\n' "$target" > "$tmp_state"
@@ -218,22 +207,8 @@ if [[ "${SKIP_SMOKE:-0}" != "1" ]]; then
   if ! API_SERVICE="api-$target" WEB_SERVICE="web-$target" \
     ENV_FILE="$env_file" COMPOSE_FILE="$compose_file" \
     ./scripts/prod-pull-smoke.sh; then
-    if [[ "$has_previous_slot" == "1" ]]; then
-      echo "Smoke test failed; rolling traffic back to $old..." >&2
-      if [[ "$maintenance_mode" == "1" ]]; then
-        restore_old_slot || true
-      elif reload_caddy "$old"; then
-        tmp_state="$(mktemp "$state_dir/active-slot.XXXXXX")"
-        printf '%s\n' "$old" > "$tmp_state"
-        mv -f "$tmp_state" "$state_file"
-      else
-        echo "Rollback failed; inspect the proxy and both slots manually." >&2
-      fi
-    else
-      echo "Smoke test failed; no previous active slot is recorded, so automatic rollback is unavailable." >&2
-      rm -f "$state_file"
-    fi
-    exit 1
+    echo "Smoke test failed; switching to maintenance and refusing legacy rollback." >&2
+    abort_deploy
   fi
 fi
 
@@ -243,11 +218,11 @@ if [[ "$maintenance_mode" == "1" ]]; then
     sleep "$drain_seconds"
   fi
   echo "Target slot is active; old slot remains stopped to conserve resources."
-  echo "Rollback command: MAINTENANCE_MODE=1 bash scripts/zero-downtime-deploy.sh $old"
+  echo "Old slot will not be started automatically after migration; verify schema compatibility first."
 elif [[ "$keep_old" == "false" ]]; then
   echo "Stopping old slot: $old..."
   "${compose[@]}" stop "web-$old" "api-$old" "celery-worker-$old" || true
 else
   echo "Old slot $old is still running for fast rollback."
-  echo "Rollback command: bash scripts/zero-downtime-deploy.sh $old"
+  echo "Rollback requires manual schema-compatibility review before routing traffic back."
 fi
