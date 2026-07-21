@@ -2,13 +2,16 @@
 # 一鍵拉取 + 部署（GHCR 預建映像版）。在 VPS 的 repo 目錄執行：
 #   ./scripts/prod-pull-deploy.sh
 #
-# 流程：git pull → 設定檢查 → compose pull → 預部署 DB 備份 → blue-green 切流 → smoke test。
+# 流程：git pull → 設定檢查 → compose pull → 預部署 DB 備份 → 維護頁切換 → smoke test。
 # 預設「不」啟動 celery-worker / celery-beat（重背景任務）；要一起開：
 #   WITH_WORKERS=1 ./scripts/prod-pull-deploy.sh
 #
 # 可用環境變數覆寫：
 #   ENV_FILE=.env.production COMPOSE_FILE=docker-compose.prod.pull.yml
 #   WITH_WORKERS=1     # 連 celery-worker / celery-beat 一起起
+#   MAINTENANCE_MODE=1 # 先顯示純靜態維護頁，再停止舊 API/Web（預設）
+#   MAINTENANCE_MODE=0 # 主機資源足夠時，使用傳統雙 slot blue-green
+#   DRAIN_SECONDS=10   # 新版切流後等待舊連線排空的秒數
 #   SKIP_GIT=1         # 跳過 git pull（例如手動同步檔案時）
 #   RELEASE_SHA=<sha>  # 指定已通過 CI 且已推送到 GHCR 的 commit（預設目前 HEAD）
 #   DEPLOY_STRATEGY=inplace  # 暫時退回原地重建流程（不建議）
@@ -109,8 +112,9 @@ fi
 echo "✓ 預部署備份完成：$backup_file"
 
 if [[ "${DEPLOY_STRATEGY:-bluegreen}" == "bluegreen" ]]; then
-  step "啟動 blue-green 零停機部署"
+  step "啟動 blue-green 部署"
   API_IMAGE="$API_IMAGE" WEB_IMAGE="$WEB_IMAGE" WITH_WORKERS="${WITH_WORKERS:-0}" \
+    MAINTENANCE_MODE="${MAINTENANCE_MODE:-1}" DRAIN_SECONDS="${DRAIN_SECONDS:-10}" \
     ENV_FILE="$env_file" COMPOSE_FILE="docker-compose.bluegreen.yml" \
     ./scripts/zero-downtime-deploy.sh "${DEPLOY_SLOT:-auto}"
 
