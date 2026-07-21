@@ -24,6 +24,11 @@ type VendorForm = {
   sort_order: string; is_active: boolean; internal_note: string;
 };
 
+type VendorDetail = Omit<RecommendedVendorOut, "products" | "menus"> & {
+  products: NonNullable<RecommendedVendorOut["products"]>;
+  menus: NonNullable<RecommendedVendorOut["menus"]>;
+};
+
 const emptyForm: VendorForm = {
   name: "", summary: "", description: "", category_id: "", address: "", latitude: "", longitude: "",
   google_maps_url: "", business_hours_text: "", contact_name: "", contact_phone: "", contact_email: "",
@@ -32,7 +37,11 @@ const emptyForm: VendorForm = {
   hygiene_note: "", status: "draft", sort_order: "0", is_active: true, internal_note: "",
 };
 
-const emptyProduct = { name: "", description: "", price_text: "" };
+const emptyProduct = { name: "", description: "", price_text: "", sort_order: 0, is_active: true };
+
+function normalizeVendor(vendor: RecommendedVendorOut): VendorDetail {
+  return { ...vendor, products: vendor.products ?? [], menus: vendor.menus ?? [] };
+}
 
 function formFromVendor(vendor: RecommendedVendorOut): VendorForm {
   return {
@@ -54,7 +63,7 @@ function formFromVendor(vendor: RecommendedVendorOut): VendorForm {
 export default function RecommendedVendorsAdminPage() {
   const [vendors, setVendors] = useState<RecommendedVendorListItem[]>([]);
   const [categories, setCategories] = useState<RecommendedVendorCategoryOut[]>([]);
-  const [selected, setSelected] = useState<RecommendedVendorOut | null>(null);
+  const [selected, setSelected] = useState<VendorDetail | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [productForm, setProductForm] = useState(emptyProduct);
   const [menuTitle, setMenuTitle] = useState("");
@@ -88,7 +97,7 @@ export default function RecommendedVendorsAdminPage() {
   const selectVendor = async (id: string) => {
     try {
       const vendor = await recommendedVendorsApi.adminGet(id);
-      setSelected(vendor);
+      setSelected(normalizeVendor(vendor));
       setForm(formFromVendor(vendor));
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : "載入商家詳情失敗");
@@ -123,7 +132,7 @@ export default function RecommendedVendorsAdminPage() {
       const vendor = selected
         ? await recommendedVendorsApi.update(selected.id, payload())
         : await recommendedVendorsApi.create(payload());
-      setSelected(vendor);
+      setSelected(normalizeVendor(vendor));
       setForm(formFromVendor(vendor));
       await load();
       toast.success(selected ? "已更新推薦商家" : "已建立推薦商家");
@@ -212,7 +221,7 @@ export default function RecommendedVendorsAdminPage() {
   );
 }
 
-function VendorFormPanel({ form, categories, selected, saving, update, onSave }: { form: VendorForm; categories: RecommendedVendorCategoryOut[]; selected: RecommendedVendorOut | null; saving: boolean; update: <K extends keyof VendorForm>(key: K, value: VendorForm[K]) => void; onSave: () => void }) {
+function VendorFormPanel({ form, categories, selected, saving, update, onSave }: { form: VendorForm; categories: RecommendedVendorCategoryOut[]; selected: VendorDetail | null; saving: boolean; update: <K extends keyof VendorForm>(key: K, value: VendorForm[K]) => void; onSave: () => void }) {
   return <section className="rounded-lg border p-5" style={{ borderColor: "var(--border)" }}><div className="mb-4 flex items-start justify-between gap-3"><div><h2 className="font-semibold" style={{ color: "var(--text-primary)" }}>{selected ? `編輯：${selected.name}` : "建立推薦商家"}</h2><p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>商家名稱、分類為必填；衛生檢驗日期在上架時必填，其餘資訊選填。</p></div><ShieldCheck size={22} style={{ color: "#15803D" }} aria-hidden="true" /></div><div className="grid gap-3 md:grid-cols-2">
     <Field label="商家名稱" required value={form.name} onChange={(value) => update("name", value)} />
     <label className="grid gap-1 text-sm"><span style={{ color: "var(--text-secondary)" }}>分類 <Required /></span><select className="input" value={form.category_id} onChange={(event) => update("category_id", event.target.value)} required><option value="">請選擇分類</option>{categories.filter((category) => category.is_active || category.id === form.category_id).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select>{categories.length === 0 && <span className="text-xs" style={{ color: "#B91C1C" }}>請先到「分類」頁籤建立分類。</span>}</label>
@@ -221,11 +230,11 @@ function VendorFormPanel({ form, categories, selected, saving, update, onSave }:
   </div><div className="mt-4 flex justify-end"><button type="button" className="btn btn-primary" disabled={saving} onClick={onSave}><Save size={15} aria-hidden="true" />{saving ? "儲存中…" : "儲存商家"}</button></div></section>;
 }
 
-function MenuPanel({ selected, menuTitle, menuUrl, uploading, setMenuTitle, setMenuUrl, addMenuLink, uploadMenus, removeMenu }: { selected: RecommendedVendorOut; menuTitle: string; menuUrl: string; uploading: boolean; setMenuTitle: (value: string) => void; setMenuUrl: (value: string) => void; addMenuLink: () => Promise<void>; uploadMenus: (files: FileList | null) => Promise<void>; removeMenu: (menu: RecommendedVendorMenuOut) => Promise<void> }) {
+function MenuPanel({ selected, menuTitle, menuUrl, uploading, setMenuTitle, setMenuUrl, addMenuLink, uploadMenus, removeMenu }: { selected: VendorDetail; menuTitle: string; menuUrl: string; uploading: boolean; setMenuTitle: (value: string) => void; setMenuUrl: (value: string) => void; addMenuLink: () => Promise<void>; uploadMenus: (files: FileList | null) => Promise<void>; removeMenu: (menu: RecommendedVendorMenuOut) => Promise<void> }) {
   return <section className="rounded-lg border p-5" style={{ borderColor: "var(--border)" }}><div className="flex items-center justify-between gap-3"><div><h2 className="font-semibold" style={{ color: "var(--text-primary)" }}>菜單檔案與連結</h2><p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>選填；可新增多個外部連結，或一次選取多個圖片／PDF。前台會提供預覽。</p></div><label className="btn btn-secondary cursor-pointer"><Upload size={15} aria-hidden="true" />{uploading ? "上傳中…" : "上傳圖片／PDF"}<input className="sr-only" type="file" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" multiple disabled={uploading} onChange={(event) => { void uploadMenus(event.target.files); event.currentTarget.value = ""; }} /></label></div><div className="mt-4 grid gap-2 md:grid-cols-[1fr_1.5fr_auto]"><Field label="連結名稱" required value={menuTitle} onChange={setMenuTitle} /><Field label="菜單連結" type="url" required value={menuUrl} onChange={setMenuUrl} /><button type="button" className="btn btn-secondary self-end" onClick={() => void addMenuLink()}><Plus size={15} aria-hidden="true" />新增連結</button></div><div className="mt-4 space-y-2">{selected.menus.length === 0 ? <p className="text-sm" style={{ color: "var(--text-muted)" }}>尚未提供菜單。</p> : selected.menus.map((menu) => <MenuRow key={menu.id} menu={menu} onDelete={removeMenu} />)}</div></section>;
 }
 
-function ProductPanel({ selected, productForm, setProductForm, addProduct, saveProduct, removeProduct }: { selected: RecommendedVendorOut; productForm: typeof emptyProduct; setProductForm: (value: typeof emptyProduct) => void; addProduct: () => Promise<void>; saveProduct: (product: RecommendedVendorProductOut) => Promise<void>; removeProduct: (product: RecommendedVendorProductOut) => Promise<void> }) {
+function ProductPanel({ selected, productForm, setProductForm, addProduct, saveProduct, removeProduct }: { selected: VendorDetail; productForm: typeof emptyProduct; setProductForm: (value: typeof emptyProduct) => void; addProduct: () => Promise<void>; saveProduct: (product: RecommendedVendorProductOut) => Promise<void>; removeProduct: (product: RecommendedVendorProductOut) => Promise<void> }) {
   return <section className="rounded-lg border p-5" style={{ borderColor: "var(--border)" }}><div className="flex items-center justify-between gap-3"><div><h2 className="font-semibold" style={{ color: "var(--text-primary)" }}>商品資訊</h2><p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>選填；沒有提供時，學生端不顯示品項。</p></div><button type="button" className="btn btn-secondary" onClick={() => void addProduct()}><Plus size={15} aria-hidden="true" />新增品項</button></div><div className="mt-4 grid gap-2 md:grid-cols-3"><Field label="品項名稱" required value={productForm.name} onChange={(value) => setProductForm({ ...productForm, name: value })} /><Field label="價格" value={productForm.price_text} onChange={(value) => setProductForm({ ...productForm, price_text: value })} /><Field label="品項說明" value={productForm.description} onChange={(value) => setProductForm({ ...productForm, description: value })} /></div><div className="mt-4 space-y-3">{selected.products.map((product) => <ProductRow key={product.id} product={product} onSave={saveProduct} onDelete={removeProduct} />)}</div></section>;
 }
 
