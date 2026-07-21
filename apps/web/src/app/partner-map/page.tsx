@@ -333,6 +333,12 @@ export default function PartnerMapPage() {
     return () => window.clearTimeout(timer);
   }, [load]);
 
+  const handleMapBoundsChange = useCallback((bounds: PartnerMapBoundsState) => {
+    setMapBounds(bounds);
+    setSelectedBusiness(null);
+    setDetailLoading(false);
+  }, []);
+
   const openBusiness = (businessId: string) => {
     setSelectedBusiness(null);
     setDetailLoading(true);
@@ -690,7 +696,7 @@ export default function PartnerMapPage() {
             center={center}
             userLocation={userLocation}
             onOpenBusiness={openBusiness}
-            onBoundsChange={setMapBounds}
+            onBoundsChange={handleMapBoundsChange}
           />
           <div className="partner-map-mobile-strip absolute inset-x-0 bottom-3 z-[500] flex snap-x gap-3 overflow-x-auto px-3 pb-1 lg:hidden">
             {filteredItems.map((item) => (
