@@ -3,11 +3,19 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { discordApi, lineApi, notificationsApi, apiErrorMessage } from "@/lib/api";
+import {
+  discordApi,
+  featureFlagsApi,
+  lineApi,
+  notificationsApi,
+  apiErrorMessage,
+  type FeatureFlagOut,
+} from "@/lib/api";
 import type { ChannelPref, NotificationPreferences } from "@/lib/types";
 import { enableWebPush } from "@/lib/web-push";
 import { SectionSkeleton } from "@/components/ui/Skeleton";
 import { useModuleStatus } from "@/contexts/ModuleStatusContext";
+import { usePermissions } from "@/hooks/usePermissions";
 
 const OPTIONS: { key: keyof NotificationPreferences; label: string; desc: string }[] = [
   { key: "document_pending", label: "公文待審", desc: "有公文需要您審核或處理時提醒" },
@@ -34,6 +42,21 @@ const OPTIONS: { key: keyof NotificationPreferences; label: string; desc: string
   { key: "work_item_due", label: "工作期限", desc: "工作項目即將到期或已逾期提醒" },
   { key: "system", label: "系統通知", desc: "平台維運、權限或安全相關提醒" },
 ];
+
+const SYSTEM_EMAIL_OPTIONS = [
+  {
+    key: "email_scheduled_dispatch",
+    label: "預約寄信",
+    desc: "每 60 秒處理到期的預約郵件。關閉後，郵件會保留在排程中。",
+    confirm: "確定關閉預約寄信？到期郵件會保留在排程中，不會被刪除。",
+  },
+  {
+    key: "email_error_report",
+    label: "錯誤通報信",
+    desc: "將 API 5xx、Celery 失敗與服務狀態彙整後寄給 OWNER_EMAILS。",
+    confirm: "確定關閉錯誤通報信？系統仍會記錄錯誤，但不會寄出通知。",
+  },
+] as const;
 
 type Channel = keyof ChannelPref;
 
@@ -68,6 +91,8 @@ function Switch({
 }
 
 export default function NotificationSettingsPage() {
+  const { can } = usePermissions();
+  const canManageSystemEmail = can("feature_flag:admin");
   const { isModuleClosed } = useModuleStatus();
   const lineClosed = isModuleClosed("line");
   const discordClosed = isModuleClosed("discord");
@@ -81,12 +106,28 @@ export default function NotificationSettingsPage() {
   const [digestSaving, setDigestSaving] = useState(false);
   const [pushPermission, setPushPermission] = useState<NotificationPermission | null>(null);
   const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [systemEmailFlags, setSystemEmailFlags] = useState<FeatureFlagOut[]>([]);
+  const [systemEmailLoading, setSystemEmailLoading] = useState(false);
+  const [systemEmailSaving, setSystemEmailSaving] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof Notification !== "undefined") {
       setPushPermission(Notification.permission);
     }
   }, []);
+
+  useEffect(() => {
+    if (!canManageSystemEmail) return;
+    setSystemEmailLoading(true);
+    featureFlagsApi
+      .list()
+      .then((flags) => {
+        const keys = new Set<string>(SYSTEM_EMAIL_OPTIONS.map((option) => option.key));
+        setSystemEmailFlags(flags.filter((flag) => keys.has(flag.key)));
+      })
+      .catch((e) => toast.error(apiErrorMessage(e, "載入系統寄信設定失敗")))
+      .finally(() => setSystemEmailLoading(false));
+  }, [canManageSystemEmail]);
 
   useEffect(() => {
     Promise.all([
@@ -125,6 +166,23 @@ export default function NotificationSettingsPage() {
       setDigest(prev);
     } finally {
       setDigestSaving(false);
+    }
+  };
+
+  const toggleSystemEmail = async (flag: FeatureFlagOut, confirmMessage: string) => {
+    if (systemEmailSaving || flag.archived_at) return;
+    const next = !flag.is_globally_enabled;
+    if (!next && !window.confirm(confirmMessage)) return;
+
+    setSystemEmailSaving(flag.key);
+    try {
+      const updated = await featureFlagsApi.update(flag.id, { is_globally_enabled: next });
+      setSystemEmailFlags((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      toast.success(next ? "系統寄信已開啟" : "系統寄信已關閉");
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "更新系統寄信設定失敗"));
+    } finally {
+      setSystemEmailSaving(null);
     }
   };
 
@@ -266,6 +324,51 @@ export default function NotificationSettingsPage() {
           })}
         </div>
       </section>
+
+      {canManageSystemEmail && (
+        <section className="card overflow-hidden">
+          <div className="px-5 py-4" style={{ borderBottom: "1px solid var(--border)" }}>
+            <h2 className="text-sm font-semibold">系統寄信</h2>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              僅具備 Feature Flag 管理權限者可調整。這些是全站開關，不會改變個別使用者的通知偏好。
+            </p>
+          </div>
+          {systemEmailLoading ? (
+            <div className="p-5"><SectionSkeleton lines={2} /></div>
+          ) : (
+            <ul>
+              {SYSTEM_EMAIL_OPTIONS.map((option) => {
+                const flag = systemEmailFlags.find((item) => item.key === option.key);
+                const enabled = Boolean(flag?.is_globally_enabled && !flag.archived_at);
+                return (
+                  <li
+                    key={option.key}
+                    className="flex items-center gap-3 px-5 py-4"
+                    style={{ borderBottom: "1px solid var(--border)" }}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+                        {option.label}
+                      </p>
+                      <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                        {flag ? option.desc : "尚未完成系統 migration，暫無法調整。"}
+                      </p>
+                    </div>
+                    <Switch
+                      on={enabled}
+                      disabled={!flag || Boolean(flag.archived_at) || systemEmailSaving !== null}
+                      onClick={() => {
+                        if (flag) void toggleSystemEmail(flag, option.confirm);
+                      }}
+                      label={`${enabled ? "關閉" : "開啟"}${option.label}`}
+                    />
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      )}
 
       <section className="card overflow-hidden">
         <div

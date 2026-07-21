@@ -6,8 +6,11 @@ import asyncio
 import logging
 
 from api.core.celery_app import celery_app
+from api.services import feature_flag
 
 logger = logging.getLogger(__name__)
+
+SCHEDULED_EMAIL_DISPATCH_FLAG = "email_scheduled_dispatch"
 
 
 @celery_app.task(
@@ -36,6 +39,9 @@ async def _dispatch_scheduled() -> dict:
 
     dispatched = 0
     async with task_session() as session:
+        if not await feature_flag.is_enabled(session, SCHEDULED_EMAIL_DISPATCH_FLAG):
+            logger.info("預約寄信功能已由管理員關閉")
+            return {"status": "disabled", "dispatched": 0}
         try:
             now = datetime.now(UTC)
             rows = (

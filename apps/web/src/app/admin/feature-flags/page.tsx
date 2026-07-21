@@ -15,12 +15,16 @@ import {
   featureFlagsApi,
   type FeatureFlagOut, apiErrorMessage } from "@/lib/api";
 
+const SYSTEM_EMAIL_FLAG_KEYS = ["email_scheduled_dispatch", "email_error_report"];
+
 export default function FeatureFlagsPage() {
   const { isAdmin } = usePermissions();
   const [flags, setFlags] = useState<FeatureFlagOut[]>([]);
   const [busy, setBusy] = useState(false);
   const [newKey, setNewKey] = useState("");
   const [newDesc, setNewDesc] = useState("");
+
+  const otherFlags = flags.filter((flag) => !SYSTEM_EMAIL_FLAG_KEYS.includes(flag.key));
 
   const load = useCallback(async () => {
     try {
@@ -121,10 +125,10 @@ export default function FeatureFlagsPage() {
       </section>
 
       <section className="space-y-2">
-        {flags.length === 0 ? (
-          <p className="text-sm text-[var(--text-muted)]">尚無 flag。</p>
+        {otherFlags.length === 0 ? (
+          <p className="text-sm text-[var(--text-muted)]">沒有其他自訂 flag。</p>
         ) : (
-          flags.map((f) => <FlagRow key={f.id} flag={f} onChange={load} />)
+          otherFlags.map((f) => <FlagRow key={f.id} flag={f} onChange={load} />)
         )}
       </section>
     </main>
