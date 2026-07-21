@@ -18,7 +18,7 @@ export default function PdfPreview({ src, className }: PdfPreviewProps) {
         "pdfjs-dist/build/pdf.worker.mjs",
         import.meta.url,
       ).toString();
-      const doc = await pdfjs.getDocument(src).promise;
+      const doc = await pdfjs.getDocument({ url: src }).promise;
       const page = await doc.getPage(1);
       const viewport = page.getViewport({ scale: 1.2 });
       const canvas = canvasRef.current;
