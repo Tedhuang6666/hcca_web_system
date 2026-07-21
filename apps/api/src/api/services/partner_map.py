@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import uuid
 from datetime import UTC, datetime
-from urllib.parse import parse_qs, unquote, urljoin, urlparse
+from urllib.parse import parse_qs, unquote, urljoin, urlparse, urlunsplit
 
 import httpx
 from sqlalchemy import Select, and_, desc, exists, func, or_, select
@@ -53,9 +53,42 @@ _GOOGLE_SHORT_HOSTS = {"maps.app.goo.gl", "goo.gl"}
 _MAX_GOOGLE_REDIRECTS = 5
 
 
-def _is_google_maps_host(host: str | None) -> bool:
+def _trusted_google_maps_host(host: str | None) -> str | None:
     host = (host or "").lower().rstrip(".")
-    return host in _GOOGLE_SHORT_HOSTS or host == "maps.google.com" or host.endswith(".google.com")
+    if host == "maps.app.goo.gl":
+        return "maps.app.goo.gl"
+    if host == "goo.gl":
+        return "goo.gl"
+    if host == "google.com":
+        return "google.com"
+    if host == "maps.google.com":
+        return "maps.google.com"
+    if host == "www.google.com":
+        return "www.google.com"
+    return None
+
+
+def _canonical_google_maps_url(url: str) -> tuple[str, str]:
+    parsed = urlparse(url)
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("Google Maps 連結的連接埠格式不正確") from exc
+
+    trusted_host = _trusted_google_maps_host(parsed.hostname)
+    if (
+        parsed.scheme != "https"
+        or trusted_host is None
+        or parsed.username is not None
+        or parsed.password is not None
+        or port is not None
+        or parsed.fragment
+    ):
+        raise ValueError("連結未導向 Google Maps")
+
+    # Rebuild the authority from a fixed allowlisted host. User input can only
+    # contribute path/query data and can never choose the outbound destination.
+    return trusted_host, urlunsplit(("https", trusted_host, parsed.path, parsed.query, ""))
 
 
 def _extract_coordinates(value: str) -> tuple[float, float] | None:
@@ -99,12 +132,9 @@ async def parse_google_maps_link(url: str) -> dict[str, str | float | None]:
     """展開 Google Maps 連結並擷取可直接建立據點的地址與座標。"""
 
     original = url.strip()
-    parsed = urlparse(original)
-    if parsed.scheme != "https" or not _is_google_maps_host(parsed.hostname):
-        raise ValueError("請貼上 https://www.google.com 或 maps.app.goo.gl 的 Google Maps 連結")
+    host, resolved_url = _canonical_google_maps_url(original)
 
-    resolved_url = original
-    if parsed.hostname and parsed.hostname.lower() in _GOOGLE_SHORT_HOSTS:
+    if host in _GOOGLE_SHORT_HOSTS:
         try:
             async with httpx.AsyncClient(follow_redirects=False, timeout=8.0) as client:
                 for _ in range(_MAX_GOOGLE_REDIRECTS):
@@ -114,12 +144,7 @@ async def parse_google_maps_link(url: str) -> dict[str, str | float | None]:
                         if not location:
                             raise ValueError("Google Maps 短網址缺少導向位置")
                         next_url = urljoin(resolved_url, location)
-                        next_parsed = urlparse(next_url)
-                        if next_parsed.scheme != "https" or not _is_google_maps_host(
-                            next_parsed.hostname
-                        ):
-                            raise ValueError("連結未導向 Google Maps")
-                        resolved_url = next_url
+                        _, resolved_url = _canonical_google_maps_url(next_url)
                         continue
                     response.raise_for_status()
                     break
@@ -128,9 +153,8 @@ async def parse_google_maps_link(url: str) -> dict[str, str | float | None]:
         except (httpx.HTTPError, ValueError) as exc:
             raise ValueError("無法展開這個 Google Maps 短網址，請改貼完整連結") from exc
 
+    _, resolved_url = _canonical_google_maps_url(resolved_url)
     parsed = urlparse(resolved_url)
-    if not _is_google_maps_host(parsed.hostname):
-        raise ValueError("連結未導向 Google Maps，請確認後再試")
     coordinates = _extract_coordinates(unquote(resolved_url))
     if coordinates is None:
         raise ValueError("連結中找不到座標，請從 Google Maps 的店家頁面重新複製分享連結")

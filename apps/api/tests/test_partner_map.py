@@ -366,6 +366,12 @@ async def test_google_maps_short_link_rejects_redirect_to_untrusted_host(monkeyp
 
 
 @pytest.mark.asyncio
+async def test_google_maps_link_rejects_userinfo_host_confusion():
+    with pytest.raises(ValueError, match="Google Maps"):
+        await partner_map_service.parse_google_maps_link("https://goo.gl@127.0.0.1/maps/example")
+
+
+@pytest.mark.asyncio
 async def test_google_maps_place_name_is_not_saved_as_address(
     client: AsyncClient,
     db_session: AsyncSession,
