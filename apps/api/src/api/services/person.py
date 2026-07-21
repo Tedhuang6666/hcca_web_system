@@ -21,6 +21,9 @@ from api.models.person import (
     PersonStatus,
 )
 from api.models.school_class import (
+    ClassCadre,
+    ClassMembership,
+    ClassMembershipStatus,
     ClassRoleBinding,
     SchoolClass,
 )
@@ -141,6 +144,7 @@ async def list_people(
             query = query.where(PersonAffiliation.org_id == org_id)
         if position_id:
             query = query.where(PersonAffiliation.position_id == position_id)
+        query = query.distinct()
 
     result = await db.execute(query)
     rows: list[PersonListItem] = []
@@ -241,6 +245,142 @@ async def ensure_person_for_user(
     db.add(person)
     await db.flush()
     return person
+
+
+async def sync_people_from_existing_data(db: AsyncSession) -> None:
+    """將既有帳號與舊版身分資料補進人員主檔，且可安全重複執行。"""
+    users = list((await db.scalars(select(User).order_by(User.created_at, User.id))).all())
+    if not users:
+        return
+
+    user_ids = [user.id for user in users]
+    people = list(
+        (
+            await db.scalars(
+                select(Person).where(
+                    or_(Person.user_id.in_(user_ids), Person.student_id.is_not(None))
+                )
+            )
+        ).all()
+    )
+    users_by_id = {user.id: user for user in users}
+    people_by_user = {person.user_id: person for person in people if person.user_id is not None}
+    people_by_student = {
+        person.student_id: person for person in people if person.student_id is not None
+    }
+    people_by_user_id: dict[uuid.UUID, Person] = {}
+
+    for user in users:
+        person = people_by_user.get(user.id)
+        if person is None and user.student_id:
+            person = people_by_student.get(user.student_id)
+            if person is not None and person.user_id not in (None, user.id):
+                person = None
+        if person is None:
+            person = Person(
+                user_id=user.id,
+                student_id=user.student_id,
+                display_name=user.display_name,
+                email=user.email,
+                status=PersonStatus.ACTIVE if user.is_active else PersonStatus.INACTIVE,
+                note="由既有使用者資料自動建立",
+            )
+            db.add(person)
+            await db.flush()
+        elif person.user_id is None:
+            person.user_id = user.id
+            await db.flush()
+
+        if person.student_id is None and user.student_id:
+            person.student_id = user.student_id
+        if not person.display_name:
+            person.display_name = user.display_name
+        if not person.email:
+            person.email = user.email
+        people_by_user_id[user.id] = person
+
+    await db.flush()
+
+    user_positions = list(
+        (
+            await db.scalars(
+                select(UserPosition)
+                .where(UserPosition.user_id.in_(user_ids))
+                .order_by(UserPosition.start_date, UserPosition.id)
+            )
+        ).all()
+    )
+    for user_position in user_positions:
+        user = users_by_id.get(user_position.user_id)
+        if user is None:
+            continue
+        affiliation = await record_affiliation_for_user_position(
+            db,
+            user=user,
+            kind=PersonAffiliationKind.ORG_POSITION,
+            position_id=user_position.position_id,
+            start_date=user_position.start_date,
+            end_date=user_position.end_date,
+            synced_user_position_id=user_position.id,
+            source=PersonAffiliationSource.RBAC_SYNC,
+        )
+        if user_position.end_date is not None and user_position.end_date < local_today():
+            affiliation.status = PersonAffiliationStatus.ENDED
+            await db.flush()
+
+    memberships = list(
+        (
+            await db.scalars(
+                select(ClassMembership).where(
+                    ClassMembership.user_id.in_(user_ids),
+                    ClassMembership.status == ClassMembershipStatus.ACTIVE,
+                )
+            )
+        ).all()
+    )
+    for membership in memberships:
+        person = people_by_user_id.get(membership.user_id)
+        if person is None:
+            continue
+        await create_affiliation(
+            db,
+            data=PersonAffiliationCreate(
+                person_id=person.id,
+                kind=PersonAffiliationKind.CLASS_MEMBER,
+                academic_year=membership.academic_year,
+                class_id=membership.class_id,
+                start_date=membership.start_date,
+                end_date=membership.end_date,
+                source=PersonAffiliationSource.CLASS_WORKSPACE,
+            ),
+        )
+
+    cadres = list(
+        (
+            await db.scalars(
+                select(ClassCadre).where(ClassCadre.user_id.in_(user_ids))
+            )
+        ).all()
+    )
+    for cadre in cadres:
+        person = people_by_user_id.get(cadre.user_id)
+        if person is None:
+            continue
+        school_class = await db.get(SchoolClass, cadre.class_id)
+        if school_class is None:
+            continue
+        await create_affiliation(
+            db,
+            data=PersonAffiliationCreate(
+                person_id=person.id,
+                kind=PersonAffiliationKind.CLASS_ROLE,
+                academic_year=school_class.academic_year,
+                class_id=school_class.id,
+                role_key="class_cadre",
+                title="班級幹部",
+                source=PersonAffiliationSource.CLASS_WORKSPACE,
+            ),
+        )
 
 
 async def _find_active_affiliation(
