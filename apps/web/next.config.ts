@@ -1,19 +1,20 @@
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
+import { resolve } from "node:path";
 
 const apiInternalUrl = process.env.API_INTERNAL_URL || "http://localhost:8000";
-const projectRoot = process.cwd();
+const webRoot = resolve(__dirname);
 
 const nextConfig: NextConfig = {
   devIndicators: false,
   output: "standalone",
-  outputFileTracingRoot: projectRoot,
+  outputFileTracingRoot: webRoot,
   allowedDevOrigins: [
     "*.trycloudflare.com",
     "*.devtunnels.ms",
   ],
   turbopack: {
-    root: projectRoot,
+    root: webRoot,
   },
   // 圖片優化：自動轉 WebP/AVIF、長 CDN 快取（1 天）；
   // remotePatterns 允許後端 /uploads 路徑與 Cloudflare 隧道測試環境。
