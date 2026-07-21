@@ -25,7 +25,11 @@ import type {
   SubmissionCustomField,
 } from "@/lib/types";
 
-type ItemDraft = MerchandiseSubmissionItemCreate & { id?: string };
+type ItemDraft = Omit<MerchandiseSubmissionItemCreate, "template_images" | "custom_fields"> & {
+  id?: string;
+  template_images: NonNullable<MerchandiseSubmissionItemCreate["template_images"]>;
+  custom_fields: NonNullable<MerchandiseSubmissionItemCreate["custom_fields"]>;
+};
 type VotingSubmission = MerchandiseSubmissionAdminListItem & {
   status: MerchandiseSubmissionAdminListItem["status"] | "review_completed";
   voting_survey_id?: string | null;

@@ -9,6 +9,11 @@ import { recommendedVendorsApi, ApiError } from "@/lib/api";
 import { apiUrl } from "@/lib/config";
 import type { RecommendedVendorCategoryOut, RecommendedVendorListItem, RecommendedVendorOut } from "@/lib/types";
 
+type VendorDetail = Omit<RecommendedVendorOut, "products" | "menus"> & {
+  products: NonNullable<RecommendedVendorOut["products"]>;
+  menus: NonNullable<RecommendedVendorOut["menus"]>;
+};
+
 const RecommendedVendorMap = dynamic(() => import("./RecommendedVendorMap"), {
   ssr: false,
   loading: () => <div className="flex h-full items-center justify-center text-sm" style={{ color: "var(--text-muted)" }}>載入地圖中…</div>,
@@ -29,7 +34,7 @@ function menuHref(url: string | null): string {
   return url?.startsWith("/") ? apiUrl(url) : url || "";
 }
 
-function VendorDetail({ vendor, onClose }: { vendor: RecommendedVendorOut; onClose: () => void }) {
+function VendorDetail({ vendor, onClose }: { vendor: VendorDetail; onClose: () => void }) {
   return (
     <aside className="space-y-5 rounded-lg border p-5" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
       <div className="flex items-start justify-between gap-3">
@@ -79,7 +84,7 @@ export default function RecommendedVendorsPage() {
   const router = useRouter();
   const [vendors, setVendors] = useState<RecommendedVendorListItem[]>([]);
   const [categories, setCategories] = useState<RecommendedVendorCategoryOut[]>([]);
-  const [selected, setSelected] = useState<RecommendedVendorOut | null>(null);
+  const [selected, setSelected] = useState<VendorDetail | null>(null);
   const [keyword, setKeyword] = useState("");
   const [category, setCategory] = useState("all");
   const [mode, setMode] = useState<"list" | "map">("list");
@@ -102,7 +107,10 @@ export default function RecommendedVendorsPage() {
     setMode(searchParams.get("view") === "map" ? "map" : "list");
   }, [searchParams]);
   const open = async (id: string) => {
-    try { setSelected(await recommendedVendorsApi.get(id)); }
+    try {
+      const vendor = await recommendedVendorsApi.get(id);
+      setSelected({ ...vendor, menus: vendor.menus ?? [], products: vendor.products ?? [] });
+    }
     catch (error) { toast.error(error instanceof ApiError ? error.message : "載入商家資訊失敗"); }
   };
 
