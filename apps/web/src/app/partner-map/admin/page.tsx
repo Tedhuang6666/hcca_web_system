@@ -564,10 +564,10 @@ export default function PartnerMapAdminPage() {
                   ))}
                 </div>
                 <div className="mt-4 space-y-2">
-                  <input className="input" placeholder="優惠標題" value={offerForm.title} onChange={(e) => setOfferForm((f) => ({ ...f, title: e.target.value }))} />
-                  <input className="input" placeholder="公開摘要" value={offerForm.public_summary} onChange={(e) => setOfferForm((f) => ({ ...f, public_summary: e.target.value }))} />
-                  <textarea className="input min-h-20" placeholder="完整優惠內容" value={offerForm.full_description} onChange={(e) => setOfferForm((f) => ({ ...f, full_description: e.target.value }))} />
-                  <textarea className="input min-h-20" placeholder="使用方式" value={offerForm.instructions} onChange={(e) => setOfferForm((f) => ({ ...f, instructions: e.target.value }))} />
+                  <input className="input" placeholder="優惠標題，例如：學生證折扣" value={offerForm.title} onChange={(e) => setOfferForm((f) => ({ ...f, title: e.target.value }))} />
+                  <input className="input" placeholder="公開摘要，例如：出示學生證享 9 折" value={offerForm.public_summary} onChange={(e) => setOfferForm((f) => ({ ...f, public_summary: e.target.value }))} />
+                  <textarea className="input min-h-20" placeholder="優惠詳情，例如：全品項 9 折，部分商品除外" value={offerForm.full_description} onChange={(e) => setOfferForm((f) => ({ ...f, full_description: e.target.value }))} />
+                  <textarea className="input min-h-20" placeholder="使用方式，例如：聯絡時出示學生證或輸入優惠碼" value={offerForm.instructions} onChange={(e) => setOfferForm((f) => ({ ...f, instructions: e.target.value }))} />
                 </div>
                 <button className="btn btn-ghost mt-3" onClick={createOffer}><Plus size={15} aria-hidden="true" />新增優惠</button>
               </section>

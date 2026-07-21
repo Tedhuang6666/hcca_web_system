@@ -167,6 +167,18 @@ async def test_contact_business_is_directory_only_and_exposes_contact_methods(
     )
     db_session.add(business)
     await db_session.flush()
+    db_session.add(
+        PartnerOffer(
+            business_id=business.id,
+            title="學生證折扣",
+            public_summary="出示學生證享 9 折",
+            full_description="全品項 9 折，部分商品除外。",
+            instructions="聯絡時出示學生證。",
+            starts_at=datetime.now(UTC) - timedelta(days=1),
+            ends_at=datetime.now(UTC) + timedelta(days=7),
+        )
+    )
+    await db_session.flush()
 
     map_response = await client.get("/partner-map", headers=HOST_HEADERS)
     directory_response = await client.get("/partner-map/directory", headers=HOST_HEADERS)
@@ -179,11 +191,14 @@ async def test_contact_business_is_directory_only_and_exposes_contact_methods(
     assert directory_response.status_code == 200
     assert directory_response.json()[0]["listing_type"] == "contact"
     assert directory_response.json()[0]["instagram_handle"] == "@campuswear"
+    assert directory_response.json()[0]["active_offer_count"] == 1
     assert detail_response.status_code == 200
     detail = detail_response.json()
     assert detail["locations"] == []
     assert detail["line_id"] == "campuswear"
     assert detail["other_contact"] == "可預約看樣，請先私訊。"
+    assert detail["offers"][0]["public_summary"] == "出示學生證享 9 折"
+    assert detail["offers"][0]["full_description"] is None
 
 
 @pytest.mark.asyncio

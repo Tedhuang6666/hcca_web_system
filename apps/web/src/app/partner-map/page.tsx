@@ -524,6 +524,9 @@ export default function PartnerMapPage() {
                     <button key={business.id} onClick={() => openBusiness(business.id)} className="w-full rounded-lg border p-2 text-left" style={{ borderColor: "var(--border)", background: "var(--bg)" }}>
                       <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>{business.name}</p>
                       <p className="mt-1 line-clamp-2 text-[11px]" style={{ color: "var(--text-muted)" }}>{business.summary || business.category || "合作聯絡窗口"}</p>
+                      {business.active_offer_count > 0 && (
+                        <p className="mt-1 text-[11px]" style={{ color: "var(--primary)" }}>有 {business.active_offer_count} 筆優惠</p>
+                      )}
                     </button>
                   ))}
                 </div>
