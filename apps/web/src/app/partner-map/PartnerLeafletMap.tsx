@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   Coffee,
@@ -39,14 +39,25 @@ function toBoundsState(bounds: LatLngBounds): PartnerMapBoundsState {
 
 function BoundsReporter({ onBoundsChange }: { onBoundsChange: (bounds: PartnerMapBoundsState) => void }) {
   const map = useMap();
-  useEffect(() => {
-    onBoundsChange(toBoundsState(map.getBounds()));
+  const lastBoundsKey = useRef<string | null>(null);
+  const reportBounds = useCallback(() => {
+    const bounds = toBoundsState(map.getBounds());
+    const boundsKey = JSON.stringify(bounds);
+    if (lastBoundsKey.current === boundsKey) return;
+    lastBoundsKey.current = boundsKey;
+    onBoundsChange(bounds);
   }, [map, onBoundsChange]);
 
-  useMapEvents({
-    moveend: () => onBoundsChange(toBoundsState(map.getBounds())),
-    zoomend: () => onBoundsChange(toBoundsState(map.getBounds())),
-  });
+  const eventHandlers = useMemo(
+    () => ({ moveend: reportBounds, zoomend: reportBounds }),
+    [reportBounds],
+  );
+
+  useEffect(() => {
+    reportBounds();
+  }, [reportBounds]);
+
+  useMapEvents(eventHandlers);
   return null;
 }
 
