@@ -280,6 +280,9 @@ from api.models.publication import (  # noqa: F401
 from api.models.receivable import Receivable, ReceivableSource, ReceivableStatus  # noqa: F401
 from api.models.recommended_vendor import (  # noqa: F401
     RecommendedVendor,
+    RecommendedVendorCategory,
+    RecommendedVendorMenu,
+    RecommendedVendorMenuKind,
     RecommendedVendorProduct,
     RecommendedVendorStatus,
 )

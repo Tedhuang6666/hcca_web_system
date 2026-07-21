@@ -356,11 +356,7 @@ async def sync_people_from_existing_data(db: AsyncSession) -> None:
         )
 
     cadres = list(
-        (
-            await db.scalars(
-                select(ClassCadre).where(ClassCadre.user_id.in_(user_ids))
-            )
-        ).all()
+        (await db.scalars(select(ClassCadre).where(ClassCadre.user_id.in_(user_ids)))).all()
     )
     for cadre in cadres:
         person = people_by_user_id.get(cadre.user_id)

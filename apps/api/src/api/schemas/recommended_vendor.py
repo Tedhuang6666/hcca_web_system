@@ -7,7 +7,65 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from api.models.recommended_vendor import RecommendedVendorStatus
+from api.models.recommended_vendor import RecommendedVendorMenuKind, RecommendedVendorStatus
+
+
+class RecommendedVendorCategoryCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=80)
+    description: str | None = None
+    sort_order: int = 0
+    is_active: bool = True
+
+
+class RecommendedVendorCategoryUpdate(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=80)
+    description: str | None = None
+    sort_order: int | None = None
+    is_active: bool | None = None
+
+
+class RecommendedVendorCategoryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    description: str | None
+    sort_order: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class RecommendedVendorMenuCreate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    kind: RecommendedVendorMenuKind = RecommendedVendorMenuKind.LINK
+    url: str | None = None
+    sort_order: int = 0
+    is_active: bool = True
+
+
+class RecommendedVendorMenuUpdate(BaseModel):
+    title: str | None = Field(None, min_length=1, max_length=200)
+    sort_order: int | None = None
+    is_active: bool | None = None
+    url: str | None = None
+
+
+class RecommendedVendorMenuOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    vendor_id: uuid.UUID
+    title: str
+    kind: RecommendedVendorMenuKind
+    url: str | None
+    filename: str | None
+    content_type: str | None
+    file_size: int | None
+    sort_order: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
 
 
 class RecommendedVendorProductCreate(BaseModel):
@@ -50,7 +108,7 @@ class RecommendedVendorCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     summary: str | None = Field(None, max_length=300)
     description: str | None = None
-    category: str | None = Field(None, max_length=80)
+    category_id: uuid.UUID | None = None
     address: str | None = Field(None, max_length=300)
     latitude: float | None = Field(None, ge=-90, le=90)
     longitude: float | None = Field(None, ge=-180, le=180)
@@ -79,7 +137,7 @@ class RecommendedVendorUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=200)
     summary: str | None = Field(None, max_length=300)
     description: str | None = None
-    category: str | None = Field(None, max_length=80)
+    category_id: uuid.UUID | None = None
     address: str | None = Field(None, max_length=300)
     latitude: float | None = Field(None, ge=-90, le=90)
     longitude: float | None = Field(None, ge=-180, le=180)
@@ -110,6 +168,7 @@ class RecommendedVendorListItem(BaseModel):
     name: str
     summary: str | None
     category: str | None
+    category_id: uuid.UUID | None
     address: str | None
     latitude: float | None
     longitude: float | None
@@ -141,3 +200,4 @@ class RecommendedVendorOut(RecommendedVendorListItem):
     internal_note: str | None = None
     created_by: uuid.UUID | None
     products: list[RecommendedVendorProductOut] = Field(default_factory=list)
+    menus: list[RecommendedVendorMenuOut] = Field(default_factory=list)
