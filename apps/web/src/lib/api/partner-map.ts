@@ -3,6 +3,19 @@ import type {
 } from "../types";
 import { get, post, patch, del } from "./core";
 
+export type PartnerBusinessListingType = "location" | "contact";
+type PartnerBusinessContactFields = {
+  listing_type: PartnerBusinessListingType;
+  contact_name: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
+  instagram_handle: string | null;
+  line_id: string | null;
+  other_contact: string | null;
+};
+export type PartnerBusinessDirectoryItem = PartnerBusinessListItem & PartnerBusinessContactFields;
+export type PartnerBusinessDetail = PartnerBusinessOut & PartnerBusinessContactFields;
+
 // ── 特約地圖 ──────────────────────────────────────────────────────────────────
 
 export const partnerMapApi = {
@@ -26,10 +39,17 @@ export const partnerMapApi = {
     return get<PartnerMapItem[]>(`/partner-map${p.size ? `?${p.toString()}` : ""}`);
   },
   tags: () => get<PartnerTagOut[]>("/partner-map/tags"),
+  directory: (params?: { keyword?: string; limit?: string; offset?: string }) => {
+    const p = new URLSearchParams();
+    Object.entries(params ?? {}).forEach(([key, value]) => {
+      if (value) p.set(key, value);
+    });
+    return get<PartnerBusinessDirectoryItem[]>(`/partner-map/directory${p.size ? `?${p}` : ""}`);
+  },
   rankings: (limit = 10) => get<PartnerRankingItem[]>(`/partner-map/rankings?limit=${limit}`),
-  getBusiness: (id: string) => get<PartnerBusinessOut>(`/partner-map/businesses/${id}`),
-  recordClick: (id: string) => post<PartnerBusinessOut>(`/partner-map/businesses/${id}/click`, {}),
-  checkIn: (id: string) => post<PartnerBusinessOut>(`/partner-map/businesses/${id}/check-in`, {}),
+  getBusiness: (id: string) => get<PartnerBusinessDetail>(`/partner-map/businesses/${id}`),
+  recordClick: (id: string) => post<PartnerBusinessDetail>(`/partner-map/businesses/${id}/click`, {}),
+  checkIn: (id: string) => post<PartnerBusinessDetail>(`/partner-map/businesses/${id}/check-in`, {}),
   listRatings: (id: string) => get<PartnerRatingOut[]>(`/partner-map/businesses/${id}/ratings`),
   rateBusiness: (id: string, body: PartnerRatingCreate) =>
     post<PartnerRatingOut>(`/partner-map/businesses/${id}/ratings`, body),
@@ -41,13 +61,13 @@ export const partnerMapApi = {
     if (params?.include_inactive !== undefined) p.set("include_inactive", String(params.include_inactive));
     if (params?.limit) p.set("limit", params.limit);
     if (params?.offset) p.set("offset", params.offset);
-    return get<PartnerBusinessListItem[]>(`/partner-map/admin/businesses${p.size ? `?${p}` : ""}`);
+    return get<PartnerBusinessDirectoryItem[]>(`/partner-map/admin/businesses${p.size ? `?${p}` : ""}`);
   },
-  adminGetBusiness: (id: string) => get<PartnerBusinessOut>(`/partner-map/admin/businesses/${id}`),
+  adminGetBusiness: (id: string) => get<PartnerBusinessDetail>(`/partner-map/admin/businesses/${id}`),
   createBusiness: (body: PartnerBusinessCreate) =>
-    post<PartnerBusinessOut>("/partner-map/admin/businesses", body),
+    post<PartnerBusinessDetail>("/partner-map/admin/businesses", body),
   updateBusiness: (id: string, body: PartnerBusinessUpdate) =>
-    patch<PartnerBusinessOut>(`/partner-map/admin/businesses/${id}`, body),
+    patch<PartnerBusinessDetail>(`/partner-map/admin/businesses/${id}`, body),
   deleteBusiness: (id: string) => del<void>(`/partner-map/admin/businesses/${id}`),
   adminSubmissions: (params?: { status?: string }) => {
     const qs = params?.status ? `?${new URLSearchParams({ status: params.status }).toString()}` : "";

@@ -77,11 +77,15 @@ def _business_out(
     out.rating_avg = rating_avg
     out.rating_count = rating_count
     out.popularity_score = map_svc.popularity_score(business)
-    out.locations = [
-        _location_out(location, include_private=include_private)
-        for location in business.locations
-        if include_private or location.is_active
-    ]
+    out.locations = (
+        [
+            _location_out(location, include_private=include_private)
+            for location in business.locations
+            if include_private or location.is_active
+        ]
+        if business.listing_type == "location"
+        else []
+    )
     out.offers = [
         _offer_out(offer, include_private=include_private)
         for offer in business.offers
@@ -182,6 +186,25 @@ async def list_map_items(
 @router.get("/tags", response_model=list[PartnerTagOut], summary="列出特約標籤")
 async def list_public_tags(db: DbDep) -> list[PartnerTag]:
     return await map_svc.list_tags(db)
+
+
+@router.get(
+    "/directory",
+    response_model=list[PartnerBusinessListItem],
+    summary="列出僅提供聯絡方式的合作夥伴",
+)
+async def list_contact_directory(
+    db: DbDep,
+    keyword: str | None = Query(None, max_length=100),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+) -> list[PartnerBusinessListItem]:
+    return [
+        _list_item(business)
+        for business in await map_svc.list_contact_businesses(
+            db, keyword=keyword, limit=limit, offset=offset
+        )
+    ]
 
 
 @router.get("/rankings", response_model=list[PartnerRankingItem], summary="學生常去排行")

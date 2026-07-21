@@ -12,6 +12,7 @@ from api.dependencies.auth import get_current_active_user, get_optional_user
 from api.main import app
 from api.models.partner_map import (
     PartnerBusiness,
+    PartnerBusinessListingType,
     PartnerBusinessStatus,
     PartnerLocation,
     PartnerOffer,
@@ -145,6 +146,44 @@ async def test_partner_map_filters_by_keyword_tag_bounds_and_offer(
     payload = response.json()
     assert len(payload) == 1
     assert payload[0]["business_name"] == "自治咖啡"
+
+
+@pytest.mark.asyncio
+async def test_contact_business_is_directory_only_and_exposes_contact_methods(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    business = PartnerBusiness(
+        name="自治服飾合作廠商",
+        summary="校服與社團服合作窗口",
+        status=PartnerBusinessStatus.ACTIVE.value,
+        listing_type=PartnerBusinessListingType.CONTACT.value,
+        contact_name="合作窗口",
+        contact_phone="0912-345-678",
+        contact_email="partner@example.com",
+        instagram_handle="@campuswear",
+        line_id="campuswear",
+        other_contact="可預約看樣，請先私訊。",
+    )
+    db_session.add(business)
+    await db_session.flush()
+
+    map_response = await client.get("/partner-map", headers=HOST_HEADERS)
+    directory_response = await client.get("/partner-map/directory", headers=HOST_HEADERS)
+    detail_response = await client.get(
+        f"/partner-map/businesses/{business.id}", headers=HOST_HEADERS
+    )
+
+    assert map_response.status_code == 200
+    assert all(item["business_id"] != str(business.id) for item in map_response.json())
+    assert directory_response.status_code == 200
+    assert directory_response.json()[0]["listing_type"] == "contact"
+    assert directory_response.json()[0]["instagram_handle"] == "@campuswear"
+    assert detail_response.status_code == 200
+    detail = detail_response.json()
+    assert detail["locations"] == []
+    assert detail["line_id"] == "campuswear"
+    assert detail["other_contact"] == "可預約看樣，請先私訊。"
 
 
 @pytest.mark.asyncio

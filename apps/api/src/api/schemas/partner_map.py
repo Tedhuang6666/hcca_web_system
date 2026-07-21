@@ -5,9 +5,13 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
-from api.models.partner_map import PartnerBusinessStatus, PartnerSubmissionStatus
+from api.models.partner_map import (
+    PartnerBusinessListingType,
+    PartnerBusinessStatus,
+    PartnerSubmissionStatus,
+)
 
 
 class PartnerTagCreate(BaseModel):
@@ -131,6 +135,19 @@ class PartnerBusinessCreate(BaseModel):
     cover_image_url: str | None = None
     category: str | None = Field(None, max_length=50)
     business_hours_text: str | None = Field(None, max_length=300)
+    listing_type: PartnerBusinessListingType = PartnerBusinessListingType.LOCATION
+    contact_name: str | None = Field(None, max_length=100)
+    contact_phone: str | None = Field(None, max_length=50)
+    contact_email: EmailStr | None = None
+    instagram_handle: str | None = Field(None, max_length=100)
+    line_id: str | None = Field(None, max_length=100)
+    other_contact: str | None = None
+
+    @field_validator("instagram_handle")
+    @classmethod
+    def normalize_instagram_handle(cls, value: str | None) -> str | None:
+        return value.strip().lstrip("@").rstrip("/") if value else value
+
     status: PartnerBusinessStatus = PartnerBusinessStatus.DRAFT
     sort_order: int = 0
     internal_note: str | None = None
@@ -147,6 +164,19 @@ class PartnerBusinessUpdate(BaseModel):
     cover_image_url: str | None = None
     category: str | None = Field(None, max_length=50)
     business_hours_text: str | None = Field(None, max_length=300)
+    listing_type: PartnerBusinessListingType | None = None
+    contact_name: str | None = Field(None, max_length=100)
+    contact_phone: str | None = Field(None, max_length=50)
+    contact_email: EmailStr | None = None
+    instagram_handle: str | None = Field(None, max_length=100)
+    line_id: str | None = Field(None, max_length=100)
+    other_contact: str | None = None
+
+    @field_validator("instagram_handle")
+    @classmethod
+    def normalize_instagram_handle(cls, value: str | None) -> str | None:
+        return value.strip().lstrip("@").rstrip("/") if value else value
+
     status: PartnerBusinessStatus | None = None
     sort_order: int | None = None
     internal_note: str | None = None
@@ -164,6 +194,13 @@ class PartnerBusinessListItem(BaseModel):
     cover_image_url: str | None = None
     category: str | None = None
     business_hours_text: str | None = None
+    listing_type: str
+    contact_name: str | None = None
+    contact_phone: str | None = None
+    contact_email: str | None = None
+    instagram_handle: str | None = None
+    line_id: str | None = None
+    other_contact: str | None = None
     sort_order: int
     view_count: int = 0
     click_count: int = 0
@@ -191,6 +228,13 @@ class PartnerBusinessOut(BaseModel):
     cover_image_url: str | None
     category: str | None
     business_hours_text: str | None
+    listing_type: str
+    contact_name: str | None
+    contact_phone: str | None
+    contact_email: str | None
+    instagram_handle: str | None
+    line_id: str | None
+    other_contact: str | None
     status: str
     sort_order: int
     view_count: int = 0

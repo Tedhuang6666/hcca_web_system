@@ -4,12 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import dynamic from "next/dynamic";
-import { Clock, LocateFixed, MapPin, Navigation, Search, Send, SlidersHorizontal, Star, Tag, Trophy } from "lucide-react";
+import { AtSign, Clock, ExternalLink, LocateFixed, Mail, MapPin, MessageCircle, Navigation, Phone, Search, Send, SlidersHorizontal, Star, Tag, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import { partnerMapApi, ApiError } from "@/lib/api";
+import type { PartnerBusinessDetail, PartnerBusinessDirectoryItem } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
 import type {
-  PartnerBusinessOut,
   PartnerMapItem,
   PartnerRankingItem,
   PartnerSubmissionCreate,
@@ -54,6 +54,10 @@ function distanceText(meters: number): string {
   return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${Math.round(meters)} m`;
 }
 
+function instagramUrl(handle: string): string {
+  return `https://www.instagram.com/${handle.replace(/^@/, "")}`;
+}
+
 function DetailPanel({
   business,
   loading,
@@ -61,7 +65,7 @@ function DetailPanel({
   onCheckIn,
   onClose,
 }: {
-  business: PartnerBusinessOut | null;
+  business: PartnerBusinessDetail | null;
   loading: boolean;
   onRate: (score: number) => void;
   onCheckIn: () => void;
@@ -121,7 +125,34 @@ function DetailPanel({
             </div>
           </div>
           {business.summary && <p className="text-sm" style={{ color: "var(--text-secondary)" }}>{business.summary}</p>}
-          <div className="grid grid-cols-3 gap-2">
+          {business.listing_type === "contact" && (
+            <section className="rounded-lg border p-3" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
+              <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>聯絡方式</h3>
+              <div className="mt-2 space-y-2 text-sm" style={{ color: "var(--text-secondary)" }}>
+                {business.contact_name && <p>聯絡人：{business.contact_name}</p>}
+                {business.contact_phone && (
+                  <a className="flex items-center gap-2 hover:underline" href={`tel:${business.contact_phone}`}>
+                    <Phone size={14} aria-hidden="true" /> {business.contact_phone}
+                  </a>
+                )}
+                {business.contact_email && (
+                  <a className="flex items-center gap-2 hover:underline" href={`mailto:${business.contact_email}`}>
+                    <Mail size={14} aria-hidden="true" /> {business.contact_email}
+                  </a>
+                )}
+                {business.instagram_handle && (
+                  <a className="flex items-center gap-2 hover:underline" href={instagramUrl(business.instagram_handle)} target="_blank" rel="noreferrer">
+                    <AtSign size={14} aria-hidden="true" /> @{business.instagram_handle.replace(/^@/, "")} <ExternalLink size={12} aria-hidden="true" />
+                  </a>
+                )}
+                {business.line_id && (
+                  <p className="flex items-center gap-2"><MessageCircle size={14} aria-hidden="true" /> LINE：{business.line_id}</p>
+                )}
+                {business.other_contact && <p className="whitespace-pre-wrap">{business.other_contact}</p>}
+              </div>
+            </section>
+          )}
+          {business.listing_type === "location" && <div className="grid grid-cols-3 gap-2">
             <div className="rounded-lg border p-2 text-center" style={{ borderColor: "var(--border)" }}>
               <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{business.rating_avg ?? "-"}</p>
               <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>評價</p>
@@ -134,7 +165,7 @@ function DetailPanel({
               <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{business.popularity_score}</p>
               <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>熱度</p>
             </div>
-          </div>
+          </div>}
           <div className="flex flex-wrap gap-2">
             {business.tags.map((tag) => (
               <span
@@ -174,7 +205,7 @@ function DetailPanel({
             )}
           </section>
 
-          <section>
+          {business.listing_type === "location" && <section>
             <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>學生互動</h3>
             <div className="mt-2 flex flex-wrap gap-2">
               {[1, 2, 3, 4, 5].map((score) => (
@@ -186,9 +217,9 @@ function DetailPanel({
                 <Trophy size={14} aria-hidden="true" /> 我常去
               </button>
             </div>
-          </section>
+          </section>}
 
-          <section>
+          {business.listing_type === "location" && <section>
             <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>點位</h3>
             <div className="mt-2 space-y-2">
               {business.locations.map((location) => (
@@ -203,7 +234,7 @@ function DetailPanel({
                 </div>
               ))}
             </div>
-          </section>
+          </section>}
 
           {!business.can_view_private_details && (
             <Link
@@ -221,12 +252,13 @@ function DetailPanel({
 
 export default function PartnerMapPage() {
   const [items, setItems] = useState<PartnerMapItem[]>([]);
+  const [contactBusinesses, setContactBusinesses] = useState<PartnerBusinessDirectoryItem[]>([]);
   const [tags, setTags] = useState<PartnerTagOut[]>([]);
   const [keyword, setKeyword] = useState("");
   const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(new Set());
   const [offerOnly, setOfferOnly] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [selectedBusiness, setSelectedBusiness] = useState<PartnerBusinessOut | null>(null);
+  const [selectedBusiness, setSelectedBusiness] = useState<PartnerBusinessDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [viewportOnly, setViewportOnly] = useState(false);
   const [mapBounds, setMapBounds] = useState<PartnerMapBoundsState | null>(null);
@@ -268,6 +300,7 @@ export default function PartnerMapPage() {
 
   useEffect(() => {
     partnerMapApi.tags().then(setTags).catch(() => {});
+    partnerMapApi.directory().then(setContactBusinesses).catch(() => {});
     partnerMapApi.rankings(5).then(setRankings).catch(() => {});
   }, []);
 
@@ -483,6 +516,19 @@ export default function PartnerMapPage() {
                 ))}
               </div>
             </div>
+            {contactBusinesses.length > 0 && (
+              <div className="mb-3 rounded-lg border p-3" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
+                <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>合作夥伴聯絡資訊</p>
+                <div className="mt-2 space-y-2">
+                  {contactBusinesses.map((business) => (
+                    <button key={business.id} onClick={() => openBusiness(business.id)} className="w-full rounded-lg border p-2 text-left" style={{ borderColor: "var(--border)", background: "var(--bg)" }}>
+                      <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>{business.name}</p>
+                      <p className="mt-1 line-clamp-2 text-[11px]" style={{ color: "var(--text-muted)" }}>{business.summary || business.category || "合作聯絡窗口"}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             {loading ? (
               <div className="py-10 text-center text-sm" style={{ color: "var(--text-muted)" }}>載入中...</div>
             ) : filteredItems.length === 0 ? (
@@ -596,6 +642,18 @@ export default function PartnerMapPage() {
                 <Send size={14} aria-hidden="true" /> 投稿新店
               </button>
             </div>
+            {contactBusinesses.length > 0 && (
+              <div className="rounded-lg border p-2" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
+                <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>合作夥伴聯絡資訊</p>
+                <div className="mt-2 max-h-24 space-y-1 overflow-y-auto">
+                  {contactBusinesses.map((business) => (
+                    <button key={business.id} onClick={() => openBusiness(business.id)} className="block w-full truncate text-left text-xs" style={{ color: "var(--primary)" }}>
+                      {business.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           <PartnerLeafletMap
             items={filteredItems}

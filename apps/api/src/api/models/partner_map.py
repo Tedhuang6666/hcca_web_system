@@ -37,6 +37,13 @@ class PartnerBusinessStatus(enum.StrEnum):
     ARCHIVED = "archived"
 
 
+class PartnerBusinessListingType(enum.StrEnum):
+    """特約刊登方式：地圖點位或僅提供聯絡方式。"""
+
+    LOCATION = "location"
+    CONTACT = "contact"
+
+
 class PartnerSubmissionStatus(enum.StrEnum):
     PENDING = "pending"
     APPROVED = "approved"
@@ -95,6 +102,19 @@ class PartnerBusiness(Base, TimestampMixin):
     cover_image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     category: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     business_hours_text: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    listing_type: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default=PartnerBusinessListingType.LOCATION.value,
+        server_default=PartnerBusinessListingType.LOCATION.value,
+        index=True,
+    )
+    contact_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    contact_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    contact_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    instagram_handle: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    line_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    other_contact: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default=PartnerBusinessStatus.DRAFT.value, index=True
     )
@@ -247,6 +267,7 @@ class PartnerSubmission(Base, TimestampMixin):
 
 __all__ = [
     "PartnerBusiness",
+    "PartnerBusinessListingType",
     "PartnerBusinessStatus",
     "PartnerLocation",
     "PartnerOffer",
