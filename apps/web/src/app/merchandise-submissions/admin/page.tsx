@@ -26,12 +26,15 @@ import type {
 } from "@/lib/types";
 
 type ItemDraft = MerchandiseSubmissionItemCreate & { id?: string };
+type VotingSubmission = MerchandiseSubmissionAdminListItem & {
+  status: MerchandiseSubmissionAdminListItem["status"] | "review_completed";
+  voting_survey_id?: string | null;
+  voting_survey_title?: string | null;
+  voting_survey_status?: string | null;
+};
 type AdminTab = "review" | "settings" | "items";
 
-const reviewStatusLabels: Record<
-  MerchandiseSubmissionAdminListItem["status"],
-  string
-> = {
+const reviewStatusLabels: Record<string, string> = {
   draft: "草稿",
   submitted: "已送出",
   reviewing: "審核中",
@@ -565,7 +568,7 @@ function ReviewRow({
   fields,
   onReviewed,
 }: {
-  submission: MerchandiseSubmissionAdminListItem;
+  submission: VotingSubmission;
   fields: SubmissionCustomField[];
   onReviewed: () => void;
 }) {
@@ -795,7 +798,7 @@ export default function MerchandiseSubmissionsAdminPage() {
     useState<MerchandiseSubmissionSettingsOut | null>(null);
   const [items, setItems] = useState<MerchandiseSubmissionItemOut[]>([]);
   const [submissions, setSubmissions] = useState<
-    MerchandiseSubmissionAdminListItem[]
+    VotingSubmission[]
   >([]);
   const [orgs, setOrgs] = useState<OrgRead[]>([]);
   const [votingOrgId, setVotingOrgId] = useState("");
@@ -805,7 +808,7 @@ export default function MerchandiseSubmissionsAdminPage() {
   const [reviewItemId, setReviewItemId] = useState("");
   const [reviewUserQuery, setReviewUserQuery] = useState("");
   const [reviewStatus, setReviewStatus] = useState<
-    MerchandiseSubmissionAdminListItem["status"] | ""
+    VotingSubmission["status"] | ""
   >("");
   const [loading, setLoading] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
@@ -1474,7 +1477,7 @@ export default function MerchandiseSubmissionsAdminPage() {
                 onChange={(event) =>
                   setReviewStatus(
                     event.target.value as
-                      MerchandiseSubmissionAdminListItem["status"] | "",
+                      VotingSubmission["status"] | "",
                   )
                 }
                 className="input w-full"
@@ -1482,7 +1485,7 @@ export default function MerchandiseSubmissionsAdminPage() {
                 <option value="">全部狀態</option>
                 {(
                   Object.entries(reviewStatusLabels) as Array<
-                    [MerchandiseSubmissionAdminListItem["status"], string]
+                    [VotingSubmission["status"], string]
                   >
                 ).map(([value, label]) => (
                   <option key={value} value={value}>

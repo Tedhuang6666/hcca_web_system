@@ -221,13 +221,14 @@ function QuestionInput({
   const {
     question_type: type,
     options: rawOptions,
-    option_image_sets: optionImageSets,
     min_value,
     max_value,
     placeholder,
   } = question;
   const options = rawOptions ?? [];
-  const imageSets = optionImageSets ?? [];
+  const imageSets = (
+    question as SurveyQuestionOut & { option_image_sets?: string[][] }
+  ).option_image_sets ?? [];
   const minV = min_value ?? 1;
   const maxV = max_value ?? 5;
   const optionPreview = (index: number) => {

@@ -29,7 +29,13 @@ import type {
   MerchandiseSubmissionUploadOut,
 } from "@/lib/types";
 
-const statusLabel: Record<MerchandiseSubmissionOut["status"], string> = {
+type VotingSubmission = MerchandiseSubmissionOut & {
+  status: MerchandiseSubmissionOut["status"] | "review_completed";
+  voting_survey_id?: string | null;
+  voting_survey_status?: string | null;
+};
+
+const statusLabel: Record<string, string> = {
   draft: "草稿",
   submitted: "已送出",
   reviewing: "審核中",
@@ -266,7 +272,7 @@ export default function MerchandiseSubmissionsPage() {
   const [portal, setPortal] = useState<MerchandiseSubmissionPortalOut | null>(
     null,
   );
-  const [submissions, setSubmissions] = useState<MerchandiseSubmissionOut[]>(
+  const [submissions, setSubmissions] = useState<VotingSubmission[]>(
     [],
   );
   const [selectedId, setSelectedId] = useState("");
