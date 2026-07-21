@@ -251,6 +251,39 @@ async def test_partner_map_admin_requires_permission(
 
 
 @pytest.mark.asyncio
+async def test_renaming_partner_tag_updates_business_category(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin = User(
+        email="rename-admin@school.edu",
+        display_name="分類管理員",
+        is_active=True,
+        is_verified=True,
+        is_superuser=True,
+    )
+    tag = PartnerTag(name="舊分類")
+    business = PartnerBusiness(
+        name="分類店家",
+        category="舊分類",
+        status=PartnerBusinessStatus.ACTIVE.value,
+    )
+    db_session.add_all([admin, tag, business])
+    await db_session.flush()
+    _override_current_user(admin)
+
+    response = await client.patch(
+        f"/partner-map/admin/tags/{tag.id}",
+        json={"name": "新分類"},
+        headers=HOST_HEADERS,
+    )
+
+    await db_session.refresh(business)
+    assert response.status_code == 200
+    assert business.category == "新分類"
+
+
+@pytest.mark.asyncio
 async def test_partner_map_admin_can_create_business(
     client: AsyncClient,
     db_session: AsyncSession,

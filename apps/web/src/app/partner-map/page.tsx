@@ -18,7 +18,6 @@ import type {
 import {
   MARKER_CONFIG,
   markerKind,
-  type MarkerKind,
   type PartnerMapBoundsState,
 } from "./PartnerLeafletMap";
 
@@ -129,6 +128,14 @@ function DetailPanel({
             </div>
           </div>
           {business.summary && <p className="text-sm" style={{ color: "var(--text-secondary)" }}>{business.summary}</p>}
+          {business.description && (
+            <section>
+              <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>合作介紹</h3>
+              <p className="mt-2 whitespace-pre-wrap text-sm" style={{ color: "var(--text-secondary)" }}>
+                {business.description}
+              </p>
+            </section>
+          )}
           {(business.website_url || business.social_url) && (
             <a
               className="btn btn-secondary w-fit"
@@ -210,7 +217,10 @@ function DetailPanel({
                       </p>
                     )}
                     {offer.instructions && (
-                      <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>{offer.instructions}</p>
+                      <div className="mt-2 text-xs">
+                        <p className="font-medium" style={{ color: "var(--text-secondary)" }}>使用方式</p>
+                        <p className="mt-0.5 whitespace-pre-wrap" style={{ color: "var(--text-muted)" }}>{offer.instructions}</p>
+                      </div>
                     )}
                   </div>
                 ))}
@@ -283,7 +293,6 @@ export default function PartnerMapPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [viewportOnly, setViewportOnly] = useState(false);
   const [mapBounds, setMapBounds] = useState<PartnerMapBoundsState | null>(null);
-  const [selectedKind, setSelectedKind] = useState<MarkerKind>("all");
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [sortMode, setSortMode] = useState<"popular" | "nearest">("popular");
   const [rankings, setRankings] = useState<PartnerRankingItem[]>([]);
@@ -421,7 +430,7 @@ export default function PartnerMapPage() {
   const center: [number, number] = DEFAULT_CENTER;
   const filteredItems = useMemo(
     () => {
-      const filtered = selectedKind === "all" ? [...items] : items.filter((item) => markerKind(item) === selectedKind);
+      const filtered = [...items];
       if (sortMode === "nearest" && userLocation) {
         filtered.sort(
           (a, b) =>
@@ -433,22 +442,7 @@ export default function PartnerMapPage() {
       }
       return filtered;
     },
-    [items, selectedKind, sortMode, userLocation],
-  );
-  const kindOptions: { key: MarkerKind; label: string }[] = [
-    { key: "all", label: "全部" },
-    { key: "drink", label: MARKER_CONFIG.drink.label },
-    { key: "breakfast", label: MARKER_CONFIG.breakfast.label },
-    { key: "fast_food", label: MARKER_CONFIG.fast_food.label },
-    { key: "noodle", label: MARKER_CONFIG.noodle.label },
-    { key: "stationery", label: MARKER_CONFIG.stationery.label },
-    { key: "cram_school", label: MARKER_CONFIG.cram_school.label },
-    { key: "copy", label: MARKER_CONFIG.copy.label },
-    { key: "meal", label: MARKER_CONFIG.meal.label },
-    { key: "other", label: MARKER_CONFIG.other.label },
-  ];
-  const categoryTags = tags.filter((tag) =>
-    /飲料|早餐|文具|補習|影印|速食|麵|餐|咖啡|列印/.test(tag.name),
+    [items, sortMode, userLocation],
   );
 
   const thumbFor = (item: PartnerMapItem) => item.logo_url || item.cover_image_url;
@@ -473,19 +467,16 @@ export default function PartnerMapPage() {
               />
             </label>
             <div className="flex items-center gap-2 overflow-x-auto pb-1">
-              {kindOptions.map((option) => (
-                <button
-                  key={option.key}
-                  onClick={() => setSelectedKind(option.key)}
-                  className="flex shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-xs"
-                  style={{
-                    borderColor: selectedKind === option.key ? "var(--primary)" : "var(--border)",
-                    color: selectedKind === option.key ? "var(--primary)" : "var(--text-secondary)",
-                    background: selectedKind === option.key ? "var(--primary-dim)" : "transparent",
-                  }}>
-                  {option.label}
-                </button>
-              ))}
+              <button
+                onClick={() => setSelectedTagIds(new Set())}
+                className="flex shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-xs"
+                style={{
+                  borderColor: selectedTagIds.size === 0 ? "var(--primary)" : "var(--border)",
+                  color: selectedTagIds.size === 0 ? "var(--primary)" : "var(--text-secondary)",
+                  background: selectedTagIds.size === 0 ? "var(--primary-dim)" : "transparent",
+                }}>
+                全部
+              </button>
               <button
                 onClick={() => setOfferOnly((value) => !value)}
                 className="flex shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-xs"
@@ -636,23 +627,18 @@ export default function PartnerMapPage() {
               />
             </label>
             <div className="flex gap-2 overflow-x-auto pb-1">
-              {kindOptions.slice(0, 8).map((option) => (
-                <button
-                  key={option.key}
-                  onClick={() => setSelectedKind(option.key)}
-                  className="partner-map-filter-chip shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium"
-                  style={{
-                    ["--chip-color" as string]: selectedKind === option.key ? "var(--primary)" : "var(--text-secondary)",
-                    ["--chip-border" as string]: selectedKind === option.key ? "var(--primary)" : "var(--border-strong)",
-                    ["--chip-bg" as string]: selectedKind === option.key ? "var(--primary-dim)" : "var(--bg-elevated)",
-                  }}
-                  aria-pressed={selectedKind === option.key}>
-                  {option.label}
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {categoryTags.map((tag) => {
+              <button
+                onClick={() => setSelectedTagIds(new Set())}
+                className="partner-map-filter-chip shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium"
+                style={{
+                  ["--chip-color" as string]: selectedTagIds.size === 0 ? "var(--primary)" : "var(--text-secondary)",
+                  ["--chip-border" as string]: selectedTagIds.size === 0 ? "var(--primary)" : "var(--border-strong)",
+                  ["--chip-bg" as string]: selectedTagIds.size === 0 ? "var(--primary-dim)" : "var(--bg-elevated)",
+                }}
+                aria-pressed={selectedTagIds.size === 0}>
+                全部
+              </button>
+              {tags.map((tag) => {
                 const active = selectedTagIds.has(tag.id);
                 return (
                   <button
