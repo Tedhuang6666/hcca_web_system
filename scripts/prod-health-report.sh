@@ -7,6 +7,9 @@ set -uo pipefail
 
 env_file="${1:-${ENV_FILE:-.env.production}}"
 compose_file="${2:-${COMPOSE_FILE:-docker-compose.prod.pull.yml}}"
+if [[ -z "${1:-}" && -z "${COMPOSE_FILE:-}" && -f .deploy-state/active-slot && -f docker-compose.bluegreen.yml ]]; then
+  compose_file="docker-compose.bluegreen.yml"
+fi
 export PROD_ENV_FILE="$env_file"
 compose=(docker compose --env-file "$env_file" -f "$compose_file")
 

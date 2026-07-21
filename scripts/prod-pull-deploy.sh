@@ -2,7 +2,7 @@
 # 一鍵拉取 + 部署（GHCR 預建映像版）。在 VPS 的 repo 目錄執行：
 #   ./scripts/prod-pull-deploy.sh
 #
-# 流程：git pull → 設定檢查 → compose pull → 預部署 DB 備份 → migration → 起服務 → smoke test。
+# 流程：git pull → 設定檢查 → compose pull → 預部署 DB 備份 → blue-green 切流 → smoke test。
 # 預設「不」啟動 celery-worker / celery-beat（重背景任務）；要一起開：
 #   WITH_WORKERS=1 ./scripts/prod-pull-deploy.sh
 #
@@ -11,6 +11,7 @@
 #   WITH_WORKERS=1     # 連 celery-worker / celery-beat 一起起
 #   SKIP_GIT=1         # 跳過 git pull（例如手動同步檔案時）
 #   RELEASE_SHA=<sha>  # 指定已通過 CI 且已推送到 GHCR 的 commit（預設目前 HEAD）
+#   DEPLOY_STRATEGY=inplace  # 暫時退回原地重建流程（不建議）
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -106,6 +107,20 @@ if [[ ! -s "$backup_file" ]] || ! gzip -t "$backup_file"; then
   exit 1
 fi
 echo "✓ 預部署備份完成：$backup_file"
+
+if [[ "${DEPLOY_STRATEGY:-bluegreen}" == "bluegreen" ]]; then
+  step "啟動 blue-green 零停機部署"
+  API_IMAGE="$API_IMAGE" WEB_IMAGE="$WEB_IMAGE" WITH_WORKERS="${WITH_WORKERS:-0}" \
+    ENV_FILE="$env_file" COMPOSE_FILE="docker-compose.bluegreen.yml" \
+    ./scripts/zero-downtime-deploy.sh "${DEPLOY_SLOT:-auto}"
+
+  # 流量切換成功後，在不影響 HTTP 的情況下更新專責寄信 worker，
+  # 再停止舊的單槽 API/Web/一般 worker。blue-green 的 beat 若啟用，已由上一步管理。
+  legacy_compose=(docker compose --env-file "$env_file" -f "$compose_file")
+  "${legacy_compose[@]}" --profile email up -d email-worker 2>/dev/null || true
+  "${legacy_compose[@]}" stop api web celery-worker 2>/dev/null || true
+  exit 0
+fi
 
 # 套用資料庫 migration（alembic upgrade head）必須在起 api/web 前先跑，否則新映像會對
 # 舊 schema 查詢而整路由 500（例：column elections.slug does not exist）。

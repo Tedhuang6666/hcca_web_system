@@ -4,6 +4,7 @@
 #   bash scripts/zero-downtime-deploy.sh green
 
 x-api-common: &api-common
+  image: ${API_IMAGE:-hcca-api:bluegreen-local}
   build:
     context: .
     dockerfile: apps/api/Dockerfile
@@ -33,6 +34,9 @@ x-api-common: &api-common
 x-api-service: &api-service
   <<: *api-common
   restart: unless-stopped
+  mem_limit: ${API_MEM_LIMIT:-1200m}
+  memswap_limit: ${API_MEM_LIMIT:-1200m}
+  mem_reservation: 256m
   environment:
     <<: *api-env
     GUNICORN_WORKERS: ${GUNICORN_WORKERS:-4}
@@ -55,6 +59,7 @@ x-api-service: &api-service
   stop_grace_period: 45s
 
 x-web-service: &web-service
+  image: ${WEB_IMAGE:-hcca-web:bluegreen-local}
   build:
     context: .
     dockerfile: apps/web/Dockerfile
@@ -63,6 +68,9 @@ x-web-service: &web-service
       NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-}
       NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://hcca40.hct.works}
   restart: unless-stopped
+  mem_limit: ${WEB_MEM_LIMIT:-768m}
+  memswap_limit: ${WEB_MEM_LIMIT:-768m}
+  mem_reservation: 192m
   environment:
     NODE_ENV: production
   healthcheck:
@@ -80,6 +88,9 @@ x-web-service: &web-service
 x-worker-service: &worker-service
   <<: *api-common
   restart: unless-stopped
+  mem_limit: ${CELERY_WORKER_MEM_LIMIT:-1200m}
+  memswap_limit: ${CELERY_WORKER_MEM_LIMIT:-1200m}
+  mem_reservation: 256m
   environment:
     <<: *api-env
     DB_POOL_SIZE: ${CELERY_DB_POOL_SIZE:-5}
@@ -178,6 +189,9 @@ services:
 
   celery-beat:
     <<: *worker-service
+    mem_limit: ${CELERY_BEAT_MEM_LIMIT:-256m}
+    memswap_limit: ${CELERY_BEAT_MEM_LIMIT:-256m}
+    mem_reservation: 48m
     # pidfile 放非持久化的 /dev/shm，避免 beat 以 PID 1 執行時把「1」寫進
     # 持久化 volume，重啟後被 celery 誤判「已在執行（pid: 1）」而卡重啟迴圈。
     # 啟動先 rm 掉新舊兩處殘留 pidfile 作保險；exec 讓 celery 接手 PID 1。
