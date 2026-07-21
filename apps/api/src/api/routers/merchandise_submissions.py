@@ -38,7 +38,7 @@ from api.services import audit as audit_svc
 from api.services import merchandise_submission as submission_svc
 from api.services import survey as survey_svc
 from api.services.permission import get_user_permission_codes
-from api.services.storage import get_storage
+from api.services.storage import get_storage, validate_storage_key
 
 router = APIRouter(prefix="/merchandise-submissions", tags=["校商投稿"])
 
@@ -197,6 +197,10 @@ async def upload_submission_file(
 
 @router.get("/uploads/{storage_key:path}", summary="預覽投稿圖稿")
 async def preview_submission_file(storage_key: str, session: DbDep, current_user: CurrentUser):
+    try:
+        storage_key = validate_storage_key(storage_key)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到投稿圖稿") from exc
     own_prefix = f"merchandise-submissions/{current_user.id}/"
     stored_file = await submission_svc.get_submission_file(session, storage_key)
     if stored_file is None:

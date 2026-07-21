@@ -41,7 +41,7 @@ async def _enforce_rate_limit(api_key: ApiKey) -> None:
         pipe.expire(key, 120)
         count, _ = await pipe.execute()
     except (RedisError, TimeoutError) as exc:
-        logger.error("API key rate limit Redis 不可用，拒絕請求 key_id=%s", api_key.id)
+        logger.error("API key rate limit Redis 不可用，拒絕請求")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="API key 限流服務暫時不可用",

@@ -120,6 +120,29 @@ _ALLOWED_TYPES: frozenset[str] = frozenset(_MIME_TO_EXT)
 
 MAX_FILE_SIZE = 20 * 1024 * 1024  # 20 MB
 
+_STORAGE_KEY_PART = re.compile(r"^[^/\\\\\x00-\x1f\x7f]+$")
+
+
+def validate_storage_key(storage_key: str) -> str:
+    """驗證 storage key 的每個路徑片段，避免使用者輸入跳脫儲存根目錄。"""
+    if not storage_key or storage_key.startswith(("/", "\\\\")):
+        raise ValueError("無效的儲存檔案路徑")
+    parts = storage_key.split("/")
+    if any(part in {"", ".", ".."} or not _STORAGE_KEY_PART.fullmatch(part) for part in parts):
+        raise ValueError("無效的儲存檔案路徑")
+    return "/".join(parts)
+
+
+def _storage_key_parts(storage_key: str) -> tuple[str, ...]:
+    return tuple(validate_storage_key(storage_key).split("/"))
+
+
+def _build_storage_key(prefix: str, filename: str) -> str:
+    if not prefix:
+        return validate_storage_key(filename)
+    return "/".join((*_storage_key_parts(prefix), filename))
+
+
 # Magic bytes 白名單：防止攻擊者宣告合法 Content-Type 但上傳偽裝內容（polyglot 攻擊）。
 # ZIP 系列（docx/xlsx/pptx）共享 PK\x03\x04 簽章；legacy Office 共享 D0CF 簽章。
 _MAGIC: dict[str, bytes | tuple[bytes, ...]] = {
@@ -220,9 +243,9 @@ class LocalStorageBackend(StorageBackend):
         sanitized = _sanitize_filename(original_filename)
         ext = _MIME_TO_EXT[content_type]  # content_type 已驗證在白名單內
         unique_name = f"{uuid.uuid4().hex}{ext}"
-        key = f"{prefix}/{unique_name}".lstrip("/") if prefix else unique_name
+        key = _build_storage_key(prefix, unique_name)
 
-        dest = self._base / key
+        dest = self._base.joinpath(*_storage_key_parts(key))
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(content)
 
@@ -236,7 +259,10 @@ class LocalStorageBackend(StorageBackend):
         )
 
     async def delete(self, storage_key: str) -> None:
-        target = self._base / storage_key
+        try:
+            target = self._base.joinpath(*_storage_key_parts(storage_key))
+        except ValueError:
+            return
         if target.exists():
             target.unlink()
             logger.info("檔案刪除 key=%s", storage_key)
@@ -249,7 +275,7 @@ class LocalStorageBackend(StorageBackend):
         disposition: str | None = None,
         download_name: str | None = None,
     ) -> str:
-        return f"/uploads/{storage_key}"
+        return f"/uploads/{validate_storage_key(storage_key)}"
 
     def local_path(self, storage_key: str) -> Path | None:
         """正規化後仍須落在 self._base 底下，否則視為不存在。
@@ -258,8 +284,12 @@ class LocalStorageBackend(StorageBackend):
         不受使用者輸入影響；這層檢查是縱深防禦，避免未來任何呼叫端不慎把
         使用者輸入傳進來時，"../../etc/passwd" 這類路徑跳脫仍能被擋下。
         """
+        try:
+            parts = _storage_key_parts(storage_key)
+        except ValueError:
+            return None
         base = self._base.resolve()
-        candidate = (self._base / storage_key).resolve()
+        candidate = self._base.joinpath(*parts).resolve()
         if not candidate.is_relative_to(base):
             return None
         return candidate
@@ -316,7 +346,7 @@ class S3StorageBackend(StorageBackend):
         sanitized = _sanitize_filename(original_filename)
         # 副檔名由白名單推導（與 LocalStorageBackend 一致），防止副檔名混淆
         ext = _MIME_TO_EXT[content_type]
-        key = f"{prefix}/{uuid.uuid4().hex}{ext}".lstrip("/")
+        key = _build_storage_key(prefix, f"{uuid.uuid4().hex}{ext}")
 
         client = self._client
         await anyio.to_thread.run_sync(
@@ -336,6 +366,10 @@ class S3StorageBackend(StorageBackend):
         )
 
     async def delete(self, storage_key: str) -> None:
+        try:
+            storage_key = validate_storage_key(storage_key)
+        except ValueError:
+            return
         client = self._client
         bucket = self._bucket
         await anyio.to_thread.run_sync(lambda: client.delete_object(Bucket=bucket, Key=storage_key))
@@ -348,6 +382,7 @@ class S3StorageBackend(StorageBackend):
         disposition: str | None = None,
         download_name: str | None = None,
     ) -> str:
+        storage_key = validate_storage_key(storage_key)
         params: dict[str, str] = {"Bucket": self._bucket, "Key": storage_key}
         if disposition:
             value = disposition

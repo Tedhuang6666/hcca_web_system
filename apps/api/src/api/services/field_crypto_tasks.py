@@ -69,7 +69,7 @@ async def _rotate_model_async(
             except FieldEncryptionNotConfigured:
                 return {"status": "skipped", "reason": "keys cleared during run"}
             except Exception:
-                logger.exception("欄位加密輪替失敗 %s.id=%s", model_class.__name__, row.id)
+                logger.exception("欄位加密輪替失敗 model=%s", model_class.__name__)
                 continue
             if new_token != current:
                 setattr(row, enc_attr, new_token)

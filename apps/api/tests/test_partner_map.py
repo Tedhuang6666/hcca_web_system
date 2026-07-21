@@ -19,6 +19,7 @@ from api.models.partner_map import (
     PartnerTag,
 )
 from api.models.user import User
+from api.services import partner_map as partner_map_service
 
 HOST_HEADERS = {"host": "localhost"}
 
@@ -336,6 +337,32 @@ async def test_admin_can_parse_google_maps_link(
     assert response.status_code == 200
     assert response.json()["latitude"] == 24.806
     assert response.json()["longitude"] == 120.968
+
+
+@pytest.mark.asyncio
+async def test_google_maps_short_link_rejects_redirect_to_untrusted_host(monkeypatch):
+    class FakeResponse:
+        is_redirect = True
+        headers = {"location": "https://127.0.0.1/internal"}
+
+        def raise_for_status(self):
+            raise AssertionError("untrusted redirect should be rejected before follow-up")
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def get(self, url):
+            assert url == "https://goo.gl/maps/example"
+            return FakeResponse()
+
+    monkeypatch.setattr(partner_map_service.httpx, "AsyncClient", lambda **kwargs: FakeClient())
+
+    with pytest.raises(ValueError, match="無法展開"):
+        await partner_map_service.parse_google_maps_link("https://goo.gl/maps/example")
 
 
 @pytest.mark.asyncio

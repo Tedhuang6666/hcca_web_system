@@ -12,7 +12,7 @@ from api.core.celery_app import celery_app
 from api.core.config import settings
 from api.core.prometheus_metrics import set_queue_depth
 
-_HEARTBEAT_PATH = Path("/tmp/celery-heartbeat")
+_HEARTBEAT_PATH = Path(settings.DB_BACKUP_DIR).parent / ".celery-heartbeat"
 
 _QUEUES = ("default", "email", "meal", "documents", "backup", "recovery", "celery")
 

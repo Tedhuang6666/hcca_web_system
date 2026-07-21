@@ -80,6 +80,17 @@ async def test_local_path_points_under_base(tmp_path):
     assert str(path).startswith(str(tmp_path))
 
 
+@pytest.mark.parametrize(
+    "storage_key",
+    ("../outside.pdf", "doc/../../outside.pdf", "/etc/passwd", "doc\\\\outside.pdf"),
+)
+async def test_local_path_rejects_path_traversal(tmp_path, storage_key):
+    backend = LocalStorageBackend(base_dir=str(tmp_path))
+    assert backend.local_path(storage_key) is None
+    with pytest.raises(ValueError):
+        await backend.get_url(storage_key)
+
+
 # ── S3StorageBackend ─────────────────────────────────────────────────────────
 
 
