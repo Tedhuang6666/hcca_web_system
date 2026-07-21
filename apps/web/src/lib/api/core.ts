@@ -261,12 +261,24 @@ export async function request<T>(
         maintenance?: boolean;
         load_shed?: boolean;
         module_maintenance?: boolean;
+        module?: string;
+        mode?: "maintenance" | "closed";
+        reason?: string;
         until?: number | null;
       };
       // 模組維護：只關掉該模組，不整站轉址（交由 AppShell gate 顯示插頁）。
       // 廣播事件讓 ModuleStatus context 立即重抓，免等輪詢；照常 fall through 拋 ApiError(503)。
       if (typeof window !== "undefined" && payload.module_maintenance) {
-        window.dispatchEvent(new CustomEvent("hcca:module-maintenance"));
+        window.dispatchEvent(
+          new CustomEvent("hcca:module-maintenance", {
+            detail: {
+              module: payload.module,
+              mode: payload.mode,
+              reason: payload.reason,
+              until: payload.until,
+            },
+          }),
+        );
       }
       if (
         typeof window !== "undefined"

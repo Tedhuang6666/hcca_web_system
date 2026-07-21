@@ -10,6 +10,7 @@ export type ModuleId =
   | "judicialPetitions"
   | "announcements"
   | "shop"
+  | "merchandiseSubmissions"
   | "meal"
   | "surveys"
   | "petitions"
@@ -18,9 +19,14 @@ export type ModuleId =
   | "line"
   | "discord"
   | "governance"
+  | "matters"
   | "activities"
   | "elections"
-  | "seating";
+  | "seating"
+  | "finance"
+  | "publications"
+  | "email"
+  | "operations";
 
 export interface FeModuleSpec {
   label: string;
@@ -65,6 +71,11 @@ export const FE_MODULES: Record<ModuleId, FeModuleSpec> = {
     routePrefixes: ["/shop"],
     navIds: ["shop", "shopAdmin"],
   },
+  merchandiseSubmissions: {
+    label: "校商投稿",
+    routePrefixes: ["/merchandise-submissions"],
+    navIds: ["merchandiseSubmissions", "merchandiseSubmissionsAdmin"],
+  },
   meal: { label: "學餐訂購", routePrefixes: ["/meal"], navIds: ["meal", "mealVendor"] },
   surveys: { label: "問卷系統", routePrefixes: ["/surveys"], navIds: ["surveys"] },
   petitions: {
@@ -89,7 +100,7 @@ export const FE_MODULES: Record<ModuleId, FeModuleSpec> = {
   },
   discord: {
     label: "Discord 機器人",
-    routePrefixes: ["/discord"],
+    routePrefixes: ["/discord", "/admin/discord"],
     navIds: ["discordAdmin"],
   },
   governance: {
@@ -97,20 +108,53 @@ export const FE_MODULES: Record<ModuleId, FeModuleSpec> = {
     routePrefixes: ["/governance"],
     navIds: ["governanceHub"],
   },
+  matters: {
+    label: "整合工作台",
+    routePrefixes: ["/matters"],
+    navIds: ["matters"],
+  },
   activities: {
     label: "活動管理",
-    routePrefixes: ["/activities"],
+    routePrefixes: ["/activities", "/admin/activities"],
     navIds: ["activitiesAdmin"],
   },
   elections: {
     label: "選舉開票",
-    routePrefixes: ["/elections"],
+    routePrefixes: ["/elections", "/admin/elections"],
     navIds: ["electionsAdmin"],
   },
   seating: {
     label: "票務劃位",
     routePrefixes: ["/seating"],
     navIds: [],
+  },
+  finance: {
+    label: "財務與收款",
+    routePrefixes: ["/finance", "/receivables"],
+    navIds: ["finance", "receivables"],
+  },
+  publications: {
+    label: "發布中心",
+    routePrefixes: ["/publications"],
+    navIds: ["publications"],
+  },
+  email: {
+    label: "電子郵件",
+    routePrefixes: ["/email"],
+    navIds: ["email"],
+  },
+  operations: {
+    label: "營運中心",
+    routePrefixes: [
+      "/operations",
+      "/tasks",
+      "/work-items",
+      "/loans",
+      "/inventory",
+      "/admin/loans",
+      "/admin/inventory",
+    ],
+    navIds: ["operations", "workItems", "inventoryAdmin"],
   },
 };
 
