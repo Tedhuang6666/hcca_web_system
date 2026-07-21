@@ -5,7 +5,6 @@ target="${1:-auto}"
 keep_old="${KEEP_OLD:-true}"
 maintenance_mode="${MAINTENANCE_MODE:-0}"
 drain_seconds="${DRAIN_SECONDS:-10}"
-migration_compatible="${MIGRATION_COMPATIBLE:-0}"
 compose_file="${COMPOSE_FILE:-docker-compose.bluegreen.yml}"
 env_file="${ENV_FILE:-.env.production}"
 export PROD_ENV_FILE="$env_file"
@@ -35,7 +34,6 @@ if [[ "$target" != "blue" && "$target" != "green" ]]; then
   echo "Usage: $0 [blue|green|auto]"
   echo "Optional env: ENV_FILE=.env.production COMPOSE_FILE=docker-compose.bluegreen.yml"
   echo "  MAINTENANCE_MODE=1 先顯示靜態維護頁，再停止舊 API/Web 以節省資源"
-  echo "  MIGRATION_COMPATIBLE=1 明確確認 migration 可讓舊映像繼續運作"
   echo "  KEEP_OLD=false      blue-green 模式切流後停止舊 slot"
   exit 2
 fi
@@ -98,6 +96,59 @@ wait_healthy() {
   return 1
 }
 
+run_slot_smoke() {
+  local api_service="$1"
+  local web_service="$2"
+  API_SERVICE="$api_service" WEB_SERVICE="$web_service" \
+    ENV_FILE="$env_file" COMPOSE_FILE="$compose_file" \
+    ./scripts/prod-pull-smoke.sh
+}
+
+check_old_slot_compatibility() {
+  if [[ "$has_previous_slot" != "1" ]]; then
+    echo "No previous slot recorded; skipping legacy compatibility check."
+    return 0
+  fi
+
+  local old_api_service="api-$old"
+  local old_web_service="web-$old"
+  local old_api_id old_web_id
+  old_api_id="$("${compose[@]}" ps -aq "$old_api_service")"
+  old_web_id="$("${compose[@]}" ps -aq "$old_web_service")"
+  if [[ -z "$old_api_id" || -z "$old_web_id" ]]; then
+    echo "Previous slot containers are missing; cannot automatically verify schema compatibility." >&2
+    return 1
+  fi
+
+  echo "Checking the migrated schema against the previous slot..."
+  if ! docker start "$old_api_id" >/dev/null; then
+    echo "Previous API container could not be started." >&2
+    return 1
+  fi
+  if ! wait_healthy "$old_api_service"; then
+    "${compose[@]}" stop "$old_api_service" "$old_web_service" || true
+    return 1
+  fi
+  if ! docker start "$old_web_id" >/dev/null; then
+    "${compose[@]}" stop "$old_api_service" || true
+    echo "Previous Web container could not be started." >&2
+    return 1
+  fi
+  if ! wait_healthy "$old_web_service"; then
+    "${compose[@]}" stop "$old_api_service" "$old_web_service" || true
+    return 1
+  fi
+
+  if ! run_slot_smoke "$old_api_service" "$old_web_service"; then
+    echo "Previous slot failed against the migrated schema." >&2
+    "${compose[@]}" stop "$old_api_service" "$old_web_service" || true
+    return 1
+  fi
+
+  "${compose[@]}" stop "$old_api_service" "$old_web_service"
+  echo "Previous slot compatibility check passed; continuing with the new slot."
+}
+
 reload_caddy() {
   local config="$1"
   "${compose[@]}" exec -T proxy caddy reload --config "/etc/caddy/bluegreen/Caddyfile.$config"
@@ -122,7 +173,7 @@ abort_deploy() {
   if [[ "$maintenance_mode" != "1" ]]; then
     enter_maintenance || true
   fi
-  echo "不會自動啟動舊 slot；請先人工確認 migration 與舊映像相容性。" >&2
+  echo "不會自動啟動舊 slot；前一個 slot 的自動相容性檢查未通過。" >&2
   exit 1
 }
 
@@ -148,16 +199,17 @@ if [[ "$maintenance_mode" == "1" ]]; then
   fi
 fi
 
-echo "Applying backward-compatible migrations..."
-if [[ "$maintenance_mode" != "1" && "$migration_compatible" != "1" ]]; then
-  echo "Refusing to run migration in live blue-green mode without MIGRATION_COMPATIBLE=1." >&2
+echo "Applying migrations in maintenance mode..."
+if [[ "$maintenance_mode" != "1" ]]; then
+  echo "Migrations require MAINTENANCE_MODE=1 so the previous slot can be tested before cutover." >&2
   exit 2
 fi
 if ! "${bootstrap_compose[@]}" run --rm migrate; then
-  echo "Migration failed; keeping the maintenance page active and refusing legacy rollback." >&2
-  if [[ "$maintenance_mode" != "1" ]]; then
-    enter_maintenance || true
-  fi
+  echo "Migration failed; keeping the maintenance page active." >&2
+  exit 1
+fi
+if ! check_old_slot_compatibility; then
+  echo "Automatic compatibility check failed; keeping the maintenance page active." >&2
   exit 1
 fi
 
@@ -218,11 +270,11 @@ if [[ "$maintenance_mode" == "1" ]]; then
     sleep "$drain_seconds"
   fi
   echo "Target slot is active; old slot remains stopped to conserve resources."
-  echo "Old slot will not be started automatically after migration; verify schema compatibility first."
+  echo "Previous slot was automatically checked before traffic cutover."
 elif [[ "$keep_old" == "false" ]]; then
   echo "Stopping old slot: $old..."
   "${compose[@]}" stop "web-$old" "api-$old" "celery-worker-$old" || true
 else
   echo "Old slot $old is still running for fast rollback."
-  echo "Rollback requires manual schema-compatibility review before routing traffic back."
+  echo "Automatic legacy rollback is disabled after migration."
 fi
