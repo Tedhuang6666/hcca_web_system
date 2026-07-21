@@ -118,9 +118,8 @@ async def is_blacklisted(token: str, *, fail_closed: bool = False) -> bool:
         return bool(await redis_client.exists(f"{BLACKLIST_JTI_PREFIX}{jti}"))
     except (RedisError, TimeoutError):
         logger.error(
-            "is_blacklisted: Redis 不可用，%s token type=%s",
+            "黑名單檢查 Redis 不可用，模式=%s",
             "fail-closed 拒絕" if fail_closed else "fail-open 放行",
-            payload.get("type"),
             extra={"alert": "blacklist_fail_open"},
         )
         return fail_closed
@@ -161,7 +160,7 @@ async def revoke_user(user_id: str, *, ttl_seconds: int | None = None) -> int:
     try:
         jtis = await redis_client.smembers(key)
     except Exception:
-        logger.warning("revoke_user smembers failed", exc_info=True)
+        logger.warning("黑名單撤銷查詢失敗", exc_info=True)
         return 0
 
     if not jtis:

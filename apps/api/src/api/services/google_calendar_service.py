@@ -235,9 +235,7 @@ async def pull_from_google(
                 ).execute()
             except HttpError as exc:
                 if exc.resp.status == 410:
-                    logger.warning(
-                        "[GoogleCalendar] syncToken 過期（org=%s），執行 full resync", config.org_id
-                    )
+                    logger.warning("[GoogleCalendar] 同步狀態過期，執行 full resync")
                     need_full_sync = True
                 else:
                     raise
