@@ -11,6 +11,7 @@
 #   WITH_WORKERS=1     # 連 celery-worker / celery-beat 一起起
 #   MAINTENANCE_MODE=1 # 先顯示純靜態維護頁，再停止舊 API/Web（預設）
 #   MAINTENANCE_MODE=0 # 主機資源足夠時，使用傳統雙 slot blue-green
+#   MIGRATION_COMPATIBLE=1 # 僅在確認舊映像可使用 migration 後 schema 時設定
 #   DRAIN_SECONDS=10   # 新版切流後等待舊連線排空的秒數
 #   SKIP_GIT=1         # 跳過 git pull（例如手動同步檔案時）
 #   RELEASE_SHA=<sha>  # 指定已通過 CI 且已推送到 GHCR 的 commit（預設目前 HEAD）
