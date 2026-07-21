@@ -12,6 +12,7 @@ from api.models.activity_discord import (  # noqa: F401
     DiscordActivityWorkspace,
 )
 from api.models.activity_link import ActivityLink, ActivityLinkKind  # noqa: F401
+from api.models.analytics_page_view import AnalyticsPageView  # noqa: F401
 from api.models.announcement import (  # noqa: F401
     Announcement,
     AnnouncementAudience,
@@ -20,7 +21,6 @@ from api.models.announcement import (  # noqa: F401
     announcement_audience_orgs,
     announcement_audience_users,
 )
-from api.models.analytics_page_view import AnalyticsPageView  # noqa: F401
 from api.models.api_key import ApiKey  # noqa: F401
 from api.models.audit_anchor import AuditLogAnchor  # noqa: F401
 from api.models.audit_log import AuditLog  # noqa: F401
