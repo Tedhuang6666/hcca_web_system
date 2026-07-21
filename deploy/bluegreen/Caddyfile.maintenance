@@ -1,0 +1,16 @@
+{$SITE_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Cache-Control "no-store, no-cache, must-revalidate"
+		X-HCCA-Maintenance "true"
+	}
+
+	root * /etc/caddy/bluegreen
+	rewrite * /maintenance.html
+	file_server
+}

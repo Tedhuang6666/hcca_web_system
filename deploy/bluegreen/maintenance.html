@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <title>系統維護中｜校園自治整合平台</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #1a1a2e;
+        --muted: #526070;
+        --surface: #fffef9;
+        --page: #faf8f3;
+        --line: #e8e2d6;
+        --gold: #856518;
+        --gold-soft: #faf4e4;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: var(--page);
+        color: var(--ink);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", "Noto Sans TC", sans-serif;
+        line-height: 1.7;
+      }
+
+      main {
+        width: min(100%, 560px);
+        padding: clamp(28px, 6vw, 56px);
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        text-align: center;
+      }
+
+      .mark {
+        display: inline-grid;
+        width: 56px;
+        height: 56px;
+        place-items: center;
+        margin-bottom: 24px;
+        border: 1px solid #d8bd6d;
+        border-radius: 50%;
+        background: var(--gold-soft);
+        color: var(--gold);
+        font-size: 26px;
+        font-weight: 700;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(1.5rem, 4vw, 2rem);
+        line-height: 1.3;
+        letter-spacing: -0.02em;
+        text-wrap: balance;
+      }
+
+      p {
+        max-width: 38rem;
+        margin: 16px auto 0;
+        color: var(--muted);
+        font-size: 1rem;
+      }
+
+      .note {
+        margin-top: 28px;
+        padding-top: 18px;
+        border-top: 1px solid var(--line);
+        color: var(--gold);
+        font-size: 0.9rem;
+        font-weight: 650;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after { scroll-behavior: auto !important; }
+      }
+    </style>
+  </head>
+  <body>
+    <main aria-labelledby="maintenance-title">
+      <div class="mark" aria-hidden="true">H</div>
+      <h1 id="maintenance-title">校園自治整合平台正在維護</h1>
+      <p>我們正在更新系統服務，期間暫時無法使用平台功能。服務恢復後即可重新連線，資料不會因此遺失。</p>
+      <div class="note" role="status">請稍後再試，謝謝你的耐心等候。</div>
+    </main>
+  </body>
+</html>
