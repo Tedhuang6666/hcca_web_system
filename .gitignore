@@ -86,6 +86,7 @@ test.env
 /*.dump
 /backups/manual/
 /openapi.json
+.deploy-state/
 # 個資匯出測試會在 repo 根目錄產生真實 zip（services/privacy.py exports_root）
 /privacy_exports/
 

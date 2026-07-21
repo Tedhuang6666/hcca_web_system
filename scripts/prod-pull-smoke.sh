@@ -12,6 +12,8 @@ env_file="${ENV_FILE:-.env.production}"
 compose_file="${COMPOSE_FILE:-docker-compose.prod.pull.yml}"
 export PROD_ENV_FILE="$env_file"
 compose=(docker compose --env-file "$env_file" -f "$compose_file")
+api_service="${API_SERVICE:-api}"
+web_service="${WEB_SERVICE:-web}"
 
 pass=0
 fail=0
@@ -31,8 +33,8 @@ check() {
 }
 
 # exec -T：非互動，腳本可用。各服務用容器內既有的 env / runtime，避免外部 DNS/TLS。
-api_exec()   { "${compose[@]}" exec -T api "$@"; }
-web_exec()   { "${compose[@]}" exec -T web "$@"; }
+api_exec()   { "${compose[@]}" exec -T "$api_service" "$@"; }
+web_exec()   { "${compose[@]}" exec -T "$web_service" "$@"; }
 redis_exec() { "${compose[@]}" exec -T redis "$@"; }
 db_exec()    { "${compose[@]}" exec -T db "$@"; }
 
