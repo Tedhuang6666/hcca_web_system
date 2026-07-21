@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   Coffee,
@@ -17,7 +17,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { divIcon } from "leaflet";
-import { MapContainer, Marker, Popup, TileLayer, ZoomControl, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, Marker, Popup, TileLayer, ZoomControl, useMap } from "react-leaflet";
 import type { LatLngBounds, LatLngExpression } from "leaflet";
 import type { PartnerMapItem } from "@/lib/types";
 
@@ -40,29 +40,31 @@ function toBoundsState(bounds: LatLngBounds): PartnerMapBoundsState {
 function BoundsReporter({ onBoundsChange }: { onBoundsChange: (bounds: PartnerMapBoundsState) => void }) {
   const map = useMap();
   const lastBoundsKey = useRef<string | null>(null);
-  const reportBounds = useCallback(() => {
-    const bounds = toBoundsState(map.getBounds());
-    const boundsKey = JSON.stringify(bounds);
-    if (lastBoundsKey.current === boundsKey) return;
-    lastBoundsKey.current = boundsKey;
-    onBoundsChange(bounds);
-  }, [map, onBoundsChange]);
+  const onBoundsChangeRef = useRef(onBoundsChange);
+  onBoundsChangeRef.current = onBoundsChange;
 
-  const eventHandlers = useMemo(
-    () => ({
+  useEffect(() => {
+    const reportBounds = () => {
+      const bounds = toBoundsState(map.getBounds());
+      const boundsKey = JSON.stringify(bounds);
+      if (lastBoundsKey.current === boundsKey) return;
+      lastBoundsKey.current = boundsKey;
+      onBoundsChangeRef.current(bounds);
+    };
+    const eventHandlers = {
       movestart: () => map.closePopup(),
       zoomstart: () => map.closePopup(),
       moveend: reportBounds,
       zoomend: reportBounds,
-    }),
-    [map, reportBounds],
-  );
+    };
 
-  useEffect(() => {
+    map.on(eventHandlers);
     reportBounds();
-  }, [reportBounds]);
+    return () => {
+      map.off(eventHandlers);
+    };
+  }, [map]);
 
-  useMapEvents(eventHandlers);
   return null;
 }
 
