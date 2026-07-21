@@ -296,18 +296,19 @@ export default function PartnerMapPage() {
     offer_hint: "",
   });
 
+  const activeMapBounds = viewportOnly ? mapBounds : null;
   const query = useMemo(
     () => ({
       keyword: keyword.trim(),
       tag_ids: Array.from(selectedTagIds),
       has_active_offer: offerOnly,
       limit: "300",
-      min_lat: viewportOnly && mapBounds ? mapBounds.min_lat : undefined,
-      max_lat: viewportOnly && mapBounds ? mapBounds.max_lat : undefined,
-      min_lng: viewportOnly && mapBounds ? mapBounds.min_lng : undefined,
-      max_lng: viewportOnly && mapBounds ? mapBounds.max_lng : undefined,
+      min_lat: activeMapBounds?.min_lat,
+      max_lat: activeMapBounds?.max_lat,
+      min_lng: activeMapBounds?.min_lng,
+      max_lng: activeMapBounds?.max_lng,
     }),
-    [keyword, mapBounds, offerOnly, selectedTagIds, viewportOnly],
+    [activeMapBounds, keyword, offerOnly, selectedTagIds],
   );
 
   const load = useCallback(() => {
@@ -326,7 +327,10 @@ export default function PartnerMapPage() {
   }, []);
 
   useEffect(() => {
-    load();
+    const timer = window.setTimeout(() => {
+      void load();
+    }, 250);
+    return () => window.clearTimeout(timer);
   }, [load]);
 
   const openBusiness = (businessId: string) => {
