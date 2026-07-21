@@ -1694,20 +1694,22 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 }
 
 /* ── 輸入框 ───────────────────────────────────────────────────────────── */
-.input {
-  width: 100%;
-  padding: 0.5rem 0.75rem;
-  background: var(--bg-surface);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  font-size: 0.875rem;
-  font-family: inherit;
-  line-height: 1.5;
-  outline: none;
-  transition: border-color var(--transition), box-shadow var(--transition);
+@layer components {
+  .input {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    font-family: inherit;
+    line-height: 1.5;
+    outline: none;
+    transition: border-color var(--transition), box-shadow var(--transition);
+  }
+  .input::placeholder { color: var(--text-muted); }
 }
-.input::placeholder { color: var(--text-muted); }
 .input:focus {
   border-color: var(--border-focus);
   box-shadow:

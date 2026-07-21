@@ -124,7 +124,7 @@ export default function RecommendedVendorsPage() {
         </div>
       </header>
       <section className="grid min-w-0 gap-3 md:grid-cols-[minmax(0,1fr)_12rem_auto]">
-        <label className="relative block min-w-0"><Search size={16} className="absolute left-3 top-3" style={{ color: "var(--text-muted)" }} aria-hidden="true" /><input className="input w-full pl-9" value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="搜尋商家、分類或地址" /></label>
+        <label className="relative block min-w-0"><Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-muted)" }} aria-hidden="true" /><input className="input w-full pl-9" value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="搜尋商家、分類或地址" /></label>
         <select className="input w-full" value={category} onChange={(event) => setCategory(event.target.value)} aria-label="商家分類"><option value="all">全部分類</option>{categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
         <button type="button" className="btn btn-secondary w-full md:w-auto" onClick={() => void load()}>搜尋</button>
       </section>
