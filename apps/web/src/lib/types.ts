@@ -539,6 +539,7 @@ import type {
   PositionSummary,
   RateLimitOverride,
   RecipientType,
+  SurveyStatus,
 } from './api-bridge'
 
 // ── 公文系統型別 ──────────────────────────────────────────────────────────────
