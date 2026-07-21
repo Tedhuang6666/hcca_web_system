@@ -98,6 +98,7 @@ from api.routers import (
     public_api,
     publications,
     receivables,
+    recommended_vendors,
     regulations,
     reports,
     saved_filters,
@@ -355,6 +356,7 @@ def create_app() -> FastAPI:
     attach_module_health(petitions.router, module_id="petitions")
     attach_module_health(exam_papers.router, module_id="examPapers")
     attach_module_health(partner_map.router, module_id="partnerMap")
+    attach_module_health(recommended_vendors.router, module_id="recommendedVendors")
     attach_module_health(line_webhook.router, module_id="line")
     attach_module_health(discord.router, module_id="discord")
     attach_module_health(governance.router, module_id="governance")
@@ -387,6 +389,7 @@ def create_app() -> FastAPI:
         "petitions",
         "examPapers",
         "partnerMap",
+        "recommendedVendors",
         "line",
         "discord",
         "governance",
@@ -458,6 +461,7 @@ def create_app() -> FastAPI:
     app.include_router(tasks.router)
     app.include_router(loans.router)
     app.include_router(inventory.router)
+    app.include_router(recommended_vendors.router)
     app.include_router(work_items.router)
     app.include_router(user_google_tasks.router)
     app.include_router(governance.router)

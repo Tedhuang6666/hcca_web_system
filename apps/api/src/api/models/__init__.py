@@ -278,6 +278,11 @@ from api.models.publication import (  # noqa: F401
     PublicationStatus,
 )
 from api.models.receivable import Receivable, ReceivableSource, ReceivableStatus  # noqa: F401
+from api.models.recommended_vendor import (  # noqa: F401
+    RecommendedVendor,
+    RecommendedVendorProduct,
+    RecommendedVendorStatus,
+)
 
 # 法規系統（含條文結構與修訂歷程）[M-20]
 from api.models.regulation import (  # noqa: F401

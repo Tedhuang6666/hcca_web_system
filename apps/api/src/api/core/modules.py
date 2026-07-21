@@ -43,6 +43,7 @@ MODULES: dict[str, ModuleSpec] = {
     "petitions": ModuleSpec("陳情中心", ("/petitions",)),
     "examPapers": ModuleSpec("段考題庫", ("/exam-papers",)),
     "partnerMap": ModuleSpec("特約地圖", ("/partner-map",)),
+    "recommendedVendors": ModuleSpec("推薦商家", ("/recommended-vendors",)),
     "line": ModuleSpec("LINE 通知", ("/line",)),
     "discord": ModuleSpec("Discord 機器人", ("/discord",)),
     "governance": ModuleSpec("治理中樞", ("/governance",)),

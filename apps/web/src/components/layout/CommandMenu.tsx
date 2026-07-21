@@ -29,7 +29,7 @@ const ACTION_GROUPS = [
     heading: "治理事務",
     ids: ["matters", "governanceHub", "documents", "regulations", "meetings", "councilProposals", "petitions", "judicialPetitions"],
   },
-  { heading: "校園服務", ids: ["surveys", "meal", "shop", "partnerMap", "examPapers"] },
+  { heading: "校園服務", ids: ["surveys", "meal", "shop", "partnerMap", "recommendedVendors", "examPapers"] },
 ] as const;
 
 function canSeeMeetings(): boolean {

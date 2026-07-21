@@ -149,6 +149,7 @@ class PermissionCode(StrEnum):
 
     PARTNER_MAP_MANAGE = "partner_map:manage"
     PARTNER_MAP_VIEW_STATS = "partner_map:view_stats"
+    RECOMMENDED_VENDOR_MANAGE = "recommended_vendor:manage"
 
     SITE_MANAGE = "site:manage"
 
@@ -899,6 +900,12 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "code": PermissionCode.PARTNER_MAP_VIEW_STATS,
         "label": "查看特約地圖統計",
         "desc": "查看特約店家點擊、瀏覽與互動統計（預留）",
+    },
+    {
+        "group": "推薦商家",
+        "code": PermissionCode.RECOMMENDED_VENDOR_MANAGE,
+        "label": "管理推薦商家",
+        "desc": "建立/修改/上下架推薦商家與選填菜單商品資訊",
     },
     {
         "group": "公開網站",
