@@ -51,6 +51,31 @@ async def test_create_person_and_list(
     assert person_id in ids
 
 
+async def test_list_people_includes_existing_user_without_person(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+    db_session: AsyncSession,
+) -> None:
+    existing_user = User(
+        email="legacy-user@example.com",
+        display_name="既有帳號",
+        student_id="SLEGACY001",
+        is_active=True,
+    )
+    db_session.add(existing_user)
+    await db_session.flush()
+
+    ac = authed_client_factory(admin_user)
+    response = await ac.get("/people")
+
+    assert response.status_code == 200
+    body = response.json()
+    row = next(item for item in body if item["display_name"] == "既有帳號")
+    assert row["display_name"] == "既有帳號"
+    assert row["student_id"] == "SLEGACY001"
+    assert row["user_id"] == str(existing_user.id)
+
+
 async def test_create_person_duplicate_student_id_conflicts(
     authed_client_factory: Callable[[User], AsyncClient],
     admin_user: User,

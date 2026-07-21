@@ -68,6 +68,8 @@ async def list_people(
     limit: int = Query(100, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> list[PersonListItem]:
+    if not keyword and offset == 0:
+        await person_svc.sync_people_from_existing_data(db)
     return await person_svc.list_people(
         db,
         keyword=keyword,
