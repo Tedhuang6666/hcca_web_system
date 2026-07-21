@@ -204,9 +204,9 @@ export default function PartnerMapAdminPage() {
         other_contact: businessForm.other_contact || null,
         internal_note: businessForm.internal_note || null,
         initial_offers: !selected ? initialOfferForms
-          .filter((offer) => offer.title.trim())
+          .filter((offer) => [offer.title, offer.benefit_value, offer.public_summary, offer.full_description, offer.instructions].some((value) => value.trim()))
           .map((offer, index) => ({
-            title: offer.title.trim(),
+            title: offer.title.trim() || "學生特約優惠",
             benefit_type: offer.benefit_type,
             benefit_value: offer.benefit_value || null,
             public_summary: offer.public_summary || null,
@@ -229,8 +229,9 @@ export default function PartnerMapAdminPage() {
       const business = selected
         ? await partnerMapApi.updateBusiness(selected.id, payload)
         : await partnerMapApi.createBusiness(payload);
+      const refreshedBusiness = await partnerMapApi.adminGetBusiness(business.id);
       toast.success(selected ? "已更新店家" : "已建立店家");
-      setSelected(business);
+      setSelected(refreshedBusiness);
       if (!selected) {
         setOfferForm(newOfferDraft());
         setInitialOfferForms([newOfferDraft()]);
