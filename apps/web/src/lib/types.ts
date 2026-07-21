@@ -530,6 +530,7 @@ export type {
 // 手寫型別引用的 api-bridge 型別（內部使用，不重複 export）
 import type {
   BallotBoxStatus,
+  ClassUserBrief,
   DeliveryMethod,
   InventoryItemType,
   InventoryProcurementStatus,
@@ -622,6 +623,34 @@ export interface LayoutDecoration {
 
 export type SchoolClassBulkActionKind = "activate" | "deactivate" | "delete";
 
+export interface ClassRosterEntryCreate {
+  seat_number: number;
+  student_id: string;
+}
+
+export interface ClassRosterEntryUpdate {
+  seat_number?: number | null;
+  student_id?: string | null;
+}
+
+export interface ClassRosterEntryOut extends ClassRosterEntryCreate {
+  id: string;
+  class_id: string;
+  user_id: string | null;
+  user?: ClassUserBrief | null;
+}
+
+export interface ClassRosterBulkCreate {
+  entries: ClassRosterEntryCreate[];
+}
+
+export interface ClassRosterBulkOut {
+  total: number;
+  created: number;
+  updated: number;
+  entries: ClassRosterEntryOut[];
+}
+
 // ── 人員與身分總表 ────────────────────────────────────────────────────────────
 
 
@@ -702,6 +731,7 @@ export type MerchandiseSubmissionStatus =
   | "draft"
   | "submitted"
   | "reviewing"
+  | "review_completed"
   | "approved"
   | "revision_requested"
   | "rejected";
@@ -808,6 +838,9 @@ export interface MerchandiseSubmissionOut {
   submitted_at: string | null;
   reviewed_at: string | null;
   reviewer_name: string | null;
+  voting_survey_id: string | null;
+  voting_survey_title: string | null;
+  voting_survey_status: SurveyStatus | null;
   review_note: string | null;
   created_at: string;
   updated_at: string;
@@ -820,7 +853,8 @@ export interface MerchandiseSubmissionAdminListItem extends MerchandiseSubmissio
 }
 
 export interface MerchandiseSubmissionReview {
-  status: "reviewing" | "approved" | "revision_requested" | "rejected";
+  status: "reviewing" | "review_completed" | "approved" | "revision_requested" | "rejected";
+  voting_survey_id?: string | null;
   review_note?: string | null;
 }
 

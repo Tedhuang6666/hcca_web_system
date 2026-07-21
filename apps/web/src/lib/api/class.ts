@@ -1,5 +1,5 @@
 import type {
-  ClassCadreOut, ClassManualMemberOut, ClassMemberOut, ClassMembershipOut, ClassRoleOut, ClassStudentRangeOut, SchoolClassBulkActionKind, SchoolClassBulkActionOut, SchoolClassBulkCreate, SchoolClassBulkCreateOut, SchoolClassListItem, SchoolClassOut,
+  ClassCadreOut, ClassManualMemberOut, ClassMemberOut, ClassMembershipOut, ClassRoleOut, ClassRosterBulkCreate, ClassRosterBulkOut, ClassRosterEntryOut, ClassStudentRangeOut, SchoolClassBulkActionKind, SchoolClassBulkActionOut, SchoolClassBulkCreate, SchoolClassBulkCreateOut, SchoolClassListItem, SchoolClassOut,
 } from "../types";
 import { get, post, patch, del } from "./core";
 
@@ -21,6 +21,14 @@ export const classApi = {
   remove: (id: string) => del<void>(`/classes/${id}`),
   members: (id: string) => get<ClassMemberOut[]>(`/classes/${id}/members`),
   memberships: (id: string) => get<ClassMembershipOut[]>(`/classes/${id}/memberships`),
+  roster: (id: string) => get<ClassRosterEntryOut[]>(`/classes/${id}/roster`),
+  addRoster: (id: string, body: { seat_number: number; student_id: string }) =>
+    post<ClassRosterEntryOut>(`/classes/${id}/roster`, body),
+  bulkRoster: (id: string, body: ClassRosterBulkCreate) =>
+    post<ClassRosterBulkOut>(`/classes/${id}/roster/bulk`, body),
+  updateRoster: (id: string, entryId: string, body: { seat_number?: number; student_id?: string }) =>
+    patch<ClassRosterEntryOut>(`/classes/${id}/roster/${entryId}`, body),
+  deleteRoster: (id: string, entryId: string) => del<void>(`/classes/${id}/roster/${entryId}`),
   addMembership: (id: string, body: { user_id: string; source?: string; start_date?: string | null }) =>
     post<ClassMembershipOut>(`/classes/${id}/memberships`, body),
   endMembership: (id: string, userId: string) =>

@@ -56,6 +56,9 @@ class SchoolClass(Base, TimestampMixin):
     ranges: Mapped[list[ClassStudentRange]] = relationship(
         "ClassStudentRange", back_populates="school_class", cascade="all, delete-orphan"
     )
+    roster_entries: Mapped[list[ClassRosterEntry]] = relationship(
+        "ClassRosterEntry", back_populates="school_class", cascade="all, delete-orphan"
+    )
     manual_members: Mapped[list[ClassManualMember]] = relationship(
         "ClassManualMember", back_populates="school_class", cascade="all, delete-orphan"
     )
@@ -159,6 +162,32 @@ class ClassStudentRange(Base, TimestampMixin):
     school_class: Mapped[SchoolClass] = relationship("SchoolClass", back_populates="ranges")
 
 
+class ClassRosterEntry(Base, TimestampMixin):
+    """班級名冊中的座號與學號對照，可先建立再等待學生帳號註冊。"""
+
+    __tablename__ = "class_roster_entries"
+    __table_args__ = (
+        UniqueConstraint("class_id", "seat_number", name="uq_class_roster_seat"),
+        UniqueConstraint("class_id", "student_id", name="uq_class_roster_student_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    class_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("school_classes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    seat_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    student_id: Mapped[str] = mapped_column(String(20), nullable=False)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
+    school_class: Mapped[SchoolClass] = relationship("SchoolClass", back_populates="roster_entries")
+    user: Mapped[User | None] = relationship("User")
+
+
 class ClassManualMember(Base, TimestampMixin):
     """班級手動成員（補足轉班、無學號或特殊帳號，不依賴學號區間）。"""
 
@@ -237,6 +266,7 @@ __all__ = [
     "ClassMembershipStatus",
     "ClassRoleBinding",
     "ClassRoleKey",
+    "ClassRosterEntry",
     "ClassStudentRange",
     "SchoolClass",
 ]

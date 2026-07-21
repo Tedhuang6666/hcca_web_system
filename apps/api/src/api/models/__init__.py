@@ -301,6 +301,7 @@ from api.models.school_class import (  # noqa: F401
     ClassMembershipStatus,
     ClassRoleBinding,
     ClassRoleKey,
+    ClassRosterEntry,
     ClassStudentRange,
     SchoolClass,
 )
