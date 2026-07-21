@@ -7,7 +7,7 @@ import uuid
 from datetime import date
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Date, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Date, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -25,6 +25,27 @@ class RecommendedVendorStatus(enum.StrEnum):
     ARCHIVED = "archived"
 
 
+class RecommendedVendorMenuKind(enum.StrEnum):
+    LINK = "link"
+    IMAGE = "image"
+    PDF = "pdf"
+
+
+class RecommendedVendorCategory(Base, TimestampMixin):
+    """推薦商家共用分類；由管理頁統一維護。"""
+
+    __tablename__ = "recommended_vendor_categories"
+    __table_args__ = (UniqueConstraint("name", name="uq_recommended_vendor_categories_name"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true", index=True
+    )
+
+
 class RecommendedVendor(Base, TimestampMixin):
     """推薦商家主資料；只有檢驗有效且 active 的資料會出現在學生端。"""
 
@@ -35,6 +56,12 @@ class RecommendedVendor(Base, TimestampMixin):
     summary: Mapped[str | None] = mapped_column(String(300), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     category: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    category_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("recommended_vendor_categories.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     address: Mapped[str | None] = mapped_column(String(300), nullable=True)
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
@@ -69,11 +96,20 @@ class RecommendedVendor(Base, TimestampMixin):
     )
 
     creator: Mapped[User | None] = relationship("User")
+    vendor_category: Mapped[RecommendedVendorCategory | None] = relationship(
+        "RecommendedVendorCategory"
+    )
     products: Mapped[list[RecommendedVendorProduct]] = relationship(
         "RecommendedVendorProduct",
         back_populates="vendor",
         cascade="all, delete-orphan",
         order_by="RecommendedVendorProduct.sort_order",
+    )
+    menus: Mapped[list[RecommendedVendorMenu]] = relationship(
+        "RecommendedVendorMenu",
+        back_populates="vendor",
+        cascade="all, delete-orphan",
+        order_by="RecommendedVendorMenu.sort_order",
     )
 
 
@@ -99,9 +135,41 @@ class RecommendedVendorProduct(Base, TimestampMixin):
         Boolean, nullable=False, default=True, server_default="true", index=True
     )
 
-    vendor: Mapped[RecommendedVendor] = relationship(
-        "RecommendedVendor", back_populates="products"
+    vendor: Mapped[RecommendedVendor] = relationship("RecommendedVendor", back_populates="products")
+
+
+class RecommendedVendorMenu(Base, TimestampMixin):
+    """商家提供的外部菜單或上傳菜單檔案。"""
+
+    __tablename__ = "recommended_vendor_menus"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    vendor_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("recommended_vendors.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False, default="link")
+    url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    storage_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    content_type: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    file_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true", index=True
     )
 
+    vendor: Mapped[RecommendedVendor] = relationship("RecommendedVendor", back_populates="menus")
 
-__all__ = ["RecommendedVendor", "RecommendedVendorProduct", "RecommendedVendorStatus"]
+
+__all__ = [
+    "RecommendedVendor",
+    "RecommendedVendorCategory",
+    "RecommendedVendorMenu",
+    "RecommendedVendorMenuKind",
+    "RecommendedVendorProduct",
+    "RecommendedVendorStatus",
+]

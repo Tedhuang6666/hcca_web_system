@@ -12,11 +12,17 @@ from sqlalchemy.orm import selectinload
 from api.core.search import like_contains
 from api.models.recommended_vendor import (
     RecommendedVendor,
+    RecommendedVendorCategory,
+    RecommendedVendorMenu,
     RecommendedVendorProduct,
     RecommendedVendorStatus,
 )
 from api.schemas.recommended_vendor import (
+    RecommendedVendorCategoryCreate,
+    RecommendedVendorCategoryUpdate,
     RecommendedVendorCreate,
+    RecommendedVendorMenuCreate,
+    RecommendedVendorMenuUpdate,
     RecommendedVendorProductCreate,
     RecommendedVendorProductUpdate,
     RecommendedVendorUpdate,
@@ -35,12 +41,54 @@ def hygiene_verified(vendor: RecommendedVendor, today: date | None = None) -> bo
 
 
 def _vendor_options():
-    return (selectinload(RecommendedVendor.products),)
+    return (
+        selectinload(RecommendedVendor.products),
+        selectinload(RecommendedVendor.menus),
+        selectinload(RecommendedVendor.vendor_category),
+    )
+
+
+async def list_categories(
+    db: AsyncSession, *, active_only: bool = False
+) -> list[RecommendedVendorCategory]:
+    query = select(RecommendedVendorCategory).order_by(
+        RecommendedVendorCategory.sort_order, RecommendedVendorCategory.name
+    )
+    if active_only:
+        query = query.where(RecommendedVendorCategory.is_active.is_(True))
+    return list((await db.execute(query)).scalars().all())
+
+
+async def get_category(
+    db: AsyncSession, category_id: uuid.UUID
+) -> RecommendedVendorCategory | None:
+    return await db.get(RecommendedVendorCategory, category_id)
+
+
+async def create_category(
+    db: AsyncSession, data: RecommendedVendorCategoryCreate
+) -> RecommendedVendorCategory:
+    category = RecommendedVendorCategory(**data.model_dump())
+    db.add(category)
+    await db.flush()
+    return category
+
+
+async def update_category(
+    db: AsyncSession,
+    category: RecommendedVendorCategory,
+    data: RecommendedVendorCategoryUpdate,
+) -> RecommendedVendorCategory:
+    apply_updates(category, data)
+    await db.flush()
+    return category
 
 
 async def get_vendor(db: AsyncSession, vendor_id: uuid.UUID) -> RecommendedVendor | None:
     result = await db.execute(
-        select(RecommendedVendor).where(RecommendedVendor.id == vendor_id).options(*_vendor_options())
+        select(RecommendedVendor)
+        .where(RecommendedVendor.id == vendor_id)
+        .options(*_vendor_options())
     )
     return result.scalar_one_or_none()
 
@@ -50,7 +98,7 @@ async def list_vendors(
     *,
     include_inactive: bool = False,
     keyword: str | None = None,
-    category: str | None = None,
+    category_id: uuid.UUID | None = None,
     map_only: bool = False,
     limit: int = 100,
     offset: int = 0,
@@ -77,13 +125,17 @@ async def list_vendors(
                 RecommendedVendor.address.ilike(term),
             )
         )
-    if category:
-        query = query.where(RecommendedVendor.category == category)
+    if category_id:
+        query = query.where(RecommendedVendor.category_id == category_id)
     if map_only:
         query = query.where(
             RecommendedVendor.latitude.is_not(None), RecommendedVendor.longitude.is_not(None)
         )
-    query = query.order_by(RecommendedVendor.sort_order, RecommendedVendor.name).offset(offset).limit(limit)
+    query = (
+        query.order_by(RecommendedVendor.sort_order, RecommendedVendor.name)
+        .offset(offset)
+        .limit(limit)
+    )
     result = await db.execute(query)
     return list(result.scalars().unique().all())
 
@@ -94,7 +146,9 @@ async def create_vendor(
     fields = data.model_dump(exclude={"products"})
     fields["status"] = str(fields["status"])
     vendor = RecommendedVendor(**fields, created_by=created_by)
-    vendor.products = [RecommendedVendorProduct(**product.model_dump()) for product in data.products]
+    vendor.products = [
+        RecommendedVendorProduct(**product.model_dump()) for product in data.products
+    ]
     db.add(vendor)
     await db.flush()
     return await get_vendor(db, vendor.id)  # type: ignore[return-value]
@@ -132,6 +186,37 @@ async def update_product(
 
 async def get_product(db: AsyncSession, product_id: uuid.UUID) -> RecommendedVendorProduct | None:
     return await db.get(RecommendedVendorProduct, product_id)
+
+
+async def get_menu(db: AsyncSession, menu_id: uuid.UUID) -> RecommendedVendorMenu | None:
+    return await db.get(RecommendedVendorMenu, menu_id)
+
+
+async def create_menu(
+    db: AsyncSession, vendor: RecommendedVendor, data: RecommendedVendorMenuCreate
+) -> RecommendedVendorMenu:
+    if not data.url:
+        raise ValueError("外部連結菜單必須提供 URL")
+    menu = RecommendedVendorMenu(vendor_id=vendor.id, **data.model_dump(mode="json"))
+    db.add(menu)
+    await db.flush()
+    await db.refresh(menu)
+    return menu
+
+
+async def update_menu(
+    db: AsyncSession, menu: RecommendedVendorMenu, data: RecommendedVendorMenuUpdate
+) -> RecommendedVendorMenu:
+    apply_updates(menu, data)
+    await db.flush()
+    await db.refresh(menu)
+    return menu
+
+
+async def delete_menu(db: AsyncSession, menu: RecommendedVendorMenu) -> str | None:
+    storage_key = menu.storage_key
+    await db.delete(menu)
+    return storage_key
 
 
 async def delete_product(db: AsyncSession, product: RecommendedVendorProduct) -> None:
