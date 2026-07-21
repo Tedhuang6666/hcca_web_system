@@ -73,21 +73,28 @@ def _extract_coordinates(value: str) -> tuple[float, float] | None:
     return None
 
 
+def _looks_like_address(value: str) -> bool:
+    return bool(re.search(r"\d", value) and re.search(r"[市縣區鄉鎮路街巷弄號段]", value))
+
+
+def _extract_place_name(parsed_url) -> str | None:
+    match = re.search(r"/maps/place/([^/@]+)", unquote(parsed_url.path))
+    if not match:
+        return None
+    name = match.group(1).replace("+", " ").strip(" /")
+    return name[:200] or None
+
+
 def _extract_address(parsed_url) -> str | None:
     query_values = parse_qs(parsed_url.query).get("query", [])
     for value in query_values:
         address = unquote(value).replace("+", " ").strip()
-        if address and _extract_coordinates(address) is None:
-            return address[:300]
-    match = re.search(r"/maps/place/([^/@]+)", unquote(parsed_url.path))
-    if match:
-        address = match.group(1).replace("+", " ").strip(" /")
-        if address:
+        if address and _extract_coordinates(address) is None and _looks_like_address(address):
             return address[:300]
     return None
 
 
-async def parse_google_maps_link(url: str) -> dict[str, str | float]:
+async def parse_google_maps_link(url: str) -> dict[str, str | float | None]:
     """展開 Google Maps 連結並擷取可直接建立據點的地址與座標。"""
 
     original = url.strip()
@@ -112,9 +119,10 @@ async def parse_google_maps_link(url: str) -> dict[str, str | float]:
     if coordinates is None:
         raise ValueError("連結中找不到座標，請從 Google Maps 的店家頁面重新複製分享連結")
     latitude, longitude = coordinates
-    address = _extract_address(parsed) or "Google Maps 據點（請補充地址）"
+    address = _extract_address(parsed)
     return {
         "google_maps_url": resolved_url,
+        "name": _extract_place_name(parsed),
         "address": address,
         "latitude": latitude,
         "longitude": longitude,

@@ -129,7 +129,7 @@ export const partnerMapApi = {
   createLocation: (businessId: string, body: PartnerLocationCreateWithMapUrl) =>
     post<PartnerLocationWithMapUrl>(`/partner-map/admin/businesses/${businessId}/locations`, body),
   parseGoogleMaps: (url: string) =>
-    post<{ google_maps_url: string; address: string; latitude: number; longitude: number }>(
+    post<{ google_maps_url: string; name: string | null; address: string | null; latitude: number; longitude: number }>(
       "/partner-map/admin/locations/parse-google-maps",
       { url },
     ),

@@ -339,6 +339,38 @@ async def test_admin_can_parse_google_maps_link(
 
 
 @pytest.mark.asyncio
+async def test_google_maps_place_name_is_not_saved_as_address(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin = User(
+        email="maps-place-admin@school.edu",
+        display_name="地圖管理員",
+        is_active=True,
+        is_verified=True,
+        is_superuser=True,
+    )
+    db_session.add(admin)
+    await db_session.flush()
+    _override_current_user(admin)
+
+    response = await client.post(
+        "/partner-map/admin/locations/parse-google-maps",
+        json={
+            "url": "https://www.google.com/maps/place/古比鮮釀餐廳+竹北店/@24.8440999,121.0220416,17z"
+        },
+        headers=HOST_HEADERS,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["name"] == "古比鮮釀餐廳 竹北店"
+    assert payload["address"] is None
+    assert payload["latitude"] == 24.8440999
+    assert payload["longitude"] == 121.0220416
+
+
+@pytest.mark.asyncio
 async def test_admin_rejects_non_google_maps_link(
     client: AsyncClient,
     db_session: AsyncSession,
