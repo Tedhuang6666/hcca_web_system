@@ -11,6 +11,11 @@ import type {
 } from "../types";
 import { BASE, ApiError, csrfHeaders, errorMessageFromResponse, get, patch, post, silentRefresh } from "./core";
 
+type MerchandiseSubmissionReviewBody = Omit<MerchandiseSubmissionReview, "status"> & {
+  status: MerchandiseSubmissionReview["status"] | "review_completed";
+  voting_survey_id?: string | null;
+};
+
 async function upload<T>(path: string, file: File, query = "", method = "POST"): Promise<T> {
   const body = new FormData();
   body.append("file", file);
@@ -57,7 +62,7 @@ export const merchandiseSubmissionsApi = {
     get<MerchandiseSubmissionAdminListItem[]>(
       `/merchandise-submissions/admin/submissions${status ? `?status=${status}` : ""}`,
     ),
-  review: (id: string, body: MerchandiseSubmissionReview) =>
+  review: (id: string, body: MerchandiseSubmissionReviewBody) =>
     patch<MerchandiseSubmissionAdminListItem>(`/merchandise-submissions/admin/submissions/${id}/review`, body),
   prepareVotingSurvey: (body: { org_id: string; title?: string; description?: string | null }) =>
     post<import("../types").SurveyOut>("/merchandise-submissions/admin/voting-survey/prepare", body),
