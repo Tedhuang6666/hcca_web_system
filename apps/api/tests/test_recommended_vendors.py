@@ -10,7 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies.auth import get_current_active_user
 from api.main import app
-from api.models.recommended_vendor import RecommendedVendor, RecommendedVendorStatus
+from api.models.recommended_vendor import (
+    RecommendedVendor,
+    RecommendedVendorStatus,
+)
 from api.models.user import User
 
 HOST_HEADERS = {"host": "localhost"}
@@ -125,3 +128,80 @@ async def test_admin_can_create_vendor_with_optional_product(
     assert payload["hygiene_verified"] is True
     assert payload["google_maps_url"].startswith("https://maps.google.com")
     assert payload["products"][0]["name"] == "牛肉麵"
+
+
+@pytest.mark.asyncio
+async def test_admin_can_manage_category_and_vendor_selects_category(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin = User(
+        email="category-admin@school.edu",
+        display_name="分類管理員",
+        is_active=True,
+        is_verified=True,
+        is_superuser=True,
+    )
+    db_session.add(admin)
+    await db_session.flush()
+    _override_user(admin)
+
+    category_response = await client.post(
+        "/recommended-vendors/admin/categories",
+        headers=HOST_HEADERS,
+        json={"name": "飲料", "sort_order": 1},
+    )
+
+    assert category_response.status_code == 201
+    category = category_response.json()
+    vendor_response = await client.post(
+        "/recommended-vendors/admin/vendors",
+        headers=HOST_HEADERS,
+        json={"name": "校園茶飲", "category_id": category["id"]},
+    )
+
+    assert vendor_response.status_code == 201
+    assert vendor_response.json()["category"] == "飲料"
+    public_categories = await client.get("/recommended-vendors/categories", headers=HOST_HEADERS)
+    assert public_categories.json()[0]["name"] == "飲料"
+
+
+@pytest.mark.asyncio
+async def test_admin_can_upload_pdf_menu_and_public_detail_exposes_preview_url(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin = User(
+        email="menu-admin@school.edu",
+        display_name="菜單管理員",
+        is_active=True,
+        is_verified=True,
+        is_superuser=True,
+    )
+    db_session.add(admin)
+    await db_session.flush()
+    _override_user(admin)
+    vendor = RecommendedVendor(
+        name="可預覽菜單店家",
+        status=RecommendedVendorStatus.ACTIVE.value,
+        hygiene_inspection_date=date.today(),
+    )
+    db_session.add(vendor)
+    await db_session.flush()
+
+    upload_response = await client.post(
+        f"/recommended-vendors/admin/vendors/{vendor.id}/menus/upload",
+        headers=HOST_HEADERS,
+        files={"file": ("menu.pdf", b"%PDF-1.7\nmenu", "application/pdf")},
+    )
+
+    assert upload_response.status_code == 201
+    menu = upload_response.json()
+    assert menu["kind"] == "pdf"
+    assert menu["url"].endswith(f"/recommended-vendors/menus/{menu['id']}/file")
+    detail_response = await client.get(f"/recommended-vendors/{vendor.id}", headers=HOST_HEADERS)
+    assert detail_response.status_code == 200
+    assert detail_response.json()["menus"][0]["id"] == menu["id"]
+
+    delete_response = await client.delete(
+        f"/recommended-vendors/admin/menus/{menu['id']}", headers=HOST_HEADERS
+    )
+    assert delete_response.status_code == 204

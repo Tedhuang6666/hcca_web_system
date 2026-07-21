@@ -1,12 +1,13 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { ExternalLink, MapPin, Menu, Phone, Search, ShieldCheck, Store, X } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ExternalLink, FileText, Image as ImageIcon, Link2, MapPin, Menu, Phone, Search, ShieldCheck, Store, X } from "lucide-react";
 import { toast } from "sonner";
 import { recommendedVendorsApi, ApiError } from "@/lib/api";
-import type { RecommendedVendorListItem, RecommendedVendorOut } from "@/lib/types";
+import { apiUrl } from "@/lib/config";
+import type { RecommendedVendorCategoryOut, RecommendedVendorListItem, RecommendedVendorOut } from "@/lib/types";
 
 const RecommendedVendorMap = dynamic(() => import("./RecommendedVendorMap"), {
   ssr: false,
@@ -17,6 +18,15 @@ function inspectionText(item: RecommendedVendorListItem | RecommendedVendorOut):
   return item.hygiene_inspection_expires_at
     ? `檢驗有效至 ${item.hygiene_inspection_expires_at}`
     : `檢驗日期 ${item.hygiene_inspection_date ?? "—"}`;
+}
+
+function FilePreviewIcon({ kind }: { kind: "link" | "image" | "pdf" }) {
+  const Icon = kind === "image" ? ImageIcon : kind === "pdf" ? FileText : Link2;
+  return <Icon size={22} style={{ color: "var(--primary)" }} aria-hidden="true" />;
+}
+
+function menuHref(url: string | null): string {
+  return url?.startsWith("/") ? apiUrl(url) : url || "";
 }
 
 function VendorDetail({ vendor, onClose }: { vendor: RecommendedVendorOut; onClose: () => void }) {
@@ -48,6 +58,7 @@ function VendorDetail({ vendor, onClose }: { vendor: RecommendedVendorOut; onClo
         {vendor.website_url && <a className="btn btn-secondary" href={vendor.website_url} target="_blank" rel="noreferrer"><ExternalLink size={15} aria-hidden="true" />官方網站</a>}
       </div>
       <section>
+        {vendor.menus.length > 0 && <section className="mb-5"><h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>菜單</h3><div className="mt-2 grid gap-3 sm:grid-cols-2">{vendor.menus.map((menu) => <a key={menu.id} className="group overflow-hidden rounded-md border" href={menuHref(menu.url)} target="_blank" rel="noreferrer" style={{ borderColor: "var(--border)" }}>{menu.kind === "image" && menu.url ? <img src={menuHref(menu.url)} alt={menu.title} className="aspect-[4/3] w-full object-cover transition-transform group-hover:scale-[1.02]" /> : <div className="flex min-h-24 items-center gap-3 p-4" style={{ background: "var(--bg)" }}><FilePreviewIcon kind={menu.kind} /><div><p className="font-medium" style={{ color: "var(--text-primary)" }}>{menu.title}</p><p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{menu.kind === "pdf" ? "PDF 預覽" : "開啟菜單連結"}</p></div></div>}</a>)}</div></section>}
         <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>菜單／商品資訊</h3>
         {vendor.products.length === 0 ? <p className="mt-2 text-sm" style={{ color: "var(--text-muted)" }}>店家尚未提供品項資訊。</p> : (
           <div className="mt-2 divide-y rounded-md border" style={{ borderColor: "var(--border)" }}>
@@ -65,25 +76,30 @@ function VendorDetail({ vendor, onClose }: { vendor: RecommendedVendorOut; onClo
 
 export default function RecommendedVendorsPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [vendors, setVendors] = useState<RecommendedVendorListItem[]>([]);
+  const [categories, setCategories] = useState<RecommendedVendorCategoryOut[]>([]);
   const [selected, setSelected] = useState<RecommendedVendorOut | null>(null);
   const [keyword, setKeyword] = useState("");
   const [category, setCategory] = useState("all");
   const [mode, setMode] = useState<"list" | "map">("list");
   const [loading, setLoading] = useState(true);
 
-  const categories = useMemo(() => [...new Set(vendors.map((vendor) => vendor.category).filter(Boolean))] as string[], [vendors]);
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setVendors(await recommendedVendorsApi.list({ keyword: keyword.trim() || undefined, category: category === "all" ? undefined : category }));
+      const [vendorRows, categoryRows] = await Promise.all([
+        recommendedVendorsApi.list({ keyword: keyword.trim() || undefined, category_id: category === "all" ? undefined : category }),
+        recommendedVendorsApi.listCategories(),
+      ]);
+      setVendors(vendorRows); setCategories(categoryRows);
     } catch (error) { toast.error(error instanceof ApiError ? error.message : "載入推薦商家失敗"); }
     finally { setLoading(false); }
   }, [category, keyword]);
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
-    if (searchParams.get("view") === "map") setMode("map");
+    setMode(searchParams.get("view") === "map" ? "map" : "list");
   }, [searchParams]);
   const open = async (id: string) => {
     try { setSelected(await recommendedVendorsApi.get(id)); }
@@ -95,13 +111,13 @@ export default function RecommendedVendorsPage() {
       <header className="workspace-header flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div><h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>推薦商家</h1><p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>整理通過衛生檢驗、方便學生聯絡訂購的校園周邊商家。</p></div>
         <div className="flex gap-2" role="group" aria-label="檢視方式">
-          <button type="button" className={`btn ${mode === "list" ? "btn-primary" : "btn-secondary"}`} onClick={() => setMode("list")}><Store size={15} aria-hidden="true" />清單</button>
-          <button type="button" className={`btn ${mode === "map" ? "btn-primary" : "btn-secondary"}`} onClick={() => setMode("map")}><MapPin size={15} aria-hidden="true" />地圖</button>
+          <button type="button" className={`btn ${mode === "list" ? "btn-primary" : "btn-secondary"}`} onClick={() => { setMode("list"); router.replace("/recommended-vendors"); }}><Store size={15} aria-hidden="true" />清單</button>
+          <button type="button" className={`btn ${mode === "map" ? "btn-primary" : "btn-secondary"}`} onClick={() => { setMode("map"); router.replace("/recommended-vendors?view=map"); }}><MapPin size={15} aria-hidden="true" />地圖</button>
         </div>
       </header>
       <section className="flex flex-col gap-3 md:flex-row">
         <label className="relative flex-1"><Search size={16} className="absolute left-3 top-3" style={{ color: "var(--text-muted)" }} aria-hidden="true" /><input className="input w-full pl-9" value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="搜尋商家、分類或地址" /></label>
-        <select className="input md:w-48" value={category} onChange={(event) => setCategory(event.target.value)} aria-label="商家分類"><option value="all">全部分類</option>{categories.map((item) => <option key={item} value={item}>{item}</option>)}</select>
+        <select className="input md:w-48" value={category} onChange={(event) => setCategory(event.target.value)} aria-label="商家分類"><option value="all">全部分類</option>{categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
         <button type="button" className="btn btn-secondary" onClick={() => void load()}>搜尋</button>
       </section>
       {mode === "map" ? <><div className="h-[min(70vh,620px)] min-h-[460px] overflow-hidden rounded-lg border" style={{ borderColor: "var(--border)" }}><RecommendedVendorMap items={vendors} onSelect={(id) => void open(id)} /></div>{selected && <div className="mx-auto mt-5 max-w-xl"><VendorDetail vendor={selected} onClose={() => setSelected(null)} /></div>}</> : (

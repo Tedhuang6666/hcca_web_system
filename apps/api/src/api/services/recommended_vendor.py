@@ -89,6 +89,7 @@ async def get_vendor(db: AsyncSession, vendor_id: uuid.UUID) -> RecommendedVendo
         select(RecommendedVendor)
         .where(RecommendedVendor.id == vendor_id)
         .options(*_vendor_options())
+        .execution_options(populate_existing=True)
     )
     return result.scalar_one_or_none()
 
@@ -122,6 +123,7 @@ async def list_vendors(
                 RecommendedVendor.summary.ilike(term),
                 RecommendedVendor.description.ilike(term),
                 RecommendedVendor.category.ilike(term),
+                RecommendedVendor.vendor_category.has(RecommendedVendorCategory.name.ilike(term)),
                 RecommendedVendor.address.ilike(term),
             )
         )

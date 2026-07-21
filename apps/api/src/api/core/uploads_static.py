@@ -34,6 +34,7 @@ PUBLIC_UPLOAD_PREFIXES: tuple[str, ...] = (
     "merchandise-submissions/templates/",
     "surveys/",
     "public-site/",
+    "recommended-vendors/",
 )
 
 
