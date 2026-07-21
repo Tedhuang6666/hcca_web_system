@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { CheckCircle, MapPin, Plus, RefreshCw, Save, Store, Tag, Trash2, XCircle } from "lucide-react";
+import { CheckCircle, MapPin, Pencil, Plus, RefreshCw, Save, Store, Tag, Trash2, XCircle } from "lucide-react";
 import { partnerMapApi, ApiError } from "@/lib/api";
 import type {
   PartnerBusinessDetail,
@@ -85,6 +85,7 @@ export default function PartnerMapAdminPage() {
   const [parsingMap, setParsingMap] = useState(false);
   const [locationForm, setLocationForm] = useState(emptyLocation);
   const [offerForm, setOfferForm] = useState<OfferDraft>(newOfferDraft());
+  const [editingOfferId, setEditingOfferId] = useState<string | null>(null);
   const [initialOfferForms, setInitialOfferForms] = useState<OfferDraft[]>([newOfferDraft()]);
 
   const load = useCallback(() => {
@@ -112,6 +113,8 @@ export default function PartnerMapAdminPage() {
   }, [load]);
 
   const selectBusiness = (id: string) => {
+    setEditingOfferId(null);
+    setOfferForm(newOfferDraft());
     partnerMapApi
       .adminGetBusiness(id)
       .then((business) => {
@@ -343,24 +346,41 @@ export default function PartnerMapAdminPage() {
     }
   };
 
-  const createOffer = async () => {
+  const editOffer = (offer: PartnerBusinessDetail["offers"][number]) => {
+    setEditingOfferId(offer.id);
+    setOfferForm({
+      title: offer.title,
+      benefit_type: offer.benefit_type,
+      benefit_value: offer.benefit_value || "",
+      public_summary: offer.public_summary || "",
+      full_description: offer.full_description || "",
+      instructions: offer.instructions || "",
+    });
+  };
+
+  const saveOffer = async () => {
     if (!selected || !offerForm.title.trim()) return;
     try {
-      await partnerMapApi.createOffer(selected.id, {
-        title: offerForm.title,
+      const payload = {
+        title: offerForm.title.trim(),
         benefit_type: offerForm.benefit_type,
-        benefit_value: offerForm.benefit_value || null,
-        public_summary: offerForm.public_summary || null,
-        full_description: offerForm.full_description || null,
-        instructions: offerForm.instructions || null,
-        sort_order: 0,
-        is_active: true,
-      });
+        benefit_value: offerForm.benefit_value.trim() || null,
+        public_summary: offerForm.public_summary.trim() || null,
+        full_description: offerForm.full_description.trim() || null,
+        instructions: offerForm.instructions.trim() || null,
+      };
+      if (editingOfferId) {
+        await partnerMapApi.updateOffer(editingOfferId, payload);
+      } else {
+        await partnerMapApi.createOffer(selected.id, { ...payload, sort_order: 0, is_active: true });
+      }
       setOfferForm(newOfferDraft());
+      setEditingOfferId(null);
       selectBusiness(selected.id);
       load();
+      toast.success(editingOfferId ? "已更新優惠" : "已新增優惠");
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : "新增優惠失敗");
+      toast.error(error instanceof ApiError ? error.message : editingOfferId ? "更新優惠失敗" : "新增優惠失敗");
     }
   };
 
@@ -607,12 +627,12 @@ export default function PartnerMapAdminPage() {
                 {initialOfferForms.map((offer, index) => <div key={index} className="rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
                   <div className="mb-2 flex items-center justify-between gap-2"><span className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>優惠 {index + 1}</span>{initialOfferForms.length > 1 && <button type="button" className="topbar-icon-btn" onClick={() => setInitialOfferForms((offers) => offers.filter((_, offerIndex) => offerIndex !== index))} aria-label={`移除優惠 ${index + 1}`}><Trash2 size={14} /></button>}</div>
                   <div className="grid gap-2 md:grid-cols-2">
-                    <input className="input" placeholder="優惠標題，例如：學生證折扣" value={offer.title} onChange={(e) => updateInitialOffer(index, "title", e.target.value)} />
-                    <input className="input" placeholder="優惠重點，例如：全館 9 折" value={offer.benefit_value} onChange={(e) => updateInitialOffer(index, "benefit_value", e.target.value)} />
-                    <select className="input" value={offer.benefit_type} onChange={(e) => updateInitialOffer(index, "benefit_type", e.target.value as OfferDraft["benefit_type"])}><option value="discount">折扣</option><option value="gift">贈品</option><option value="bundle">組合優惠</option><option value="member_price">學生價</option><option value="other">其他合作優惠</option></select>
-                    <input className="input" placeholder="公開摘要" value={offer.public_summary} onChange={(e) => updateInitialOffer(index, "public_summary", e.target.value)} />
-                    <textarea className="input min-h-20 md:col-span-2" placeholder="完整優惠條款" value={offer.full_description} onChange={(e) => updateInitialOffer(index, "full_description", e.target.value)} />
-                    <textarea className="input min-h-20 md:col-span-2" placeholder="使用方式" value={offer.instructions} onChange={(e) => updateInitialOffer(index, "instructions", e.target.value)} />
+                    <label className="space-y-1"><span className="text-xs" style={{ color: "var(--text-secondary)" }}>優惠標題</span><input className="input" placeholder="例如：學生證折扣" value={offer.title} onChange={(e) => updateInitialOffer(index, "title", e.target.value)} /></label>
+                    <label className="space-y-1"><span className="text-xs" style={{ color: "var(--text-secondary)" }}>優惠重點</span><input className="input" placeholder="例如：全館 9 折" value={offer.benefit_value} onChange={(e) => updateInitialOffer(index, "benefit_value", e.target.value)} /></label>
+                    <label className="space-y-1"><span className="text-xs" style={{ color: "var(--text-secondary)" }}>優惠類型</span><select className="input" value={offer.benefit_type} onChange={(e) => updateInitialOffer(index, "benefit_type", e.target.value as OfferDraft["benefit_type"])}><option value="discount">折扣</option><option value="gift">贈品</option><option value="bundle">組合優惠</option><option value="member_price">學生價</option><option value="other">其他合作優惠</option></select></label>
+                    <label className="space-y-1"><span className="text-xs" style={{ color: "var(--text-secondary)" }}>公開摘要</span><input className="input" placeholder="例如：出示學生證享 9 折" value={offer.public_summary} onChange={(e) => updateInitialOffer(index, "public_summary", e.target.value)} /></label>
+                    <label className="space-y-1 md:col-span-2"><span className="text-xs" style={{ color: "var(--text-secondary)" }}>完整優惠條款</span><textarea className="input min-h-20" placeholder="例如：全品項 9 折，部分商品除外" value={offer.full_description} onChange={(e) => updateInitialOffer(index, "full_description", e.target.value)} /></label>
+                    <label className="space-y-1 md:col-span-2"><span className="text-xs" style={{ color: "var(--text-secondary)" }}>使用方式</span><textarea className="input min-h-20" placeholder="例如：聯絡時出示學生證或輸入優惠碼" value={offer.instructions} onChange={(e) => updateInitialOffer(index, "instructions", e.target.value)} /></label>
                   </div>
                 </div>)}
               </div>
@@ -675,25 +695,36 @@ export default function PartnerMapAdminPage() {
                         <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{offer.title}</p>
                         <p className="text-xs" style={{ color: "var(--text-muted)" }}>{offer.public_summary || "無摘要"}</p>
                       </div>
-                      <button className="topbar-icon-btn" onClick={() => partnerMapApi.deleteOffer(offer.id).then(() => selectBusiness(selected.id))} aria-label="刪除優惠">
-                        <Trash2 size={14} aria-hidden="true" />
-                      </button>
+                      <div className="flex shrink-0 gap-1">
+                        <button className="topbar-icon-btn" onClick={() => editOffer(offer)} aria-label={`編輯優惠 ${offer.title}`}>
+                          <Pencil size={14} aria-hidden="true" />
+                        </button>
+                        <button className="topbar-icon-btn" onClick={() => partnerMapApi.deleteOffer(offer.id).then(() => selectBusiness(selected.id))} aria-label="刪除優惠">
+                          <Trash2 size={14} aria-hidden="true" />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
                 <div className="mt-4 space-y-2">
-                  <input className="input" placeholder="優惠標題，例如：學生證折扣" value={offerForm.title} onChange={(e) => setOfferForm((f) => ({ ...f, title: e.target.value }))} />
+                  <label className="space-y-1"><span className="text-xs" style={{ color: "var(--text-secondary)" }}>優惠標題</span><input className="input" placeholder="例如：學生證折扣" value={offerForm.title} onChange={(e) => setOfferForm((f) => ({ ...f, title: e.target.value }))} /></label>
                   <div className="grid gap-2 sm:grid-cols-2">
-                    <select className="input" value={offerForm.benefit_type} onChange={(e) => setOfferForm((f) => ({ ...f, benefit_type: e.target.value as typeof f.benefit_type }))}>
+                    <label className="space-y-1"><span className="text-xs" style={{ color: "var(--text-secondary)" }}>優惠類型</span><select className="input" value={offerForm.benefit_type} onChange={(e) => setOfferForm((f) => ({ ...f, benefit_type: e.target.value as typeof f.benefit_type }))}>
                       <option value="discount">折扣</option><option value="gift">贈品</option><option value="bundle">組合優惠</option><option value="member_price">學生價</option><option value="other">其他合作優惠</option>
-                    </select>
-                    <input className="input" placeholder="優惠重點，例如：全品項 9 折" value={offerForm.benefit_value} onChange={(e) => setOfferForm((f) => ({ ...f, benefit_value: e.target.value }))} />
+                    </select></label>
+                    <label className="space-y-1"><span className="text-xs" style={{ color: "var(--text-secondary)" }}>優惠重點</span><input className="input" placeholder="例如：全品項 9 折" value={offerForm.benefit_value} onChange={(e) => setOfferForm((f) => ({ ...f, benefit_value: e.target.value }))} /></label>
                   </div>
-                  <input className="input" placeholder="公開摘要，例如：出示學生證享 9 折" value={offerForm.public_summary} onChange={(e) => setOfferForm((f) => ({ ...f, public_summary: e.target.value }))} />
-                  <textarea className="input min-h-20" placeholder="優惠詳情，例如：全品項 9 折，部分商品除外" value={offerForm.full_description} onChange={(e) => setOfferForm((f) => ({ ...f, full_description: e.target.value }))} />
-                  <textarea className="input min-h-20" placeholder="使用方式，例如：聯絡時出示學生證或輸入優惠碼" value={offerForm.instructions} onChange={(e) => setOfferForm((f) => ({ ...f, instructions: e.target.value }))} />
+                  <label className="space-y-1"><span className="text-xs" style={{ color: "var(--text-secondary)" }}>公開摘要</span><input className="input" placeholder="例如：出示學生證享 9 折" value={offerForm.public_summary} onChange={(e) => setOfferForm((f) => ({ ...f, public_summary: e.target.value }))} /></label>
+                  <label className="space-y-1"><span className="text-xs" style={{ color: "var(--text-secondary)" }}>完整優惠條款</span><textarea className="input min-h-20" placeholder="例如：全品項 9 折，部分商品除外" value={offerForm.full_description} onChange={(e) => setOfferForm((f) => ({ ...f, full_description: e.target.value }))} /></label>
+                  <label className="space-y-1"><span className="text-xs" style={{ color: "var(--text-secondary)" }}>使用方式</span><textarea className="input min-h-20" placeholder="例如：聯絡時出示學生證或輸入優惠碼" value={offerForm.instructions} onChange={(e) => setOfferForm((f) => ({ ...f, instructions: e.target.value }))} /></label>
                 </div>
-                <button className="btn btn-ghost mt-3" onClick={createOffer}><Plus size={15} aria-hidden="true" />新增優惠</button>
+                <div className="mt-3 flex gap-2">
+                  <button className="btn btn-ghost" onClick={saveOffer}>
+                    {editingOfferId ? <Save size={15} aria-hidden="true" /> : <Plus size={15} aria-hidden="true" />}
+                    {editingOfferId ? "儲存優惠" : "新增優惠"}
+                  </button>
+                  {editingOfferId && <button className="btn btn-secondary" onClick={() => { setEditingOfferId(null); setOfferForm(newOfferDraft()); }}>取消編輯</button>}
+                </div>
               </section>
             </div>
           )}

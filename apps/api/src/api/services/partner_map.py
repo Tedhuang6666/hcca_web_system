@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from urllib.parse import parse_qs, unquote, urljoin, urlparse, urlunsplit
 
 import httpx
-from sqlalchemy import Select, and_, desc, exists, func, or_, select
+from sqlalchemy import Select, and_, desc, exists, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -238,7 +238,14 @@ async def create_tag(db: AsyncSession, data: PartnerTagCreate) -> PartnerTag:
 
 
 async def update_tag(db: AsyncSession, tag: PartnerTag, data: PartnerTagUpdate) -> PartnerTag:
+    original_name = tag.name
     apply_updates(tag, data)
+    if data.name is not None and data.name != original_name:
+        await db.execute(
+            update(PartnerBusiness)
+            .where(PartnerBusiness.category == original_name)
+            .values(category=data.name)
+        )
     await db.flush()
     await db.refresh(tag)
     return tag
