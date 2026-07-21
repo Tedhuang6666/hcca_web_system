@@ -63,6 +63,15 @@ const newOfferDraft = (): OfferDraft => ({
   instructions: "",
 });
 
+const emptyLocation = () => ({
+  name: "",
+  address: "",
+  latitude: "",
+  longitude: "",
+  phone: "",
+  google_maps_url: "",
+});
+
 export default function PartnerMapAdminPage() {
   const [businesses, setBusinesses] = useState<PartnerBusinessDirectoryItem[]>([]);
   const [tags, setTags] = useState<PartnerTagOut[]>([]);
@@ -74,14 +83,7 @@ export default function PartnerMapAdminPage() {
   const [tagColor, setTagColor] = useState("#10B981");
   const [saving, setSaving] = useState(false);
   const [parsingMap, setParsingMap] = useState(false);
-  const [locationForm, setLocationForm] = useState({
-    name: "",
-    address: "",
-    latitude: "",
-    longitude: "",
-    phone: "",
-    google_maps_url: "",
-  });
+  const [locationForm, setLocationForm] = useState(emptyLocation);
   const [offerForm, setOfferForm] = useState<OfferDraft>(newOfferDraft());
   const [initialOfferForms, setInitialOfferForms] = useState<OfferDraft[]>([newOfferDraft()]);
 
@@ -143,6 +145,7 @@ export default function PartnerMapAdminPage() {
   const resetCreate = () => {
     setSelected(null);
     setBusinessForm(emptyBusiness);
+    setLocationForm(emptyLocation());
     setInitialOfferForms([newOfferDraft()]);
   };
 
@@ -166,7 +169,17 @@ export default function PartnerMapAdminPage() {
     const initialLatitude = Number(locationForm.latitude);
     const initialLongitude = Number(locationForm.longitude);
     if (!selected && businessForm.listing_type === "physical" && hasInitialLocationInput) {
-      if (!locationForm.address.trim() || Number.isNaN(initialLatitude) || Number.isNaN(initialLongitude)) {
+      if (
+        !locationForm.address.trim()
+        || !locationForm.latitude.trim()
+        || !locationForm.longitude.trim()
+        || !Number.isFinite(initialLatitude)
+        || !Number.isFinite(initialLongitude)
+        || initialLatitude < -90
+        || initialLatitude > 90
+        || initialLongitude < -180
+        || initialLongitude > 180
+      ) {
         toast.error("請先完成地址與座標，或使用 Google Maps 自動擷取");
         return;
       }
@@ -290,7 +303,7 @@ export default function PartnerMapAdminPage() {
         sort_order: 0,
         is_active: true,
       });
-      setLocationForm({ name: "", address: "", latitude: "", longitude: "", phone: "", google_maps_url: "" });
+      setLocationForm(emptyLocation());
       selectBusiness(selected.id);
       load();
     } catch (error) {
@@ -309,11 +322,19 @@ export default function PartnerMapAdminPage() {
       setLocationForm((form) => ({
         ...form,
         google_maps_url: location.google_maps_url,
-        address: location.address,
+        name: location.name || form.name,
+        address: location.address ?? form.address,
         latitude: String(location.latitude),
         longitude: String(location.longitude),
       }));
-      toast.success("已帶入地址與座標，請確認後新增據點");
+      if (!selected && location.name) {
+        setBusinessForm((form) => (form.name.trim() ? form : { ...form, name: location.name || "" }));
+      }
+      toast.success(
+        location.address
+          ? "已帶入店家名稱、地址與座標，請確認後儲存"
+          : "已帶入店家名稱與座標；地址請手動確認後儲存",
+      );
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : "無法解析 Google Maps 連結");
     } finally {
@@ -503,118 +524,79 @@ export default function PartnerMapAdminPage() {
         </aside>
 
         <main className="space-y-4">
-          <section className="card p-5">
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="space-y-1">
-                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>店家名稱</span>
-                <input className="input" value={businessForm.name} onChange={(e) => setBusinessForm((f) => ({ ...f, name: e.target.value }))} />
-              </label>
-              <label className="space-y-1">
-                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>狀態</span>
-                <select className="input" value={businessForm.status} onChange={(e) => setBusinessForm((f) => ({ ...f, status: e.target.value as PartnerBusinessStatus }))}>
-                  <option value="draft">草稿</option>
-                  <option value="active">公開</option>
-                  <option value="hidden">暫時隱藏</option>
-                  <option value="archived">封存</option>
-                </select>
-              </label>
-              <label className="space-y-1">
-                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>合作型態</span>
-                <select className="input" value={businessForm.listing_type} onChange={(e) => setBusinessForm((f) => ({ ...f, listing_type: e.target.value as PartnerBusinessListingType }))}>
-                  <option value="physical">實體店家（顯示據點）</option>
-                  <option value="online">線上合作（不顯示位置）</option>
-                </select>
-              </label>
-              <label className="space-y-1 md:col-span-2">
-                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>摘要</span>
-                <input className="input" value={businessForm.summary} onChange={(e) => setBusinessForm((f) => ({ ...f, summary: e.target.value }))} />
-              </label>
-              <label className="space-y-1">
-                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>分類</span>
-                <select className="input" value={businessForm.category} onChange={(e) => setBusinessForm((f) => ({ ...f, category: e.target.value }))}>
-                  <option value="">未分類</option>
-                  {tags.filter((tag) => tag.is_active).map((tag) => (
-                    <option key={tag.id} value={tag.name}>{tag.name}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="space-y-1">
-                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>營業時間</span>
-                <input className="input" value={businessForm.business_hours_text} onChange={(e) => setBusinessForm((f) => ({ ...f, business_hours_text: e.target.value }))} />
-              </label>
-              <label className="space-y-1 md:col-span-2">
-                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>描述</span>
-                <textarea className="input min-h-24" value={businessForm.description} onChange={(e) => setBusinessForm((f) => ({ ...f, description: e.target.value }))} />
-              </label>
-              <label className="space-y-1">
-                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>網站</span>
-                <input className="input" value={businessForm.website_url} onChange={(e) => setBusinessForm((f) => ({ ...f, website_url: e.target.value }))} />
-              </label>
-              <label className="space-y-1">
-                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>社群連結</span>
-                <input className="input" value={businessForm.social_url} onChange={(e) => setBusinessForm((f) => ({ ...f, social_url: e.target.value }))} />
-              </label>
-              <label className="space-y-1">
-                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>聯絡人</span>
-                <input className="input" value={businessForm.contact_name} onChange={(e) => setBusinessForm((f) => ({ ...f, contact_name: e.target.value }))} />
-              </label>
-              <label className="space-y-1">
-                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>聯絡電話</span>
-                <input className="input" value={businessForm.contact_phone} onChange={(e) => setBusinessForm((f) => ({ ...f, contact_phone: e.target.value }))} />
-              </label>
-              <label className="space-y-1">
-                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>聯絡 Email</span>
-                <input className="input" type="email" value={businessForm.contact_email} onChange={(e) => setBusinessForm((f) => ({ ...f, contact_email: e.target.value }))} />
-              </label>
-              <label className="space-y-1">
-                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Instagram 帳號</span>
-                <input className="input" placeholder="例如 hcca_store（可含 @）" value={businessForm.instagram_handle} onChange={(e) => setBusinessForm((f) => ({ ...f, instagram_handle: e.target.value }))} />
-              </label>
-              <label className="space-y-1">
-                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>LINE ID</span>
-                <input className="input" value={businessForm.line_id} onChange={(e) => setBusinessForm((f) => ({ ...f, line_id: e.target.value }))} />
-              </label>
-              <label className="space-y-1 md:col-span-2">
-                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>其他聯絡方式</span>
-                <textarea className="input min-h-20" placeholder="可自訂輸入 Discord、地址說明或其他聯絡方式" value={businessForm.other_contact} onChange={(e) => setBusinessForm((f) => ({ ...f, other_contact: e.target.value }))} />
-              </label>
-              <label className="space-y-1">
-                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Logo URL</span>
-                <input className="input" value={businessForm.logo_url} onChange={(e) => setBusinessForm((f) => ({ ...f, logo_url: e.target.value }))} />
-              </label>
-              <label className="space-y-1">
-                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>封面圖片 URL</span>
-                <input className="input" value={businessForm.cover_image_url} onChange={(e) => setBusinessForm((f) => ({ ...f, cover_image_url: e.target.value }))} />
-              </label>
+          <section className="card overflow-hidden">
+            <div className="border-b p-5" style={{ borderColor: "var(--border)" }}>
+              <p className="text-xs font-medium" style={{ color: "var(--primary)" }}>{selected ? "編輯合作夥伴" : "建立合作夥伴"}</p>
+              <h2 className="mt-1 text-lg font-semibold" style={{ color: "var(--text-primary)" }}>{businessForm.name || "尚未命名的合作夥伴"}</h2>
+              <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>先完成基本資料，再補充公開聯絡方式、位置與優惠。</p>
             </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {tags.map((tag) => {
-                const active = businessForm.tag_ids.includes(tag.id);
-                return (
-                  <button
-                    key={tag.id}
-                    onClick={() => toggleTag(tag.id)}
-                    className="rounded-full border px-3 py-1.5 text-xs"
-                    style={{
-                      borderColor: active ? "var(--primary)" : "var(--border)",
-                      color: active ? "var(--primary)" : "var(--text-secondary)",
-                    }}>
-                    {tag.name}
-                  </button>
-                );
-              })}
-            </div>
-            {!selected && businessForm.listing_type === "physical" && <div className="mt-6 border-t pt-5" style={{ borderColor: "var(--border)" }}>
-              <div className="flex items-start justify-between gap-3"><div><h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>實體店家位置（可選）</h2><p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>新建時可直接設定第一個據點；之後仍可新增多個分店。</p></div><MapPin size={18} style={{ color: "var(--primary)" }} aria-hidden="true" /></div>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                <input className="input" placeholder="分店名稱（選填）" value={locationForm.name} onChange={(e) => setLocationForm((f) => ({ ...f, name: e.target.value }))} />
-                <input className="input" placeholder="據點電話（選填）" value={locationForm.phone} onChange={(e) => setLocationForm((f) => ({ ...f, phone: e.target.value }))} />
-                <div className="flex gap-2 sm:col-span-2"><input className="input min-w-0 flex-1" type="url" placeholder="貼上 Google Maps 分享連結" value={locationForm.google_maps_url} onChange={(e) => setLocationForm((f) => ({ ...f, google_maps_url: e.target.value }))} /><button type="button" className="btn btn-secondary shrink-0" onClick={() => void parseGoogleMaps()} disabled={parsingMap}>{parsingMap ? "解析中…" : "自動擷取"}</button></div>
-                <input className="input sm:col-span-2" placeholder="地址" value={locationForm.address} onChange={(e) => setLocationForm((f) => ({ ...f, address: e.target.value }))} />
-                <input className="input" inputMode="decimal" placeholder="緯度" value={locationForm.latitude} onChange={(e) => setLocationForm((f) => ({ ...f, latitude: e.target.value }))} />
-                <input className="input" inputMode="decimal" placeholder="經度" value={locationForm.longitude} onChange={(e) => setLocationForm((f) => ({ ...f, longitude: e.target.value }))} />
-              </div>
-            </div>}
+            <div className="space-y-7 p-5">
+              <section>
+                <div className="mb-3"><h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>基本資料</h3><p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>學生端列表會優先顯示名稱、摘要與合作型態。</p></div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>店家名稱</span><input className="input" value={businessForm.name} onChange={(e) => setBusinessForm((f) => ({ ...f, name: e.target.value }))} /></label>
+                  <label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>合作型態</span><select className="input" value={businessForm.listing_type} onChange={(e) => setBusinessForm((f) => ({ ...f, listing_type: e.target.value as PartnerBusinessListingType }))}><option value="physical">實體店家（顯示據點）</option><option value="online">線上合作（不顯示位置）</option></select></label>
+                  <label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>狀態</span><select className="input" value={businessForm.status} onChange={(e) => setBusinessForm((f) => ({ ...f, status: e.target.value as PartnerBusinessStatus }))}><option value="draft">草稿</option><option value="active">公開</option><option value="hidden">暫時隱藏</option><option value="archived">封存</option></select></label>
+                  <label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>分類</span><select className="input" value={businessForm.category} onChange={(e) => setBusinessForm((f) => ({ ...f, category: e.target.value }))}><option value="">未分類</option>{tags.filter((tag) => tag.is_active).map((tag) => <option key={tag.id} value={tag.name}>{tag.name}</option>)}</select></label>
+                  <label className="space-y-1 md:col-span-2"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>摘要</span><input className="input" value={businessForm.summary} onChange={(e) => setBusinessForm((f) => ({ ...f, summary: e.target.value }))} placeholder="一句話說明合作內容" /></label>
+                  <label className="space-y-1 md:col-span-2"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>合作介紹</span><textarea className="input min-h-24" value={businessForm.description} onChange={(e) => setBusinessForm((f) => ({ ...f, description: e.target.value }))} placeholder="補充學生需要知道的合作背景或服務內容" /></label>
+                </div>
+              </section>
+
+              <section className="border-t pt-6" style={{ borderColor: "var(--border)" }}>
+                <div className="mb-3"><h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>公開聯絡方式</h3><p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>至少填一種學生可以使用的聯絡或前往方式。</p></div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>聯絡人</span><input className="input" value={businessForm.contact_name} onChange={(e) => setBusinessForm((f) => ({ ...f, contact_name: e.target.value }))} /></label>
+                  <label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>聯絡電話</span><input className="input" value={businessForm.contact_phone} onChange={(e) => setBusinessForm((f) => ({ ...f, contact_phone: e.target.value }))} /></label>
+                  <label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>聯絡 Email</span><input className="input" type="email" value={businessForm.contact_email} onChange={(e) => setBusinessForm((f) => ({ ...f, contact_email: e.target.value }))} /></label>
+                  <label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Instagram 帳號</span><input className="input" placeholder="例如 hcca_store（可含 @）" value={businessForm.instagram_handle} onChange={(e) => setBusinessForm((f) => ({ ...f, instagram_handle: e.target.value }))} /></label>
+                  <label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>LINE ID</span><input className="input" value={businessForm.line_id} onChange={(e) => setBusinessForm((f) => ({ ...f, line_id: e.target.value }))} /></label>
+                  <label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>網站／合作頁</span><input className="input" type="url" value={businessForm.website_url} onChange={(e) => setBusinessForm((f) => ({ ...f, website_url: e.target.value }))} /></label>
+                  <label className="space-y-1 md:col-span-2"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>其他聯絡方式</span><textarea className="input min-h-20" placeholder="可自訂輸入 Discord、表單連結或其他說明" value={businessForm.other_contact} onChange={(e) => setBusinessForm((f) => ({ ...f, other_contact: e.target.value }))} /></label>
+                </div>
+              </section>
+
+              <section className="border-t pt-6" style={{ borderColor: "var(--border)" }}>
+                <div className="mb-3"><h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>顯示素材與分類</h3><p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>選填，讓學生更容易辨識合作夥伴。</p></div>
+                <div className="grid gap-3 md:grid-cols-2"><label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>社群連結</span><input className="input" type="url" value={businessForm.social_url} onChange={(e) => setBusinessForm((f) => ({ ...f, social_url: e.target.value }))} /></label><label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>營業時間</span><input className="input" value={businessForm.business_hours_text} onChange={(e) => setBusinessForm((f) => ({ ...f, business_hours_text: e.target.value }))} /></label><label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Logo URL</span><input className="input" value={businessForm.logo_url} onChange={(e) => setBusinessForm((f) => ({ ...f, logo_url: e.target.value }))} /></label><label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>封面圖片 URL</span><input className="input" value={businessForm.cover_image_url} onChange={(e) => setBusinessForm((f) => ({ ...f, cover_image_url: e.target.value }))} /></label></div>
+                <div className="mt-4 flex flex-wrap gap-2">{tags.map((tag) => { const active = businessForm.tag_ids.includes(tag.id); return <button type="button" key={tag.id} onClick={() => toggleTag(tag.id)} className="rounded-full border px-3 py-1.5 text-xs" style={{ borderColor: active ? "var(--primary)" : "var(--border)", color: active ? "var(--primary)" : "var(--text-secondary)", background: active ? "var(--primary-dim)" : "transparent" }}>{tag.name}</button>; })}</div>
+              </section>
+            {!selected && businessForm.listing_type === "physical" && (
+              <section className="border-t pt-6" style={{ borderColor: "var(--border)" }}>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>實體店家位置（可選）</h3>
+                    <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                      先貼 Google Maps 連結自動帶入資料，再手動修改或補充；之後仍可新增多個分店。
+                    </p>
+                  </div>
+                  <MapPin size={18} style={{ color: "var(--primary)" }} aria-hidden="true" />
+                </div>
+                <div className="mt-4 rounded-lg border p-3" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
+                  <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Google Maps 連結</label>
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      className="input min-w-0 flex-1"
+                      type="url"
+                      placeholder="貼上 Google Maps 分享連結"
+                      value={locationForm.google_maps_url}
+                      onChange={(e) => setLocationForm((f) => ({ ...f, google_maps_url: e.target.value }))}
+                    />
+                    <button type="button" className="btn btn-secondary shrink-0" onClick={() => void parseGoogleMaps()} disabled={parsingMap}>
+                      {parsingMap ? "解析中…" : "自動擷取"}
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>可自動帶入店家名稱與座標；地址依連結內容提供，欄位都可以再修改。</p>
+                </div>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <label className="space-y-1"><span className="text-xs" style={{ color: "var(--text-secondary)" }}>分店名稱</span><input className="input" placeholder="例如：竹北店" value={locationForm.name} onChange={(e) => setLocationForm((f) => ({ ...f, name: e.target.value }))} /></label>
+                  <label className="space-y-1"><span className="text-xs" style={{ color: "var(--text-secondary)" }}>據點電話</span><input className="input" placeholder="選填" value={locationForm.phone} onChange={(e) => setLocationForm((f) => ({ ...f, phone: e.target.value }))} /></label>
+                  <label className="space-y-1 sm:col-span-2"><span className="text-xs" style={{ color: "var(--text-secondary)" }}>地址</span><input className="input" placeholder="請確認或手動輸入完整地址" value={locationForm.address} onChange={(e) => setLocationForm((f) => ({ ...f, address: e.target.value }))} /></label>
+                  <label className="space-y-1"><span className="text-xs" style={{ color: "var(--text-secondary)" }}>緯度</span><input className="input" inputMode="decimal" placeholder="例如：24.8440999" value={locationForm.latitude} onChange={(e) => setLocationForm((f) => ({ ...f, latitude: e.target.value }))} /></label>
+                  <label className="space-y-1"><span className="text-xs" style={{ color: "var(--text-secondary)" }}>經度</span><input className="input" inputMode="decimal" placeholder="例如：121.0220416" value={locationForm.longitude} onChange={(e) => setLocationForm((f) => ({ ...f, longitude: e.target.value }))} /></label>
+                </div>
+              </section>
+            )}
             {!selected && <div className="mt-6 border-t pt-5" style={{ borderColor: "var(--border)" }}>
               <div className="flex items-start justify-between gap-3">
                 <div><h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>建立時加入優惠（可多筆）</h2><p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>可一次建立多個優惠；完整條款會直接顯示給所有訪客。</p></div>
@@ -639,6 +621,7 @@ export default function PartnerMapAdminPage() {
                 <Save size={15} aria-hidden="true" />{saving ? "儲存中..." : "儲存店家"}
               </button>
             </div>
+            </div>
           </section>
 
           {selected && (
@@ -662,16 +645,20 @@ export default function PartnerMapAdminPage() {
                     </div>
                       ))}
                     </div>
-                    <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                      <input className="input" placeholder="分店名稱" value={locationForm.name} onChange={(e) => setLocationForm((f) => ({ ...f, name: e.target.value }))} />
-                      <input className="input" placeholder="電話" value={locationForm.phone} onChange={(e) => setLocationForm((f) => ({ ...f, phone: e.target.value }))} />
-                      <div className="flex gap-2 sm:col-span-2">
-                        <input className="input min-w-0 flex-1" type="url" placeholder="貼上 Google Maps 分享連結，自動帶入地址與座標" value={locationForm.google_maps_url} onChange={(e) => setLocationForm((f) => ({ ...f, google_maps_url: e.target.value }))} />
+                    <div className="mt-4 rounded-lg border p-3" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
+                      <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Google Maps 連結</label>
+                      <div className="mt-2 flex gap-2">
+                        <input className="input min-w-0 flex-1" type="url" placeholder="貼上連結，自動帶入可辨識資料" value={locationForm.google_maps_url} onChange={(e) => setLocationForm((f) => ({ ...f, google_maps_url: e.target.value }))} />
                         <button type="button" className="btn btn-secondary shrink-0" onClick={() => void parseGoogleMaps()} disabled={parsingMap}>{parsingMap ? "解析中…" : "自動擷取"}</button>
                       </div>
-                      <input className="input sm:col-span-2" placeholder="地址" value={locationForm.address} onChange={(e) => setLocationForm((f) => ({ ...f, address: e.target.value }))} />
-                      <input className="input" placeholder="緯度" value={locationForm.latitude} onChange={(e) => setLocationForm((f) => ({ ...f, latitude: e.target.value }))} />
-                      <input className="input" placeholder="經度" value={locationForm.longitude} onChange={(e) => setLocationForm((f) => ({ ...f, longitude: e.target.value }))} />
+                      <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>擷取後仍可手動修改名稱、地址與座標。</p>
+                    </div>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <label className="space-y-1"><span className="text-xs" style={{ color: "var(--text-secondary)" }}>分店名稱</span><input className="input" placeholder="例如：竹北店" value={locationForm.name} onChange={(e) => setLocationForm((f) => ({ ...f, name: e.target.value }))} /></label>
+                      <label className="space-y-1"><span className="text-xs" style={{ color: "var(--text-secondary)" }}>電話</span><input className="input" placeholder="選填" value={locationForm.phone} onChange={(e) => setLocationForm((f) => ({ ...f, phone: e.target.value }))} /></label>
+                      <label className="space-y-1 sm:col-span-2"><span className="text-xs" style={{ color: "var(--text-secondary)" }}>地址</span><input className="input" placeholder="請確認或手動輸入完整地址" value={locationForm.address} onChange={(e) => setLocationForm((f) => ({ ...f, address: e.target.value }))} /></label>
+                      <label className="space-y-1"><span className="text-xs" style={{ color: "var(--text-secondary)" }}>緯度</span><input className="input" placeholder="緯度" value={locationForm.latitude} onChange={(e) => setLocationForm((f) => ({ ...f, latitude: e.target.value }))} /></label>
+                      <label className="space-y-1"><span className="text-xs" style={{ color: "var(--text-secondary)" }}>經度</span><input className="input" placeholder="經度" value={locationForm.longitude} onChange={(e) => setLocationForm((f) => ({ ...f, longitude: e.target.value }))} /></label>
                     </div>
                     <button className="btn btn-ghost mt-3" onClick={createLocation}><Plus size={15} aria-hidden="true" />新增點位</button>
                   </>

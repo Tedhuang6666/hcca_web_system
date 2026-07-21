@@ -92,7 +92,8 @@ class PartnerGoogleMapsParseIn(BaseModel):
 
 class PartnerGoogleMapsParseOut(BaseModel):
     google_maps_url: str
-    address: str
+    name: str | None = None
+    address: str | None = None
     latitude: float
     longitude: float
 
