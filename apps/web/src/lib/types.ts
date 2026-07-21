@@ -900,6 +900,32 @@ export interface OrgWithPositions {
 // ── 學餐系統型別 ──────────────────────────────────────────────────────────────
 
 export type RecommendedVendorStatus = "draft" | "active" | "hidden" | "archived";
+export type RecommendedVendorMenuKind = "link" | "image" | "pdf";
+
+export interface RecommendedVendorCategoryOut {
+  id: string;
+  name: string;
+  description: string | null;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RecommendedVendorMenuOut {
+  id: string;
+  vendor_id: string;
+  title: string;
+  kind: RecommendedVendorMenuKind;
+  url: string | null;
+  filename: string | null;
+  content_type: string | null;
+  file_size: number | null;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
 
 export interface RecommendedVendorProductCreate {
   name: string;
@@ -939,7 +965,7 @@ export interface RecommendedVendorCreate {
   name: string;
   summary?: string | null;
   description?: string | null;
-  category?: string | null;
+  category_id?: string | null;
   address?: string | null;
   latitude?: number | null;
   longitude?: number | null;
@@ -971,6 +997,7 @@ export interface RecommendedVendorListItem {
   name: string;
   summary: string | null;
   category: string | null;
+  category_id: string | null;
   address: string | null;
   latitude: number | null;
   longitude: number | null;
@@ -1002,6 +1029,7 @@ export interface RecommendedVendorOut extends RecommendedVendorListItem {
   internal_note: string | null;
   created_by: string | null;
   products: RecommendedVendorProductOut[];
+  menus: RecommendedVendorMenuOut[];
 }
 
 

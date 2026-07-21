@@ -386,10 +386,9 @@ async def admin_upload_menu(
     )
     db.add(menu)
     await db.flush()
-    return RecommendedVendorMenuOut(
-        **RecommendedVendorMenuOut.model_validate(menu).model_dump(),
-        url=f"/recommended-vendors/menus/{menu.id}/file",
-    )
+    menu_out = RecommendedVendorMenuOut.model_validate(menu)
+    menu_out.url = f"/recommended-vendors/menus/{menu.id}/file"
+    return menu_out
 
 
 @router.patch(

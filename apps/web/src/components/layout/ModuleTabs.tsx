@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 
 export type ModuleTab = {
@@ -19,6 +19,7 @@ export default function ModuleTabs({
   tabs: ModuleTab[];
 }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   if (tabs.length <= 1) return null;
 
@@ -30,9 +31,14 @@ export default function ModuleTabs({
       <div className="module-tabs-list">
         {tabs.map((tab) => {
           const Icon = tab.icon;
+          const [tabPath, tabQuery] = tab.href.split("?", 2);
+          const tabParams = new URLSearchParams(tabQuery ?? "");
+          const queryMatches = [...tabParams.entries()].every(
+            ([key, value]) => searchParams.get(key) === value,
+          );
           const active = tab.end
-            ? pathname === tab.href
-            : pathname === tab.href || pathname.startsWith(`${tab.href}/`);
+            ? pathname === tabPath && searchParams.toString() === ""
+            : (pathname === tabPath || pathname.startsWith(`${tabPath}/`)) && queryMatches;
           return (
             <Link
               key={tab.href}
