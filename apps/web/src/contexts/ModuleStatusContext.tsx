@@ -1,7 +1,7 @@
 "use client";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { ApiError, systemApi, type ModuleStatusPublic } from "@/lib/api";
-import type { ModuleId } from "@/lib/modules";
+import { FE_MODULES, type ModuleId } from "@/lib/modules";
 import { useWS } from "@/hooks/useWS";
 import { useLowDataMode } from "@/hooks/useLowDataMode";
 import { useResilientPoll } from "@/hooks/useResilientPoll";
@@ -99,7 +99,30 @@ export function ModuleStatusProvider({
   });
 
   useEffect(() => {
-    const onNudge = () => refresh();
+    const onNudge = (event: Event) => {
+      const detail = (event as CustomEvent<{
+        module?: string;
+        mode?: "maintenance" | "closed";
+        reason?: string;
+        until?: number | null;
+      }>).detail;
+      const moduleId = detail?.module as ModuleId | undefined;
+      const spec = moduleId ? FE_MODULES[moduleId] : undefined;
+      if (moduleId && spec) {
+        setStatuses((previous) => ({
+          ...previous,
+          [moduleId]: {
+            id: moduleId,
+            label: spec.label,
+            on: true,
+            mode: detail?.mode ?? "maintenance",
+            reason: detail?.reason ?? previous[moduleId]?.reason ?? "",
+            until: detail?.until ?? previous[moduleId]?.until ?? null,
+          },
+        }));
+      }
+      refresh();
+    };
     window.addEventListener("hcca:module-maintenance", onNudge);
     // 取使用者 ID 訂閱 WebSocket（已登入時才連）
     if (typeof window !== "undefined") {

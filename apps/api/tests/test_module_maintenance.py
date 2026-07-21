@@ -74,6 +74,13 @@ def test_match_module_respects_segment_boundary() -> None:
     assert match_module("/documents-approve/5") == "documents"
     assert match_module("/shop") == "shop"
     assert match_module("/shop/cart") == "shop"
+    assert match_module("/merchandise-submissions/admin") == "merchandiseSubmissions"
+    assert match_module("/matters") == "matters"
+    assert match_module("/finance/receivables") == "finance"
+    assert match_module("/receivables") == "finance"
+    assert match_module("/publications") == "publications"
+    assert match_module("/email") == "email"
+    assert match_module("/inventory/items") == "operations"
     # 邊界：非 segment 邊界不命中
     assert match_module("/shop-other") is None
     # 核心通道不屬於任何可維護模組

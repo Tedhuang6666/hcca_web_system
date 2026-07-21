@@ -17,7 +17,14 @@ export default function ModuleMaintenance({ moduleId }: { moduleId: ModuleId }) 
 
   return (
     <div className="mx-auto flex min-h-[60vh] w-full max-w-2xl flex-col items-center justify-center text-center">
-      <div className="grid h-16 w-16 place-items-center rounded-2xl border border-[var(--warning-border)] bg-[var(--warning-dim)] text-[var(--warning)]">
+      <div
+        className="grid h-16 w-16 place-items-center rounded-2xl border"
+        style={{
+          borderColor: closed ? "var(--danger-border)" : "var(--warning-border)",
+          background: closed ? "var(--danger-dim)" : "var(--warning-dim)",
+          color: closed ? "var(--danger)" : "var(--warning)",
+        }}
+      >
         <Icon size={28} aria-hidden />
       </div>
       <h1 className="mt-6 text-2xl font-semibold text-[var(--text-primary)] md:text-3xl">
