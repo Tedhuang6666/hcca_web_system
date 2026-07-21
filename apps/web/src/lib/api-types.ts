@@ -51540,6 +51540,8 @@ export interface operations {
             query?: {
                 /** @description 僅回傳啟用中的組織 */
                 active_only?: boolean;
+                /** @description 排除班級系統自動建立的組織 */
+                exclude_class_orgs?: boolean;
             };
             header?: never;
             path?: never;

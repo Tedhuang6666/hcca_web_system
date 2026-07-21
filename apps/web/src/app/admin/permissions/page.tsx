@@ -171,7 +171,7 @@ export default function PermissionsAdminPage() {
       withFallback(adminApi.listUsers({ limit: 200 }), [], noteFailure("使用者")),
       withFallback(adminApi.listPositions(), [], noteFailure("職位")),
       withFallback(adminApi.listPermissionCodes(), [], noteFailure("權限代碼")),
-      withFallback(orgsApi.list({ active_only: true }), [], noteFailure("組織")),
+      withFallback(orgsApi.list({ active_only: true, exclude_class_orgs: true }), [], noteFailure("組織")),
       withFallback(classApi.list({ is_active: "true" }), [], noteFailure("班級")),
     ]);
     setUsers(loadedUsers);
