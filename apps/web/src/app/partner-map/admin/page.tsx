@@ -464,8 +464,8 @@ export default function PartnerMapAdminPage() {
               <Tag size={16} aria-hidden="true" />
               <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>標籤</span>
             </div>
-            <div className="grid gap-3 rounded-lg border p-3 sm:grid-cols-[minmax(0,1fr)_90px_180px_auto]" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
-              <label className="grid gap-1">
+            <div className="grid gap-3 rounded-lg border p-3 md:grid-cols-[minmax(0,1fr)_90px_minmax(160px,0.8fr)_auto]" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
+              <label className="grid min-w-0 gap-1">
                 <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>分類名稱</span>
                 <input
                   value={tagName}
@@ -474,7 +474,7 @@ export default function PartnerMapAdminPage() {
                   placeholder="例如：制服、飲料、文具"
                 />
               </label>
-              <label className="grid gap-1">
+              <label className="grid min-w-0 gap-1">
                 <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>顏色</span>
                 <input
                   value={tagColor}
@@ -485,13 +485,13 @@ export default function PartnerMapAdminPage() {
                   aria-label="分類顏色"
                 />
               </label>
-              <label className="grid gap-1">
+              <label className="grid min-w-0 gap-1">
                 <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>圖示</span>
                 <select className="input h-9" value={tagIconKey} onChange={(event) => setTagIconKey(event.target.value as PartnerIconKey)}>
                   {PARTNER_ICON_OPTIONS.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
                 </select>
               </label>
-              <button className="btn btn-ghost self-end" onClick={createTag} aria-label="新增標籤">
+              <button className="btn btn-ghost w-full self-end md:w-auto" onClick={createTag} aria-label="新增標籤">
                 <Plus size={15} aria-hidden="true" /> 新增
               </button>
             </div>
@@ -516,8 +516,8 @@ export default function PartnerMapAdminPage() {
                         <Save size={14} aria-hidden="true" /> 儲存
                       </button>
                     </div>
-                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_80px_minmax(0,1.3fr)_72px_84px]">
-                      <label className="grid gap-1">
+                    <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_80px_minmax(160px,1.3fr)_72px_84px]">
+                      <label className="grid min-w-0 gap-1">
                         <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>標籤名稱</span>
                         <input
                           className="input h-9"
@@ -528,7 +528,7 @@ export default function PartnerMapAdminPage() {
                           }))}
                         />
                       </label>
-                      <label className="grid gap-1">
+                      <label className="grid min-w-0 gap-1">
                         <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>顏色</span>
                         <input
                           className="h-9 w-full rounded border bg-transparent p-1"
@@ -542,7 +542,7 @@ export default function PartnerMapAdminPage() {
                           aria-label={`${tag.name} 顏色`}
                         />
                       </label>
-                      <label className="grid gap-1">
+                      <label className="grid min-w-0 gap-1">
                         <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>圖示</span>
                         <select
                           className="input h-9"
@@ -555,7 +555,7 @@ export default function PartnerMapAdminPage() {
                           {PARTNER_ICON_OPTIONS.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
                         </select>
                       </label>
-                      <label className="grid gap-1">
+                      <label className="grid min-w-0 gap-1">
                         <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>排序</span>
                         <input
                           className="input h-9"
@@ -567,7 +567,7 @@ export default function PartnerMapAdminPage() {
                           }))}
                         />
                       </label>
-                      <label className="grid gap-1">
+                      <label className="grid min-w-0 gap-1">
                         <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>狀態</span>
                         <button
                           className="btn btn-ghost h-9 justify-start px-2 text-xs"
