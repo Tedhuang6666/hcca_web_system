@@ -210,7 +210,7 @@ export default function CouncilOrdersPage() {
     <main className="mx-auto max-w-7xl space-y-5 px-4 py-5">
       <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>校園商品</p>
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>校慶商品</p>
           <h1 className="flex items-center gap-2 text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
             <BarChart2 size={22} /> 班聯訂購管理
           </h1>
