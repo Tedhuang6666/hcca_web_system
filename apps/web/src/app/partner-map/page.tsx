@@ -217,9 +217,9 @@ function DetailPanel({
                       </p>
                     )}
                     {offer.instructions && (
-                      <div className="mt-2 text-xs">
-                        <p className="font-medium" style={{ color: "var(--text-secondary)" }}>使用方式</p>
-                        <p className="mt-0.5 whitespace-pre-wrap" style={{ color: "var(--text-muted)" }}>{offer.instructions}</p>
+                      <div className="mt-3 rounded-md border p-2.5 text-xs" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
+                        <p className="font-semibold" style={{ color: "var(--text-primary)" }}>使用方式</p>
+                        <p className="mt-1 whitespace-pre-wrap" style={{ color: "var(--text-secondary)" }}>{offer.instructions}</p>
                       </div>
                     )}
                   </div>
