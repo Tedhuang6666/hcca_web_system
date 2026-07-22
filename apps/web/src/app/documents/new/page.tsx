@@ -1030,7 +1030,12 @@ export default function NewDocumentPage() {
             </p>
             {[
               { label: "姓名", value: handlerName, setter: setHandlerName, ph: "承辦人姓名" },
-              { label: "單位", value: handlerUnit, setter: setHandlerUnit, ph: "所屬單位" },
+              {
+                label: isDecree ? "令前主詞" : "單位",
+                value: handlerUnit,
+                setter: setHandlerUnit,
+                ph: isDecree ? "例如：主席" : "所屬單位",
+              },
             ].map(({ label, value, setter, ph }) => (
               <div key={label} className="flex items-center gap-3">
                 <span className="text-xs w-12 flex-shrink-0 font-medium" style={{ color: "var(--text-muted)" }}>

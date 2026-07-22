@@ -580,7 +580,12 @@ export default function EditDocumentPage() {
             <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>承辦人資訊</h3>
             {[
               { label: "姓名", value: handlerName, setter: setHandlerName, ph: "承辦人姓名" },
-              { label: "單位", value: handlerUnit, setter: setHandlerUnit, ph: "所屬單位" },
+              {
+                label: isDecree ? "令前主詞" : "單位",
+                value: handlerUnit,
+                setter: setHandlerUnit,
+                ph: isDecree ? "例如：主席" : "所屬單位",
+              },
               { label: "Email", value: handlerEmail, setter: setHandlerEmail, ph: "電子郵件" },
             ].map(({ label, value, setter, ph }) => (
               <div key={label} className="flex items-center gap-2">

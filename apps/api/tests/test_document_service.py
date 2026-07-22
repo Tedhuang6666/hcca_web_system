@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -131,8 +132,8 @@ def _mock_scalar_none_result() -> MagicMock:
 # ── 令格式驗證 ───────────────────────────────────────────────────────────────
 
 
-def test_decree_create_allows_empty_subject() -> None:
-    """令可直接以正文起稿，不需要主旨欄位。"""
+def test_decree_create_defaults_issuer_title() -> None:
+    """令可直接以正文起稿，並自動補上令前主詞。"""
     payload = _make_create_payload(
         category=DocumentCategory.DECREE,
         subject=None,
@@ -141,6 +142,7 @@ def test_decree_create_allows_empty_subject() -> None:
 
     assert payload.category == DocumentCategory.DECREE
     assert payload.subject is None
+    assert payload.issuer_full_name == "主席"
 
 
 def test_decree_template_allows_empty_subject() -> None:
@@ -155,6 +157,13 @@ def test_decree_template_allows_empty_subject() -> None:
 
     assert template.category == DocumentCategory.DECREE
     assert template.subject is None
+    assert template.issuer_full_name == "主席"
+
+
+def test_decree_update_defaults_issuer_title() -> None:
+    payload = DocumentUpdate(category=DocumentCategory.DECREE)
+
+    assert payload.issuer_full_name == "主席"
 
 
 @pytest.mark.asyncio
@@ -190,6 +199,7 @@ async def test_decree_print_hides_empty_recipient_and_subject() -> None:
     html = await render_document_print_html(_make_session(), doc)
 
     assert "發文字號：" in html
+    assert "主席令" in re.sub(r"<[^>]+>", "", html)
     assert "茲修正發布" in html
     assert "受文者：" not in html
     assert "主旨：" not in html

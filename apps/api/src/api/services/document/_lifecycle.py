@@ -17,6 +17,7 @@ from api.models.document import (
     Document,
     DocumentApproval,
     DocumentApprovalDelegation,
+    DocumentCategory,
     DocumentRecipient,
     DocumentRevision,
     DocumentStatus,
@@ -156,6 +157,9 @@ async def update_document(
         if getattr(doc, field, None) != value:
             setattr(doc, field, value)
             changed = True
+    if doc.category == DocumentCategory.DECREE and not (doc.issuer_full_name or "").strip():
+        doc.issuer_full_name = "主席"
+        changed = True
     if "visibility_level" in update_fields:
         doc.is_public = doc.visibility_level == DocumentVisibility.PUBLICLY_OPEN
 
