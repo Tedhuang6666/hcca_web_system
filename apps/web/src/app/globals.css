@@ -1105,7 +1105,7 @@
   align-items: center;
   gap: 0.45rem;
   margin-bottom: 0.55rem;
-  color: var(--danger);
+  color: var(--primary-text);
 }
 
 .public-urgent-heading p {
@@ -1119,9 +1119,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 1.25rem;
-  border: 1px solid var(--danger-border);
+  border: 1px solid var(--warning-border);
   border-radius: 12px;
-  background: var(--danger-dim);
+  background: var(--warning-dim);
   color: var(--public-text);
   padding: 1rem 1.15rem;
   text-decoration: none;
@@ -1134,8 +1134,8 @@
 
 .public-urgent-link:hover,
 .public-urgent-link:focus-visible {
-  border-color: var(--danger);
-  background: color-mix(in srgb, var(--danger-dim) 80%, var(--public-surface));
+  border-color: var(--warning);
+  background: color-mix(in srgb, var(--warning-dim) 80%, var(--public-surface));
   transform: translateY(-1px);
 }
 
@@ -1146,8 +1146,8 @@
   align-items: center;
   gap: 0.35rem;
   border-radius: 8px;
-  background: var(--danger);
-  color: #fff;
+  background: var(--primary);
+  color: var(--primary-fg);
   padding: 0 0.8rem;
   font-size: 0.9rem;
   font-weight: 800;
