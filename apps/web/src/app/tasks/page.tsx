@@ -19,6 +19,7 @@ import {
 import type { RegulationWorkflowStatus } from "@/lib/types";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
+import { usePermissions } from "@/hooks/usePermissions";
 
 type IconProps = { size: number; "aria-hidden": boolean };
 function FallbackModuleIcon(p: IconProps) { return <FileText {...p} />; }
@@ -92,14 +93,26 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(!cacheHas(CACHE_KEYS.tasks));
   const [tab, setTab] = useState<TaskModule | "all">("all");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
+  const { can, canAny } = usePermissions();
+  const canSeeDocumentDrafts = can("document:draft");
+  const canSeeDocumentApprovals = can("document:approve");
+  const canSeeRegulationReview = canAny("regulation:schedule", "regulation:council_approve");
+  const canSeeRegulationPublish = can("regulation:president_publish");
 
   useEffect(() => {
     let mounted = true;
     Promise.allSettled([
       tasksApi.list(),
-      documentsApi.stats(),
+      canSeeDocumentDrafts || canSeeDocumentApprovals ? documentsApi.stats() : Promise.resolve(null),
       ...(["under_review", "scheduled", "council_approved"] as RegulationWorkflowStatus[])
-        .map(status => regulationsApi.list({ workflow_status: status, limit: "50" })),
+        .map(status => {
+          const allowed = status === "council_approved"
+            ? canSeeRegulationPublish
+            : canSeeRegulationReview;
+          return allowed
+            ? regulationsApi.list({ workflow_status: status, limit: "50" })
+            : Promise.resolve([]);
+        }),
     ])
       .then(([tasksRes, statsRes, underReviewRes, scheduledRes, councilApprovedRes]) => {
         if (!mounted) return;
@@ -125,13 +138,19 @@ export default function TasksPage() {
       })
       .finally(() => { if (mounted) setLoading(false); });
     return () => { mounted = false; };
-  }, []);
+  }, [canSeeDocumentApprovals, canSeeDocumentDrafts, canSeeRegulationPublish, canSeeRegulationReview]);
 
   const filtered = useMemo<TaskItem[]>(() => {
     if (!data) return [];
     const now = Date.now();
     const tomorrow = now + 24 * 60 * 60 * 1000;
     return data.items.filter((t) => {
+      if (t.module === "document" && !canSeeDocumentApprovals) return false;
+      if (
+        t.module === "regulation"
+        && ((t.action === "publish" && !canSeeRegulationPublish)
+          || (t.action === "review" && !canSeeRegulationReview))
+      ) return false;
       if (tab !== "all" && t.module !== tab) return false;
       const due = t.due_at ? new Date(t.due_at).getTime() : null;
       if (quickFilter === "critical") return t.severity === "critical";
@@ -140,14 +159,29 @@ export default function TasksPage() {
       if (quickFilter === "high") return t.priority_score >= 70;
       return true;
     });
-  }, [data, quickFilter, tab]);
+  }, [
+    canSeeDocumentApprovals,
+    canSeeRegulationPublish,
+    canSeeRegulationReview,
+    data,
+    quickFilter,
+    tab,
+  ]);
 
   const moduleTabs: Array<TaskModule | "all"> = useMemo(() => {
     const tabs: Array<TaskModule | "all"> = ["all"];
     if (!data) return tabs;
-    const present = Object.keys(data.by_module).sort() as TaskModule[];
-    return [...tabs, ...present];
-  }, [data]);
+    const present = new Set(
+      data.items
+        .filter((t) => {
+          if (t.module === "document") return canSeeDocumentApprovals;
+          if (t.module !== "regulation") return true;
+          return t.action === "publish" ? canSeeRegulationPublish : canSeeRegulationReview;
+        })
+        .map((t) => t.module),
+    );
+    return [...tabs, ...Array.from(present).sort()];
+  }, [canSeeDocumentApprovals, canSeeRegulationPublish, canSeeRegulationReview, data]);
 
   return (
     <div className="max-w-4xl mx-auto space-y-5">
@@ -174,16 +208,24 @@ export default function TasksPage() {
         className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4"
         aria-label="治理工作台摘要"
       >
-        <WorkspaceMetric href="/documents?status=pending&my_only=true" label="待我簽核" value={docStats?.pending_my_approval ?? 0} tone="danger" />
-        <WorkspaceMetric href="/documents?status=draft&my_only=true" label="我的草稿" value={docStats?.draft ?? 0} tone="neutral" />
-        <WorkspaceMetric href="/regulations/pending" label="法規送審" value={regCounts.under_review ?? 0} tone="info" />
-        <WorkspaceMetric href="/regulations/pending" label="待主席公布" value={regCounts.council_approved ?? 0} tone="success" />
+        {canSeeDocumentApprovals && (
+          <WorkspaceMetric href="/documents?status=pending&my_only=true" label="待我簽核" value={docStats?.pending_my_approval ?? 0} tone="danger" />
+        )}
+        {canSeeDocumentDrafts && (
+          <WorkspaceMetric href="/documents?status=draft&my_only=true" label="我的草稿" value={docStats?.draft ?? 0} tone="neutral" />
+        )}
+        {canSeeRegulationReview && (
+          <WorkspaceMetric href="/regulations/pending" label="法規送審" value={regCounts.under_review ?? 0} tone="info" />
+        )}
+        {canSeeRegulationPublish && (
+          <WorkspaceMetric href="/regulations/pending" label="待主席公布" value={regCounts.council_approved ?? 0} tone="success" />
+        )}
       </section>
 
       <section className="grid gap-2 sm:grid-cols-3" aria-label="常用治理入口">
-        <QuickAction href="/documents/new" label="建立公文" detail="套範本、選字號、保存草稿" />
-        <QuickAction href="/regulations/new" label="起草法規" detail="建立條文、送審與會議連動" />
-        <QuickAction href="/meetings" label="議事與通知單" detail="確認議程後產生開會通知單" />
+        {canSeeDocumentDrafts && <QuickAction href="/documents/new" label="建立公文" detail="套範本、選字號、保存草稿" />}
+        {can("regulation:create") && <QuickAction href="/regulations/new" label="起草法規" detail="建立條文、送審與會議連動" />}
+        {canAny("meeting:create", "meeting:manage") && <QuickAction href="/meetings" label="議事與通知單" detail="確認議程後產生開會通知單" />}
       </section>
 
       <section
