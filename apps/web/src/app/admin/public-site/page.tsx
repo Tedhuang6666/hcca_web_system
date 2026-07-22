@@ -5,6 +5,9 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpRight,
+  AlertTriangle,
+  CheckCircle2,
+  ClipboardPaste,
   Compass,
   Eye,
   EyeOff,
@@ -36,7 +39,9 @@ import type {
   PublicLinkCategoryOut,
   PublicLinkOut,
   PublicOfficerCandidateOut,
+  PublicOfficerProfileCreate,
   PublicOfficerProfileOut,
+  PublicOfficerProfileUpdate,
   PublicSitePageOut,
   PublicSiteSettingsOut,
 } from "@/lib/types";
@@ -231,6 +236,39 @@ function parseJsonObject(value: string, label: string) {
   return parsed as Record<string, unknown>;
 }
 
+type OfficerRosterLine = {
+  lineNumber: number;
+  title: string;
+  names: string[];
+  error?: string;
+};
+
+function parseOfficerRoster(value: string): OfficerRosterLine[] {
+  return value.split(/\r?\n/).flatMap((rawLine, index) => {
+    const line = rawLine.trim();
+    if (!line) return [];
+    const separatorIndex = line.search(/[｜|]/);
+    if (separatorIndex < 0) {
+      return [{ lineNumber: index + 1, title: "", names: [], error: "請使用「職位｜姓名」格式" }];
+    }
+    const title = line.slice(0, separatorIndex).trim();
+    const names = line
+      .slice(separatorIndex + 1)
+      .trim()
+      .split(/[\s、，,]+/)
+      .map((name) => name.trim())
+      .filter(Boolean);
+    if (!title || names.length === 0) {
+      return [{ lineNumber: index + 1, title, names, error: "職位與姓名都不能空白" }];
+    }
+    return [{ lineNumber: index + 1, title, names: [...new Set(names)] }];
+  });
+}
+
+function normalizeOfficerRosterValue(value: string) {
+  return value.trim().replace(/\s+/g, "").replace(/[部組處]$/, "");
+}
+
 export default function PublicSiteAdminPage() {
   const [tab, setTab] = useState<Tab>("settings");
   const [loading, setLoading] = useState(true);
@@ -242,6 +280,8 @@ export default function PublicSiteAdminPage() {
   const [profiles, setProfiles] = useState<PublicOfficerProfileOut[]>([]);
   const [themeJson, setThemeJson] = useState("{}");
   const [blocksJson, setBlocksJson] = useState("{}");
+  const [rosterText, setRosterText] = useState("");
+  const [rosterBusy, setRosterBusy] = useState(false);
   const [navItems, setNavItems] = useState<ResolvedNavItem[]>([]);
 
   const [pageDraft, setPageDraft] = useState({
@@ -324,6 +364,88 @@ export default function PublicSiteAdminPage() {
     () => new Map(candidates.map((candidate) => [candidate.user_position_id, candidate])),
     [candidates],
   );
+
+  const rosterLines = useMemo(() => parseOfficerRoster(rosterText), [rosterText]);
+  const rosterMatches = useMemo(() => {
+    const matches: Array<{
+      candidate: PublicOfficerCandidateOut;
+      name: string;
+      title: string;
+      sort_order: number;
+    }> = [];
+    const unmatched: string[] = [];
+    const profileByPosition = new Map(profiles.map((profile) => [profile.user_position_id, profile]));
+
+    rosterLines.forEach((line, lineIndex) => {
+      if (line.error) return;
+      line.names.forEach((name) => {
+        const matchingCandidates = candidates.filter(
+          (candidate) =>
+            normalizeOfficerRosterValue(candidate.display_name) === normalizeOfficerRosterValue(name) &&
+            normalizeOfficerRosterValue(candidate.position_name) === normalizeOfficerRosterValue(line.title),
+        );
+        if (matchingCandidates.length !== 1) {
+          unmatched.push(matchingCandidates.length > 1 ? `${line.title}｜${name}（有多筆相同任期）` : `${line.title}｜${name}`);
+          return;
+        }
+        const candidate = matchingCandidates[0];
+        matches.push({ candidate, name, title: line.title, sort_order: lineIndex });
+      });
+    });
+    return { matches, unmatched, profileByPosition };
+  }, [candidates, profiles, rosterLines]);
+
+  const applyOfficerRoster = async () => {
+    const invalidLines = rosterLines.filter((line) => line.error);
+    if (invalidLines.length > 0) {
+      toast.error(`第 ${invalidLines.map((line) => line.lineNumber).join("、")} 行格式有誤`);
+      return;
+    }
+    if (rosterMatches.matches.length === 0) {
+      toast.error("尚未比對到任何有效幹部，請確認職位與姓名和目前任期一致");
+      return;
+    }
+
+    setRosterBusy(true);
+    try {
+      const results = await Promise.all(
+        rosterMatches.matches.map(async ({ candidate, name, title, sort_order }) => {
+          const body: PublicOfficerProfileUpdate = {
+            display_name_override: name,
+            title_override: title,
+            sort_order,
+            is_visible: true,
+          };
+          const existing = rosterMatches.profileByPosition.get(candidate.user_position_id);
+          if (existing) {
+            await siteApi.updateOfficerProfile(existing.id, body);
+            return "updated" as const;
+          }
+          const createBody: PublicOfficerProfileCreate = {
+            user_position_id: candidate.user_position_id,
+            display_name_override: name,
+            title_override: title,
+            bio: null,
+            public_email: null,
+            external_links: {},
+            sort_order,
+            is_featured: false,
+            is_visible: true,
+          };
+          await siteApi.createOfficerProfile(createBody);
+          return "created" as const;
+        }),
+      );
+      await load();
+      const created = results.filter((result) => result === "created").length;
+      const updated = results.length - created;
+      toast.success(`已套用 ${results.length} 位幹部（新增 ${created}、更新 ${updated}）`);
+    } catch (error) {
+      displayError(error, "套用幹部名單失敗，請確認候選人是否已建立公開設定");
+    } finally {
+      setRosterBusy(false);
+    }
+  };
 
   const saveSettings = async () => {
     try {
@@ -841,14 +963,32 @@ export default function PublicSiteAdminPage() {
             </div>
             <Field label="說明"><TextInput value={linkDraft.description} onChange={(e) => setLinkDraft({ ...linkDraft, description: e.target.value })} /></Field>
             <Toggle label="啟用" checked={linkDraft.is_active} onChange={(value) => setLinkDraft({ ...linkDraft, is_active: value })} />
-            <button type="button" onClick={createLink} className="btn btn-primary"><Plus size={16} aria-hidden /> 新增連結</button>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={createLink} className="btn btn-primary">
+                {editingLinkId ? <Save size={16} aria-hidden /> : <Plus size={16} aria-hidden />}
+                {editingLinkId ? "儲存修改" : "新增連結"}
+              </button>
+              {editingLinkId && <button type="button" onClick={cancelEditLink} className="btn btn-ghost">取消編輯</button>}
+            </div>
             <div className="space-y-2">
               {links.map((link) => (
                 <div key={link.id} className="flex items-center justify-between gap-3 rounded-lg px-3 py-2" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-                  <span className="min-w-0 text-sm"><span className="font-medium">{link.title}</span><span className="ml-2 text-[var(--text-muted)]">{link.category?.title ?? "未分類"}</span></span>
-                  <button type="button" className="btn btn-sm btn-ghost" onClick={() => patchLink(link, { is_active: !link.is_active }).catch((e) => displayError(e, "更新連結失敗"))}>
-                    {link.is_active ? "停用" : "啟用"}
-                  </button>
+                  <span className="min-w-0 text-sm">
+                    <span className="font-medium">{link.title}</span>
+                    <span className="ml-2 text-[var(--text-muted)]">{link.category?.title ?? "未分類"}</span>
+                    <span className="mt-1 block truncate text-xs text-[var(--text-muted)]">{link.url}</span>
+                  </span>
+                  <div className="flex shrink-0 flex-wrap justify-end gap-1">
+                    <button type="button" className="btn btn-sm btn-ghost" onClick={() => startEditLink(link)} aria-label={`編輯${link.title}`}>
+                      <Pencil size={14} aria-hidden /> 編輯
+                    </button>
+                    <button type="button" className="btn btn-sm btn-ghost" onClick={() => deleteLink(link)} aria-label={`刪除${link.title}`}>
+                      <Trash2 size={14} aria-hidden /> 刪除
+                    </button>
+                    <button type="button" className="btn btn-sm btn-ghost" onClick={() => patchLink(link, { is_active: !link.is_active }).catch((e) => displayError(e, "更新連結失敗"))}>
+                      {link.is_active ? "停用" : "啟用"}
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -857,12 +997,56 @@ export default function PublicSiteAdminPage() {
       )}
 
       {tab === "officers" && (
-        <section
-          key="officers"
-          className={`tab-panel-transition grid gap-4 ${profiles.length > 0 ? "lg:grid-cols-[0.9fr_1.1fr]" : ""}`}
-        >
+        <section key="officers" className="tab-panel-transition space-y-4">
           <div className="card space-y-4 p-5">
-            <h2 className="font-semibold">幹部覆寫 / 隱藏設定</h2>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="font-semibold">快速貼上幹部名單</h2>
+                  <span className="rounded-full px-2 py-0.5 text-xs font-semibold" style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
+                    批次輸入
+                  </span>
+                </div>
+                <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--text-muted)]">
+                  每行一個職位，姓名之間用空白、頓號或逗號分隔。套用時會比對目前有效任期；已存在的公開設定會更新，未比對到的人只會列在提示中。
+                </p>
+              </div>
+              <ClipboardPaste size={20} className="text-[var(--primary)]" aria-hidden />
+            </div>
+            <TextArea
+              rows={10}
+              value={rosterText}
+              onChange={(event) => setRosterText(event.target.value)}
+              placeholder={"主席｜黃丞廷\n副主席｜葉鎧丞\n秘書｜簡子皓 黃柏硯\n活動｜邱翊展 劉哲愷 黃言真"}
+              aria-label="快速貼上幹部名單"
+              className="font-mono text-[13px] leading-7"
+            />
+            <div className="flex flex-col gap-3 rounded-lg p-3 text-sm" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }} aria-live="polite">
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[var(--text-secondary)]">
+                <span className="inline-flex items-center gap-1.5"><CheckCircle2 size={15} className="text-emerald-400" aria-hidden />{rosterMatches.matches.length} 位可套用</span>
+                <span className="inline-flex items-center gap-1.5"><AlertTriangle size={15} className={rosterMatches.unmatched.length ? "text-amber-400" : "text-[var(--text-muted)]"} aria-hidden />{rosterMatches.unmatched.length} 位待確認</span>
+                <span className="text-[var(--text-muted)]">{rosterLines.filter((line) => !line.error).length} 個職位</span>
+              </div>
+              {rosterLines.some((line) => line.error) && (
+                <p className="text-xs text-amber-300">
+                  {rosterLines.filter((line) => line.error).map((line) => `第 ${line.lineNumber} 行：${line.error}`).join("；")}
+                </p>
+              )}
+              {rosterMatches.unmatched.length > 0 && (
+                <p className="text-xs text-amber-300">找不到：{rosterMatches.unmatched.join("、")}</p>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs text-[var(--text-muted)]">格式：職位｜姓名 姓名；同一人可出現在不同職位。</p>
+              <button type="button" onClick={applyOfficerRoster} disabled={rosterBusy || rosterMatches.matches.length === 0} className="btn btn-primary min-h-11">
+                <ClipboardPaste size={16} aria-hidden /> {rosterBusy ? "套用中…" : "套用這份名單"}
+              </button>
+            </div>
+          </div>
+
+          <div className={`grid gap-4 ${profiles.length > 0 ? "lg:grid-cols-[0.9fr_1.1fr]" : ""}`}>
+            <div className="card space-y-4 p-5">
+              <h2 className="font-semibold">單筆覆寫（進階）</h2>
             <p className="text-xs text-[var(--text-muted)]">
               公開幹部頁會<strong>自動列出當屆所有幹部</strong>，不需逐一新增。只有在你想覆寫顯示名稱／稱謂／簡介、調整排序、設為首頁精選，或<strong>隱藏</strong>某位成員時，才需要在此建立設定。
             </p>
@@ -889,32 +1073,33 @@ export default function PublicSiteAdminPage() {
               <Toggle label="首頁精選" checked={officerDraft.is_featured} onChange={(value) => setOfficerDraft({ ...officerDraft, is_featured: value })} />
             </div>
             <button type="button" onClick={createOfficerProfile} className="btn btn-primary"><Plus size={16} aria-hidden /> 新增公開幹部</button>
-          </div>
-          <div className="space-y-3">
-            {profiles.map((profile) => {
-              const candidate = candidateByUserPosition.get(profile.user_position_id);
-              return (
-                <div key={profile.id} className="card p-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <h3 className="font-semibold">{profile.display_name_override || candidate?.display_name || "未命名幹部"}</h3>
-                      <p className="mt-1 text-xs text-[var(--text-muted)]">
-                        {profile.title_override || candidate?.position_name || "職位未載入"} / {candidate?.org_name ?? "既有任期"}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => patchProfile(profile, { is_visible: !profile.is_visible }).catch((e) => displayError(e, "更新幹部失敗"))}>
-                        {profile.is_visible ? "隱藏" : "顯示"}
-                      </button>
-                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => patchProfile(profile, { is_featured: !profile.is_featured }).catch((e) => displayError(e, "更新精選失敗"))}>
-                        {profile.is_featured ? "取消精選" : "設為精選"}
-                      </button>
-                      <button type="button" className="btn btn-sm btn-ghost" onClick={() => siteApi.deleteOfficerProfile(profile.id).then(load).catch((e) => displayError(e, "刪除幹部失敗"))}>刪除</button>
+            </div>
+            <div className="space-y-3">
+              {profiles.map((profile) => {
+                const candidate = candidateByUserPosition.get(profile.user_position_id);
+                return (
+                  <div key={profile.id} className="card p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <h3 className="font-semibold">{profile.display_name_override || candidate?.display_name || "未命名幹部"}</h3>
+                        <p className="mt-1 text-xs text-[var(--text-muted)]">
+                          {profile.title_override || candidate?.position_name || "職位未載入"} / {candidate?.org_name ?? "既有任期"}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <button type="button" className="btn btn-sm btn-ghost" onClick={() => patchProfile(profile, { is_visible: !profile.is_visible }).catch((e) => displayError(e, "更新幹部失敗"))}>
+                          {profile.is_visible ? "隱藏" : "顯示"}
+                        </button>
+                        <button type="button" className="btn btn-sm btn-ghost" onClick={() => patchProfile(profile, { is_featured: !profile.is_featured }).catch((e) => displayError(e, "更新精選失敗"))}>
+                          {profile.is_featured ? "取消精選" : "設為精選"}
+                        </button>
+                        <button type="button" className="btn btn-sm btn-ghost" onClick={() => siteApi.deleteOfficerProfile(profile.id).then(load).catch((e) => displayError(e, "刪除幹部失敗"))}>刪除</button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </section>
       )}
