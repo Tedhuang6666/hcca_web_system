@@ -69,9 +69,10 @@
   },
   "overrides": {
     "js-yaml": "^4.3.0",
-    "postcss": "^8.5.10"
+    "postcss": "^8.5.10",
+    "sharp": "^0.35.0"
   },
   "allowScripts": {
-    "sharp@0.34.5": true
+    "sharp@0.35.3": true
   }
 }
