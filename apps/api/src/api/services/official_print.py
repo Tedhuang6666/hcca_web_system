@@ -457,6 +457,8 @@ async def render_document_print_html(
     is_decree = cat == "decree"
     is_record = cat == "record"
     issuer = _esc(await _full_org_name(session, doc))
+    if is_decree and not (getattr(doc, "issuer_full_name", None) or "").strip():
+        issuer = "主席"
     category_label = {
         "letter": "函",
         "decree": "令",

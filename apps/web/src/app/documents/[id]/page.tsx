@@ -659,9 +659,7 @@ export default function DocumentDetailPage() {
             }}>
               {isDecree && (
                 <div className="mb-4 text-center text-2xl tracking-[0.35em]" style={{ color: "var(--text-primary)" }}>
-                  {doc.issuer_full_name && (
-                    <span className="tracking-normal">{doc.issuer_full_name} </span>
-                  )}
+                  <span className="tracking-normal">{doc.issuer_full_name?.trim() || "主席"} </span>
                   令
                 </div>
               )}

@@ -223,6 +223,8 @@ class DocumentTemplateBase(BaseModel):
             not self.doc_description or not self.action_required
         ):
             raise ValueError("紀錄範本需填寫討論事項與決議")
+        if self.category == DocumentCategory.DECREE and not (self.issuer_full_name or "").strip():
+            self.issuer_full_name = "主席"
         return self
 
 
@@ -575,6 +577,9 @@ class DocumentCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_official_fields(self) -> DocumentCreate:
+        if self.category == DocumentCategory.DECREE and not (self.issuer_full_name or "").strip():
+            self.issuer_full_name = "主席"
+
         if self.category == DocumentCategory.MEETING_NOTICE:
             if not self.meeting_purpose or not self.meeting_time or not self.meeting_location:
                 raise ValueError("開會通知單需填寫開會事由、時間與地點")
@@ -634,6 +639,12 @@ class DocumentUpdate(BaseModel):
     page_info: str | None = Field(None, max_length=50)
     change_note: str | None = Field(None, max_length=500, description="修改備註（將記入版本歷程）")
     autosave: bool = Field(False, description="線上自動儲存；不建立版本快照")
+
+    @model_validator(mode="after")
+    def default_decree_issuer(self) -> DocumentUpdate:
+        if self.category == DocumentCategory.DECREE and not (self.issuer_full_name or "").strip():
+            self.issuer_full_name = "主席"
+        return self
 
 
 class DocumentArchiveSettingsUpdate(BaseModel):
