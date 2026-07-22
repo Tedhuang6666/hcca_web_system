@@ -162,7 +162,9 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
       superuser || perms.has("admin:all") || Array.from(perms).some((perm) => perm.startsWith(prefix));
     const profile = resolveNavigationProfile(perms, superuser);
     const mobileOrder =
-      serverMobileOrder ?? (profile === "default" ? navPrefs.mobileOrder : PROFILE_MOBILE_ORDER[profile]);
+      profile === "student"
+        ? PROFILE_MOBILE_ORDER.student
+        : serverMobileOrder ?? (profile === "default" ? navPrefs.mobileOrder : PROFILE_MOBILE_ORDER[profile]);
     const mobileHidden = serverMobileOrder || profile !== "default" ? [] : navPrefs.mobileHidden;
     const available = filterNavItems(
       orderedItems(mobileOrder, mobileHidden),
