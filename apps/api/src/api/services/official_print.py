@@ -908,10 +908,8 @@ def _law_history_rows(reg: Regulation) -> str:
         rows.extend(
             f"<div>{_br(line.strip())}</div>" for line in history.splitlines() if line.strip()
         )
-    revision_rows = _law_revision_rows(reg)
-    if revision_rows:
-        rows.append(revision_rows)
-    return "".join(rows)
+        return "".join(rows)
+    return _law_revision_rows(reg)
 
 
 def _article_html(label: str, body: str, *, cls: str = "article-row") -> str:
@@ -1060,7 +1058,14 @@ def _render_markdown_law(text: str | None) -> str:
 
 def render_regulation_print_html(reg: Regulation) -> str:
     """Render a law-compilation style regulation print page."""
-    title = _esc(reg.title)
+    raw_title = str(reg.title or "").strip()
+    title = _esc(raw_title)
+    title_suffix = raw_title.removeprefix(_SCHOOL_FULL_NAME).strip()
+    title_lines = (
+        f"<div>{_esc(_SCHOOL_FULL_NAME)}</div><div>{_esc(title_suffix)}</div>"
+        if title_suffix and raw_title.startswith(_SCHOOL_FULL_NAME)
+        else f"<div>{title}</div>"
+    )
     history = _law_history_rows(reg)
     preface = "".join(f'<p class="preface">{_br(item)}</p>' for item in _paragraphs(reg.preface))
     articles = _render_structured_articles(reg) or _render_markdown_law(reg.content)
@@ -1073,13 +1078,8 @@ def render_regulation_print_html(reg: Regulation) -> str:
   <style>
     {_font_faces()}
     @page {{
-      size: A4 portrait;
-      margin: 20mm 24mm 18mm 24mm;
-      @bottom-center {{
-        content: "第 " counter(page) " 頁　共 " counter(pages) " 頁";
-        font-family: "OfficialKai","OfficialSerifTC","標楷體","DFKai-SB",serif;
-        font-size: 10pt;
-      }}
+      size: letter portrait;
+      margin: 4mm 24mm 20mm;
     }}
     * {{ box-sizing: border-box; font-weight: 400 !important; }}
     body {{
@@ -1088,7 +1088,7 @@ def render_regulation_print_html(reg: Regulation) -> str:
       background: #fff;
       font-family: "OfficialKai","OfficialSerifTC","標楷體","DFKai-SB",serif;
       font-size: 12pt;
-      line-height: 1.8;
+      line-height: 1.5;
       overflow-wrap: anywhere;
       word-break: break-word;
     }}
@@ -1097,20 +1097,19 @@ def render_regulation_print_html(reg: Regulation) -> str:
     @media print {{ .no-print {{ display: none; }} }}
     .law-page {{
       width: 164mm;
-      min-height: 246mm;
       margin: 0 auto;
     }}
     .law-title {{
       text-align: center;
       font-size: 20pt;
       line-height: 1.75;
-      margin: 12mm 0 4mm;
+      margin: 20mm 0 1mm;
       letter-spacing: .08em;
     }}
     .legislative-history {{
-      width: 74mm;
-      margin: 0 0 13mm auto;
-      font-size: 12pt;
+      width: 78mm;
+      margin: 0 0 4mm auto;
+      font-size: 10.5pt;
       line-height: 1.65;
       text-align: left;
       overflow-wrap: anywhere;
@@ -1125,15 +1124,16 @@ def render_regulation_print_html(reg: Regulation) -> str:
     .article-row {{
       display: grid;
       grid-template-columns: 25mm minmax(0, 1fr);
-      column-gap: 13mm;
-      break-inside: avoid;
+      column-gap: 2mm;
     }}
     .chapter-row {{
-      margin: 9mm 0 5mm;
+      margin: 4mm 0 1mm;
       font-size: 14pt;
+      break-inside: avoid;
     }}
     .article-row {{
       margin: 3.3mm 0;
+      break-inside: auto;
     }}
     .article-label {{ white-space: nowrap; }}
     .article-body {{
@@ -1175,7 +1175,7 @@ def render_regulation_print_html(reg: Regulation) -> str:
   <div class="no-print"><button onclick="window.print()">列印 / 另存 PDF</button></div>
   <main class="law-page">
     <header class="law-title">
-      <div>{title}</div>
+      {title_lines}
     </header>
     {f'<section class="legislative-history">{history}</section>' if history else ""}
     {preface}
