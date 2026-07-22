@@ -1,9 +1,39 @@
 import Image from "next/image";
 import { Mail, UserRound } from "lucide-react";
 
+import OfficerRosterTabs, { type OfficerRosterTab } from "@/components/site/OfficerRosterTabs";
 import PublicSiteShell from "@/components/site/PublicSiteShell";
 import { fetchPublicBundle, fetchPublicOfficers } from "@/lib/serverFetch";
 import type { PublicOfficerOut } from "@/lib/types";
+
+function parseDirectOfficerRosters(themeConfig: Record<string, unknown> | undefined): OfficerRosterTab[] {
+  if (Array.isArray(themeConfig?.officer_rosters)) {
+    const tabs = themeConfig.officer_rosters.flatMap((item) => {
+      if (!item || typeof item !== "object") return [];
+      const record = item as Record<string, unknown>;
+      const id = typeof record.id === "string" ? record.id.trim() : "";
+      const label = typeof record.label === "string" ? record.label.trim() : "";
+      const entries = parseRosterEntries(record.entries);
+      return id && label ? [{ id, label, entries }] : [];
+    });
+    if (tabs.length > 0) return tabs;
+  }
+  const entries = parseRosterEntries(themeConfig?.officer_roster);
+  return entries.length > 0 ? [{ id: "campus-council", label: "班聯會", entries }] : [];
+}
+
+function parseRosterEntries(value: unknown): Array<{ title: string; names: string[] }> {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const record = item as Record<string, unknown>;
+    const title = typeof record.title === "string" ? record.title.trim() : "";
+    const names = Array.isArray(record.names)
+      ? record.names.filter((name): name is string => typeof name === "string").map((name) => name.trim()).filter(Boolean)
+      : [];
+    return title && names.length > 0 ? [{ title, names: [...new Set(names)] }] : [];
+  });
+}
 
 function OfficerCard({ officer, index = 0 }: { officer: PublicOfficerOut; index?: number }) {
   return (
@@ -84,6 +114,7 @@ export default async function OfficersPage() {
     fetchPublicOfficers(),
   ]);
 
+  const directRosters = parseDirectOfficerRosters(bundle?.settings?.theme_config);
   const grouped = groupOfficersByOrganization(officers);
 
   return (
@@ -97,7 +128,8 @@ export default async function OfficersPage() {
           </p>
         </header>
         <div className="space-y-8">
-          {grouped.map(({ orgName, roles }) => (
+          {directRosters.length > 0 && <OfficerRosterTabs tabs={directRosters} />}
+          {directRosters.length === 0 && grouped.map(({ orgName, roles }) => (
             <section key={orgName} aria-labelledby={`org-${orgName}`}>
               <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
                 <h2 id={`org-${orgName}`} className="text-lg font-semibold">{orgName}</h2>
@@ -134,7 +166,7 @@ export default async function OfficersPage() {
               </div>
             </section>
           ))}
-          {grouped.length === 0 && (
+          {directRosters.length === 0 && grouped.length === 0 && (
             <div className="card p-10 text-center text-sm text-[var(--text-muted)]">
               目前尚未設定公開幹部
             </div>

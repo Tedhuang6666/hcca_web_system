@@ -39,9 +39,7 @@ import type {
   PublicLinkCategoryOut,
   PublicLinkOut,
   PublicOfficerCandidateOut,
-  PublicOfficerProfileCreate,
   PublicOfficerProfileOut,
-  PublicOfficerProfileUpdate,
   PublicSitePageOut,
   PublicSiteSettingsOut,
 } from "@/lib/types";
@@ -243,6 +241,17 @@ type OfficerRosterLine = {
   error?: string;
 };
 
+type OfficerRosterEntry = {
+  title: string;
+  names: string[];
+};
+
+type OfficerRosterTab = {
+  id: string;
+  label: string;
+  entries: OfficerRosterEntry[];
+};
+
 function parseOfficerRoster(value: string): OfficerRosterLine[] {
   return value.split(/\r?\n/).flatMap((rawLine, index) => {
     const line = rawLine.trim();
@@ -265,8 +274,36 @@ function parseOfficerRoster(value: string): OfficerRosterLine[] {
   });
 }
 
-function normalizeOfficerRosterValue(value: string) {
-  return value.trim().replace(/\s+/g, "").replace(/[部組處]$/, "");
+function parseStoredOfficerRoster(value: unknown): OfficerRosterEntry[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const record = item as Record<string, unknown>;
+    const title = typeof record.title === "string" ? record.title.trim() : "";
+    const names = Array.isArray(record.names)
+      ? record.names.filter((name): name is string => typeof name === "string").map((name) => name.trim()).filter(Boolean)
+      : [];
+    return title && names.length > 0 ? [{ title, names: [...new Set(names)] }] : [];
+  });
+}
+
+function parseStoredOfficerRosterTabs(themeConfig: Record<string, unknown> | undefined): OfficerRosterTab[] {
+  if (Array.isArray(themeConfig?.officer_rosters)) {
+    const tabs = themeConfig.officer_rosters.flatMap((item) => {
+      if (!item || typeof item !== "object") return [];
+      const record = item as Record<string, unknown>;
+      const id = typeof record.id === "string" ? record.id.trim() : "";
+      const label = typeof record.label === "string" ? record.label.trim() : "";
+      const entries = parseStoredOfficerRoster(record.entries);
+      return id && label ? [{ id, label, entries }] : [];
+    });
+    if (tabs.length > 0) return tabs;
+  }
+  return [{ id: "campus-council", label: "班聯會", entries: parseStoredOfficerRoster(themeConfig?.officer_roster) }];
+}
+
+function serializeOfficerRoster(entries: OfficerRosterEntry[]) {
+  return entries.map((entry) => `${entry.title}｜${entry.names.join(" ")}`).join("\n");
 }
 
 export default function PublicSiteAdminPage() {
@@ -281,6 +318,9 @@ export default function PublicSiteAdminPage() {
   const [themeJson, setThemeJson] = useState("{}");
   const [blocksJson, setBlocksJson] = useState("{}");
   const [rosterText, setRosterText] = useState("");
+  const [rosterTabs, setRosterTabs] = useState<OfficerRosterTab[]>([]);
+  const [activeRosterTabId, setActiveRosterTabId] = useState("");
+  const [newRosterTabLabel, setNewRosterTabLabel] = useState("");
   const [rosterBusy, setRosterBusy] = useState(false);
   const [navItems, setNavItems] = useState<ResolvedNavItem[]>([]);
 
@@ -350,6 +390,10 @@ export default function PublicSiteAdminPage() {
       setProfiles(nextProfiles);
       setThemeJson(JSON.stringify(nextSettings.theme_config ?? {}, null, 2));
       setBlocksJson(JSON.stringify(nextSettings.homepage_blocks ?? {}, null, 2));
+      const nextRosterTabs = parseStoredOfficerRosterTabs(nextSettings.theme_config);
+      setRosterTabs(nextRosterTabs);
+      setActiveRosterTabId((currentId) => nextRosterTabs.some((tab) => tab.id === currentId) ? currentId : nextRosterTabs[0]?.id ?? "");
+      setRosterText(serializeOfficerRoster(nextRosterTabs[0]?.entries ?? []));
       setNavItems(resolvePublicNav(nextSettings.theme_config));
     } catch (error) {
       displayError(error, "載入公開網站設定失敗");
@@ -366,82 +410,83 @@ export default function PublicSiteAdminPage() {
   );
 
   const rosterLines = useMemo(() => parseOfficerRoster(rosterText), [rosterText]);
-  const rosterMatches = useMemo(() => {
-    const matches: Array<{
-      candidate: PublicOfficerCandidateOut;
-      name: string;
-      title: string;
-      sort_order: number;
-    }> = [];
-    const unmatched: string[] = [];
-    const profileByPosition = new Map(profiles.map((profile) => [profile.user_position_id, profile]));
+  const rosterSummary = useMemo(() => {
+    const validLines = rosterLines.filter((line): line is OfficerRosterLine & { error?: undefined } => !line.error);
+    return {
+      validLines,
+      memberCount: validLines.reduce((total, line) => total + line.names.length, 0),
+    };
+  }, [rosterLines]);
 
-    rosterLines.forEach((line, lineIndex) => {
-      if (line.error) return;
-      line.names.forEach((name) => {
-        const matchingCandidates = candidates.filter(
-          (candidate) =>
-            normalizeOfficerRosterValue(candidate.display_name) === normalizeOfficerRosterValue(name) &&
-            normalizeOfficerRosterValue(candidate.position_name) === normalizeOfficerRosterValue(line.title),
-        );
-        if (matchingCandidates.length !== 1) {
-          unmatched.push(matchingCandidates.length > 1 ? `${line.title}｜${name}（有多筆相同任期）` : `${line.title}｜${name}`);
-          return;
-        }
-        const candidate = matchingCandidates[0];
-        matches.push({ candidate, name, title: line.title, sort_order: lineIndex });
-      });
-    });
-    return { matches, unmatched, profileByPosition };
-  }, [candidates, profiles, rosterLines]);
+  const activeRosterTab = rosterTabs.find((tab) => tab.id === activeRosterTabId);
 
-  const applyOfficerRoster = async () => {
+  const currentRosterEntries = () => rosterSummary.validLines.map(({ title, names }) => ({ title, names }));
+
+  const selectRosterTab = (tabId: string) => {
+    const tab = rosterTabs.find((item) => item.id === tabId);
+    if (!tab) return;
+    setRosterTabs((current) => current.map((item) => item.id === activeRosterTabId ? { ...item, entries: currentRosterEntries() } : item));
+    setActiveRosterTabId(tabId);
+    setRosterText(serializeOfficerRoster(tab.entries));
+  };
+
+  const addRosterTab = () => {
+    const label = newRosterTabLabel.trim();
+    if (!label) {
+      toast.error("請先輸入組織名稱");
+      return;
+    }
+    if (rosterTabs.some((tab) => tab.label === label)) {
+      toast.error("組織名稱不可重複");
+      return;
+    }
+    const id = `roster-${Date.now()}`;
+    const nextTab = { id, label, entries: [] };
+    setRosterTabs((current) => [
+      ...current.map((tab) => tab.id === activeRosterTabId ? { ...tab, entries: currentRosterEntries() } : tab),
+      nextTab,
+    ]);
+    setActiveRosterTabId(id);
+    setRosterText("");
+    setNewRosterTabLabel("");
+  };
+
+  const deleteRosterTab = () => {
+    if (!activeRosterTab) return;
+    if (rosterTabs.length <= 1) {
+      toast.error("至少保留一個組織頁籤");
+      return;
+    }
+    const nextTabs = rosterTabs.filter((tab) => tab.id !== activeRosterTab.id);
+    const nextTab = nextTabs[0];
+    setRosterTabs(nextTabs);
+    setActiveRosterTabId(nextTab.id);
+    setRosterText(serializeOfficerRoster(nextTab.entries));
+  };
+
+  const saveOfficerRoster = async () => {
     const invalidLines = rosterLines.filter((line) => line.error);
     if (invalidLines.length > 0) {
       toast.error(`第 ${invalidLines.map((line) => line.lineNumber).join("、")} 行格式有誤`);
       return;
     }
-    if (rosterMatches.matches.length === 0) {
-      toast.error("尚未比對到任何有效幹部，請確認職位與姓名和目前任期一致");
+    if (rosterSummary.memberCount === 0) {
+      toast.error("尚未輸入任何有效幹部");
       return;
     }
 
     setRosterBusy(true);
     try {
-      const results = await Promise.all(
-        rosterMatches.matches.map(async ({ candidate, name, title, sort_order }) => {
-          const body: PublicOfficerProfileUpdate = {
-            display_name_override: name,
-            title_override: title,
-            sort_order,
-            is_visible: true,
-          };
-          const existing = rosterMatches.profileByPosition.get(candidate.user_position_id);
-          if (existing) {
-            await siteApi.updateOfficerProfile(existing.id, body);
-            return "updated" as const;
-          }
-          const createBody: PublicOfficerProfileCreate = {
-            user_position_id: candidate.user_position_id,
-            display_name_override: name,
-            title_override: title,
-            bio: null,
-            public_email: null,
-            external_links: {},
-            sort_order,
-            is_featured: false,
-            is_visible: true,
-          };
-          await siteApi.createOfficerProfile(createBody);
-          return "created" as const;
-        }),
-      );
-      await load();
-      const created = results.filter((result) => result === "created").length;
-      const updated = results.length - created;
-      toast.success(`已套用 ${results.length} 位幹部（新增 ${created}、更新 ${updated}）`);
+      const roster = rosterSummary.validLines.map(({ title, names }) => ({ title, names }));
+      const nextTabs = rosterTabs.map((tab) => tab.id === activeRosterTabId ? { ...tab, entries: roster } : tab);
+      const nextTheme = { ...(settings.theme_config ?? {}), officer_rosters: nextTabs };
+      const next = await siteApi.updateSettings({ theme_config: nextTheme });
+      setRosterTabs(nextTabs);
+      setSettings(next);
+      setThemeJson(JSON.stringify(next.theme_config ?? {}, null, 2));
+      toast.success(`已儲存 ${rosterSummary.memberCount} 位幹部、${roster.length} 個職位`);
     } catch (error) {
-      displayError(error, "套用幹部名單失敗，請確認候選人是否已建立公開設定");
+      displayError(error, "儲存幹部名單失敗");
     } finally {
       setRosterBusy(false);
     }
@@ -1008,10 +1053,42 @@ export default function PublicSiteAdminPage() {
                   </span>
                 </div>
                 <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--text-muted)]">
-                  每行一個職位，姓名之間用空白、頓號或逗號分隔。套用時會比對目前有效任期；已存在的公開設定會更新，未比對到的人只會列在提示中。
+                  每行一個職位，姓名之間用空白、頓號或逗號分隔。這份名單會直接作為公開頁內容，不需要先建立使用者任期或逐一選人。
                 </p>
               </div>
               <ClipboardPaste size={20} className="text-[var(--primary)]" aria-hidden />
+            </div>
+            <div className="space-y-3 rounded-lg p-3" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+              <div className="flex flex-wrap gap-2" role="tablist" aria-label="幹部名單組織頁籤">
+                {rosterTabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab.id === activeRosterTabId}
+                    onClick={() => selectRosterTab(tab.id)}
+                    className={`min-h-10 rounded-lg px-3 text-sm font-semibold transition-colors ${tab.id === activeRosterTabId ? "" : "text-[var(--text-secondary)] hover:bg-[var(--bg-surface)]"}`}
+                    style={tab.id === activeRosterTabId ? { color: "var(--primary-contrast, white)", background: "var(--primary)" } : undefined}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <TextInput
+                  value={newRosterTabLabel}
+                  onChange={(event) => setNewRosterTabLabel(event.target.value)}
+                  placeholder="新增組織，例如：學生議會"
+                  aria-label="新增組織名稱"
+                />
+                <button type="button" onClick={addRosterTab} className="btn btn-secondary min-h-11 shrink-0">
+                  <Plus size={16} aria-hidden /> 新增組織頁籤
+                </button>
+                <button type="button" onClick={deleteRosterTab} className="btn btn-ghost min-h-11 shrink-0" disabled={rosterTabs.length <= 1}>
+                  <Trash2 size={15} aria-hidden /> 刪除目前頁籤
+                </button>
+              </div>
+              <p className="text-xs text-[var(--text-muted)]">目前編輯：{activeRosterTab?.label ?? "尚未建立組織"}；每個頁籤各自保存一份名單。</p>
             </div>
             <TextArea
               rows={10}
@@ -1023,23 +1100,20 @@ export default function PublicSiteAdminPage() {
             />
             <div className="flex flex-col gap-3 rounded-lg p-3 text-sm" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }} aria-live="polite">
               <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[var(--text-secondary)]">
-                <span className="inline-flex items-center gap-1.5"><CheckCircle2 size={15} className="text-emerald-400" aria-hidden />{rosterMatches.matches.length} 位可套用</span>
-                <span className="inline-flex items-center gap-1.5"><AlertTriangle size={15} className={rosterMatches.unmatched.length ? "text-amber-400" : "text-[var(--text-muted)]"} aria-hidden />{rosterMatches.unmatched.length} 位待確認</span>
-                <span className="text-[var(--text-muted)]">{rosterLines.filter((line) => !line.error).length} 個職位</span>
+                <span className="inline-flex items-center gap-1.5"><CheckCircle2 size={15} className="text-emerald-400" aria-hidden />{rosterSummary.memberCount} 位成員</span>
+                <span className="inline-flex items-center gap-1.5"><AlertTriangle size={15} className={rosterLines.some((line) => line.error) ? "text-amber-400" : "text-[var(--text-muted)]"} aria-hidden />{rosterLines.filter((line) => line.error).length} 行待修正</span>
+                <span className="text-[var(--text-muted)]">{rosterSummary.validLines.length} 個職位</span>
               </div>
               {rosterLines.some((line) => line.error) && (
                 <p className="text-xs text-amber-300">
                   {rosterLines.filter((line) => line.error).map((line) => `第 ${line.lineNumber} 行：${line.error}`).join("；")}
                 </p>
               )}
-              {rosterMatches.unmatched.length > 0 && (
-                <p className="text-xs text-amber-300">找不到：{rosterMatches.unmatched.join("、")}</p>
-              )}
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-xs text-[var(--text-muted)]">格式：職位｜姓名 姓名；同一人可出現在不同職位。</p>
-              <button type="button" onClick={applyOfficerRoster} disabled={rosterBusy || rosterMatches.matches.length === 0} className="btn btn-primary min-h-11">
-                <ClipboardPaste size={16} aria-hidden /> {rosterBusy ? "套用中…" : "套用這份名單"}
+              <button type="button" onClick={saveOfficerRoster} disabled={rosterBusy || rosterSummary.memberCount === 0} className="btn btn-primary min-h-11">
+                <ClipboardPaste size={16} aria-hidden /> {rosterBusy ? "儲存中…" : "儲存這份名單"}
               </button>
             </div>
           </div>
