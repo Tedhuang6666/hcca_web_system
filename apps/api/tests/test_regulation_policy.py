@@ -302,12 +302,16 @@ def test_regulation_print_prefers_curated_history_and_standard_page_layout() -> 
     assert "size: letter portrait;" in rendered
     assert "margin: 4mm 24mm 20mm;" in rendered
     assert "line-height: 1.5;" in rendered
+    assert "font-weight: 700 !important;" in rendered
+    assert "font-synthesis: weight;" in rendered
     assert 'content: "第 " counter(page)' not in rendered
     assert "column-gap: 2mm;" in rendered
     assert ".chapter-row {\n      margin: 4mm 0 1mm;" in rendered
     assert "break-after: avoid;" in rendered
-    assert ".article-row {\n      margin: 3.3mm 0;\n      break-inside: avoid;" in rendered
-    assert ".item-row { margin-left: 25mm; }" in rendered
+    assert ".article-row {\n      margin: 3.3mm 0;\n      break-inside: auto;" in rendered
+    assert ".article-with-nested { margin-bottom: 0; }" in rendered
+    assert ".nested-article-row {\n      margin: 0;" in rendered
+    assert ".item-row { margin-left: 27mm; }" in rendered
     assert "<div>國立新竹高級中學</div><div>班級聯合自治會組織章程</div>" in rendered
     assert rendered.count("113 學年度第二學期第一次學生議會修訂") == 1
     assert "114學年度第一學期第一次學生議會修訂" not in rendered
@@ -346,6 +350,7 @@ def test_regulation_print_splits_merged_subparagraphs() -> None:
 
     rendered = render_regulation_print_html(reg)
 
+    assert '<div class="article-row article-with-nested">' in rendered
     assert '<div class="article-body">會員應有以下義務：</div>' in rendered
     assert '<span class="nested-label">一、</span><span class="nested-body">配合行政。' in rendered
     assert (

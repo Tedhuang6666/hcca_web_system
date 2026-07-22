@@ -1061,8 +1061,11 @@ def _render_structured_articles(reg: Regulation) -> str:
         )
     }
     chunks: list[str] = []
-    for article in articles:
+    for index, article in enumerate(articles):
         article_type = _enum_value(article.article_type)
+        next_article_type = (
+            _enum_value(articles[index + 1].article_type) if index + 1 < len(articles) else None
+        )
         raw_content, inline_subparagraphs = _split_inline_subparagraphs(article.content)
         content = _law_content_html(raw_content)
         title = _esc(article.title or article.subtitle or "")
@@ -1104,8 +1107,20 @@ def _render_structured_articles(reg: Regulation) -> str:
         elif article_type == "article":
             counters["article"] += 1
             counters["paragraph"] = counters["subparagraph"] = counters["item"] = 0
+            article_class = (
+                "article-row article-with-nested"
+                if (
+                    inline_subparagraphs
+                    or next_article_type in {"paragraph", "subparagraph", "item"}
+                )
+                else "article-row"
+            )
             chunks.append(
-                _article_html(f"第{_law_number(article.legal_number, counters['article'])}條", body)
+                _article_html(
+                    f"第{_law_number(article.legal_number, counters['article'])}條",
+                    body,
+                    cls=article_class,
+                )
             )
             chunks.extend(
                 _nested_article_html(f"{label}、", _law_content_html(item), cls="subparagraph-row")
@@ -1220,6 +1235,9 @@ def render_regulation_print_html(reg: Regulation) -> str:
       line-height: 1.75;
       margin: 20mm 0 1mm;
       letter-spacing: .08em;
+      font-weight: 700 !important;
+      font-synthesis: weight;
+      text-shadow: .2px 0 currentColor, -.2px 0 currentColor;
     }}
     .legislative-history {{
       width: 78mm;
@@ -1250,8 +1268,9 @@ def render_regulation_print_html(reg: Regulation) -> str:
     }}
     .article-row {{
       margin: 3.3mm 0;
-      break-inside: avoid;
+      break-inside: auto;
     }}
+    .article-with-nested {{ margin-bottom: 0; }}
     .article-label {{ white-space: nowrap; }}
     .article-body {{
       min-width: 0;
@@ -1260,8 +1279,7 @@ def render_regulation_print_html(reg: Regulation) -> str:
       overflow-wrap: anywhere;
     }}
     .nested-article-row {{
-      margin-top: 1.4mm;
-      margin-bottom: 1.4mm;
+      margin: 0;
       text-align: justify;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
@@ -1269,7 +1287,7 @@ def render_regulation_print_html(reg: Regulation) -> str:
     }}
     .paragraph-row,
     .subparagraph-row,
-    .item-row {{ margin-left: 25mm; }}
+    .item-row {{ margin-left: 27mm; }}
     .nested-label,
     .nested-body {{ display: inline; }}
     .law-indent {{
