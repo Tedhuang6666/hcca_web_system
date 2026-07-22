@@ -85,6 +85,7 @@ async def test_create_document_template_stores_recipients_as_json(
             "email": None,
             "target_user_id": None,
             "target_org_id": None,
+            "target_class_id": None,
             "delivery_method": "none",
         }
     ]

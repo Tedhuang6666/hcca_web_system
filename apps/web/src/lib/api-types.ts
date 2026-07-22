@@ -2694,6 +2694,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/classes/recipient-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出可作為公文受文者的現行班級 */
+        get: operations["list_recipient_options_classes_recipient_options_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/classes/{class_id}": {
         parameters: {
             query?: never;
@@ -28624,8 +28641,13 @@ export interface components {
             /** @description 受文者類型（main=受文者 / primary=正本 / copy=副本） */
             recipient_type: components["schemas"]["RecipientType"];
             /**
+             * Target Class Id
+             * @description 指定特定班級（與其他結構化目標互斥）
+             */
+            target_class_id?: string | null;
+            /**
              * Target Org Id
-             * @description 指定特定機關（與 target_user_id 互斥）
+             * @description 指定特定自治組織（與其他結構化目標互斥）
              */
             target_org_id?: string | null;
             /**
@@ -28654,6 +28676,8 @@ export interface components {
             /** Name */
             name: string;
             recipient_type: components["schemas"]["RecipientType"];
+            /** Target Class Id */
+            target_class_id?: string | null;
             /** Target Org Id */
             target_org_id?: string | null;
             /** Target User Id */
@@ -39132,6 +39156,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SchoolClassListItem"] | null;
+                };
+            };
+        };
+    };
+    list_recipient_options_classes_recipient_options_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SchoolClassListItem"][];
                 };
             };
         };

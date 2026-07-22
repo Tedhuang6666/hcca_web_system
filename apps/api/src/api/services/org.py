@@ -32,10 +32,13 @@ async def get_orgs(
     db: AsyncSession,
     active_only: bool = False,
     exclude_class_orgs: bool = False,
+    org_ids: list[uuid.UUID] | None = None,
 ) -> list[Org]:
     query = select(Org).order_by(Org.name)
     if active_only:
         query = query.where(Org.is_active.is_(True))
+    if org_ids is not None:
+        query = query.where(Org.id.in_(org_ids))
     if exclude_class_orgs:
         query = query.where(~exists().where(SchoolClass.org_id == Org.id))
     result = await db.execute(query)

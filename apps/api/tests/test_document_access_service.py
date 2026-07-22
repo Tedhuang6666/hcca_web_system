@@ -28,6 +28,7 @@ from api.models.document import (
     RecipientType,
 )
 from api.models.org import Org, Position, UserPosition
+from api.models.school_class import ClassManualMember, SchoolClass
 from api.models.user import User
 from api.services.document import (
     build_document_list_items,
@@ -294,6 +295,38 @@ async def test_full_access_granted_to_active_org_member(
     await _grant_position(db_session, member, org)
     doc = _make_doc(org, creator)
     db_session.add(doc)
+    await db_session.flush()
+    await db_session.refresh(doc, attribute_names=["approvals"])
+
+    assert await user_has_full_document_access(db_session, doc, member.id) is True
+
+
+async def test_full_access_granted_to_active_class_recipient(
+    db_session: AsyncSession, make_user
+) -> None:
+    org = await _make_org(db_session)
+    creator = await make_user()
+    member = await make_user()
+    school_class = SchoolClass(
+        academic_year=115,
+        class_code="401",
+        grade=4,
+        created_by=creator.id,
+    )
+    db_session.add(school_class)
+    await db_session.flush()
+    db_session.add(ClassManualMember(class_id=school_class.id, user_id=member.id))
+    doc = _make_doc(org, creator)
+    db_session.add(doc)
+    await db_session.flush()
+    db_session.add(
+        DocumentRecipient(
+            document_id=doc.id,
+            recipient_type=RecipientType.MAIN,
+            name="115 學年度 401 班",
+            target_class_id=school_class.id,
+        )
+    )
     await db_session.flush()
     await db_session.refresh(doc, attribute_names=["approvals"])
 

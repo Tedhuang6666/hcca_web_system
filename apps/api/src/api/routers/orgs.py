@@ -4,7 +4,6 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,7 +12,6 @@ from api.core.database import get_db
 from api.core.permission_codes import PermissionCode, validate_permission_codes
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_any
-from api.models.org import Org
 from api.models.user import User
 from api.schemas.org import OrgCreate, OrgRead, OrgTree, OrgUpdate
 from api.services import audit as audit_svc
@@ -38,7 +36,7 @@ async def list_orgs(
     exclude_class_orgs: bool = Query(False, description="排除班級系統自動建立的組織"),
 ) -> list:
     # 檢查快取
-    cache_key = f"org:list:active_only={active_only}"
+    cache_key = f"org:list:active_only={active_only}:exclude_class_orgs={exclude_class_orgs}"
     if not exclude_class_orgs:
         cached = await cache_get(cache_key)
         if cached is not None:
@@ -86,17 +84,18 @@ async def list_my_create_orgs(db: DbDep, current_user: CurrentUser) -> list:
     superuser 直接回傳所有組織。
     """
     if current_user.is_superuser:
-        result = await db.execute(select(Org).where(Org.is_active.is_(True)).order_by(Org.name))
-        return list(result.scalars().all())
+        return await org_svc.get_orgs(db, active_only=True, exclude_class_orgs=True)
     org_ids = await get_user_org_ids_with_any_permission(
         db, current_user.id, {"document:create", "document:draft"}
     )
     if not org_ids:
         return []
-    result = await db.execute(
-        select(Org).where(Org.id.in_(org_ids), Org.is_active.is_(True)).order_by(Org.name)
+    return await org_svc.get_orgs(
+        db,
+        active_only=True,
+        exclude_class_orgs=True,
+        org_ids=org_ids,
     )
-    return list(result.scalars().all())
 
 
 @router.get(
@@ -110,15 +109,16 @@ async def list_my_regulation_create_orgs(db: DbDep, current_user: CurrentUser) -
     superuser 直接回傳所有組織。
     """
     if current_user.is_superuser:
-        result = await db.execute(select(Org).where(Org.is_active.is_(True)).order_by(Org.name))
-        return list(result.scalars().all())
+        return await org_svc.get_orgs(db, active_only=True, exclude_class_orgs=True)
     org_ids = await get_user_org_ids_with_permission(db, current_user.id, "regulation:create")
     if not org_ids:
         return []
-    result = await db.execute(
-        select(Org).where(Org.id.in_(org_ids), Org.is_active.is_(True)).order_by(Org.name)
+    return await org_svc.get_orgs(
+        db,
+        active_only=True,
+        exclude_class_orgs=True,
+        org_ids=org_ids,
     )
-    return list(result.scalars().all())
 
 
 @router.get(
@@ -132,19 +132,19 @@ async def list_my_serial_template_orgs(db: DbDep, current_user: CurrentUser) -> 
     superuser 或 admin:all 直接回傳所有組織。
     """
     if current_user.is_superuser:
-        result = await db.execute(select(Org).where(Org.is_active.is_(True)).order_by(Org.name))
-        return list(result.scalars().all())
+        return await org_svc.get_orgs(db, active_only=True, exclude_class_orgs=True)
     codes = await get_user_permission_codes(db, current_user.id)
     if "admin:all" in codes:
-        result = await db.execute(select(Org).where(Org.is_active.is_(True)).order_by(Org.name))
-        return list(result.scalars().all())
+        return await org_svc.get_orgs(db, active_only=True, exclude_class_orgs=True)
     org_ids = await get_user_org_ids_with_permission(db, current_user.id, "serial:create")
     if not org_ids:
         return []
-    result = await db.execute(
-        select(Org).where(Org.id.in_(org_ids), Org.is_active.is_(True)).order_by(Org.name)
+    return await org_svc.get_orgs(
+        db,
+        active_only=True,
+        exclude_class_orgs=True,
+        org_ids=org_ids,
     )
-    return list(result.scalars().all())
 
 
 @router.get("/{org_id}", response_model=OrgRead, summary="取得單一組織節點")

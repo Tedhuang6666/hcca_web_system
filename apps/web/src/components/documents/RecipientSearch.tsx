@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { OrgRead, UserSummary } from "@/lib/api";
 import { usersApi } from "@/lib/api";
-import type { RecipientType } from "@/lib/types";
+import type { RecipientType, SchoolClassListItem } from "@/lib/types";
 import { getRecentRecipients, pushRecentRecipients, type RecentRecipient } from "@/lib/recentRecipients";
 
 // 收件者沒有穩定 id（可自由輸入），用 name + email 以 JSON 編碼成去重鍵。
@@ -52,6 +52,9 @@ export type RecipientDraft = {
   recipient_type: RecipientType;
   name: string;
   email: string;
+  target_user_id?: string;
+  target_org_id?: string;
+  target_class_id?: string;
 };
 
 export function RecipientSearch({
@@ -61,6 +64,7 @@ export function RecipientSearch({
   isMeetingNotice,
   isRecord,
   orgs,
+  classes,
 }: {
   onAdd: (r: RecipientDraft) => void;
   inputStyle: React.CSSProperties;
@@ -68,12 +72,16 @@ export function RecipientSearch({
   isMeetingNotice: boolean;
   isRecord: boolean;
   orgs: OrgRead[];
+  classes: SchoolClassListItem[];
 }) {
   const [type, setType] = useState<RecipientType>(isMeetingNotice ? "primary" : "main");
   const [query, setQuery] = useState("");
   const [email, setEmail] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const [recents, setRecents] = useState<RecentRecipient[]>([]);
+  const [selectedTarget, setSelectedTarget] = useState<
+    Pick<RecipientDraft, "target_user_id" | "target_org_id" | "target_class_id">
+  >({});
 
   useEffect(() => {
     setRecents(getRecentRecipients());
@@ -90,6 +98,7 @@ export function RecipientSearch({
   const selectUser = (u: UserSummary) => {
     setQuery(u.display_name);
     setEmail(u.email);
+    setSelectedTarget({ target_user_id: u.id });
     setShowDropdown(false);
   };
 
@@ -97,10 +106,11 @@ export function RecipientSearch({
     if (!query.trim()) return;
     const name = query.trim();
     const mail = email.trim();
-    onAdd({ recipient_type: type, name, email: mail });
+    onAdd({ recipient_type: type, name, email: mail, ...selectedTarget });
     remember(name, mail);
     setQuery("");
     setEmail("");
+    setSelectedTarget({});
   };
 
   // 過濾並排序：query 為空時，依名稱排序顯示前 8 個組織；有 query 時做名稱/前綴 fuzzy match
@@ -114,9 +124,30 @@ export function RecipientSearch({
     return filtered.slice(0, 8);
   }, [orgs, query]);
 
+  const classSuggestions = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const filtered = q
+      ? classes.filter((item) =>
+          [item.label, item.class_code, `${item.academic_year}`]
+            .filter(Boolean)
+            .some((value) => value!.toLowerCase().includes(q)),
+        )
+      : classes;
+    return filtered.slice(0, 8);
+  }, [classes, query]);
+
   const selectOrg = (o: OrgRead) => {
-    onAdd({ recipient_type: type, name: o.name, email: "" });
+    onAdd({ recipient_type: type, name: o.name, email: "", target_org_id: o.id });
     remember(o.name, "");
+    setQuery("");
+    setEmail("");
+    setShowDropdown(false);
+  };
+
+  const selectClass = (schoolClass: SchoolClassListItem) => {
+    const name = schoolClass.label || `${schoolClass.academic_year} 學年度 ${schoolClass.class_code} 班`;
+    onAdd({ recipient_type: type, name, email: "", target_class_id: schoolClass.id });
+    remember(name, "");
     setQuery("");
     setEmail("");
     setShowDropdown(false);
@@ -187,6 +218,7 @@ export function RecipientSearch({
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
+            setSelectedTarget({});
             setShowDropdown(true);
           }}
           onKeyDown={(e) => {
@@ -199,7 +231,7 @@ export function RecipientSearch({
           aria-label="收件人姓名或單位"
           aria-autocomplete="list"
         />
-        {showDropdown && (suggestions.length > 0 || orgSuggestions.length > 0) && (
+        {showDropdown && (suggestions.length > 0 || orgSuggestions.length > 0 || classSuggestions.length > 0) && (
           <div
             className="absolute z-20 left-0 right-0 top-full mt-1 rounded-xl overflow-hidden shadow-lg max-h-72 overflow-y-auto"
             style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
@@ -281,6 +313,36 @@ export function RecipientSearch({
                     </div>
                   </button>
                 ))}
+              </>
+            )}
+            {classSuggestions.length > 0 && (
+              <>
+                <p
+                  className="px-3 py-1 text-[10px] font-semibold"
+                  style={{ color: "var(--text-muted)", background: "var(--bg-surface)" }}
+                >
+                  班級（點選快速新增）
+                </p>
+                {classSuggestions.map((schoolClass) => {
+                  const name = schoolClass.label || `${schoolClass.academic_year} 學年度 ${schoolClass.class_code} 班`;
+                  return (
+                    <button
+                      key={schoolClass.id}
+                      type="button"
+                      onMouseDown={() => selectClass(schoolClass)}
+                      className="flex items-center gap-2 w-full px-3 py-2 text-left text-xs hover:opacity-80"
+                      role="option"
+                      aria-selected="false"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p style={{ color: "var(--text-primary)" }}>{name}</p>
+                        <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+                          班級受文者
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
               </>
             )}
           </div>

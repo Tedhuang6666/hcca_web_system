@@ -171,6 +171,34 @@ async def test_list_my_create_orgs_superuser_sees_all_active(
 
 
 @pytest.mark.asyncio
+async def test_list_my_create_orgs_hides_class_orgs(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin = await _seed_user_with_codes(
+        db_session, "org-my-create-class-admin@school.edu", [], superuser=True
+    )
+    class_org = Org(name="115 學年度 201 班")
+    db_session.add(class_org)
+    await db_session.flush()
+    db_session.add(
+        SchoolClass(
+            academic_year=115,
+            class_code="201",
+            grade=2,
+            created_by=admin.id,
+            org_id=class_org.id,
+        )
+    )
+    await db_session.flush()
+    _override_user(admin)
+
+    resp = await client.get("/orgs/my-create-orgs")
+
+    assert resp.status_code == 200
+    assert "115 學年度 201 班" not in {item["name"] for item in resp.json()}
+
+
+@pytest.mark.asyncio
 async def test_list_my_regulation_create_orgs_filters_by_permission(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:

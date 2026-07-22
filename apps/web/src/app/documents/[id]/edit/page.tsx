@@ -15,7 +15,15 @@ import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import { useOnlineAutosave } from "@/hooks/useOnlineAutosave";
 import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 
-interface Recipient { id: string; recipient_type: RecipientType; name: string; email: string }
+interface Recipient {
+  id: string;
+  recipient_type: RecipientType;
+  name: string;
+  email: string;
+  target_user_id?: string;
+  target_org_id?: string;
+  target_class_id?: string;
+}
 
 const CATEGORY_OPTIONS: Array<[DocumentCategory, string]> = [
   ["letter", "函"],
@@ -154,6 +162,9 @@ export default function EditDocumentPage() {
       recipient_type: r.recipient_type,
       name: r.name,
       email: r.email ?? "",
+      target_user_id: r.target_user_id ?? undefined,
+      target_org_id: r.target_org_id ?? undefined,
+      target_class_id: r.target_class_id ?? undefined,
     })),
     newRecipient: { name: "", email: "", recipient_type: "main" },
     selectedTemplateId: doc.serial_template_id ?? "",
@@ -241,6 +252,9 @@ export default function EditDocumentPage() {
         recipient_type: r.recipient_type,
         name: r.name,
         email: r.email || undefined,
+        target_user_id: r.target_user_id,
+        target_org_id: r.target_org_id,
+        target_class_id: r.target_class_id,
       })));
     }, [buildUpdatePayload, id, recipients]),
   });
@@ -272,7 +286,13 @@ export default function EditDocumentPage() {
       setDueDate(d.due_date ? d.due_date.split("T")[0] : "");
       setSelectedTemplateId(d.serial_template_id ?? "");
       setRecipients(d.recipients.map(r => ({
-        id: r.id, recipient_type: r.recipient_type, name: r.name, email: r.email ?? "",
+        id: r.id,
+        recipient_type: r.recipient_type,
+        name: r.name,
+        email: r.email ?? "",
+        target_user_id: r.target_user_id ?? undefined,
+        target_org_id: r.target_org_id ?? undefined,
+        target_class_id: r.target_class_id ?? undefined,
       })));
     } catch (e) {
       toast.error(apiErrorMessage(e, "載入失敗"));
@@ -311,6 +331,9 @@ export default function EditDocumentPage() {
       // 更新受文者（整批覆寫）
       await documentsRecipientsApi.update(id, recipients.map(r => ({
         recipient_type: r.recipient_type, name: r.name, email: r.email || undefined,
+        target_user_id: r.target_user_id,
+        target_org_id: r.target_org_id,
+        target_class_id: r.target_class_id,
       })));
       clearDraft();
       toast.success("公文已更新");

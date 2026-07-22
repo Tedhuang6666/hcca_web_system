@@ -69,6 +69,15 @@ async def list_classes(
     return await class_svc.list_classes(session, academic_year=academic_year, is_active=is_active)
 
 
+@router.get(
+    "/recipient-options",
+    response_model=list[SchoolClassListItem],
+    summary="列出可作為公文受文者的現行班級",
+)
+async def list_recipient_options(session: DbDep, _: CurrentUser) -> list[SchoolClass]:
+    return await class_svc.list_recipient_options(session)
+
+
 @router.post(
     "",
     response_model=SchoolClassOut,

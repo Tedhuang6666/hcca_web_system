@@ -11,9 +11,7 @@ export const orgsApi = {
   list: (params?: { active_only?: boolean; exclude_class_orgs?: boolean }) => {
     const query = new URLSearchParams();
     if (params?.active_only !== undefined) query.set("active_only", String(params.active_only));
-    if (params?.exclude_class_orgs !== undefined) {
-      query.set("exclude_class_orgs", String(params.exclude_class_orgs));
-    }
+    query.set("exclude_class_orgs", String(params?.exclude_class_orgs ?? true));
     const qs = query.toString();
     return get<OrgRead[]>(`/orgs${qs ? `?${qs}` : ""}`);
   },

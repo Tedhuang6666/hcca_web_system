@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from api.models.activity import Activity
     from api.models.org import Org
     from api.models.regulation import Regulation
+    from api.models.school_class import SchoolClass
     from api.models.user import User
 
 
@@ -671,14 +672,15 @@ class DocumentApprovalDelegation(Base, TimestampMixin):
 class DocumentRecipient(Base, TimestampMixin):
     """受文者清單（正本 / 副本 / 主旨對象）。
 
-    可指向特定使用者（target_user_id）或機關（target_org_id），
-    若兩者皆 None 則 name 為純文字外部單位（如：教育部）。
+    可指向特定使用者、自治組織或班級；若三者皆 None 則 name 為純文字
+    外部單位（如：教育部）。
     """
 
     __tablename__ = "document_recipients"
     __table_args__ = (
         Index("ix_document_recipients_target_user", "target_user_id"),
         Index("ix_document_recipients_target_org", "target_org_id"),
+        Index("ix_document_recipients_target_class", "target_class_id"),
         Index("ix_document_recipients_doc_type", "document_id", "recipient_type"),
     )
 
@@ -698,7 +700,7 @@ class DocumentRecipient(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(200), nullable=False)  # 單位或個人名稱
     email: Mapped[str | None] = mapped_column(String(200), nullable=True)  # 發文後寄送聯絡信箱
 
-    # 結構化目標：擇一指定（兩者皆 None 即為純文字外部單位）
+    # 結構化目標：擇一指定（三者皆 None 即為純文字外部單位）
     target_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
@@ -707,6 +709,11 @@ class DocumentRecipient(Base, TimestampMixin):
     target_org_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("orgs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    target_class_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("school_classes.id", ondelete="SET NULL"),
         nullable=True,
     )
     delivery_method: Mapped[DeliveryMethod] = mapped_column(
@@ -723,6 +730,9 @@ class DocumentRecipient(Base, TimestampMixin):
     document: Mapped[Document] = relationship("Document", back_populates="recipients")
     target_user: Mapped[User | None] = relationship("User", foreign_keys=[target_user_id])
     target_org: Mapped[Org | None] = relationship("Org", foreign_keys=[target_org_id])
+    target_class: Mapped[SchoolClass | None] = relationship(
+        "SchoolClass", foreign_keys=[target_class_id]
+    )
 
 
 # ── 附件 ──────────────────────────────────────────────────────────────────────
