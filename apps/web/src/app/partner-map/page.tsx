@@ -58,6 +58,20 @@ function externalUrl(url: string): string {
   return /^https?:\/\//i.test(url) ? url : `https://${url}`;
 }
 
+function attachCategoryTag<T extends { category: string | null; tags: PartnerTagOut[] }>(
+  item: T,
+  availableTags: PartnerTagOut[],
+): T {
+  const category = item.category?.trim();
+  if (!category) return item;
+  const categoryTag = availableTags.find((tag) => tag.is_active && tag.name.trim() === category);
+  if (!categoryTag || item.tags.some((tag) => tag.name.trim() === category && tag.color)) return item;
+  return {
+    ...item,
+    tags: [...item.tags.filter((tag) => tag.name.trim() !== category), categoryTag],
+  };
+}
+
 function DetailPanel({
   business,
   loading,
@@ -72,6 +86,8 @@ function DetailPanel({
   onClose: () => void;
 }) {
   if (!business && !loading) return null;
+  const categoryColor = business?.tags.find((tag) => tag.name.trim() === business.category?.trim())?.color
+    || "var(--primary)";
   const panel = (
     <aside
       className="partner-map-detail-panel fixed inset-x-3 bottom-3 max-h-[calc(100dvh-1.5rem)] overflow-y-auto rounded-lg border p-4 shadow-xl lg:top-20 lg:right-5 lg:bottom-5 lg:left-auto lg:w-96"
@@ -116,7 +132,7 @@ function DetailPanel({
             )}
             <div className="min-w-0 flex-1">
               {business.category && (
-                <p className="text-xs font-medium" style={{ color: "var(--primary)" }}>
+                <p className="text-xs font-medium" style={{ color: categoryColor }}>
                   {business.category}
                 </p>
               )}
@@ -432,7 +448,7 @@ export default function PartnerMapPage() {
   const center: [number, number] = DEFAULT_CENTER;
   const filteredItems = useMemo(
     () => {
-      const filtered = [...items];
+      const filtered = items.map((item) => attachCategoryTag(item, tags));
       if (sortMode === "nearest" && userLocation) {
         filtered.sort(
           (a, b) =>
@@ -444,7 +460,7 @@ export default function PartnerMapPage() {
       }
       return filtered;
     },
-    [items, sortMode, userLocation],
+    [items, sortMode, tags, userLocation],
   );
 
   const thumbFor = (item: PartnerMapItem) => item.logo_url || item.cover_image_url;
@@ -764,7 +780,7 @@ export default function PartnerMapPage() {
             document.body,
           )}
           <DetailPanel
-            business={selectedBusiness}
+            business={selectedBusiness ? attachCategoryTag(selectedBusiness, tags) : null}
             loading={detailLoading}
             onRate={rateSelected}
             onCheckIn={checkInSelected}
