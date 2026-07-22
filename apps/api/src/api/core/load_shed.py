@@ -18,9 +18,10 @@ from __future__ import annotations
 import logging
 import secrets
 from collections.abc import Awaitable, Callable
+from urllib.parse import quote
 
 import jwt
-from starlette.responses import JSONResponse, Response
+from starlette.responses import JSONResponse, RedirectResponse, Response
 from starlette.types import Receive, Scope, Send
 
 from api.core.config import settings
@@ -109,6 +110,17 @@ def _can_bypass_protection(scope: Scope) -> bool:
         payload.get("is_admin")
         or "admin:all" in permissions
         or "system:maintenance_bypass" in permissions
+    )
+
+
+def _is_browser_navigation(scope: Scope) -> bool:
+    """判斷請求是否是瀏覽器直接導覽，而非前端 fetch。"""
+    headers = {key.decode("latin-1"): value.decode("latin-1") for key, value in scope["headers"]}
+    accept = headers.get("accept", "")
+    fetch_dest = headers.get("sec-fetch-dest", "")
+    fetch_mode = headers.get("sec-fetch-mode", "")
+    return "text/html" in accept and (
+        fetch_dest in {"document", "iframe"} or fetch_mode == "navigate"
     )
 
 
@@ -249,6 +261,12 @@ class LoadShedMiddleware:
     ) -> None:
         reason = state.get("reason") or ""
         closed = state.get("mode") == "closed"
+        if _is_browser_navigation(scope):
+            frontend = settings.FRONTEND_BASE_URL.rstrip("/")
+            location = f"{frontend}/module-status?module={quote(module_id, safe='')}"
+            resp = RedirectResponse(url=location, status_code=303)
+            await self._send_response(resp, scope, send)
+            return
         message = (
             f"此功能模組系統關閉中{('：' + reason) if reason else ''}"
             if closed
