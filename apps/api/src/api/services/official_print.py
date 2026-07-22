@@ -13,13 +13,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.clock import local_today
 from api.models.document import Document
-from api.models.org import Position, UserPosition
+from api.models.org import Org, Position, UserPosition
 from api.models.regulation import Regulation
 from api.models.user import User
 
 _CN_DIGITS = "零一二三四五六七八九"
 _WEEKDAYS = "一二三四五六日"
-_BUNDLED_KAI_FONT = "LXGWWenKaiTC-Regular.ttf"
+_SCHOOL_FULL_NAME = "國立新竹高級中學"
+_SCHOOL_SHORT_NAME = "新竹高中"
+_BUNDLED_KAI_FONT = "edukai-5.1_20251208.ttf"
+_FALLBACK_KAI_FONT = "LXGWWenKaiTC-Regular.ttf"
 
 
 def _bundled_font_candidates(filename: str) -> tuple[Path, ...]:
@@ -47,20 +50,43 @@ def _compact_official_name(value: object | None) -> str:
     return re.sub(r"\s+", "", str(value or "").strip())
 
 
-def _decree_issuer_title(doc: Document) -> str:
+def _canonical_official_org_name(*parts: object | None) -> str:
+    """Build a school-prefixed official name without redundant org levels."""
+    body = "".join(_compact_official_name(part) for part in parts if part)
+    while body.startswith(_SCHOOL_FULL_NAME):
+        body = body[len(_SCHOOL_FULL_NAME) :]
+    while body.startswith(_SCHOOL_SHORT_NAME):
+        body = body[len(_SCHOOL_SHORT_NAME) :]
+    body = body.replace("班級聯合自治會", "班聯會")
+    body = body.replace("班聯會學生會", "班聯會")
+    if body.startswith("學生會"):
+        body = f"班聯會{body.removeprefix('學生會')}"
+    return f"{_SCHOOL_FULL_NAME}{body}"
+
+
+def _decree_issuer_title(doc: Document, issuer_name: str = "") -> str:
     """Resolve the authority title used by a decree heading and signature."""
-    explicit = _compact_official_name(getattr(doc, "issuer_full_name", ""))
     custom_title = _compact_official_name(getattr(doc, "title", ""))
     if custom_title.endswith("令") and custom_title != "法規發布令":
         authority = custom_title[:-1]
+        if issuer_name and authority.startswith(issuer_name):
+            authority = authority[len(issuer_name) :]
+        if authority.startswith(_SCHOOL_FULL_NAME):
+            authority = authority[len(_SCHOOL_FULL_NAME) :]
         if authority:
             return authority
-    return explicit or "主席"
+    return "主席"
 
 
 def _font_faces() -> str:
     kai_path = next(
-        (path for path in _bundled_font_candidates(_BUNDLED_KAI_FONT) if path.is_file()), None
+        (
+            path
+            for filename in (_BUNDLED_KAI_FONT, _FALLBACK_KAI_FONT)
+            for path in _bundled_font_candidates(filename)
+            if path.is_file()
+        ),
+        None,
     )
     if kai_path is None:
         return ""
@@ -94,18 +120,31 @@ def _enum_value(value: object) -> str:
 async def _full_org_name(session: AsyncSession, doc: Document | Regulation) -> str:
     """組出發文機關全銜。
 
-    優先使用公文上明確填寫的 ``issuer_full_name``；否則使用目前選取的組織名稱。
-    機關全銜是公文可見文字，不應由系統自動加上學校前綴，也不應在中文階層間
-    插入空格；若需完整名稱，請直接填入 ``issuer_full_name``。
+    所有公文皆以學校全銜起首，並將班聯會組織樹中的冗餘「學生會」層級省略。
+    ``issuer_full_name`` 可覆蓋組織樹名稱，但仍會套用相同的全銜正規化規則。
     """
     explicit = getattr(doc, "issuer_full_name", None)
     if explicit and str(explicit).strip():
-        return _compact_official_name(explicit)
+        return _canonical_official_org_name(explicit)
 
     org = getattr(doc, "org", None)
     if org is None:
-        return ""
-    return _compact_official_name(getattr(org, "name", ""))
+        return _SCHOOL_FULL_NAME
+
+    names: list[str] = []
+    seen: set[object] = set()
+    current = org
+    while current is not None:
+        current_id = getattr(current, "id", None)
+        if current_id is not None and current_id in seen:
+            break
+        if current_id is not None:
+            seen.add(current_id)
+        names.append(_compact_official_name(getattr(current, "name", "")))
+        parent_id = getattr(current, "parent_id", None)
+        current = await session.get(Org, parent_id) if parent_id else None
+
+    return _canonical_official_org_name(*reversed(names))
 
 
 def _br(value: str | None) -> str:
@@ -215,7 +254,7 @@ async def _final_signature_html(
     ]
     if not approved:
         signer = _esc(doc.handler_name)
-        title = _esc(doc.handler_unit or fallback_title)
+        title = _esc(fallback_title or doc.handler_unit)
         if not signer:
             return '<section class="signature signature-placeholder">（核准後用印）</section>'
         return (
@@ -425,7 +464,8 @@ async def render_document_print_html(
     is_meeting = cat == "meeting_notice"
     is_decree = cat == "decree"
     is_record = cat == "record"
-    issuer_name = _decree_issuer_title(doc) if is_decree else await _full_org_name(session, doc)
+    issuer_name = await _full_org_name(session, doc)
+    decree_authority_title = _decree_issuer_title(doc, issuer_name) if is_decree else ""
     issuer = _esc(issuer_name)
     category_label = {
         "letter": "函",
@@ -470,7 +510,7 @@ async def render_document_print_html(
     signature = await _final_signature_html(
         session,
         doc,
-        fallback_title=issuer_name if is_decree else None,
+        fallback_title=decree_authority_title if is_decree else None,
     )
 
     meta_rows = [
@@ -568,11 +608,15 @@ async def render_document_print_html(
 
     custom_title = _compact_official_name(getattr(doc, "title", ""))
     if is_decree:
-        document_title = f"{issuer_name}令"
+        if custom_title.startswith(issuer_name) and custom_title.endswith("令"):
+            document_title = custom_title
+        else:
+            document_title = f"{issuer_name}{decree_authority_title}令"
     else:
-        document_title = custom_title or issuer_name
+        document_title = _canonical_official_org_name(custom_title or issuer_name)
         if not document_title.endswith(category_label):
             document_title += category_label
+    title_font_size = min(20.0, max(10.0, 440 / max(len(document_title), 1)))
     document_title = _esc(document_title)
 
     return f"""<!DOCTYPE html>
@@ -584,10 +628,10 @@ async def render_document_print_html(
     {_font_faces()}
     @page {{
       size: A4 portrait;
-      margin: 16mm 19mm 17mm 19mm;
+      margin: 25mm;
       @bottom-center {{
         content: "第 " counter(page) " 頁　共 " counter(pages) " 頁";
-        font-family: "OfficialKai","OfficialSerifTC","標楷體","DFKai-SB",serif;
+        font-family: "Times New Roman","OfficialKai","標楷體","DFKai-SB",serif;
         font-size: 10pt;
       }}
     }}
@@ -596,9 +640,9 @@ async def render_document_print_html(
       margin: 0;
       background: #fff;
       color: #000;
-      font-family: "OfficialKai","OfficialSerifTC","標楷體","DFKai-SB",serif;
-      font-size: 14pt;
-      line-height: 1.75;
+      font-family: "Times New Roman","OfficialKai","標楷體","DFKai-SB",serif;
+      font-size: 12pt;
+      line-height: 1.25;
       overflow-wrap: anywhere;
       word-break: break-word;
     }}
@@ -607,16 +651,15 @@ async def render_document_print_html(
     @media print {{ .no-print {{ display: none; }} }}
     .page {{
       position: relative;
-      width: 172mm;
-      min-height: 244mm;
+      width: 160mm;
+      min-height: 247mm;
       margin: 0 auto;
-      padding-left: 18mm;
     }}
     .binding {{
       position: fixed;
-      left: 10mm;
-      top: 16mm;
-      bottom: 17mm;
+      left: -10mm;
+      top: 0;
+      bottom: 0;
       width: 5mm;
       border-left: 1px dotted #777;
       color: #000;
@@ -630,23 +673,28 @@ async def render_document_print_html(
       z-index: 0;
     }}
     .binding span {{ transform: translateX(-2.5mm); }}
-    .copy-mark {{ font-size: 14pt; letter-spacing: .55em; margin-left: 2mm; }}
-    .delivery {{ font-size: 10.5pt; margin: 1mm 0 6mm 2mm; }}
+    .copy-mark {{
+      position: absolute;
+      left: 0;
+      top: -18mm;
+      font-size: 14pt;
+      letter-spacing: .55em;
+    }}
     .file-box {{
       position: absolute;
       right: 0;
-      top: 0;
-      font-size: 10.5pt;
-      line-height: 2.1;
+      top: -18mm;
+      font-size: 10pt;
+      line-height: 1.3;
       min-width: 54mm;
     }}
     .title {{
       text-align: center;
-      font-size: 20pt;
-      letter-spacing: .08em;
-      margin-top: 2mm;
-      margin-bottom: 14mm;
-      white-space: normal;
+      font-size: {title_font_size:.1f}pt;
+      line-height: 1.8;
+      letter-spacing: .02em;
+      margin: 0 0 20mm;
+      white-space: nowrap;
     }}
     .doc-type {{
       display: inline-block;
@@ -656,18 +704,18 @@ async def render_document_print_html(
     .meeting-title {{ margin-left: 9mm; letter-spacing: .15em; }}
     .handler {{
       position: absolute;
-      right: 8mm;
-      top: 42mm;
+      right: 0;
+      top: 16mm;
       width: 62mm;
-      font-size: 10.5pt;
-      line-height: 1.35;
+      font-size: 12pt;
+      line-height: 1.25;
       text-align: left;
     }}
     .recipient-line {{
       margin-top: 2mm;
       margin-bottom: 3mm;
-      font-size: 15pt;
-      line-height: 1.8;
+      font-size: 16pt;
+      line-height: 1.75;
     }}
     .meta {{ margin: 0 0 7mm; }}
     .meta-row,
@@ -675,8 +723,8 @@ async def render_document_print_html(
       display: flex;
       align-items: baseline;
       min-height: 5.2mm;
-      font-size: 11pt;
-      line-height: 1.55;
+      font-size: 12pt;
+      line-height: 1.25;
     }}
     .meta-label,
     .small-label {{ flex: 0 0 auto; white-space: nowrap; margin-right: .7mm; }}
@@ -687,8 +735,8 @@ async def render_document_print_html(
       grid-template-columns: max-content minmax(0, 1fr);
       column-gap: 2mm;
       margin: 2.1mm 0;
-      font-size: 15pt;
-      line-height: 1.55;
+      font-size: 16pt;
+      line-height: 1.75;
     }}
     .large-label {{ white-space: nowrap; }}
     .large-value {{ min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }}
@@ -697,22 +745,22 @@ async def render_document_print_html(
       grid-template-columns: max-content minmax(0, 1fr);
       column-gap: .45em;
       margin: 5mm 0;
-      font-size: 15pt;
-      line-height: 1.9;
+      font-size: 16pt;
+      line-height: 1.75;
       break-inside: avoid;
     }}
     .subject-label {{ white-space: nowrap; }}
     .subject-body {{ min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }}
     .doc-section {{ margin: 5mm 0; break-inside: avoid; }}
     .doc-section-label {{
-      font-size: 15pt;
+      font-size: 16pt;
       line-height: 1.75;
     }}
     .doc-section-body {{
       margin-top: 1mm;
-      padding-left: 16mm;
-      font-size: 15pt;
-      line-height: 1.9;
+      padding-left: 8mm;
+      font-size: 16pt;
+      line-height: 1.75;
     }}
     .decree-meta {{
       margin: 0 0 10mm;
@@ -721,8 +769,8 @@ async def render_document_print_html(
     }}
     .decree-body {{
       margin: 8mm 0 0;
-      font-size: 15pt;
-      line-height: 1.9;
+      font-size: 16pt;
+      line-height: 1.75;
       white-space: normal;
     }}
     .amendment-table {{
@@ -764,15 +812,15 @@ async def render_document_print_html(
     .level-3 {{ margin-left: 4em; }}
     .blank-line {{ height: 1em; }}
     .agenda-title,
-    .meeting-note-label {{ margin-top: 5mm; font-size: 15pt; }}
+    .meeting-note-label {{ margin-top: 5mm; font-size: 16pt; }}
     .agenda-body,
     .meeting-note-body {{
       margin-top: 1mm;
       padding-left: 8mm;
-      font-size: 15pt;
-      line-height: 1.65;
+      font-size: 16pt;
+      line-height: 1.75;
     }}
-    .copies {{ margin-top: 8mm; font-size: 11pt; line-height: 1.55; }}
+    .copies {{ margin-top: 8mm; font-size: 12pt; line-height: 1.25; }}
     .signature {{
       margin-top: 10mm;
       color: #003aa7;
@@ -806,7 +854,6 @@ async def render_document_print_html(
   <div class="binding"><span>裝</span><span>訂</span><span>線</span></div>
   <main class="page">
     <div class="copy-mark">{copy_mark}</div>
-    <div class="delivery">發文方式：線上寄送</div>
     <div class="file-box">檔　　號：{file_number}<br>保存年限：{retention_period}</div>
     <header class="title">{document_title}</header>
     {f'<aside class="handler">{handler_block}</aside>' if handler_block and not is_meeting else ""}
