@@ -14,7 +14,12 @@ import {
 import { useEffect, useRef, useState } from "react";
 
 import { useScrollReveal } from "@/hooks/useScrollReveal";
+import {
+  ModuleStatusProvider,
+  useModuleStatus,
+} from "@/contexts/ModuleStatusContext";
 import LiveElectionBanner from "@/components/site/LiveElectionBanner";
+import ImportantAnnouncementBanner from "@/components/site/ImportantAnnouncementBanner";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { BRANDING } from "@/lib/branding";
 import {
@@ -23,14 +28,12 @@ import {
   groupResolvedNav,
   resolvePublicNav,
 } from "@/lib/publicNav";
-import type { PublicSitePageOut, PublicSiteSettingsOut } from "@/lib/types";
+import type { AnnouncementOut, PublicSitePageOut, PublicSiteSettingsOut } from "@/lib/types";
 
 /** 已知父層路徑 → 返回鈕文案。未列出者依前綴給通用文案。 */
 const PUBLIC_BACK_LABELS: Record<string, string> = {
   "/public": "返回公開資料庫",
   "/public/elections": "返回即時開票",
-  "/public/documents": "返回公開公文",
-  "/public/regulations": "返回公開法規",
   "/news": "返回最新公告",
 };
 
@@ -55,23 +58,26 @@ function getPublicBack(pathname: string): { href: string; label: string } | null
 
   const label =
     PUBLIC_BACK_LABELS[parent] ??
-    (parent.startsWith("/public/regulations") ? "返回法規" :
-     parent.startsWith("/public/documents") ? "返回公文" : "返回上一頁");
+    "返回上一頁";
   return { href: parent, label };
 }
 
-export default function PublicSiteShell({
+function PublicSiteShellContent({
   children,
   navPages = [],
   settings,
+  urgentAnnouncement,
 }: {
   children: React.ReactNode;
   navPages?: PublicSitePageOut[];
   settings?: PublicSiteSettingsOut | null;
+  urgentAnnouncement?: AnnouncementOut | null;
 }) {
   const [open, setOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [moduleStatusReady, setModuleStatusReady] = useState(false);
   const { theme, toggleTheme } = useTheme();
+  const { isModuleClosed } = useModuleStatus();
   const pathname = usePathname();
   const publicEmblemUrl = settings?.site_logo_url?.trim() || BRANDING.publicEmblemUrl;
   useScrollReveal([]);
@@ -102,9 +108,23 @@ export default function PublicSiteShell({
   }, []);
 
   // 內建導覽項目（單一來源）+ 後台覆寫（theme_config.nav），primary 上頂列、其餘進選單。
-  const groups = groupResolvedNav(
+  const resolvedGroups = groupResolvedNav(
     resolvePublicNav(settings?.theme_config as Record<string, unknown> | undefined),
   );
+  const groups = {
+    primary: resolvedGroups.primary.filter(
+      (item) => !moduleStatusReady || !isModuleClosed(item.moduleId ?? null),
+    ),
+    info: resolvedGroups.info.filter(
+      (item) => !moduleStatusReady || !isModuleClosed(item.moduleId ?? null),
+    ),
+    data: resolvedGroups.data.filter(
+      (item) => !moduleStatusReady || !isModuleClosed(item.moduleId ?? null),
+    ),
+    participation: resolvedGroups.participation.filter(
+      (item) => !moduleStatusReady || !isModuleClosed(item.moduleId ?? null),
+    ),
+  };
   const topLevel = [
     { key: "__home", href: "/", label: "首頁", guestUsable: false },
     ...groups.primary.map((item) => ({
@@ -129,6 +149,7 @@ export default function PublicSiteShell({
 
   useEffect(() => {
     setIsLoggedIn(Boolean(window.localStorage.getItem("user_id")));
+    setModuleStatusReady(true);
   }, []);
 
   return (
@@ -148,6 +169,7 @@ export default function PublicSiteShell({
       )}
       <header className="public-header" ref={headerRef}>
         <LiveElectionBanner />
+        <ImportantAnnouncementBanner announcement={urgentAnnouncement} />
         <div className="public-header-inner">
           <Link href="/" className="public-brand" onClick={() => setOpen(false)}>
             <span className="public-brand-mark">
@@ -356,5 +378,18 @@ export default function PublicSiteShell({
         </div>
       </footer>
     </div>
+  );
+}
+
+export default function PublicSiteShell(props: {
+  children: React.ReactNode;
+  navPages?: PublicSitePageOut[];
+  settings?: PublicSiteSettingsOut | null;
+  urgentAnnouncement?: AnnouncementOut | null;
+}) {
+  return (
+    <ModuleStatusProvider authenticated={false}>
+      <PublicSiteShellContent {...props} />
+    </ModuleStatusProvider>
   );
 }

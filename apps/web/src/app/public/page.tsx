@@ -1,25 +1,29 @@
+"use client";
+
 import Link from "next/link";
 import {
   ArrowRight,
   BookOpenText,
   FileSearch,
-  Landmark,
   Megaphone,
   MessageSquareText,
   Radio,
-  Scale,
 } from "lucide-react";
+import { useEffect, useState } from "react";
+
+import { useModuleStatus } from "@/contexts/ModuleStatusContext";
+import type { ModuleId } from "@/lib/modules";
 
 const DATABASES = [
   {
-    href: "/public/regulations",
+    href: "/regulations",
     title: "法規資料庫",
     description: "查詢現行法規、條文沿革與版本差異，取得可穩定引用的公開連結。",
     icon: BookOpenText,
     meta: "條文、沿革、版本比對",
   },
   {
-    href: "/public/documents",
+    href: "/documents",
     title: "公文資料庫",
     description: "依字號、標題與主旨查找公開公文，查看附件與文件基本資訊。",
     icon: FileSearch,
@@ -27,15 +31,46 @@ const DATABASES = [
   },
 ];
 
-const SERVICES = [
-  { href: "/public/elections", title: "即時開票", description: "查看公開選舉的即時票數、開票率與票匭進度。", icon: Radio },
-  { href: "/news", title: "最新公告", description: "掌握班聯會最新消息與公開說明。", icon: Megaphone },
-  { href: "/council-proposals", title: "議會提案", description: "查看學生代表大會提案與議事資訊。", icon: Landmark },
-  { href: "/petitions/new", title: "提出陳情", description: "向自治組織反映問題並留下正式紀錄。", icon: MessageSquareText },
-  { href: "/judicial-petitions", title: "評議聲請", description: "提出法規審查、機關爭議或其他評議事項。", icon: Scale },
+const SERVICES: Array<{
+  href: string;
+  title: string;
+  description: string;
+  icon: typeof Radio;
+  moduleId: ModuleId;
+}> = [
+  {
+    href: "/public/elections",
+    title: "即時開票",
+    description: "查看公開選舉的即時票數、開票率與票匭進度。",
+    icon: Radio,
+    moduleId: "elections",
+  },
+  {
+    href: "/news",
+    title: "最新公告",
+    description: "掌握班聯會最新消息與公開說明。",
+    icon: Megaphone,
+    moduleId: "announcements",
+  },
+  {
+    href: "/petitions/new",
+    title: "提出陳情",
+    description: "向自治組織反映問題並留下正式紀錄。",
+    icon: MessageSquareText,
+    moduleId: "petitions",
+  },
 ];
 
 export default function PublicHomePage() {
+  const { isModuleClosed } = useModuleStatus();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
+
+  const visibleServices = SERVICES.filter(
+    (item) => !mounted || !isModuleClosed(item.moduleId),
+  );
+
   return (
     <div className="space-y-10 pb-8">
       <section className="overflow-hidden rounded-2xl border border-[var(--public-border)] bg-[var(--public-surface)]">
@@ -47,7 +82,7 @@ export default function PublicHomePage() {
             </h1>
             <p className="mt-5 max-w-2xl text-sm leading-7 text-[var(--public-secondary)] sm:text-base sm:leading-8">
               這裡集中提供法規、公文與自治參與服務。查詢公開資料不需要帳號，
-              議會提案、評議聲請與內部操作則需要登入。
+              需要權限的自治作業與內部操作則需要登入。
             </p>
           </div>
           <div className="rounded-2xl border border-[var(--public-border)] bg-[var(--public-soft)] p-3 sm:p-4">
@@ -118,7 +153,7 @@ export default function PublicHomePage() {
           <h2 className="mt-2 text-2xl font-semibold">公開參與服務</h2>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
-          {SERVICES.map((item) => {
+          {visibleServices.map((item) => {
             const Icon = item.icon;
             return (
               <Link

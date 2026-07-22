@@ -11,8 +11,8 @@ export default function robots(): MetadataRoute.Robots {
           "/",
           "/announcements",
           "/public",
-          "/public/documents",
-          "/public/regulations",
+          "/documents",
+          "/regulations",
           "/meetings",
         ],
         disallow: [
