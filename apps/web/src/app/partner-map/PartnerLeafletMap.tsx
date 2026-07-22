@@ -238,7 +238,8 @@ export default function PartnerLeafletMap({
         <Marker
           key={item.location_id}
           position={[item.latitude, item.longitude]}
-          icon={storeIcon(item)}>
+          icon={storeIcon(item)}
+          eventHandlers={{ click: () => onOpenBusiness(item.business_id) }}>
           <Popup>
             <div className="min-w-48">
               <p className="text-sm font-semibold">{item.business_name}</p>

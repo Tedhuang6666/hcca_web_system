@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import Image from "next/image";
 import dynamic from "next/dynamic";
@@ -75,10 +76,11 @@ function DetailPanel({
   onClose: () => void;
 }) {
   if (!business && !loading) return null;
-  return (
+  const panel = (
     <aside
-      className="partner-map-detail-panel fixed inset-x-3 bottom-3 max-h-[70vh] overflow-y-auto rounded-lg border p-4 shadow-xl lg:absolute lg:inset-y-4 lg:right-4 lg:left-auto lg:w-96"
+      className="partner-map-detail-panel fixed inset-x-3 bottom-3 max-h-[calc(100dvh-1.5rem)] overflow-y-auto rounded-lg border p-4 shadow-xl lg:top-20 lg:right-5 lg:bottom-5 lg:left-auto lg:w-96"
       role="dialog"
+      aria-modal="true"
       aria-label="特約詳情"
       style={{ background: "var(--bg)", borderColor: "var(--border)" }}>
       <div className="flex items-start justify-between gap-3">
@@ -281,6 +283,7 @@ function DetailPanel({
       )}
     </aside>
   );
+  return typeof document === "undefined" ? null : createPortal(panel, document.body);
 }
 
 export default function PartnerMapPage() {
@@ -299,6 +302,7 @@ export default function PartnerMapPage() {
   const [sortMode, setSortMode] = useState<"popular" | "nearest">("popular");
   const [rankings, setRankings] = useState<PartnerRankingItem[]>([]);
   const [submissionOpen, setSubmissionOpen] = useState(false);
+  const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
   const [submission, setSubmission] = useState<PartnerSubmissionCreate>({
     name: "",
     category: "",
@@ -608,74 +612,90 @@ export default function PartnerMapPage() {
         </aside>
 
         <main className="relative min-h-[360px]">
-          <div className="partner-map-mobile-controls absolute left-2.5 right-2.5 top-2.5 z-[500] space-y-2.5 rounded-lg border p-3 lg:hidden">
+          <div className="partner-map-mobile-controls absolute left-2.5 right-2.5 top-2.5 z-[500] rounded-lg border p-3 lg:hidden">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h1 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>特約地圖</h1>
                 <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>新竹高中周邊</p>
               </div>
-              <span className="partner-map-count-pill rounded-full px-2 py-1 text-[11px]">
-                {filteredItems.length} 點位
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="partner-map-count-pill rounded-full px-2 py-1 text-[11px]">
+                  {filteredItems.length} 點位
+                </span>
+                <button
+                  type="button"
+                  className="partner-map-control-toggle"
+                  aria-expanded={mobileControlsOpen}
+                  aria-controls="partner-map-mobile-filters"
+                  onClick={() => setMobileControlsOpen((open) => !open)}>
+                  <span>{mobileControlsOpen ? "收起" : "篩選"}</span>
+                  <span aria-hidden="true" className={`text-sm transition-transform ${mobileControlsOpen ? "rotate-180" : ""}`}>⌄</span>
+                </button>
+              </div>
             </div>
-            <label className="partner-map-mobile-search flex items-center gap-2 rounded-lg border px-3 py-2.5">
-              <Search size={15} aria-hidden="true" />
-              <input
-                value={keyword}
-                onChange={(event) => setKeyword(event.target.value)}
-                placeholder="搜尋店家"
-                className="min-w-0 flex-1 bg-transparent text-sm outline-none"
-                style={{ color: "var(--text-primary)" }}
-              />
-            </label>
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              <button
-                onClick={() => setSelectedTagIds(new Set())}
-                className="partner-map-filter-chip shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium"
-                style={{
-                  ["--chip-color" as string]: selectedTagIds.size === 0 ? "var(--primary)" : "var(--text-secondary)",
-                  ["--chip-border" as string]: selectedTagIds.size === 0 ? "var(--primary)" : "var(--border-strong)",
-                  ["--chip-bg" as string]: selectedTagIds.size === 0 ? "var(--primary-dim)" : "var(--bg-elevated)",
-                }}
-                aria-pressed={selectedTagIds.size === 0}>
-                全部
-              </button>
-              {tags.map((tag) => {
-                const active = selectedTagIds.has(tag.id);
-                return (
+            {mobileControlsOpen && (
+              <div id="partner-map-mobile-filters" className="mt-2.5 space-y-2.5">
+                <label className="partner-map-mobile-search flex items-center gap-2 rounded-lg border px-3 py-2.5">
+                  <Search size={15} aria-hidden="true" />
+                  <input
+                    value={keyword}
+                    onChange={(event) => setKeyword(event.target.value)}
+                    placeholder="搜尋店家"
+                    className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+                    style={{ color: "var(--text-primary)" }}
+                  />
+                </label>
+                <div className="flex gap-2 overflow-x-auto pb-1">
                   <button
-                  key={tag.id}
-                  onClick={() => toggleTag(tag.id)}
+                    onClick={() => setSelectedTagIds(new Set())}
                     className="partner-map-filter-chip shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium"
                     style={{
-                      ["--chip-color" as string]: active ? tag.color || "var(--primary)" : "var(--text-secondary)",
-                      ["--chip-border" as string]: active ? tag.color || "var(--primary)" : "var(--border-strong)",
-                      ["--chip-bg" as string]: active ? "var(--bg-elevated)" : "var(--bg-elevated)",
+                      ["--chip-color" as string]: selectedTagIds.size === 0 ? "var(--primary)" : "var(--text-secondary)",
+                      ["--chip-border" as string]: selectedTagIds.size === 0 ? "var(--primary)" : "var(--border-strong)",
+                      ["--chip-bg" as string]: selectedTagIds.size === 0 ? "var(--primary-dim)" : "var(--bg-elevated)",
+                    }}
+                    aria-pressed={selectedTagIds.size === 0}>
+                    全部
+                  </button>
+                  {tags.map((tag) => {
+                    const active = selectedTagIds.has(tag.id);
+                    return (
+                      <button
+                  key={tag.id}
+                  onClick={() => toggleTag(tag.id)}
+                        className="partner-map-filter-chip shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium"
+                        style={{
+                          ["--chip-color" as string]: active ? tag.color || "var(--primary)" : "var(--text-secondary)",
+                          ["--chip-border" as string]: active ? tag.color || "var(--primary)" : "var(--border-strong)",
+                          ["--chip-bg" as string]: active ? "var(--bg-elevated)" : "var(--bg-elevated)",
                     }}
                     aria-pressed={active}>
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ background: tag.color || "var(--text-muted)" }} aria-hidden="true" />
                     {tag.name}
                   </button>
-                );
-              })}
-            </div>
-            <div className="flex gap-2">
-              <button className="partner-map-mobile-action btn btn-ghost flex-1" onClick={locateMe}>
-                <Navigation size={14} aria-hidden="true" /> 離我最近
-              </button>
-              <button className="partner-map-mobile-action btn btn-ghost flex-1" onClick={() => setSubmissionOpen(true)}>
-                <Send size={14} aria-hidden="true" /> 投稿新店
-              </button>
-            </div>
-            {contactBusinesses.length > 0 && (
-              <div className="rounded-lg border p-2" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
-                <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>合作夥伴聯絡資訊</p>
-                <div className="mt-2 max-h-24 space-y-1 overflow-y-auto">
-                  {contactBusinesses.map((business) => (
-                    <button type="button" key={business.id} onClick={() => openBusiness(business.id)} className="flex w-full items-center justify-between gap-2 text-left text-xs" style={{ color: "var(--primary)" }}>
-                      <span className="truncate">{business.name}</span><span className="shrink-0">查看詳情 →</span>
-                    </button>
-                  ))}
+                    );
+                  })}
                 </div>
+                <div className="flex gap-2">
+                  <button className="partner-map-mobile-action btn btn-ghost flex-1" onClick={locateMe}>
+                    <Navigation size={14} aria-hidden="true" /> 離我最近
+                  </button>
+                  <button className="partner-map-mobile-action btn btn-ghost flex-1" onClick={() => setSubmissionOpen(true)}>
+                    <Send size={14} aria-hidden="true" /> 投稿新店
+                  </button>
+                </div>
+                {contactBusinesses.length > 0 && (
+                  <div className="rounded-lg border p-2" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
+                    <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>合作夥伴聯絡資訊</p>
+                    <div className="mt-2 max-h-24 space-y-1 overflow-y-auto">
+                      {contactBusinesses.map((business) => (
+                        <button type="button" key={business.id} onClick={() => openBusiness(business.id)} className="flex w-full items-center justify-between gap-2 text-left text-xs" style={{ color: "var(--primary)" }}>
+                          <span className="truncate">{business.name}</span><span className="shrink-0">查看詳情 →</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -719,8 +739,9 @@ export default function PartnerMapPage() {
                     )}
                     <p className="mt-1 line-clamp-2 text-xs" style={{ color: "var(--text-muted)" }}>{item.address}</p>
                   </div>
-                  <span className="shrink-0 rounded-full px-2 py-1 text-[11px]" style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)" }}>
-                    {MARKER_CONFIG[markerKind(item)].label}
+                  <span className="flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium" style={{ background: "var(--bg-elevated)", borderColor: markerColor(item), color: markerColor(item) }}>
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ background: markerColor(item) }} aria-hidden="true" />
+                    {markerLabel(item)}
                   </span>
                 </div>
                 <p className="mt-2 truncate text-xs" style={{ color: item.has_active_offer ? "var(--success)" : "var(--text-secondary)" }}>
@@ -729,16 +750,17 @@ export default function PartnerMapPage() {
               </button>
             ))}
           </div>
-          {(selectedBusiness || detailLoading) && (
+          {(selectedBusiness || detailLoading) && typeof document !== "undefined" && createPortal(
             <button
               type="button"
-              className="partner-map-detail-backdrop fixed inset-x-0 top-0 lg:hidden"
+              className="partner-map-detail-backdrop fixed inset-0 lg:hidden"
               aria-label="關閉特約詳情"
               onClick={() => {
                 setSelectedBusiness(null);
                 setDetailLoading(false);
               }}
-            />
+            />,
+            document.body,
           )}
           <DetailPanel
             business={selectedBusiness}
@@ -753,12 +775,12 @@ export default function PartnerMapPage() {
           <div className="pointer-events-none absolute left-4 top-4 hidden rounded-lg border px-3 py-2 text-xs shadow lg:block" style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text-secondary)" }}>
             <span className="inline-flex items-center gap-1"><MapPin size={13} aria-hidden="true" /> {filteredItems.length} 個點位</span>
           </div>
-          {submissionOpen && (
-            <div className="partner-map-submit-dialog fixed inset-0 grid place-items-center p-4" style={{ background: "var(--bg-overlay)" }}>
-              <div className="w-full max-w-lg rounded-lg border p-5 shadow-xl" style={{ background: "var(--bg)", borderColor: "var(--border)" }}>
+          {submissionOpen && typeof document !== "undefined" && createPortal(
+            <div className="partner-map-submit-dialog fixed inset-0 flex items-start justify-center overflow-y-auto p-4 sm:items-center" style={{ background: "var(--bg-overlay)" }}>
+              <div className="my-auto max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-lg border p-5 shadow-xl" role="dialog" aria-modal="true" aria-labelledby="partner-map-submit-title" style={{ background: "var(--bg)", borderColor: "var(--border)" }}>
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>投稿新店家</h2>
+                    <h2 id="partner-map-submit-title" className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>投稿新店家</h2>
                     <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>推薦你希望加入特約地圖的店家</p>
                   </div>
                   <button className="topbar-icon-btn" onClick={() => setSubmissionOpen(false)} aria-label="關閉投稿">×</button>
@@ -777,7 +799,8 @@ export default function PartnerMapPage() {
                   </button>
                 </div>
               </div>
-            </div>
+            </div>,
+            document.body,
           )}
         </main>
       </div>
