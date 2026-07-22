@@ -68,6 +68,43 @@ type TagDraft = {
   is_active: boolean;
 };
 
+function PartnerIconPicker({
+  value,
+  onChange,
+}: {
+  value: PartnerIconKey;
+  onChange: (value: PartnerIconKey) => void;
+}) {
+  return (
+    <div className="grid gap-2">
+      <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>圖示</span>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6" role="radiogroup" aria-label="圖示選擇">
+        {PARTNER_ICON_OPTIONS.map(({ key, label, icon: Icon }) => {
+          const selected = value === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              aria-label={label}
+              onClick={() => onChange(key)}
+              className="flex min-h-11 min-w-0 items-center gap-2 rounded-md border px-3 py-2 text-left transition-colors"
+              style={{
+                borderColor: selected ? "var(--primary)" : "var(--border)",
+                background: selected ? "var(--primary-dim)" : "var(--bg-surface)",
+                color: selected ? "var(--primary)" : "var(--text-secondary)",
+              }}>
+              <Icon size={17} className="shrink-0" aria-hidden="true" />
+              <span className="truncate text-xs">{label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 const newOfferDraft = (): OfferDraft => ({
   title: "",
   benefit_type: "discount",
@@ -716,7 +753,7 @@ export default function PartnerMapAdminPage() {
               <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>設定店家分類的名稱、顏色與圖示，讓地圖上的店家更容易辨識。</p>
             </div>
           </div>
-          <div className="grid gap-3 rounded-lg border p-4 md:grid-cols-[minmax(0,1fr)_96px_minmax(180px,0.8fr)_auto]" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
+          <div className="grid gap-4 rounded-lg border p-4 md:grid-cols-[minmax(0,1fr)_96px_auto]" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
             <label className="grid min-w-0 gap-1">
               <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>分類名稱</span>
               <input value={tagName} onChange={(event) => setTagName(event.target.value)} className="input h-9" placeholder="例如：制服、飲料、文具" />
@@ -725,15 +762,12 @@ export default function PartnerMapAdminPage() {
               <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>顏色</span>
               <input value={tagColor} onChange={(event) => setTagColor(event.target.value)} className="h-9 w-full rounded border bg-transparent p-1" style={{ borderColor: "var(--border)" }} type="color" aria-label="分類顏色" />
             </label>
-            <label className="grid min-w-0 gap-1">
-              <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>圖示</span>
-              <select className="input h-9" value={tagIconKey} onChange={(event) => setTagIconKey(event.target.value as PartnerIconKey)}>
-                {PARTNER_ICON_OPTIONS.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
-              </select>
-            </label>
             <button className="btn btn-ghost w-full self-end md:w-auto" onClick={createTag} aria-label="新增標籤">
               <Plus size={15} aria-hidden="true" /> 新增
             </button>
+            <div className="md:col-span-3">
+              <PartnerIconPicker value={tagIconKey} onChange={setTagIconKey} />
+            </div>
           </div>
           <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
             每個標籤可以設定自己的顏色與圖示，店家套用標籤後會同步顯示在地圖點位上。
@@ -756,7 +790,7 @@ export default function PartnerMapAdminPage() {
                       <Save size={14} aria-hidden="true" /> 儲存
                     </button>
                   </div>
-                  <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_96px_minmax(180px,1.3fr)_80px_96px]">
+                  <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_96px_80px_96px]">
                     <label className="grid min-w-0 gap-1">
                       <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>標籤名稱</span>
                       <input className="input h-9" value={draft.name} onChange={(event) => setTagDrafts((current) => ({ ...current, [tag.id]: { ...draft, name: event.target.value } }))} />
@@ -764,12 +798,6 @@ export default function PartnerMapAdminPage() {
                     <label className="grid min-w-0 gap-1">
                       <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>顏色</span>
                       <input className="h-9 w-full rounded border bg-transparent p-1" style={{ borderColor: "var(--border)" }} type="color" value={draft.color} onChange={(event) => setTagDrafts((current) => ({ ...current, [tag.id]: { ...draft, color: event.target.value } }))} aria-label={`${tag.name} 顏色`} />
-                    </label>
-                    <label className="grid min-w-0 gap-1">
-                      <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>圖示</span>
-                      <select className="input h-9" value={draft.icon_key} onChange={(event) => setTagDrafts((current) => ({ ...current, [tag.id]: { ...draft, icon_key: event.target.value as PartnerIconKey } }))} aria-label={`${tag.name} 圖示`}>
-                        {PARTNER_ICON_OPTIONS.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
-                      </select>
                     </label>
                     <label className="grid min-w-0 gap-1">
                       <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>排序</span>
@@ -782,6 +810,12 @@ export default function PartnerMapAdminPage() {
                         {draft.is_active ? "啟用中" : "已停用"}
                       </button>
                     </label>
+                    <div className="md:col-span-4">
+                      <PartnerIconPicker
+                        value={draft.icon_key}
+                        onChange={(icon_key) => setTagDrafts((current) => ({ ...current, [tag.id]: { ...draft, icon_key } }))}
+                      />
+                    </div>
                   </div>
                 </div>
               );
