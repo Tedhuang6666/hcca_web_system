@@ -56,7 +56,6 @@ COPY --from=builder /build/.venv /app/.venv
 COPY apps/api/src /app/src
 COPY libs/shared/src /app/src
 COPY apps/api/scripts /app/scripts
-COPY apps/api/data /app/data
 COPY fonts/edukai-5.1_20251208.ttf /app/fonts/edukai-5.1_20251208.ttf
 COPY fonts/LXGWWenKaiTC-Regular.ttf /app/fonts/LXGWWenKaiTC-Regular.ttf
 COPY fonts/MoeLI-3.0.ttf /app/fonts/MoeLI-3.0.ttf

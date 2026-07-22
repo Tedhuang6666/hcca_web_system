@@ -133,9 +133,7 @@ services:
   migrate:
     <<: *api-common
     restart: "no"
-    command: >
-      sh -c 'python -m alembic -c /app/alembic.ini upgrade head &&
-      python /app/scripts/import_class_roster.py --apply'
+    command: python -m alembic -c /app/alembic.ini upgrade head
 
   api-blue:
     <<: *api-service
