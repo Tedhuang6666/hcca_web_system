@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, ArrowRight } from "lucide-react";
@@ -17,6 +18,25 @@ export default function LoginPage() {
   const [discordLoginHref, setDiscordLoginHref] = useState(apiUrl("/auth/discord/login"));
   const { isModuleClosed } = useModuleStatus();
   const discordClosed = isModuleClosed("discord");
+
+  const oauthHref = (provider: "google" | "discord", next: string) => {
+    const params = new URLSearchParams({
+      frontend_origin: window.location.origin,
+      next,
+    });
+    return apiUrl(`/auth/${provider}/login?${params.toString()}`);
+  };
+
+  const handleOAuthClick = (
+    event: ReactMouseEvent<HTMLAnchorElement>,
+    provider: "google" | "discord",
+  ) => {
+    // OAuth login creates a server-side state cookie. Build the URL at click time
+    // so a fast first click cannot use the server-rendered fallback href.
+    event.preventDefault();
+    const next = searchParams.get("next") ?? "/dashboard";
+    window.location.assign(oauthHref(provider, next));
+  };
 
   useEffect(() => {
     const frontendOrigin = encodeURIComponent(window.location.origin);
@@ -137,6 +157,8 @@ export default function LoginPage() {
             <a
               href={googleLoginHref}
               data-no-prefetch="true"
+              data-full-navigation="true"
+              onClick={(event) => handleOAuthClick(event, "google")}
               className="login-oauth group flex h-13 w-full cursor-pointer items-center justify-between rounded-xl px-4 text-sm font-semibold transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2"
               style={{
                 background: "#ffffff",
@@ -175,6 +197,8 @@ export default function LoginPage() {
                 <a
                   href={discordLoginHref}
                   data-no-prefetch="true"
+                  data-full-navigation="true"
+                  onClick={(event) => handleOAuthClick(event, "discord")}
                   className="login-oauth group flex h-13 w-full cursor-pointer items-center justify-between rounded-xl px-4 text-sm font-semibold text-white transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2"
                   style={{
                     background: "#5865f2",
