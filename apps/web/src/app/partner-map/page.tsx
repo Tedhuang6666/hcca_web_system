@@ -16,11 +16,7 @@ import type {
   PartnerSubmissionCreate,
   PartnerTagOut,
 } from "@/lib/types";
-import {
-  MARKER_CONFIG,
-  markerKind,
-  type PartnerMapBoundsState,
-} from "./PartnerLeafletMap";
+import { markerColor, markerLabel, type PartnerMapBoundsState } from "./PartnerLeafletMap";
 
 const DEFAULT_CENTER: [number, number] = [24.795151, 120.98018];
 const PartnerLeafletMap = dynamic(() => import("./PartnerLeafletMap"), {
@@ -518,7 +514,8 @@ export default function PartnerMapPage() {
                       color: active ? tag.color || "var(--primary)" : "var(--text-secondary)",
                       background: active ? "var(--bg-elevated)" : "transparent",
                     }}>
-                    <Tag size={13} aria-hidden="true" />
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ background: tag.color || "var(--text-muted)" }} aria-hidden="true" />
+                    <Tag size={12} aria-hidden="true" />
                     {tag.name}
                   </button>
                 );
@@ -587,6 +584,10 @@ export default function PartnerMapPage() {
                       )}
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{item.business_name}</p>
+                        <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium" style={{ color: markerColor(item) }}>
+                          <span className="h-1.5 w-1.5 rounded-full" style={{ background: markerColor(item) }} aria-hidden="true" />
+                          {markerLabel(item)}
+                        </p>
                         <p className="mt-0.5 flex items-center gap-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
                           <Star size={11} aria-hidden="true" /> {item.rating_avg ?? "-"} · 熱度 {item.popularity_score}
                         </p>

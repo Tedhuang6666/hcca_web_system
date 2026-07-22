@@ -14,6 +14,12 @@ import type {
   PartnerSubmissionOut,
   PartnerTagOut,
 } from "@/lib/types";
+import {
+  defaultPartnerIconKey,
+  getPartnerIcon,
+  PARTNER_ICON_OPTIONS,
+  type PartnerIconKey,
+} from "../partner-map-icons";
 
 const emptyBusiness = {
   name: "",
@@ -54,6 +60,14 @@ type OfferDraft = {
   instructions: string;
 };
 
+type TagDraft = {
+  name: string;
+  color: string;
+  icon_key: PartnerIconKey;
+  sort_order: number;
+  is_active: boolean;
+};
+
 const newOfferDraft = (): OfferDraft => ({
   title: "",
   benefit_type: "discount",
@@ -75,12 +89,13 @@ const emptyLocation = () => ({
 export default function PartnerMapAdminPage() {
   const [businesses, setBusinesses] = useState<PartnerBusinessDirectoryItem[]>([]);
   const [tags, setTags] = useState<PartnerTagOut[]>([]);
-  const [tagDrafts, setTagDrafts] = useState<Record<string, { name: string; color: string; sort_order: number; is_active: boolean }>>({});
+  const [tagDrafts, setTagDrafts] = useState<Record<string, TagDraft>>({});
   const [submissions, setSubmissions] = useState<PartnerSubmissionOut[]>([]);
   const [selected, setSelected] = useState<PartnerBusinessDetail | null>(null);
   const [businessForm, setBusinessForm] = useState(emptyBusiness);
   const [tagName, setTagName] = useState("");
   const [tagColor, setTagColor] = useState("#10B981");
+  const [tagIconKey, setTagIconKey] = useState<PartnerIconKey>("store");
   const [saving, setSaving] = useState(false);
   const [parsingMap, setParsingMap] = useState(false);
   const [locationForm, setLocationForm] = useState(emptyLocation);
@@ -100,6 +115,9 @@ export default function PartnerMapAdminPage() {
         {
           name: tag.name,
           color: tag.color || "#10B981",
+          icon_key: tag.icon_key && PARTNER_ICON_OPTIONS.some((option) => option.key === tag.icon_key)
+            ? tag.icon_key as PartnerIconKey
+            : defaultPartnerIconKey(tag.name),
           sort_order: tag.sort_order,
           is_active: tag.is_active,
         },
@@ -250,8 +268,9 @@ export default function PartnerMapAdminPage() {
   const createTag = async () => {
     if (!tagName.trim()) return;
     try {
-      await partnerMapApi.createTag({ name: tagName.trim(), color: tagColor, sort_order: 0, is_active: true });
+      await partnerMapApi.createTag({ name: tagName.trim(), color: tagColor, icon_key: tagIconKey, sort_order: 0, is_active: true });
       setTagName("");
+      setTagIconKey("store");
       load();
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : "建立標籤失敗");
@@ -265,6 +284,7 @@ export default function PartnerMapAdminPage() {
       await partnerMapApi.updateTag(tagId, {
         name: draft.name.trim(),
         color: draft.color || null,
+        icon_key: draft.icon_key,
         sort_order: draft.sort_order,
         is_active: draft.is_active,
       });
@@ -444,69 +464,123 @@ export default function PartnerMapAdminPage() {
               <Tag size={16} aria-hidden="true" />
               <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>標籤</span>
             </div>
-            <div className="flex gap-2">
-              <input
-                value={tagName}
-                onChange={(event) => setTagName(event.target.value)}
-                className="input flex-1"
-                placeholder="新增分類"
-              />
-              <input
-                value={tagColor}
-                onChange={(event) => setTagColor(event.target.value)}
-                className="h-10 w-12 rounded border bg-transparent p-1"
-                style={{ borderColor: "var(--border)" }}
-                type="color"
-                aria-label="分類顏色"
-              />
-              <button className="btn btn-ghost" onClick={createTag}><Plus size={15} aria-hidden="true" /></button>
+            <div className="grid gap-3 rounded-lg border p-3 sm:grid-cols-[minmax(0,1fr)_90px_180px_auto]" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
+              <label className="grid gap-1">
+                <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>分類名稱</span>
+                <input
+                  value={tagName}
+                  onChange={(event) => setTagName(event.target.value)}
+                  className="input h-9"
+                  placeholder="例如：制服、飲料、文具"
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>顏色</span>
+                <input
+                  value={tagColor}
+                  onChange={(event) => setTagColor(event.target.value)}
+                  className="h-9 w-full rounded border bg-transparent p-1"
+                  style={{ borderColor: "var(--border)" }}
+                  type="color"
+                  aria-label="分類顏色"
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>圖示</span>
+                <select className="input h-9" value={tagIconKey} onChange={(event) => setTagIconKey(event.target.value as PartnerIconKey)}>
+                  {PARTNER_ICON_OPTIONS.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
+                </select>
+              </label>
+              <button className="btn btn-ghost self-end" onClick={createTag} aria-label="新增標籤">
+                <Plus size={15} aria-hidden="true" /> 新增
+              </button>
             </div>
-            <div className="mt-3 space-y-2">
+            <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+              每個標籤可以設定自己的顏色與圖示，店家套用標籤後會同步顯示在地圖點位上。
+            </p>
+            <div className="mt-3 space-y-3">
               {tags.map((tag) => {
                 const draft = tagDrafts[tag.id];
                 if (!draft) return null;
+                const Icon = getPartnerIcon(draft.icon_key);
                 return (
-                  <div key={tag.id} className="grid grid-cols-[1fr_44px_58px_32px_32px] items-center gap-2">
-                    <input
-                      className="input h-9"
-                      value={draft.name}
-                      onChange={(event) => setTagDrafts((current) => ({
-                        ...current,
-                        [tag.id]: { ...draft, name: event.target.value },
-                      }))}
-                    />
-                    <input
-                      className="h-9 rounded border bg-transparent p-1"
-                      style={{ borderColor: "var(--border)" }}
-                      type="color"
-                      value={draft.color}
-                      onChange={(event) => setTagDrafts((current) => ({
-                        ...current,
-                        [tag.id]: { ...draft, color: event.target.value },
-                      }))}
-                      aria-label={`${tag.name} 顏色`}
-                    />
-                    <input
-                      className="input h-9"
-                      type="number"
-                      value={draft.sort_order}
-                      onChange={(event) => setTagDrafts((current) => ({
-                        ...current,
-                        [tag.id]: { ...draft, sort_order: Number(event.target.value) },
-                      }))}
-                    />
-                    <button
-                      className="topbar-icon-btn"
-                      onClick={() => setTagDrafts((current) => ({
-                        ...current,
-                        [tag.id]: { ...draft, is_active: !draft.is_active },
-                      }))}
-                      aria-label="切換啟用">
-                      <span style={{ color: draft.is_active ? "var(--success)" : "var(--text-muted)" }}>●</span>
-                    </button>
-                    <button className="topbar-icon-btn" onClick={() => saveTag(tag.id)} aria-label="儲存分類">
-                      <Save size={14} aria-hidden="true" />
-                    </button>
+                  <div key={tag.id} className="rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md" style={{ color: draft.color, background: `${draft.color}22` }}>
+                          <Icon size={17} aria-hidden="true" />
+                        </span>
+                        <span className="truncate text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{draft.name || "未命名標籤"}</span>
+                      </div>
+                      <button className="btn btn-ghost h-8 px-2 text-xs" onClick={() => saveTag(tag.id)}>
+                        <Save size={14} aria-hidden="true" /> 儲存
+                      </button>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_80px_minmax(0,1.3fr)_72px_84px]">
+                      <label className="grid gap-1">
+                        <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>標籤名稱</span>
+                        <input
+                          className="input h-9"
+                          value={draft.name}
+                          onChange={(event) => setTagDrafts((current) => ({
+                            ...current,
+                            [tag.id]: { ...draft, name: event.target.value },
+                          }))}
+                        />
+                      </label>
+                      <label className="grid gap-1">
+                        <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>顏色</span>
+                        <input
+                          className="h-9 w-full rounded border bg-transparent p-1"
+                          style={{ borderColor: "var(--border)" }}
+                          type="color"
+                          value={draft.color}
+                          onChange={(event) => setTagDrafts((current) => ({
+                            ...current,
+                            [tag.id]: { ...draft, color: event.target.value },
+                          }))}
+                          aria-label={`${tag.name} 顏色`}
+                        />
+                      </label>
+                      <label className="grid gap-1">
+                        <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>圖示</span>
+                        <select
+                          className="input h-9"
+                          value={draft.icon_key}
+                          onChange={(event) => setTagDrafts((current) => ({
+                            ...current,
+                            [tag.id]: { ...draft, icon_key: event.target.value as PartnerIconKey },
+                          }))}
+                          aria-label={`${tag.name} 圖示`}>
+                          {PARTNER_ICON_OPTIONS.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
+                        </select>
+                      </label>
+                      <label className="grid gap-1">
+                        <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>排序</span>
+                        <input
+                          className="input h-9"
+                          type="number"
+                          value={draft.sort_order}
+                          onChange={(event) => setTagDrafts((current) => ({
+                            ...current,
+                            [tag.id]: { ...draft, sort_order: Number(event.target.value) },
+                          }))}
+                        />
+                      </label>
+                      <label className="grid gap-1">
+                        <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>狀態</span>
+                        <button
+                          className="btn btn-ghost h-9 justify-start px-2 text-xs"
+                          onClick={() => setTagDrafts((current) => ({
+                            ...current,
+                            [tag.id]: { ...draft, is_active: !draft.is_active },
+                          }))}
+                          aria-label="切換啟用">
+                          <span className="h-2 w-2 rounded-full" style={{ background: draft.is_active ? "var(--success)" : "var(--text-muted)" }} />
+                          {draft.is_active ? "啟用中" : "已停用"}
+                        </button>
+                      </label>
+                    </div>
                   </div>
                 );
               })}

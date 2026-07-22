@@ -18,6 +18,7 @@ from api.models.partner_map import (
 class PartnerTagCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=80)
     color: str | None = Field(None, max_length=20)
+    icon_key: str | None = Field(None, max_length=40)
     sort_order: int = 0
     is_active: bool = True
 
@@ -25,6 +26,7 @@ class PartnerTagCreate(BaseModel):
 class PartnerTagUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=80)
     color: str | None = Field(None, max_length=20)
+    icon_key: str | None = Field(None, max_length=40)
     sort_order: int | None = None
     is_active: bool | None = None
 
@@ -35,6 +37,7 @@ class PartnerTagOut(BaseModel):
     id: uuid.UUID
     name: str
     color: str | None
+    icon_key: str | None
     sort_order: int
     is_active: bool
     created_at: datetime
