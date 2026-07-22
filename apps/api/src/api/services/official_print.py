@@ -13,27 +13,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.clock import local_today
 from api.models.document import Document
-from api.models.org import Org, Position, UserPosition
+from api.models.org import Position, UserPosition
 from api.models.regulation import Regulation
 from api.models.user import User
 
 _CN_DIGITS = "零一二三四五六七八九"
 _WEEKDAYS = "一二三四五六日"
-_SCHOOL_FULL_NAME = "國立新竹高級中學"
-_KAI_FONT_CANDIDATES = (
-    Path("/usr/share/fonts/truetype/hcca/STKAITI.TTF"),
-    Path("/mnt/c/Windows/Fonts/STKAITI.TTF"),
-)
-_SERIF_FONT_CANDIDATES = (
-    Path("/usr/share/fonts/opentype/noto-custom/NotoSerifCJKtc-Regular.otf"),
-    Path("/mnt/c/Windows/Fonts/NotoSerifCJKtc-Regular.otf"),
-)
-_HAND_FONT_CANDIDATES = (
-    Path("/usr/share/fonts/truetype/hcca/SIMLI.TTF"),
-    Path("/mnt/c/Windows/Fonts/SIMLI.TTF"),
-    Path("/usr/share/fonts/truetype/hcca/STKAITI.TTF"),
-    Path("/mnt/c/Windows/Fonts/STKAITI.TTF"),
-)
+_BUNDLED_KAI_FONT = "LXGWWenKaiTC-Regular.ttf"
+
+
+def _bundled_font_candidates(filename: str) -> tuple[Path, ...]:
+    """Return deterministic font locations for source and container layouts."""
+    source_root = Path(__file__).resolve().parents[5]
+    return (
+        Path("/app/fonts") / filename,
+        source_root / "fonts" / filename,
+    )
 
 
 @dataclass(frozen=True)
@@ -47,45 +42,42 @@ def _esc(value: object | None) -> str:
     return html.escape(str(value or ""))
 
 
+def _compact_official_name(value: object | None) -> str:
+    """Remove layout whitespace from Chinese official names and headings."""
+    return re.sub(r"\s+", "", str(value or "").strip())
+
+
+def _decree_issuer_title(doc: Document) -> str:
+    """Resolve the authority title used by a decree heading and signature."""
+    explicit = _compact_official_name(getattr(doc, "issuer_full_name", ""))
+    custom_title = _compact_official_name(getattr(doc, "title", ""))
+    if custom_title.endswith("令") and custom_title != "法規發布令":
+        authority = custom_title[:-1]
+        if authority:
+            return authority
+    return explicit or "主席"
+
+
 def _font_faces() -> str:
-    faces: list[str] = []
-    kai_path = next((path for path in _KAI_FONT_CANDIDATES if path.exists()), None)
-    serif_path = next((path for path in _SERIF_FONT_CANDIDATES if path.exists()), None)
-    hand_path = next((path for path in _HAND_FONT_CANDIDATES if path.exists()), None)
-    if kai_path is not None:
-        faces.append(
-            f"""
+    kai_path = next(
+        (path for path in _bundled_font_candidates(_BUNDLED_KAI_FONT) if path.is_file()), None
+    )
+    if kai_path is None:
+        return ""
+    return f"""
     @font-face {{
       font-family: "OfficialKai";
       src: url("{kai_path.as_uri()}") format("truetype");
       font-weight: 400;
       font-style: normal;
     }}
-    """
-        )
-    if serif_path is not None:
-        faces.append(
-            f"""
-    @font-face {{
-      font-family: "OfficialSerifTC";
-      src: url("{serif_path.as_uri()}") format("opentype");
-      font-weight: 400;
-      font-style: normal;
-    }}
-    """
-        )
-    if hand_path is not None:
-        faces.append(
-            f"""
     @font-face {{
       font-family: "OfficialHand";
-      src: url("{hand_path.as_uri()}") format("truetype");
+      src: url("{kai_path.as_uri()}") format("truetype");
       font-weight: 400;
       font-style: normal;
     }}
     """
-        )
-    return "".join(faces)
 
 
 def render_print_pdf(html_content: str) -> bytes:
@@ -102,47 +94,18 @@ def _enum_value(value: object) -> str:
 async def _full_org_name(session: AsyncSession, doc: Document | Regulation) -> str:
     """組出發文機關全銜。
 
-    優先使用公文上明確填寫的 ``issuer_full_name``；否則沿 org 的上級機關鏈
-    （adjacency list）由最上層往下串接，例如「班級聯合自治會」＋「學生議會
-    常務委員會」→「班級聯合自治會 學生議會常務委員會」，最後補上學校全銜前綴，
-    得到「國立新竹高級中學班級聯合自治會 學生議會常務委員會」。
+    優先使用公文上明確填寫的 ``issuer_full_name``；否則使用目前選取的組織名稱。
+    機關全銜是公文可見文字，不應由系統自動加上學校前綴，也不應在中文階層間
+    插入空格；若需完整名稱，請直接填入 ``issuer_full_name``。
     """
     explicit = getattr(doc, "issuer_full_name", None)
     if explicit and str(explicit).strip():
-        explicit = str(explicit).strip()
-        if explicit.startswith(_SCHOOL_FULL_NAME):
-            return explicit
-        return f"{_SCHOOL_FULL_NAME}{explicit}"
+        return _compact_official_name(explicit)
 
     org = getattr(doc, "org", None)
     if org is None:
         return ""
-
-    # 由 leaf 往上收集機關名稱，再反轉為「上級 → 下級」順序
-    segments: list[str] = []
-    seen: set[object] = set()
-    current: Org | None = org
-    while current is not None:
-        org_id = getattr(current, "id", None)
-        if org_id is not None and org_id in seen:
-            break
-        if org_id is not None:
-            seen.add(org_id)
-        seg = (getattr(current, "name", "") or "").strip()
-        if seg:
-            segments.append(seg)
-        parent_id = getattr(current, "parent_id", None)
-        if parent_id is None:
-            break
-        current = await session.get(Org, parent_id)
-    if not segments:
-        return ""
-    segments.reverse()
-
-    name = " ".join(segments)
-    if name.startswith(_SCHOOL_FULL_NAME):
-        return name
-    return f"{_SCHOOL_FULL_NAME}{name}"
+    return _compact_official_name(getattr(org, "name", ""))
 
 
 def _br(value: str | None) -> str:
@@ -239,7 +202,12 @@ async def _position_title(
     return _esc(result.scalar_one_or_none())
 
 
-async def _final_signature_html(session: AsyncSession, doc: Document) -> str:
+async def _final_signature_html(
+    session: AsyncSession,
+    doc: Document,
+    *,
+    fallback_title: str | None = None,
+) -> str:
     approved = [
         approval
         for approval in (doc.approvals or [])
@@ -247,7 +215,7 @@ async def _final_signature_html(session: AsyncSession, doc: Document) -> str:
     ]
     if not approved:
         signer = _esc(doc.handler_name)
-        title = _esc(doc.handler_unit)
+        title = _esc(doc.handler_unit or fallback_title)
         if not signer:
             return '<section class="signature signature-placeholder">（核准後用印）</section>'
         return (
@@ -265,12 +233,12 @@ async def _final_signature_html(session: AsyncSession, doc: Document) -> str:
             await _position_title(session, user_id=principal.id, org_id=doc.org_id)
             if getattr(principal, "id", None)
             else ""
-        )
+        ) or _esc(fallback_title)
         delegate_title = (
             await _position_title(session, user_id=delegate.id, org_id=doc.org_id)
             if getattr(delegate, "id", None)
             else ""
-        )
+        ) or _esc(fallback_title)
         return (
             '<section class="signature signature-acting">'
             f"{_esc(principal.display_name)}({principal_title})假 "
@@ -283,6 +251,7 @@ async def _final_signature_html(session: AsyncSession, doc: Document) -> str:
     if not signer or not getattr(actor, "id", None):
         return '<section class="signature signature-placeholder">（核准後用印）</section>'
     title = await _position_title(session, user_id=actor.id, org_id=doc.org_id)
+    title = title or _esc(fallback_title)
     return (
         '<section class="signature">'
         f'<span class="signature-title">{title}</span>'
@@ -456,9 +425,8 @@ async def render_document_print_html(
     is_meeting = cat == "meeting_notice"
     is_decree = cat == "decree"
     is_record = cat == "record"
-    issuer = _esc(await _full_org_name(session, doc))
-    if is_decree and not (getattr(doc, "issuer_full_name", None) or "").strip():
-        issuer = "主席"
+    issuer_name = _decree_issuer_title(doc) if is_decree else await _full_org_name(session, doc)
+    issuer = _esc(issuer_name)
     category_label = {
         "letter": "函",
         "decree": "令",
@@ -499,7 +467,11 @@ async def render_document_print_html(
     if doc.handler_email:
         handler_block += f"<div>電子信箱：{_esc(doc.handler_email)}</div>"
 
-    signature = await _final_signature_html(session, doc)
+    signature = await _final_signature_html(
+        session,
+        doc,
+        fallback_title=issuer_name if is_decree else None,
+    )
 
     meta_rows = [
         _meta_row("發文日期：", issue_date),
@@ -594,8 +566,14 @@ async def render_document_print_html(
             f"{signature}"
         )
 
-    title_gap = " meeting-title" if is_meeting else ""
-    right_title = f'<span class="doc-type{title_gap}">{category_label}</span>'
+    custom_title = _compact_official_name(getattr(doc, "title", ""))
+    if is_decree:
+        document_title = f"{issuer_name}令"
+    else:
+        document_title = custom_title or issuer_name
+        if not document_title.endswith(category_label):
+            document_title += category_label
+    document_title = _esc(document_title)
 
     return f"""<!DOCTYPE html>
 <html lang="zh-TW">
@@ -830,7 +808,7 @@ async def render_document_print_html(
     <div class="copy-mark">{copy_mark}</div>
     <div class="delivery">發文方式：線上寄送</div>
     <div class="file-box">檔　　號：{file_number}<br>保存年限：{retention_period}</div>
-    <header class="title"><span>{issuer}</span>{right_title}</header>
+    <header class="title">{document_title}</header>
     {f'<aside class="handler">{handler_block}</aside>' if handler_block and not is_meeting else ""}
     <section class="body">{body_html}</section>
   </main>

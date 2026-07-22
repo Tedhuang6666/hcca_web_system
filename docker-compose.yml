@@ -29,11 +29,6 @@ x-api-common: &api-common
     redis:
       condition: service_healthy
   volumes:
-    # PDF generation uses direct @font-face file URLs. STKAITI avoids the KaiU
-    # glyph component offset bug in WeasyPrint while keeping a Kai-style face.
-    - /mnt/c/Windows/Fonts/STKAITI.TTF:/usr/share/fonts/truetype/hcca/STKAITI.TTF:ro
-    - /mnt/c/Windows/Fonts/SIMLI.TTF:/usr/share/fonts/truetype/hcca/SIMLI.TTF:ro
-    - /usr/share/fonts/opentype/noto-custom:/usr/share/fonts/opentype/noto-custom:ro
     - ./uploads:/app/uploads
 
 services:

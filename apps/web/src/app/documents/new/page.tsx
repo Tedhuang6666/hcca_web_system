@@ -39,6 +39,7 @@ interface LinkDraft {
 type DocumentDraft = {
   urgency: DocumentUrgency;
   classification: DocumentClassification;
+  title: string;
   subject: string;
   category: DocumentCategory;
   selectedOrgId: string;
@@ -187,6 +188,7 @@ export default function NewDocumentPage() {
   const [activeStep, setActiveStep] = useState(0);
   const [urgency, setUrgency] = useState<DocumentUrgency>("normal");
   const [classification, setClassification] = useState<DocumentClassification>("normal");
+  const [title, setTitle] = useState("");
   const [subject, setSubject] = useState(governanceContext?.matterTitle ?? "");
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [category, setCategory] = useState<DocumentCategory>("letter");
@@ -204,9 +206,10 @@ export default function NewDocumentPage() {
 
   // 自動標題
   const autoTitle = useMemo(() => {
+    if (category === "decree") return "主席令";
     const parts = [selectedOrg?.name, docType.trim()].filter(Boolean);
-    return parts.join(" ");
-  }, [selectedOrg, docType]);
+    return parts.join("").replace(/\s+/g, "");
+  }, [category, selectedOrg, docType]);
 
   const [docDescription, setDocDescription] = useState("");
   const [actionRequired, setActionRequired] = useState("");
@@ -232,6 +235,7 @@ export default function NewDocumentPage() {
 
   const fieldError = {
     org: !selectedOrgId ? "請選擇發文組織" : "",
+    title: !title.trim() && !autoTitle ? "請輸入公文標題" : "",
     subject: copy.subjectLabel && !subject.trim()
       ? `${copy.subjectLabel}為必填`
       : copy.subjectLabel && subject.trim().length < 8
@@ -269,6 +273,7 @@ export default function NewDocumentPage() {
   const draftValue = useMemo<DocumentDraft>(() => ({
     urgency,
     classification,
+    title,
     subject,
     category,
     selectedOrgId,
@@ -310,12 +315,14 @@ export default function NewDocumentPage() {
     selectedTemplateId,
     showEmail,
     subject,
+    title,
     urgency,
     visibilityLevel,
   ]);
   const restoreDraft = useCallback((draft: DocumentDraft) => {
     setUrgency(draft.urgency ?? "normal");
     setClassification(draft.classification ?? "normal");
+    setTitle(draft.title ?? "");
     setSubject(draft.subject ?? "");
     setCategory(draft.category ?? "letter");
     setSelectedOrgId(draft.selectedOrgId ?? "");
@@ -436,6 +443,7 @@ export default function NewDocumentPage() {
   const save = async () => {
     setTouched({
       org: true,
+      title: true,
       subject: true,
       meetingPurpose: true,
       meetingTime: true,
@@ -450,7 +458,7 @@ export default function NewDocumentPage() {
     setSaving(true);
     try {
       const doc = await documentsApi.create({
-        title: autoTitle, urgency, classification, category,
+        title: title.trim() || autoTitle, urgency, classification, category,
         declassification_condition: "none",
         content: "",
         is_public: false,
@@ -633,16 +641,23 @@ export default function NewDocumentPage() {
               </div>
             </div>
 
-            {/* 標題預覽 */}
-            {autoTitle && (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-xl"
-                style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-                <span className="text-xs" style={{ color: "var(--text-muted)" }}>公文標題：</span>
-                <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-                  {autoTitle}
-                </span>
-              </div>
-            )}
+            <div>
+              <Label required>公文標題</Label>
+              <input
+                value={title || autoTitle}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="輸入公文標題…"
+                style={showErr("title")
+                  ? { ...inputStyle, border: "1px solid var(--danger)" }
+                  : inputStyle}
+              />
+              <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                預設為「{autoTitle || "發文組織＋公文類別"}」，可依需要修改。
+              </p>
+              {showErr("title") && (
+                <p className="mt-1 text-xs" style={{ color: "var(--danger)" }}>{fieldError.title}</p>
+              )}
+            </div>
 
             <ActivitySelect value={activityId} onChange={setActivityId} />
 
