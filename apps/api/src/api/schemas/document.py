@@ -163,9 +163,10 @@ class RecipientCreate(BaseModel):
 
 
 class RecipientDownloadVariant(StrEnum):
-    """管理員下載時可指定的版本（一般使用者由系統依身份決定）"""
+    """公文製作者或管理員下載時可指定的版本。"""
 
     PRIMARY = "primary"  # 正本
+    DUPLICATE = "duplicate"  # 副本
     COPY = "copy"  # 影本
 
 

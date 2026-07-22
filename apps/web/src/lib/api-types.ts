@@ -3968,11 +3968,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 下載公文 PDF（管理員可指定受文者版本）
+         * 下載公文 PDF（製作者可選正本、副本或影本）
          * @description 直接產生並下載中華民國公文格式 PDF。
          *
-         *     一般使用者：依其身份自動判定下「正本」或「影本」。
-         *     管理員：可額外指定 recipient_id 或 variant 任意挑一份印。
+         *     一般使用者：依其身份自動判定「正本」、「副本」或「影本」。
+         *     製作者：可使用 variant 選擇版本；管理員可再指定 recipient_id。
          */
         get: operations["print_document_documents__doc_id__print_get"];
         put?: never;
@@ -28664,10 +28664,10 @@ export interface components {
         };
         /**
          * RecipientDownloadVariant
-         * @description 管理員下載時可指定的版本（一般使用者由系統依身份決定）
+         * @description 公文製作者或管理員下載時可指定的版本。
          * @enum {string}
          */
-        RecipientDownloadVariant: "primary" | "copy";
+        RecipientDownloadVariant: "primary" | "duplicate" | "copy";
         /** RecipientOut */
         RecipientOut: {
             /** @default none */
@@ -42470,7 +42470,7 @@ export interface operations {
             query?: {
                 /** @description 管理員指定列印某筆受文者的版本；一般使用者不可使用 */
                 recipient_id?: string | null;
-                /** @description 管理員強制指定下載正本或影本；一般使用者不可使用 */
+                /** @description 製作者或管理員指定下載正本、副本或影本；一般受文者不可使用 */
                 variant?: components["schemas"]["RecipientDownloadVariant"] | null;
             };
             header?: never;
@@ -42488,7 +42488,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description 無查看權限或非管理員不得指定受文者 */
+            /** @description 無查看權限或無權指定受文者／公文版本 */
             403: {
                 headers: {
                     [name: string]: unknown;

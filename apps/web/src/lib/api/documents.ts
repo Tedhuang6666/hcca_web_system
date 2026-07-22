@@ -1,6 +1,6 @@
 import type {
   BatchDocumentOperationOut, DocumentApprovalDelegationOut, DocumentCreate, DocumentListItem,
-  DocumentOut,
+  DocumentOut, RecipientDownloadVariant,
 } from "../types";
 import { BASE, get, post, put, patch, del, request, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
 
@@ -137,10 +137,10 @@ export const documentsApi = {
     `${BASE}/documents/${id}/attachments/${attachmentId}/download`,
   attachmentPreviewUrl: (id: string, attachmentId: string) =>
     `${BASE}/documents/${id}/attachments/${attachmentId}/preview`,
-  /** 後端列印 / 下載 PDF（一般使用者由身份自動判定正/影本；管理員可指定）。 */
+  /** 後端列印 / 下載 PDF（一般受文者自動判定；製作者可指定正本、副本或影本）。 */
   printPdf: async (
     id: string,
-    opts?: { recipientId?: string; variant?: "primary" | "copy" },
+    opts?: { recipientId?: string; variant?: RecipientDownloadVariant },
   ): Promise<Blob> => {
     const qs = new URLSearchParams();
     if (opts?.recipientId) qs.set("recipient_id", opts.recipientId);

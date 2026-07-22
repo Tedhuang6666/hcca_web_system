@@ -514,6 +514,7 @@ export type {
   ReceivableSource,
   ReceivableStatus,
   ReceivableSummaryOut,
+  RecipientDownloadVariant,
   RecipientOut,
   RecipientPreviewOut,
   RecipientSelector,
