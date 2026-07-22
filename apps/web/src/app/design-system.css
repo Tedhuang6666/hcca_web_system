@@ -1773,18 +1773,20 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
     overflow: hidden;
   }
 
-  .regulation-detail-zoom-control {
+  .regulation-detail-tool-group .regulation-detail-zoom-control {
     width: 100% !important;
+    justify-content: space-between;
   }
 
   .regulation-detail-zoom-control > button {
-    flex: 1 1 2.75rem;
+    flex: 0 0 2.75rem;
     min-width: 2.75rem;
     padding-inline: 0.625rem;
   }
 
   .regulation-detail-zoom-control > span {
-    flex: 0 0 auto;
+    flex: 1 1 auto;
+    text-align: center;
   }
 
   .regulation-detail-management-group {
