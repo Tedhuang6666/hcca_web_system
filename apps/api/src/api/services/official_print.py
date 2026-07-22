@@ -27,11 +27,9 @@ _FALLBACK_KAI_FONT = "LXGWWenKaiTC-Regular.ttf"
 
 def _bundled_font_candidates(filename: str) -> tuple[Path, ...]:
     """Return deterministic font locations for source and container layouts."""
-    source_root = Path(__file__).resolve().parents[5]
-    return (
-        Path("/app/fonts") / filename,
-        source_root / "fonts" / filename,
-    )
+    locations = [Path("/app/fonts") / filename]
+    locations.extend(parent / "fonts" / filename for parent in Path(__file__).resolve().parents)
+    return tuple(dict.fromkeys(locations))
 
 
 @dataclass(frozen=True)

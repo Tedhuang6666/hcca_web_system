@@ -1,11 +1,13 @@
 """公文 PDF 產出資源測試。"""
 
 from io import BytesIO
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from pypdf import PdfReader
 
+from api.services import official_print
 from api.services.official_print import (
     _BUNDLED_KAI_FONT,
     _decree_issuer_title,
@@ -33,6 +35,14 @@ def test_official_print_uses_bundled_kai_font() -> None:
     assert 'font-family: "OfficialKai"' in css
     assert 'font-family: "OfficialHand"' in css
     assert "file://" in css
+
+
+def test_official_print_supports_container_source_layout(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(official_print, "__file__", "/app/src/api/services/official_print.py")
+
+    candidates = official_print._bundled_font_candidates(_BUNDLED_KAI_FONT)
+
+    assert candidates[0] == Path("/app/fonts") / _BUNDLED_KAI_FONT
 
 
 def test_render_print_pdf_embeds_bundled_kai_font() -> None:

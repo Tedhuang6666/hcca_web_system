@@ -37,6 +37,9 @@ x-api-common: &api-common
     DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
     DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
     HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
+    # API 的 Origin 驗證與 WebSocket 都必須知道實際公開網域；未額外覆寫時
+    # 沿用 Caddy 的 SITE_DOMAIN，避免 production 預設仍只允許 localhost。
+    FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-https://${SITE_DOMAIN:?set SITE_DOMAIN}}
     REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
   depends_on:
     db:
