@@ -10,6 +10,7 @@ from pypdf import PdfReader
 from api.services import official_print
 from api.services.official_print import (
     _BUNDLED_KAI_FONT,
+    _BUNDLED_LISHU_FONT,
     _FALLBACK_KAI_FONT,
     _decree_issuer_title,
     _final_signature_html,
@@ -29,14 +30,15 @@ class _OrgSession:
         return self.orgs.get(org_id)
 
 
-def test_official_print_uses_bundled_kai_font() -> None:
+def test_official_print_uses_distinct_bundled_body_and_signature_fonts() -> None:
     """正文與末署應使用兩個不同的專案內字型，不依賴主機字型。"""
     css = _font_faces()
 
     assert _BUNDLED_KAI_FONT in css
-    assert _FALLBACK_KAI_FONT in css
+    assert _BUNDLED_LISHU_FONT in css
+    assert _FALLBACK_KAI_FONT not in css
     assert 'font-family: "OfficialKai"' in css
-    assert 'font-family: "OfficialHand"' in css
+    assert 'font-family: "OfficialLishu"' in css
     assert "file://" in css
 
 
@@ -62,17 +64,20 @@ def test_official_print_supports_container_source_layout(monkeypatch: pytest.Mon
     assert candidates[0] == Path("/app/fonts") / _BUNDLED_KAI_FONT
 
 
-def test_render_print_pdf_embeds_bundled_kai_font() -> None:
+def test_render_print_pdf_embeds_bundled_body_and_signature_fonts() -> None:
     pdf = render_print_pdf(
         f"<html><head><style>{_font_faces()}</style></head>"
-        '<body style="font-family: OfficialKai">國立新竹高級中學公文測試</body></html>'
+        '<body><span style="font-family: OfficialKai">國立新竹高級中學公文測試</span>'
+        '<span style="font-family: OfficialLishu">主席黃丞廷</span></body></html>'
     )
     reader = PdfReader(BytesIO(pdf))
     embedded_fonts = []
+    base_fonts = []
     for page in reader.pages:
         resources = page.get("/Resources", {})
         for font_ref in (resources.get("/Font", {}) or {}).values():
             font = font_ref.get_object()
+            base_fonts.append(str(font.get("/BaseFont", "")))
             for descendant_ref in font.get("/DescendantFonts", []):
                 descendant = descendant_ref.get_object()
                 descriptor_ref = descendant.get("/FontDescriptor")
@@ -82,6 +87,8 @@ def test_render_print_pdf_embeds_bundled_kai_font() -> None:
     assert any(
         "/FontFile2" in descriptor or "/FontFile3" in descriptor for descriptor in embedded_fonts
     )
+    assert any("OfficialKai" in font_name for font_name in base_fonts)
+    assert any("OfficialLishu" in font_name for font_name in base_fonts)
 
 
 @pytest.mark.asyncio
@@ -214,6 +221,6 @@ async def test_meeting_notice_seal_stays_on_one_page_with_handwritten_font() -> 
     pdf = render_print_pdf(rendered)
 
     assert "國立新竹高級中學班聯會設計部籌備會議開會通知單</header>" in rendered
-    assert 'font-family: "OfficialHand"' in rendered
+    assert 'font-family: "OfficialLishu"' in rendered
     assert "white-space: nowrap" in rendered
     assert len(PdfReader(BytesIO(pdf)).pages) == 1
