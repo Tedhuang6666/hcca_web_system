@@ -16,6 +16,7 @@ import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import { LoadingState } from "@/components/ui/LoadingState";
 import ModuleMaintenance from "@/components/ui/ModuleMaintenance";
 import UrgentAnnouncementPopup from "@/components/announcements/UrgentAnnouncementPopup";
+import ImportantAnnouncementBanner from "@/components/site/ImportantAnnouncementBanner";
 const CommandMenu = dynamic(() => import("./CommandMenu"), { ssr: false });
 import { PolicyConsentBanner } from "@/components/legal/PolicyConsentBanner";
 import { isPublicRoute, requiresAuthentication } from "@/lib/route-access";
@@ -194,6 +195,7 @@ function AppShellContent({
 
         {/* 主內容區 */}
         <div className="flex flex-col flex-1 overflow-hidden min-w-0">
+          <ImportantAnnouncementBanner />
           <Topbar onMenuClick={toggleSidebar} />
           <main
             id="main-content"

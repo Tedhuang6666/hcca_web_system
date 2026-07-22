@@ -893,7 +893,7 @@
   padding: 0.3rem 0.75rem 0.3rem 1rem;
   border-bottom: 1px solid var(--warning-border);
   background: var(--warning-dim);
-  color: var(--public-text);
+  color: var(--public-text, var(--text-primary));
 }
 
 @media (min-width: 640px) {
@@ -969,7 +969,7 @@
 .public-important-strip-close:hover,
 .public-important-strip-close:focus-visible {
   background: color-mix(in srgb, var(--warning-border) 52%, transparent);
-  color: var(--public-text);
+  color: var(--public-text, var(--text-primary));
 }
 
 @media (max-width: 639.98px) {
