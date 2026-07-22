@@ -37,13 +37,14 @@ export default function TelemetryProvider() {
   const isFirstRender = useRef(true);
 
   useEffect(() => {
-    const key = process.env.NEXT_PUBLIC_POSTHOG_KEY;
-    if (!key) return;
     const query = searchParams.toString();
     const url = query ? `${pathname}?${query}` : pathname;
     if (typeof window !== "undefined" && localStorage.getItem("user_id")) {
       void analyticsApi.trackPageView(pathname).catch(() => undefined);
     }
+
+    const key = process.env.NEXT_PUBLIC_POSTHOG_KEY;
+    if (!key) return;
 
     if (isFirstRender.current) {
       isFirstRender.current = false;

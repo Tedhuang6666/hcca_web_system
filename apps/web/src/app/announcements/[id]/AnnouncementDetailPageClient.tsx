@@ -36,13 +36,13 @@ export default function AnnouncementDetailPageClient({
   );
 
   useEffect(() => {
-    if (initialItem?.id === id) {
-      setLoading(false);
-      return;
-    }
+    const hasInitialItem = initialItem?.id === id;
+    if (!hasInitialItem) setLoading(true);
     announcementsApi.get(id)
-      .then(setItem)
-      .catch((e) => toast.error(apiErrorMessage(e, "載入公告失敗")))
+      .then((nextItem) => setItem(nextItem))
+      .catch((e) => {
+        if (!hasInitialItem) toast.error(apiErrorMessage(e, "載入公告失敗"));
+      })
       .finally(() => setLoading(false));
   }, [id, initialItem]);
 

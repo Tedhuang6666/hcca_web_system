@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies.auth import get_current_active_user, get_optional_user
 from api.main import app
-from api.models.announcement import Announcement
+from api.models.announcement import Announcement, AnnouncementRead
 from api.models.org import Org, Permission, Position, UserPosition
 from api.models.user import User
 
@@ -110,6 +111,34 @@ async def test_get_published_announcement_without_login_is_public(
 
     assert resp.status_code == 200
     assert resp.json()["title"] == "公開公告詳情"
+
+
+@pytest.mark.asyncio
+async def test_get_published_announcement_records_authenticated_read(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    author = await _seed_user_with_codes(db_session, "ann-read-author@school.edu", [])
+    ann = Announcement(
+        title="閱讀紀錄公告",
+        content={"type": "doc", "content": []},
+        author_id=author.id,
+        is_published=True,
+        audience_type="all",
+    )
+    db_session.add(ann)
+    await db_session.flush()
+    _override_user(author)
+
+    resp = await client.get(f"/announcements/{ann.id}")
+
+    assert resp.status_code == 200
+    result = await db_session.execute(
+        select(AnnouncementRead).where(
+            AnnouncementRead.announcement_id == ann.id,
+            AnnouncementRead.user_id == author.id,
+        )
+    )
+    assert result.scalar_one_or_none() is not None
 
 
 @pytest.mark.asyncio
