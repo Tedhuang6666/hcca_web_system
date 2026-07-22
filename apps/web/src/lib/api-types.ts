@@ -25292,13 +25292,13 @@ export interface components {
         PartnerTagOut: {
             /** Color */
             color: string | null;
-            /** Icon Key */
-            icon_key: string | null;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+            /** Icon Key */
+            icon_key: string | null;
             /**
              * Id
              * Format: uuid
