@@ -1,6 +1,6 @@
 "use client";
 
-import { UserRound } from "lucide-react";
+import { UserRound, UsersRound } from "lucide-react";
 import { useState } from "react";
 
 export type OfficerRosterTab = {
@@ -14,27 +14,35 @@ export default function OfficerRosterTabs({ tabs }: { tabs: OfficerRosterTab[] }
   const activeTab = tabs.find((tab) => tab.id === activeId) ?? tabs[0];
 
   if (!activeTab) return null;
-  const memberCount = activeTab.entries.reduce((total, entry) => total + entry.names.length, 0);
+  const memberCount = new Set(activeTab.entries.flatMap((entry) => entry.names)).size;
 
   return (
     <section aria-labelledby="officer-roster-heading">
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className="mb-7 flex flex-col gap-5">
         <div>
-          <h2 id="officer-roster-heading" className="text-lg font-semibold">組織名單</h2>
-          <p className="mt-1 text-sm text-[var(--text-secondary)]">切換頁籤查看不同自治組織的幹部名單。</p>
+          <div className="flex items-center gap-2 text-xs font-bold tracking-[0.12em] text-[var(--primary-text)]">
+            <UsersRound size={15} aria-hidden />
+            <span>組織名單</span>
+          </div>
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <h2 id="officer-roster-heading" className="mt-2 text-2xl font-bold">選擇自治組織</h2>
+            <span className="text-sm font-medium text-[var(--text-muted)]">{memberCount} 位幹部</span>
+          </div>
         </div>
-        <div className="flex max-w-full gap-2 overflow-x-auto pb-1" role="tablist" aria-label="自治組織名單">
+        <div className="flex max-w-full gap-6 overflow-x-auto border-b" role="tablist" aria-label="自治組織名單" style={{ borderColor: "var(--border)" }}>
           {tabs.map((tab) => (
             <button
               key={tab.id}
               type="button"
               role="tab"
+              id={`roster-tab-${tab.id}`}
               aria-selected={tab.id === activeTab.id}
+              aria-controls={`roster-panel-${tab.id}`}
               onClick={() => setActiveId(tab.id)}
-              className="min-h-11 shrink-0 rounded-lg px-4 text-sm font-semibold transition-colors"
+              className="min-h-12 shrink-0 border-b-2 px-0.5 text-sm font-bold transition-[border-color,color] focus-visible:outline-2 focus-visible:outline-offset-4"
               style={tab.id === activeTab.id
-                ? { color: "var(--primary-contrast, white)", background: "var(--primary)" }
-                : { color: "var(--text-secondary)", background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
+                ? { color: "var(--primary-text)", borderColor: "var(--primary)" }
+                : { color: "var(--text-muted)", borderColor: "transparent" }}
             >
               {tab.label}
             </button>
@@ -42,35 +50,32 @@ export default function OfficerRosterTabs({ tabs }: { tabs: OfficerRosterTab[] }
         </div>
       </div>
 
-      <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-        <h3 className="text-base font-semibold">{activeTab.label}</h3>
-        <span className="text-xs text-[var(--text-muted)]">{memberCount} 位幹部</span>
-      </div>
-      <div className="space-y-3">
-        {activeTab.entries.map((role, roleIndex) => (
+      <div
+        id={`roster-panel-${activeTab.id}`}
+        role="tabpanel"
+        aria-labelledby={`roster-tab-${activeTab.id}`}
+        className="overflow-hidden rounded-2xl border"
+        style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
+      >
+        <div className="flex items-center justify-between px-5 py-3" style={{ background: "var(--bg-hover)", borderBottom: "1px solid var(--border)" }}>
+          <span className="text-xs font-bold tracking-[0.08em] text-[var(--text-muted)]">職位</span>
+          <span className="text-xs font-bold tracking-[0.08em] text-[var(--text-muted)]">成員</span>
+        </div>
+        {activeTab.entries.map((role) => (
           <div
-            key={`${activeTab.id}-${role.title}-${roleIndex}`}
-            className="overflow-hidden rounded-2xl"
-            style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
+            key={`${activeTab.id}-${role.title}`}
+            className="grid gap-4 border-b px-5 py-5 last:border-0 sm:grid-cols-[10rem,1fr] sm:items-start"
+            style={{ borderColor: "var(--border)" }}
           >
-            <div
-              className="flex flex-col gap-1 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
-              style={{ background: "var(--bg-elevated)", borderBottom: "1px solid var(--border)" }}
-            >
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-semibold tabular-nums" style={{ color: "var(--primary)" }}>
-                  {String(roleIndex + 1).padStart(2, "0")}
-                </span>
-                <h4 className="font-semibold">{role.title}</h4>
-              </div>
-              <span className="text-xs text-[var(--text-muted)]">{role.names.length} 人</span>
+            <div>
+              <h4 className="text-sm font-bold">{role.title}</h4>
             </div>
-            <div className="flex flex-wrap gap-2 p-3">
+            <div className="flex flex-wrap gap-2">
               {role.names.map((name) => (
                 <span
                   key={`${activeTab.id}-${role.title}-${name}`}
-                  className="inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-sm font-medium"
-                  style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
+                  className="inline-flex min-h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium"
+                  style={{ background: "var(--bg-elevated)", borderColor: "var(--border)", color: "var(--text-primary)" }}
                 >
                   <UserRound size={15} style={{ color: "var(--primary)" }} aria-hidden />
                   {name}

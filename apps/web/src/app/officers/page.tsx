@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { Mail, UserRound } from "lucide-react";
+import { Mail, UserRound, UsersRound } from "lucide-react";
 
 import OfficerRosterTabs, { type OfficerRosterTab } from "@/components/site/OfficerRosterTabs";
 import PublicSiteShell from "@/components/site/PublicSiteShell";
@@ -38,13 +38,13 @@ function parseRosterEntries(value: unknown): Array<{ title: string; names: strin
 function OfficerCard({ officer, index = 0 }: { officer: PublicOfficerOut; index?: number }) {
   return (
     <article
-      className="flex min-w-0 items-center gap-3 rounded-xl p-3 transition-colors"
+      className="group flex min-w-0 items-center gap-3 border-b py-3 last:border-0"
       data-reveal
-      style={{ "--reveal-delay": `${Math.min(index, 8) * 55}ms` } as React.CSSProperties}
+      style={{ "--reveal-delay": `${Math.min(index, 8) * 55}ms`, borderColor: "var(--border)" } as React.CSSProperties}
     >
       <div
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
-        style={{ background: "var(--primary-dim)", color: "var(--primary)" }}
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border"
+        style={{ background: "var(--primary-dim)", color: "var(--primary)", borderColor: "var(--border-strong)" }}
       >
         {officer.avatar_url ? (
           <Image
@@ -61,11 +61,11 @@ function OfficerCard({ officer, index = 0 }: { officer: PublicOfficerOut; index?
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="truncate text-sm font-semibold">{officer.display_name}</h3>
+          <h3 className="truncate text-sm font-semibold text-[var(--text-primary)]">{officer.display_name}</h3>
           {officer.is_featured && (
             <span
-              className="badge"
-              style={{ color: "var(--primary)", background: "var(--primary-dim)", borderColor: "var(--border-strong)" }}
+              className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+              style={{ color: "var(--primary-text)", background: "var(--primary-dim)" }}
             >
               精選
             </span>
@@ -75,8 +75,8 @@ function OfficerCard({ officer, index = 0 }: { officer: PublicOfficerOut; index?
         {officer.public_email && (
           <a
             href={`mailto:${officer.public_email}`}
-            className="mt-1 inline-flex min-h-8 items-center gap-1.5 text-xs font-medium no-underline"
-            style={{ color: "var(--primary)" }}
+            className="mt-1 inline-flex min-h-8 items-center gap-1.5 text-xs font-semibold no-underline"
+            style={{ color: "var(--primary-text)" }}
           >
             <Mail size={13} aria-hidden /> 聯絡
           </a>
@@ -119,44 +119,41 @@ export default async function OfficersPage() {
 
   return (
     <PublicSiteShell navPages={bundle?.nav_pages ?? []} settings={bundle?.settings}>
-      <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
-        <header className="public-page-head mb-8">
-          <p className="public-section-kicker">Officers</p>
-          <h1 className="mt-2 text-3xl font-bold">班聯會幹部</h1>
-          <p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--text-secondary)]">
-            依職位整理當屆幹部名冊，讓每個部門的分工與成員一眼可見。
-          </p>
+      <div className="mx-auto max-w-6xl px-4 pb-16 pt-8 sm:px-6 lg:pt-12">
+        <header
+          className="public-page-head mb-12 rounded-2xl border p-6 sm:p-8 lg:p-10"
+          style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
+        >
+          <div className="max-w-3xl">
+            <div>
+              <p className="mb-5 text-xs font-bold tracking-[0.16em] text-[var(--primary-text)]">HCCA / 公開名冊</p>
+              <h1 className="text-5xl font-bold tracking-[-0.04em] sm:text-6xl">班聯會幹部</h1>
+              <p className="mt-5 max-w-xl text-base leading-7 text-[var(--text-secondary)]">
+                認識正在服務校園的自治幹部，依組織與職位找到正確的聯絡對象。
+              </p>
+            </div>
+          </div>
         </header>
-        <div className="space-y-8">
+        <div className="space-y-10">
           {directRosters.length > 0 && <OfficerRosterTabs tabs={directRosters} />}
           {directRosters.length === 0 && grouped.map(({ orgName, roles }) => (
             <section key={orgName} aria-labelledby={`org-${orgName}`}>
-              <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-                <h2 id={`org-${orgName}`} className="text-lg font-semibold">{orgName}</h2>
-                <span className="text-xs text-[var(--text-muted)]">
-                  {roles.reduce((total, role) => total + role.officers.length, 0)} 位幹部
+              <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold tracking-[0.12em] text-[var(--primary-text)]">自治組織</p>
+                  <h2 id={`org-${orgName}`} className="mt-2 text-2xl font-bold">{orgName}</h2>
+                </div>
+                <span className="text-sm font-medium text-[var(--text-muted)]">
+                  {new Set(roles.flatMap((role) => role.officers.map((officer) => officer.display_name))).size} 位幹部
                 </span>
               </div>
-              <div className="space-y-3">
-                {roles.map((role, roleIndex) => (
-                  <div
-                    key={role.positionName}
-                    className="overflow-hidden rounded-2xl"
-                    style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
-                  >
-                    <div
-                      className="flex flex-col gap-1 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
-                      style={{ background: "var(--bg-elevated)", borderBottom: "1px solid var(--border)" }}
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs font-semibold tabular-nums" style={{ color: "var(--primary)" }}>
-                          {String(roleIndex + 1).padStart(2, "0")}
-                        </span>
-                        <h3 className="font-semibold">{role.positionName}</h3>
-                      </div>
-                      <span className="text-xs text-[var(--text-muted)]">{role.officers.length} 人</span>
+              <div className="overflow-hidden rounded-2xl border" style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}>
+                {roles.map((role) => (
+                  <div key={role.positionName} className="grid gap-4 border-b px-5 py-5 last:border-0 sm:grid-cols-[10rem,1fr] sm:items-start" style={{ borderColor: "var(--border)" }}>
+                    <div>
+                      <h3 className="text-sm font-bold">{role.positionName}</h3>
                     </div>
-                    <div className="grid gap-2 p-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="grid gap-x-5 sm:grid-cols-2">
                       {role.officers.map((officer, index) => (
                         <OfficerCard key={officer.id} officer={officer} index={index} />
                       ))}
@@ -167,8 +164,10 @@ export default async function OfficersPage() {
             </section>
           ))}
           {directRosters.length === 0 && grouped.length === 0 && (
-            <div className="card p-10 text-center text-sm text-[var(--text-muted)]">
-              目前尚未設定公開幹部
+            <div className="rounded-xl border p-10 text-center" style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}>
+              <UsersRound className="mx-auto" size={24} style={{ color: "var(--primary-text)" }} aria-hidden />
+              <p className="mt-3 text-sm font-semibold">目前尚未設定公開幹部</p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">公開名冊更新後會在這裡顯示。</p>
             </div>
           )}
         </div>
