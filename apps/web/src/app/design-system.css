@@ -1685,6 +1685,11 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
   .regulation-detail-management-group {
     justify-content: flex-start;
   }
+
+  /* 沒有治理權限時，保留的外層不可再製造一整列空白。 */
+  .regulation-detail-governance:empty {
+    display: none;
+  }
 }
 
 @media (max-width: 767px) {
@@ -1756,6 +1761,35 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
   .regulation-detail-toolbar {
     width: calc(100% + 2.75rem);
     margin-left: -2.75rem;
+  }
+
+  /* 閱讀工具在手機改成 2×2，避免縮放控制和中文標籤被四等分壓扁。 */
+  .regulation-detail-tool-group {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .regulation-detail-tool-group > * {
+    overflow: hidden;
+  }
+
+  .regulation-detail-zoom-control {
+    width: 100% !important;
+  }
+
+  .regulation-detail-zoom-control > button {
+    flex: 1 1 2.75rem;
+    min-width: 2.75rem;
+    padding-inline: 0.625rem;
+  }
+
+  .regulation-detail-zoom-control > span {
+    flex: 0 0 auto;
+  }
+
+  .regulation-detail-management-group {
+    grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+    gap: 0.5rem;
   }
 
   .document-detail-actions > *,
