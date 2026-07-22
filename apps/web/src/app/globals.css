@@ -245,6 +245,27 @@
   display: none;
 }
 
+.partner-map-detail-backdrop {
+  z-index: 1040;
+  bottom: calc(56px + env(safe-area-inset-bottom));
+  background: var(--bg-overlay);
+}
+
+.partner-map-detail-panel {
+  z-index: 1050;
+}
+
+.partner-map-submit-dialog {
+  z-index: 1100;
+}
+
+@media (max-width: 1023.98px) {
+  .partner-map-detail-panel {
+    bottom: calc(56px + env(safe-area-inset-bottom) + 0.75rem);
+    max-height: calc(100dvh - 88px - env(safe-area-inset-bottom));
+  }
+}
+
 @keyframes partner-marker-pulse {
   0% { opacity: 0.9; transform: scale(0.86); }
   100% { opacity: 0; transform: scale(1.25); }

@@ -77,7 +77,9 @@ function DetailPanel({
   if (!business && !loading) return null;
   return (
     <aside
-      className="fixed inset-x-3 bottom-3 z-[600] max-h-[70vh] overflow-y-auto rounded-lg border p-4 shadow-xl lg:absolute lg:inset-y-4 lg:right-4 lg:left-auto lg:w-96"
+      className="partner-map-detail-panel fixed inset-x-3 bottom-3 max-h-[70vh] overflow-y-auto rounded-lg border p-4 shadow-xl lg:absolute lg:inset-y-4 lg:right-4 lg:left-auto lg:w-96"
+      role="dialog"
+      aria-label="特約詳情"
       style={{ background: "var(--bg)", borderColor: "var(--border)" }}>
       <div className="flex items-start justify-between gap-3">
         <div>
@@ -727,6 +729,17 @@ export default function PartnerMapPage() {
               </button>
             ))}
           </div>
+          {(selectedBusiness || detailLoading) && (
+            <button
+              type="button"
+              className="partner-map-detail-backdrop fixed inset-x-0 top-0 lg:hidden"
+              aria-label="關閉特約詳情"
+              onClick={() => {
+                setSelectedBusiness(null);
+                setDetailLoading(false);
+              }}
+            />
+          )}
           <DetailPanel
             business={selectedBusiness}
             loading={detailLoading}
@@ -741,7 +754,7 @@ export default function PartnerMapPage() {
             <span className="inline-flex items-center gap-1"><MapPin size={13} aria-hidden="true" /> {filteredItems.length} 個點位</span>
           </div>
           {submissionOpen && (
-            <div className="fixed inset-0 z-[700] grid place-items-center p-4" style={{ background: "var(--bg-overlay)" }}>
+            <div className="partner-map-submit-dialog fixed inset-0 grid place-items-center p-4" style={{ background: "var(--bg-overlay)" }}>
               <div className="w-full max-w-lg rounded-lg border p-5 shadow-xl" style={{ background: "var(--bg)", borderColor: "var(--border)" }}>
                 <div className="flex items-start justify-between gap-3">
                   <div>
