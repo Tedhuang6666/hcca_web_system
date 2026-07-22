@@ -192,7 +192,10 @@ async def create_document(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="您在此組織或活動下無草擬公文的權限（需 document:draft/document:create 或活動總召）",
             )
-    doc = await doc_svc.create_document(session, data=payload, created_by=current_user.id)
+    try:
+        doc = await doc_svc.create_document(session, data=payload, created_by=current_user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     await audit_svc.record(
         session,
         entity_type="document",

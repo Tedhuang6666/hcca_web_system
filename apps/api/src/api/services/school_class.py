@@ -159,6 +159,37 @@ async def list_classes(
     return list(result.scalars().unique().all())
 
 
+async def list_recipient_options(session: AsyncSession) -> list[SchoolClass]:
+    """回傳可作為公文受文者的現行班級，避免把班級當成自治組織。"""
+    result = await session.execute(
+        select(SchoolClass)
+        .where(SchoolClass.is_active.is_(True))
+        .order_by(SchoolClass.academic_year.desc(), SchoolClass.class_code)
+    )
+    return list(result.scalars().all())
+
+
+async def get_user_active_class_ids(session: AsyncSession, user_id: uuid.UUID) -> set[uuid.UUID]:
+    """取得使用者目前所屬的所有班級，涵蓋手動、名冊與學號區間。"""
+    user = await session.get(User, user_id)
+    if user is None:
+        return set()
+    result = await session.execute(
+        select(SchoolClass)
+        .options(
+            selectinload(SchoolClass.ranges),
+            selectinload(SchoolClass.roster_entries),
+            selectinload(SchoolClass.manual_members),
+        )
+        .where(SchoolClass.is_active.is_(True))
+    )
+    class_ids: set[uuid.UUID] = set()
+    for school_class in result.scalars().unique():
+        if await is_class_member(session, school_class, user):
+            class_ids.add(school_class.id)
+    return class_ids
+
+
 async def create_class(
     session: AsyncSession, *, data: SchoolClassCreate, created_by: uuid.UUID
 ) -> SchoolClass:

@@ -24,6 +24,8 @@ from api.models.document import (
     DocumentVisibility,
     RecipientType,
 )
+from api.models.org import Org
+from api.models.school_class import SchoolClass
 from api.schemas.document import (
     DocumentApprovalDelegationCreate,
     DocumentApprovalDelegationUpdate,
@@ -35,6 +37,7 @@ from api.schemas.document import (
 from api.services.document._access import (
     _apply_assignment_delegate_to_approval,
     _delegation_query_with_relations,
+    _has_active_class_membership,
     _has_active_org_membership,
     _resolve_active_delegate_assignment,
     _sync_pending_approval_delegations,
@@ -49,6 +52,38 @@ logger = logging.getLogger(__name__)
 PRIMARY_RECIPIENT_TYPES = frozenset({RecipientType.MAIN, RecipientType.PRIMARY})
 
 
+async def _validate_recipient_targets(
+    session: AsyncSession,
+    recipients: list[RecipientCreate],
+) -> None:
+    class_ids = {recipient.target_class_id for recipient in recipients if recipient.target_class_id}
+    if class_ids:
+        result = await session.execute(
+            select(SchoolClass.id).where(
+                SchoolClass.id.in_(class_ids),
+                SchoolClass.is_active.is_(True),
+            )
+        )
+        found_class_ids = set(result.scalars().all())
+        if found_class_ids != class_ids:
+            raise ValueError("受文班級不存在或已停用")
+
+    org_ids = {recipient.target_org_id for recipient in recipients if recipient.target_org_id}
+    if org_ids:
+        class_org_result = await session.execute(
+            select(SchoolClass.org_id).where(SchoolClass.org_id.in_(org_ids))
+        )
+        if set(class_org_result.scalars().all()):
+            raise ValueError("班級受文者請使用 target_class_id，不可當作自治組織")
+
+    if org_ids:
+        existing_org_ids = set(
+            (await session.execute(select(Org.id).where(Org.id.in_(org_ids)))).scalars().all()
+        )
+        if existing_org_ids != org_ids:
+            raise ValueError("受文自治組織不存在")
+
+
 async def create_document(
     session: AsyncSession,
     *,
@@ -56,6 +91,13 @@ async def create_document(
     created_by: uuid.UUID,
 ) -> Document:
     from api.models.document import DocumentSerialTemplate
+
+    is_class_org = await session.scalar(
+        select(SchoolClass.id).where(SchoolClass.org_id == data.org_id).limit(1)
+    )
+    if is_class_org is not None:
+        raise ValueError("班級不是發文機關，請改選自治組織")
+    await _validate_recipient_targets(session, data.recipients)
 
     template: DocumentSerialTemplate | None = None
     manual_serial = data.manual_serial_number.strip() if data.manual_serial_number else None
@@ -128,6 +170,7 @@ async def create_document(
                 email=r.email,
                 target_user_id=r.target_user_id,
                 target_org_id=r.target_org_id,
+                target_class_id=r.target_class_id,
                 delivery_method=r.delivery_method,
             )
         )
@@ -416,6 +459,7 @@ async def upsert_recipients(
 ) -> list[DocumentRecipient]:
     if doc.status != DocumentStatus.DRAFT:
         raise ValueError("只有草稿狀態的公文可以修改受文者")
+    await _validate_recipient_targets(session, recipients)
 
     old_result = await session.execute(
         select(DocumentRecipient).where(DocumentRecipient.document_id == doc.id)
@@ -432,6 +476,7 @@ async def upsert_recipients(
             email=r.email,
             target_user_id=r.target_user_id,
             target_org_id=r.target_org_id,
+            target_class_id=r.target_class_id,
             delivery_method=r.delivery_method,
         )
         session.add(rec)
@@ -768,6 +813,10 @@ async def resolve_recipient_match(
             return r
         if r.target_org_id is not None and await _has_active_org_membership(
             session, viewer_id, r.target_org_id
+        ):
+            return r
+        if r.target_class_id is not None and await _has_active_class_membership(
+            session, viewer_id, r.target_class_id
         ):
             return r
     return None

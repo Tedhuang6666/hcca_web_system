@@ -69,6 +69,7 @@ def _doc_query_with_relations():
         selectinload(Document.attachments),
         selectinload(Document.recipients).selectinload(DocumentRecipient.target_user),
         selectinload(Document.recipients).selectinload(DocumentRecipient.target_org),
+        selectinload(Document.recipients).selectinload(DocumentRecipient.target_class),
         selectinload(Document.creator),
     )
 
@@ -101,6 +102,29 @@ async def _has_active_org_membership(
         .limit(1)
     )
     return result.scalar_one_or_none() is not None
+
+
+async def _has_active_class_membership(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    class_id: uuid.UUID,
+) -> bool:
+    from api.models.school_class import SchoolClass
+    from api.services.school_class import is_class_member
+
+    user = await session.get(User, user_id)
+    school_class = await session.scalar(
+        select(SchoolClass)
+        .where(SchoolClass.id == class_id)
+        .options(
+            selectinload(SchoolClass.ranges),
+            selectinload(SchoolClass.roster_entries),
+            selectinload(SchoolClass.manual_members),
+        )
+    )
+    if user is None or school_class is None or not school_class.is_active:
+        return False
+    return await is_class_member(session, school_class, user)
 
 
 async def _resolve_active_delegate_assignment(
@@ -266,6 +290,25 @@ async def user_has_full_document_access(
         if recipient_result.scalar_one_or_none() is not None:
             return True
 
+    target_result = await session.execute(
+        select(
+            DocumentRecipient.target_user_id,
+            DocumentRecipient.target_org_id,
+            DocumentRecipient.target_class_id,
+        ).where(DocumentRecipient.document_id == doc.id)
+    )
+    for target_user_id, target_org_id, target_class_id in target_result:
+        if target_user_id == user_id:
+            return True
+        if target_org_id is not None and await _has_active_org_membership(
+            session, user_id, target_org_id
+        ):
+            return True
+        if target_class_id is not None and await _has_active_class_membership(
+            session, user_id, target_class_id
+        ):
+            return True
+
     today = local_today()
     result = await session.execute(
         select(UserPosition.id)
@@ -300,6 +343,7 @@ async def _build_visibility_filter(
         return None
 
     from api.models.org import Position, UserPosition
+    from api.services.school_class import get_user_active_class_ids
 
     viewer = await session.scalar(select(User).where(User.id == viewer_id))
     viewer_email = viewer.email if viewer else None
@@ -314,6 +358,7 @@ async def _build_visibility_filter(
         .distinct()
     )
     viewer_org_ids = list(org_ids_result.scalars().all())
+    viewer_class_ids = await get_user_active_class_ids(session, viewer_id)
 
     is_approver = exists(
         select(1).where(
@@ -331,16 +376,23 @@ async def _build_visibility_filter(
             ),
         )
     )
-    is_subject_recipient = (
-        exists(
-            select(1).where(
-                DocumentRecipient.document_id == Document.id,
+    recipient_conditions = [DocumentRecipient.target_user_id == viewer_id]
+    if viewer_email:
+        recipient_conditions.append(
+            and_(
                 DocumentRecipient.email.is_not(None),
                 DocumentRecipient.email == viewer_email,
             )
         )
-        if viewer_email
-        else False
+    if viewer_org_ids:
+        recipient_conditions.append(DocumentRecipient.target_org_id.in_(viewer_org_ids))
+    if viewer_class_ids:
+        recipient_conditions.append(DocumentRecipient.target_class_id.in_(viewer_class_ids))
+    is_subject_recipient = exists(
+        select(1).where(
+            DocumentRecipient.document_id == Document.id,
+            or_(*recipient_conditions),
+        )
     )
 
     return [
@@ -348,6 +400,7 @@ async def _build_visibility_filter(
         Document.visibility_level == DocumentVisibility.PUBLIC,
         Document.created_by == viewer_id,
         is_approver,
+        is_subject_recipient,
         and_(
             Document.visibility_level == DocumentVisibility.ORG_ONLY,
             Document.org_id.in_(viewer_org_ids) if viewer_org_ids else False,

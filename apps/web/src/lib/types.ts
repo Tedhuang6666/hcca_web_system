@@ -655,6 +655,7 @@ export interface RecipientCreatePayload {
   email?: string | null;
   target_user_id?: string | null;
   target_org_id?: string | null;
+  target_class_id?: string | null;
   delivery_method?: DeliveryMethod;
 }
 

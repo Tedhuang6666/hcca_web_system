@@ -3,10 +3,11 @@ import { useCallback, useEffect, useState, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { documentsApi, documentTemplatesApi, serialTemplatesApi, orgsApi, usersApi, apiErrorMessage } from "@/lib/api";
+import { classApi, documentsApi, documentTemplatesApi, serialTemplatesApi, orgsApi, usersApi, apiErrorMessage } from "@/lib/api";
 import type {
   DocumentUrgency, DocumentClassification, DocumentCategory,
   DocumentVisibility, RecipientType, SerialTemplateOut,
+  SchoolClassListItem,
 } from "@/lib/types";
 import type { OrgRead } from "@/lib/api";
 import { orgDisplayName } from "@/lib/orgs";
@@ -28,6 +29,9 @@ interface Recipient {
   recipient_type: RecipientType;
   name: string;
   email: string;
+  target_user_id?: string;
+  target_org_id?: string;
+  target_class_id?: string;
 }
 
 interface LinkDraft {
@@ -200,6 +204,7 @@ export default function NewDocumentPage() {
 
   // 組織列表
   const [orgs, setOrgs] = useState<OrgRead[]>([]);
+  const [classes, setClasses] = useState<SchoolClassListItem[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState<string>(governanceContext?.orgId ?? "");
   const [activityId, setActivityId] = useState("");
   const selectedOrg = orgs.find(o => o.id === selectedOrgId) ?? null;
@@ -377,6 +382,7 @@ export default function NewDocumentPage() {
 
   // 載入使用者資料與組織
   useEffect(() => {
+    classApi.recipientOptions().then(setClasses).catch(() => {});
     orgsApi.myCreateOrgs().then((items) => {
       setOrgs(items);
       const storedOrgId = typeof window !== "undefined" ? (localStorage.getItem("org_id") ?? "") : "";
@@ -432,6 +438,9 @@ export default function NewDocumentPage() {
             recipient_type: item.recipient_type,
             name: item.name,
             email: item.email ?? "",
+            target_user_id: item.target_user_id ?? undefined,
+            target_org_id: item.target_org_id ?? undefined,
+            target_class_id: item.target_class_id ?? undefined,
           })),
         );
         toast.success(`已套用公文範本「${template.name}」`);
@@ -481,6 +490,9 @@ export default function NewDocumentPage() {
           recipient_type: r.recipient_type,
           name: r.name,
           email: r.email || undefined,
+          target_user_id: r.target_user_id,
+          target_org_id: r.target_org_id,
+          target_class_id: r.target_class_id,
           delivery_method: (r.email ? "email" : "none") as "none" | "system" | "email" | "paper" | "postal",
         })),
       });
@@ -858,6 +870,7 @@ export default function NewDocumentPage() {
               isMeetingNotice={isMeetingNotice}
               isRecord={isRecord}
               orgs={orgs}
+              classes={classes}
             />
             {showErr("recordAttendees") && (
               <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>{fieldError.recordAttendees}</p>

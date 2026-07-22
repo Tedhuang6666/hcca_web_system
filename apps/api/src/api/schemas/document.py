@@ -131,6 +131,7 @@ class RecipientOut(BaseModel):
     email: str | None
     target_user_id: uuid.UUID | None = None
     target_org_id: uuid.UUID | None = None
+    target_class_id: uuid.UUID | None = None
     delivery_method: DeliveryMethod = DeliveryMethod.NONE
 
 
@@ -144,7 +145,10 @@ class RecipientCreate(BaseModel):
         None, description="指定特定使用者（與 target_org_id 互斥）"
     )
     target_org_id: uuid.UUID | None = Field(
-        None, description="指定特定機關（與 target_user_id 互斥）"
+        None, description="指定特定自治組織（與其他結構化目標互斥）"
+    )
+    target_class_id: uuid.UUID | None = Field(
+        None, description="指定特定班級（與其他結構化目標互斥）"
     )
     delivery_method: DeliveryMethod = Field(
         DeliveryMethod.NONE, description="遞送方式（系統僅儲存與顯示）"
@@ -152,8 +156,9 @@ class RecipientCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_target_exclusivity(self) -> RecipientCreate:
-        if self.target_user_id is not None and self.target_org_id is not None:
-            raise ValueError("target_user_id 與 target_org_id 不可同時指定")
+        targets = [self.target_user_id, self.target_org_id, self.target_class_id]
+        if sum(target is not None for target in targets) > 1:
+            raise ValueError("target_user_id、target_org_id、target_class_id 僅能指定一項")
         return self
 
 

@@ -10,6 +10,7 @@ export const classApi = {
     const qs = params ? "?" + new URLSearchParams(params).toString() : "";
     return get<SchoolClassListItem[]>(`/classes${qs}`);
   },
+  recipientOptions: () => get<SchoolClassListItem[]>('/classes/recipient-options'),
   get: (id: string) => get<SchoolClassOut>(`/classes/${id}`),
   myClass: () => get<SchoolClassListItem | null>("/classes/me"),
   create: (body: Record<string, unknown>) => post<SchoolClassOut>("/classes", body),

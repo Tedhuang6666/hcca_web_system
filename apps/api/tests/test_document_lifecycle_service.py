@@ -27,6 +27,7 @@ from api.models.document import (
     YearMode,
 )
 from api.models.org import Org, Permission, Position, UserPosition
+from api.models.school_class import SchoolClass
 from api.models.user import User
 from api.schemas.document import (
     DocumentApprovalDelegationCreate,
@@ -133,6 +134,52 @@ async def test_create_document_auto_generates_draft_serial(
     assert doc.status == DocumentStatus.DRAFT
     assert len(doc.revisions) == 1
     assert doc.revisions[0].change_note == "初稿建立"
+
+
+async def test_create_document_rejects_class_org(db_session: AsyncSession, make_user) -> None:
+    class_org = await _make_org(db_session, name="115 學年度 301 班")
+    creator = await make_user()
+    db_session.add(
+        SchoolClass(
+            academic_year=115,
+            class_code="301",
+            grade=3,
+            created_by=creator.id,
+            org_id=class_org.id,
+        )
+    )
+    await db_session.flush()
+
+    with pytest.raises(ValueError, match="班級不是發文機關"):
+        await _make_draft(db_session, class_org, creator)
+
+
+async def test_create_document_accepts_class_recipient(db_session: AsyncSession, make_user) -> None:
+    org = await _make_org(db_session)
+    creator = await make_user()
+    school_class = SchoolClass(
+        academic_year=115,
+        class_code="302",
+        grade=3,
+        created_by=creator.id,
+    )
+    db_session.add(school_class)
+    await db_session.flush()
+
+    doc = await _make_draft(
+        db_session,
+        org,
+        creator,
+        recipients=[
+            RecipientCreate(
+                recipient_type="main",
+                name="115 學年度 302 班",
+                target_class_id=school_class.id,
+            )
+        ],
+    )
+
+    assert doc.recipients[0].target_class_id == school_class.id
 
 
 async def test_create_document_manual_serial_rejects_duplicate(
