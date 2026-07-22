@@ -6,6 +6,7 @@ const PUBLIC_PREFIXES = [
   "/live",
   "/login",
   "/maintenance",
+  "/module-status",
   "/news",
   "/officers",
   "/pages",

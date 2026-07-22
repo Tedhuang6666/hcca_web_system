@@ -34,6 +34,7 @@ const BARE_PATHS = [
   "/login",
   "/auth",
   "/maintenance",
+  "/module-status",
   "/profile/complete",
   "/public",
   "/live",

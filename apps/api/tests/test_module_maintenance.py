@@ -166,6 +166,25 @@ async def test_closed_module_blocks_admin_and_reports_closed(
     assert "系統關閉中" in body["detail"]
 
 
+async def test_closed_module_browser_navigation_redirects_to_status_page(
+    client: AsyncClient,
+) -> None:
+    await maint.set_module_maintenance("shop", on=True, mode="closed", source="manual")
+    maint.clear_cache()
+
+    resp = await client.get(
+        "/shop",
+        headers={
+            "accept": "text/html,application/xhtml+xml",
+            "sec-fetch-dest": "document",
+        },
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 303
+    assert resp.headers["location"].endswith("/module-status?module=shop")
+
+
 async def test_closed_module_is_not_cleared_by_forced_recovery() -> None:
     await maint.set_module_maintenance("meal", on=True, mode="closed", source="manual")
 
