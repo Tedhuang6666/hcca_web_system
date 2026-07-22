@@ -12,6 +12,7 @@ import { apiUrl } from "@/lib/config";
 import { useWS } from "@/hooks/useWS";
 import { useLowDataMode } from "@/hooks/useLowDataMode";
 import { useInboxCountsContext } from "@/contexts/InboxCountsContext";
+import { usePermissions } from "@/hooks/usePermissions";
 import { getBreadcrumbs, getCompactCrumbs, getPageTitle } from "@/lib/breadcrumb";
 import type { Crumb } from "@/lib/breadcrumb";
 import { OPEN_COMMAND_MENU_EVENT } from "./CommandMenu";
@@ -88,6 +89,13 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
   const lowDataMode = useLowDataMode();
   const { taskCount, unreadCount, setTaskCount, setUnreadCount, refresh: refreshCounts } =
     useInboxCountsContext();
+  const { isAdmin, permissions } = usePermissions();
+  const hasTaskAccess = isAdmin
+    || permissions.has("admin:all")
+    || Array.from(permissions).some(
+      (permission) => permission.startsWith("document:") || permission.startsWith("regulation:"),
+    );
+  const visibleTaskCount = hasTaskAccess ? taskCount : 0;
   const menuRef = useRef<HTMLDivElement>(null);
   const bellRef = useRef<HTMLDivElement>(null);
 
@@ -140,7 +148,9 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
       try {
         const [items, inbox] = await Promise.all([
           notificationsApi.list(false, 5),
-          tasksApi.list().catch(() => ({ items: [] as TaskItem[], total: 0, by_module: {} })),
+          hasTaskAccess
+            ? tasksApi.list().catch(() => ({ items: [] as TaskItem[], total: 0, by_module: {} }))
+            : Promise.resolve({ items: [] as TaskItem[], total: 0, by_module: {} }),
         ]);
         setPreviewNtfs(items);
         setPreviewTasks(inbox.items.slice(0, 5));
@@ -254,7 +264,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
           <button
             onClick={openBell}
             className="topbar-icon-btn relative"
-            aria-label={`通知與待辦${(unreadCount + taskCount) > 0 ? `（${unreadCount} 則未讀通知、${taskCount} 件待辦）` : ""}`}
+            aria-label={`通知與待辦${(unreadCount + visibleTaskCount) > 0 ? `（${unreadCount} 則未讀通知、${visibleTaskCount} 件待辦）` : ""}`}
             aria-expanded={showBell}
             aria-haspopup="true">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -262,12 +272,12 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
               <path d="M13.73 21a2 2 0 0 1-3.46 0" />
             </svg>
-            {(unreadCount + taskCount) > 0 && (
+            {(unreadCount + visibleTaskCount) > 0 && (
               <span
                 className="absolute -top-1 -right-1 min-w-[1rem] h-4 rounded-full flex items-center justify-center text-[10px] font-bold px-1"
                 style={{ background: "var(--danger)", color: "#fff" }}
                 aria-hidden="true">
-                {(unreadCount + taskCount) > 99 ? "99+" : (unreadCount + taskCount)}
+                {(unreadCount + visibleTaskCount) > 99 ? "99+" : (unreadCount + visibleTaskCount)}
               </span>
             )}
           </button>
@@ -282,16 +292,17 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
                 border: "1px solid var(--border-strong)",
                 boxShadow: "var(--shadow-xl)",
               }}>
+              {hasTaskAccess && <>
               {/* 待辦區 */}
               <div className="px-4 py-2.5 flex items-center justify-between"
                 style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-hover)" }}>
                 <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
                   待辦中心
                 </p>
-                {taskCount > 0 && (
+                {visibleTaskCount > 0 && (
                   <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
                     style={{ background: "var(--warning)", color: "#fff" }}>
-                    {taskCount > 99 ? "99+" : taskCount}
+                    {visibleTaskCount > 99 ? "99+" : visibleTaskCount}
                   </span>
                 )}
               </div>
@@ -344,6 +355,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
                 }}>
                 查看全部待辦 →
               </Link>
+              </>}
 
               {/* 通知區 */}
               <div className="px-4 py-2.5 flex items-center justify-between"

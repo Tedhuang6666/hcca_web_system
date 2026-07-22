@@ -129,14 +129,19 @@ function AppShellContent({
   children: React.ReactNode;
   isLoggedIn: boolean;
 }) {
-  const { can, isAdmin } = usePermissions();
+  const { can, isAdmin, permissions } = usePermissions();
   const { isModuleDown, moduleInfo: getModuleInfo } = useModuleStatus();
   const pathname = usePathname();
   const moduleId = moduleForPath(pathname);
   const moduleDown = isModuleDown(moduleId);
   const moduleInfo = getModuleInfo(moduleId);
+  const hasTaskAccess = isAdmin
+    || permissions.has("admin:all")
+    || Array.from(permissions).some(
+      (permission) => permission.startsWith("document:") || permission.startsWith("regulation:"),
+    );
   const suppressPolicyConsent = pathname.startsWith("/legal");
-  const inboxCounts = useInboxCounts(isLoggedIn);
+  const inboxCounts = useInboxCounts(isLoggedIn && hasTaskAccess);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
 

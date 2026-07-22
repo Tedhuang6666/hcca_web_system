@@ -64,7 +64,6 @@ export default function CommandMenu() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResultOut[]>([]);
   const recents = useRecentItems(6);
-  const showRecents = query.trim().length === 0 && recents.length > 0;
   const [meetingsVisible, setMeetingsVisible] = useState(false);
 
   useEffect(() => {
@@ -106,6 +105,10 @@ export default function CommandMenu() {
     }
     return false;
   }, [isAdmin, permissions]);
+  const visibleRecents = recents.filter(
+    (item) => item.href !== "/tasks" || hasPrefix("document:") || hasPrefix("regulation:"),
+  );
+  const showRecents = query.trim().length === 0 && visibleRecents.length > 0;
 
   const allNavActions = useMemo(() => {
     // 這是「所有服務」入口：不能只跟隨目前角色視角，否則被精簡的功能會無法抵達。
@@ -135,6 +138,7 @@ export default function CommandMenu() {
     );
     const items = filterNavItems(NAV_ITEMS, can, hasPrefix)
       .filter((item) => item.id !== "meetings")
+      .filter((item) => item.id !== "tasks" || hasPrefix("document:") || hasPrefix("regulation:"))
       .filter((item) => item.id !== "operations" || hasOperationsAccess)
       .filter((item) => item.id !== "moduleBackoffice" || hasBackofficeAccess)
       .filter((item) => !isModuleClosed(NAV_ID_TO_MODULE[item.id] ?? null));
@@ -225,7 +229,7 @@ export default function CommandMenu() {
 
           {showRecents && (
             <Command.Group heading="最近開啟">
-              {recents.map((item) => (
+              {visibleRecents.map((item) => (
                 <Command.Item
                   key={`recent-${item.kind}-${item.id}`}
                   value={`recent-${item.title}`}

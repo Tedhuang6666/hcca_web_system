@@ -169,6 +169,8 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
       can,
       hasPrefix,
     ).filter((item) =>
+      (item.id !== "tasks" || hasPrefix("document:") || hasPrefix("regulation:"))
+      &&
       !isModuleClosed(NAV_ID_TO_MODULE[item.id] ?? null),
     );
     const topTabs = available.slice(0, 4).map(navItemToTab);
