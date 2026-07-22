@@ -81,6 +81,8 @@ def test_match_module_respects_segment_boundary() -> None:
     assert match_module("/publications") == "publications"
     assert match_module("/email") == "email"
     assert match_module("/inventory/items") == "operations"
+    assert "elections" in MODULE_IDS
+    assert match_module("/elections/public") == "elections"
     # 邊界：非 segment 邊界不命中
     assert match_module("/shop-other") is None
     # 核心通道不屬於任何可維護模組
@@ -103,6 +105,20 @@ async def test_module_maintenance_blocks_target_module_returns_503(
     # 其他模組不受影響
     other = await client.get("/surveys")
     assert other.status_code != 503
+
+
+async def test_election_module_maintenance_blocks_public_api_returns_503(
+    client: AsyncClient,
+) -> None:
+    await maint.set_module_maintenance("elections", on=True, source="manual")
+    maint.clear_cache()
+
+    resp = await client.get("/elections/public")
+
+    assert resp.status_code == 503
+    body = resp.json()
+    assert body["module_maintenance"] is True
+    assert body["module"] == "elections"
 
 
 async def test_module_maintenance_blocks_non_admin_but_admin_bypasses(
