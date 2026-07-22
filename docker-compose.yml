@@ -19,7 +19,7 @@ x-api-common: &api-common
     DB_POOL_TIMEOUT_SECONDS: ${DB_POOL_TIMEOUT_SECONDS:-30}
     DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
     HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
-    REDIS_URL: redis://redis:6379/0
+    REDIS_URL: redis://:${REDIS_PASSWORD:-dev-redis-change-in-prod}@redis:6379/0
     # Bot secrets belong only to the standalone discord-bot service.
     DISCORD_BOT_TOKEN: ""
     HCCA_DISCORD_BOT_API_KEY: ""
