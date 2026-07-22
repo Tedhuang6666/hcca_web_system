@@ -10,10 +10,12 @@ from pypdf import PdfReader
 from api.services import official_print
 from api.services.official_print import (
     _BUNDLED_KAI_FONT,
+    _FALLBACK_KAI_FONT,
     _decree_issuer_title,
     _final_signature_html,
     _font_faces,
     _full_org_name,
+    _official_document_title,
     render_document_print_html,
     render_print_pdf,
 )
@@ -28,13 +30,28 @@ class _OrgSession:
 
 
 def test_official_print_uses_bundled_kai_font() -> None:
-    """正式映像與本機測試都應使用專案內固定的楷體，不依賴主機字型。"""
+    """正文與末署應使用兩個不同的專案內字型，不依賴主機字型。"""
     css = _font_faces()
 
     assert _BUNDLED_KAI_FONT in css
+    assert _FALLBACK_KAI_FONT in css
     assert 'font-family: "OfficialKai"' in css
     assert 'font-family: "OfficialHand"' in css
     assert "file://" in css
+
+
+def test_official_document_title_restores_full_issuer_before_editable_title() -> None:
+    issuer = "國立新竹高級中學班聯會設計部"
+
+    assert (
+        _official_document_title(
+            issuer,
+            "國立新竹高級中學設計部籌備會議開會通知單",
+            "開會通知單",
+            "設計部",
+        )
+        == "國立新竹高級中學班聯會設計部籌備會議開會通知單"
+    )
 
 
 def test_official_print_supports_container_source_layout(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -156,3 +173,47 @@ async def test_decree_print_uses_full_school_heading_and_government_layout() -> 
     assert '<span class="signature-name">黃丞廷</span>' in rendered
     assert "margin: 25mm;" in rendered
     assert 'font-family: "Times New Roman","OfficialKai","標楷體","DFKai-SB",serif;' in rendered
+
+
+@pytest.mark.asyncio
+async def test_meeting_notice_seal_stays_on_one_page_with_handwritten_font() -> None:
+    council = SimpleNamespace(id="council", name="班級聯合自治會", parent_id=None)
+    design = SimpleNamespace(id="design", name="設計部", parent_id="council")
+    doc = SimpleNamespace(
+        category="meeting_notice",
+        issuer_full_name=None,
+        org=design,
+        org_id="design",
+        title="國立新竹高級中學設計部籌備會議開會通知單",
+        urgency="normal",
+        classification="normal",
+        declassification_condition="none",
+        recipients=[],
+        attachments=[],
+        issued_at=None,
+        completed_at=None,
+        created_at=None,
+        serial_number="嶺班議字第1150000001號",
+        file_number=None,
+        retention_period=None,
+        approvals=[],
+        handler_name="黃丞廷",
+        handler_unit="設計部",
+        handler_email=None,
+        subject=None,
+        content=None,
+        action_required="請準時出席。",
+        doc_description="一、主席致詞。\n二、討論籌備事項。",
+        meeting_purpose="設計部籌備會議",
+        meeting_time=None,
+        meeting_location="國立新竹高級中學行政大樓會議室",
+        meeting_chairperson="黃丞廷",
+    )
+
+    rendered = await render_document_print_html(_OrgSession(council, design), doc)
+    pdf = render_print_pdf(rendered)
+
+    assert "國立新竹高級中學班聯會設計部籌備會議開會通知單</header>" in rendered
+    assert 'font-family: "OfficialHand"' in rendered
+    assert "white-space: nowrap" in rendered
+    assert len(PdfReader(BytesIO(pdf)).pages) == 1

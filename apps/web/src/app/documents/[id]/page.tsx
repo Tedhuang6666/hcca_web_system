@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { documentsApi, usersApi, ApiError, apiErrorMessage } from "@/lib/api";
 import type { DocumentWithArchive, UserSummary } from "@/lib/api";
+import type { RecipientDownloadVariant } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
 import { DocumentStatusBadge, UrgencyBadge } from "@/components/ui/StatusBadge";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
@@ -169,6 +170,7 @@ export default function DocumentDetailPage() {
   const [allUsers, setAllUsers] = useState<UserSummary[]>([]);
   const { zoom, setZoom, zoomStyle } = usePersistedZoom("hcca.viewer.zoom");
   const [printingPdf, setPrintingPdf] = useState(false);
+  const [downloadVariant, setDownloadVariant] = useState<RecipientDownloadVariant>("primary");
   const [archiveAtInput, setArchiveAtInput] = useState("");
   const [archiveSettingsBusy, setArchiveSettingsBusy] = useState(false);
   const { can } = usePermissions();
@@ -360,6 +362,9 @@ export default function DocumentDetailPage() {
   if (!doc) return <div className="text-center text-red-400 mt-20">公文不存在或無權限查看</div>;
 
   const isCreator = doc.created_by === currentUserId;
+  const canChoosePrintVariant = isCreator
+    || can("document:admin")
+    || can("document:view_all");
   const catLabel = CAT_LABEL[doc.category] ?? doc.category;
   const canApprove = can("document:approve") &&
     doc.status === "pending" &&
@@ -527,17 +532,42 @@ export default function DocumentDetailPage() {
               封存
             </button>
           )}
-          {/* 官式公文列印（後端格式，帶 token 避免 401） */}
+          {/* 官式公文列印；製作者與管理員可選正本、副本或影本。 */}
+          <div
+            className="flex min-h-9 items-stretch overflow-hidden rounded-lg max-sm:min-h-11"
+            style={{ border: "1px solid var(--border-strong)" }}
+          >
+          {canChoosePrintVariant && (
+            <label className="relative flex items-center" style={{ background: "var(--bg-elevated)" }}>
+              <span className="sr-only">下載版本</span>
+              <select
+                aria-label="下載版本"
+                value={downloadVariant}
+                onChange={(event) => setDownloadVariant(event.target.value as RecipientDownloadVariant)}
+                disabled={printingPdf}
+                className="h-full min-w-[5.25rem] appearance-auto bg-transparent px-2.5 pr-7 text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset"
+                style={{ color: "var(--text-primary)", borderColor: "var(--primary)" }}
+              >
+                <option value="primary">正本</option>
+                <option value="duplicate">副本</option>
+                <option value="copy">影本</option>
+              </select>
+            </label>
+          )}
           <button
             onClick={async () => {
               if (printingPdf) return;
               const toastId = toast.loading("正在處理檔案，請稍候...");
               setPrintingPdf(true);
               try {
-                const res = await fetch(apiUrl(`/documents/${id}/print`), {
+                const query = canChoosePrintVariant ? `?variant=${downloadVariant}` : "";
+                const res = await fetch(apiUrl(`/documents/${id}/print${query}`), {
                   credentials: "include",
                 });
-                if (!res.ok) throw new Error(res.statusText);
+                if (!res.ok) {
+                  const body = await res.json().catch(() => null) as { detail?: string } | null;
+                  throw new Error(body?.detail || res.statusText);
+                }
                 const blob = await res.blob();
                 const fallbackName = `${doc.serial_number || doc.title || "公文"}.pdf`;
                 const filename = filenameFromContentDisposition(
@@ -560,8 +590,13 @@ export default function DocumentDetailPage() {
               }
             }}
             disabled={printingPdf}
-            className="px-4 py-2 rounded-lg text-sm font-medium inline-flex items-center gap-1.5 transition-colors hover:opacity-90 disabled:opacity-60 disabled:cursor-wait"
-            style={{ background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }}>
+            aria-busy={printingPdf}
+            className="px-4 py-2 text-sm font-medium inline-flex flex-1 items-center justify-center gap-1.5 transition-colors hover:opacity-90 disabled:opacity-60 disabled:cursor-wait"
+            style={{
+              background: "var(--primary-dim)",
+              color: "var(--primary)",
+              borderLeft: canChoosePrintVariant ? "1px solid var(--border-strong)" : undefined,
+            }}>
             {printingPdf ? (
               <Loader2 size={13} className="animate-spin" aria-hidden={true} />
             ) : (
@@ -572,6 +607,7 @@ export default function DocumentDetailPage() {
             )}
             {printingPdf ? "正在處理檔案" : "列印公文"}
           </button>
+          </div>
           </div>
         </div>
       </div>

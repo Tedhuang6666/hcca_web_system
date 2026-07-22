@@ -88,6 +88,10 @@ def _font_faces() -> str:
     )
     if kai_path is None:
         return ""
+    hand_path = next(
+        (path for path in _bundled_font_candidates(_FALLBACK_KAI_FONT) if path.is_file()),
+        kai_path,
+    )
     return f"""
     @font-face {{
       font-family: "OfficialKai";
@@ -97,11 +101,40 @@ def _font_faces() -> str:
     }}
     @font-face {{
       font-family: "OfficialHand";
-      src: url("{kai_path.as_uri()}") format("truetype");
+      src: url("{hand_path.as_uri()}") format("truetype");
       font-weight: 400;
       font-style: normal;
     }}
     """
+
+
+def _official_document_title(
+    issuer_name: str,
+    custom_title: object | None,
+    category_label: str,
+    org_name: object | None,
+) -> str:
+    """Prefix editable titles with the complete issuer while avoiding repeated unit names."""
+    title = _compact_official_name(custom_title)
+    if title.startswith(issuer_name):
+        result = title
+    else:
+        while title.startswith(_SCHOOL_FULL_NAME):
+            title = title[len(_SCHOOL_FULL_NAME) :]
+        while title.startswith(_SCHOOL_SHORT_NAME):
+            title = title[len(_SCHOOL_SHORT_NAME) :]
+
+        issuer_body = issuer_name.removeprefix(_SCHOOL_FULL_NAME)
+        leaf_name = _compact_official_name(org_name)
+        if issuer_body and title.startswith(issuer_body):
+            title = title[len(issuer_body) :]
+        elif leaf_name and issuer_name.endswith(leaf_name) and title.startswith(leaf_name):
+            title = title[len(leaf_name) :]
+        result = f"{issuer_name}{title}"
+
+    if not result.endswith(category_label):
+        result += category_label
+    return result
 
 
 def render_print_pdf(html_content: str) -> bytes:
@@ -549,7 +582,11 @@ async def render_document_print_html(
             meeting_body += '<div class="agenda-title">議事日程：</div>'
             meeting_body += f'<div class="agenda-body">{_hanging_text(doc.doc_description)}</div>'
         if issuer:
-            meeting_body += f'<section class="meeting-seal">{issuer}</section>'
+            seal_font_size = min(22.0, max(14.0, 395 / max(len(issuer), 1)))
+            meeting_body += (
+                f'<section class="meeting-seal" style="font-size:{seal_font_size:.1f}pt">'
+                f"{issuer}</section>"
+            )
         body_html = meeting_body
     elif is_decree:
         decree_body_text = doc.doc_description or doc.content or doc.action_required or doc.subject
@@ -611,9 +648,12 @@ async def render_document_print_html(
         else:
             document_title = f"{issuer_name}{decree_authority_title}令"
     else:
-        document_title = _canonical_official_org_name(custom_title or issuer_name)
-        if not document_title.endswith(category_label):
-            document_title += category_label
+        document_title = _official_document_title(
+            issuer_name,
+            custom_title,
+            category_label,
+            getattr(getattr(doc, "org", None), "name", None),
+        )
     title_font_size = min(20.0, max(10.0, 440 / max(len(document_title), 1)))
     document_title = _esc(document_title)
 
@@ -821,6 +861,7 @@ async def render_document_print_html(
     .copies {{ margin-top: 8mm; font-size: 12pt; line-height: 1.25; }}
     .signature {{
       margin-top: 10mm;
+      break-inside: avoid;
       color: #003aa7;
       font-family: "OfficialHand","OfficialKai","OfficialSerifTC","LiSu","STLiti",cursive;
       font-size: 26pt;
@@ -828,15 +869,20 @@ async def render_document_print_html(
       text-shadow: .35px 0 #003aa7, 0 .35px #003aa7;
     }}
     .meeting-seal {{
+      display: block;
+      width: max-content;
+      max-width: 100%;
+      margin-top: 7mm;
+      break-inside: avoid;
       color: #003aa7;
       font-family: "OfficialHand","OfficialKai","OfficialSerifTC","LiSu","STLiti",cursive;
-      font-size: 28pt;
-      line-height: 1.7;
-      letter-spacing: .16em;
+      line-height: 1.2;
+      letter-spacing: .04em;
+      white-space: nowrap;
       text-shadow: .35px 0 #003aa7, 0 .35px #003aa7;
     }}
-    .signature-title {{ display: inline-block; font-size: 24pt; margin-right: 6mm; }}
-    .signature-name {{ display: inline-block; font-size: 48pt; }}
+    .signature-title {{ display: inline-block; font-size: 22pt; margin-right: 5mm; }}
+    .signature-name {{ display: inline-block; font-size: 40pt; }}
     .signature-acting {{
       display: block;
       font-size: 24pt;
@@ -844,7 +890,6 @@ async def render_document_print_html(
       white-space: nowrap;
     }}
     .signature-placeholder {{ color: #777; font-size: 12pt; }}
-    .meeting-seal {{ margin-top: 5mm; }}
   </style>
 </head>
 <body>

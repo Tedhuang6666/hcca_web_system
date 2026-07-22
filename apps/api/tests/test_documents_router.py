@@ -580,7 +580,7 @@ async def test_print_document_by_creator_returns_pdf(
 
 
 @pytest.mark.asyncio
-async def test_print_document_recipient_variant_by_non_admin_returns_403(
+async def test_print_document_duplicate_variant_by_creator_returns_pdf(
     db_session: AsyncSession, authed_client_factory
 ) -> None:
     org = Org(name=f"列印拒絕組織-{uuid.uuid4().hex[:6]}")
@@ -593,6 +593,27 @@ async def test_print_document_recipient_variant_by_non_admin_returns_403(
     await db_session.flush()
 
     ac = _authed(authed_client_factory, creator)
+    resp = await ac.get(f"/documents/{doc.id}/print", params={"variant": "duplicate"})
+
+    assert resp.status_code == 200, resp.text
+    assert "%E5%89%AF%E6%9C%AC" in resp.headers["content-disposition"]
+
+
+@pytest.mark.asyncio
+async def test_print_document_variant_by_non_creator_returns_403(
+    db_session: AsyncSession, authed_client_factory
+) -> None:
+    org = Org(name=f"列印拒絕組織-{uuid.uuid4().hex[:6]}")
+    creator = User(email="print-owner@example.com", display_name="Creator", is_active=True)
+    viewer = User(email="print-viewer@example.com", display_name="Viewer", is_active=True)
+    db_session.add_all([org, creator, viewer])
+    await db_session.flush()
+
+    doc = _make_doc(org, creator, visibility_level=DocumentVisibility.PUBLIC)
+    db_session.add(doc)
+    await db_session.flush()
+
+    ac = _authed(authed_client_factory, viewer)
     resp = await ac.get(f"/documents/{doc.id}/print", params={"variant": "primary"})
 
     assert resp.status_code == 403

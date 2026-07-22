@@ -503,10 +503,10 @@ async def _is_document_admin(session: AsyncSession, doc: Document, user: User) -
 @router.get(
     "/{doc_id}/print",
     response_class=Response,
-    summary="下載公文 PDF（管理員可指定受文者版本）",
+    summary="下載公文 PDF（製作者可選正本、副本或影本）",
     responses={
         200: {"description": "PDF 公文檔案"},
-        403: {"description": "無查看權限或非管理員不得指定受文者"},
+        403: {"description": "無查看權限或無權指定受文者／公文版本"},
         404: {"description": "公文不存在或受文者不存在"},
     },
 )
@@ -520,13 +520,13 @@ async def print_document(
     ),
     variant: RecipientDownloadVariant | None = Query(
         None,
-        description="管理員強制指定下載正本或影本；一般使用者不可使用",
+        description="製作者或管理員指定下載正本、副本或影本；一般受文者不可使用",
     ),
 ) -> Response:
     """直接產生並下載中華民國公文格式 PDF。
 
-    一般使用者：依其身份自動判定下「正本」或「影本」。
-    管理員：可額外指定 recipient_id 或 variant 任意挑一份印。
+    一般使用者：依其身份自動判定「正本」、「副本」或「影本」。
+    製作者：可使用 variant 選擇版本；管理員可再指定 recipient_id。
     """
     from api.services.official_print import render_document_print_html, render_print_pdf
 
@@ -534,10 +534,15 @@ async def print_document(
     await _assert_access(session, doc, current_user)
 
     is_admin = await _is_document_admin(session, doc, current_user)
-    if (recipient_id or variant) and not is_admin:
+    if recipient_id and not is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="僅公文管理員可指定受文者或版本",
+            detail="僅公文管理員可指定受文者",
+        )
+    if variant and not (is_admin or doc.created_by == current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="僅公文製作者或管理員可指定下載版本",
         )
 
     addressed_recipient_name: str | None = None
@@ -550,11 +555,15 @@ async def print_document(
             variant = (
                 RecipientDownloadVariant.PRIMARY
                 if doc_svc.is_primary_variant(target)
-                else RecipientDownloadVariant.COPY
+                else RecipientDownloadVariant.DUPLICATE
             )
 
     if variant is not None:
-        copy_mark = "正本" if variant == RecipientDownloadVariant.PRIMARY else "影本"
+        copy_mark = {
+            RecipientDownloadVariant.PRIMARY: "正本",
+            RecipientDownloadVariant.DUPLICATE: "副本",
+            RecipientDownloadVariant.COPY: "影本",
+        }[variant]
     else:
         # 一般使用者：依身份判定
         if is_admin:
@@ -563,6 +572,9 @@ async def print_document(
             matched = await doc_svc.resolve_recipient_match(session, doc, current_user.id)
             if matched is not None and doc_svc.is_primary_variant(matched):
                 copy_mark = "正本"
+                addressed_recipient_name = matched.name
+            elif matched is not None:
+                copy_mark = "副本"
                 addressed_recipient_name = matched.name
             else:
                 copy_mark = "影本"
