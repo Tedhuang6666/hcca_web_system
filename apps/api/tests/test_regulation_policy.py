@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import uuid
 from io import BytesIO
 from zipfile import ZipFile
@@ -12,6 +13,7 @@ from api.models.regulation import (
     Regulation,
     RegulationArticle,
     RegulationCategory,
+    RegulationRevision,
     RegulationWorkflowStatus,
 )
 from api.schemas.regulation import RegulationArticleCreate, RegulationPublishRequest
@@ -273,6 +275,40 @@ def test_regulation_print_renders_title_history_and_nested_numbering() -> None:
     assert (
         '<span class="nested-label">（一）</span><span class="nested-body">書面提出。' in rendered
     )
+
+
+def test_regulation_print_prefers_curated_history_and_standard_page_layout() -> None:
+    reg = Regulation(
+        id=uuid.uuid4(),
+        title="國立新竹高級中學班級聯合自治會組織章程",
+        category=RegulationCategory.ORDINANCE,
+        content="第一條 本章程規範班聯會組織。",
+        legislative_history="113 學年度第二學期第一次學生議會修訂",
+        org_id=uuid.uuid4(),
+        created_by=uuid.uuid4(),
+    )
+    reg.revisions = [
+        RegulationRevision(
+            regulation_id=reg.id,
+            version=1,
+            change_brief="修訂",
+            amended_at=dt.datetime(2025, 9, 1, tzinfo=dt.UTC),
+            amended_by=uuid.uuid4(),
+        )
+    ]
+
+    rendered = render_regulation_print_html(reg)
+
+    assert "size: letter portrait;" in rendered
+    assert "margin: 4mm 24mm 20mm;" in rendered
+    assert "line-height: 1.5;" in rendered
+    assert 'content: "第 " counter(page)' not in rendered
+    assert "column-gap: 2mm;" in rendered
+    assert ".chapter-row {\n      margin: 4mm 0 1mm;" in rendered
+    assert ".article-row {\n      margin: 3.3mm 0;\n      break-inside: auto;" in rendered
+    assert "<div>國立新竹高級中學</div><div>班級聯合自治會組織章程</div>" in rendered
+    assert rendered.count("113 學年度第二學期第一次學生議會修訂") == 1
+    assert "114學年度第一學期第一次學生議會修訂" not in rendered
 
 
 @pytest.mark.asyncio
