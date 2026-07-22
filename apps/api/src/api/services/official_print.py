@@ -23,6 +23,7 @@ _SCHOOL_FULL_NAME = "國立新竹高級中學"
 _SCHOOL_SHORT_NAME = "新竹高中"
 _BUNDLED_KAI_FONT = "edukai-5.1_20251208.ttf"
 _FALLBACK_KAI_FONT = "LXGWWenKaiTC-Regular.ttf"
+_BUNDLED_LISHU_FONT = "MoeLI-3.0.ttf"
 
 
 def _bundled_font_candidates(filename: str) -> tuple[Path, ...]:
@@ -88,8 +89,13 @@ def _font_faces() -> str:
     )
     if kai_path is None:
         return ""
-    hand_path = next(
-        (path for path in _bundled_font_candidates(_FALLBACK_KAI_FONT) if path.is_file()),
+    lishu_path = next(
+        (
+            path
+            for filename in (_BUNDLED_LISHU_FONT, _BUNDLED_KAI_FONT, _FALLBACK_KAI_FONT)
+            for path in _bundled_font_candidates(filename)
+            if path.is_file()
+        ),
         kai_path,
     )
     return f"""
@@ -100,8 +106,8 @@ def _font_faces() -> str:
       font-style: normal;
     }}
     @font-face {{
-      font-family: "OfficialHand";
-      src: url("{hand_path.as_uri()}") format("truetype");
+      font-family: "OfficialLishu";
+      src: url("{lishu_path.as_uri()}") format("truetype");
       font-weight: 400;
       font-style: normal;
     }}
@@ -860,13 +866,19 @@ async def render_document_print_html(
     }}
     .copies {{ margin-top: 8mm; font-size: 12pt; line-height: 1.25; }}
     .signature {{
+      width: max-content;
+      max-width: 100%;
       margin-top: 10mm;
       break-inside: avoid;
       color: #003aa7;
-      font-family: "OfficialHand","OfficialKai","OfficialSerifTC","LiSu","STLiti",cursive;
+      font-family: "OfficialLishu","OfficialKai","OfficialSerifTC","LiSu","STLiti",serif;
       font-size: 26pt;
-      letter-spacing: .12em;
-      text-shadow: .35px 0 #003aa7, 0 .35px #003aa7;
+      letter-spacing: .03em;
+      font-synthesis: none;
+      white-space: nowrap;
+      text-shadow:
+        .2px 0 #003aa7, -.2px 0 #003aa7,
+        0 .2px #003aa7, 0 -.2px #003aa7;
     }}
     .meeting-seal {{
       display: block;
@@ -875,14 +887,29 @@ async def render_document_print_html(
       margin-top: 7mm;
       break-inside: avoid;
       color: #003aa7;
-      font-family: "OfficialHand","OfficialKai","OfficialSerifTC","LiSu","STLiti",cursive;
+      font-family: "OfficialLishu","OfficialKai","OfficialSerifTC","LiSu","STLiti",serif;
+      font-size: 22pt;
       line-height: 1.2;
       letter-spacing: .04em;
+      font-synthesis: none;
       white-space: nowrap;
-      text-shadow: .35px 0 #003aa7, 0 .35px #003aa7;
+      text-shadow:
+        .2px 0 #003aa7, -.2px 0 #003aa7,
+        0 .2px #003aa7, 0 -.2px #003aa7;
     }}
-    .signature-title {{ display: inline-block; font-size: 22pt; margin-right: 5mm; }}
-    .signature-name {{ display: inline-block; font-size: 40pt; }}
+    .signature-title {{
+      display: inline-block;
+      margin-right: 5mm;
+      font-size: 22pt;
+      vertical-align: middle;
+    }}
+    .signature-name {{
+      display: inline-block;
+      font-size: 40pt;
+      letter-spacing: .01em;
+      vertical-align: middle;
+      white-space: nowrap;
+    }}
     .signature-acting {{
       display: block;
       font-size: 24pt;
