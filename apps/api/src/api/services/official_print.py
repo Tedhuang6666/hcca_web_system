@@ -985,6 +985,34 @@ def _law_number(legal_number: str | None, fallback: int) -> str:
     return _cn_number(int(raw)) if raw.isdigit() else raw
 
 
+_INLINE_SUBPARAGRAPH_RE = re.compile(r"(?P<label>[一二三四五六七八九十百零〇]+)、")
+
+
+def _split_inline_subparagraphs(text: str | None) -> tuple[str, list[tuple[str, str]]]:
+    """Separate enumerated subparagraphs that were merged into an imported article."""
+    source = str(text or "").strip()
+    matches = list(_INLINE_SUBPARAGRAPH_RE.finditer(source))
+    if not matches:
+        return source, []
+
+    prefix = source[: matches[0].start()].strip()
+    items = [
+        (
+            match.group("label"),
+            source[
+                match.end() : matches[index + 1].start() if index + 1 < len(matches) else None
+            ].strip(),
+        )
+        for index, match in enumerate(matches)
+    ]
+    return prefix, items
+
+
+def _law_content_html(text: str | None) -> str:
+    """Restore sentence breaks lost while importing Word/PDF regulation files."""
+    return re.sub(r"。(?=.)", "。<br>", _br(text))
+
+
 def _render_structured_articles(reg: Regulation) -> str:
     articles = sorted(
         [article for article in (reg.articles or []) if not article.is_deleted],
@@ -1008,7 +1036,8 @@ def _render_structured_articles(reg: Regulation) -> str:
     chunks: list[str] = []
     for article in articles:
         article_type = _enum_value(article.article_type)
-        content = _br(article.content or "")
+        raw_content, inline_subparagraphs = _split_inline_subparagraphs(article.content)
+        content = _law_content_html(raw_content)
         title = _esc(article.title or article.subtitle or "")
         body = "　".join(part for part in [title, content] if part)
 
@@ -1051,25 +1080,39 @@ def _render_structured_articles(reg: Regulation) -> str:
             chunks.append(
                 _article_html(f"第{_law_number(article.legal_number, counters['article'])}條", body)
             )
+            chunks.extend(
+                _nested_article_html(f"{label}、", _law_content_html(item), cls="subparagraph-row")
+                for label, item in inline_subparagraphs
+            )
         elif article_type == "paragraph":
             counters["paragraph"] += 1
             counters["subparagraph"] = counters["item"] = 0
-            chunks.append(
-                _nested_article_html(
-                    f"第{_law_number(article.legal_number, counters['paragraph'])}項",
-                    body,
-                    cls="paragraph-row",
+            if raw_content:
+                chunks.append(
+                    _nested_article_html(
+                        f"第{_law_number(article.legal_number, counters['paragraph'])}項",
+                        body,
+                        cls="paragraph-row",
+                    )
                 )
+            chunks.extend(
+                _nested_article_html(f"{label}、", _law_content_html(item), cls="subparagraph-row")
+                for label, item in inline_subparagraphs
             )
         elif article_type == "subparagraph":
             counters["subparagraph"] += 1
             counters["item"] = 0
-            chunks.append(
-                _nested_article_html(
-                    f"{_law_number(article.legal_number, counters['subparagraph'])}、",
-                    body,
-                    cls="subparagraph-row",
+            if raw_content:
+                chunks.append(
+                    _nested_article_html(
+                        f"{_law_number(article.legal_number, counters['subparagraph'])}、",
+                        body,
+                        cls="subparagraph-row",
+                    )
                 )
+            chunks.extend(
+                _nested_article_html(f"{label}、", _law_content_html(item), cls="subparagraph-row")
+                for label, item in inline_subparagraphs
             )
         elif article_type == "item":
             counters["item"] += 1
@@ -1175,10 +1218,12 @@ def render_regulation_print_html(reg: Regulation) -> str:
       margin: 4mm 0 1mm;
       font-size: 14pt;
       break-inside: avoid;
+      break-after: avoid;
+      page-break-after: avoid;
     }}
     .article-row {{
       margin: 3.3mm 0;
-      break-inside: auto;
+      break-inside: avoid;
     }}
     .article-label {{ white-space: nowrap; }}
     .article-body {{
@@ -1195,9 +1240,9 @@ def render_regulation_print_html(reg: Regulation) -> str:
       overflow-wrap: anywhere;
       break-inside: avoid;
     }}
-    .paragraph-row {{ margin-left: 38mm; }}
-    .subparagraph-row {{ margin-left: 46mm; }}
-    .item-row {{ margin-left: 54mm; }}
+    .paragraph-row,
+    .subparagraph-row,
+    .item-row {{ margin-left: 25mm; }}
     .nested-label,
     .nested-body {{ display: inline; }}
     .law-indent {{

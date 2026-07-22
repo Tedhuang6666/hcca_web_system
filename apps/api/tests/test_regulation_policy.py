@@ -305,10 +305,57 @@ def test_regulation_print_prefers_curated_history_and_standard_page_layout() -> 
     assert 'content: "第 " counter(page)' not in rendered
     assert "column-gap: 2mm;" in rendered
     assert ".chapter-row {\n      margin: 4mm 0 1mm;" in rendered
-    assert ".article-row {\n      margin: 3.3mm 0;\n      break-inside: auto;" in rendered
+    assert "break-after: avoid;" in rendered
+    assert ".article-row {\n      margin: 3.3mm 0;\n      break-inside: avoid;" in rendered
+    assert ".item-row { margin-left: 25mm; }" in rendered
     assert "<div>國立新竹高級中學</div><div>班級聯合自治會組織章程</div>" in rendered
     assert rendered.count("113 學年度第二學期第一次學生議會修訂") == 1
     assert "114學年度第一學期第一次學生議會修訂" not in rendered
+
+
+def test_regulation_print_splits_merged_subparagraphs() -> None:
+    reg_id = uuid.uuid4()
+    reg = Regulation(
+        id=reg_id,
+        title="測試法規",
+        category=RegulationCategory.ORDINANCE,
+        content="",
+        org_id=uuid.uuid4(),
+        created_by=uuid.uuid4(),
+    )
+    reg.articles = [
+        RegulationArticle(
+            id=uuid.uuid4(),
+            regulation_id=reg_id,
+            sort_index=1,
+            order_index=0,
+            article_type=ArticleType.ARTICLE,
+            legal_number="6",
+            content="會員應有以下義務： 一、配合行政。",
+        ),
+        RegulationArticle(
+            id=uuid.uuid4(),
+            regulation_id=reg_id,
+            sort_index=2,
+            order_index=0,
+            article_type=ArticleType.SUBPARAGRAPH,
+            legal_number="2",
+            content="監督行政。補充分項。 三、參與投票。 四、弘揚民主精神。",
+        ),
+    ]
+
+    rendered = render_regulation_print_html(reg)
+
+    assert '<div class="article-body">會員應有以下義務：</div>' in rendered
+    assert '<span class="nested-label">一、</span><span class="nested-body">配合行政。' in rendered
+    assert (
+        '<span class="nested-label">二、</span><span class="nested-body">監督行政。<br>補充分項。'
+        in rendered
+    )
+    assert '<span class="nested-label">三、</span><span class="nested-body">參與投票。' in rendered
+    assert (
+        '<span class="nested-label">四、</span><span class="nested-body">弘揚民主精神。' in rendered
+    )
 
 
 @pytest.mark.asyncio
