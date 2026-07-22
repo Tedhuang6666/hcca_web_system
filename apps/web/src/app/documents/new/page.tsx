@@ -102,6 +102,28 @@ const CATEGORY_OPTIONS: { value: DocumentCategory; label: string }[] = [
   { value: "other",          label: "其他"     },
 ];
 
+const SCHOOL_FULL_NAME = "國立新竹高級中學";
+
+function officialOrgFullName(org: OrgRead | null, orgs: readonly OrgRead[]): string {
+  if (!org) return "";
+  const names: string[] = [];
+  const seen = new Set<string>();
+  let current: OrgRead | undefined = org;
+  while (current && !seen.has(current.id)) {
+    seen.add(current.id);
+    names.unshift(current.name.replace(/\s+/g, ""));
+    current = current.parent_id ? orgs.find((item) => item.id === current?.parent_id) : undefined;
+  }
+
+  let body = names.join("");
+  while (body.startsWith(SCHOOL_FULL_NAME)) body = body.slice(SCHOOL_FULL_NAME.length);
+  while (body.startsWith("新竹高中")) body = body.slice("新竹高中".length);
+  body = body.replaceAll("班級聯合自治會", "班聯會");
+  body = body.replaceAll("班聯會學生會", "班聯會");
+  if (body.startsWith("學生會")) body = `班聯會${body.slice("學生會".length)}`;
+  return `${SCHOOL_FULL_NAME}${body}`;
+}
+
 const DOCUMENT_STEPS: GuidedFormStepDefinition[] = [
   { label: "基本資料", description: "先選擇組織與公文用途。" },
   { label: "撰寫內容", description: "完成本次要傳達的重點。" },
@@ -204,6 +226,7 @@ export default function NewDocumentPage() {
 
   // 組織列表
   const [orgs, setOrgs] = useState<OrgRead[]>([]);
+  const [orgHierarchy, setOrgHierarchy] = useState<OrgRead[]>([]);
   const [classes, setClasses] = useState<SchoolClassListItem[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState<string>(governanceContext?.orgId ?? "");
   const [activityId, setActivityId] = useState("");
@@ -211,10 +234,11 @@ export default function NewDocumentPage() {
 
   // 自動標題
   const autoTitle = useMemo(() => {
-    if (category === "decree") return "主席令";
-    const parts = [selectedOrg?.name, docType.trim()].filter(Boolean);
+    const issuer = officialOrgFullName(selectedOrg, orgHierarchy.length ? orgHierarchy : orgs);
+    if (category === "decree") return issuer ? `${issuer}主席令` : "主席令";
+    const parts = [issuer, docType.trim()].filter(Boolean);
     return parts.join("").replace(/\s+/g, "");
-  }, [category, selectedOrg, docType]);
+  }, [category, selectedOrg, orgHierarchy, orgs, docType]);
 
   const [docDescription, setDocDescription] = useState("");
   const [actionRequired, setActionRequired] = useState("");
@@ -383,6 +407,7 @@ export default function NewDocumentPage() {
   // 載入使用者資料與組織
   useEffect(() => {
     classApi.recipientOptions().then(setClasses).catch(() => {});
+    orgsApi.list({ active_only: true }).then(setOrgHierarchy).catch(() => {});
     orgsApi.myCreateOrgs().then((items) => {
       setOrgs(items);
       const storedOrgId = typeof window !== "undefined" ? (localStorage.getItem("org_id") ?? "") : "";
