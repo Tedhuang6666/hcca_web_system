@@ -134,6 +134,7 @@ export default function PartnerMapAdminPage() {
   const [tagColor, setTagColor] = useState("#10B981");
   const [tagIconKey, setTagIconKey] = useState<PartnerIconKey>("store");
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [parsingMap, setParsingMap] = useState(false);
   const [locationForm, setLocationForm] = useState(emptyLocation);
   const [offerForm, setOfferForm] = useState<OfferDraft>(newOfferDraft());
@@ -442,6 +443,21 @@ export default function PartnerMapAdminPage() {
     }
   };
 
+  const deleteSelectedBusiness = async () => {
+    if (!selected || !window.confirm(`確定要刪除「${selected.name}」嗎？店家的據點、優惠與評價也會一併刪除。`)) return;
+    setDeleting(true);
+    try {
+      await partnerMapApi.deleteBusiness(selected.id);
+      toast.success("已刪除店家");
+      resetCreate();
+      load();
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : "刪除店家失敗");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const toggleTag = (id: string) => {
     setBusinessForm((form) => ({
       ...form,
@@ -650,7 +666,16 @@ export default function PartnerMapAdminPage() {
                 </div>)}
               </div>
             </div>}
-            <div className="mt-4 flex justify-end">
+            <div className="mt-4 flex items-center justify-between gap-2">
+              {selected ? (
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => void deleteSelectedBusiness()}
+                  disabled={deleting}
+                  style={{ color: "var(--danger)" }}>
+                  <Trash2 size={15} aria-hidden="true" />{deleting ? "刪除中..." : "刪除店家"}
+                </button>
+              ) : <span />}
               <button className="btn" onClick={saveBusiness} disabled={saving} style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
                 <Save size={15} aria-hidden="true" />{saving ? "儲存中..." : "儲存店家"}
               </button>

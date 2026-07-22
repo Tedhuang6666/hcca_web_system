@@ -153,6 +153,41 @@ async def test_partner_map_filters_by_keyword_tag_bounds_and_offer(
 
 
 @pytest.mark.asyncio
+async def test_partner_map_category_filter_includes_business_with_category_only(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    tag = PartnerTag(name="飲料", color="#EC4899")
+    business = PartnerBusiness(
+        name="分類飲料店",
+        category="飲料",
+        status=PartnerBusinessStatus.ACTIVE.value,
+        listing_type=PartnerBusinessListingType.PHYSICAL.value,
+    )
+    db_session.add_all([tag, business])
+    await db_session.flush()
+    db_session.add(
+        PartnerLocation(
+            business_id=business.id,
+            address="新竹市東區飲料路 1 號",
+            latitude=24.806,
+            longitude=120.968,
+            business_hours={},
+        )
+    )
+    await db_session.flush()
+
+    response = await client.get(
+        "/partner-map",
+        params={"tag_ids": str(tag.id)},
+        headers=HOST_HEADERS,
+    )
+
+    assert response.status_code == 200
+    assert [item["business_name"] for item in response.json()] == ["分類飲料店"]
+
+
+@pytest.mark.asyncio
 async def test_contact_business_is_directory_only_and_exposes_contact_methods(
     client: AsyncClient,
     db_session: AsyncSession,
@@ -343,6 +378,54 @@ async def test_partner_map_admin_can_create_business(
     assert payload["offers"][0]["benefit_value"] == "全館 9 折"
     assert len(payload["offers"]) == 2
     assert payload["locations"][0]["google_maps_url"].endswith("17z")
+
+
+@pytest.mark.asyncio
+async def test_partner_map_admin_can_delete_business_with_related_records(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin = User(
+        email="delete-admin@school.edu",
+        display_name="刪除管理員",
+        is_active=True,
+        is_verified=True,
+        is_superuser=True,
+    )
+    tag = PartnerTag(name="待刪分類")
+    business = PartnerBusiness(
+        name="待刪店家",
+        category="待刪分類",
+        status=PartnerBusinessStatus.ACTIVE.value,
+    )
+    business.tags = [tag]
+    db_session.add_all([admin, tag, business])
+    await db_session.flush()
+    db_session.add_all(
+        [
+            PartnerLocation(
+                business_id=business.id,
+                address="新竹市東區待刪路 1 號",
+                latitude=24.806,
+                longitude=120.968,
+                business_hours={},
+            ),
+            PartnerOffer(business_id=business.id, title="待刪優惠"),
+        ]
+    )
+    await db_session.flush()
+    _override_current_user(admin)
+
+    response = await client.delete(
+        f"/partner-map/admin/businesses/{business.id}",
+        headers=HOST_HEADERS,
+    )
+
+    assert response.status_code == 204
+    detail_response = await client.get(
+        f"/partner-map/businesses/{business.id}", headers=HOST_HEADERS
+    )
+    assert detail_response.status_code == 404
 
 
 @pytest.mark.asyncio
