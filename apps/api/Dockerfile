@@ -55,6 +55,8 @@ COPY --from=builder /build/.venv /app/.venv
 # 複製應用程式原始碼
 COPY apps/api/src /app/src
 COPY libs/shared/src /app/src
+COPY fonts/LXGWWenKaiTC-Regular.ttf /app/fonts/LXGWWenKaiTC-Regular.ttf
+RUN fc-cache -f
 COPY apps/api/scripts /app/scripts
 COPY apps/api/data /app/data
 COPY apps/api/alembic /app/alembic
