@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import Image from "next/image";
 import dynamic from "next/dynamic";
-import { AtSign, Clock, ExternalLink, LocateFixed, Mail, MapPin, MessageCircle, Navigation, Phone, Search, Send, SlidersHorizontal, Star, Tag, Trophy } from "lucide-react";
+import { AtSign, Clock, ExternalLink, LocateFixed, Mail, MapPin, MessageCircle, Phone, Search, Send, Star, Tag, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import { partnerMapApi, ApiError } from "@/lib/api";
 import type { PartnerBusinessDetail, PartnerBusinessDirectoryItem } from "@/lib/api";
@@ -31,23 +31,6 @@ const PartnerLeafletMap = dynamic(() => import("./PartnerLeafletMap"), {
 function formatOffers(item: PartnerMapItem): string {
   if (!item.has_active_offer) return "目前無有效優惠";
   return item.active_offer_titles.join("、");
-}
-
-function distanceMeters(a: [number, number], b: [number, number]): number {
-  const toRad = (value: number) => value * Math.PI / 180;
-  const earth = 6371000;
-  const dLat = toRad(b[0] - a[0]);
-  const dLng = toRad(b[1] - a[1]);
-  const lat1 = toRad(a[0]);
-  const lat2 = toRad(b[0]);
-  const h =
-    Math.sin(dLat / 2) ** 2
-    + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
-  return 2 * earth * Math.asin(Math.sqrt(h));
-}
-
-function distanceText(meters: number): string {
-  return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${Math.round(meters)} m`;
 }
 
 function instagramUrl(handle: string): string {
@@ -304,14 +287,11 @@ export default function PartnerMapPage() {
   const [tags, setTags] = useState<PartnerTagOut[]>([]);
   const [keyword, setKeyword] = useState("");
   const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(new Set());
-  const [offerOnly, setOfferOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selectedBusiness, setSelectedBusiness] = useState<PartnerBusinessDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [viewportOnly, setViewportOnly] = useState(false);
   const [mapBounds, setMapBounds] = useState<PartnerMapBoundsState | null>(null);
-  const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
-  const [sortMode, setSortMode] = useState<"popular" | "nearest">("popular");
   const [rankings, setRankings] = useState<PartnerRankingItem[]>([]);
   const [submissionOpen, setSubmissionOpen] = useState(false);
   const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
@@ -328,14 +308,13 @@ export default function PartnerMapPage() {
     () => ({
       keyword: keyword.trim(),
       tag_ids: Array.from(selectedTagIds),
-      has_active_offer: offerOnly,
       limit: "300",
       min_lat: activeMapBounds?.min_lat,
       max_lat: activeMapBounds?.max_lat,
       min_lng: activeMapBounds?.min_lng,
       max_lng: activeMapBounds?.max_lng,
     }),
-    [activeMapBounds, keyword, offerOnly, selectedTagIds],
+    [activeMapBounds, keyword, selectedTagIds],
   );
 
   const load = useCallback(() => {
@@ -377,22 +356,6 @@ export default function PartnerMapPage() {
       .finally(() => setDetailLoading(false));
   };
 
-  const locateMe = () => {
-    if (!navigator.geolocation) {
-      toast.error("此瀏覽器不支援定位");
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setUserLocation([position.coords.latitude, position.coords.longitude]);
-        setSortMode("nearest");
-        toast.success("已取得目前位置");
-      },
-      () => toast.error("無法取得定位，請確認瀏覽器權限"),
-      { enableHighAccuracy: true, timeout: 8000 },
-    );
-  };
-
   const submitNewBusiness = async () => {
     if (!submission.name?.trim()) {
       toast.error("請輸入店家名稱");
@@ -402,8 +365,6 @@ export default function PartnerMapPage() {
       await partnerMapApi.submitBusiness({
         ...submission,
         name: submission.name.trim(),
-        latitude: userLocation?.[0] ?? null,
-        longitude: userLocation?.[1] ?? null,
       });
       toast.success("已送出投稿，等待管理員審核");
       setSubmissionOpen(false);
@@ -447,20 +408,8 @@ export default function PartnerMapPage() {
 
   const center: [number, number] = DEFAULT_CENTER;
   const filteredItems = useMemo(
-    () => {
-      const filtered = items.map((item) => attachCategoryTag(item, tags));
-      if (sortMode === "nearest" && userLocation) {
-        filtered.sort(
-          (a, b) =>
-            distanceMeters(userLocation, [a.latitude, a.longitude])
-            - distanceMeters(userLocation, [b.latitude, b.longitude]),
-        );
-      } else {
-        filtered.sort((a, b) => b.popularity_score - a.popularity_score);
-      }
-      return filtered;
-    },
-    [items, sortMode, tags, userLocation],
+    () => items.map((item) => attachCategoryTag(item, tags)).sort((a, b) => b.popularity_score - a.popularity_score),
+    [items, tags],
   );
 
   const thumbFor = (item: PartnerMapItem) => item.logo_url || item.cover_image_url;
@@ -496,16 +445,6 @@ export default function PartnerMapPage() {
                 全部
               </button>
               <button
-                onClick={() => setOfferOnly((value) => !value)}
-                className="flex shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-xs"
-                style={{
-                  borderColor: offerOnly ? "var(--primary)" : "var(--border)",
-                  color: offerOnly ? "var(--primary)" : "var(--text-secondary)",
-                }}>
-                <SlidersHorizontal size={13} aria-hidden="true" />
-                有優惠
-              </button>
-              <button
                 onClick={() => setViewportOnly((value) => !value)}
                 className="flex shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-xs"
                 style={{
@@ -514,9 +453,6 @@ export default function PartnerMapPage() {
                 }}>
                 <LocateFixed size={13} aria-hidden="true" />
                 目前視野
-              </button>
-              <button onClick={locateMe} className="flex shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-xs" style={{ borderColor: "var(--border)", color: "var(--text-secondary)" }}>
-                <Navigation size={13} aria-hidden="true" /> 離我最近
               </button>
               {tags.map((tag) => {
                 const active = selectedTagIds.has(tag.id);
@@ -694,9 +630,6 @@ export default function PartnerMapPage() {
                   })}
                 </div>
                 <div className="flex gap-2">
-                  <button className="partner-map-mobile-action btn btn-ghost flex-1" onClick={locateMe}>
-                    <Navigation size={14} aria-hidden="true" /> 離我最近
-                  </button>
                   <button className="partner-map-mobile-action btn btn-ghost flex-1" onClick={() => setSubmissionOpen(true)}>
                     <Send size={14} aria-hidden="true" /> 投稿新店
                   </button>
@@ -719,7 +652,7 @@ export default function PartnerMapPage() {
           <PartnerLeafletMap
             items={filteredItems}
             center={center}
-            userLocation={userLocation}
+            userLocation={null}
             onOpenBusiness={openBusiness}
             onBoundsChange={handleMapBoundsChange}
           />
@@ -747,7 +680,6 @@ export default function PartnerMapPage() {
                       <Star size={11} aria-hidden="true" /> {item.rating_avg ?? "-"}
                       <span>·</span>
                       <Trophy size={11} aria-hidden="true" /> {item.checkin_count}
-                      {userLocation && <span>· {distanceText(distanceMeters(userLocation, [item.latitude, item.longitude]))}</span>}
                     </p>
                     {item.business_hours_text && (
                       <p className="mt-0.5 flex items-center gap-1 text-[11px]" style={{ color: "var(--text-muted)" }}>

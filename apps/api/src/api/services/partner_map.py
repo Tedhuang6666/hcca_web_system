@@ -354,6 +354,17 @@ async def delete_business(db: AsyncSession, business: PartnerBusiness) -> None:
     await db.delete(business)
 
 
+def _business_matches_tag_ids(tag_ids: list[uuid.UUID]):
+    tag_id_values = set(tag_ids)
+    category_names = select(PartnerTag.name).where(PartnerTag.id.in_(tag_id_values))
+    return or_(
+        exists()
+        .where(partner_business_tags.c.business_id == PartnerBusiness.id)
+        .where(partner_business_tags.c.tag_id.in_(tag_id_values)),
+        func.trim(PartnerBusiness.category).in_(category_names),
+    )
+
+
 async def discover_businesses(
     db: AsyncSession,
     *,
@@ -429,11 +440,7 @@ async def list_map_locations(
         )
     )
     if tag_ids:
-        q = q.where(
-            exists()
-            .where(partner_business_tags.c.business_id == PartnerBusiness.id)
-            .where(partner_business_tags.c.tag_id.in_(set(tag_ids)))
-        )
+        q = q.where(_business_matches_tag_ids(tag_ids))
     if keyword:
         term = like_contains(keyword.strip())
         q = q.where(
