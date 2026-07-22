@@ -16,6 +16,10 @@ export default function NavigationProgress() {
   const lastStart = useRef<{ href: string; at: number } | null>(null);
   const prefetchOnIntent = process.env.NODE_ENV !== "development";
 
+  const isFullNavigation = (anchor: HTMLAnchorElement) =>
+    anchor.dataset.fullNavigation === "true"
+    || anchor.getAttribute("href")?.startsWith("/api/") === true;
+
   const internalPathFromAnchor = useCallback((anchor: HTMLAnchorElement): string | null => {
     const href = anchor.getAttribute("href") ?? "";
     if (!href || href.startsWith("#")) return null;
@@ -76,6 +80,7 @@ export default function NavigationProgress() {
       const anchor = (e.target as Element).closest("a[href]") as HTMLAnchorElement | null;
       if (!anchor || e.button !== 0) return;
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      if (isFullNavigation(anchor)) return;
       const href = internalPathFromAnchor(anchor);
       if (!href) return;
       startNavigation(href);
@@ -85,6 +90,7 @@ export default function NavigationProgress() {
       const anchor = (e.target as Element).closest("a[href]") as HTMLAnchorElement | null;
       if (!anchor) return;
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      if (isFullNavigation(anchor)) return;
       const href = internalPathFromAnchor(anchor);
       if (!href) return;
       startNavigation(href);
@@ -105,6 +111,7 @@ export default function NavigationProgress() {
       if (!prefetchOnIntent) return;
       const anchor = (target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
       if (!anchor) return;
+      if (isFullNavigation(anchor)) return;
       // OAuth login endpoints create a server-side state/session and redirect
       // to the provider; prefetching them starts an unintended login flow.
       if (anchor.dataset.noPrefetch === "true") return;

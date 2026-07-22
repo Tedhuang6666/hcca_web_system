@@ -23,6 +23,19 @@ describe("NavigationProgress", () => {
     expect(mocks.prefetch).not.toHaveBeenCalled();
   });
 
+  it("does not intercept full-navigation links", () => {
+    render(<NavigationProgress />);
+    const link = document.createElement("a");
+    link.href = "/api/auth/google/login";
+    link.dataset.fullNavigation = "true";
+    document.body.append(link);
+
+    fireEvent.pointerDown(link, { button: 0 });
+    fireEvent.click(link);
+
+    expect(document.documentElement).not.toHaveAttribute("data-navigation");
+  });
+
   it("prefetches ordinary internal links", () => {
     render(<NavigationProgress />);
     const link = document.createElement("a");
