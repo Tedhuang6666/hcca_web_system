@@ -82,7 +82,12 @@ def _work_item_href(item: WorkItem) -> str:
 # ── Builders ─────────────────────────────────────────────────────────────────
 
 
-async def _docs_pending_my_approval(db: AsyncSession, user: User) -> list[TaskItem]:
+async def _docs_pending_my_approval(
+    db: AsyncSession, user: User, perms: frozenset[str], is_admin: bool
+) -> list[TaskItem]:
+    if not _has(perms, is_admin, "document:approve"):
+        return []
+
     now = datetime.now(UTC)
     active_assignment = select(DocumentApprovalDelegation.id).where(
         DocumentApprovalDelegation.principal_user_id == DocumentApproval.approver_id,
@@ -532,7 +537,7 @@ async def build_task_inbox(db: AsyncSession, user: User) -> TaskInboxResponse:
     is_admin = bool(getattr(user, "is_superuser", False))
 
     groups = await asyncio.gather(
-        _safe("docs_approve", lambda: _docs_pending_my_approval(db, user)),
+        _safe("docs_approve", lambda: _docs_pending_my_approval(db, user, perms, is_admin)),
         _safe("meetings_upcoming", lambda: _meetings_upcoming(db, user)),
         _safe("regulations_publish", lambda: _regulations_to_publish(db, user, perms, is_admin)),
         _safe("regulations_review", lambda: _regulations_to_review(db, user, perms, is_admin)),

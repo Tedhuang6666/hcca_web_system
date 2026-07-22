@@ -88,11 +88,20 @@ async def get_document_stats(session: DbDep, current_user: CurrentUser) -> dict:
     """回傳當前使用者相關的公文計數，供儀表板顯示（計數限制以避免 full table scan）。"""
     from datetime import UTC, datetime
 
+    permission_codes = await get_user_permission_codes(session, current_user.id)
+    can_approve = (
+        current_user.is_superuser
+        or "admin:all" in permission_codes
+        or "document:approve" in permission_codes
+    )
     cache_key = f"doc_stats:{current_user.id}"
     try:
         raw = await redis_client.get(cache_key)
         if raw:
-            return json.loads(raw)
+            cached = json.loads(raw)
+            if not can_approve:
+                cached["pending_my_approval"] = 0
+            return cached
     except Exception:
         pass
 
@@ -127,24 +136,26 @@ async def get_document_stats(session: DbDep, current_user: CurrentUser) -> dict:
             DocumentApprovalDelegation.end_at >= now,
         ),
     )
-    my_pending = await safe_count(
-        select(DocumentApproval.id)
-        .join(Document, DocumentApproval.document_id == Document.id)
-        .where(DocumentApproval.status == ApprovalStepStatus.PENDING)
-        .where(
-            or_(
-                DocumentApproval.approver_id == current_user.id,
-                and_(
-                    DocumentApproval.delegate_source == DelegateSource.MANUAL,
-                    DocumentApproval.delegate_id == current_user.id,
-                ),
-                and_(
-                    DocumentApproval.delegate_source == DelegateSource.ASSIGNMENT,
-                    active_assignment.exists(),
-                ),
+    my_pending = 0
+    if can_approve:
+        my_pending = await safe_count(
+            select(DocumentApproval.id)
+            .join(Document, DocumentApproval.document_id == Document.id)
+            .where(DocumentApproval.status == ApprovalStepStatus.PENDING)
+            .where(
+                or_(
+                    DocumentApproval.approver_id == current_user.id,
+                    and_(
+                        DocumentApproval.delegate_source == DelegateSource.MANUAL,
+                        DocumentApproval.delegate_id == current_user.id,
+                    ),
+                    and_(
+                        DocumentApproval.delegate_source == DelegateSource.ASSIGNMENT,
+                        active_assignment.exists(),
+                    ),
+                )
             )
         )
-    )
 
     result = {
         "draft": draft_count,

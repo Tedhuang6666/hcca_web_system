@@ -274,6 +274,12 @@ export default function DashboardPage() {
   const [matters, setMatters] = useState<MatterListItem[]>(() => cacheGet("dashboard/matters") ?? []);
   const [loading, setLoading] = useState(!cacheHas("dashboard/data"));
   const { can, canAny, isAdmin, permissions } = usePermissions();
+  const canViewGovernanceWork = canAny(
+    "governance:manage",
+    "meeting:manage",
+    "activity:manage",
+    "document:admin",
+  );
   const recents = useRecentItems(6);
 
   useEffect(() => {
@@ -293,7 +299,9 @@ export default function DashboardPage() {
     Promise.allSettled([
       dashboardApi.get(),
       tasksApi.list(),
-      governanceApi.listMatters({ status: "active", limit: 6 }),
+      canViewGovernanceWork
+        ? governanceApi.listMatters({ status: "active", limit: 6 })
+        : Promise.resolve([]),
     ])
       .then(([dashboardRes, tasksRes, mattersRes]) => {
         if (dashboardRes.status === "fulfilled") {
@@ -314,7 +322,7 @@ export default function DashboardPage() {
         console.error(e);
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [canViewGovernanceWork]);
 
   const widgets = data?.widgets ?? [];
   const layoutHint = data?.layout_hint ?? "student";
@@ -325,10 +333,19 @@ export default function DashboardPage() {
   const hasAny = widgets.length > 0;
   const visibleItems = widgets.reduce((sum, widget) => sum + widget.items.length, 0);
   const priorityTasks = (tasks?.items ?? [])
+    .filter((task) => {
+      if (task.module === "document") return can("document:approve");
+      if (task.module !== "regulation") return true;
+      return task.action === "publish"
+        ? can("regulation:president_publish")
+        : canAny("regulation:schedule", "regulation:council_approve");
+    })
     .slice()
     .sort((a, b) => b.priority_score - a.priority_score)
     .slice(0, 3);
-  const priorityMatters = sortMattersByInsight(matters).slice(0, 2);
+  const priorityMatters = canViewGovernanceWork
+    ? sortMattersByInsight(matters).slice(0, 2)
+    : [];
   const urgentCount = (tasks?.items ?? []).filter((task) => task.severity === "critical").length;
   const isOperator = isAdmin || permissions.size > 0 || layoutHint !== "student";
   const dashboardContent = getDashboardContent(profile, can, canAny, isOperator);
