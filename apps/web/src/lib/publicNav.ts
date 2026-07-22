@@ -19,6 +19,7 @@ import {
   Scale,
   UsersRound,
 } from "lucide-react";
+import type { ModuleId } from "./modules";
 
 /** primary 顯示在頂列；其餘三組收進「所有公開服務」選單。每個項目只屬於一組，從結構上杜絕重複。 */
 export type PublicNavGroupId = "primary" | "info" | "data" | "participation";
@@ -32,6 +33,8 @@ export interface PublicNavItemDef {
   description: string;
   icon: LucideIcon;
   group: PublicNavGroupId;
+  /** 對應的功能模組；模組關閉時不在公開站顯示。 */
+  moduleId?: ModuleId;
   /** 未登入者也能直接使用（顯示「免登入」標記）。 */
   guestUsable?: boolean;
 }
@@ -48,23 +51,21 @@ export const PUBLIC_NAV_GROUP_META: Record<
 
 /** 顯示順序＝陣列順序（同組內）。後台 order 覆寫只調整同組相對位置。 */
 export const PUBLIC_NAV_ITEMS: PublicNavItemDef[] = [
-  { key: "news", href: "/news", label: "最新公告", description: "公開消息與重要通知", icon: Megaphone, group: "primary" },
+  { key: "news", href: "/news", label: "最新公告", description: "公開消息與重要通知", icon: Megaphone, group: "primary", moduleId: "announcements" },
   { key: "about", href: "/about", label: "關於班聯會", description: "任務、沿革與公共角色", icon: Landmark, group: "primary" },
 
   { key: "officers", href: "/officers", label: "班聯會幹部", description: "當屆幹部與公開資料", icon: UsersRound, group: "info", guestUsable: true },
   { key: "links", href: "/links", label: "平台連結", description: "常用服務與外部連結", icon: Link2, group: "info", guestUsable: true },
 
   { key: "public-db", href: "/public", label: "公開資料庫", description: "所有公開資料與參與入口", icon: BookOpenText, group: "data", guestUsable: true },
-  { key: "regulations", href: "/regulations", label: "法規查詢", description: "現行條文、沿革與版本", icon: Scale, group: "data", guestUsable: true },
-  { key: "documents", href: "/documents", label: "公文查詢", description: "公開公文、字號與附件", icon: FileSearch, group: "data", guestUsable: true },
-  { key: "elections", href: "/public/elections", label: "即時開票", description: "公開選舉票數與進度", icon: Radio, group: "data", guestUsable: true },
-  { key: "partner-map", href: "/partner-map", label: "特約地圖", description: "合作店家與學生優惠", icon: MapPinned, group: "data", guestUsable: true },
-  { key: "surveys", href: "/surveys", label: "公開問卷", description: "參與目前開放的校園調查", icon: ListChecks, group: "data", guestUsable: true },
+  { key: "regulations", href: "/regulations", label: "法規查詢", description: "現行條文、沿革與版本", icon: Scale, group: "data", guestUsable: true, moduleId: "regulations" },
+  { key: "documents", href: "/documents", label: "公文查詢", description: "公開公文、字號與附件", icon: FileSearch, group: "data", guestUsable: true, moduleId: "documents" },
+  { key: "elections", href: "/public/elections", label: "即時開票", description: "公開選舉票數與進度", icon: Radio, group: "data", guestUsable: true, moduleId: "elections" },
+  { key: "partner-map", href: "/partner-map", label: "特約地圖", description: "合作店家與學生優惠", icon: MapPinned, group: "data", guestUsable: true, moduleId: "partnerMap" },
+  { key: "surveys", href: "/surveys", label: "公開問卷", description: "參與目前開放的校園調查", icon: ListChecks, group: "data", guestUsable: true, moduleId: "surveys" },
 
-  { key: "council-proposals", href: "/council-proposals", label: "議會提案", description: "向學生代表大會提案", icon: Landmark, group: "participation" },
-  { key: "petition-new", href: "/petitions/new", label: "提出陳情", description: "反映校園問題與建議", icon: MessageSquareText, group: "participation", guestUsable: true },
-  { key: "petitions", href: "/petitions", label: "陳情中心", description: "用案號查詢陳情進度", icon: MessageSquareText, group: "participation", guestUsable: true },
-  { key: "judicial-petitions", href: "/judicial-petitions", label: "評議聲請", description: "提出審查與爭議事項", icon: Scale, group: "participation" },
+  { key: "petition-new", href: "/petitions/new", label: "提出陳情", description: "反映校園問題與建議", icon: MessageSquareText, group: "participation", guestUsable: true, moduleId: "petitions" },
+  { key: "petitions", href: "/petitions", label: "陳情中心", description: "用案號查詢陳情進度", icon: MessageSquareText, group: "participation", guestUsable: true, moduleId: "petitions" },
 ];
 
 /** 後台存進 settings.theme_config.nav 的覆寫形狀。 */

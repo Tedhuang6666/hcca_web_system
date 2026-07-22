@@ -16,9 +16,7 @@ const PUBLIC_PREFIXES = [
 const PUBLIC_EXACT_PATHS = new Set([
   "/",
   "/announcements",
-  "/council-proposals",
   "/documents",
-  "/judicial-petitions",
   "/partner-map",
   "/petitions",
   "/petitions/new",
