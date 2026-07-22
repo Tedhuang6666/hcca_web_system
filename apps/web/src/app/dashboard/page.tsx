@@ -274,6 +274,11 @@ export default function DashboardPage() {
   const [matters, setMatters] = useState<MatterListItem[]>(() => cacheGet("dashboard/matters") ?? []);
   const [loading, setLoading] = useState(!cacheHas("dashboard/data"));
   const { can, canAny, isAdmin, permissions } = usePermissions();
+  const hasTaskAccess = isAdmin
+    || permissions.has("admin:all")
+    || Array.from(permissions).some(
+      (permission) => permission.startsWith("document:") || permission.startsWith("regulation:"),
+    );
   const canViewGovernanceWork = canAny(
     "governance:manage",
     "meeting:manage",
@@ -349,8 +354,15 @@ export default function DashboardPage() {
   const urgentCount = (tasks?.items ?? []).filter((task) => task.severity === "critical").length;
   const isOperator = isAdmin || permissions.size > 0 || layoutHint !== "student";
   const dashboardContent = getDashboardContent(profile, can, canAny, isOperator);
-  const primaryAction = dashboardContent.primaryAction;
-  const quickActions = dashboardContent.quickActions;
+  const primaryAction = !hasTaskAccess && dashboardContent.primaryAction.href === "/tasks"
+    ? { href: "/announcements", label: "查看公告", detail: "掌握校內最新消息", icon: Bell }
+    : dashboardContent.primaryAction;
+  const quickActions = hasTaskAccess
+    ? dashboardContent.quickActions
+    : dashboardContent.quickActions.filter((action) => action.href !== "/tasks");
+  const serviceActions = hasTaskAccess
+    ? dashboardContent.services
+    : dashboardContent.services.filter((action) => action.href !== "/tasks");
   const adminActions = getAdminActions(can, canAny, isAdmin);
 
   return (
@@ -398,9 +410,11 @@ export default function DashboardPage() {
         <div className="dashboard-focus-main">
           <div className="dashboard-section-heading">
             <h2>優先處理</h2>
-            <Link href="/tasks" className="dashboard-text-link">
-              全部待辦 <ChevronRight size={14} aria-hidden={true} />
-            </Link>
+            {hasTaskAccess && (
+              <Link href="/tasks" className="dashboard-text-link">
+                全部待辦 <ChevronRight size={14} aria-hidden={true} />
+              </Link>
+            )}
           </div>
           {loading ? (
             <div className="space-y-2">
@@ -449,7 +463,7 @@ export default function DashboardPage() {
           <ChevronRight size={16} aria-hidden={true} style={{ color: "var(--text-muted)" }} />
         </summary>
         <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {dashboardContent.services.map((action) => <QuickActionCard key={action.href} action={action} />)}
+          {serviceActions.map((action) => <QuickActionCard key={action.href} action={action} />)}
         </div>
       </details>
 

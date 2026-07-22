@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   FileText, Landmark, Scale, MessageSquare, CheckSquare, ShoppingCart,
@@ -20,6 +21,7 @@ import type { RegulationWorkflowStatus } from "@/lib/types";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
 import { usePermissions } from "@/hooks/usePermissions";
+import { LoadingState } from "@/components/ui/LoadingState";
 
 type IconProps = { size: number; "aria-hidden": boolean };
 function FallbackModuleIcon(p: IconProps) { return <FileText {...p} />; }
@@ -87,13 +89,19 @@ const CACHE_KEYS = {
 } as const;
 
 export default function TasksPage() {
+  const router = useRouter();
   const [data, setData] = useState<TaskInboxResponse | null>(() => cacheGet<TaskInboxResponse>(CACHE_KEYS.tasks) ?? null);
   const [docStats, setDocStats] = useState<DocumentStats | null>(() => cacheGet<DocumentStats>(CACHE_KEYS.docStats) ?? null);
   const [regCounts, setRegCounts] = useState<Record<string, number>>(() => cacheGet<Record<string, number>>(CACHE_KEYS.regCounts) ?? {});
   const [loading, setLoading] = useState(!cacheHas(CACHE_KEYS.tasks));
   const [tab, setTab] = useState<TaskModule | "all">("all");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
-  const { can, canAny } = usePermissions();
+  const { can, canAny, isAdmin, permissions } = usePermissions();
+  const hasTaskAccess = isAdmin
+    || permissions.has("admin:all")
+    || Array.from(permissions).some(
+      (permission) => permission.startsWith("document:") || permission.startsWith("regulation:"),
+    );
   const canSeeDocumentDrafts = can("document:draft");
   const canSeeDocumentApprovals = can("document:approve");
   const canSeeRegulationReview = canAny("regulation:schedule", "regulation:council_approve");
@@ -101,6 +109,10 @@ export default function TasksPage() {
 
   useEffect(() => {
     let mounted = true;
+    if (!hasTaskAccess) {
+      router.replace("/dashboard");
+      return () => { mounted = false; };
+    }
     Promise.allSettled([
       tasksApi.list(),
       canSeeDocumentDrafts || canSeeDocumentApprovals ? documentsApi.stats() : Promise.resolve(null),
@@ -138,7 +150,14 @@ export default function TasksPage() {
       })
       .finally(() => { if (mounted) setLoading(false); });
     return () => { mounted = false; };
-  }, [canSeeDocumentApprovals, canSeeDocumentDrafts, canSeeRegulationPublish, canSeeRegulationReview]);
+  }, [
+    canSeeDocumentApprovals,
+    canSeeDocumentDrafts,
+    canSeeRegulationPublish,
+    canSeeRegulationReview,
+    hasTaskAccess,
+    router,
+  ]);
 
   const filtered = useMemo<TaskItem[]>(() => {
     if (!data) return [];
@@ -182,6 +201,15 @@ export default function TasksPage() {
     );
     return [...tabs, ...Array.from(present).sort()];
   }, [canSeeDocumentApprovals, canSeeRegulationPublish, canSeeRegulationReview, data]);
+
+  if (!hasTaskAccess) {
+    return (
+      <LoadingState
+        title="正在返回首頁"
+        description="此帳號目前沒有公文或法規工作權限。"
+      />
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto space-y-5">
