@@ -6,20 +6,27 @@ import {
   Coffee,
   BookOpen,
   Croissant,
+  Dumbbell,
   GraduationCap,
+  HeartPulse,
   Landmark,
   Printer,
+  Scissors,
   Sandwich,
   School,
+  Shirt,
+  ShoppingBag,
   Soup,
   TrainFront,
   UtensilsCrossed,
+  Wrench,
   type LucideIcon,
 } from "lucide-react";
 import { divIcon } from "leaflet";
 import { MapContainer, Marker, Popup, TileLayer, ZoomControl, useMap } from "react-leaflet";
 import type { LatLngBounds, LatLngExpression } from "leaflet";
 import type { PartnerMapItem } from "@/lib/types";
+import { getPartnerIcon } from "./partner-map-icons";
 
 export type PartnerMapBoundsState = {
   min_lat: string;
@@ -84,6 +91,12 @@ export type MarkerKind =
   | "breakfast"
   | "fast_food"
   | "noodle"
+  | "uniform"
+  | "retail"
+  | "fitness"
+  | "health"
+  | "beauty"
+  | "repair"
   | "stationery"
   | "cram_school"
   | "copy"
@@ -95,6 +108,12 @@ export const MARKER_CONFIG: Record<Exclude<MarkerKind, "all">, { label: string; 
   breakfast: { label: "早餐", color: "#F97316", icon: Croissant },
   fast_food: { label: "速食", color: "#EF4444", icon: Sandwich },
   noodle: { label: "麵店", color: "#F59E0B", icon: Soup },
+  uniform: { label: "制服", color: "#0F766E", icon: Shirt },
+  retail: { label: "零售", color: "#DB2777", icon: ShoppingBag },
+  fitness: { label: "運動", color: "#2563EB", icon: Dumbbell },
+  health: { label: "健康", color: "#059669", icon: HeartPulse },
+  beauty: { label: "美容", color: "#C026D3", icon: Scissors },
+  repair: { label: "維修", color: "#7C3AED", icon: Wrench },
   stationery: { label: "文具", color: "#8B5CF6", icon: BookOpen },
   cram_school: { label: "補習班", color: "#3B82F6", icon: GraduationCap },
   copy: { label: "影印", color: "#64748B", icon: Printer },
@@ -113,6 +132,12 @@ export function markerKind(item: PartnerMapItem): Exclude<MarkerKind, "all"> {
   if (/早餐|早午餐|蛋餅|飯糰|吐司|漢堡蛋/.test(text)) return "breakfast";
   if (/速食|漢堡|炸雞|披薩|薯條|三明治/.test(text)) return "fast_food";
   if (/麵|拉麵|牛肉麵|乾麵|湯麵|麵線|意麵/.test(text)) return "noodle";
+  if (/制服|服飾|成衣|鞋|衣服|皮件|修改衣/.test(text)) return "uniform";
+  if (/商店|零售|百貨|購物|雜貨|超商|生活用品/.test(text)) return "retail";
+  if (/健身|運動|體育|瑜珈/.test(text)) return "fitness";
+  if (/診所|藥局|牙醫|醫療|健康/.test(text)) return "health";
+  if (/美髮|髮廊|美容|美甲|美妝/.test(text)) return "beauty";
+  if (/修理|維修|洗衣|鎖店/.test(text)) return "repair";
   if (/文具|書局|筆|紙|美術|用品/.test(text)) return "stationery";
   if (/補習|升學|家教|英文|數學|物理|化學/.test(text)) return "cram_school";
   if (/影印|列印|印刷|輸出|裝訂/.test(text)) return "copy";
@@ -120,19 +145,48 @@ export function markerKind(item: PartnerMapItem): Exclude<MarkerKind, "all"> {
   return "other";
 }
 
+function safeMarkerColor(value: string | null | undefined, fallback: string): string {
+  const color = value?.trim() ?? "";
+  return /^#[\da-f]{3,8}$/i.test(color) ? color : fallback;
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[character] ?? character);
+}
+
+export function markerLabel(item: PartnerMapItem): string {
+  return item.category?.trim() || item.tags.find((tag) => tag.name.trim())?.name.trim() || MARKER_CONFIG[markerKind(item)].label;
+}
+
+export function markerColor(item: PartnerMapItem): string {
+  const fallback = MARKER_CONFIG[markerKind(item)].color;
+  return safeMarkerColor(item.tags.find((tag) => tag.color)?.color, fallback);
+}
+
+export function markerIcon(item: PartnerMapItem): LucideIcon {
+  const configuredIconKey = item.tags.find((tag) => tag.icon_key)?.icon_key;
+  if (configuredIconKey) return getPartnerIcon(configuredIconKey);
+  return MARKER_CONFIG[markerKind(item)].icon;
+}
+
 function storeIcon(item: PartnerMapItem) {
-  const config = MARKER_CONFIG[markerKind(item)];
-  const Icon = config.icon;
-  const iconMarkup = renderToStaticMarkup(<Icon size={18} strokeWidth={2.4} aria-hidden="true" />);
+  const Icon = markerIcon(item);
+  const iconMarkup = renderToStaticMarkup(<Icon size={17} strokeWidth={2.4} aria-hidden="true" />);
   return divIcon({
     className: "partner-map-marker-shell",
     iconSize: [44, 44],
     iconAnchor: [22, 40],
     popupAnchor: [0, -38],
     html: `
-      <div class="partner-map-marker ${item.has_active_offer ? "has-offer" : ""}" style="--marker-color: ${config.color}">
+      <div class="partner-map-marker ${item.has_active_offer ? "has-offer" : ""}" style="--marker-color: ${markerColor(item)}">
         <div class="partner-map-marker-icon">${iconMarkup}</div>
-        <div class="partner-map-marker-label">${config.label}</div>
+        <div class="partner-map-marker-label" title="${escapeHtml(markerLabel(item))}">${escapeHtml(markerLabel(item))}</div>
       </div>
     `,
   });
@@ -243,6 +297,10 @@ export default function PartnerLeafletMap({
           <Popup>
             <div className="min-w-48">
               <p className="text-sm font-semibold">{item.business_name}</p>
+              <p className="mt-1 flex items-center gap-1 text-[11px] font-medium" style={{ color: markerColor(item) }}>
+                <span className="h-1.5 w-1.5 rounded-full" style={{ background: markerColor(item) }} aria-hidden="true" />
+                {markerLabel(item)}
+              </p>
               <p className="mt-1 text-xs">{item.address}</p>
               {item.has_active_offer && (
                 <p className="mt-2 text-xs text-emerald-700">{item.active_offer_titles.join("、")}</p>

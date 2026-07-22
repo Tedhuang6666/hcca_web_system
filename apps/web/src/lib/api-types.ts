@@ -25273,6 +25273,8 @@ export interface components {
         PartnerTagCreate: {
             /** Color */
             color?: string | null;
+            /** Icon Key */
+            icon_key?: string | null;
             /**
              * Is Active
              * @default true
@@ -25290,6 +25292,8 @@ export interface components {
         PartnerTagOut: {
             /** Color */
             color: string | null;
+            /** Icon Key */
+            icon_key: string | null;
             /**
              * Created At
              * Format: date-time
@@ -25316,6 +25320,8 @@ export interface components {
         PartnerTagUpdate: {
             /** Color */
             color?: string | null;
+            /** Icon Key */
+            icon_key?: string | null;
             /** Is Active */
             is_active?: boolean | null;
             /** Name */
