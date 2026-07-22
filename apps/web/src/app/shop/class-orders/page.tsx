@@ -289,7 +289,7 @@ export default function ClassOrdersPage() {
     <main className="shop-class-orders-page mx-auto min-w-0 w-full max-w-7xl space-y-5 px-4 py-5">
       <header className="flex min-w-0 flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div className="min-w-0">
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>校園商品</p>
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>校慶商品</p>
           <h1 className="break-words text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>班級商品工作台</h1>
         </div>
         <div className="flex flex-wrap gap-2">

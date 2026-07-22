@@ -395,7 +395,7 @@ export default function MerchandiseSubmissionsPage() {
             className="text-sm font-semibold"
             style={{ color: "var(--primary-text)" }}
           >
-            校園商品設計徵集
+            校慶商品設計徵集
           </p>
           <h1 className="mt-1 text-2xl font-bold tracking-tight">校商投稿</h1>
           <p
