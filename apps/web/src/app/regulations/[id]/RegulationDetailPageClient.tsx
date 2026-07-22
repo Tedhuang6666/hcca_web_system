@@ -573,7 +573,7 @@ export default function RegulationDetailPageClient() {
                 <div className="regulation-detail-action-groups">
                 <div className="regulation-detail-tool-group" role="group" aria-label="閱讀工具">
                 {/* 縮放 */}
-                <div className="flex items-center gap-1 rounded-lg overflow-hidden"
+                <div className="regulation-detail-zoom-control flex items-center gap-1 rounded-lg overflow-hidden"
                   style={{ border: "1px solid var(--border)" }}>
                   <button onClick={() => setZoom(z => Math.max(70, z - 10))}
                     className="px-2 py-1.5 text-xs transition-colors hover:opacity-80"
