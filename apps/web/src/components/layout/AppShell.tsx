@@ -175,7 +175,7 @@ function AppShellContent({
         {/* 平板與行動版側邊欄遮罩 */}
         {sidebarOpen && (
           <div
-            className="fixed inset-0 z-40 lg:hidden"
+            className="fixed inset-0 z-[105] lg:hidden"
             style={{ background: "var(--bg-overlay)" }}
             onClick={() => setSidebarOpen(false)}
             aria-hidden="true"
@@ -185,7 +185,7 @@ function AppShellContent({
         {/* 側邊欄 */}
         <div
           className={`
-            fixed inset-y-0 left-0 z-50 transition-transform duration-300
+            fixed inset-y-0 left-0 z-[110] transition-transform duration-300
             lg:relative lg:z-auto
             ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
             ${desktopSidebarOpen ? "lg:block lg:translate-x-0" : "lg:hidden"}
