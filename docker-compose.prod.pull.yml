@@ -71,7 +71,9 @@ services:
     <<: *api-common
     restart: "no"
     profiles: ["migrate"]
-    command: python -m alembic -c /app/alembic.ini upgrade head
+    command: >
+      sh -c 'python -m alembic -c /app/alembic.ini upgrade head &&
+      python /app/scripts/import_class_roster.py --apply'
 
   api:
     <<: *api-common
