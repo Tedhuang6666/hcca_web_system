@@ -437,6 +437,39 @@ async def test_google_maps_place_name_is_not_saved_as_address(
 
 
 @pytest.mark.asyncio
+async def test_google_maps_parser_prefers_place_coordinates_over_viewport_center(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin = User(
+        email="maps-place-coordinate-admin@school.edu",
+        display_name="地圖管理員",
+        is_active=True,
+        is_verified=True,
+        is_superuser=True,
+    )
+    db_session.add(admin)
+    await db_session.flush()
+    _override_current_user(admin)
+
+    response = await client.post(
+        "/partner-map/admin/locations/parse-google-maps",
+        json={
+            "url": (
+                "https://www.google.com/maps/place/統帥西服/@24.795151,120.98018,16z/"
+                "data=!3d24.801234!4d120.974567"
+            )
+        },
+        headers=HOST_HEADERS,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["latitude"] == 24.801234
+    assert payload["longitude"] == 120.974567
+
+
+@pytest.mark.asyncio
 async def test_admin_rejects_non_google_maps_link(
     client: AsyncClient,
     db_session: AsyncSession,

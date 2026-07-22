@@ -93,8 +93,8 @@ def _canonical_google_maps_url(url: str) -> tuple[str, str]:
 
 def _extract_coordinates(value: str) -> tuple[float, float] | None:
     patterns = (
-        r"@(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)",
         r"!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)",
+        r"@(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)",
         r"(?:^|[^\d-])(-?\d{1,3}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)(?:$|[^\d])",
     )
     for pattern in patterns:
