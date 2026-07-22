@@ -144,6 +144,16 @@ function SortTh({
 export default function DocumentListPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { can } = usePermissions();
+  const canReview = can("document:approve") || can("document:reject");
+  const canBatch = canReview || can("document:archive") || can("document:forward");
+  const canViewAll = can("document:view_all") || can("document:admin") || canBatch;
+  const effectiveVisibility = canViewAll ? undefined : "publicly_open";
+  const visibleTabs = useMemo(() => [
+    TABS[0],
+    ...(can("document:draft") ? [TABS[1]] : []),
+    ...(canReview ? TABS.slice(2) : []),
+  ], [can, canReview]);
   const initialStatus = searchParams.get("status") as DocumentStatus | null;
 
   const [docs, setDocs] = useState<DocumentListItem[]>(() => cacheGet<DocumentListItem[]>("documents/list") ?? []);
@@ -151,7 +161,7 @@ export default function DocumentListPage() {
   const [now, setNow] = useState<number | null>(null);
   const isMountedFetch = useRef(false);
   const [activeTab, setActiveTab] = useState<DocumentStatus | "all">(
-    initialStatus && TABS.some(t => t.key === initialStatus) ? initialStatus : "all"
+    initialStatus && visibleTabs.some(t => t.key === initialStatus) ? initialStatus : "all"
   );
   const [search, setSearch] = useState(searchParams.get("keyword") ?? "");
   const [debouncedSearch, setDebouncedSearch] = useState(searchParams.get("keyword") ?? "");
@@ -163,7 +173,7 @@ export default function DocumentListPage() {
     () => ({
       category:         searchParams.get("category") ?? "",
       classification:   searchParams.get("classification") ?? "",
-      visibility:       searchParams.get("visibility") ?? "",
+      visibility:       canViewAll ? searchParams.get("visibility") ?? "" : "publicly_open",
       dateFrom:         searchParams.get("date_from") ?? "",
       dateTo:           searchParams.get("date_to") ?? "",
       issuedFrom:       searchParams.get("issued_from") ?? "",
@@ -172,7 +182,7 @@ export default function DocumentListPage() {
       serialPrefix:     searchParams.get("serial_prefix") ?? "",
       handlerKeyword:   searchParams.get("handler_keyword") ?? "",
       recipientKeyword: searchParams.get("recipient_keyword") ?? "",
-      myOnly:           searchParams.get("my_only") === "true",
+      myOnly:           canViewAll && searchParams.get("my_only") === "true",
       orgId:            searchParams.get("org_id") ?? "",
       activityId:       searchParams.get("activity_id") ?? "",
     })
@@ -189,8 +199,6 @@ export default function DocumentListPage() {
   const [delegateId, setDelegateId] = useState<string | null>(null);
   const [delegateSuggestions, setDelegateSuggestions] = useState<UserSummary[]>([]);
   const PAGE_SIZE = 20;
-  const { can } = usePermissions();
-
   const hasActiveFilters = Boolean(
     filters.category || filters.classification || filters.visibility ||
     filters.dateFrom || filters.dateTo ||
@@ -198,6 +206,7 @@ export default function DocumentListPage() {
     filters.rocYear || filters.serialPrefix || filters.handlerKeyword || filters.recipientKeyword ||
     filters.myOnly || filters.orgId || filters.activityId
   );
+  const queryVisibility = canViewAll ? filters.visibility : effectiveVisibility;
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search), 300);
@@ -213,7 +222,7 @@ export default function DocumentListPage() {
     if (search.trim()) initialParams.keyword = search.trim();
     if (filters.category) initialParams.category = filters.category;
     if (filters.classification) initialParams.classification = filters.classification;
-    if (filters.visibility) initialParams.visibility = filters.visibility;
+    if (queryVisibility) initialParams.visibility = queryVisibility;
     if (filters.dateFrom) initialParams.date_from = filters.dateFrom;
     if (filters.dateTo) initialParams.date_to = filters.dateTo;
     if (filters.issuedFrom) initialParams.issued_from = filters.issuedFrom;
@@ -252,7 +261,7 @@ export default function DocumentListPage() {
     if (debouncedSearch.trim()) q.set("keyword", debouncedSearch.trim());
     if (filters.category) q.set("category", filters.category);
     if (filters.classification) q.set("classification", filters.classification);
-    if (filters.visibility) q.set("visibility", filters.visibility);
+    if (queryVisibility) q.set("visibility", queryVisibility);
     if (filters.dateFrom) q.set("date_from", filters.dateFrom);
     if (filters.dateTo) q.set("date_to", filters.dateTo);
     if (filters.issuedFrom) q.set("issued_from", filters.issuedFrom);
@@ -266,7 +275,7 @@ export default function DocumentListPage() {
     if (filters.activityId) q.set("activity_id", filters.activityId);
     const next = q.toString() ? `/documents?${q}` : "/documents";
     router.replace(next, { scroll: false });
-  }, [activeTab, debouncedSearch, filters, router]);
+  }, [activeTab, debouncedSearch, filters, queryVisibility, router]);
 
   useEffect(() => {
     if (!isMountedFetch.current) return; // mount effect already handled first load
@@ -275,7 +284,7 @@ export default function DocumentListPage() {
     if (debouncedSearch.trim()) params.keyword = debouncedSearch.trim();
     if (filters.category) params.category = filters.category;
     if (filters.classification) params.classification = filters.classification;
-    if (filters.visibility) params.visibility = filters.visibility;
+    if (queryVisibility) params.visibility = queryVisibility;
     if (filters.dateFrom) params.date_from = filters.dateFrom;
     if (filters.dateTo) params.date_to = filters.dateTo;
     if (filters.issuedFrom) params.issued_from = filters.issuedFrom;
@@ -309,7 +318,7 @@ export default function DocumentListPage() {
       })
       .catch((e) => toast.error(apiErrorMessage(e, "載入失敗")))
       .finally(() => setLoading(false));
-  }, [activeTab, debouncedSearch, filters]);
+  }, [activeTab, debouncedSearch, filters, queryVisibility]);
 
   const clearFilters = useCallback(() => {
     dispatchFilter({ type: "clear" });
@@ -350,7 +359,7 @@ export default function DocumentListPage() {
     if (search.trim()) params.keyword = search.trim();
     if (filters.category) params.category = filters.category;
     if (filters.classification) params.classification = filters.classification;
-    if (filters.visibility) params.visibility = filters.visibility;
+    if (queryVisibility) params.visibility = queryVisibility;
     if (filters.dateFrom) params.date_from = filters.dateFrom;
     if (filters.dateTo) params.date_to = filters.dateTo;
     if (filters.issuedFrom) params.issued_from = filters.issuedFrom;
@@ -395,7 +404,7 @@ export default function DocumentListPage() {
       if (search.trim()) params.keyword = search.trim();
       if (filters.category) params.category = filters.category;
       if (filters.classification) params.classification = filters.classification;
-      if (filters.visibility) params.visibility = filters.visibility;
+      if (queryVisibility) params.visibility = queryVisibility;
       if (filters.dateFrom) params.date_from = filters.dateFrom;
       if (filters.dateTo) params.date_to = filters.dateTo;
       if (filters.issuedFrom) params.issued_from = filters.issuedFrom;
@@ -472,7 +481,7 @@ export default function DocumentListPage() {
     if (search.trim()) params.keyword = search.trim();
     if (filters.category) params.category = filters.category;
     if (filters.classification) params.classification = filters.classification;
-    if (filters.visibility) params.visibility = filters.visibility;
+    if (queryVisibility) params.visibility = queryVisibility;
     if (filters.dateFrom) params.date_from = filters.dateFrom;
     if (filters.dateTo) params.date_to = filters.dateTo;
     if (filters.issuedFrom) params.issued_from = filters.issuedFrom;
@@ -592,7 +601,9 @@ export default function DocumentListPage() {
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
             公文
           </h1>
-          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>建立、簽核與追蹤公文。</p>
+          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
+            {canBatch || can("document:draft") ? "建立、簽核與追蹤公文。" : "查看公開的校園公文。"}
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
           {can("document:approve") && (
@@ -622,9 +633,9 @@ export default function DocumentListPage() {
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
           {[
-            { label: "我的待辦", tab: "pending" as const, myOnly: true, sort: "due_asc" as const },
-            { label: "我的草稿", tab: "draft" as const, myOnly: true },
-            { label: "退件處理", tab: "rejected" as const, myOnly: true },
+            ...(canReview ? [{ label: "我的待辦", tab: "pending" as const, myOnly: true, sort: "due_asc" as const }] : []),
+            ...(can("document:draft") ? [{ label: "我的草稿", tab: "draft" as const, myOnly: true }] : []),
+            ...(canReview ? [{ label: "退件處理", tab: "rejected" as const, myOnly: true }] : []),
             { label: "公開查詢", tab: "all" as const, visibility: "publicly_open" },
           ].map(item => (
             <button
@@ -644,7 +655,7 @@ export default function DocumentListPage() {
         </div>
 
         {/* 常用篩選 */}
-        {savedFilters.length > 0 && (
+        {canViewAll && savedFilters.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs" style={{ color: "var(--text-muted)" }}>常用篩選：</span>
             {savedFilters.slice(0, 8).map(sf => (
@@ -686,7 +697,7 @@ export default function DocumentListPage() {
           <div className="document-tabs flex w-full gap-0.5 p-1 rounded-xl overflow-x-auto"
             style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
             role="tablist" aria-label="公文狀態篩選">
-            {TABS.map(({ key, label }) => {
+            {visibleTabs.map(({ key, label }) => {
               const active = activeTab === key;
               return (
                 <button key={key} role="tab" aria-selected={active}
@@ -703,7 +714,7 @@ export default function DocumentListPage() {
 
           <div className="document-filter-actions flex w-full flex-wrap items-center gap-2">
             {/* 進階篩選開關 */}
-            <button onClick={() => setShowFilters(f => !f)}
+            {canViewAll && <button onClick={() => setShowFilters(f => !f)}
               className="document-filter-toggle relative px-3 py-1.5 rounded-lg text-xs font-medium inline-flex items-center gap-1.5"
               style={showFilters || hasActiveFilters
                 ? { color: "var(--primary)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }
@@ -716,9 +727,9 @@ export default function DocumentListPage() {
                 <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full"
                   style={{ background: "var(--primary)" }} />
               )}
-            </button>
+            </button>}
 
-            {hasActiveFilters && (
+            {canViewAll && hasActiveFilters && (
               <button onClick={clearFilters}
                 className="document-filter-toggle text-xs px-2.5 py-1.5 rounded-lg"
                 style={{ color: "var(--danger)", border: "1px solid rgba(220,38,38,0.3)", background: "rgba(220,38,38,0.06)" }}>
@@ -726,19 +737,19 @@ export default function DocumentListPage() {
               </button>
             )}
 
-            <button
+            {canViewAll && <button
               onClick={saveCurrentFilter}
               className="text-xs px-3 py-1.5 rounded-lg hover:opacity-80"
               style={{ color: "var(--primary)", background: "var(--primary-dim)", border: "1px solid var(--border-strong)" }}
               title="將目前的 Tab/搜尋/篩選保存為常用篩選"
             >
               ＋ 儲存目前查詢
-            </button>
+            </button>}
           </div>
         </div>
 
         {/* 進階篩選面板 */}
-        {showFilters && (
+        {canViewAll && showFilters && (
           <div className="card p-4 space-y-4">
             <div className="flex flex-wrap gap-5">
               {/* 字號前綴 */}
@@ -933,7 +944,7 @@ export default function DocumentListPage() {
         )}
       </div>
 
-      {selectedArray.length > 0 && (
+      {canBatch && selectedArray.length > 0 && (
         <div className="card p-3">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-wrap items-center gap-2">
@@ -1051,7 +1062,7 @@ export default function DocumentListPage() {
               <table className="w-full text-sm" role="table" aria-label="公文列表">
                 <thead>
                   <tr style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-hover)" }}>
-                    <th className="px-5 py-3.5 text-left" scope="col">
+                    {canBatch && <th className="px-5 py-3.5 text-left" scope="col">
                       <input
                         type="checkbox"
                         checked={allVisibleSelected}
@@ -1060,7 +1071,7 @@ export default function DocumentListPage() {
                         aria-label="選取目前列表所有公文"
                         className="accent-blue-600"
                       />
-                    </th>
+                    </th>}
                     <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted)" }} scope="col">字號</th>
                     <SortTh label="標題" sk="title_asc" sortKey={sortKey} onToggle={(sk) => setSortKey(p => p === sk ? "created_desc" : sk)} />
                     <SortTh label="速別" sk="urgency_desc" sortKey={sortKey} onToggle={(sk) => setSortKey(p => p === sk ? "created_desc" : sk)} />
@@ -1076,7 +1087,7 @@ export default function DocumentListPage() {
                       key={doc.id}
                       className="hover:[background:var(--bg-hover)]"
                       style={idx < docs.length - 1 ? { borderBottom: "1px solid var(--border)" } : {}}>
-                      <td className="px-5 py-4">
+                      {canBatch && <td className="px-5 py-4">
                         <input
                           type="checkbox"
                           checked={selectedIds.has(doc.id)}
@@ -1085,7 +1096,7 @@ export default function DocumentListPage() {
                           aria-label={`選取公文 ${doc.serial_number}`}
                           className="accent-blue-600"
                         />
-                      </td>
+                      </td>}
                       <td className="px-5 py-4">
                         <span className="text-xs font-mono" style={{ color: "var(--primary)" }}>
                           {doc.serial_number}
@@ -1196,14 +1207,14 @@ export default function DocumentListPage() {
                 return (
                   <li key={doc.id}>
                     <div className="flex items-start justify-between gap-2 px-4 py-4 transition-colors hover:[background:var(--bg-hover)]">
-                    <input
+                    {canBatch && <input
                       type="checkbox"
                       checked={selectedIds.has(doc.id)}
                       onChange={() => toggleSelected(doc.id)}
                       disabled={doc.is_redacted}
                       aria-label={`選取公文 ${doc.serial_number}`}
                       className="mt-1 flex-shrink-0 accent-blue-600"
-                    />
+                    />}
                     {doc.is_redacted ? (
                       <div
                         className="flex items-start justify-between gap-3 flex-1 min-w-0"

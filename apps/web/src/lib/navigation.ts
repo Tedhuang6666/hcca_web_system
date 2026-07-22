@@ -513,16 +513,20 @@ export function resolveNavigationProfile(
 ): NavigationProfile {
   if (isAdmin || permissions.has("admin:all")) return "default";
   const hasPrefix = (prefix: string) => Array.from(permissions).some((p) => p.startsWith(prefix));
+  const hasNonViewerPermission = (prefix: string, viewerOnly: string[]) =>
+    Array.from(permissions).some((permission) =>
+      permission.startsWith(prefix) && !viewerOnly.includes(permission),
+    );
   const hasGovernanceOrBackoffice = [
-    "document:",
-    "regulation:",
+    hasNonViewerPermission("document:", ["document:view_all"]),
+    hasNonViewerPermission("regulation:", ["regulation:view_all"]),
     "admin:",
     "org:",
     "finance:",
     "election:",
     "audit:",
     "email:",
-  ].some(hasPrefix);
+  ].some((entry) => typeof entry === "string" ? hasPrefix(entry) : entry);
 
   if (hasGovernanceOrBackoffice) return "default";
 
