@@ -11,6 +11,7 @@ import {
   FileText,
   Globe2,
   Link as LinkIcon,
+  Pencil,
   Plus,
   RefreshCw,
   RotateCcw,
@@ -271,6 +272,7 @@ export default function PublicSiteAdminPage() {
     sort_order: 0,
     is_active: true,
   });
+  const [editingLinkId, setEditingLinkId] = useState<string | null>(null);
   const [officerDraft, setOfficerDraft] = useState({
     user_position_id: "",
     display_name_override: "",
@@ -453,17 +455,54 @@ export default function PublicSiteAdminPage() {
 
   const createLink = async () => {
     try {
-      await siteApi.createLink({
+      const body = {
         ...linkDraft,
         description: linkDraft.description || null,
         category_id: linkDraft.category_id || null,
         icon_key: linkDraft.icon_key || null,
-      });
-      toast.success("連結已新增");
+      };
+      if (editingLinkId) {
+        await siteApi.updateLink(editingLinkId, body);
+        toast.success("連結已更新");
+      } else {
+        await siteApi.createLink(body);
+        toast.success("連結已新增");
+      }
+      setEditingLinkId(null);
       setLinkDraft({ title: "", url: "", description: "", category_id: "", icon_key: "", sort_order: 0, is_active: true });
       await load();
     } catch (error) {
-      displayError(error, "新增連結失敗");
+      displayError(error, editingLinkId ? "更新連結失敗" : "新增連結失敗");
+    }
+  };
+
+  const startEditLink = (link: PublicLinkOut) => {
+    setEditingLinkId(link.id);
+    setLinkDraft({
+      title: link.title,
+      url: link.url,
+      description: link.description ?? "",
+      category_id: link.category_id ?? "",
+      icon_key: link.icon_key ?? "",
+      sort_order: link.sort_order,
+      is_active: link.is_active,
+    });
+  };
+
+  const cancelEditLink = () => {
+    setEditingLinkId(null);
+    setLinkDraft({ title: "", url: "", description: "", category_id: "", icon_key: "", sort_order: 0, is_active: true });
+  };
+
+  const deleteLink = async (link: PublicLinkOut) => {
+    if (!window.confirm(`確定要刪除「${link.title}」嗎？此操作無法復原。`)) return;
+    try {
+      await siteApi.deleteLink(link.id);
+      if (editingLinkId === link.id) cancelEditLink();
+      toast.success("連結已刪除");
+      await load();
+    } catch (error) {
+      displayError(error, "刪除連結失敗");
     }
   };
 
@@ -788,7 +827,7 @@ export default function PublicSiteAdminPage() {
             </div>
           </div>
           <div className="card space-y-4 p-5">
-            <h2 className="font-semibold">新增 Linktree 連結</h2>
+            <h2 className="font-semibold">{editingLinkId ? "編輯 Linktree 連結" : "新增 Linktree 連結"}</h2>
             <Field label="標題"><TextInput value={linkDraft.title} onChange={(e) => setLinkDraft({ ...linkDraft, title: e.target.value })} /></Field>
             <Field label="URL"><TextInput value={linkDraft.url} onChange={(e) => setLinkDraft({ ...linkDraft, url: e.target.value })} /></Field>
             <div className="grid gap-4 md:grid-cols-2">
