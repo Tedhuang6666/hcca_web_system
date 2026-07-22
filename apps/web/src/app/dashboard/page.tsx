@@ -9,7 +9,7 @@ import {
   Settings, Users, Bell, Search, PenLine, Send, Wrench, AlertCircle,
 } from "lucide-react";
 import {
-  dashboardApi,
+  announcementsApi, dashboardApi,
   governanceApi,
   tasksApi,
   type DashboardResponse,
@@ -18,7 +18,7 @@ import {
   type TaskItem,
   type TaskModule,
 } from "@/lib/api";
-import type { MatterListItem } from "@/lib/types";
+import type { AnnouncementListItem, MatterListItem } from "@/lib/types";
 import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useRecentItems } from "@/hooks/useRecentItems";
@@ -272,6 +272,9 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardResponse | null>(() => cacheGet("dashboard/data") ?? null);
   const [tasks, setTasks] = useState<TaskInboxResponse | null>(() => cacheGet("dashboard/tasks") ?? null);
   const [matters, setMatters] = useState<MatterListItem[]>(() => cacheGet("dashboard/matters") ?? []);
+  const [announcements, setAnnouncements] = useState<AnnouncementListItem[]>(
+    () => cacheGet("dashboard/announcements") ?? [],
+  );
   const [loading, setLoading] = useState(!cacheHas("dashboard/data"));
   const { can, canAny, isAdmin, permissions } = usePermissions();
   const hasTaskAccess = isAdmin
@@ -307,8 +310,9 @@ export default function DashboardPage() {
       canViewGovernanceWork
         ? governanceApi.listMatters({ status: "active", limit: 6 })
         : Promise.resolve([]),
+      announcementsApi.list({ limit: 3 }),
     ])
-      .then(([dashboardRes, tasksRes, mattersRes]) => {
+      .then(([dashboardRes, tasksRes, mattersRes, announcementsRes]) => {
         if (dashboardRes.status === "fulfilled") {
           setData(dashboardRes.value);
           cacheSet("dashboard/data", dashboardRes.value);
@@ -320,6 +324,10 @@ export default function DashboardPage() {
         if (mattersRes.status === "fulfilled") {
           setMatters(mattersRes.value);
           cacheSet("dashboard/matters", mattersRes.value);
+        }
+        if (announcementsRes.status === "fulfilled") {
+          setAnnouncements(announcementsRes.value);
+          cacheSet("dashboard/announcements", announcementsRes.value);
         }
       })
       .catch((e) => {
@@ -351,6 +359,12 @@ export default function DashboardPage() {
   const priorityMatters = canViewGovernanceWork
     ? sortMattersByInsight(matters).slice(0, 2)
     : [];
+  const latestAnnouncements = useMemo(
+    () => [...announcements]
+      .sort((a, b) => (b.published_at ?? b.created_at).localeCompare(a.published_at ?? a.created_at))
+      .slice(0, 3),
+    [announcements],
+  );
   const urgentCount = (tasks?.items ?? []).filter((task) => task.severity === "critical").length;
   const isOperator = isAdmin || permissions.size > 0 || layoutHint !== "student";
   const dashboardContent = getDashboardContent(profile, can, canAny, isOperator);
@@ -452,6 +466,38 @@ export default function DashboardPage() {
           </Link>
         </aside>
       </section>
+
+      {latestAnnouncements.length > 0 && (
+        <section className="dashboard-focus-main dashboard-announcements-panel" aria-labelledby="dashboard-announcements-title">
+          <div className="dashboard-section-heading">
+            <h2 id="dashboard-announcements-title">最新公告</h2>
+            <Link href="/announcements" className="dashboard-text-link">
+              查看全部 <ChevronRight size={14} aria-hidden={true} />
+            </Link>
+          </div>
+          <ul className="dashboard-announcement-list">
+            {latestAnnouncements.map((announcement) => (
+              <li key={announcement.id}>
+                <Link href={`/announcements/${announcement.id}`} className="dashboard-announcement-row">
+                  <span
+                    className="dashboard-announcement-badge"
+                    style={announcement.is_urgent
+                      ? { color: "var(--warning)", background: "var(--warning-dim)" }
+                      : { color: "var(--primary-text)", background: "var(--primary-dim)" }}
+                  >
+                    {announcement.is_urgent ? "重要" : "公告"}
+                  </span>
+                  <span className="dashboard-announcement-title">{announcement.title}</span>
+                  <time className="dashboard-announcement-date" dateTime={announcement.published_at ?? announcement.created_at}>
+                    {formatDate(announcement.published_at ?? announcement.created_at)}
+                  </time>
+                  <ChevronRight size={15} aria-hidden={true} style={{ color: "var(--text-disabled)" }} />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <details className="rounded-lg p-4" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
@@ -735,7 +781,7 @@ function getPrimaryAction(
   if (isOperator) {
     return { href: "/tasks", label: "查看待辦", detail: "統一工作佇列", icon: ListChecks };
   }
-  return { href: "/surveys", label: "填寫問卷", detail: "參與校園決策", icon: PenLine };
+  return { href: "/partner-map", label: "查看特約", detail: "優惠、地點與合作店家", icon: Search };
 }
 
 function getQuickActions(
