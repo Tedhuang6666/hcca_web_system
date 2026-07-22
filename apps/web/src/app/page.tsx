@@ -14,7 +14,11 @@ export default async function PublicHomePage() {
   ]);
 
   return (
-    <PublicSiteShell navPages={bundle?.nav_pages ?? []} settings={bundle?.settings}>
+    <PublicSiteShell
+      navPages={bundle?.nav_pages ?? []}
+      settings={bundle?.settings}
+      urgentAnnouncement={urgentAnnouncement}
+    >
       <HomeContent
         bundle={bundle}
         announcements={announcements}

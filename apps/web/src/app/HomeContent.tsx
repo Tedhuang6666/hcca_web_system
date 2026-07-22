@@ -3,7 +3,6 @@
 import Link from "next/link";
 import {
   ArrowRight,
-  AlertTriangle,
   BellRing,
   Database,
   ExternalLink,
@@ -86,37 +85,6 @@ export default function HomeContent({
           </div>
         </div>
       </section>
-
-      {urgentAnnouncement && (
-        <section className="public-urgent-region" aria-labelledby="important-announcement-title">
-          <div className="public-urgent-heading">
-            <AlertTriangle size={19} aria-hidden />
-            <p>重要公告</p>
-          </div>
-          <Link
-            href={urgentAnnouncement.link_url || `/news/${urgentAnnouncement.id}`}
-            className="public-urgent-link"
-          >
-            <span className="min-w-0">
-              <span id="important-announcement-title" className="block text-lg font-bold leading-snug">
-                {urgentAnnouncement.title}
-              </span>
-              <time
-                className="mt-2 block text-sm"
-                dateTime={urgentAnnouncement.published_at ?? urgentAnnouncement.created_at}
-              >
-                發布於 {new Date(
-                  urgentAnnouncement.published_at ?? urgentAnnouncement.created_at,
-                ).toLocaleDateString("zh-TW")}
-              </time>
-            </span>
-            <span className="public-urgent-action">
-              {urgentAnnouncement.link_label || (urgentAnnouncement.link_url ? "前往連結" : "查看公告")}
-              <ArrowRight size={16} aria-hidden />
-            </span>
-          </Link>
-        </section>
-      )}
 
       {(activeElection || latestAnnouncements.length > 0 || recentlyUpdatedPages.length > 0) && (
         <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6" aria-labelledby="public-now-title" data-reveal>
