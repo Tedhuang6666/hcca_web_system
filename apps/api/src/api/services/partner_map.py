@@ -9,6 +9,7 @@ from urllib.parse import parse_qs, unquote, urljoin, urlparse, urlunsplit
 
 import httpx
 from sqlalchemy import Select, and_, desc, exists, func, or_, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -17,6 +18,7 @@ from api.models.partner_map import (
     PartnerBusiness,
     PartnerBusinessListingType,
     PartnerBusinessStatus,
+    PartnerCheckin,
     PartnerLocation,
     PartnerOffer,
     PartnerRating,
@@ -198,6 +200,7 @@ def _business_options():
         selectinload(PartnerBusiness.locations),
         selectinload(PartnerBusiness.offers),
         selectinload(PartnerBusiness.ratings),
+        selectinload(PartnerBusiness.checkins),
     )
 
 
@@ -274,6 +277,22 @@ async def create_business(
     db.add(business)
     await db.flush()
     await db.refresh(business, ["tags", "locations", "offers", "ratings"])
+    return business
+
+
+async def record_business_checkin(
+    db: AsyncSession, business: PartnerBusiness, user_id: uuid.UUID
+) -> PartnerBusiness:
+    statement = (
+        pg_insert(PartnerCheckin)
+        .values(business_id=business.id, user_id=user_id)
+        .on_conflict_do_nothing(index_elements=["business_id", "user_id"])
+    )
+    result = await db.execute(statement)
+    if result.rowcount:
+        business.checkin_count += 1
+        await db.flush()
+    await db.refresh(business, ["tags", "locations", "offers", "ratings", "checkins"])
     return business
 
 

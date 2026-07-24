@@ -588,6 +588,16 @@ export default function PartnerMapAdminPage() {
                   {submission.offer_hint && (
                     <p className="mt-1 text-xs" style={{ color: "var(--text-secondary)" }}>{submission.offer_hint}</p>
                   )}
+                  {submission.google_maps_url && (
+                    <a
+                      className="mt-1 inline-flex text-xs font-medium hover:underline"
+                      href={submission.google_maps_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: "var(--primary)" }}>
+                      開啟 Google Maps ↗
+                    </a>
+                  )}
                   <div className="mt-2 flex gap-2">
                     <button className="btn btn-ghost" onClick={() => reviewSubmission(submission.id, true)}>
                       <CheckCircle size={14} aria-hidden="true" />採納

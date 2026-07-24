@@ -235,6 +235,7 @@ from api.models.outbox import OutboxEvent  # noqa: F401
 from api.models.partner_map import (  # noqa: F401
     PartnerBusiness,
     PartnerBusinessStatus,
+    PartnerCheckin,
     PartnerLocation,
     PartnerOffer,
     PartnerRating,

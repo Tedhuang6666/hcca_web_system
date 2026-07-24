@@ -80,6 +80,7 @@ def _business_out(
     *,
     include_private: bool,
     include_internal: bool = False,
+    viewer_id: uuid.UUID | None = None,
 ) -> PartnerBusinessOut:
     out = PartnerBusinessOut.model_validate(business)
     rating_avg, rating_count = map_svc.rating_stats(business)
@@ -90,6 +91,14 @@ def _business_out(
     )
     out.rating_avg = rating_avg
     out.rating_count = rating_count
+    out.my_rating = (
+        next((rating.rating for rating in business.ratings if rating.user_id == viewer_id), None)
+        if viewer_id
+        else None
+    )
+    out.has_checked_in = (
+        any(checkin.user_id == viewer_id for checkin in business.checkins) if viewer_id else False
+    )
     out.popularity_score = map_svc.popularity_score(business)
     out.locations = (
         [
@@ -299,7 +308,9 @@ async def get_business_detail(
     if business.status != "active":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此特約店家")
     await map_svc.increment_business_metric(db, business, "view")
-    return _business_out(business, include_private=viewer is not None)
+    return _business_out(
+        business, include_private=viewer is not None, viewer_id=viewer.id if viewer else None
+    )
 
 
 @router.get(
@@ -334,7 +345,9 @@ async def record_business_click(
     if business.status != "active":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此特約店家")
     business = await map_svc.increment_business_metric(db, business, "click")
-    return _business_out(business, include_private=viewer is not None)
+    return _business_out(
+        business, include_private=viewer is not None, viewer_id=viewer.id if viewer else None
+    )
 
 
 @router.post(
@@ -343,13 +356,13 @@ async def record_business_click(
     summary="記錄學生常去",
 )
 async def record_business_checkin(
-    business_id: uuid.UUID, db: DbDep, viewer: OptionalUser
+    business_id: uuid.UUID, db: DbDep, viewer: CurrentUser
 ) -> PartnerBusinessOut:
     business = await _business_or_404(db, business_id)
     if business.status != "active":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此特約店家")
-    business = await map_svc.increment_business_metric(db, business, "checkin")
-    return _business_out(business, include_private=viewer is not None)
+    business = await map_svc.record_business_checkin(db, business, viewer.id)
+    return _business_out(business, include_private=True, viewer_id=viewer.id)
 
 
 @router.get(
