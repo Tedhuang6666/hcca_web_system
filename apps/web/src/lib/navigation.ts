@@ -347,7 +347,7 @@ export const NAV_DEF_STUDENT: NavEntry[] = [
   {
     id: "student-main",
     heading: "我的校園服務",
-    items: byIds(["dashboard", "tasks", "announcements", "surveys"]),
+    items: byIds(["dashboard", "announcements", "documents", "regulations", "surveys"]),
   },
   {
     id: "student-services",
@@ -431,7 +431,7 @@ export const NAVIGATION_PROFILES: Record<NavigationProfile, NavigationProfileCon
     description: "把一般學生常用的公告、問卷、陳情、學餐、商品與特約地圖集中成服務入口。",
     audience: "一般學生、未持有行政或商家權限的登入使用者",
     desktopSections: NAV_DEF_STUDENT,
-    mobileOrder: ["dashboard", "announcements", "surveys", "meal", "shop", "merchandiseSubmissions", "petitions", "partnerMap", "settings"],
+    mobileOrder: ["dashboard", "announcements", "documents", "regulations", "surveys", "meal", "shop", "merchandiseSubmissions", "petitions", "partnerMap", "settings"],
   },
   teacher: {
     id: "teacher",
