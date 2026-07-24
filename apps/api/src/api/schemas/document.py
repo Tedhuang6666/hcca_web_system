@@ -653,6 +653,10 @@ class DocumentUpdate(BaseModel):
         return self
 
 
+class DocumentVisibilityUpdate(BaseModel):
+    visibility_level: DocumentVisibility = Field(..., description="新的公文可見度")
+
+
 class DocumentArchiveSettingsUpdate(BaseModel):
     """已核准公文的預約歸檔設定；傳 null 可取消預約。"""
 

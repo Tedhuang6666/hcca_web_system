@@ -32,6 +32,11 @@ export const documentsApi = {
   create: (body: DocumentCreate) => post<DocumentWithArchive>("/documents", body),
   update: (id: string, body: Partial<DocumentCreate> & { change_note?: string; autosave?: boolean }) =>
     patch<DocumentOut>(`/documents/${id}`, body),
+  updateVisibility: (id: string, visibility_level: DocumentCreate["visibility_level"]) =>
+    request<DocumentOut>(`/documents/${id}/visibility`, {
+      method: "PUT",
+      body: JSON.stringify({ visibility_level }),
+    }),
   delete: (id: string) => del<void>(`/documents/${id}`),
   submit: (id: string, approver_ids: string[]) =>
     post<DocumentOut>(`/documents/${id}/submit`, { approver_ids }),

@@ -229,6 +229,19 @@ async def update_document(
     return doc
 
 
+async def update_document_visibility(
+    session: AsyncSession,
+    doc: Document,
+    *,
+    visibility: DocumentVisibility,
+) -> Document:
+    """調整公文可見度；不受草稿狀態限制，也不建立正文版本快照。"""
+    doc.visibility_level = visibility
+    doc.is_public = visibility == DocumentVisibility.PUBLICLY_OPEN
+    await session.flush()
+    return doc
+
+
 async def submit_document(
     session: AsyncSession,
     doc: Document,
