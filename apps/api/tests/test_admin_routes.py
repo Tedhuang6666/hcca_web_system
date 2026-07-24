@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
+from unittest.mock import AsyncMock
 
 import pytest
 from httpx import AsyncClient
@@ -11,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies.auth import get_current_active_user
 from api.main import app
-from api.models.org import Org, Position, UserPosition
+from api.models.org import Org, Permission, Position, UserPosition
 from api.models.user import User
 from api.models.user_identity import UserIdentity
 from api.routers import auth as auth_router
@@ -76,9 +77,12 @@ async def test_admin_can_update_position_weight(
 async def test_admin_can_update_user_position_dates(
     client: AsyncClient,
     db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     admin, member, _, _, assignment = await _seed_admin_data(db_session)
     _override_user(admin)
+    invalidate = AsyncMock()
+    monkeypatch.setattr("api.routers.admin.cache_invalidate_user_permissions", invalidate)
     start = date.today() - timedelta(days=7)
     end = date.today() + timedelta(days=30)
 
@@ -90,6 +94,34 @@ async def test_admin_can_update_user_position_dates(
     assert response.status_code == 200
     updated = response.json()["positions"][0]
     assert updated["user_position_id"] == str(assignment.id)
+    invalidate.assert_awaited_once_with(str(member.id))
+
+
+@pytest.mark.asyncio
+async def test_replacing_position_permissions_invalidates_holder_caches(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    admin, member, _, position, _ = await _seed_admin_data(db_session)
+    _override_user(admin)
+    invalidate = AsyncMock()
+    monkeypatch.setattr("api.routers.admin.cache_invalidate_user_permissions", invalidate)
+
+    response = await client.put(
+        f"/admin/positions/{position.id}/permissions",
+        json=["document:create"],
+    )
+
+    assert response.status_code == 200
+    assert response.json()["permission_codes"] == ["document:create"]
+    assert (
+        await db_session.scalar(
+            select(Permission.code).where(Permission.position_id == position.id)
+        )
+        == "document:create"
+    )
+    invalidate.assert_awaited_once_with(str(member.id))
 
 
 @pytest.mark.asyncio

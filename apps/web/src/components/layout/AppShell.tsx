@@ -20,7 +20,7 @@ import ImportantAnnouncementBanner from "@/components/site/ImportantAnnouncement
 const CommandMenu = dynamic(() => import("./CommandMenu"), { ssr: false });
 import { PolicyConsentBanner } from "@/components/legal/PolicyConsentBanner";
 import { isPublicRoute, requiresAuthentication } from "@/lib/route-access";
-import { authApi } from "@/lib/api";
+import { ApiError, authApi } from "@/lib/api";
 import { cacheCurrentUser, clearAuthCache } from "@/lib/auth-cache";
 
 /** 完全裸頁（不渲染 Shell）：公開官網、login、auth callback、Email 退訂落地頁 */
@@ -55,10 +55,9 @@ function SessionGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    const loggedIn = Boolean(localStorage.getItem("user_id"));
 
     if (!requiresAuthentication(pathname)) {
-      setIsLoggedIn(loggedIn);
+      setIsLoggedIn(Boolean(localStorage.getItem("user_id")));
       setRedirecting(false);
       setAuthReady(true);
       return () => {
@@ -68,6 +67,7 @@ function SessionGate({ children }: { children: React.ReactNode }) {
 
     setAuthReady(false);
     const verifySession = async () => {
+      const loggedIn = Boolean(localStorage.getItem("user_id"));
       if (!loggedIn) {
         if (cancelled) return;
         setRedirecting(true);
@@ -87,8 +87,16 @@ function SessionGate({ children }: { children: React.ReactNode }) {
         redirectedFrom.current = null;
         setRedirecting(false);
         setAuthReady(true);
-      } catch {
+      } catch (error) {
         if (cancelled) return;
+        // 暫時性網路/API 失敗不能清除登入快取，否則短暫 503 會被誤判成
+        // 登入失效，導致管理權限畫面消失，使用者只能重新登入。
+        if (error instanceof ApiError && (error.status === 0 || error.status >= 500)) {
+          setIsLoggedIn(true);
+          setRedirecting(false);
+          setAuthReady(true);
+          return;
+        }
         clearAuthCache();
         setIsLoggedIn(false);
         setRedirecting(true);
@@ -101,8 +109,15 @@ function SessionGate({ children }: { children: React.ReactNode }) {
     };
 
     void verifySession();
+    const revalidate = () => {
+      if (document.visibilityState === "visible") void verifySession();
+    };
+    window.addEventListener("focus", revalidate);
+    document.addEventListener("visibilitychange", revalidate);
     return () => {
       cancelled = true;
+      window.removeEventListener("focus", revalidate);
+      document.removeEventListener("visibilitychange", revalidate);
     };
   }, [pathname, router]);
 
