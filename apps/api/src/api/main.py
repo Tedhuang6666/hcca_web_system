@@ -412,6 +412,7 @@ def create_app() -> FastAPI:
     app.include_router(admin.router)
     app.include_router(admin_system.public_router)
     app.include_router(admin_system.router)
+    app.include_router(navigation_profiles.public_router)
     app.include_router(navigation_profiles.router)
     app.include_router(data_lifecycle.router)
     app.include_router(trash.router)

@@ -109,6 +109,9 @@ class PartnerBusiness(Base, TimestampMixin):
     social_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     logo_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     cover_image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    flyer_storage_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    flyer_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    flyer_content_type: Mapped[str | None] = mapped_column(String(120), nullable=True)
     category: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     business_hours_text: Mapped[str | None] = mapped_column(String(300), nullable=True)
     listing_type: Mapped[str] = mapped_column(
@@ -234,8 +237,8 @@ class PartnerRating(Base, TimestampMixin):
         nullable=False,
         index=True,
     )
-    user_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     rating: Mapped[int] = mapped_column(Integer, nullable=False)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)

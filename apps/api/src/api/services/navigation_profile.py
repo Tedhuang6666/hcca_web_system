@@ -72,6 +72,15 @@ async def get_profile(db: AsyncSession, profile_id: uuid.UUID) -> NavigationProf
     )
 
 
+async def get_active_profile_by_key(db: AsyncSession, key: str) -> NavigationProfileOut | None:
+    profile = await db.scalar(
+        select(NavigationProfile)
+        .options(selectinload(NavigationProfile.positions))
+        .where(NavigationProfile.key == key, NavigationProfile.is_active.is_(True))
+    )
+    return _profile_out(profile) if profile is not None else None
+
+
 async def create_profile(db: AsyncSession, body: NavigationProfileCreate) -> NavigationProfileOut:
     profile = NavigationProfile(
         key=body.key,
@@ -140,8 +149,9 @@ async def resolve_for_user(db: AsyncSession, user: User) -> NavigationProfileRes
     default_profile = next(
         (profile for profile in profiles if profile.key == "default"), profiles[-1]
     )
+    student_profile = next((profile for profile in profiles if profile.key == "student"), None)
     for profile in profiles:
-        if profile.key == "default":
+        if profile.key in {"default", "public", "student"}:
             continue
         excluded = _has_match(permissions, profile.exclude_permissions, profile.exclude_prefixes)
         if excluded:
@@ -169,6 +179,8 @@ async def resolve_for_user(db: AsyncSession, user: User) -> NavigationProfileRes
                 },
             )
 
+    if student_profile is not None:
+        return NavigationProfileResolveOut(profile=_profile_out(student_profile), source="student")
     return NavigationProfileResolveOut(profile=_profile_out(default_profile), source="default")
 
 

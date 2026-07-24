@@ -253,6 +253,7 @@ class PartnerBusinessOut(BaseModel):
     social_url: str | None
     logo_url: str | None
     cover_image_url: str | None
+    flyer_image_url: str | None = None
     category: str | None
     business_hours_text: str | None
     listing_type: str
@@ -334,7 +335,7 @@ class PartnerRatingOut(BaseModel):
 
     id: uuid.UUID
     business_id: uuid.UUID
-    user_id: uuid.UUID | None
+    user_id: uuid.UUID
     rating: int
     comment: str | None
     visit_count: int

@@ -50,6 +50,30 @@ async def test_list_navigation_profiles_by_member_returns_403(
     assert resp.status_code == 403
 
 
+async def test_get_public_navigation_profile_without_login(client, db_session) -> None:
+    await _seed_profile(
+        db_session,
+        key="public",
+        label="公開查詢視角",
+        is_system=True,
+        desktop_sections=[
+            {
+                "id": "public-main",
+                "heading": "公開查詢",
+                "items": ["publicDocuments"],
+                "collapsible": False,
+                "default_collapsed": False,
+            }
+        ],
+    )
+
+    resp = await client.get("/navigation-profiles/public")
+
+    assert resp.status_code == 200
+    assert resp.json()["key"] == "public"
+    assert resp.json()["desktop_sections"][0]["items"] == ["publicDocuments"]
+
+
 async def test_list_navigation_profiles_by_admin_includes_created_profiles(
     admin_user, authed_client_factory, db_session
 ) -> None:

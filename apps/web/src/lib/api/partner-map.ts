@@ -1,7 +1,7 @@
 import type {
   PartnerBusinessCreate, PartnerBusinessListItem, PartnerBusinessOut, PartnerBusinessUpdate, PartnerLocationCreate, PartnerLocationOut, PartnerLocationUpdate, PartnerMapItem, PartnerOfferCreate, PartnerOfferOut, PartnerOfferUpdate, PartnerRankingItem, PartnerRatingCreate, PartnerRatingOut, PartnerSubmissionCreate, PartnerSubmissionOut, PartnerTagCreate, PartnerTagOut, PartnerTagUpdate,
 } from "../types";
-import { get, post, patch, del } from "./core";
+import { ApiError, BASE, csrfHeaders, errorMessageFromResponse, get, post, patch, del } from "./core";
 
 export type PartnerBusinessListingType = "physical" | "online";
 type PartnerBusinessContactFields = {
@@ -15,6 +15,9 @@ type PartnerBusinessContactFields = {
 };
 export type PartnerBusinessDirectoryItem = PartnerBusinessListItem & PartnerBusinessContactFields;
 export type PartnerLocationWithMapUrl = PartnerLocationOut & { google_maps_url: string | null };
+type PartnerBusinessOutWithFlyer = PartnerBusinessOut & {
+  flyer_image_url: string | null;
+};
 export type PartnerLocationCreateWithMapUrl = PartnerLocationCreate & {
   google_maps_url?: string | null;
 };
@@ -25,7 +28,7 @@ export type PartnerOfferDetail = PartnerOfferOut & {
   benefit_type: "discount" | "gift" | "bundle" | "member_price" | "other";
   benefit_value: string | null;
 };
-export type PartnerBusinessDetail = Omit<PartnerBusinessOut, "offers" | "locations"> &
+export type PartnerBusinessDetail = Omit<PartnerBusinessOutWithFlyer, "offers" | "locations"> &
   PartnerBusinessContactFields & {
     offers: PartnerOfferDetail[];
     locations: PartnerLocationWithMapUrl[];
@@ -112,6 +115,21 @@ export const partnerMapApi = {
     post<PartnerBusinessDetail>("/partner-map/admin/businesses", body),
   updateBusiness: (id: string, body: PartnerBusinessUpdate) =>
     patch<PartnerBusinessDetail>(`/partner-map/admin/businesses/${id}`, body),
+  uploadFlyer: async (id: string, file: File): Promise<PartnerBusinessDetail> => {
+    const form = new FormData();
+    form.append("file", file);
+    const response = await fetch(`${BASE}/partner-map/admin/businesses/${id}/flyer`, {
+      method: "POST",
+      credentials: "include",
+      headers: csrfHeaders("POST"),
+      body: form,
+    });
+    if (!response.ok) {
+      throw new ApiError(response.status, await errorMessageFromResponse(response));
+    }
+    return response.json() as Promise<PartnerBusinessDetail>;
+  },
+  deleteFlyer: (id: string) => del<void>(`/partner-map/admin/businesses/${id}/flyer`),
   deleteBusiness: (id: string) => del<void>(`/partner-map/admin/businesses/${id}`),
   adminSubmissions: (params?: { status?: string }) => {
     const qs = params?.status ? `?${new URLSearchParams({ status: params.status }).toString()}` : "";

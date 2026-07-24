@@ -22,10 +22,24 @@ from api.schemas.navigation_profile import (
 from api.services import navigation_profile as service
 
 router = APIRouter(prefix="/admin/navigation-profiles", tags=["管理員 / 視角管理"])
+public_router = APIRouter(prefix="/navigation-profiles", tags=["公開 / 導覽"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
 AdminDep = Depends(require_permission(PermissionCode.ADMIN_ALL))
+
+
+@public_router.get("/{profile_key}", response_model=NavigationProfileOut)
+async def get_public_navigation_profile(
+    profile_key: str,
+    db: DbDep,
+) -> NavigationProfileOut:
+    if profile_key not in {"public", "student"}:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="公開視角不存在")
+    profile = await service.get_active_profile_by_key(db, profile_key)
+    if profile is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="公開視角不存在")
+    return profile
 
 
 @router.get("", response_model=list[NavigationProfileOut], dependencies=[AdminDep])

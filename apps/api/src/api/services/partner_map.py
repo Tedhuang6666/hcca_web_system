@@ -350,8 +350,10 @@ async def list_contact_businesses(
     return list(result.scalars().unique().all())
 
 
-async def delete_business(db: AsyncSession, business: PartnerBusiness) -> None:
+async def delete_business(db: AsyncSession, business: PartnerBusiness) -> str | None:
+    flyer_storage_key = business.flyer_storage_key
     await db.delete(business)
+    return flyer_storage_key
 
 
 def _business_matches_tag_ids(tag_ids: list[uuid.UUID]):
@@ -563,17 +565,15 @@ async def upsert_rating(
     db: AsyncSession,
     business: PartnerBusiness,
     data: PartnerRatingCreate,
-    user_id: uuid.UUID | None,
+    user_id: uuid.UUID,
 ) -> PartnerRating:
-    rating: PartnerRating | None = None
-    if user_id is not None:
-        result = await db.execute(
-            select(PartnerRating).where(
-                PartnerRating.business_id == business.id,
-                PartnerRating.user_id == user_id,
-            )
+    result = await db.execute(
+        select(PartnerRating).where(
+            PartnerRating.business_id == business.id,
+            PartnerRating.user_id == user_id,
         )
-        rating = result.scalar_one_or_none()
+    )
+    rating = result.scalar_one_or_none()
     if rating is None:
         rating = PartnerRating(business_id=business.id, user_id=user_id)
         db.add(rating)
