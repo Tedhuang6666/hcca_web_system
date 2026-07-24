@@ -160,6 +160,9 @@ class PartnerBusiness(Base, TimestampMixin):
     ratings: Mapped[list[PartnerRating]] = relationship(
         "PartnerRating", back_populates="business", cascade="all, delete-orphan"
     )
+    checkins: Mapped[list[PartnerCheckin]] = relationship(
+        "PartnerCheckin", back_populates="business", cascade="all, delete-orphan"
+    )
 
 
 class PartnerLocation(Base, TimestampMixin):
@@ -251,6 +254,27 @@ class PartnerRating(Base, TimestampMixin):
     user: Mapped[User | None] = relationship("User")
 
 
+class PartnerCheckin(Base, TimestampMixin):
+    """學生對特約店家的唯一常去紀錄。"""
+
+    __tablename__ = "partner_checkins"
+    __table_args__ = (UniqueConstraint("business_id", "user_id", name="uq_partner_checkin_user"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("partner_businesses.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    business: Mapped[PartnerBusiness] = relationship("PartnerBusiness", back_populates="checkins")
+    user: Mapped[User] = relationship("User")
+
+
 class PartnerSubmission(Base, TimestampMixin):
     """學生投稿的新特約店家候選。"""
 
@@ -260,6 +284,7 @@ class PartnerSubmission(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     category: Mapped[str | None] = mapped_column(String(50), nullable=True)
     address: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    google_maps_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -289,6 +314,7 @@ __all__ = [
     "PartnerBusiness",
     "PartnerBusinessListingType",
     "PartnerBusinessStatus",
+    "PartnerCheckin",
     "PartnerLocation",
     "PartnerOffer",
     "PartnerRating",

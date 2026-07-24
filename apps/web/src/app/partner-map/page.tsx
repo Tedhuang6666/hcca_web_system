@@ -192,9 +192,14 @@ function DetailPanel({
             </section>
           )}
           {business.listing_type === "physical" && <div className="grid grid-cols-3 gap-2">
-            <div className="rounded-lg border p-2 text-center" style={{ borderColor: "var(--border)" }}>
-              <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{business.rating_avg ?? "-"}</p>
-              <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>評價</p>
+            <div className="rounded-lg border-2 p-2 text-center" style={{ borderColor: "var(--primary)", background: "var(--bg-elevated)" }}>
+              <p className="text-2xl font-bold" style={{ color: "var(--primary)" }}>{business.rating_avg ?? "-"}</p>
+              <p className="text-[11px] font-medium" style={{ color: "var(--text-primary)" }}>整體評價（{business.rating_count} 則）</p>
+              {business.my_rating && (
+                <p className="mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ background: "var(--primary)", color: "var(--primary-fg)" }}>
+                  <Star size={11} fill="currentColor" aria-hidden="true" /> 我的評分 {business.my_rating}/5
+                </p>
+              )}
             </div>
             <div className="rounded-lg border p-2 text-center" style={{ borderColor: "var(--border)" }}>
               <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{business.checkin_count}</p>
@@ -252,12 +257,23 @@ function DetailPanel({
             <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>可評價一次，之後再次選擇分數即可修改。</p>
             <div className="mt-2 flex flex-wrap gap-2">
               {[1, 2, 3, 4, 5].map((score) => (
-                <button key={score} className="btn btn-ghost px-2" onClick={() => onRate(score)}>
-                  <Star size={14} aria-hidden="true" /> {score}
+                <button
+                  key={score}
+                  className="btn px-2"
+                  onClick={() => onRate(score)}
+                  aria-pressed={business.my_rating === score}
+                  style={business.my_rating === score
+                    ? { background: "var(--primary)", color: "var(--primary-fg)", border: "2px solid var(--primary)" }
+                    : undefined}>
+                  <Star size={14} fill={business.my_rating === score ? "currentColor" : "none"} aria-hidden="true" /> {score}
                 </button>
               ))}
-              <button className="btn" onClick={onCheckIn} style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
-                <Trophy size={14} aria-hidden="true" /> 我常去
+              <button
+                className="btn"
+                onClick={onCheckIn}
+                disabled={business.has_checked_in}
+                style={{ background: business.has_checked_in ? "var(--bg-elevated)" : "var(--primary)", color: business.has_checked_in ? "var(--text-muted)" : "var(--primary-fg)", border: "none" }}>
+                <Trophy size={14} aria-hidden="true" /> {business.has_checked_in ? "已加入常去" : "我常去"}
               </button>
             </div>
           </section>}
@@ -320,6 +336,7 @@ export default function PartnerMapPage() {
     name: "",
     category: "",
     address: "",
+    google_maps_url: "",
     reason: "",
     offer_hint: "",
   });
@@ -389,7 +406,7 @@ export default function PartnerMapPage() {
       });
       toast.success("已送出投稿，等待管理員審核");
       setSubmissionOpen(false);
-      setSubmission({ name: "", category: "", address: "", reason: "", offer_hint: "" });
+      setSubmission({ name: "", category: "", address: "", google_maps_url: "", reason: "", offer_hint: "" });
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : "投稿失敗");
     }
@@ -771,6 +788,7 @@ export default function PartnerMapPage() {
                   <input className="input" placeholder="店家名稱" value={submission.name} onChange={(e) => setSubmission((s) => ({ ...s, name: e.target.value }))} />
                   <input className="input" placeholder="類型，例如 飲料 / 早餐 / 文具 / 補習班" value={submission.category ?? ""} onChange={(e) => setSubmission((s) => ({ ...s, category: e.target.value }))} />
                   <input className="input" placeholder="地址" value={submission.address ?? ""} onChange={(e) => setSubmission((s) => ({ ...s, address: e.target.value }))} />
+                  <input className="input" type="url" placeholder="Google Maps 連結（可直接貼上）" value={submission.google_maps_url ?? ""} onChange={(e) => setSubmission((s) => ({ ...s, google_maps_url: e.target.value }))} />
                   <textarea className="input min-h-20" placeholder="推薦原因" value={submission.reason ?? ""} onChange={(e) => setSubmission((s) => ({ ...s, reason: e.target.value }))} />
                   <input className="input" placeholder="可能的特約優惠，例如 學生證九折" value={submission.offer_hint ?? ""} onChange={(e) => setSubmission((s) => ({ ...s, offer_hint: e.target.value }))} />
                 </div>

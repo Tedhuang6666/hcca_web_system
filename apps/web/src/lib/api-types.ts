@@ -24756,6 +24756,8 @@ export interface components {
             description: string | null;
             /** Flyer Image Url */
             flyer_image_url?: string | null;
+            /** Has Checked In */
+            has_checked_in?: boolean;
             /**
              * Id
              * Format: uuid
@@ -24797,6 +24799,8 @@ export interface components {
              * @default 0
              */
             rating_count: number;
+            /** My Rating */
+            my_rating?: number | null;
             /** Social Url */
             social_url: string | null;
             /** Sort Order */
@@ -25283,6 +25287,8 @@ export interface components {
             category?: string | null;
             /** Contact Hint */
             contact_hint?: string | null;
+            /** Google Maps Url */
+            google_maps_url?: string | null;
             /** Latitude */
             latitude?: number | null;
             /** Longitude */
@@ -25309,6 +25315,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Google Maps Url */
+            google_maps_url: string | null;
             /**
              * Id
              * Format: uuid
@@ -31918,6 +31926,8 @@ export interface components {
             audit_id: string;
             /** Created At */
             created_at: string;
+            /** Google Maps Url */
+            google_maps_url: string | null;
             /** Entity Id */
             entity_id: string;
             /** Entity Type */

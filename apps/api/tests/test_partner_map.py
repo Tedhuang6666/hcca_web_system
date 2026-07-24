@@ -252,7 +252,12 @@ async def test_partner_ratings_require_login_and_upsert_one_score_per_user(
         json={"rating": 1},
         headers=HOST_HEADERS,
     )
+    anonymous_checkin_response = await client.post(
+        f"/partner-map/businesses/{business.id}/check-in",
+        headers=HOST_HEADERS,
+    )
     assert anonymous_response.status_code == 401
+    assert anonymous_checkin_response.status_code == 401
 
     _override_current_user(user)
     first_response = await client.post(
@@ -275,6 +280,38 @@ async def test_partner_ratings_require_login_and_upsert_one_score_per_user(
     assert ratings_response.status_code == 200
     assert len(ratings_response.json()) == 1
     assert ratings_response.json()[0]["rating"] == 5
+
+    first_checkin = await client.post(
+        f"/partner-map/businesses/{business.id}/check-in",
+        headers=HOST_HEADERS,
+    )
+    second_checkin = await client.post(
+        f"/partner-map/businesses/{business.id}/check-in",
+        headers=HOST_HEADERS,
+    )
+
+    assert first_checkin.status_code == 200
+    assert second_checkin.status_code == 200
+    assert first_checkin.json()["checkin_count"] == 1
+    assert second_checkin.json()["checkin_count"] == 1
+    assert second_checkin.json()["has_checked_in"] is True
+
+
+@pytest.mark.asyncio
+async def test_partner_submission_accepts_google_maps_url(
+    client: AsyncClient,
+) -> None:
+    response = await client.post(
+        "/partner-map/submissions",
+        headers=HOST_HEADERS,
+        json={
+            "name": "地圖投稿店家",
+            "google_maps_url": "https://maps.google.com/?q=25.04,121.53",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["google_maps_url"] == "https://maps.google.com/?q=25.04,121.53"
 
 
 @pytest.mark.asyncio

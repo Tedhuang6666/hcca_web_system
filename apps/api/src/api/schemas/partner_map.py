@@ -270,6 +270,8 @@ class PartnerBusinessOut(BaseModel):
     checkin_count: int = 0
     rating_avg: float | None = None
     rating_count: int = 0
+    my_rating: int | None = None
+    has_checked_in: bool = False
     popularity_score: float = 0
     internal_note: str | None
     created_by: uuid.UUID | None
@@ -348,6 +350,7 @@ class PartnerSubmissionCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     category: str | None = Field(None, max_length=50)
     address: str | None = Field(None, max_length=300)
+    google_maps_url: str | None = Field(None, max_length=1000)
     latitude: float | None = Field(None, ge=-90, le=90)
     longitude: float | None = Field(None, ge=-180, le=180)
     reason: str | None = None
@@ -368,6 +371,7 @@ class PartnerSubmissionOut(BaseModel):
     name: str
     category: str | None
     address: str | None
+    google_maps_url: str | None
     latitude: float | None
     longitude: float | None
     reason: str | None
