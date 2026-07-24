@@ -489,6 +489,8 @@ async def update_affiliation(
     apply_updates(affiliation, data)
     if affiliation.status == PersonAffiliationStatus.ENDED and affiliation.end_date is None:
         affiliation.end_date = local_today()
+    if affiliation.end_date is not None and affiliation.end_date < affiliation.start_date:
+        affiliation.end_date = affiliation.start_date
     if affiliation.end_date is not None and affiliation.status == PersonAffiliationStatus.ACTIVE:
         affiliation.status = PersonAffiliationStatus.ENDED
     await db.flush()
@@ -504,7 +506,8 @@ async def end_affiliation(
     db: AsyncSession, affiliation: PersonAffiliation, *, end_date: date | None = None
 ) -> PersonAffiliation:
     affiliation.status = PersonAffiliationStatus.ENDED
-    affiliation.end_date = end_date or local_today()
+    effective_end_date = end_date or local_today()
+    affiliation.end_date = max(effective_end_date, affiliation.start_date)
     await db.flush()
     await sync_affiliation_to_rbac(db, affiliation)
     return affiliation

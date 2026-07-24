@@ -4,11 +4,19 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable
+from datetime import date, timedelta
 
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.models.person import Person
+from api.models.org import Org, Position, UserPosition
+from api.models.person import (
+    Person,
+    PersonAffiliation,
+    PersonAffiliationKind,
+    PersonAffiliationSource,
+    PersonAffiliationStatus,
+)
 from api.models.user import User
 
 
@@ -139,6 +147,52 @@ async def test_create_affiliation_then_end_it(
     end_resp = await ac.delete(f"/people/affiliations/{affiliation_id}")
     assert end_resp.status_code == 200
     assert end_resp.json()["status"] == "ended"
+
+
+async def test_end_future_org_affiliation_keeps_a_valid_date_range(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+    db_session: AsyncSession,
+) -> None:
+    person = await _make_person(db_session, user_id=admin_user.id)
+    org = Org(name=f"未開始任期組織-{uuid.uuid4().hex[:6]}")
+    db_session.add(org)
+    await db_session.flush()
+    position = Position(org_id=org.id, name="未開始職位")
+    db_session.add(position)
+    await db_session.flush()
+
+    start_date = date.today() + timedelta(days=7)
+    user_position = UserPosition(
+        user_id=admin_user.id,
+        position_id=position.id,
+        start_date=start_date,
+        end_date=start_date + timedelta(days=365),
+    )
+    db_session.add(user_position)
+    await db_session.flush()
+    affiliation = PersonAffiliation(
+        person_id=person.id,
+        kind=PersonAffiliationKind.ORG_POSITION,
+        org_id=org.id,
+        position_id=position.id,
+        title=position.name,
+        start_date=start_date,
+        end_date=user_position.end_date,
+        status=PersonAffiliationStatus.ACTIVE,
+        source=PersonAffiliationSource.RBAC_SYNC,
+        synced_user_position_id=user_position.id,
+    )
+    db_session.add(affiliation)
+    await db_session.flush()
+
+    ac = authed_client_factory(admin_user)
+    response = await ac.delete(f"/people/affiliations/{affiliation.id}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ended"
+    assert body["end_date"] == start_date.isoformat()
 
 
 async def test_create_affiliation_class_member_requires_class_id(
