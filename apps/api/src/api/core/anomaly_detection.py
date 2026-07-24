@@ -8,6 +8,8 @@ import json
 import logging
 from datetime import UTC, datetime, timedelta
 
+from redis.exceptions import RedisError
+
 from api.core.ip_blocklist import block as ip_block
 from api.core.security import redis_client
 
@@ -18,24 +20,28 @@ _AUTO_BLOCK_TTL_SECONDS = 3600
 
 async def record_login(user_id: str, ip: str, user_agent: str | None = None) -> None:
     """記錄用戶登入"""
-    key = f"login:{user_id}"
-    value = f"{ip}|{user_agent or 'unknown'}|{datetime.now(UTC).isoformat()}"
-    await redis_client.set(key, value, ex=30 * 24 * 3600)  # 保留 30 天
-    history_key = f"login_history:{user_id}"
-    await redis_client.zadd(
-        history_key,
-        {
-            json.dumps({"ip": ip, "user_agent": user_agent or "unknown"}): datetime.now(
-                UTC
-            ).timestamp()
-        },
-    )
-    await redis_client.zremrangebyscore(
-        history_key,
-        "-inf",
-        (datetime.now(UTC) - timedelta(days=30)).timestamp(),
-    )
-    await redis_client.expire(history_key, 30 * 24 * 3600)
+    try:
+        key = f"login:{user_id}"
+        value = f"{ip}|{user_agent or 'unknown'}|{datetime.now(UTC).isoformat()}"
+        await redis_client.set(key, value, ex=30 * 24 * 3600)  # 保留 30 天
+        history_key = f"login_history:{user_id}"
+        await redis_client.zadd(
+            history_key,
+            {
+                json.dumps({"ip": ip, "user_agent": user_agent or "unknown"}): datetime.now(
+                    UTC
+                ).timestamp()
+            },
+        )
+        await redis_client.zremrangebyscore(
+            history_key,
+            "-inf",
+            (datetime.now(UTC) - timedelta(days=30)).timestamp(),
+        )
+        await redis_client.expire(history_key, 30 * 24 * 3600)
+    except (RedisError, TimeoutError):
+        # 登入稽核是輔助功能；Redis 短暫故障不能阻斷合法登入。
+        logger.warning("登入紀錄暫時無法寫入 Redis", exc_info=True)
 
 
 async def get_login_ips(user_id: str) -> list[str]:
@@ -64,7 +70,12 @@ async def check_suspicious_login(user_id: str, current_ip: str) -> tuple[bool, s
     返回 (is_suspicious, reason)
     """
     key = f"login:{user_id}"
-    last_login = await redis_client.get(key)
+    try:
+        last_login = await redis_client.get(key)
+    except (RedisError, TimeoutError):
+        # 無法取得稽核資料時採不阻斷策略，並保留後續登入流程。
+        logger.warning("登入異常檢查暫時無法讀取 Redis", exc_info=True)
+        return False, None
 
     if not last_login:
         return False, None

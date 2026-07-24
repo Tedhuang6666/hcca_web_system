@@ -8,7 +8,9 @@ void apiUrl;
 
 // ── 核心 fetch 包裝 ────────────────────────────────────────────────────────────
 
-let refreshPromise: Promise<boolean> | null = null;
+type RefreshStatus = "ok" | "invalid" | "unavailable";
+
+let refreshPromise: Promise<RefreshStatus> | null = null;
 
 export function formatErrorDetail(detail: unknown, fallback: string): string {
   if (!detail) return fallback;
@@ -88,18 +90,28 @@ async function apiErrorFromResponse(res: Response): Promise<ApiError> {
   return new ApiError(res.status, detail.message, detail.requestId, detail.errorId);
 }
 
-export async function silentRefresh(): Promise<boolean> {
-  refreshPromise ??= fetch(apiUrl("/auth/refresh"), {
+async function refreshWithStatus(): Promise<RefreshStatus> {
+  if (refreshPromise) return refreshPromise;
+
+  const nextRefresh = fetch(apiUrl("/auth/refresh"), {
     method: "POST",
     credentials: "include",
     headers: csrfHeaders("POST"),
   })
-    .then((res) => res.ok)
-    .catch(() => false)
+    .then((res): RefreshStatus => {
+      if (res.ok) return "ok";
+      return res.status >= 500 ? "unavailable" : "invalid";
+    })
+    .catch((): RefreshStatus => "unavailable")
     .finally(() => {
       refreshPromise = null;
     });
-  return refreshPromise;
+  refreshPromise = nextRefresh;
+  return nextRefresh;
+}
+
+export async function silentRefresh(): Promise<boolean> {
+  return (await refreshWithStatus()) === "ok";
 }
 
 function getCookie(name: string): string | null {
@@ -218,8 +230,8 @@ export async function request<T>(
 
   // 401 → 嘗試 silent refresh，成功後重試一次
   if (res.status === 401) {
-    const ok = await silentRefresh();
-    if (ok) {
+    const refreshStatus = await refreshWithStatus();
+    if (refreshStatus === "ok") {
       let retry: Response;
       try {
         retry = await fetch(`${BASE}${path}`, {
@@ -240,7 +252,11 @@ export async function request<T>(
       }
       throw await apiErrorFromResponse(retry);
     }
-    // refresh 失敗：
+    if (refreshStatus === "unavailable") {
+      throw new ApiError(503, "登入服務暫時不可用，請稍後再試", res.headers.get("X-Request-ID"));
+    }
+
+    // refresh 明確失敗：
     // - 若本地「看起來已登入」（有 user_id），視為 session 過期 → 清除並導回登入
     // - 若未登入（無 user_id），可能是在存取公開端點 → 不強制導向 /login
     if (typeof window !== "undefined") {
