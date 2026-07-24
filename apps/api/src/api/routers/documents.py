@@ -57,6 +57,7 @@ from api.schemas.document import (
     DocumentListItem,
     DocumentOut,
     DocumentUpdate,
+    DocumentVisibilityUpdate,
     RecipientCreate,
     RecipientDownloadVariant,
 )
@@ -340,6 +341,60 @@ async def get_document(doc_id: str, session: DbDep, current_user: OptionalUser) 
     await _assert_access(session, doc, current_user)
     await _attach_approval_titles(session, doc)
     return doc
+
+
+@router.put(
+    "/{doc_id}/visibility",
+    response_model=DocumentOut,
+    summary="調整公文可見度（不受發文狀態限制）",
+    responses={
+        200: {"description": "可見度更新成功"},
+        403: {"description": "無調整可見度權限"},
+    },
+)
+async def update_document_visibility(
+    doc_id: str,
+    payload: DocumentVisibilityUpdate,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> Document:
+    doc = await _get_doc_or_404(doc_id, session)
+    if not current_user.is_superuser:
+        codes = await get_user_permission_codes_for_org(session, current_user.id, doc.org_id)
+        is_activity_manager = await activity_svc.can_manage_activity_resource(
+            session, current_user, doc.activity_id
+        )
+        is_org_leader = await user_is_org_leader(session, current_user.id, doc.org_id)
+        if not (
+            doc.created_by == current_user.id
+            or is_org_leader
+            or {"document:admin", "document:edit", "document:create"} & set(codes)
+            or is_activity_manager
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="只有建立者、機關管理者、機關編輯者或活動管理者可以調整公文可見度",
+            )
+
+    previous_visibility = doc.visibility_level
+    updated = await doc_svc.update_document_visibility(
+        session, doc, visibility=payload.visibility_level
+    )
+    await audit_svc.record(
+        session,
+        entity_type="document",
+        entity_id=str(updated.id),
+        action="visibility.update",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={
+            "from": previous_visibility.value,
+            "to": updated.visibility_level.value,
+        },
+        summary=f"調整公文「{updated.title}」可見度為 {updated.visibility_level.value}",
+    )
+    await _attach_approval_titles(session, updated)
+    return updated
 
 
 @router.patch(

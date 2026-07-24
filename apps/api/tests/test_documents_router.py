@@ -377,6 +377,56 @@ async def test_update_non_draft_document_returns_409(
     assert resp.status_code == 409
 
 
+@pytest.mark.asyncio
+async def test_update_visibility_of_issued_document_by_creator_succeeds(
+    db_session: AsyncSession, authed_client_factory
+) -> None:
+    org = Org(name=f"發文可見度組織-{uuid.uuid4().hex[:6]}")
+    creator = User(email="visibility-creator@example.com", display_name="Creator", is_active=True)
+    db_session.add_all([org, creator])
+    await db_session.flush()
+
+    doc = _make_doc(org, creator, status=DocumentStatus.APPROVED)
+    db_session.add(doc)
+    await db_session.flush()
+
+    ac = _authed(authed_client_factory, creator)
+    resp = await ac.put(
+        f"/documents/{doc.id}/visibility",
+        json={"visibility_level": DocumentVisibility.PUBLICLY_OPEN.value},
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["visibility_level"] == DocumentVisibility.PUBLICLY_OPEN.value
+    await db_session.refresh(doc)
+    assert doc.is_public is True
+
+
+@pytest.mark.asyncio
+async def test_update_visibility_by_unrelated_user_returns_403(
+    db_session: AsyncSession, authed_client_factory
+) -> None:
+    org = Org(name=f"發文可見度拒絕組織-{uuid.uuid4().hex[:6]}")
+    creator = User(email="visibility-creator2@example.com", display_name="Creator", is_active=True)
+    stranger = User(
+        email="visibility-stranger@example.com", display_name="Stranger", is_active=True
+    )
+    db_session.add_all([org, creator, stranger])
+    await db_session.flush()
+
+    doc = _make_doc(org, creator, status=DocumentStatus.APPROVED)
+    db_session.add(doc)
+    await db_session.flush()
+
+    ac = _authed(authed_client_factory, stranger)
+    resp = await ac.put(
+        f"/documents/{doc.id}/visibility",
+        json={"visibility_level": DocumentVisibility.PUBLICLY_OPEN.value},
+    )
+
+    assert resp.status_code == 403
+
+
 # ── 刪除 ───────────────────────────────────────────────────────────────────────
 
 

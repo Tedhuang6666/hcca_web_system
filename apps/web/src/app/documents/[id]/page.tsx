@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { documentsApi, usersApi, ApiError, apiErrorMessage } from "@/lib/api";
 import type { DocumentWithArchive, UserSummary } from "@/lib/api";
-import type { RecipientDownloadVariant } from "@/lib/types";
+import type { DocumentVisibility, RecipientDownloadVariant } from "@/lib/types";
 import { usePermissions } from "@/hooks/usePermissions";
 import { DocumentStatusBadge, UrgencyBadge } from "@/components/ui/StatusBadge";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
@@ -39,6 +39,18 @@ const CAT_LABEL: Record<string, string> = {
 };
 const CLASS_LABEL: Record<string, string> = { normal: "普通", confidential: "密", secret: "機密" };
 const URGENCY_LABEL: Record<string, string> = { normal: "普通件", priority: "速件", express: "最速件" };
+const VISIBILITY_LABEL: Record<DocumentVisibility, string> = {
+  subject_only: "僅當事人",
+  org_only: "機關成員",
+  public: "登入可見",
+  publicly_open: "公開（含未登入）",
+};
+const VISIBILITY_OPTIONS: Array<{ value: DocumentVisibility; label: string }> = [
+  { value: "subject_only", label: "僅當事人" },
+  { value: "org_only", label: "機關成員" },
+  { value: "public", label: "登入可見" },
+  { value: "publicly_open", label: "公開" },
+];
 
 function fmtSize(bytes: number) {
   return bytes < 1024 * 1024
@@ -173,6 +185,8 @@ export default function DocumentDetailPage() {
   const [downloadVariant, setDownloadVariant] = useState<RecipientDownloadVariant>("primary");
   const [archiveAtInput, setArchiveAtInput] = useState("");
   const [archiveSettingsBusy, setArchiveSettingsBusy] = useState(false);
+  const [visibilityValue, setVisibilityValue] = useState<DocumentVisibility>("org_only");
+  const [visibilityBusy, setVisibilityBusy] = useState(false);
   const { can } = usePermissions();
   const currentUserId = typeof window !== "undefined" ? localStorage.getItem("user_id") ?? "" : "";
 
@@ -197,7 +211,10 @@ export default function DocumentDetailPage() {
     if (doc) recordRecent({ kind: "document", id, title: doc.serial_number ?? doc.title, href: `/documents/${id}` });
   }, [doc, id]);
   useEffect(() => {
-    if (doc) setArchiveAtInput(toDateTimeLocal(doc.archive_at));
+    if (doc) {
+      setArchiveAtInput(toDateTimeLocal(doc.archive_at));
+      setVisibilityValue(doc.visibility_level);
+    }
   }, [doc]);
 
   // 即時 WebSocket 更新
@@ -249,6 +266,21 @@ export default function DocumentDetailPage() {
       toast.error(apiErrorMessage(e, "歸檔設定更新失敗"));
     } finally {
       setArchiveSettingsBusy(false);
+    }
+  };
+
+  const handleVisibilityChange = async () => {
+    if (!doc || visibilityValue === doc.visibility_level) return;
+    setVisibilityBusy(true);
+    try {
+      await documentsApi.updateVisibility(id, visibilityValue);
+      toast.success("公文可見度已更新");
+      fetchDoc();
+    } catch (e) {
+      setVisibilityValue(doc.visibility_level);
+      toast.error(apiErrorMessage(e, "可見度更新失敗"));
+    } finally {
+      setVisibilityBusy(false);
     }
   };
 
@@ -365,6 +397,11 @@ export default function DocumentDetailPage() {
   const canChoosePrintVariant = isCreator
     || can("document:admin")
     || can("document:view_all");
+  const canManageVisibility = isCreator
+    || can("document:admin")
+    || can("document:view_all")
+    || can("document:edit")
+    || can("document:create");
   const catLabel = CAT_LABEL[doc.category] ?? doc.category;
   const canApprove = can("document:approve") &&
     doc.status === "pending" &&
@@ -377,6 +414,7 @@ export default function DocumentDetailPage() {
     ["字號", doc.serial_number || "（未分配）"],
     ["類別", catLabel],
     ["密等", CLASS_LABEL[doc.classification] ?? doc.classification],
+    ["可見度", VISIBILITY_LABEL[doc.visibility_level]],
     ["建立日期", new Date(doc.created_at).toLocaleDateString("zh-TW")],
     ["送審日期", doc.submitted_at ? new Date(doc.submitted_at).toLocaleDateString("zh-TW") : "—"],
     ["限辦日期", doc.due_date ? new Date(doc.due_date).toLocaleDateString("zh-TW") : "—"],
@@ -1005,6 +1043,43 @@ export default function DocumentDetailPage() {
               >
                 查看法規
               </Link>
+            </div>
+          )}
+
+          {canManageVisibility && (
+            <div className="card flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                  公文可見度
+                </p>
+                <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                  發文後仍可單獨調整，正文與簽核狀態不會被修改。
+                </p>
+              </div>
+              <div className="flex w-full items-center gap-2 sm:w-auto">
+                <select
+                  aria-label="公文可見度"
+                  value={visibilityValue}
+                  onChange={event => setVisibilityValue(event.target.value as DocumentVisibility)}
+                  disabled={visibilityBusy}
+                  className="min-h-10 min-w-0 flex-1 rounded-lg bg-transparent px-3 text-sm outline-none focus-visible:ring-2 sm:min-w-40 sm:flex-none"
+                  style={{ border: "1px solid var(--border-strong)", color: "var(--text-primary)" }}
+                >
+                  {VISIBILITY_OPTIONS.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleVisibilityChange}
+                  disabled={visibilityBusy || visibilityValue === doc.visibility_level}
+                  className="btn btn-primary min-h-10 whitespace-nowrap text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {visibilityBusy ? "儲存中…" : "儲存可見度"}
+                </button>
+              </div>
             </div>
           )}
 

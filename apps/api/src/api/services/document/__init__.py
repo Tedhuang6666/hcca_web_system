@@ -53,6 +53,7 @@ from api.services.document._lifecycle import (
     update_approval_delegation,
     update_archive_settings,
     update_document,
+    update_document_visibility,
     upsert_recipients,
 )
 from api.services.document._serial import (
@@ -120,6 +121,7 @@ __all__ = [
     "update_document",
     "update_archive_settings",
     "submit_document",
+    "update_document_visibility",
     "issue_document_directly",
     "suggest_approvers",
     "_lock_document",
