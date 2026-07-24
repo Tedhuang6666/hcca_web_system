@@ -26046,6 +26046,7 @@ export interface components {
             id: string;
             /** Is Named */
             is_named: boolean;
+            public_status: components["schemas"]["PetitionPublicStatus"];
             /**
              * Next Action
              * @default
@@ -26103,6 +26104,8 @@ export interface components {
              * @default false
              */
             can_supplement: boolean;
+            /** Can Respond Public */
+            can_respond_public: boolean;
             /**
              * Can View Submitter
              * @default false
@@ -26148,6 +26151,7 @@ export interface components {
             id: string;
             /** Is Named */
             is_named: boolean;
+            public_status: components["schemas"]["PetitionPublicStatus"];
             /** Latest Internal Note */
             latest_internal_note?: string | null;
             /**
@@ -26157,6 +26161,16 @@ export interface components {
             next_action: string;
             /** Public Reply */
             public_reply: string | null;
+            /** Public Content */
+            public_content: string | null;
+            /** Public Published At */
+            public_published_at: string | null;
+            /** Public Requested At */
+            public_requested_at: string | null;
+            /** Public Title */
+            public_title: string | null;
+            /** Public User Responded At */
+            public_user_responded_at: string | null;
             /** Rejection Reason */
             rejection_reason: string | null;
             /** Resolved At */
@@ -26282,7 +26296,7 @@ export interface components {
          * PetitionEventType
          * @enum {string}
          */
-        PetitionEventType: "created" | "assigned" | "status_changed" | "transferred" | "needs_info" | "supplemented" | "replied" | "closed" | "rejected" | "note" | "attachment_added";
+        PetitionEventType: "created" | "assigned" | "status_changed" | "transferred" | "needs_info" | "supplemented" | "replied" | "closed" | "rejected" | "note" | "attachment_added" | "public_requested" | "public_responded" | "public_confirmed" | "public_declined";
         /**
          * PetitionEventVisibility
          * @enum {string}
@@ -26311,6 +26325,8 @@ export interface components {
              * @default false
              */
             can_supplement: boolean;
+            /** Can Respond Public */
+            can_respond_public: boolean;
             /**
              * Can View Submitter
              * @default false
@@ -26356,6 +26372,7 @@ export interface components {
             id: string;
             /** Is Named */
             is_named: boolean;
+            public_status: components["schemas"]["PetitionPublicStatus"];
             /** Latest Internal Note */
             latest_internal_note?: string | null;
             /**
@@ -26365,6 +26382,16 @@ export interface components {
             next_action: string;
             /** Public Reply */
             public_reply: string | null;
+            /** Public Content */
+            public_content: string | null;
+            /** Public Published At */
+            public_published_at: string | null;
+            /** Public Requested At */
+            public_requested_at: string | null;
+            /** Public Title */
+            public_title: string | null;
+            /** Public User Responded At */
+            public_user_responded_at: string | null;
             /** Rejection Reason */
             rejection_reason: string | null;
             /** Resolved At */
@@ -26442,8 +26469,51 @@ export interface components {
             /** Transferred */
             transferred: number;
         };
+        /** PetitionPublicListItem */
+        PetitionPublicListItem: {
+            /** Case Number */
+            case_number: string;
+            /** Current Org Name */
+            current_org_name: string;
+            /** Id */
+            id: string;
+            /** Published At */
+            published_at: string;
+            /** Reply */
+            reply: string | null;
+            /** Title */
+            title: string;
+            /** Type Name */
+            type_name: string;
+        };
+        /** PetitionPublicOut */
+        PetitionPublicOut: components["schemas"]["PetitionPublicListItem"] & {
+            /** Content */
+            content: string;
+        };
+        /** PetitionPublicRequest */
+        PetitionPublicRequest: {
+            /** Content */
+            content?: string | null;
+            /** Title */
+            title?: string | null;
+        };
+        /** PetitionPublicResponse */
+        PetitionPublicResponse: {
+            /** Content */
+            content?: string | null;
+            decision: "approve" | "approve_with_changes" | "reject";
+            /** Title */
+            title?: string | null;
+            /** Verification Code */
+            verification_code?: string | null;
+        };
+        /** PetitionPublicStatus */
+        PetitionPublicStatus: "not_requested" | "pending_user" | "pending_handler" | "published" | "declined";
         /** PetitionReplyCreate */
         PetitionReplyCreate: {
+            /** Close */
+            close?: boolean;
             /** Internal Note */
             internal_note?: string | null;
             /** Public Content */

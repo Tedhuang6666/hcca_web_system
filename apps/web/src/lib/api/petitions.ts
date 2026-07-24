@@ -1,5 +1,6 @@
 import type {
   PetitionCaseListItem, PetitionCaseOut, PetitionCreate, PetitionCreatedOut, PetitionStatsOut, PetitionStatus, PetitionTypeOut,
+  PetitionPublicListItem, PetitionPublicOut,
 } from "../types";
 import { BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
 
@@ -48,6 +49,13 @@ export const petitionsApi = {
       `/petitions/lookup?${new URLSearchParams({ case_number: caseNumber, verification_code: verificationCode }).toString()}`
     ),
   lookupShare: (shareToken: string) => post<PetitionCaseOut>("/petitions/share", { share_token: shareToken }),
+  publicList: (params?: { limit?: number; offset?: number }) => {
+    const p = new URLSearchParams();
+    if (params?.limit !== undefined) p.set("limit", String(params.limit));
+    if (params?.offset !== undefined) p.set("offset", String(params.offset));
+    return get<PetitionPublicListItem[]>(`/petitions/public${p.size ? `?${p}` : ""}`);
+  },
+  publicGet: (id: string) => get<PetitionPublicOut>(`/petitions/public/${id}`),
   my: (params?: { status?: PetitionStatus; keyword?: string }) => {
     const qs = params ? `?${new URLSearchParams(Object.entries(params).filter(([, v]) => Boolean(v)) as [string, string][]).toString()}` : "";
     return get<PetitionCaseListItem[]>(`/petitions/my${qs}`);
@@ -70,8 +78,17 @@ export const petitionsApi = {
     patch<PetitionCaseOut>(`/petitions/${id}/assign`, body),
   transfer: (id: string, body: { to_org_id: string; reason: string }) =>
     patch<PetitionCaseOut>(`/petitions/${id}/transfer`, body),
-  reply: (id: string, body: { public_content: string; internal_note?: string | null; resolve?: boolean }) =>
+  reply: (id: string, body: { public_content: string; internal_note?: string | null; resolve?: boolean; close?: boolean }) =>
     post<PetitionCaseOut>(`/petitions/${id}/reply`, body),
+  requestPublic: (id: string, body: { title?: string | null; content?: string | null }) =>
+    post<PetitionCaseOut>(`/petitions/${id}/public-request`, body),
+  respondPublic: (id: string, body: {
+    decision: "approve" | "approve_with_changes" | "reject";
+    title?: string;
+    content?: string;
+    verification_code?: string | null;
+  }) => post<PetitionCaseOut>(`/petitions/${id}/public-response`, body),
+  confirmPublic: (id: string) => post<PetitionCaseOut>(`/petitions/${id}/public-confirm`, {}),
   updateStatus: (id: string, body: { status: PetitionStatus; public_message?: string | null; internal_note?: string | null }) =>
     patch<PetitionCaseOut>(`/petitions/${id}/status`, body),
   addNote: (id: string, content: string) => post<PetitionCaseOut>(`/petitions/${id}/notes`, { content }),

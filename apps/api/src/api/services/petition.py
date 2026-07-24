@@ -23,6 +23,7 @@ from api.models.petition import (
     PetitionCaseEvent,
     PetitionEventType,
     PetitionEventVisibility,
+    PetitionPublicStatus,
     PetitionStatus,
     PetitionType,
 )
@@ -32,6 +33,8 @@ from api.schemas.petition import (
     PetitionCreate,
     PetitionInternalNoteCreate,
     PetitionOrgStatsItem,
+    PetitionPublicRequest,
+    PetitionPublicResponse,
     PetitionReplyCreate,
     PetitionStatsOut,
     PetitionStatusUpdate,
@@ -321,6 +324,36 @@ async def list_cases(
     return list(result.scalars().all())
 
 
+async def list_public_cases(
+    session: AsyncSession, *, limit: int = 50, offset: int = 0
+) -> list[PetitionCase]:
+    result = await session.execute(
+        select(PetitionCase)
+        .where(
+            PetitionCase.status == PetitionStatus.CLOSED,
+            PetitionCase.public_status == PetitionPublicStatus.PUBLISHED,
+        )
+        .options(selectinload(PetitionCase.type), selectinload(PetitionCase.current_org))
+        .order_by(PetitionCase.public_published_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    return list(result.scalars().all())
+
+
+async def get_public_case(session: AsyncSession, case_id: uuid.UUID) -> PetitionCase | None:
+    result = await session.execute(
+        select(PetitionCase)
+        .where(
+            PetitionCase.id == case_id,
+            PetitionCase.status == PetitionStatus.CLOSED,
+            PetitionCase.public_status == PetitionPublicStatus.PUBLISHED,
+        )
+        .options(selectinload(PetitionCase.type), selectinload(PetitionCase.current_org))
+    )
+    return result.scalar_one_or_none()
+
+
 async def assign_case(
     session: AsyncSession,
     case_obj: PetitionCase,
@@ -410,14 +443,34 @@ async def reply_case(
     data: PetitionReplyCreate,
     actor_id: uuid.UUID,
 ) -> PetitionCase:
-    previous = case_obj.status
     now = datetime.now(UTC)
+    if case_obj.assigned_to_id is None:
+        case_obj.assigned_to_id = actor_id
+        case_obj.assigned_at = now
+        previous_assignment_status = case_obj.status
+        case_obj.status = PetitionStatus.ASSIGNED
+        await session.flush()
+        await add_event(
+            session,
+            case_obj,
+            event_type=PetitionEventType.ASSIGNED,
+            title="回覆前自動分派承辦人",
+            content="案件未分派承辦人，已自動分派給回覆人員。",
+            actor_id=actor_id,
+            from_status=previous_assignment_status.value,
+            to_status=case_obj.status.value,
+        )
+    previous = case_obj.status
     case_obj.public_reply = data.public_content
     if case_obj.first_response_at is None:
         case_obj.first_response_at = now
     if data.internal_note:
         case_obj.latest_internal_note = data.internal_note
-    if data.resolve:
+    if data.close:
+        case_obj.status = PetitionStatus.CLOSED
+        case_obj.resolved_at = now
+        case_obj.closed_at = now
+    elif data.resolve:
         case_obj.status = PetitionStatus.RESOLVED
         case_obj.resolved_at = now
     else:
@@ -443,6 +496,105 @@ async def reply_case(
             actor_id=actor_id,
             visibility=PetitionEventVisibility.INTERNAL,
         )
+    return case_obj
+
+
+async def request_public(
+    session: AsyncSession,
+    case_obj: PetitionCase,
+    *,
+    data: PetitionPublicRequest,
+    actor_id: uuid.UUID,
+) -> PetitionCase:
+    if case_obj.status != PetitionStatus.CLOSED:
+        raise ValueError("案件結案後才能提出公開申請")
+    if case_obj.public_status in {
+        PetitionPublicStatus.PENDING_USER,
+        PetitionPublicStatus.PENDING_HANDLER,
+        PetitionPublicStatus.PUBLISHED,
+    }:
+        raise ValueError("此案件已有進行中的公開流程")
+    case_obj.public_title = data.title or case_obj.title
+    case_obj.public_content = data.content or case_obj.content
+    case_obj.public_status = PetitionPublicStatus.PENDING_USER
+    case_obj.public_requested_at = datetime.now(UTC)
+    case_obj.public_user_responded_at = None
+    case_obj.public_published_at = None
+    await session.flush()
+    await add_event(
+        session,
+        case_obj,
+        event_type=PetitionEventType.PUBLIC_REQUESTED,
+        title="已提出公開陳情申請",
+        content="請陳情人確認公開標題與內容。",
+        actor_id=actor_id,
+        visibility=PetitionEventVisibility.PUBLIC,
+    )
+    return case_obj
+
+
+async def respond_public(
+    session: AsyncSession,
+    case_obj: PetitionCase,
+    *,
+    data: PetitionPublicResponse,
+    actor_id: uuid.UUID | None,
+) -> PetitionCase:
+    if case_obj.public_status != PetitionPublicStatus.PENDING_USER:
+        raise ValueError("此案件目前沒有待確認的公開申請")
+    now = datetime.now(UTC)
+    case_obj.public_user_responded_at = now
+    if data.decision == "reject":
+        case_obj.public_status = PetitionPublicStatus.DECLINED
+        event_type = PetitionEventType.PUBLIC_DECLINED
+        title = "陳情人拒絕公開"
+        content = "陳情人拒絕公開此案件。"
+    elif data.decision == "approve_with_changes":
+        case_obj.public_title = data.title
+        case_obj.public_content = data.content
+        case_obj.public_status = PetitionPublicStatus.PENDING_HANDLER
+        event_type = PetitionEventType.PUBLIC_RESPONDED
+        title = "陳情人修改公開內容，待承辦確認"
+        content = "陳情人已修改公開標題或內容，請承辦確認差異後發布。"
+    else:
+        case_obj.public_status = PetitionPublicStatus.PUBLISHED
+        case_obj.public_published_at = now
+        event_type = PetitionEventType.PUBLIC_CONFIRMED
+        title = "陳情人同意公開"
+        content = "陳情人同意以目前草案公開此案件。"
+    await session.flush()
+    await add_event(
+        session,
+        case_obj,
+        event_type=event_type,
+        title=title,
+        content=content,
+        actor_id=actor_id,
+        visibility=PetitionEventVisibility.PUBLIC,
+    )
+    return case_obj
+
+
+async def confirm_public(
+    session: AsyncSession,
+    case_obj: PetitionCase,
+    *,
+    actor_id: uuid.UUID,
+) -> PetitionCase:
+    if case_obj.public_status != PetitionPublicStatus.PENDING_HANDLER:
+        raise ValueError("此案件目前沒有待承辦確認的公開修改")
+    case_obj.public_status = PetitionPublicStatus.PUBLISHED
+    case_obj.public_published_at = datetime.now(UTC)
+    await session.flush()
+    await add_event(
+        session,
+        case_obj,
+        event_type=PetitionEventType.PUBLIC_CONFIRMED,
+        title="承辦確認公開內容並發布",
+        content="已確認陳情人修改後的公開標題與內容。",
+        actor_id=actor_id,
+        visibility=PetitionEventVisibility.PUBLIC,
+    )
     return case_obj
 
 

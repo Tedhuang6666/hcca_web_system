@@ -42,6 +42,10 @@ class PetitionEventType(enum.StrEnum):
     REJECTED = "rejected"
     NOTE = "note"
     ATTACHMENT_ADDED = "attachment_added"
+    PUBLIC_REQUESTED = "public_requested"
+    PUBLIC_RESPONDED = "public_responded"
+    PUBLIC_CONFIRMED = "public_confirmed"
+    PUBLIC_DECLINED = "public_declined"
 
 
 class PetitionEventVisibility(enum.StrEnum):
@@ -52,6 +56,14 @@ class PetitionEventVisibility(enum.StrEnum):
 class PetitionAttachmentVisibility(enum.StrEnum):
     PUBLIC = "public"
     INTERNAL = "internal"
+
+
+class PetitionPublicStatus(enum.StrEnum):
+    NOT_REQUESTED = "not_requested"
+    PENDING_USER = "pending_user"
+    PENDING_HANDLER = "pending_handler"
+    PUBLISHED = "published"
+    DECLINED = "declined"
 
 
 class PetitionType(Base, TimestampMixin):
@@ -111,6 +123,28 @@ class PetitionCase(Base, TimestampMixin):
     latest_internal_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     supplement_request: Mapped[str | None] = mapped_column(Text, nullable=True)
     rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    public_status: Mapped[PetitionPublicStatus] = mapped_column(
+        Enum(
+            PetitionPublicStatus,
+            name="petitionpublicstatus",
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
+        nullable=False,
+        default=PetitionPublicStatus.NOT_REQUESTED,
+        index=True,
+    )
+    public_title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    public_content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    public_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    public_user_responded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    public_published_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     current_org_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("orgs.id", ondelete="RESTRICT"), nullable=False, index=True
@@ -240,6 +274,7 @@ __all__ = [
     "PetitionCaseEvent",
     "PetitionEventType",
     "PetitionEventVisibility",
+    "PetitionPublicStatus",
     "PetitionStatus",
     "PetitionType",
 ]

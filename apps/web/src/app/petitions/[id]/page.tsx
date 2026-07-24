@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { ApiError, petitionsApi } from "@/lib/api";
 import type { PetitionCaseOut } from "@/lib/types";
 import { PetitionStatusBadge } from "@/components/ui/StatusBadge";
+import PetitionPublicConsent from "@/components/petitions/PetitionPublicConsent";
 import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 
 function fmt(iso: string | null) {
@@ -135,6 +136,8 @@ export default function PetitionDetailPage() {
           )}
         </aside>
       </div>
+
+      {item.can_respond_public && <PetitionPublicConsent item={item} onUpdated={setItem} />}
 
       <section className="card p-5 space-y-4">
         <h2 className="font-semibold">處理時間軸</h2>
