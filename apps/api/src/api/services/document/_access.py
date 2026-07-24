@@ -227,6 +227,17 @@ async def get_document_by_serial(session: AsyncSession, serial_number: str) -> D
     result = await session.execute(
         _doc_query_with_relations().where(Document.serial_number == serial_number)
     )
+    document = result.scalar_one_or_none()
+    if document is not None:
+        return document
+
+    # 公文字號中的空格只是排版差異，連結可能在複製或手動輸入時被省略。
+    normalized_serial = serial_number.replace(" ", "")
+    result = await session.execute(
+        _doc_query_with_relations().where(
+            func.replace(Document.serial_number, " ", "") == normalized_serial
+        )
+    )
     return result.scalar_one_or_none()
 
 
