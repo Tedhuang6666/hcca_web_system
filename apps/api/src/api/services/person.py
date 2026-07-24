@@ -520,7 +520,7 @@ async def sync_affiliation_to_rbac(
         return None
     if affiliation.position_id is None:
         return None
-    person = affiliation.person or await db.get(Person, affiliation.person_id)
+    person = await db.get(Person, affiliation.person_id)
     if person is None or person.user_id is None:
         affiliation.status = PersonAffiliationStatus.PENDING_USER
         await db.flush()
