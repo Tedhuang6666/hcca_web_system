@@ -9,9 +9,10 @@ import { cacheGet, cacheHas, cacheSet, cachePurge } from "@/lib/api-cache";
 import { PetitionStatusBadge } from "@/components/ui/StatusBadge";
 import { orgDisplayName } from "@/lib/orgs";
 import { usePermissions } from "@/hooks/usePermissions";
+import { PetitionPublicDiff } from "@/components/petitions/PetitionPublicConsent";
 
 type QueueKey = "all" | "pending" | "mine" | "active" | "needs_info" | "done";
-type ActionKey = "assign" | "handle" | "transfer" | "reject_close" | "attachments";
+type ActionKey = "assign" | "handle" | "transfer" | "reject_close" | "public" | "attachments";
 
 const STATUS_OPTIONS: { value: PetitionStatus; label: string }[] = [
   { value: "submitted", label: "已收件" },
@@ -61,6 +62,8 @@ export default function PetitionManagePage() {
   const [assignee, setAssignee] = useState("");
   const [targetOrg, setTargetOrg] = useState("");
   const [publicText, setPublicText] = useState("");
+  const [publicTitle, setPublicTitle] = useState("");
+  const [publicContent, setPublicContent] = useState("");
   const [internalNote, setInternalNote] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -98,6 +101,8 @@ export default function PetitionManagePage() {
 
   const resetForm = () => {
     setPublicText("");
+    setPublicTitle("");
+    setPublicContent("");
     setInternalNote("");
     setTargetOrg("");
     setFile(null);
@@ -108,10 +113,14 @@ export default function PetitionManagePage() {
       const detail = await petitionsApi.get(id);
       setSelected(detail);
       resetForm();
+      setPublicTitle(detail.public_title || detail.title);
+      setPublicContent(detail.public_content || detail.content);
       const assignable = await petitionsApi.assignableUsers(id).catch(() => []);
       setUsers(assignable);
       setAssignee(detail.assigned_to_id || assignable[0]?.id || "");
-      if (detail.status === "submitted" || !detail.assigned_to_id) setActiveAction("assign");
+      if (detail.public_status === "pending_user" || detail.public_status === "pending_handler") setActiveAction("public");
+      else if (detail.status === "closed" && detail.public_status !== "published") setActiveAction("public");
+      else if (detail.status === "submitted" || !detail.assigned_to_id) setActiveAction("assign");
       else if (detail.status === "resolved" || detail.status === "closed") setActiveAction("reject_close");
       else setActiveAction("handle");
     } catch (err) {
@@ -155,6 +164,7 @@ export default function PetitionManagePage() {
           public_content: publicText,
           internal_note: internalNote || null,
           resolve: true,
+          close: true,
         });
       } else if (action === "transfer") {
         updated = await petitionsApi.transfer(selected.id, {
@@ -173,6 +183,13 @@ export default function PetitionManagePage() {
           public_message: publicText || "案件已結案。",
           internal_note: internalNote || null,
         });
+      } else if (action === "request_public") {
+        updated = await petitionsApi.requestPublic(selected.id, {
+          title: publicTitle.trim() || null,
+          content: publicContent.trim() || null,
+        });
+      } else if (action === "confirm_public") {
+        updated = await petitionsApi.confirmPublic(selected.id);
       } else {
         updated = await petitionsApi.addNote(selected.id, internalNote || publicText);
       }
@@ -330,6 +347,7 @@ export default function PetitionManagePage() {
                   ["handle", "處理/回覆"],
                   ["transfer", "跨機關轉派"],
                   ["reject_close", "駁回/結案"],
+                  ...(selected.status === "closed" ? [["public", "公開陳情"]] : []),
                   ["attachments", "附件/備註"],
                 ].map(([key, label]) => (
                   <button
@@ -401,6 +419,45 @@ export default function PetitionManagePage() {
                     <button className="btn btn-ghost" disabled={!publicText.trim() || busy} onClick={() => run("reject")}>駁回 / 不受理</button>
                     <button className="btn btn-primary" disabled={busy} onClick={() => run("close")}>結案</button>
                   </div>
+                </div>
+              )}
+
+              {activeAction === "public" && (
+                <div className="rounded-lg p-4 space-y-4" style={{ border: "1px solid var(--border)" }}>
+                  <div>
+                    <h3 className="font-medium">公開陳情</h3>
+                    <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
+                      公開前會先徵詢陳情人；若陳情人修改內容，承辦需再次確認差異後才會發布。
+                    </p>
+                  </div>
+                  {selected.public_status === "pending_user" && (
+                    <p className="rounded-lg p-3 text-sm" style={{ background: "var(--primary-dim)", color: "var(--text-muted)" }}>
+                      已送出公開申請，等待陳情人同意、修改後同意或拒絕。
+                    </p>
+                  )}
+                  {selected.public_status === "pending_handler" && (
+                    <>
+                      <div>
+                        <p className="text-sm font-medium mb-2">標題差異</p>
+                        <PetitionPublicDiff before={selected.title} after={selected.public_title || selected.title} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium mb-2">內容差異</p>
+                        <PetitionPublicDiff before={selected.content} after={selected.public_content || selected.content} />
+                      </div>
+                      <button className="btn btn-primary" disabled={busy} onClick={() => run("confirm_public")}>確認差異並公開</button>
+                    </>
+                  )}
+                  {(selected.public_status === "not_requested" || selected.public_status === "declined") && (
+                    <>
+                      <input className="input w-full" value={publicTitle} onChange={(e) => setPublicTitle(e.target.value)} placeholder="公開標題（可移除個資）" />
+                      <textarea className="input w-full min-h-40" value={publicContent} onChange={(e) => setPublicContent(e.target.value)} placeholder="公開內容（可移除個資）" />
+                      <button className="btn btn-primary" disabled={busy || !publicTitle.trim() || !publicContent.trim()} onClick={() => run("request_public")}>要求陳情人確認公開</button>
+                    </>
+                  )}
+                  {selected.public_status === "published" && (
+                    <p className="rounded-lg p-3 text-sm" style={{ background: "var(--success-dim)", color: "var(--success)" }}>此案件已公開。</p>
+                  )}
                 </div>
               )}
 

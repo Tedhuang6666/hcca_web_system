@@ -260,6 +260,7 @@ from api.models.petition import (  # noqa: F401
     PetitionCaseEvent,
     PetitionEventType,
     PetitionEventVisibility,
+    PetitionPublicStatus,
     PetitionStatus,
     PetitionType,
 )

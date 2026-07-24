@@ -50,6 +50,10 @@ from api.schemas.petition import (
     PetitionCreatedOut,
     PetitionInternalNoteCreate,
     PetitionLookupOut,
+    PetitionPublicListItem,
+    PetitionPublicOut,
+    PetitionPublicRequest,
+    PetitionPublicResponse,
     PetitionReplyCreate,
     PetitionShareLookup,
     PetitionStatsOut,
@@ -193,6 +197,7 @@ def _decorate_list_item(case_obj: PetitionCase) -> PetitionCaseListItem:
         case_number=case_obj.case_number,
         type_id=case_obj.type_id,
         status=case_obj.status,
+        public_status=case_obj.public_status,
         is_named=case_obj.is_named,
         title=case_obj.title,
         current_org_id=case_obj.current_org_id,
@@ -216,6 +221,7 @@ async def _decorate_case(
     *,
     include_internal: bool,
     can_view_submitter: bool,
+    can_respond_public: bool = False,
 ) -> PetitionCaseOut:
     storage = get_storage()
     events = [
@@ -246,6 +252,11 @@ async def _decorate_case(
         **_decorate_list_item(case_obj).model_dump(),
         content=case_obj.content,
         public_reply=case_obj.public_reply,
+        public_title=case_obj.public_title,
+        public_content=case_obj.public_content,
+        public_requested_at=case_obj.public_requested_at,
+        public_user_responded_at=case_obj.public_user_responded_at,
+        public_published_at=case_obj.public_published_at,
         latest_internal_note=case_obj.latest_internal_note if include_internal else None,
         supplement_request=case_obj.supplement_request,
         rejection_reason=case_obj.rejection_reason,
@@ -257,10 +268,30 @@ async def _decorate_case(
         resolved_at=case_obj.resolved_at,
         closed_at=case_obj.closed_at,
         can_supplement=case_obj.status == PetitionStatus.NEEDS_INFO,
+        can_respond_public=can_respond_public,
         can_view_submitter=can_view_submitter,
         submitter=submitter,
         events=events,
         attachments=attachments,
+    )
+
+
+def _decorate_public_list_item(case_obj: PetitionCase) -> PetitionPublicListItem:
+    return PetitionPublicListItem(
+        id=case_obj.id,
+        case_number=case_obj.case_number,
+        type_name=case_obj.type.name if case_obj.type else "",
+        current_org_name=case_obj.current_org.name if case_obj.current_org else "",
+        title=case_obj.public_title or case_obj.title,
+        reply=case_obj.public_reply,
+        published_at=case_obj.public_published_at,
+    )
+
+
+def _decorate_public_case(case_obj: PetitionCase) -> PetitionPublicOut:
+    return PetitionPublicOut(
+        **_decorate_public_list_item(case_obj).model_dump(),
+        content=case_obj.public_content or case_obj.content,
     )
 
 
@@ -270,6 +301,24 @@ async def _decorate_case(
 @router.get("/types", response_model=list[PetitionTypeOut], summary="取得啟用中的陳情類型")
 async def list_public_types(session: DbDep) -> list[PetitionType]:
     return await petition_svc.list_types(session, active_only=True)
+
+
+@router.get("/public", response_model=list[PetitionPublicListItem], summary="列出已公開陳情")
+async def list_public_petitions(
+    session: DbDep,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> list[PetitionPublicListItem]:
+    cases = await petition_svc.list_public_cases(session, limit=limit, offset=offset)
+    return [_decorate_public_list_item(case_obj) for case_obj in cases]
+
+
+@router.get("/public/{case_id}", response_model=PetitionPublicOut, summary="查看已公開陳情")
+async def get_public_petition(case_id: uuid.UUID, session: DbDep) -> PetitionPublicOut:
+    case_obj = await petition_svc.get_public_case(session, case_id)
+    if case_obj is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到已公開的陳情")
+    return _decorate_public_case(case_obj)
 
 
 @router.post(
@@ -381,7 +430,12 @@ async def lookup_case(
     await record_success(ip_key)
     await record_success(case_key)
     return PetitionLookupOut.model_validate(
-        await _decorate_case(case_obj, include_internal=False, can_view_submitter=False)
+        await _decorate_case(
+            case_obj,
+            include_internal=False,
+            can_view_submitter=False,
+            can_respond_public=True,
+        )
     )
 
 
@@ -587,6 +641,7 @@ async def get_case(case_id: uuid.UUID, session: DbDep, user: CurrentUser) -> Pet
         case_obj,
         include_internal=include_internal,
         can_view_submitter=can_view_submitter,
+        can_respond_public=case_obj.submitter_id == user.id,
     )
 
 
@@ -821,6 +876,96 @@ async def reply_case(
     )
 
 
+@router.post(
+    "/{case_id}/public-request",
+    response_model=PetitionCaseOut,
+    summary="提出公開陳情申請",
+    dependencies=[
+        Depends(require_any(PermissionCode.PETITION_HANDLE, PermissionCode.PETITION_ADMIN))
+    ],
+)
+async def request_public(
+    case_id: uuid.UUID,
+    payload: PetitionPublicRequest,
+    session: DbDep,
+    user: CurrentUser,
+) -> PetitionCaseOut:
+    case_obj = await _case_or_404(session, case_id)
+    await _assert_case_access(session, case_obj, user)
+    try:
+        case_obj = await petition_svc.request_public(
+            session, case_obj, data=payload, actor_id=user.id
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    await _notify(
+        session,
+        user_id=case_obj.submitter_id,
+        type="petition_public_request",
+        title=f"陳情案件 {case_obj.case_number} 徵詢公開意願",
+        body="承辦機關已提出公開陳情申請，請登入查看並選擇同意、修改後同意或拒絕。",
+        link=f"/petitions/{case_obj.id}",
+        related_id=case_obj.id,
+        external_email=case_obj.contact_email if case_obj.submitter_id is None else None,
+        external_name=case_obj.contact_name,
+    )
+    return await _decorate_case(
+        case_obj, include_internal=True, can_view_submitter=case_obj.is_named
+    )
+
+
+@router.post(
+    "/{case_id}/public-response",
+    response_model=PetitionCaseOut,
+    summary="回覆公開陳情申請",
+)
+async def respond_public(
+    case_id: uuid.UUID,
+    payload: PetitionPublicResponse,
+    session: DbDep,
+    user: OptionalUser,
+) -> PetitionCaseOut:
+    case_obj = await _case_or_404(session, case_id)
+    if (user is None or case_obj.submitter_id != user.id) and (
+        not payload.verification_code
+        or not petition_svc.verify_code(case_obj, payload.verification_code)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="需要本人登入或正確驗證碼"
+        )
+    try:
+        case_obj = await petition_svc.respond_public(
+            session, case_obj, data=payload, actor_id=user.id if user else None
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    return await _decorate_case(case_obj, include_internal=False, can_view_submitter=False)
+
+
+@router.post(
+    "/{case_id}/public-confirm",
+    response_model=PetitionCaseOut,
+    summary="確認修改後公開內容並發布",
+    dependencies=[
+        Depends(require_any(PermissionCode.PETITION_HANDLE, PermissionCode.PETITION_ADMIN))
+    ],
+)
+async def confirm_public(
+    case_id: uuid.UUID,
+    session: DbDep,
+    user: CurrentUser,
+) -> PetitionCaseOut:
+    case_obj = await _case_or_404(session, case_id)
+    await _assert_case_access(session, case_obj, user)
+    try:
+        case_obj = await petition_svc.confirm_public(session, case_obj, actor_id=user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    return await _decorate_case(
+        case_obj, include_internal=True, can_view_submitter=case_obj.is_named
+    )
+
+
 @router.patch(
     "/{case_id}/status",
     response_model=PetitionCaseOut,
@@ -1013,5 +1158,9 @@ async def lookup_case_by_share_token(
     if case_obj is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="分享連結無效")
     return PetitionLookupOut.model_validate(
-        await _decorate_case(case_obj, include_internal=False, can_view_submitter=False)
+        await _decorate_case(
+            case_obj,
+            include_internal=False,
+            can_view_submitter=False,
+        )
     )

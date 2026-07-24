@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { ApiError, petitionsApi } from "@/lib/api";
 import type { PetitionCaseListItem, PetitionCaseOut, PetitionStatsOut } from "@/lib/types";
 import { PetitionStatusBadge } from "@/components/ui/StatusBadge";
+import PetitionPublicConsent from "@/components/petitions/PetitionPublicConsent";
 import { usePermissions } from "@/hooks/usePermissions";
 
 function fmt(iso: string) {
@@ -51,7 +52,10 @@ export default function PetitionsPage() {
             提出陳情或查詢案件進度。
           </p>
         </div>
-        <Link href="/petitions/new" className="btn btn-primary">我要陳情</Link>
+        <div className="flex gap-2">
+          <Link href="/petitions/public" className="btn btn-ghost">公開陳情</Link>
+          <Link href="/petitions/new" className="btn btn-primary">我要陳情</Link>
+        </div>
       </div>
 
       {stats && (
@@ -88,14 +92,17 @@ export default function PetitionsPage() {
             </button>
           </form>
           {lookup && (
-            <div className="rounded-lg p-4 space-y-2" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
-              <div className="flex items-center justify-between gap-2">
-                <p className="font-medium" style={{ color: "var(--text-primary)" }}>{lookup.title}</p>
-                <PetitionStatusBadge status={lookup.status} />
+            <>
+              <div className="rounded-lg p-4 space-y-2" style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-medium" style={{ color: "var(--text-primary)" }}>{lookup.title}</p>
+                  <PetitionStatusBadge status={lookup.status} />
+                </div>
+                <p className="text-sm" style={{ color: "var(--text-muted)" }}>{lookup.status_public_message}</p>
+                <Link href={`/petitions/${caseNumber}/${verificationCode}`} className="btn btn-ghost mt-2">查看進度分享頁</Link>
               </div>
-              <p className="text-sm" style={{ color: "var(--text-muted)" }}>{lookup.status_public_message}</p>
-              <Link href={`/petitions/${caseNumber}/${verificationCode}`} className="btn btn-ghost mt-2">查看進度分享頁</Link>
-            </div>
+              {lookup.can_respond_public && <PetitionPublicConsent item={lookup} verificationCode={verificationCode} onUpdated={setLookup} />}
+            </>
           )}
         </section>
 

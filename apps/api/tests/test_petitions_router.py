@@ -5,8 +5,10 @@ from __future__ import annotations
 import uuid
 from datetime import date
 
+from sqlalchemy import select
+
 from api.models.org import Org, Permission, Position, UserPosition
-from api.models.petition import PetitionType
+from api.models.petition import PetitionCaseEvent, PetitionType
 from api.models.user import User
 from api.schemas.petition import PetitionCreate, PetitionStatusUpdate
 from api.services import petition as petition_svc
@@ -379,6 +381,77 @@ async def test_reply_case_marks_resolved_when_requested(db_session, authed_clien
     assert resp.status_code == 200
     assert resp.json()["status"] == "resolved"
     assert resp.json()["public_reply"] == "已派員修復完畢"
+
+
+async def test_reply_case_can_auto_assign_and_close(db_session, authed_client_factory) -> None:
+    org, petition_type = await _make_org_and_type(db_session)
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:handle")
+    case_obj, _code = await _create_case(db_session, petition_type)
+
+    ac = authed_client_factory(handler)
+    resp = await ac.post(
+        f"/petitions/{case_obj.id}/reply",
+        json={"public_content": "已完成處理", "close": True},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "closed"
+    assert resp.json()["assigned_to_id"] == str(handler.id)
+    event_result = await db_session.execute(
+        select(PetitionCaseEvent.event_type)
+        .where(PetitionCaseEvent.case_id == case_obj.id)
+        .order_by(PetitionCaseEvent.created_at)
+    )
+    assert [event.value for event in event_result.scalars().all()][-2:] == ["assigned", "replied"]
+
+
+async def test_public_petition_requires_user_then_handler_confirmation(
+    db_session, authed_client_factory, client
+) -> None:
+    org, petition_type = await _make_org_and_type(db_session)
+    owner = await _bare_user(db_session)
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:handle")
+    case_obj, _code = await _create_case(db_session, petition_type, submitter=owner)
+    handler_client = authed_client_factory(handler)
+
+    closed = await handler_client.post(
+        f"/petitions/{case_obj.id}/reply",
+        json={"public_content": "已完成修繕", "close": True},
+    )
+    assert closed.status_code == 200
+
+    requested = await handler_client.post(
+        f"/petitions/{case_obj.id}/public-request",
+        json={"title": "公開版：教室冷氣故障", "content": "B302 冷氣故障，已完成修繕。"},
+    )
+    assert requested.status_code == 200
+    assert requested.json()["public_status"] == "pending_user"
+
+    owner_client = authed_client_factory(owner)
+    modified = await owner_client.post(
+        f"/petitions/{case_obj.id}/public-response",
+        json={
+            "decision": "approve_with_changes",
+            "title": "公開版：教室設備故障",
+            "content": "教室設備故障，已完成修繕。",
+        },
+    )
+    assert modified.status_code == 200
+    assert modified.json()["public_status"] == "pending_handler"
+
+    confirmed = await handler_client.post(f"/petitions/{case_obj.id}/public-confirm")
+    assert confirmed.status_code == 200
+    assert confirmed.json()["public_status"] == "published"
+
+    public = await client.get(f"/petitions/public/{case_obj.id}")
+    assert public.status_code == 200
+    assert public.json()["title"] == "公開版：教室設備故障"
+    assert public.json()["content"] == "教室設備故障，已完成修繕。"
+    assert public.json()["reply"] == "已完成修繕"
+    assert "contact_name" not in public.json()
+    assert "submitter" not in public.json()
 
 
 async def test_update_status_needs_info_requires_message(db_session, authed_client_factory) -> None:

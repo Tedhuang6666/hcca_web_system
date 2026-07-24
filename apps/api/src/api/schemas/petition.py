@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from api.models.petition import (
     PetitionAttachmentVisibility,
     PetitionEventType,
     PetitionEventVisibility,
+    PetitionPublicStatus,
     PetitionStatus,
 )
 
@@ -120,6 +122,7 @@ class PetitionCaseListItem(BaseModel):
     case_number: str
     type_id: uuid.UUID
     status: PetitionStatus
+    public_status: PetitionPublicStatus
     is_named: bool
     title: str
     current_org_id: uuid.UUID
@@ -140,6 +143,11 @@ class PetitionCaseListItem(BaseModel):
 class PetitionCaseOut(PetitionCaseListItem):
     content: str
     public_reply: str | None
+    public_title: str | None
+    public_content: str | None
+    public_requested_at: datetime | None
+    public_user_responded_at: datetime | None
+    public_published_at: datetime | None
     latest_internal_note: str | None = None
     supplement_request: str | None
     rejection_reason: str | None
@@ -152,6 +160,7 @@ class PetitionCaseOut(PetitionCaseListItem):
     resolved_at: datetime | None
     closed_at: datetime | None
     can_supplement: bool = False
+    can_respond_public: bool = False
     can_view_submitter: bool = False
     submitter: PetitionSubmitterOut | None = None
     events: list[PetitionEventOut] = []
@@ -187,6 +196,7 @@ class PetitionReplyCreate(BaseModel):
     public_content: str = Field(..., min_length=1, max_length=10000)
     internal_note: str | None = Field(None, max_length=3000)
     resolve: bool = True
+    close: bool = False
 
 
 class PetitionStatusUpdate(BaseModel):
@@ -197,6 +207,40 @@ class PetitionStatusUpdate(BaseModel):
 
 class PetitionInternalNoteCreate(BaseModel):
     content: str = Field(..., min_length=1, max_length=3000)
+
+
+class PetitionPublicRequest(BaseModel):
+    title: str | None = Field(None, min_length=1, max_length=200)
+    content: str | None = Field(None, min_length=1, max_length=10000)
+
+
+class PetitionPublicResponse(BaseModel):
+    decision: Literal["approve", "approve_with_changes", "reject"]
+    title: str | None = Field(None, min_length=1, max_length=200)
+    content: str | None = Field(None, min_length=1, max_length=10000)
+    verification_code: str | None = Field(None, min_length=5, max_length=5, pattern=r"^\d{5}$")
+
+    @model_validator(mode="after")
+    def require_changes(self) -> PetitionPublicResponse:
+        if self.decision == "approve_with_changes" and (not self.title or not self.content):
+            raise ValueError("修改後同意需同時提供公開標題與公開內容")
+        if self.decision != "approve_with_changes" and (self.title or self.content):
+            raise ValueError("只有修改後同意可以提供修改內容")
+        return self
+
+
+class PetitionPublicListItem(BaseModel):
+    id: uuid.UUID
+    case_number: str
+    type_name: str
+    current_org_name: str
+    title: str
+    reply: str | None
+    published_at: datetime
+
+
+class PetitionPublicOut(PetitionPublicListItem):
+    content: str
 
 
 class PetitionOrgStatsItem(BaseModel):
