@@ -1,5 +1,5 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
@@ -9,24 +9,39 @@ import { safeNextPath } from "@/lib/safe-redirect";
 
 export default function AuthCallbackPage() {
   const searchParams = useSearchParams();
+  const bootstrapStarted = useRef(false);
 
   useEffect(() => {
+    // React Strict Mode 會在開發環境重跑 effect；登入 callback 不能因此同時
+    // 旋轉兩次 refresh token，否則第一次登入會被其中一個競態請求判定失敗。
+    if (bootstrapStarted.current) return;
+    bootstrapStarted.current = true;
+
     const error = searchParams.get("error");
     const next = safeNextPath(searchParams.get("next"));
+    const retryDelays = [100, 250, 500];
+
+    const waitBeforeRetry = (attempt: number) =>
+      new Promise<void>((resolve) => window.setTimeout(resolve, retryDelays[attempt] ?? 500));
 
     async function fetchMeFromCookie(): Promise<boolean> {
-      try {
-        const res = await fetch(apiUrl("/auth/me"), {
-          credentials: "include",
-        });
-        if (!res.ok) return false;
-        const me = await res.json();
-        if (me?.id) {
-          cacheCurrentUser(me);
-          return true;
+      for (let attempt = 0; attempt <= retryDelays.length; attempt += 1) {
+        try {
+          const res = await fetch(apiUrl("/auth/me"), {
+            credentials: "include",
+            cache: "no-store",
+          });
+          if (res.ok) {
+            const me = await res.json();
+            if (me?.id) {
+              cacheCurrentUser(me);
+              return true;
+            }
+          }
+        } catch {
+          // OAuth 回呼剛完成時，反向代理或 cookie store 可能尚未穩定；繼續短暫重試。
         }
-      } catch {
-        // 交由 refresh fallback 處理，避免 callback 卡住。
+        if (attempt < retryDelays.length) await waitBeforeRetry(attempt);
       }
       return false;
     }
@@ -41,6 +56,7 @@ export default function AuthCallbackPage() {
         const res = await fetch(apiUrl("/auth/refresh"), {
           method: "POST",
           credentials: "include",
+          cache: "no-store",
           headers: csrfToken ? { "X-CSRF-Token": decodeURIComponent(csrfToken) } : {},
         });
         return res.ok;
