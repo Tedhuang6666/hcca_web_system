@@ -9,7 +9,7 @@ import { AtSign, Clock, ExternalLink, LocateFixed, Mail, MapPin, MessageCircle, 
 import { toast } from "sonner";
 import { partnerMapApi, ApiError } from "@/lib/api";
 import type { PartnerBusinessDetail, PartnerBusinessDirectoryItem } from "@/lib/api";
-import { uploadUrl } from "@/lib/config";
+import { apiUrl, uploadUrl } from "@/lib/config";
 import type {
   PartnerMapItem,
   PartnerRankingItem,
@@ -100,6 +100,26 @@ function DetailPanel({
               unoptimized
               className="h-36 w-full rounded-lg object-cover"
             />
+          )}
+          {business.flyer_image_url && (
+            <a
+              className="block overflow-hidden rounded-lg border"
+              href={apiUrl(business.flyer_image_url)}
+              target="_blank"
+              rel="noreferrer"
+              style={{ borderColor: "var(--border)" }}>
+              <Image
+                src={apiUrl(business.flyer_image_url)}
+                alt={`${business.name} 店家傳單`}
+                width={640}
+                height={420}
+                unoptimized
+                className="max-h-64 w-full object-contain"
+              />
+              <span className="block border-t px-3 py-2 text-xs font-medium" style={{ borderColor: "var(--border)", color: "var(--primary)" }}>
+                查看店家照片／傳單 <ExternalLink size={12} className="ml-1 inline" aria-hidden="true" />
+              </span>
+            </a>
           )}
           <div className="flex items-start gap-3">
             {business.logo_url && (
@@ -227,8 +247,9 @@ function DetailPanel({
             )}
           </section>
 
-          {business.listing_type === "physical" && <section>
+          {business.listing_type === "physical" && business.can_view_private_details && <section>
             <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>學生互動</h3>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>可評價一次，之後再次選擇分數即可修改。</p>
             <div className="mt-2 flex flex-wrap gap-2">
               {[1, 2, 3, 4, 5].map((score) => (
                 <button key={score} className="btn btn-ghost px-2" onClick={() => onRate(score)}>
@@ -634,19 +655,31 @@ export default function PartnerMapPage() {
                     <Send size={14} aria-hidden="true" /> 投稿新店
                   </button>
                 </div>
-                {contactBusinesses.length > 0 && (
-                  <div className="rounded-lg border p-2" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
-                    <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>合作夥伴聯絡資訊</p>
-                    <div className="mt-2 max-h-24 space-y-1 overflow-y-auto">
-                      {contactBusinesses.map((business) => (
-                        <button type="button" key={business.id} onClick={() => openBusiness(business.id)} className="flex w-full items-center justify-between gap-2 text-left text-xs" style={{ color: "var(--primary)" }}>
-                          <span className="truncate">{business.name}</span><span className="shrink-0">查看詳情 →</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
+            )}
+            {contactBusinesses.length > 0 && (
+              <section className="mt-3 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>沒有地點的特約</p>
+                    <p className="mt-0.5 text-[11px]" style={{ color: "var(--text-muted)" }}>線上合作夥伴也在這裡</p>
+                  </div>
+                  <span className="rounded-full px-2 py-1 text-[11px] font-medium" style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
+                    {contactBusinesses.length} 家
+                  </span>
+                </div>
+                <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+                  {contactBusinesses.map((business) => (
+                    <button type="button" key={business.id} onClick={() => openBusiness(business.id)} className="min-w-[72vw] rounded-lg border p-3 text-left" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{business.name}</p>
+                        <span className="shrink-0 text-[11px]" style={{ color: "var(--primary)" }}>查看 →</span>
+                      </div>
+                      <p className="mt-1 line-clamp-2 text-xs" style={{ color: "var(--text-secondary)" }}>{business.summary || business.category || "可線上聯絡"}</p>
+                    </button>
+                  ))}
+                </div>
+              </section>
             )}
           </div>
           <PartnerLeafletMap

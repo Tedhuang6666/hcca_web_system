@@ -4,6 +4,8 @@ import type {
 import { get, post, patch, del } from "./core";
 
 export const navigationProfilesApi = {
+  public: (key: "public" | "student") =>
+    get<NavigationProfileOut>(`/navigation-profiles/${key}`),
   list: (includeInactive = true) =>
     get<NavigationProfileOut[]>(
       `/admin/navigation-profiles?include_inactive=${String(includeInactive)}`,

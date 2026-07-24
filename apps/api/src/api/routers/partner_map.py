@@ -5,16 +5,18 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
-from api.dependencies.auth import get_optional_user
+from api.dependencies.auth import get_current_active_user, get_optional_user
 from api.dependencies.permissions import require_permission
 from api.models.partner_map import (
     PartnerBusiness,
     PartnerBusinessListingType,
+    PartnerBusinessStatus,
     PartnerLocation,
     PartnerOffer,
     PartnerTag,
@@ -48,11 +50,13 @@ from api.schemas.partner_map import (
 )
 from api.services import audit as audit_svc
 from api.services import partner_map as map_svc
+from api.services.storage import get_storage
 
 router = APIRouter(prefix="/partner-map", tags=["特約地圖"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 OptionalUser = Annotated[User | None, Depends(get_optional_user)]
+CurrentUser = Annotated[User, Depends(get_current_active_user)]
 ManagerUser = Annotated[User, Depends(require_permission(PermissionCode.PARTNER_MAP_MANAGE))]
 
 
@@ -81,6 +85,9 @@ def _business_out(
     rating_avg, rating_count = map_svc.rating_stats(business)
     out.can_view_private_details = include_private
     out.internal_note = business.internal_note if include_internal else None
+    out.flyer_image_url = (
+        f"/partner-map/businesses/{business.id}/flyer" if business.flyer_storage_key else None
+    )
     out.rating_avg = rating_avg
     out.rating_count = rating_count
     out.popularity_score = map_svc.popularity_score(business)
@@ -295,6 +302,26 @@ async def get_business_detail(
     return _business_out(business, include_private=viewer is not None)
 
 
+@router.get(
+    "/businesses/{business_id}/flyer",
+    response_model=None,
+    summary="預覽特約店家照片或傳單",
+)
+async def preview_business_flyer(
+    business_id: uuid.UUID, db: DbDep
+) -> FileResponse | RedirectResponse:
+    business = await _business_or_404(db, business_id)
+    if business.status != PartnerBusinessStatus.ACTIVE.value or not business.flyer_storage_key:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此店家照片")
+    storage = get_storage()
+    local = storage.local_path(business.flyer_storage_key)
+    if local is not None:
+        if not local.exists():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="店家照片不存在")
+        return FileResponse(str(local), media_type=business.flyer_content_type or "image/*")
+    return RedirectResponse(await storage.get_url(business.flyer_storage_key, disposition="inline"))
+
+
 @router.post(
     "/businesses/{business_id}/click",
     response_model=PartnerBusinessOut,
@@ -355,13 +382,62 @@ async def create_business_rating(
     business_id: uuid.UUID,
     body: PartnerRatingCreate,
     db: DbDep,
-    viewer: OptionalUser,
+    viewer: CurrentUser,
 ) -> PartnerRatingOut:
     business = await _business_or_404(db, business_id)
     if business.status != "active":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此特約店家")
-    rating = await map_svc.upsert_rating(db, business, body, viewer.id if viewer else None)
+    rating = await map_svc.upsert_rating(db, business, body, viewer.id)
     return PartnerRatingOut.model_validate(rating)
+
+
+@router.post(
+    "/admin/businesses/{business_id}/flyer",
+    response_model=PartnerBusinessOut,
+    summary="上傳特約店家照片或傳單",
+)
+async def admin_upload_business_flyer(
+    business_id: uuid.UUID,
+    db: DbDep,
+    _: ManagerUser,
+    file: UploadFile = File(...),
+) -> PartnerBusinessOut:
+    business = await _business_or_404(db, business_id)
+    try:
+        stored = await get_storage().save(
+            file,
+            prefix=f"partner-map/{business.id}",
+            max_file_size=10 * 1024 * 1024,
+            allowed_content_types={"image/jpeg", "image/png", "image/gif", "image/webp"},
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    old_storage_key = business.flyer_storage_key
+    business.flyer_storage_key = stored.storage_key
+    business.flyer_filename = stored.filename
+    business.flyer_content_type = stored.content_type
+    await db.flush()
+    if old_storage_key:
+        await get_storage().delete(old_storage_key)
+    return _business_out(business, include_private=True, include_internal=True)
+
+
+@router.delete(
+    "/admin/businesses/{business_id}/flyer",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="移除特約店家照片或傳單",
+)
+async def admin_delete_business_flyer(business_id: uuid.UUID, db: DbDep, _: ManagerUser) -> None:
+    business = await _business_or_404(db, business_id)
+    storage_key = business.flyer_storage_key
+    business.flyer_storage_key = None
+    business.flyer_filename = None
+    business.flyer_content_type = None
+    await db.flush()
+    if storage_key:
+        await get_storage().delete(storage_key)
 
 
 @router.post(
@@ -476,7 +552,9 @@ async def admin_delete_business(business_id: uuid.UUID, db: DbDep, user: Manager
         actor_email=user.email,
         summary=f"刪除特約店家「{business.name}」",
     )
-    await map_svc.delete_business(db, business)
+    storage_key = await map_svc.delete_business(db, business)
+    if storage_key:
+        await get_storage().delete(storage_key)
 
 
 @router.get(

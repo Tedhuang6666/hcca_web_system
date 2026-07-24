@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Image from "next/image";
 import { toast } from "sonner";
-import { CheckCircle, MapPin, Pencil, Plus, RefreshCw, Save, Store, Tag, Trash2, XCircle } from "lucide-react";
+import { CheckCircle, Image as ImageIcon, MapPin, Pencil, Plus, RefreshCw, Save, Store, Tag, Trash2, Upload, XCircle } from "lucide-react";
 import { partnerMapApi, ApiError } from "@/lib/api";
+import { apiUrl } from "@/lib/config";
 import type {
   PartnerBusinessDetail,
   PartnerBusinessDirectoryItem,
@@ -135,6 +137,7 @@ export default function PartnerMapAdminPage() {
   const [tagIconKey, setTagIconKey] = useState<PartnerIconKey>("store");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [uploadingFlyer, setUploadingFlyer] = useState(false);
   const [parsingMap, setParsingMap] = useState(false);
   const [locationForm, setLocationForm] = useState(emptyLocation);
   const [offerForm, setOfferForm] = useState<OfferDraft>(newOfferDraft());
@@ -301,6 +304,32 @@ export default function PartnerMapAdminPage() {
       toast.error(error instanceof ApiError ? error.message : "儲存失敗");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const uploadBusinessFlyer = async (file: File | undefined) => {
+    if (!selected || !file) return;
+    setUploadingFlyer(true);
+    try {
+      const business = await partnerMapApi.uploadFlyer(selected.id, file);
+      setSelected(business);
+      load();
+      toast.success("已上傳店家照片／傳單");
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : "上傳店家照片失敗");
+    } finally {
+      setUploadingFlyer(false);
+    }
+  };
+
+  const removeBusinessFlyer = async () => {
+    if (!selected || !window.confirm("確定移除這張店家照片／傳單？")) return;
+    try {
+      await partnerMapApi.deleteFlyer(selected.id);
+      setSelected({ ...selected, flyer_image_url: null });
+      toast.success("已移除店家照片／傳單");
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : "移除店家照片失敗");
     }
   };
 
@@ -575,10 +604,17 @@ export default function PartnerMapAdminPage() {
 
         <main className="space-y-4">
           <section className="card overflow-hidden">
-            <div className="border-b p-5" style={{ borderColor: "var(--border)" }}>
-              <p className="text-xs font-medium" style={{ color: "var(--primary)" }}>{selected ? "編輯合作夥伴" : "建立合作夥伴"}</p>
-              <h2 className="mt-1 text-lg font-semibold" style={{ color: "var(--text-primary)" }}>{businessForm.name || "尚未命名的合作夥伴"}</h2>
-              <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>先完成基本資料，再補充公開聯絡方式、位置與優惠。</p>
+            <div className="flex items-start justify-between gap-4 border-b p-5" style={{ borderColor: "var(--border)" }}>
+              <div>
+                <p className="text-xs font-medium" style={{ color: "var(--primary)" }}>{selected ? "編輯合作夥伴" : "建立合作夥伴"}</p>
+                <h2 className="mt-1 text-lg font-semibold" style={{ color: "var(--text-primary)" }}>{businessForm.name || "尚未命名的合作夥伴"}</h2>
+                <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>先完成基本資料，再補充公開聯絡方式、位置與優惠。</p>
+              </div>
+              {selected && (
+                <button type="button" className="btn btn-secondary shrink-0" onClick={() => void deleteSelectedBusiness()} disabled={deleting} style={{ color: "var(--danger)" }}>
+                  <Trash2 size={15} aria-hidden="true" />{deleting ? "移除中…" : "移除店家"}
+                </button>
+              )}
             </div>
             <div className="space-y-7 p-5">
               <section>
@@ -610,6 +646,28 @@ export default function PartnerMapAdminPage() {
                 <div className="mb-3"><h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>顯示素材與分類</h3><p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>選填，讓學生更容易辨識合作夥伴。</p></div>
                 <div className="grid gap-3 md:grid-cols-2"><label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>社群連結</span><input className="input" type="url" value={businessForm.social_url} onChange={(e) => setBusinessForm((f) => ({ ...f, social_url: e.target.value }))} /></label><label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>營業時間</span><input className="input" value={businessForm.business_hours_text} onChange={(e) => setBusinessForm((f) => ({ ...f, business_hours_text: e.target.value }))} /></label><label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Logo URL</span><input className="input" value={businessForm.logo_url} onChange={(e) => setBusinessForm((f) => ({ ...f, logo_url: e.target.value }))} /></label><label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>封面圖片 URL</span><input className="input" value={businessForm.cover_image_url} onChange={(e) => setBusinessForm((f) => ({ ...f, cover_image_url: e.target.value }))} /></label></div>
                 <div className="mt-4 flex flex-wrap gap-2">{tags.map((tag) => { const active = businessForm.tag_ids.includes(tag.id); return <button type="button" key={tag.id} onClick={() => toggleTag(tag.id)} className="rounded-full border px-3 py-1.5 text-xs" style={{ borderColor: active ? "var(--primary)" : "var(--border)", color: active ? "var(--primary)" : "var(--text-secondary)", background: active ? "var(--primary-dim)" : "transparent" }}>{tag.name}</button>; })}</div>
+                {selected && (
+                  <div className="mt-4 rounded-lg border p-3" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h4 className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: "var(--text-primary)" }}><ImageIcon size={15} aria-hidden="true" />店家照片／傳單</h4>
+                        <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>可上傳 JPG、PNG、GIF 或 WebP，最大 10 MB。</p>
+                      </div>
+                      <label className="btn btn-secondary shrink-0 cursor-pointer">
+                        <Upload size={15} aria-hidden="true" />{uploadingFlyer ? "上傳中…" : "上傳照片"}
+                        <input className="sr-only" type="file" accept="image/jpeg,image/png,image/gif,image/webp" disabled={uploadingFlyer} onChange={(event) => { void uploadBusinessFlyer(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+                      </label>
+                    </div>
+                    {selected.flyer_image_url ? (
+                      <div className="mt-3 flex items-start gap-3">
+                        <Image src={apiUrl(selected.flyer_image_url)} alt={`${selected.name} 店家傳單`} width={160} height={100} unoptimized className="h-24 w-40 rounded-md border object-contain" style={{ borderColor: "var(--border)", background: "var(--bg)" }} />
+                        <button type="button" className="btn btn-secondary" onClick={() => void removeBusinessFlyer()} style={{ color: "var(--danger)" }}><Trash2 size={14} aria-hidden="true" />移除</button>
+                      </div>
+                    ) : (
+                      <p className="mt-3 text-xs" style={{ color: "var(--text-muted)" }}>尚未上傳照片或傳單。</p>
+                    )}
+                  </div>
+                )}
               </section>
             {!selected && businessForm.listing_type === "physical" && (
               <section className="border-t pt-6" style={{ borderColor: "var(--border)" }}>
@@ -667,15 +725,7 @@ export default function PartnerMapAdminPage() {
               </div>
             </div>}
             <div className="mt-4 flex items-center justify-between gap-2">
-              {selected ? (
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => void deleteSelectedBusiness()}
-                  disabled={deleting}
-                  style={{ color: "var(--danger)" }}>
-                  <Trash2 size={15} aria-hidden="true" />{deleting ? "刪除中..." : "刪除店家"}
-                </button>
-              ) : <span />}
+              <span />
               <button className="btn" onClick={saveBusiness} disabled={saving} style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
                 <Save size={15} aria-hidden="true" />{saving ? "儲存中..." : "儲存店家"}
               </button>

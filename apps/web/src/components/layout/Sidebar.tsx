@@ -96,21 +96,35 @@ export default function Sidebar() {
   const [meetingsUnlocked, setMeetingsUnlocked] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [serverProfile, setServerProfile] = useState<NavigationProfileConfig | null>(null);
+  const [publicProfile, setPublicProfile] = useState<NavigationProfileConfig | null>(null);
   const navigationProfile = useMemo(
     () => resolveNavigationProfile(permissions, isAdmin),
     [isAdmin, permissions],
   );
   const activeNavDef = useMemo(
-    () => serverProfile?.desktopSections ?? navDefinitionForProfile(navigationProfile),
-    [navigationProfile, serverProfile],
+    () => {
+      if (!isLoggedIn) return publicProfile?.desktopSections ?? NAV_DEF_LOGGED_OUT;
+      return serverProfile?.desktopSections ?? navDefinitionForProfile(navigationProfile);
+    },
+    [isLoggedIn, navigationProfile, publicProfile, serverProfile],
   );
 
   useEffect(() => {
+    let alive = true;
     if (!isLoggedIn) {
       setServerProfile(null);
-      return;
+      navigationProfilesApi.public("public")
+        .then((profile) => {
+          if (alive) setPublicProfile(navProfileFromApi(profile));
+        })
+        .catch(() => {
+          if (alive) setPublicProfile(null);
+        });
+      return () => {
+        alive = false;
+      };
     }
-    let alive = true;
+    setPublicProfile(null);
     navigationProfilesApi.me()
       .then((result) => {
         if (!alive) return;
@@ -272,7 +286,7 @@ export default function Sidebar() {
           return items.length > 0 ? { ...entry, items } : null;
         }).filter(Boolean) as NavEntry[];
       }
-      return (isLoggedIn ? activeNavDef : NAV_DEF_LOGGED_OUT).map((entry) => {
+      return activeNavDef.map((entry) => {
         if (!isSection(entry)) return entry;
         const items = entry.items.filter(itemVisible);
         return items.length > 0 ? { ...entry, items } : null;

@@ -16,6 +16,7 @@ import type {
   NavigationProfileCreate,
   NavigationProfileOut,
   NavigationProfileSection,
+  PermissionCodeInfo,
   PositionSummary,
 } from "@/lib/types";
 
@@ -40,6 +41,7 @@ const EMPTY_DRAFT: Draft = {
 export default function NavigationProfilesPage() {
   const [profiles, setProfiles] = useState<NavigationProfileOut[]>([]);
   const [positions, setPositions] = useState<PositionSummary[]>([]);
+  const [permissionCodes, setPermissionCodes] = useState<PermissionCodeInfo[]>([]);
   const [selectedId, setSelectedId] = useState<string>("new");
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [loading, setLoading] = useState(true);
@@ -50,12 +52,14 @@ export default function NavigationProfilesPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [profileRows, positionRows] = await Promise.all([
+      const [profileRows, positionRows, permissionRows] = await Promise.all([
         navigationProfilesApi.list(true),
         adminApi.listPositions(),
+        adminApi.listPermissionCodes(),
       ]);
       setProfiles(profileRows);
       setPositions(positionRows);
+      setPermissionCodes(permissionRows);
       if (selectedId !== "new") {
         const current = profileRows.find((profile) => profile.id === selectedId);
         if (current) setDraft(profileToDraft(current));
@@ -174,6 +178,7 @@ export default function NavigationProfilesPage() {
             draft={draft}
             setDraft={setDraft}
             positions={positions}
+            permissionCodes={permissionCodes}
             selected={selected}
             loading={loading}
             onSave={save}
@@ -193,6 +198,7 @@ function Editor({
   draft,
   setDraft,
   positions,
+  permissionCodes,
   selected,
   loading,
   onSave,
@@ -201,6 +207,7 @@ function Editor({
   draft: Draft;
   setDraft: React.Dispatch<React.SetStateAction<Draft>>;
   positions: PositionSummary[];
+  permissionCodes: PermissionCodeInfo[];
   selected: NavigationProfileOut | null;
   loading: boolean;
   onSave: () => void;
@@ -208,6 +215,26 @@ function Editor({
 }) {
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
     setDraft((current) => ({ ...current, [key]: value }));
+  const permissionOptions = useMemo(
+    () => permissionCodes.map((permission) => ({
+      value: permission.code,
+      label: permission.label,
+      detail: permission.code,
+    })),
+    [permissionCodes],
+  );
+  const prefixOptions = useMemo(
+    () => Array.from(new Set(
+      permissionCodes
+        .map((permission) => permission.code.slice(0, permission.code.indexOf(":") + 1))
+        .filter((prefix) => prefix.length > 1),
+    )).sort().map((prefix) => ({
+      value: prefix,
+      label: `${prefix} 全部權限`,
+      detail: "套用此模組下的所有權限",
+    })),
+    [permissionCodes],
+  );
   return (
     <section className="card p-5">
       <div className="grid gap-4 md:grid-cols-2">
@@ -241,18 +268,30 @@ function Editor({
       </Field>
 
       <div className="mt-4 grid gap-4 md:grid-cols-2">
-        <Field label="符合任一權限">
-          <textarea className="input min-h-20" value={(draft.match_any_permissions ?? []).join("\n")} onChange={(event) => set("match_any_permissions", lines(event.target.value))} />
-        </Field>
-        <Field label="符合任一權限前綴">
-          <textarea className="input min-h-20" value={(draft.match_any_prefixes ?? []).join("\n")} onChange={(event) => set("match_any_prefixes", lines(event.target.value))} />
-        </Field>
-        <Field label="排除權限">
-          <textarea className="input min-h-20" value={(draft.exclude_permissions ?? []).join("\n")} onChange={(event) => set("exclude_permissions", lines(event.target.value))} />
-        </Field>
-        <Field label="排除權限前綴">
-          <textarea className="input min-h-20" value={(draft.exclude_prefixes ?? []).join("\n")} onChange={(event) => set("exclude_prefixes", lines(event.target.value))} />
-        </Field>
+        <PermissionPicker
+          label="符合任一權限"
+          values={draft.match_any_permissions ?? []}
+          options={permissionOptions}
+          onChange={(value) => set("match_any_permissions", value)}
+        />
+        <PermissionPicker
+          label="符合任一權限前綴"
+          values={draft.match_any_prefixes ?? []}
+          options={prefixOptions}
+          onChange={(value) => set("match_any_prefixes", value)}
+        />
+        <PermissionPicker
+          label="排除權限"
+          values={draft.exclude_permissions ?? []}
+          options={permissionOptions}
+          onChange={(value) => set("exclude_permissions", value)}
+        />
+        <PermissionPicker
+          label="排除權限前綴"
+          values={draft.exclude_prefixes ?? []}
+          options={prefixOptions}
+          onChange={(value) => set("exclude_prefixes", value)}
+        />
       </div>
 
       <Field label="指定職位">
@@ -367,6 +406,78 @@ function MobileOrderEditor({ value, onChange }: { value: string[]; onChange: (va
   );
 }
 
+type PermissionChoice = { value: string; label: string; detail?: string };
+
+function PermissionPicker({
+  label,
+  values,
+  options,
+  onChange,
+}: {
+  label: string;
+  values: string[];
+  options: PermissionChoice[];
+  onChange: (value: string[]) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const selected = new Set(values);
+  const choices = [
+    ...options,
+    ...values
+      .filter((value) => !options.some((option) => option.value === value))
+      .map((value) => ({ value, label: `${value}（現有設定）`, detail: "此權限目前不在字典中" })),
+  ];
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleChoices = choices.filter((choice) =>
+    !normalizedQuery
+    || `${choice.label} ${choice.value} ${choice.detail ?? ""}`.toLowerCase().includes(normalizedQuery),
+  );
+
+  const toggle = (value: string) => {
+    onChange(selected.has(value) ? values.filter((item) => item !== value) : [...values, value]);
+  };
+
+  return (
+    <div className="mt-4 block">
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <span className="text-xs font-medium text-[var(--text-muted)]">{label}</span>
+        <span className="text-[11px] text-[var(--text-muted)]">已選 {values.length} 項</span>
+      </div>
+      <input
+        className="input mb-2 h-9 text-sm"
+        type="search"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        placeholder="搜尋權限名稱或代碼"
+        aria-label={`搜尋${label}`}
+      />
+      <div
+        className="max-h-48 space-y-1 overflow-y-auto rounded-md border p-2"
+        style={{ borderColor: "var(--border)" }}>
+        {visibleChoices.map((choice) => (
+          <label key={choice.value} className="flex cursor-pointer items-start gap-2 rounded px-2 py-1.5 hover:bg-[var(--bg-muted)]">
+            <input
+              className="mt-0.5"
+              type="checkbox"
+              checked={selected.has(choice.value)}
+              onChange={() => toggle(choice.value)}
+            />
+            <span className="min-w-0 text-xs">
+              <span className="block font-medium">{choice.label}</span>
+              {choice.detail && <span className="block truncate text-[var(--text-muted)]">{choice.detail}</span>}
+            </span>
+          </label>
+        ))}
+        {visibleChoices.length === 0 && (
+          <p className="px-2 py-3 text-xs text-[var(--text-muted)]">
+            {options.length === 0 ? "尚未載入權限字典" : "找不到符合的權限"}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Preview({ items, mobileItems }: { items: NavItem[]; mobileItems: NavItem[] }) {
   return (
     <section className="card overflow-hidden">
@@ -460,12 +571,12 @@ function normalizeDraft(draft: Draft): Draft {
   };
 }
 
-function lines(value: string) {
-  return unique(value.split(/\n|,/).map((line) => line.trim()).filter(Boolean));
-}
-
 function unique(values: string[]) {
   return Array.from(new Set(values));
+}
+
+function lines(value: string) {
+  return unique(value.split(/\n|,/).map((line) => line.trim()).filter(Boolean));
 }
 
 function sectionsToText(sections: NavigationProfileSection[]) {

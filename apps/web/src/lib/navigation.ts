@@ -48,6 +48,13 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "matters", href: "/matters", iconKey: "governance", label: "整合工作台" },
   { id: "governanceHub", href: "/governance", iconKey: "governance", label: "工作中心" },
   { id: "announcements", href: "/announcements", iconKey: "announcement", label: "校內公告" },
+  { id: "publicRegulations", href: "/regulations", iconKey: "regulations", label: "法規查詢" },
+  { id: "publicDocuments", href: "/documents", iconKey: "documents", label: "公文查詢" },
+  { id: "publicAnnouncements", href: "/announcements", iconKey: "announcement", label: "校內公告" },
+  { id: "publicPartnerMap", href: "/partner-map", iconKey: "partnerMap", label: "特約地圖" },
+  { id: "publicRecommendedVendors", href: "/recommended-vendors", iconKey: "shopOrders", label: "推薦商家" },
+  { id: "publicPetition", href: "/petitions/new", iconKey: "petition", label: "我要陳情" },
+  { id: "publicAbout", href: "/about", iconKey: "info", label: "關於本系統" },
   { id: "documents", href: "/documents", iconKey: "documents", label: "公文系統" },
   { id: "calendar", href: "/calendar", iconKey: "calendar", label: "行事曆" },
   { id: "meetings", href: "/meetings", iconKey: "meetings", label: "議事系統" },
@@ -318,15 +325,15 @@ export const NAV_DEF_LOGGED_OUT: NavEntry[] = [
   {
     id: "public",
     heading: "公開",
-    items: [
-      { id: "publicRegulations", href: "/regulations", iconKey: "regulations", label: "法規查詢" },
-      { id: "publicDocuments", href: "/documents", iconKey: "documents", label: "公文查詢" },
-      { id: "publicAnnouncements", href: "/announcements", iconKey: "announcement", label: "校內公告" },
-      { id: "publicPartnerMap", href: "/partner-map", iconKey: "partnerMap", label: "特約地圖" },
-      { id: "publicRecommendedVendors", href: "/recommended-vendors", iconKey: "shopOrders", label: "推薦商家" },
-      { id: "publicPetition", href: "/petitions/new", iconKey: "petition", label: "我要陳情" },
-      { id: "publicAbout", href: "/about", iconKey: "info", label: "關於本系統" },
-    ],
+    items: byIds([
+      "publicRegulations",
+      "publicDocuments",
+      "publicAnnouncements",
+      "publicPartnerMap",
+      "publicRecommendedVendors",
+      "publicPetition",
+      "publicAbout",
+    ]),
   },
 ];
 
