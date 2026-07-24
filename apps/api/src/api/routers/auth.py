@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.anomaly_detection import check_suspicious_login, record_login
+from api.core.clock import local_today
 from api.core.config import settings
 from api.core.database import get_db
 from api.core.defense import find_identity_block
@@ -26,6 +27,7 @@ from api.core.permission_codes import PermissionCode
 from api.core.posthog import get_posthog_client
 from api.core.redirects import safe_next_path
 from api.core.security import (
+    RedisUnavailableError,
     add_to_blacklist,
     create_access_token,
     create_mfa_challenge_token,
@@ -159,7 +161,8 @@ def _email_can_login(
 async def _auth_user_payload(db: AsyncSession, user: User) -> dict:
     from api.services.permission import get_user_permission_codes
 
-    codes = await get_user_permission_codes(db, user.id)
+    # 登入狀態與前端權限快取必須反映最新資料；不要使用 RBAC 的短期 Redis 快取。
+    codes = await get_user_permission_codes(db, user.id, on_date=local_today())
     return {
         "id": str(user.id),
         "email": user.email,
@@ -174,7 +177,9 @@ async def _auth_user_payload(db: AsyncSession, user: User) -> dict:
 async def _access_token_claims(db: AsyncSession, user: User) -> dict:
     from api.services.permission import get_user_permission_codes
 
-    codes = await get_user_permission_codes(db, user.id)
+    # Refresh 會重新簽發 JWT，權限 claims 必須從資料庫即時重算，避免舊快取讓權限
+    # 在換發 token 後仍短暫消失或殘留。
+    codes = await get_user_permission_codes(db, user.id, on_date=local_today())
     return {
         "is_admin": user.is_superuser or PermissionCode.ADMIN_ALL in codes,
         "permissions": sorted(codes),
@@ -366,8 +371,9 @@ async def google_login(request: Request) -> RedirectResponse:
     frontend_origin = _frontend_origin_for(request, use_saved=False)
     request.session["frontend_origin"] = frontend_origin
     request.session["login_next"] = _safe_next_path(request.query_params.get("next"))
-    redirect_uri = f"{frontend_origin}/auth/google/callback"
-    return await google.authorize_redirect(request, redirect_uri)
+    # Google OAuth callback 必須固定使用 Google Console 登記的 URI；前端來源只用於
+    # OAuth 完成後的站內導回，不能拿來動態改變 provider 的 redirect_uri。
+    return await google.authorize_redirect(request, settings.GOOGLE_REDIRECT_URI)
 
 
 @router.get("/google/callback", name="google_callback", summary="Google OAuth2 Callback")
@@ -655,7 +661,17 @@ async def refresh_token(
     token = (body.refresh_token if body else None) or request.cookies.get(
         settings.REFRESH_TOKEN_COOKIE_NAME
     )
-    if not token or await is_blacklisted(token, fail_closed=True):
+    if not token:
+        raise credentials_exception
+    try:
+        blacklisted = await is_blacklisted(token, fail_closed=True, raise_on_unavailable=True)
+    except RedisUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="登入服務暫時不可用，請稍後再試",
+            headers={"Retry-After": "3"},
+        ) from exc
+    if blacklisted:
         raise credentials_exception
 
     try:

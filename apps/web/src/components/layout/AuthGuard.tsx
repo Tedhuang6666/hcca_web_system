@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
-import { authApi } from "@/lib/api";
+import { ApiError, authApi } from "@/lib/api";
 import { cacheCurrentUser, clearAuthCache } from "@/lib/auth-cache";
 import { isPublicRoute } from "@/lib/route-access";
 
@@ -26,8 +26,16 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
         cacheCurrentUser(me);
         setReady(true);
       })
-      .catch(() => {
+      .catch((error) => {
         if (cancelled) return;
+        // 網路短暫中斷或 API 5xx 不代表 session 失效；保留現有登入/權限快取，
+        // 避免 transient failure 把使用者誤導回登入頁。
+        const transientFailure = error instanceof ApiError
+          && (error.status === 0 || error.status >= 500);
+        if (transientFailure && localStorage.getItem("user_id")) {
+          setReady(true);
+          return;
+        }
         clearAuthCache();
         router.replace(`/login?next=${encodeURIComponent(pathname)}`);
       });

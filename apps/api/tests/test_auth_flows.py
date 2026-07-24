@@ -17,7 +17,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.config import settings
 from api.core.defense import publish_rules
-from api.core.security import create_access_token, create_refresh_token, decode_token
+from api.core.security import (
+    RedisUnavailableError,
+    create_access_token,
+    create_refresh_token,
+    decode_token,
+)
 from api.models.user import User
 
 # ---------------------------------------------------------------------------
@@ -54,6 +59,25 @@ async def test_refresh_with_body_token_also_works(client: AsyncClient, member_us
 async def test_refresh_without_any_token_returns_401(client: AsyncClient) -> None:
     response = await client.post("/auth/refresh")
     assert response.status_code == 401
+
+
+async def test_refresh_returns_503_when_blacklist_store_is_unavailable(
+    client: AsyncClient, member_user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import api.routers.auth as auth_module
+
+    async def _raise_unavailable(*args: Any, **kwargs: Any) -> bool:
+        raise RedisUnavailableError("redis unavailable")
+
+    monkeypatch.setattr(auth_module, "is_blacklisted", _raise_unavailable)
+    client.cookies.set(
+        settings.REFRESH_TOKEN_COOKIE_NAME, create_refresh_token(str(member_user.id))
+    )
+
+    response = await client.post("/auth/refresh")
+
+    assert response.status_code == 503
+    assert response.headers["Retry-After"] == "3"
 
 
 async def test_refresh_reused_old_token_returns_401_after_rotation(
@@ -329,6 +353,24 @@ async def test_google_login_redirects_to_google_authorize_endpoint(client: Async
 
     assert response.status_code in (302, 307)
     assert "accounts.google.com" in response.headers["location"]
+
+
+async def test_google_login_uses_configured_redirect_uri(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        settings, "GOOGLE_REDIRECT_URI", "https://auth.example.com/auth/google/callback"
+    )
+
+    response = await client.get(
+        "/auth/google/login?frontend_origin=http://localhost:3000", follow_redirects=False
+    )
+
+    assert response.status_code in (302, 307)
+    assert (
+        "redirect_uri=https%3A%2F%2Fauth.example.com%2Fauth%2Fgoogle%2Fcallback"
+        in response.headers["location"]
+    )
 
 
 async def test_discord_login_returns_503_when_not_configured(

@@ -38,6 +38,10 @@ USER_TOKENS_PREFIX = "user_tokens:"
 _TOKEN_TRACKING_TIMEOUT_SECONDS = 0.8
 
 
+class RedisUnavailableError(RuntimeError):
+    """Redis 暫時不可用，無法可靠判斷 Token 是否已撤銷。"""
+
+
 def _now_ts() -> int:
     return int(datetime.now(UTC).timestamp())
 
@@ -100,7 +104,9 @@ async def add_to_blacklist(token: str) -> None:
         await redis_client.setex(f"{BLACKLIST_JTI_PREFIX}{jti}", ttl, "1")
 
 
-async def is_blacklisted(token: str, *, fail_closed: bool = False) -> bool:
+async def is_blacklisted(
+    token: str, *, fail_closed: bool = False, raise_on_unavailable: bool = False
+) -> bool:
     """檢查 Token jti 是否已被撤銷。
 
     一般 access token 可採 fail-open，避免 Redis 暫時故障造成全站不可用；會換發
@@ -116,12 +122,14 @@ async def is_blacklisted(token: str, *, fail_closed: bool = False) -> bool:
         return False
     try:
         return bool(await redis_client.exists(f"{BLACKLIST_JTI_PREFIX}{jti}"))
-    except (RedisError, TimeoutError):
+    except (RedisError, TimeoutError) as exc:
         logger.error(
             "黑名單檢查 Redis 不可用，模式=%s",
             "fail-closed 拒絕" if fail_closed else "fail-open 放行",
             extra={"alert": "blacklist_fail_open"},
         )
+        if fail_closed and raise_on_unavailable:
+            raise RedisUnavailableError("Redis unavailable while checking token blacklist") from exc
         return fail_closed
 
 
