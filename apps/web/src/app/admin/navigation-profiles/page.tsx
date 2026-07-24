@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus, Save, ShieldCheck, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Plus, Save, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import NavIcon from "@/components/layout/NavIcon";
 import { adminApi, apiErrorMessage, navigationProfilesApi } from "@/lib/api";
 import {
   isSection,
+  NAV_ITEMS,
   NAV_ITEMS_BY_ID,
   navProfileFromApi,
   type NavItem,
@@ -125,7 +126,7 @@ export default function NavigationProfilesPage() {
           </div>
           <h1 className="text-2xl font-bold">視角管理</h1>
           <p className="mt-1 max-w-2xl text-sm text-[var(--text-muted)]">
-            新增或調整登入後介面視角，並用指定職位或權限規則決定套用對象。
+            為不同職位或權限設定登入後的側邊欄與手機底部欄，並即時預覽套用後的入口。
           </p>
         </div>
         <button type="button" className="btn btn-primary" onClick={() => selectProfile(null)}>
@@ -178,7 +179,10 @@ export default function NavigationProfilesPage() {
             onSave={save}
             onDelete={remove}
           />
-          <Preview items={preview.desktopSections.flatMap((entry) => isSection(entry) ? entry.items : [entry])} />
+          <Preview
+            items={preview.desktopSections.flatMap((entry) => isSection(entry) ? entry.items : [entry])}
+            mobileItems={preview.mobileOrder.map((id) => NAV_ITEMS_BY_ID[id]).filter((item): item is NavItem => !!item)}
+          />
         </section>
       </div>
     </main>
@@ -275,7 +279,10 @@ function Editor({
           />
         </Field>
         <Field label="手機項目順序">
-          <textarea className="input min-h-40 font-mono text-xs" value={(draft.mobile_order ?? []).join("\n")} onChange={(event) => set("mobile_order", lines(event.target.value))} />
+          <MobileOrderEditor
+            value={draft.mobile_order ?? []}
+            onChange={(value) => set("mobile_order", value)}
+          />
         </Field>
       </div>
 
@@ -301,26 +308,100 @@ function Editor({
   );
 }
 
-function Preview({ items }: { items: NavItem[] }) {
+function MobileOrderEditor({ value, onChange }: { value: string[]; onChange: (value: string[]) => void }) {
+  const order = value.filter((id, index) => NAV_ITEMS_BY_ID[id] && value.indexOf(id) === index);
+  const selected = new Set(order);
+
+  const move = (id: string, direction: -1 | 1) => {
+    const index = order.indexOf(id);
+    const nextIndex = index + direction;
+    if (index < 0 || nextIndex < 0 || nextIndex >= order.length) return;
+    const next = [...order];
+    [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+    onChange(next);
+  };
+
+  const toggle = (id: string) => {
+    onChange(selected.has(id) ? order.filter((itemId) => itemId !== id) : [...order, id]);
+  };
+
+  return (
+    <div className="space-y-3 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
+      <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+        前 4 個可用項目會出現在手機底部欄，其餘項目會收進「更多」。
+      </p>
+      <div className="space-y-1.5">
+        {order.map((id, index) => {
+          const item = NAV_ITEMS_BY_ID[id];
+          return (
+            <div key={id} className="flex items-center gap-2 rounded-md px-2 py-1.5" style={{ background: "var(--bg-muted)" }}>
+              <span className="w-5 text-center text-xs" style={{ color: "var(--text-muted)" }}>{index + 1}</span>
+              <NavIcon iconKey={item.iconKey} size={15} />
+              <span className="min-w-0 flex-1 truncate text-sm">{item.label}</span>
+              <button type="button" className="btn btn-ghost btn-icon" onClick={() => move(id, -1)} disabled={index === 0} aria-label={`上移 ${item.label}`}>
+                <ArrowUp size={14} aria-hidden />
+              </button>
+              <button type="button" className="btn btn-ghost btn-icon" onClick={() => move(id, 1)} disabled={index === order.length - 1} aria-label={`下移 ${item.label}`}>
+                <ArrowDown size={14} aria-hidden />
+              </button>
+              <button type="button" className="text-xs" style={{ color: "var(--danger)" }} onClick={() => toggle(id)}>
+                移除
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {NAV_ITEMS.filter((item) => !selected.has(item.id)).map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className="rounded-full border px-2.5 py-1 text-xs"
+            style={{ borderColor: "var(--border)", color: "var(--text-secondary)" }}
+            onClick={() => toggle(item.id)}>
+            ＋ {item.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Preview({ items, mobileItems }: { items: NavItem[]; mobileItems: NavItem[] }) {
   return (
     <section className="card overflow-hidden">
       <header className="border-b border-[var(--border)] px-5 py-4">
         <h2 className="font-semibold">導覽預覽</h2>
       </header>
-      <div className="divide-y divide-[var(--border)]">
+      <div className="grid gap-5 p-4 md:grid-cols-2">
+        <PreviewColumn title="桌面側邊欄" items={items} />
+        <PreviewColumn title="手機底部欄（前四個）" items={mobileItems.slice(0, 4)} />
+      </div>
+    </section>
+  );
+}
+
+function PreviewColumn({ title, items }: { title: string; items: NavItem[] }) {
+  return (
+    <div>
+      <h3 className="mb-2 text-xs font-semibold" style={{ color: "var(--text-muted)" }}>{title}</h3>
+      <div className="divide-y rounded-md border" style={{ borderColor: "var(--border)" }}>
         {items.map((item) => (
-          <div key={item.id} className="flex items-center gap-3 px-5 py-3">
+          <div key={item.id} className="flex items-center gap-3 px-3 py-2.5">
             <span className="flex h-8 w-8 items-center justify-center rounded-md bg-[var(--bg-muted)] text-[var(--text-muted)]">
               <NavIcon iconKey={item.iconKey} size={16} />
             </span>
             <div className="min-w-0">
-              <div className="text-sm font-medium">{item.label}</div>
+              <div className="truncate text-sm font-medium">{item.label}</div>
               <div className="truncate text-xs text-[var(--text-muted)]">{item.href}</div>
             </div>
           </div>
         ))}
+        {items.length === 0 && (
+          <p className="px-3 py-4 text-xs" style={{ color: "var(--text-muted)" }}>尚未設定項目</p>
+        )}
       </div>
-    </section>
+    </div>
   );
 }
 
