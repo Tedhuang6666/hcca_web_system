@@ -114,6 +114,10 @@ KNOWN_PUBLIC_ROUTES: set[tuple[str, str]] = {
     ("/petitions", "POST"),
     ("/petitions/lookup", "GET"),
     ("/petitions/types", "GET"),
+    # 公開陳情查閱；回覆端點在 handler 內以登入身分或驗證碼確認本人
+    ("/petitions/public", "GET"),
+    ("/petitions/public/{case_id}", "GET"),
+    ("/petitions/{case_id}/public-response", "POST"),
     ("/petitions/{case_id}/attachments", "POST"),
     ("/petitions/{case_id}/attachments/{attachment_id}/download", "GET"),
     ("/petitions/{case_id}/supplement", "POST"),
