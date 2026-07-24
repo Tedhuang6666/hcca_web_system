@@ -9548,6 +9548,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/petitions/public": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出已公開陳情 */
+        get: operations["list_public_petitions_petitions_public_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/petitions/public/{case_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 查看已公開陳情 */
+        get: operations["get_public_petition_petitions_public__case_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/petitions/share": {
         parameters: {
             query?: never;
@@ -9712,6 +9746,57 @@ export interface paths {
         put?: never;
         /** 新增內部備註 */
         post: operations["add_note_petitions__case_id__notes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/petitions/{case_id}/public-confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 確認修改後公開內容並發布 */
+        post: operations["confirm_public_petitions__case_id__public_confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/petitions/{case_id}/public-request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 提出公開陳情申請 */
+        post: operations["request_public_petitions__case_id__public_request_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/petitions/{case_id}/public-response": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 回覆公開陳情申請 */
+        post: operations["respond_public_petitions__case_id__public_response_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -26046,12 +26131,12 @@ export interface components {
             id: string;
             /** Is Named */
             is_named: boolean;
-            public_status: components["schemas"]["PetitionPublicStatus"];
             /**
              * Next Action
              * @default
              */
             next_action: string;
+            public_status: components["schemas"]["PetitionPublicStatus"];
             status: components["schemas"]["PetitionStatus"];
             /**
              * Status Label
@@ -26100,12 +26185,15 @@ export interface components {
              */
             attachments: components["schemas"]["PetitionAttachmentOut"][];
             /**
+             * Can Respond Public
+             * @default false
+             */
+            can_respond_public: boolean;
+            /**
              * Can Supplement
              * @default false
              */
             can_supplement: boolean;
-            /** Can Respond Public */
-            can_respond_public: boolean;
             /**
              * Can View Submitter
              * @default false
@@ -26151,7 +26239,6 @@ export interface components {
             id: string;
             /** Is Named */
             is_named: boolean;
-            public_status: components["schemas"]["PetitionPublicStatus"];
             /** Latest Internal Note */
             latest_internal_note?: string | null;
             /**
@@ -26159,14 +26246,15 @@ export interface components {
              * @default
              */
             next_action: string;
-            /** Public Reply */
-            public_reply: string | null;
             /** Public Content */
             public_content: string | null;
             /** Public Published At */
             public_published_at: string | null;
+            /** Public Reply */
+            public_reply: string | null;
             /** Public Requested At */
             public_requested_at: string | null;
+            public_status: components["schemas"]["PetitionPublicStatus"];
             /** Public Title */
             public_title: string | null;
             /** Public User Responded At */
@@ -26321,12 +26409,15 @@ export interface components {
              */
             attachments: components["schemas"]["PetitionAttachmentOut"][];
             /**
+             * Can Respond Public
+             * @default false
+             */
+            can_respond_public: boolean;
+            /**
              * Can Supplement
              * @default false
              */
             can_supplement: boolean;
-            /** Can Respond Public */
-            can_respond_public: boolean;
             /**
              * Can View Submitter
              * @default false
@@ -26372,7 +26463,6 @@ export interface components {
             id: string;
             /** Is Named */
             is_named: boolean;
-            public_status: components["schemas"]["PetitionPublicStatus"];
             /** Latest Internal Note */
             latest_internal_note?: string | null;
             /**
@@ -26380,14 +26470,15 @@ export interface components {
              * @default
              */
             next_action: string;
-            /** Public Reply */
-            public_reply: string | null;
             /** Public Content */
             public_content: string | null;
             /** Public Published At */
             public_published_at: string | null;
+            /** Public Reply */
+            public_reply: string | null;
             /** Public Requested At */
             public_requested_at: string | null;
+            public_status: components["schemas"]["PetitionPublicStatus"];
             /** Public Title */
             public_title: string | null;
             /** Public User Responded At */
@@ -26475,9 +26566,15 @@ export interface components {
             case_number: string;
             /** Current Org Name */
             current_org_name: string;
-            /** Id */
+            /**
+             * Id
+             * Format: uuid
+             */
             id: string;
-            /** Published At */
+            /**
+             * Published At
+             * Format: date-time
+             */
             published_at: string;
             /** Reply */
             reply: string | null;
@@ -26487,9 +26584,29 @@ export interface components {
             type_name: string;
         };
         /** PetitionPublicOut */
-        PetitionPublicOut: components["schemas"]["PetitionPublicListItem"] & {
+        PetitionPublicOut: {
+            /** Case Number */
+            case_number: string;
             /** Content */
             content: string;
+            /** Current Org Name */
+            current_org_name: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Published At
+             * Format: date-time
+             */
+            published_at: string;
+            /** Reply */
+            reply: string | null;
+            /** Title */
+            title: string;
+            /** Type Name */
+            type_name: string;
         };
         /** PetitionPublicRequest */
         PetitionPublicRequest: {
@@ -26502,18 +26619,28 @@ export interface components {
         PetitionPublicResponse: {
             /** Content */
             content?: string | null;
+            /**
+             * Decision
+             * @enum {string}
+             */
             decision: "approve" | "approve_with_changes" | "reject";
             /** Title */
             title?: string | null;
             /** Verification Code */
             verification_code?: string | null;
         };
-        /** PetitionPublicStatus */
+        /**
+         * PetitionPublicStatus
+         * @enum {string}
+         */
         PetitionPublicStatus: "not_requested" | "pending_user" | "pending_handler" | "published" | "declined";
         /** PetitionReplyCreate */
         PetitionReplyCreate: {
-            /** Close */
-            close?: boolean;
+            /**
+             * Close
+             * @default false
+             */
+            close: boolean;
             /** Internal Note */
             internal_note?: string | null;
             /** Public Content */
@@ -55722,6 +55849,69 @@ export interface operations {
             };
         };
     };
+    list_public_petitions_petitions_public_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PetitionPublicListItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_public_petition_petitions_public__case_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PetitionPublicOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     lookup_case_by_share_token_petitions_share_post: {
         parameters: {
             query?: never;
@@ -56006,6 +56196,107 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["PetitionInternalNoteCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PetitionCaseOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_public_petitions__case_id__public_confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PetitionCaseOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    request_public_petitions__case_id__public_request_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PetitionPublicRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PetitionCaseOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    respond_public_petitions__case_id__public_response_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PetitionPublicResponse"];
             };
         };
         responses: {
