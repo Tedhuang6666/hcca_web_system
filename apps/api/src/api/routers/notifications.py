@@ -663,25 +663,15 @@ async def create_notification(
             logger.warning("通知 LINE 排程失敗 user=%s type=%s", user_id, type, exc_info=True)
     if channel.get("discord"):
         try:
-            from api.models.discord_account import DiscordAccountLink
-            from api.services.outbox import emit
+            from api.services.discord_notification_routes import emit_personal_notification
 
-            discord_user_id = await db.scalar(
-                select(DiscordAccountLink.discord_user_id).where(
-                    DiscordAccountLink.user_id == user_id,
-                    DiscordAccountLink.is_active.is_(True),
-                )
+            await emit_personal_notification(
+                db,
+                user_id=user_id,
+                notification_type=type,
+                title=title,
+                body=body,
+                link=link,
             )
-            if discord_user_id:
-                await emit(
-                    db,
-                    event_type="discord.push",
-                    payload={
-                        "discord_user_id": discord_user_id,
-                        "title": title,
-                        "body": body,
-                        "link": link,
-                    },
-                )
         except Exception:
             logger.warning("通知 Discord 排程失敗 user=%s type=%s", user_id, type, exc_info=True)

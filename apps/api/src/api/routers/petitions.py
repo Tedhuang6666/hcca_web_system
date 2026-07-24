@@ -299,6 +299,27 @@ async def create_petition(
         meta={"case_number": case_obj.case_number, "type_id": str(case_obj.type_id)},
         summary=f"建立陳情案件 {case_obj.case_number}",
     )
+    petition_type = await petition_svc.get_type(session, case_obj.type_id)
+    from api.services.discord_notification_routes import emit_routed_notification
+
+    await emit_routed_notification(
+        session,
+        event_key="petition.created",
+        module="petition",
+        title=f"新陳情案件 {case_obj.case_number}",
+        body=case_obj.title,
+        link=f"/petitions/{case_obj.id}",
+        petition_type_id=case_obj.type_id,
+        org_id=case_obj.current_org_id,
+        fields=[
+            {
+                "name": "分類",
+                "value": petition_type.name if petition_type else "未分類",
+                "inline": True,
+            }
+        ],
+        thread_name=f"陳情討論：{case_obj.case_number}",
+    )
     await enqueue_petition_private_channel(session, case_obj)
     # 治理匯流：陳情建立經 audit_svc.record() 統一橋接進治理中樞（governance_events 登錄表），
     # 不再於此手寫 ingest，避免雙重時間軸。
@@ -662,6 +683,26 @@ async def supplement_case(
         link=f"/petitions/manage?case={case_obj.id}",
         related_id=case_obj.id,
     )
+    from api.services.discord_notification_routes import emit_routed_notification
+
+    petition_type = await petition_svc.get_type(session, case_obj.type_id)
+    await emit_routed_notification(
+        session,
+        event_key="petition.assigned",
+        module="petition",
+        title=f"陳情案件已指派 {case_obj.case_number}",
+        body=case_obj.title,
+        link=f"/petitions/manage?case={case_obj.id}",
+        petition_type_id=case_obj.type_id,
+        org_id=case_obj.current_org_id,
+        fields=[
+            {
+                "name": "分類",
+                "value": petition_type.name if petition_type else "未分類",
+                "inline": True,
+            }
+        ],
+    )
     return await _decorate_case(case_obj, include_internal=False, can_view_submitter=True)
 
 
@@ -763,6 +804,18 @@ async def reply_case(
         external_email=case_obj.contact_email if case_obj.submitter_id is None else None,
         external_name=case_obj.contact_name,
     )
+    from api.services.discord_notification_routes import emit_routed_notification
+
+    await emit_routed_notification(
+        session,
+        event_key="petition.replied",
+        module="petition",
+        title=f"陳情案件已回覆 {case_obj.case_number}",
+        body=case_obj.title,
+        link=f"/petitions/{case_obj.id}",
+        petition_type_id=case_obj.type_id,
+        org_id=case_obj.current_org_id,
+    )
     return await _decorate_case(
         case_obj, include_internal=True, can_view_submitter=case_obj.is_named
     )
@@ -800,6 +853,18 @@ async def update_status(
         related_id=case_obj.id,
         external_email=case_obj.contact_email if case_obj.submitter_id is None else None,
         external_name=case_obj.contact_name,
+    )
+    from api.services.discord_notification_routes import emit_routed_notification
+
+    await emit_routed_notification(
+        session,
+        event_key="petition.status_changed",
+        module="petition",
+        title=f"陳情案件狀態更新 {case_obj.case_number}",
+        body=f"{case_obj.title}｜{petition_svc.STATUS_LABELS[case_obj.status]}",
+        link=f"/petitions/{case_obj.id}",
+        petition_type_id=case_obj.type_id,
+        org_id=case_obj.current_org_id,
     )
     return await _decorate_case(
         case_obj, include_internal=True, can_view_submitter=case_obj.is_named

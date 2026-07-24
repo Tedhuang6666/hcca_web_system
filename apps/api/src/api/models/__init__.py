@@ -56,6 +56,7 @@ from api.models.discord_account import (  # noqa: F401
     DiscordRoleMappingKind,
     DiscordRolePolicy,
 )
+from api.models.discord_notification_route import DiscordNotificationRoute  # noqa: F401
 from api.models.document import (  # noqa: F401
     ApprovalStepStatus,
     DelegateSource,

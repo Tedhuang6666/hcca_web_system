@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { adminApi, ApiError, discordApi, orgsApi } from "@/lib/api";
+import { adminApi, ApiError, discordApi, orgsApi, petitionsApi } from "@/lib/api";
 import { orgDisplayName } from "@/lib/orgs";
 import DiscordRolePolicyPanel from "@/components/admin/DiscordRolePolicyPanel";
+import DiscordNotificationRoutePanel from "@/components/admin/DiscordNotificationRoutePanel";
 import type {
   DiscordGuildConfigIn,
   DiscordGuildConfigOut,
@@ -21,6 +22,7 @@ import type {
   DiscordRoleOptionOut,
   OrgRead,
   PositionSummary,
+  PetitionTypeOut,
 } from "@/lib/types";
 
 const emptyConfig: DiscordGuildConfigIn = {
@@ -46,6 +48,7 @@ export default function DiscordAdminPage() {
   const [orgChannelMappings, setOrgChannelMappings] = useState<DiscordOrgChannelMappingOut[]>([]);
   const [orgs, setOrgs] = useState<OrgRead[]>([]);
   const [positions, setPositions] = useState<PositionSummary[]>([]);
+  const [petitionTypes, setPetitionTypes] = useState<PetitionTypeOut[]>([]);
   const [guildOptions, setGuildOptions] = useState<DiscordGuildOptionOut[]>([]);
   const [channelOptions, setChannelOptions] = useState<DiscordChannelOptionOut[]>([]);
   const [roleOptions, setRoleOptions] = useState<DiscordRoleOptionOut[]>([]);
@@ -100,6 +103,7 @@ export default function DiscordAdminPage() {
       discordApi.health().catch(() => null),
       orgsApi.list({ active_only: true }),
       adminApi.listPositions(),
+      petitionsApi.listAdminTypes(),
       discordApi.availableGuilds().catch((error) => {
         setDiscordFetchError(error instanceof ApiError ? error.message : "無法讀取 Discord 伺服器清單");
         return [] as DiscordGuildOptionOut[];
@@ -114,6 +118,7 @@ export default function DiscordAdminPage() {
           nextHealth,
           nextOrgs,
           nextPositions,
+          nextPetitionTypes,
           nextGuilds,
         ],
       ) => {
@@ -124,6 +129,7 @@ export default function DiscordAdminPage() {
         setHealth(nextHealth);
         setOrgs(nextOrgs);
         setPositions(nextPositions);
+        setPetitionTypes(nextPetitionTypes);
         setGuildOptions(nextGuilds);
         if (nextConfigs[0]) {
           setConfigDraft({
@@ -553,6 +559,14 @@ export default function DiscordAdminPage() {
         orgs={orgs}
         positions={positions}
         roles={roleOptions}
+      />
+
+      <DiscordNotificationRoutePanel
+        guildId={configDraft.guild_id}
+        channels={channelOptions}
+        roles={roleOptions}
+        orgs={orgs}
+        petitionTypes={petitionTypes}
       />
 
       <section className="card hidden p-5">

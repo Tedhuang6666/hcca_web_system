@@ -25,12 +25,14 @@ from api.models.discord_account import (
 )
 from api.models.outbox import OutboxEvent, OutboxStatus
 from api.models.petition import PetitionCase
+from api.models.user import User
 from api.services.discord_bot import (
     emit_moderation_log,
     emit_welcome_message,
     enqueue_role_sync,
     get_user_by_discord_id,
 )
+from api.services.notification_pref import normalize_preferences
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +85,19 @@ async def _normalize_payload(db: AsyncSession, event: OutboxEvent) -> dict[str, 
         )
     )
     category = payload.get("category")
+    user = await db.get(User, user_id)
+    if user is None:
+        return None
+    if category:
+        normalized = normalize_preferences(user.notification_preferences)
+        if category in normalized and not normalized[category].get("discord", False):
+            return None
+        if (
+            category not in normalized
+            and preference is not None
+            and not bool((preference.preferences or {}).get(str(category), True))
+        ):
+            return None
     if (
         category
         and preference is not None

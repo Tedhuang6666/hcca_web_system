@@ -67,6 +67,7 @@ async def _send_dm(client: discord.Client, payload: dict[str, Any]) -> None:
 async def _send_channel(client: discord.Client, payload: dict[str, Any]) -> None:
     channel = await _channel(client, str(payload["channel_id"]))
     message = await channel.send(
+        content=str(payload["content"]) if payload.get("content") else None,
         embed=_embed(payload),
         view=_view(payload.get("components")),
     )
