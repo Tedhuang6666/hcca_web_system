@@ -4083,6 +4083,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/documents/{doc_id}/visibility": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 調整公文可見度（不受發文狀態限制） */
+        put: operations["update_document_visibility_documents__doc_id__visibility_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/elections": {
         parameters: {
             query?: never;
@@ -8415,6 +8432,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/navigation-profiles/{profile_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Public Navigation Profile */
+        get: operations["get_public_navigation_profile_navigation_profiles__profile_key__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/notifications/email": {
         parameters: {
             query?: never;
@@ -8889,6 +8923,24 @@ export interface paths {
         patch: operations["admin_update_business_partner_map_admin_businesses__business_id__patch"];
         trace?: never;
     };
+    "/partner-map/admin/businesses/{business_id}/flyer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 上傳特約店家照片或傳單 */
+        post: operations["admin_upload_business_flyer_partner_map_admin_businesses__business_id__flyer_post"];
+        /** 移除特約店家照片或傳單 */
+        delete: operations["admin_delete_business_flyer_partner_map_admin_businesses__business_id__flyer_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/partner-map/admin/businesses/{business_id}/locations": {
         parameters: {
             query?: never;
@@ -9091,6 +9143,23 @@ export interface paths {
         put?: never;
         /** 記錄店家點擊 */
         post: operations["record_business_click_partner_map_businesses__business_id__click_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/partner-map/businesses/{business_id}/flyer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 預覽特約店家照片或傳單 */
+        get: operations["preview_business_flyer_partner_map_businesses__business_id__flyer_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -14820,6 +14889,11 @@ export interface components {
             /** File */
             file: string;
         };
+        /** Body_admin_upload_business_flyer_partner_map_admin_businesses__business_id__flyer_post */
+        Body_admin_upload_business_flyer_partner_map_admin_businesses__business_id__flyer_post: {
+            /** File */
+            file: string;
+        };
         /** Body_admin_upload_image_site_admin_images_post */
         Body_admin_upload_image_site_admin_images_post: {
             /** File */
@@ -18144,6 +18218,11 @@ export interface components {
          * @enum {string}
          */
         DocumentVisibility: "subject_only" | "org_only" | "public" | "publicly_open";
+        /** DocumentVisibilityUpdate */
+        DocumentVisibilityUpdate: {
+            /** @description 新的公文可見度 */
+            visibility_level: components["schemas"]["DocumentVisibility"];
+        };
         /** DryRunBody */
         DryRunBody: {
             /** New Assignments */
@@ -24675,6 +24754,8 @@ export interface components {
             created_by: string | null;
             /** Description */
             description: string | null;
+            /** Flyer Image Url */
+            flyer_image_url?: string | null;
             /**
              * Id
              * Format: uuid
@@ -25186,8 +25267,11 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            /** User Id */
-            user_id: string | null;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
             /** Visit Count */
             visit_count: number;
         };
@@ -42742,6 +42826,48 @@ export interface operations {
             };
         };
     };
+    update_document_visibility_documents__doc_id__visibility_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocumentVisibilityUpdate"];
+            };
+        };
+        responses: {
+            /** @description 可見度更新成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentOut"];
+                };
+            };
+            /** @description 無調整可見度權限 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_elections_elections_get: {
         parameters: {
             query?: never;
@@ -52725,6 +52851,37 @@ export interface operations {
             };
         };
     };
+    get_public_navigation_profile_navigation_profiles__profile_key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profile_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NavigationProfileOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     send_email_notification_notifications_email_post: {
         parameters: {
             query?: never;
@@ -53791,6 +53948,70 @@ export interface operations {
             };
         };
     };
+    admin_upload_business_flyer_partner_map_admin_businesses__business_id__flyer_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                business_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_admin_upload_business_flyer_partner_map_admin_businesses__business_id__flyer_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerBusinessOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_delete_business_flyer_partner_map_admin_businesses__business_id__flyer_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                business_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     admin_create_location_partner_map_admin_businesses__business_id__locations_post: {
         parameters: {
             query?: never;
@@ -54287,6 +54508,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PartnerBusinessOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_business_flyer_partner_map_businesses__business_id__flyer_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                business_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
