@@ -944,7 +944,7 @@ export default function SystemDefensePage() {
         <ModulesLinkCard />
       </section>
 
-      <section className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[0.8fr_1.2fr]">
+      <section className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(20rem,0.8fr)_minmax(0,1.2fr)]">
         <RecoveryToolsPanel onChanged={refresh} />
         <RecentErrorsPanel />
         <div className="xl:col-span-2">
