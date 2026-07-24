@@ -851,7 +851,11 @@ async def reply_case(
     await _notify(
         session,
         user_id=case_obj.submitter_id,
-        type="petition_replied",
+        type=(
+            "petition_status_updated"
+            if case_obj.status == PetitionStatus.CLOSED
+            else "petition_replied"
+        ),
         title=f"陳情案件 {case_obj.case_number} 已回覆",
         body=case_obj.title,
         link=f"/petitions/{case_obj.id}",
@@ -901,7 +905,7 @@ async def request_public(
     await _notify(
         session,
         user_id=case_obj.submitter_id,
-        type="petition_public_request",
+        type="petition_status_updated",
         title=f"陳情案件 {case_obj.case_number} 徵詢公開意願",
         body="承辦機關已提出公開陳情申請，請登入查看並選擇同意、修改後同意或拒絕。",
         link=f"/petitions/{case_obj.id}",
@@ -991,7 +995,11 @@ async def update_status(
     await _notify(
         session,
         user_id=case_obj.submitter_id,
-        type=f"petition_{case_obj.status.value}",
+        type=(
+            "petition_status_updated"
+            if case_obj.status in {PetitionStatus.NEEDS_INFO, PetitionStatus.CLOSED}
+            else f"petition_{case_obj.status.value}"
+        ),
         title=f"陳情案件 {case_obj.case_number} 狀態更新",
         body=petition_svc.STATUS_LABELS[case_obj.status],
         link=f"/petitions/{case_obj.id}",

@@ -49,6 +49,7 @@ _EMAIL_DEFAULT_ON: frozenset[str] = frozenset(
         "meeting_invited",
         "regulation_publish_ready",
         "petition_assigned",
+        "petition_status_updated",
     }
 )
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import date
 
+import pytest
 from sqlalchemy import select
 
 from api.models.org import Org, Permission, Position, UserPosition
@@ -472,6 +473,49 @@ async def test_update_status_needs_info_requires_message(db_session, authed_clie
     )
     assert ok.status_code == 200
     assert ok.json()["supplement_request"] == "請補充現場照片"
+
+
+@pytest.mark.parametrize("scenario", ["needs_info", "closed", "public_request"])
+async def test_petition_updates_email_logged_in_submitter(
+    db_session, authed_client_factory, scenario, monkeypatch
+) -> None:
+    org, petition_type = await _make_org_and_type(db_session)
+    owner = await _bare_user(db_session)
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:handle")
+    case_obj, _code = await _create_case(db_session, petition_type, submitter=owner)
+
+    sent: list[dict] = []
+
+    def fake_send_branded_email(to, subject, template, context):
+        sent.append({"to": to, "subject": subject, "template": template, "context": context})
+        return []
+
+    monkeypatch.setattr("api.routers.notifications.send_branded_email", fake_send_branded_email)
+    ac = authed_client_factory(handler)
+
+    if scenario == "needs_info":
+        response = await ac.patch(
+            f"/petitions/{case_obj.id}/status",
+            json={"status": "needs_info", "public_message": "請補充現場照片"},
+        )
+    else:
+        response = await ac.post(
+            f"/petitions/{case_obj.id}/reply",
+            json={"public_content": "已完成處理", "close": True},
+        )
+        assert response.status_code == 200
+        if scenario == "public_request":
+            sent.clear()
+            response = await ac.post(
+                f"/petitions/{case_obj.id}/public-request",
+                json={"title": "公開版陳情", "content": "已完成處理。"},
+            )
+
+    assert response.status_code == 200
+    assert len(sent) == 1
+    assert sent[0]["to"] == [owner.email]
+    assert sent[0]["template"] == "notification"
 
 
 async def test_add_internal_note_succeeds(db_session, authed_client_factory) -> None:
