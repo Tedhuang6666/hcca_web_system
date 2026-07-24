@@ -20,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from api.core.cache import cache_invalidate_user_permissions
 from api.core.clock import local_today
 from api.core.config import settings
 from api.core.database import get_db
@@ -611,6 +612,7 @@ async def add_user_position(
         summary=f"指派「{position.name}」給「{user.display_name}」",
     )
     await enqueue_role_sync(db, user_id)
+    await cache_invalidate_user_permissions(str(user_id))
     return await _enrich_user(db, user)
 
 
@@ -656,6 +658,7 @@ async def remove_user_position(
     await db.delete(up)
     await db.flush()
     await enqueue_role_sync(db, user_id)
+    await cache_invalidate_user_permissions(str(user_id))
 
 
 @router.patch(
@@ -721,6 +724,7 @@ async def update_user_position(
         summary="更新使用者職位任期",
     )
     await enqueue_role_sync(db, up.user_id)
+    await cache_invalidate_user_permissions(str(up.user_id))
     if up.user is None:
         user_result = await db.execute(select(User).where(User.id == user_id))
         user = user_result.scalar_one()
@@ -949,6 +953,15 @@ async def replace_position_permissions(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="職位不存在")
     before_codes = sorted(perm.code for perm in position.permissions)
     after_codes = sorted(set(permission_codes))
+    holder_ids = set(
+        (
+            await db.execute(
+                select(UserPosition.user_id).where(UserPosition.position_id == position_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     # 清除舊有
     for p in position.permissions:
@@ -959,6 +972,8 @@ async def replace_position_permissions(
     for code in after_codes:
         db.add(Permission(position_id=position_id, code=code))
     await db.flush()
+    for user_id in holder_ids:
+        await cache_invalidate_user_permissions(str(user_id))
     await audit_svc.record(
         db,
         entity_type="position",
@@ -1008,6 +1023,15 @@ async def delete_position(
     position = result.scalar_one_or_none()
     if not position:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="職位不存在")
+    holder_ids = set(
+        (
+            await db.execute(
+                select(UserPosition.user_id).where(UserPosition.position_id == position_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
     await audit_svc.record(
         db,
         entity_type="position",
@@ -1024,6 +1048,8 @@ async def delete_position(
         summary=f"刪除職位「{position.name}」",
     )
     await db.delete(position)
+    for user_id in holder_ids:
+        await cache_invalidate_user_permissions(str(user_id))
 
 
 # ── 系統資訊 ──────────────────────────────────────────────────────────────────
