@@ -37,6 +37,7 @@ from api.schemas.survey import SurveyOut
 from api.services import audit as audit_svc
 from api.services import merchandise_submission as submission_svc
 from api.services import survey as survey_svc
+from api.services.discord_embeds import Severity
 from api.services.permission import get_user_permission_codes
 from api.services.storage import get_storage, validate_storage_key
 
@@ -305,6 +306,19 @@ async def create_submission(
         meta={"item_id": str(submission.item_id), "status": submission.status.value},
         summary=f"{'送出' if submit else '儲存'}校商投稿「{submission.item.name}」",
     )
+    if submit and submission.status == MerchandiseSubmissionStatus.SUBMITTED:
+        from api.services.discord_notification_routes import emit_routed_notification
+
+        await emit_routed_notification(
+            session,
+            event_key="merchandise_submission.submitted",
+            module="shop",
+            title=f"校商投稿：{submission.item.name}",
+            body=f"有新的校商投稿送出，投稿編號 {submission.id}",
+            link=f"/merchandise-submissions/admin?submission={submission.id}",
+            severity=Severity.INFO,
+            thread_name=f"投稿討論：{submission.item.name[:70]}",
+        )
     return _serialize_submission(submission, include_submitter=False)
 
 
@@ -568,6 +582,20 @@ async def review_admin_submission(
         body=submission.review_note or "請前往投稿頁查看最新狀態。",
         link="/merchandise-submissions",
         related_id=submission.id,
+    )
+    from api.services.discord_notification_routes import emit_routed_notification
+
+    await emit_routed_notification(
+        session,
+        event_key="merchandise_submission.reviewed",
+        module="shop",
+        title=f"校商投稿審核完成：{submission.item.name}",
+        body=submission.review_note or f"目前狀態：{submission.status.value}",
+        link=f"/merchandise-submissions/admin?submission={submission.id}",
+        severity=Severity.SUCCESS
+        if submission.status == MerchandiseSubmissionStatus.APPROVED
+        else Severity.WARNING,
+        thread_name=f"投稿審核：{submission.item.name[:70]}",
     )
     await audit_svc.record(
         session,

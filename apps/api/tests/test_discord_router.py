@@ -538,6 +538,37 @@ async def test_create_and_delete_org_channel_mapping(
     assert delete_missing_resp.status_code == 404
 
 
+async def test_notification_route_crud(
+    authed_client_factory: Callable[[User], AsyncClient], admin_user: User
+) -> None:
+    ac = authed_client_factory(admin_user)
+    events_response = await ac.get("/discord/notification-events")
+    assert events_response.status_code == 200
+    assert any(item["key"] == "petition.created" for item in events_response.json())
+
+    create_response = await ac.post(
+        "/discord/notification-routes",
+        json={
+            "guild_id": "guild-1",
+            "event_key": "petition.created",
+            "module": "petition",
+            "channel_id": "chan-1",
+            "role_id": "role-1",
+            "mention_role": True,
+        },
+    )
+    assert create_response.status_code == 201
+    route_id = create_response.json()["id"]
+    assert create_response.json()["mention_role"] is True
+
+    list_response = await ac.get("/discord/notification-routes", params={"guild_id": "guild-1"})
+    assert list_response.status_code == 200
+    assert any(item["id"] == route_id for item in list_response.json())
+
+    delete_response = await ac.delete(f"/discord/notification-routes/{route_id}")
+    assert delete_response.status_code == 204
+
+
 async def test_create_update_delete_nickname_prefix_rule(
     authed_client_factory: Callable[[User], AsyncClient], admin_user: User, db_session: AsyncSession
 ) -> None:

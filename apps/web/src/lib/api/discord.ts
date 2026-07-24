@@ -1,5 +1,10 @@
 import type {
-  DiscordBindingOut, DiscordBotHealthOut, DiscordChannelOptionOut, DiscordGuildConfigIn, DiscordGuildConfigOut, DiscordGuildOptionOut, DiscordMemberSyncStateOut, DiscordNicknamePrefixRuleIn, DiscordNicknamePrefixRuleOut, DiscordOrgChannelMappingIn, DiscordOrgChannelMappingOut, DiscordRoleMappingIn, DiscordRoleMappingOut, DiscordRoleOptionOut, DiscordRolePolicyIn, DiscordRolePolicyOut, DiscordSyncAllOut,
+  DiscordBindingOut, DiscordBotHealthOut, DiscordChannelOptionOut, DiscordGuildConfigIn,
+  DiscordGuildConfigOut, DiscordGuildOptionOut, DiscordMemberSyncStateOut,
+  DiscordNicknamePrefixRuleIn, DiscordNicknamePrefixRuleOut, DiscordNotificationEventOut,
+  DiscordNotificationRouteIn, DiscordNotificationRouteOut, DiscordOrgChannelMappingIn,
+  DiscordOrgChannelMappingOut, DiscordRoleMappingIn, DiscordRoleMappingOut, DiscordRoleOptionOut,
+  DiscordRolePolicyIn, DiscordRolePolicyOut, DiscordSyncAllOut,
 } from "../types";
 import { BASE, get, post, patch, del } from "./core";
 
@@ -12,6 +17,16 @@ export const discordApi = {
   syncAll: () => post<DiscordSyncAllOut>("/discord/sync-all", {}),
   testMessage: (body: { channel_id: string; message?: string }) =>
     post<void>("/discord/test-message", body),
+  notificationEvents: () => get<DiscordNotificationEventOut[]>("/discord/notification-events"),
+  listNotificationRoutes: (guildId?: string) =>
+    get<DiscordNotificationRouteOut[]>(
+      `/discord/notification-routes${guildId ? `?guild_id=${encodeURIComponent(guildId)}` : ""}`,
+    ),
+  createNotificationRoute: (body: DiscordNotificationRouteIn) =>
+    post<DiscordNotificationRouteOut>("/discord/notification-routes", body),
+  updateNotificationRoute: (id: string, body: DiscordNotificationRouteIn) =>
+    patch<DiscordNotificationRouteOut>(`/discord/notification-routes/${id}`, body),
+  deleteNotificationRoute: (id: string) => del<void>(`/discord/notification-routes/${id}`),
   availableGuilds: () => get<DiscordGuildOptionOut[]>("/discord/available-guilds"),
   guildChannels: (guildId: string) =>
     get<DiscordChannelOptionOut[]>(`/discord/guilds/${encodeURIComponent(guildId)}/channels`),

@@ -37,6 +37,7 @@ from api.services.discord_embeds import (
     build_embed,
     default_action_row,
 )
+from api.services.discord_notification_routes import emit_routed_notification
 from api.services.permission import active_tenure_filter
 
 logger = logging.getLogger(__name__)
@@ -472,6 +473,18 @@ async def emit_public_document_notice(db: AsyncSession, doc: Document) -> None:
                 "thread_name": f"討論：{doc.title[:80]}",
             },
         )
+    await emit_routed_notification(
+        db,
+        event_key="document.published",
+        module="document",
+        title=f"公開公文：{doc.title}",
+        body=body,
+        link=link,
+        fields=fields,
+        severity=Severity.SUCCESS,
+        org_id=doc.org_id,
+        thread_name=f"討論：{doc.title[:80]}",
+    )
 
 
 async def emit_announcement_notice(db: AsyncSession, ann: Announcement) -> None:
@@ -518,6 +531,16 @@ async def emit_announcement_notice(db: AsyncSession, ann: Announcement) -> None:
                 "thread_name": f"留言：{ann.title[:80]}",
             },
         )
+    await emit_routed_notification(
+        db,
+        event_key="announcement.published",
+        module="announcement",
+        title=f"{title_prefix}{ann.title}",
+        link=f"/announcements/{ann.id}",
+        severity=severity,
+        org_id=ann.org_id,
+        thread_name=f"留言：{ann.title[:80]}",
+    )
 
 
 # ── 個人 DM 與額外 domain 推播 ────────────────────────────────────────────────
@@ -949,6 +972,17 @@ async def emit_regulation_published(db: AsyncSession, regulation: Any) -> None:
         org_ids={regulation.org_id} if getattr(regulation, "org_id", None) else set(),
         embed=embed,
         components=[components] if components else None,
+        thread_name=f"討論：{regulation.title[:80]}",
+    )
+    await emit_routed_notification(
+        db,
+        event_key="regulation.published",
+        module="regulation",
+        title=f"法規公布：{regulation.title}",
+        fields=fields,
+        link=link,
+        severity=Severity.SUCCESS,
+        org_id=getattr(regulation, "org_id", None),
         thread_name=f"討論：{regulation.title[:80]}",
     )
 

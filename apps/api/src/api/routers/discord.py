@@ -33,6 +33,7 @@ from api.models.discord_account import (
     DiscordRoleMappingKind,
     DiscordRolePolicy,
 )
+from api.models.discord_notification_route import DiscordNotificationRoute
 from api.models.user import User
 from api.services import audit as audit_svc
 from api.services import discord_gateway, discord_governance
@@ -47,6 +48,7 @@ from api.services.discord_bot import (
     unlink_user,
     upsert_user_link,
 )
+from api.services.discord_notification_routes import EVENT_CATALOG, list_event_catalog
 
 logger = logging.getLogger(__name__)
 
@@ -241,6 +243,40 @@ class DiscordSyncAllOut(BaseModel):
 class DiscordTestMessageIn(BaseModel):
     channel_id: str = Field(..., min_length=1, max_length=32)
     message: str = Field("HCCA Discord Bot 測試訊息", min_length=1, max_length=500)
+
+
+class DiscordNotificationRouteIn(BaseModel):
+    guild_id: str = Field(..., min_length=1, max_length=32)
+    event_key: str = Field(..., min_length=1, max_length=80)
+    module: str = Field(..., min_length=1, max_length=40)
+    channel_id: str = Field(..., min_length=1, max_length=32)
+    role_id: str | None = Field(None, max_length=32)
+    petition_type_id: uuid.UUID | None = None
+    org_id: uuid.UUID | None = None
+    priority: int = Field(100, ge=0, le=9999)
+    mention_role: bool = False
+    is_active: bool = True
+
+    @model_validator(mode="after")
+    def event_must_match_module(self) -> DiscordNotificationRouteIn:
+        catalog_module = next(
+            (item["module"] for item in EVENT_CATALOG if item["key"] == self.event_key), None
+        )
+        if catalog_module is None:
+            raise ValueError("不支援的 Discord 通知事件")
+        if catalog_module != self.module:
+            raise ValueError("通知事件與模組不一致")
+        if self.mention_role and not self.role_id:
+            raise ValueError("啟用身分組標註時必須提供 role_id")
+        return self
+
+
+class DiscordNotificationRouteOut(DiscordNotificationRouteIn):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
 
 
 def _safe_next_path(value: str | None) -> str:
@@ -1025,3 +1061,111 @@ async def delete_role_mapping(mapping_id: uuid.UUID, db: DbDep, current_user: Cu
     ).scalars()
     for user_id in linked_user_ids:
         await enqueue_role_sync(db, user_id)
+
+
+@router.get(
+    "/notification-events",
+    response_model=list[dict[str, str]],
+    dependencies=[Depends(require_permission(PermissionCode.ADMIN_ALL))],
+    summary="取得可配置的 Discord 通知事件",
+)
+async def list_discord_notification_events() -> list[dict[str, str]]:
+    return list_event_catalog()
+
+
+@router.get(
+    "/notification-routes",
+    response_model=list[DiscordNotificationRouteOut],
+    dependencies=[Depends(require_permission(PermissionCode.ADMIN_ALL))],
+    summary="列出 Discord 模組通知路由",
+)
+async def list_discord_notification_routes(
+    db: DbDep, guild_id: str | None = Query(None, max_length=32)
+) -> list[DiscordNotificationRoute]:
+    stmt = select(DiscordNotificationRoute).order_by(
+        DiscordNotificationRoute.priority, DiscordNotificationRoute.created_at
+    )
+    if guild_id:
+        stmt = stmt.where(DiscordNotificationRoute.guild_id == guild_id)
+    return list((await db.execute(stmt)).scalars().all())
+
+
+@router.post(
+    "/notification-routes",
+    response_model=DiscordNotificationRouteOut,
+    status_code=201,
+    dependencies=[Depends(require_permission(PermissionCode.ADMIN_ALL))],
+    summary="建立 Discord 模組通知路由",
+)
+async def create_discord_notification_route(
+    body: DiscordNotificationRouteIn, db: DbDep, current_user: CurrentUser
+) -> DiscordNotificationRoute:
+    route = DiscordNotificationRoute(**body.model_dump())
+    db.add(route)
+    await db.flush()
+    await audit_svc.record(
+        db,
+        entity_type="discord_notification_route",
+        entity_id=str(route.id),
+        action="discord.notification_route.create",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta=body.model_dump(mode="json"),
+        summary="建立 Discord 模組通知路由",
+    )
+    return route
+
+
+@router.patch(
+    "/notification-routes/{route_id}",
+    response_model=DiscordNotificationRouteOut,
+    dependencies=[Depends(require_permission(PermissionCode.ADMIN_ALL))],
+    summary="更新 Discord 模組通知路由",
+)
+async def update_discord_notification_route(
+    route_id: uuid.UUID,
+    body: DiscordNotificationRouteIn,
+    db: DbDep,
+    current_user: CurrentUser,
+) -> DiscordNotificationRoute:
+    route = await db.get(DiscordNotificationRoute, route_id)
+    if route is None:
+        raise HTTPException(status_code=404, detail="Discord 模組通知路由不存在")
+    for key, value in body.model_dump().items():
+        setattr(route, key, value)
+    await db.flush()
+    await audit_svc.record(
+        db,
+        entity_type="discord_notification_route",
+        entity_id=str(route.id),
+        action="discord.notification_route.update",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta=body.model_dump(mode="json"),
+        summary="更新 Discord 模組通知路由",
+    )
+    return route
+
+
+@router.delete(
+    "/notification-routes/{route_id}",
+    status_code=204,
+    dependencies=[Depends(require_permission(PermissionCode.ADMIN_ALL))],
+    summary="停用 Discord 模組通知路由",
+)
+async def delete_discord_notification_route(
+    route_id: uuid.UUID, db: DbDep, current_user: CurrentUser
+) -> None:
+    route = await db.get(DiscordNotificationRoute, route_id)
+    if route is None:
+        raise HTTPException(status_code=404, detail="Discord 模組通知路由不存在")
+    route.is_active = False
+    await audit_svc.record(
+        db,
+        entity_type="discord_notification_route",
+        entity_id=str(route.id),
+        action="discord.notification_route.disable",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        summary="停用 Discord 模組通知路由",
+    )

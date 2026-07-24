@@ -1129,5 +1129,30 @@ export interface InventoryProcurementUpdate {
   line_items?: InventoryProcurementItemIn[];
 }
 
+export interface DiscordNotificationRouteIn {
+  guild_id: string;
+  event_key: string;
+  module: string;
+  channel_id: string;
+  role_id?: string | null;
+  petition_type_id?: string | null;
+  org_id?: string | null;
+  priority?: number;
+  mention_role?: boolean;
+  is_active?: boolean;
+}
+
+export interface DiscordNotificationRouteOut extends DiscordNotificationRouteIn {
+  id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DiscordNotificationEventOut {
+  key: string;
+  module: string;
+  label: string;
+}
+
 
 // ── Google Calendar 同步 ──────────────────────────────────────────────────────
