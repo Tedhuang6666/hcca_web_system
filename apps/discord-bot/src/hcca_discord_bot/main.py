@@ -18,6 +18,20 @@ from hcca_discord_bot.extended_commands import load_extended_commands
 logger = logging.getLogger(__name__)
 
 
+def validate_settings(*, require_discord_token: bool = True) -> None:
+    required = ["HCCA_API_URL", "HCCA_API_KEY", "FRONTEND_BASE_URL"]
+    if require_discord_token:
+        required.append("DISCORD_BOT_TOKEN")
+    missing = settings.missing(required)
+    if missing:
+        names = ", ".join(missing)
+        raise RuntimeError(f"缺少必要設定：{names}。請填寫 apps/discord-bot/env.example")
+    if not settings.HCCA_API_URL.startswith(("http://", "https://")):
+        raise RuntimeError("HCCA_API_URL 必須是 http:// 或 https:// 開頭的網址")
+    if not settings.FRONTEND_BASE_URL.startswith(("http://", "https://")):
+        raise RuntimeError("FRONTEND_BASE_URL 必須是 http:// 或 https:// 開頭的網址")
+
+
 class HccaDiscordBot(commands.Bot):
     def __init__(self) -> None:
         intents = discord.Intents.default()
@@ -68,9 +82,7 @@ class HccaDiscordBot(commands.Bot):
         except PlatformUnavailableError:
             logger.exception("Failed to report Discord member join")
 
-    async def on_member_update(
-        self, before: discord.Member, after: discord.Member
-    ) -> None:
+    async def on_member_update(self, before: discord.Member, after: discord.Member) -> None:
         if before.roles == after.roles and before.display_name == after.display_name:
             return
         try:
@@ -109,9 +121,7 @@ class HccaDiscordBot(commands.Bot):
     async def on_guild_role_delete(self, _role: discord.Role) -> None:
         await self.report_inventory()
 
-    async def on_guild_role_update(
-        self, _before: discord.Role, _after: discord.Role
-    ) -> None:
+    async def on_guild_role_update(self, _before: discord.Role, _after: discord.Role) -> None:
         await self.report_inventory()
 
     async def report_inventory(self) -> None:
@@ -199,8 +209,21 @@ def run() -> None:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
-    if not settings.DISCORD_BOT_TOKEN:
-        raise RuntimeError("DISCORD_BOT_TOKEN 未設定")
-    if not settings.HCCA_API_KEY:
-        raise RuntimeError("HCCA_API_KEY 未設定")
+    validate_settings()
     HccaDiscordBot().run(settings.DISCORD_BOT_TOKEN, log_handler=None)
+
+
+async def check_api() -> None:
+    """Check the configured platform API without connecting to Discord."""
+    validate_settings(require_discord_token=False)
+    client = PlatformApiClient(
+        settings.HCCA_API_URL,
+        settings.HCCA_API_KEY,
+        cf_access_client_id=settings.HCCA_API_CF_ACCESS_CLIENT_ID,
+        cf_access_client_secret=settings.HCCA_API_CF_ACCESS_CLIENT_SECRET,
+    )
+    try:
+        status = await client.status()
+    finally:
+        await client.close()
+    print(f"HCCA API 連線成功：{status.get('status', 'ok')}")
