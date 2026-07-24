@@ -97,11 +97,26 @@ async def test_get_document_returns_none_for_missing_id(db_session: AsyncSession
 async def test_get_document_by_serial_finds_existing(db_session: AsyncSession, make_user) -> None:
     org = await _make_org(db_session)
     creator = await make_user()
-    doc = _make_doc(org, creator, serial_number="DOC-SERIAL-LOOKUP")
+    doc = _make_doc(org, creator, serial_number="嶺班主令字第 1150000001 號")
     db_session.add(doc)
     await db_session.flush()
 
-    found = await get_document_by_serial(db_session, "DOC-SERIAL-LOOKUP")
+    for serial_number in ("嶺班主令字第 1150000001 號", "嶺班主令字第1150000001號"):
+        found = await get_document_by_serial(db_session, serial_number)
+        assert found is not None
+        assert found.id == doc.id
+
+
+async def test_get_document_by_serial_accepts_spaces_in_input_when_stored_without_spaces(
+    db_session: AsyncSession, make_user
+) -> None:
+    org = await _make_org(db_session)
+    creator = await make_user()
+    doc = _make_doc(org, creator, serial_number="嶺班主令字第1150000002號")
+    db_session.add(doc)
+    await db_session.flush()
+
+    found = await get_document_by_serial(db_session, "嶺班主令字第 1150000002 號")
     assert found is not None
     assert found.id == doc.id
 
