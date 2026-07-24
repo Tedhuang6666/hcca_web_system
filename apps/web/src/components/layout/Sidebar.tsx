@@ -104,9 +104,11 @@ export default function Sidebar() {
   const activeNavDef = useMemo(
     () => {
       if (!isLoggedIn) return publicProfile?.desktopSections ?? NAV_DEF_LOGGED_OUT;
+      // 管理員必須保留完整後台入口；自訂視角只套用到一般使用者。
+      if (isAdmin || permissions.has("admin:all")) return navDefinitionForProfile("default");
       return serverProfile?.desktopSections ?? navDefinitionForProfile(navigationProfile);
     },
-    [isLoggedIn, navigationProfile, publicProfile, serverProfile],
+    [isAdmin, isLoggedIn, navigationProfile, permissions, publicProfile, serverProfile],
   );
 
   useEffect(() => {
