@@ -3337,6 +3337,59 @@ export interface paths {
         patch: operations["update_nickname_prefix_rule_discord_nickname_prefix_rules__rule_id__patch"];
         trace?: never;
     };
+    "/discord/notification-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 取得可配置的 Discord 通知事件 */
+        get: operations["list_discord_notification_events_discord_notification_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/discord/notification-routes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出 Discord 模組通知路由 */
+        get: operations["list_discord_notification_routes_discord_notification_routes_get"];
+        put?: never;
+        /** 建立 Discord 模組通知路由 */
+        post: operations["create_discord_notification_route_discord_notification_routes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/discord/notification-routes/{route_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 停用 Discord 模組通知路由 */
+        delete: operations["delete_discord_notification_route_discord_notification_routes__route_id__delete"];
+        options?: never;
+        head?: never;
+        /** 更新 Discord 模組通知路由 */
+        patch: operations["update_discord_notification_route_discord_notification_routes__route_id__patch"];
+        trace?: never;
+    };
     "/discord/open": {
         parameters: {
             query?: never;
@@ -17262,6 +17315,85 @@ export interface components {
              */
             updated_at: string;
         };
+        /** DiscordNotificationRouteIn */
+        DiscordNotificationRouteIn: {
+            /** Channel Id */
+            channel_id: string;
+            /** Event Key */
+            event_key: string;
+            /** Guild Id */
+            guild_id: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /**
+             * Mention Role
+             * @default false
+             */
+            mention_role: boolean;
+            /** Module */
+            module: string;
+            /** Org Id */
+            org_id?: string | null;
+            /** Petition Type Id */
+            petition_type_id?: string | null;
+            /**
+             * Priority
+             * @default 100
+             */
+            priority: number;
+            /** Role Id */
+            role_id?: string | null;
+        };
+        /** DiscordNotificationRouteOut */
+        DiscordNotificationRouteOut: {
+            /** Channel Id */
+            channel_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Event Key */
+            event_key: string;
+            /** Guild Id */
+            guild_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /**
+             * Mention Role
+             * @default false
+             */
+            mention_role: boolean;
+            /** Module */
+            module: string;
+            /** Org Id */
+            org_id?: string | null;
+            /** Petition Type Id */
+            petition_type_id?: string | null;
+            /**
+             * Priority
+             * @default 100
+             */
+            priority: number;
+            /** Role Id */
+            role_id?: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /** DiscordOrgChannelMappingIn */
         DiscordOrgChannelMappingIn: {
             /** Channel Id */
@@ -24756,8 +24888,11 @@ export interface components {
             description: string | null;
             /** Flyer Image Url */
             flyer_image_url?: string | null;
-            /** Has Checked In */
-            has_checked_in?: boolean;
+            /**
+             * Has Checked In
+             * @default false
+             */
+            has_checked_in: boolean;
             /**
              * Id
              * Format: uuid
@@ -24778,6 +24913,8 @@ export interface components {
             locations: components["schemas"]["PartnerLocationOut"][];
             /** Logo Url */
             logo_url: string | null;
+            /** My Rating */
+            my_rating?: number | null;
             /** Name */
             name: string;
             /**
@@ -24799,8 +24936,6 @@ export interface components {
              * @default 0
              */
             rating_count: number;
-            /** My Rating */
-            my_rating?: number | null;
             /** Social Url */
             social_url: string | null;
             /** Sort Order */
@@ -31926,8 +32061,6 @@ export interface components {
             audit_id: string;
             /** Created At */
             created_at: string;
-            /** Google Maps Url */
-            google_maps_url: string | null;
             /** Entity Id */
             entity_id: string;
             /** Entity Type */
@@ -40666,6 +40799,156 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DiscordNicknamePrefixRuleOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_discord_notification_events_discord_notification_events_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    }[];
+                };
+            };
+        };
+    };
+    list_discord_notification_routes_discord_notification_routes_get: {
+        parameters: {
+            query?: {
+                guild_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscordNotificationRouteOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_discord_notification_route_discord_notification_routes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiscordNotificationRouteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscordNotificationRouteOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_discord_notification_route_discord_notification_routes__route_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                route_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_discord_notification_route_discord_notification_routes__route_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                route_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiscordNotificationRouteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscordNotificationRouteOut"];
                 };
             };
             /** @description Validation Error */
