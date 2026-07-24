@@ -115,7 +115,10 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
     let alive = true;
     navigationProfilesApi.me()
       .then((result) => {
-        if (alive) setServerMobileOrder(result.profile?.mobile_order ?? null);
+        if (!alive) return;
+        setServerMobileOrder(
+          result.source === "default" ? null : result.profile?.mobile_order ?? null,
+        );
       })
       .catch(() => {
         if (alive) setServerMobileOrder(null);
@@ -162,9 +165,7 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
       superuser || perms.has("admin:all") || Array.from(perms).some((perm) => perm.startsWith(prefix));
     const profile = resolveNavigationProfile(perms, superuser);
     const mobileOrder =
-      profile === "student"
-        ? PROFILE_MOBILE_ORDER.student
-        : serverMobileOrder ?? (profile === "default" ? navPrefs.mobileOrder : PROFILE_MOBILE_ORDER[profile]);
+      serverMobileOrder ?? (profile === "default" ? navPrefs.mobileOrder : PROFILE_MOBILE_ORDER[profile]);
     const mobileHidden = serverMobileOrder || profile !== "default" ? [] : navPrefs.mobileHidden;
     const available = filterNavItems(
       orderedItems(mobileOrder, mobileHidden),

@@ -101,9 +101,7 @@ export default function Sidebar() {
     [isAdmin, permissions],
   );
   const activeNavDef = useMemo(
-    () => navigationProfile === "student"
-      ? navDefinitionForProfile("student")
-      : serverProfile?.desktopSections ?? navDefinitionForProfile(navigationProfile),
+    () => serverProfile?.desktopSections ?? navDefinitionForProfile(navigationProfile),
     [navigationProfile, serverProfile],
   );
 
@@ -116,7 +114,11 @@ export default function Sidebar() {
     navigationProfilesApi.me()
       .then((result) => {
         if (!alive) return;
-        setServerProfile(result.profile ? navProfileFromApi(result.profile) : null);
+        setServerProfile(
+          result.source === "default" || !result.profile
+            ? null
+            : navProfileFromApi(result.profile),
+        );
       })
       .catch(() => {
         if (alive) setServerProfile(null);
