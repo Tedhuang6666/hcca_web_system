@@ -5,13 +5,12 @@ import Link from "next/link";
 import {
   Clock3,
   CheckCircle2,
-  ChevronDown,
   Download,
+  ArrowLeftRight,
   FileText,
   LoaderCircle,
   Package,
   Pencil,
-  Plus,
   Send,
   Upload,
   X,
@@ -34,6 +33,8 @@ type VotingSubmission = MerchandiseSubmissionOut & {
   voting_survey_id?: string | null;
   voting_survey_status?: string | null;
 };
+
+type SubmissionStep = "info" | "item" | "form";
 
 const statusLabel: Record<string, string> = {
   draft: "草稿",
@@ -279,12 +280,10 @@ export default function MerchandiseSubmissionsPage() {
   const [values, setValues] = useState<Record<string, string>>({});
   const [files, setFiles] = useState<MerchandiseSubmissionUploadOut[]>([]);
   const [tab, setTab] = useState<"submit" | "mine">("submit");
-  const [isPickerOpen, setIsPickerOpen] = useState(true);
+  const [step, setStep] = useState<SubmissionStep>("info");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const detailsRef = useRef<HTMLDivElement>(null);
-  const shouldScrollToDetails = useRef(false);
   const selected = useMemo(
     () => portal?.items.find((item) => item.id === selectedId) ?? null,
     [portal, selectedId],
@@ -307,36 +306,22 @@ export default function MerchandiseSubmissionsPage() {
   useEffect(() => {
     void load();
   }, [load]);
-  useEffect(() => {
-    if (!shouldScrollToDetails.current || isPickerOpen || !selectedId) return;
-    shouldScrollToDetails.current = false;
-    if (!selected || !hasItemDetails(selected)) return;
-
-    const frame = window.requestAnimationFrame(() => {
-      detailsRef.current?.scrollIntoView({
-        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-          ? "auto"
-          : "smooth",
-        block: "start",
-      });
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [isPickerOpen, selected, selectedId]);
   const choose = (id: string) => {
-    shouldScrollToDetails.current = true;
     setSelectedId(id);
     setEditingId(null);
     setValues({});
     setFiles([]);
-    setIsPickerOpen(false);
+  };
+  const continueToForm = () => {
+    if (!selected) return;
+    setStep("form");
   };
   const edit = (submission: MerchandiseSubmissionOut) => {
-    shouldScrollToDetails.current = true;
     setSelectedId(submission.item_id);
     setValues(submission.field_values);
     setFiles(submission.files);
     setEditingId(submission.id);
-    setIsPickerOpen(false);
+    setStep("form");
     setTab("submit");
   };
   const save = async (submit: boolean) => {
@@ -360,6 +345,7 @@ export default function MerchandiseSubmissionsPage() {
         setEditingId(null);
         setValues({});
         setFiles([]);
+        setStep("item");
       } else setEditingId(saved.id);
       toast.success(
         submit ? "投稿已送出。" : "草稿已儲存，可在我的投稿繼續編輯。",
@@ -581,6 +567,62 @@ export default function MerchandiseSubmissionsPage() {
         </section>
       ) : (
         <div className="space-y-6">
+          <nav
+            className="grid grid-cols-3 gap-1 rounded-xl border p-1 sm:gap-2 sm:p-2"
+            style={{
+              background: "var(--bg-elevated)",
+              borderColor: "var(--border)",
+            }}
+            aria-label="投稿步驟"
+          >
+            {([
+              ["info", "看投稿資訊", "先確認規格與截止時間"],
+              ["item", "選擇商品", "挑選要設計的品項"],
+              ["form", "投稿詳情", "上傳圖稿並送出"],
+            ] as const).map(([value, label, description], index) => {
+              const isActive = step === value;
+              const isDisabled = value === "form" && !selected;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  disabled={isDisabled || (value === "item" && Boolean(editingId))}
+                  onClick={() => setStep(value)}
+                  className="min-h-16 rounded-lg px-2 py-2 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
+                  style={{
+                    background: isActive ? "var(--bg-surface)" : "transparent",
+                    boxShadow: isActive ? "0 1px 3px rgba(15, 23, 42, 0.12)" : "none",
+                    outlineColor: "var(--primary)",
+                  }}
+                >
+                  <span className="flex items-center gap-2">
+                    <span
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold"
+                      style={{
+                        background: isActive ? "var(--primary)" : "var(--primary-dim)",
+                        color: isActive ? "var(--primary-fg)" : "var(--primary-text)",
+                      }}
+                    >
+                      {index + 1}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold">{label}</span>
+                      <span
+                        className="mt-0.5 hidden truncate text-xs sm:block"
+                        style={{ color: "var(--text-muted)" }}
+                      >
+                        {description}
+                      </span>
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </nav>
+          {step === "info" && (
+            <>
           {portal?.settings.submission_intro && (
             <section
               className="rounded-xl border p-5 sm:p-6"
@@ -617,8 +659,39 @@ export default function MerchandiseSubmissionsPage() {
               </div>
             </section>
           )}
+          <section
+            className="rounded-xl border p-5 sm:p-6"
+            style={{
+              background: "var(--primary-dim)",
+              borderColor: "var(--border-strong)",
+            }}
+          >
+            <div className="flex items-start gap-3">
+              <CheckCircle2
+                size={20}
+                className="mt-0.5 shrink-0"
+                style={{ color: "var(--primary-text)" }}
+              />
+              <div>
+                <h2 className="font-semibold">準備好開始投稿了嗎？</h2>
+                <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
+                  先選擇一個商品，下一步會顯示它專屬的規格、範本與投稿欄位。
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-primary mt-4 min-h-11"
+                  onClick={() => setStep("item")}
+                >
+                  下一步：選擇商品
+                </button>
+              </div>
+            </div>
+          </section>
+            </>
+          )}
           {portal?.items.length ? (
             <>
+              {step === "item" && (
               <section
                 className="rounded-xl border p-5 sm:p-6"
                 style={{
@@ -629,67 +702,31 @@ export default function MerchandiseSubmissionsPage() {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-lg font-semibold">
-                        {isPickerOpen ? "可投稿品項" : "已選擇品項"}
-                      </h2>
-                      {!isPickerOpen && selected && (
-                        <span
-                          className="rounded px-2 py-1 text-xs font-semibold"
-                          style={{
-                            background: "var(--success-dim)",
-                            color: "var(--success)",
-                          }}
-                        >
-                          已選擇
-                        </span>
-                      )}
+                      <h2 className="text-lg font-semibold">選擇要投稿的商品</h2>
+                      <span
+                        className="rounded px-2 py-1 text-xs font-semibold"
+                        style={{
+                          background: "var(--primary-dim)",
+                          color: "var(--primary-text)",
+                        }}
+                      >
+                        第 2 步，共 3 步
+                      </span>
                     </div>
                     <p
                       className="mt-1 text-sm"
                       style={{ color: "var(--text-secondary)" }}
                     >
-                      {isPickerOpen
-                        ? "請選擇要設計的商品；每個品項都有自己的規格與範本。"
-                        : `目前選擇：${selected?.name ?? "尚未選擇"}`}
+                      請選擇要設計的商品；下一步會顯示該品項的規格與投稿欄位。
                     </p>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {selected && !isPickerOpen && !editingId && (
-                      <button
-                        type="button"
-                        className="btn btn-ghost min-h-10"
-                        aria-expanded={isPickerOpen}
-                        aria-controls="merchandise-item-picker"
-                        onClick={() => setIsPickerOpen(true)}
-                      >
-                        <ChevronDown size={15} />
-                        更換品項
-                      </button>
-                    )}
-                    {editingId && (
-                      <button
-                        type="button"
-                        className="btn btn-ghost min-h-10"
-                        onClick={() => {
-                          setEditingId(null);
-                          setValues({});
-                          setFiles([]);
-                          setIsPickerOpen(true);
-                        }}
-                      >
-                        <Plus size={15} />
-                        建立新投稿
-                      </button>
-                    )}
-                  </div>
                 </div>
-                {isPickerOpen ? (
-                  <div
-                    id="merchandise-item-picker"
-                    className="mt-5 grid gap-2 sm:grid-cols-2 sm:gap-3 xl:grid-cols-3"
-                    role="group"
-                    aria-label="可投稿品項"
-                  >
+                <div
+                  id="merchandise-item-picker"
+                  className="mt-5 grid gap-2 sm:grid-cols-2 sm:gap-3 xl:grid-cols-3"
+                  role="group"
+                  aria-label="可投稿品項"
+                >
                       {portal.items.map((item) => (
                         <button
                           type="button"
@@ -779,43 +816,28 @@ export default function MerchandiseSubmissionsPage() {
                           </div>
                         </button>
                       ))}
-                  </div>
-                ) : selected ? (
-                  <div
-                    className="mt-5 flex items-center gap-3 rounded-lg border p-3"
-                    style={{
-                      background: "var(--bg-elevated)",
-                      borderColor: "var(--border)",
-                    }}
+                </div>
+                <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+                    {selected ? `目前選擇：${selected.name}` : "尚未選擇商品"}
+                  </p>
+                  <button
+                    type="button"
+                    className="btn btn-primary min-h-11 w-full sm:w-auto"
+                    disabled={!selected}
+                    onClick={continueToForm}
                   >
-                    <span
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
-                      style={{
-                        background: "var(--primary-dim)",
-                        color: "var(--primary-text)",
-                      }}
-                    >
-                      <Package size={20} />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate font-semibold">{selected.name}</p>
-                      <p
-                        className="mt-1 text-sm"
-                        style={{ color: "var(--text-secondary)" }}
-                      >
-                        {hasItemDetails(selected)
-                          ? "以下為品項資訊、規格與設計範本。"
-                          : "已選擇品項，請準備投稿檔案。"}
-                      </p>
-                    </div>
-                  </div>
-                ) : null}
+                    下一步：查看投稿詳情
+                  </button>
+                </div>
               </section>
-              {selected && hasItemDetails(selected) && (
+              )}
+              {step === "form" && selected && (
+                <>
+              {hasItemDetails(selected) && (
                 <div
-                  ref={detailsRef}
                   id="merchandise-item-details"
-                  className="scroll-mt-24 space-y-6"
+                  className="space-y-6"
                 >
                   {selected.description && (
                     <section
@@ -856,23 +878,49 @@ export default function MerchandiseSubmissionsPage() {
                     borderColor: "var(--border)",
                   }}
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <h2 className="text-lg font-semibold">
-                      {editingId ? "編輯圖稿與投稿資料" : "上傳圖稿與投稿資料"}
-                    </h2>
-                    <span
-                      className="rounded px-2 py-1 text-xs font-semibold"
-                      style={{
-                        background: selected.is_accepting
-                          ? "var(--success-dim)"
-                          : "var(--danger-dim)",
-                        color: selected.is_accepting
-                          ? "var(--success)"
-                          : "var(--danger)",
-                      }}
-                    >
-                      {selected.is_accepting ? "開放投稿中" : "目前未開放"}
-                    </span>
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold" style={{ color: "var(--primary-text)" }}>
+                        第 3 步，共 3 步
+                      </p>
+                      <h2 className="mt-1 text-lg font-semibold">
+                        {editingId ? "編輯圖稿與投稿資料" : "投稿詳情與圖稿"}
+                      </h2>
+                      <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
+                        {selected.name} · 先看規格，再上傳檔案與填寫資料
+                      </p>
+                    </div>
+                    <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                      {editingId ? (
+                        <button
+                          type="button"
+                          className="btn btn-ghost min-h-11 w-full sm:w-auto"
+                          onClick={() => {
+                            setEditingId(null);
+                            setValues({});
+                            setFiles([]);
+                            setSelectedId("");
+                            setStep("item");
+                          }}
+                        >
+                          建立新投稿
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn btn-secondary min-h-11 w-full border-2 font-semibold sm:w-auto"
+                          onClick={() => setStep("item")}
+                          style={{
+                            background: "var(--primary-dim)",
+                            borderColor: "var(--primary)",
+                            color: "var(--primary-text)",
+                          }}
+                        >
+                          <ArrowLeftRight size={16} />
+                          更換品項
+                        </button>
+                      )}
+                    </div>
                   </div>
                   {selected.effective_closes_at && (
                     <p
@@ -938,10 +986,10 @@ export default function MerchandiseSubmissionsPage() {
                       </label>
                     ))}
                   </div>
-                  <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                  <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
                     <button
                       type="button"
-                      className="btn btn-ghost min-h-11"
+                      className="btn btn-ghost min-h-11 w-full sm:w-auto"
                       disabled={saving || !portal?.is_eligible_submitter}
                       onClick={() => void save(false)}
                     >
@@ -949,7 +997,7 @@ export default function MerchandiseSubmissionsPage() {
                     </button>
                     <button
                       type="button"
-                      className="btn min-h-11"
+                      className="btn min-h-11 w-full sm:w-auto"
                       disabled={saving || !canUpload}
                       onClick={() => void save(true)}
                       style={{
@@ -967,6 +1015,8 @@ export default function MerchandiseSubmissionsPage() {
                     </button>
                   </div>
                 </section>
+              )}
+                </>
               )}
             </>
           ) : (
