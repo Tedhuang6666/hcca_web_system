@@ -37,12 +37,24 @@ HCCA_DISCORD_BOT_CF_ACCESS_CLIENT_ID=...
 HCCA_DISCORD_BOT_CF_ACCESS_CLIENT_SECRET=...
 ```
 
+這份設定檔也可以直接給 Bot 程式使用；程式會同時接受 `HCCA_DISCORD_BOT_*` 與
+compose 轉換後的 `HCCA_*` 命名，因此不需要另外改名。
+
 從專案根目錄啟動獨立 Bot：
 
 ```bash
 docker compose --env-file .env.discord-bot -f docker-compose.bot.yml up -d --build
 docker compose --env-file .env.discord-bot -f docker-compose.bot.yml logs -f discord-bot
 ```
+
+啟動前可先只檢查異地主機到 API 的 HTTPS、API Key 與 Cloudflare Access：
+
+```bash
+docker compose --env-file .env.discord-bot -f docker-compose.bot.yml run --rm discord-bot \
+  python -m hcca_discord_bot --check-api
+```
+
+若回傳 `HCCA API 連線成功`，再啟動 Bot 即可；容器也會以同一檢查作為 healthcheck。
 
 Bot 每 20 秒回報一次 inventory 作為心跳。API 暫時中斷時，Discord 連線會保持運作，
 Bot 會持續重試，恢復後自動重新連結，不需重啟。

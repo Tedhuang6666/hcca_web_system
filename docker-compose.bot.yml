@@ -5,6 +5,8 @@ services:
       dockerfile: apps/discord-bot/Dockerfile
     container_name: campus_discord_bot
     restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
     environment:
       HCCA_API_URL: ${HCCA_DISCORD_BOT_API_URL:?請設定 API 的公開 HTTPS 網址}
       HCCA_API_KEY: ${HCCA_DISCORD_BOT_API_KEY:?請設定 discord:bot API Key}
@@ -14,3 +16,9 @@ services:
       DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:?請設定 Discord Bot Token}
       DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:-}
       DISCORD_COMMAND_SYNC_GUILD_ID: ${DISCORD_COMMAND_SYNC_GUILD_ID:-}
+    healthcheck:
+      test: ["CMD", "python", "-m", "hcca_discord_bot", "--check-api"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
