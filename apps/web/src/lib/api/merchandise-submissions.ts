@@ -9,7 +9,7 @@ import type {
   MerchandiseSubmissionSettingsUpdate,
   MerchandiseSubmissionUploadOut,
 } from "../types";
-import { BASE, ApiError, csrfHeaders, errorMessageFromResponse, get, patch, post, silentRefresh } from "./core";
+import { BASE, ApiError, csrfHeaders, del, errorMessageFromResponse, get, patch, post, silentRefresh } from "./core";
 
 type MerchandiseSubmissionReviewBody = Omit<MerchandiseSubmissionReview, "status"> & {
   status: MerchandiseSubmissionReview["status"] | "review_completed";
@@ -50,6 +50,7 @@ export const merchandiseSubmissionsApi = {
     field_values: Record<string, string>;
     files: MerchandiseSubmissionUploadOut[];
   }, submit = true) => patch<MerchandiseSubmissionOut>(`/merchandise-submissions/submissions/${id}?submit=${submit}`, body),
+  deleteSubmission: (id: string) => del<void>(`/merchandise-submissions/submissions/${id}`),
   getSettings: () => get<MerchandiseSubmissionSettingsOut>("/merchandise-submissions/admin/settings"),
   updateSettings: (body: MerchandiseSubmissionSettingsUpdate) =>
     patch<MerchandiseSubmissionSettingsOut>("/merchandise-submissions/admin/settings", body),

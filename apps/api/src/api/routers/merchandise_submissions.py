@@ -356,6 +356,38 @@ async def update_my_submission(
     return _serialize_submission(submission, include_submitter=False)
 
 
+@router.delete(
+    "/submissions/{submission_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="刪除自己的投稿",
+)
+async def delete_my_submission(
+    submission_id: uuid.UUID,
+    session: DbDep,
+    current_user: CurrentUser,
+) -> None:
+    submission = or_404(await submission_svc.get_submission(session, submission_id), "找不到投稿")
+    item_name = submission.item.name
+    try:
+        await submission_svc.delete_submission(session, submission, user=current_user)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    await audit_svc.record(
+        session,
+        entity_type="merchandise_submission",
+        entity_id=str(submission_id),
+        action="merchandise_submission.delete",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={"status": submission.status.value},
+        summary=f"刪除校商投稿「{item_name}」",
+    )
+
+
 @router.get(
     "/admin/settings",
     response_model=MerchandiseSubmissionSettingsOut,

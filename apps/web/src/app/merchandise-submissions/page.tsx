@@ -12,6 +12,7 @@ import {
   Package,
   Pencil,
   Send,
+  Trash2,
   Upload,
   X,
 } from "lucide-react";
@@ -47,6 +48,7 @@ const statusLabel: Record<string, string> = {
 };
 const editableStatuses = new Set<MerchandiseSubmissionOut["status"]>([
   "draft",
+  "submitted",
   "revision_requested",
 ]);
 
@@ -284,6 +286,7 @@ export default function MerchandiseSubmissionsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const selected = useMemo(
     () => portal?.items.find((item) => item.id === selectedId) ?? null,
     [portal, selectedId],
@@ -323,6 +326,26 @@ export default function MerchandiseSubmissionsPage() {
     setEditingId(submission.id);
     setStep("form");
     setTab("submit");
+  };
+  const remove = async (submission: MerchandiseSubmissionOut) => {
+    if (!window.confirm(`確定刪除「${submission.item_name}」的投稿？刪除後無法復原。`)) return;
+    setDeletingId(submission.id);
+    try {
+      await merchandiseSubmissionsApi.deleteSubmission(submission.id);
+      setSubmissions((current) => current.filter((entry) => entry.id !== submission.id));
+      if (editingId === submission.id) {
+        setEditingId(null);
+        setValues({});
+        setFiles([]);
+        setSelectedId("");
+        setStep("item");
+      }
+      toast.success("投稿已刪除。");
+    } catch (error) {
+      toast.error(apiErrorMessage(error, "無法刪除投稿"));
+    } finally {
+      setDeletingId(null);
+    }
   };
   const save = async (submit: boolean) => {
     if (!selected) return;
@@ -538,7 +561,7 @@ export default function MerchandiseSubmissionsPage() {
                   ))}
                 </div>
                 {editableStatuses.has(submission.status) && (
-                  <div className="mt-4">
+                  <div className="mt-4 flex flex-wrap gap-2">
                     <button
                       type="button"
                       onClick={() => edit(submission)}
@@ -551,6 +574,20 @@ export default function MerchandiseSubmissionsPage() {
                     >
                       <Pencil size={14} />
                       編輯投稿
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void remove(submission)}
+                      disabled={deletingId === submission.id}
+                      className="btn btn-ghost min-h-10"
+                      style={{ color: "var(--danger)" }}
+                    >
+                      {deletingId === submission.id ? (
+                        <LoaderCircle className="animate-spin" size={14} />
+                      ) : (
+                        <Trash2 size={14} />
+                      )}
+                      刪除投稿
                     </button>
                   </div>
                 )}

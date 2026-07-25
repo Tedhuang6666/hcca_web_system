@@ -356,6 +356,7 @@ async def update_submission(
         raise PermissionError("只能編輯自己的投稿")
     if submission.status not in {
         MerchandiseSubmissionStatus.DRAFT,
+        MerchandiseSubmissionStatus.SUBMITTED,
         MerchandiseSubmissionStatus.REVISION_REQUESTED,
     }:
         raise ValueError("此投稿已進入審核流程，無法再編輯")
@@ -410,6 +411,28 @@ async def update_submission(
     await session.flush()
     session.expire(submission, ["files"])
     return (await get_submission(session, submission.id)) or submission
+
+
+async def delete_submission(
+    session: AsyncSession,
+    submission: MerchandiseSubmission,
+    *,
+    user: User,
+) -> None:
+    if submission.user_id != user.id:
+        raise PermissionError("只能刪除自己的投稿")
+    if submission.status not in {
+        MerchandiseSubmissionStatus.DRAFT,
+        MerchandiseSubmissionStatus.SUBMITTED,
+        MerchandiseSubmissionStatus.REVISION_REQUESTED,
+    }:
+        raise ValueError("此投稿已進入審核流程，無法刪除")
+
+    storage = get_storage()
+    for file in submission.files:
+        await storage.delete(file.storage_key)
+    await session.delete(submission)
+    await session.flush()
 
 
 async def admin_upload_submission_file(
