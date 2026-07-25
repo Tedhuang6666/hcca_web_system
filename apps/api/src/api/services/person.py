@@ -513,6 +513,26 @@ async def end_affiliation(
     return affiliation
 
 
+async def end_affiliations_for_position(db: AsyncSession, position_id: uuid.UUID) -> None:
+    """職位刪除前結束所有仍掛在該職位上的人員歸屬。"""
+    affiliations = list(
+        (
+            await db.scalars(
+                select(PersonAffiliation).where(
+                    PersonAffiliation.position_id == position_id,
+                    PersonAffiliation.status != PersonAffiliationStatus.ENDED,
+                )
+            )
+        ).all()
+    )
+    for affiliation in affiliations:
+        affiliation.status = PersonAffiliationStatus.ENDED
+        affiliation.end_date = max(local_today(), affiliation.start_date)
+        affiliation.position_id = None
+        affiliation.synced_user_position_id = None
+    await db.flush()
+
+
 async def sync_affiliation_to_rbac(
     db: AsyncSession, affiliation: PersonAffiliation
 ) -> UserPosition | None:

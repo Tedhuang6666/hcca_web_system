@@ -35,6 +35,7 @@ from api.models.person import PersonAffiliationKind, PersonAffiliationSource
 from api.models.user import User
 from api.models.user_identity import UserIdentity
 from api.services import audit as audit_svc
+from api.services import org as org_svc
 from api.services import person as person_svc
 from api.services import user_registration as user_registration_svc
 from api.services.discord_bot import enqueue_role_sync
@@ -1133,9 +1134,11 @@ async def delete_position(
         },
         summary=f"刪除職位「{position.name}」",
     )
-    await db.delete(position)
+    await person_svc.end_affiliations_for_position(db, position.id)
+    await org_svc.delete_position(db, position)
     for user_id in holder_ids:
         await cache_invalidate_user_permissions(str(user_id))
+        await enqueue_role_sync(db, user_id)
 
 
 # ── 系統資訊 ──────────────────────────────────────────────────────────────────
