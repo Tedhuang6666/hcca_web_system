@@ -606,7 +606,6 @@ export type {
 // 手寫型別引用的 api-bridge 型別（內部使用，不重複 export）
 import type {
   BallotBoxStatus,
-  ClassUserBrief,
   DeliveryMethod,
   InventoryItemType,
   InventoryProcurementStatus,
@@ -615,7 +614,6 @@ import type {
   PositionSummary,
   RateLimitOverride,
   RecipientType,
-  SurveyStatus,
 } from './api-bridge'
 
 // ── 公文系統型別 ──────────────────────────────────────────────────────────────
