@@ -7,11 +7,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.cache import cache_invalidate_user_permissions
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_any, require_permission
-from api.models.org import Org, Permission
+from api.models.org import Org, Permission, UserPosition
 from api.models.user import User
 from api.schemas.org import (
     PermissionCreate,
@@ -22,6 +23,8 @@ from api.schemas.org import (
 )
 from api.services import audit as audit_svc
 from api.services import org as org_svc
+from api.services import person as person_svc
+from api.services.discord_bot import enqueue_role_sync
 
 router = APIRouter(tags=["職位與權限"])
 
@@ -149,6 +152,15 @@ async def delete_position(position_id: uuid.UUID, db: DbDep, current_user: Curre
     position = await org_svc.get_position(db, position_id)
     if not position:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="職位不存在")
+    holder_ids = set(
+        (
+            await db.execute(
+                select(UserPosition.user_id).where(UserPosition.position_id == position_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
     await audit_svc.record(
         db,
         entity_type="position",
@@ -159,7 +171,11 @@ async def delete_position(position_id: uuid.UUID, db: DbDep, current_user: Curre
         meta={"name": position.name, "org_id": str(position.org_id)},
         summary=f"刪除職位「{position.name}」",
     )
+    await person_svc.end_affiliations_for_position(db, position.id)
     await org_svc.delete_position(db, position)
+    for user_id in holder_ids:
+        await cache_invalidate_user_permissions(str(user_id))
+        await enqueue_role_sync(db, user_id)
 
 
 # ── Permission (nested under /positions) ──────────────────────────────────────

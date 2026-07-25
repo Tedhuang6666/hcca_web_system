@@ -13,6 +13,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.dependencies.auth import get_current_active_user
 from api.main import app
 from api.models.org import Org, Permission, Position, UserPosition
+from api.models.person import (
+    Person,
+    PersonAffiliation,
+    PersonAffiliationKind,
+    PersonAffiliationSource,
+    PersonAffiliationStatus,
+)
 from api.models.user import User
 from api.models.user_identity import UserIdentity
 from api.routers import auth as auth_router
@@ -162,6 +169,53 @@ async def test_copying_position_permissions_replaces_target_permissions(
     ).all()
     assert codes == ["document:approve", "finance:view"]
     invalidate.assert_awaited_once_with(str(member.id))
+
+
+@pytest.mark.asyncio
+async def test_admin_delete_position_ends_affiliation_and_removes_assignments(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    admin, member, org, position, assignment = await _seed_admin_data(db_session)
+    person = Person(
+        user_id=member.id,
+        student_id="SDELETEPOSITION",
+        display_name=member.display_name,
+    )
+    db_session.add(person)
+    await db_session.flush()
+    affiliation = PersonAffiliation(
+        person_id=person.id,
+        kind=PersonAffiliationKind.ORG_POSITION,
+        org_id=org.id,
+        position_id=position.id,
+        title=position.name,
+        start_date=assignment.start_date,
+        status=PersonAffiliationStatus.ACTIVE,
+        source=PersonAffiliationSource.RBAC_SYNC,
+        synced_user_position_id=assignment.id,
+    )
+    db_session.add(affiliation)
+    await db_session.flush()
+    _override_user(admin)
+    invalidate = AsyncMock()
+    role_sync = AsyncMock()
+    monkeypatch.setattr("api.routers.admin.cache_invalidate_user_permissions", invalidate)
+    monkeypatch.setattr("api.routers.admin.enqueue_role_sync", role_sync)
+
+    response = await client.delete(f"/admin/positions/{position.id}")
+
+    assert response.status_code == 204
+    assert await db_session.get(Position, position.id) is None
+    assert await db_session.get(UserPosition, assignment.id) is None
+    await db_session.refresh(affiliation)
+    assert affiliation.status == PersonAffiliationStatus.ENDED
+    assert affiliation.end_date == assignment.start_date
+    assert affiliation.position_id is None
+    assert affiliation.synced_user_position_id is None
+    invalidate.assert_awaited_once_with(str(member.id))
+    role_sync.assert_awaited_once_with(db_session, member.id)
 
 
 @pytest.mark.asyncio

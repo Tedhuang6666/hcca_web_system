@@ -235,6 +235,14 @@ async def update_position(db: AsyncSession, position: Position, data: PositionUp
 
 
 async def delete_position(db: AsyncSession, position: Position) -> None:
+    holders = list(
+        (
+            await db.scalars(select(UserPosition).where(UserPosition.position_id == position.id))
+        ).all()
+    )
+    for holder in holders:
+        await db.delete(holder)
+    await db.flush()
     await db.delete(position)
     await db.flush()
 
