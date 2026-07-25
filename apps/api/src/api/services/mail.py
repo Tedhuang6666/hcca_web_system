@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -98,6 +99,7 @@ async def _update_email_message_status(
     error_detail: str | None = None,
     attempt_count: int | None = None,
     next_retry_at: datetime | None = None,
+    provider_id: str | None = None,
 ) -> None:
     if not email_message_id:
         return
@@ -113,6 +115,28 @@ async def _update_email_message_status(
                 msg.attempt_count = attempt_count
             # 非 RETRYING（終態或成功）時清掉下一次重試時間
             msg.next_retry_at = next_retry_at if status == EmailStatus.RETRYING else None
+            recipient_status = {
+                EmailStatus.SENT: EmailRecipientStatus.SENT,
+                EmailStatus.FAILED: EmailRecipientStatus.FAILED,
+                EmailStatus.RETRYING: EmailRecipientStatus.RETRYING,
+                EmailStatus.DEAD: EmailRecipientStatus.DEAD,
+            }.get(status)
+            if recipient_status is not None:
+                recipients = (
+                    await session.execute(
+                        select(EmailCampaignRecipient).where(
+                            EmailCampaignRecipient.message_id == msg.id
+                        )
+                    )
+                ).scalars()
+                for recipient in recipients:
+                    recipient.status = recipient_status
+                    recipient.provider_id = provider_id or recipient.provider_id
+                    recipient.next_retry_at = (
+                        next_retry_at if status == EmailStatus.RETRYING else None
+                    )
+                    if status == EmailStatus.SENT:
+                        recipient.sent_at = datetime.now(UTC)
             await session.commit()
     finally:
         await engine.dispose()
@@ -181,6 +205,61 @@ async def _update_campaign_recipient_status(
 # ── Celery Task（同步函式內用 asyncio.run 執行非同步郵件發送）────────────────
 
 
+def _preview_text(body: str) -> str:
+    text = re.sub(r"<[^>]+>", " ", body or "")
+    return " ".join(text.split())[:200]
+
+
+async def _create_automatic_email_message(
+    to: list[str],
+    subject: str,
+    body: str,
+    subtype: str,
+    *,
+    already_rendered: bool,
+) -> str:
+    """為未經平台建立的共用寄信建立可稽核、可預覽的 EmailMessage。"""
+    engine = create_async_engine(str(settings.DATABASE_URL))
+    try:
+        async with AsyncSession(engine) as session:
+            recipients = [address.strip() for address in to if address and address.strip()]
+            body_format = (
+                "rendered" if already_rendered else ("html" if subtype == "html" else "markdown")
+            )
+            message = EmailMessage(
+                subject=subject[:255],
+                body=body,
+                template="generic",
+                context={
+                    "body_format": body_format,
+                    "heading": subject[:200],
+                    "preview_text": _preview_text(body),
+                    "source": "system",
+                },
+                recipient_spec={"external_emails": recipients},
+                recipient_variables=[
+                    {"email": address, "name": None, "variables": {}} for address in recipients
+                ],
+                resolved_emails=recipients,
+                recipient_count=len(recipients),
+                status=EmailStatus.QUEUED,
+            )
+            session.add(message)
+            await session.flush()
+            for address in recipients:
+                session.add(
+                    EmailCampaignRecipient(
+                        message_id=message.id,
+                        email=address,
+                        status=EmailRecipientStatus.QUEUED,
+                    )
+                )
+            await session.commit()
+            return str(message.id)
+    finally:
+        await engine.dispose()
+
+
 @celery_app.task(
     name="api.services.mail.send_email", bind=True, max_retries=len(EMAIL_RETRY_BACKOFF)
 )
@@ -193,6 +272,7 @@ def send_email(
     email_message_id: str | None = None,
     email_recipient_id: str | None = None,
     attachments: list[dict[str, str]] | None = None,
+    format_body: bool = False,
 ) -> dict[str, object]:
     """
     Celery 背景郵件發送任務。
@@ -204,7 +284,29 @@ def send_email(
     attempt = self.request.retries + 1  # 本次嘗試（1-based）
 
     try:
-        message_id = asyncio.run(_send_via_resend(to, subject, body, subtype, attachments))
+        if email_message_id is None:
+            email_message_id = asyncio.run(
+                _create_automatic_email_message(
+                    to,
+                    subject,
+                    body,
+                    subtype,
+                    already_rendered=not format_body,
+                )
+            )
+        rendered_body = body
+        if format_body:
+            from api.email.sender import render_generic_message
+
+            rendered_body = render_generic_message(
+                subject,
+                body,
+                {"body_format": "html" if subtype == "html" else "markdown"},
+            )
+        delivery_subtype = "html" if format_body else subtype
+        message_id = asyncio.run(
+            _send_via_resend(to, subject, rendered_body, delivery_subtype, attachments)
+        )
         if email_recipient_id is not None:
             asyncio.run(
                 _update_campaign_recipient_status(
@@ -217,7 +319,10 @@ def send_email(
         else:
             asyncio.run(
                 _update_email_message_status(
-                    email_message_id, EmailStatus.SENT, attempt_count=attempt
+                    email_message_id,
+                    EmailStatus.SENT,
+                    attempt_count=attempt,
+                    provider_id=message_id,
                 )
             )
         record_email_delivery("sent")
@@ -274,7 +379,20 @@ def send_email(
             logger.warning(
                 "郵件發送失敗，第 %d 次嘗試，%ds 後重試 to=%s: %s", attempt, delay, to, exc
             )
-        raise self.retry(exc=exc, countdown=delay) from exc
+        raise self.retry(
+            exc=exc,
+            countdown=delay,
+            kwargs={
+                "to": to,
+                "subject": subject,
+                "body": body,
+                "subtype": subtype,
+                "email_message_id": email_message_id,
+                "email_recipient_id": email_recipient_id,
+                "attachments": attachments,
+                "format_body": format_body,
+            },
+        ) from exc
 
 
 # ── 輔助函式（FastAPI 路由層呼叫）────────────────────────────────────────────
@@ -288,6 +406,8 @@ def enqueue_email(
     email_message_id: str | None = None,
     email_recipient_id: str | None = None,
     attachments: list[dict[str, str]] | None = None,
+    *,
+    already_rendered: bool = False,
 ) -> str:
     """
     將郵件發送任務推入 Celery 佇列，立即回傳 task_id。
@@ -302,29 +422,16 @@ def enqueue_email(
         Celery task_id 字串
     """
     recipients = [to] if isinstance(to, str) else to
-    if email_message_id is None and email_recipient_id is None and attachments is None:
-        result = send_email.delay(recipients, subject, body, subtype)
-    elif email_message_id is None and email_recipient_id is None:
-        result = send_email.delay(recipients, subject, body, subtype, None, None, attachments)
-    elif attachments is None:
-        result = send_email.delay(
-            recipients,
-            subject,
-            body,
-            subtype,
-            email_message_id,
-            email_recipient_id,
-        )
-    else:
-        result = send_email.delay(
-            recipients,
-            subject,
-            body,
-            subtype,
-            email_message_id,
-            email_recipient_id,
-            attachments,
-        )
+    result = send_email.delay(
+        recipients,
+        subject,
+        body,
+        subtype,
+        email_message_id=email_message_id,
+        email_recipient_id=email_recipient_id,
+        attachments=attachments,
+        format_body=email_message_id is None and not already_rendered,
+    )
     logger.info("郵件任務已排入佇列 task_id=%s", result.id)
     return result.id
 
@@ -340,4 +447,35 @@ async def send_email_now(
     直接非同步發送郵件（不透過 Celery，適用於測試或緊急通知）。
     """
     recipients = [to] if isinstance(to, str) else to
-    await _send_via_resend(recipients, subject, body, subtype, attachments)
+    email_message_id = await _create_automatic_email_message(
+        recipients,
+        subject,
+        body,
+        subtype,
+        already_rendered=False,
+    )
+    try:
+        from api.email.sender import render_generic_message
+
+        rendered_body = render_generic_message(
+            subject,
+            body,
+            {"body_format": "html" if subtype == "html" else "markdown"},
+        )
+        provider_id = await _send_via_resend(
+            recipients, subject, rendered_body, "html", attachments
+        )
+        await _update_email_message_status(
+            email_message_id,
+            EmailStatus.SENT,
+            attempt_count=1,
+            provider_id=provider_id,
+        )
+    except Exception as exc:
+        await _update_email_message_status(
+            email_message_id,
+            EmailStatus.FAILED,
+            error_detail=str(exc)[:500],
+            attempt_count=1,
+        )
+        raise

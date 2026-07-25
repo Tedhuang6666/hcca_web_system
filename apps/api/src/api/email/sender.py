@@ -36,6 +36,7 @@ def enqueue_rendered(
             email_message_id,
             email_recipient_id,
             attachments,
+            already_rendered=True,
         )
         for addr in to
         if addr
@@ -53,6 +54,7 @@ def render_generic_message(
     body_markdown: str,
     context: dict,
     variables: dict | None = None,
+    body_format: str | None = None,
 ) -> str:
     """組裝 generic 範本 context 並渲染為完整 HTML（寄信頁、預約寄送共用）。
 
@@ -135,7 +137,10 @@ def render_generic_message(
                         ),
                     }
                 )
-    html_body = md.render(rendered_body)
+    if (body_format or context.get("body_format")) == "html":
+        html_body = sanitize_html(rendered_body)
+    else:
+        html_body = md.render(rendered_body)
     return render_email(
         "generic",
         {
