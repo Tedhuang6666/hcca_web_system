@@ -1514,5 +1514,16 @@ async def preview_message_recipient(
         student_id=None,
         custom_variables=dict(recipient.variables or {}),
     )
-    html = render_generic_message(msg.subject, msg.body, msg.context or {}, personal)
+    body_format = str((msg.context or {}).get("body_format", "markdown"))
+    html = (
+        msg.body
+        if body_format == "rendered"
+        else render_generic_message(
+            msg.subject,
+            msg.body,
+            msg.context or {},
+            personal,
+            body_format=body_format,
+        )
+    )
     return EmailPreviewOut(html=html)

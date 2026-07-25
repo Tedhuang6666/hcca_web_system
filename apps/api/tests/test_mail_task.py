@@ -25,7 +25,7 @@ def test_send_email_task_calls_resend(monkeypatch: pytest.MonkeyPatch) -> None:
 
     with patch("api.services.mail.asyncio.run", side_effect=_close_coro_and_return) as mock_run:
         send_email(["test@example.com"], "測試主旨", "<p>測試內容</p>")
-        assert mock_run.call_count == 2
+        assert mock_run.call_count == 3
 
 
 def test_send_email_returns_sent_status(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -50,7 +50,16 @@ def test_enqueue_email_returns_task_id() -> None:
 
     assert task_id == "fake-task-id-12345"
     # delay 應以 list 型態呼叫（單一收件人也轉換成 list）
-    mock_delay.assert_called_once_with(["to@example.com"], "subject", "body", "html")
+    mock_delay.assert_called_once_with(
+        ["to@example.com"],
+        "subject",
+        "body",
+        "html",
+        email_message_id=None,
+        email_recipient_id=None,
+        attachments=None,
+        format_body=True,
+    )
 
 
 def test_enqueue_email_accepts_list_of_recipients() -> None:
@@ -74,7 +83,14 @@ def test_enqueue_email_accepts_message_id() -> None:
         enqueue_email("to@example.com", "subject", "body", email_message_id="message-id")
 
     mock_delay.assert_called_once_with(
-        ["to@example.com"], "subject", "body", "html", "message-id", None
+        ["to@example.com"],
+        "subject",
+        "body",
+        "html",
+        email_message_id="message-id",
+        email_recipient_id=None,
+        attachments=None,
+        format_body=False,
     )
 
 
@@ -93,7 +109,14 @@ def test_enqueue_email_accepts_campaign_recipient_id() -> None:
         )
 
     mock_delay.assert_called_once_with(
-        ["to@example.com"], "subject", "body", "html", "message-id", "recipient-id"
+        ["to@example.com"],
+        "subject",
+        "body",
+        "html",
+        email_message_id="message-id",
+        email_recipient_id="recipient-id",
+        attachments=None,
+        format_body=False,
     )
 
 
@@ -144,18 +167,23 @@ async def test_send_email_now_posts_to_resend(monkeypatch: pytest.MonkeyPatch) -
     mock_client.__aexit__ = AsyncMock(return_value=None)
     mock_client.post = AsyncMock(return_value=mock_response)
 
-    with patch("api.services.mail.httpx.AsyncClient", return_value=mock_client):
+    with (
+        patch(
+            "api.services.mail._create_automatic_email_message",
+            new=AsyncMock(return_value="message-id"),
+        ),
+        patch("api.services.mail._update_email_message_status", new=AsyncMock()),
+        patch("api.services.mail.httpx.AsyncClient", return_value=mock_client),
+    ):
         await send_email_now("user@example.com", "主旨", "<p>內容</p>")
 
     mock_client.post.assert_awaited_once()
     _url, kwargs = mock_client.post.call_args
     assert kwargs["headers"]["Authorization"] == "Bearer re_test"
-    assert kwargs["json"] == {
-        "from": "HCCA <noreply@hct.works>",
-        "to": ["user@example.com"],
-        "subject": "主旨",
-        "html": "<p>內容</p>",
-    }
+    assert kwargs["json"]["from"] == "HCCA <noreply@hct.works>"
+    assert kwargs["json"]["to"] == ["user@example.com"]
+    assert kwargs["json"]["subject"] == "主旨"
+    assert "內容" in kwargs["json"]["html"]
 
 
 async def test_send_email_now_explains_invalid_api_key(
@@ -172,6 +200,11 @@ async def test_send_email_now_explains_invalid_api_key(
     mock_client.post = AsyncMock(return_value=mock_response)
 
     with (
+        patch(
+            "api.services.mail._create_automatic_email_message",
+            new=AsyncMock(return_value="message-id"),
+        ),
+        patch("api.services.mail._update_email_message_status", new=AsyncMock()),
         patch("api.services.mail.httpx.AsyncClient", return_value=mock_client),
         pytest.raises(ResendAPIError, match="更新 RESEND_API_KEY 並重啟 email worker"),
     ):
