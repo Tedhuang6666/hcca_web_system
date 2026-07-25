@@ -75,19 +75,14 @@ def _upload_preview_url(storage_key: str) -> str:
 def _discord_image_url(file) -> str:
     token = _DISCORD_IMAGE_SERIALIZER.dumps({"file_id": str(file.id)})
     base = settings.API_PUBLIC_BASE_URL.rstrip("/")
-    return (
-        f"{base}/merchandise-submissions/discord-images/{file.id}"
-        f"?token={quote(token, safe='')}"
-    )
+    return f"{base}/merchandise-submissions/discord-images/{file.id}?token={quote(token, safe='')}"
 
 
 async def _submission_discord_details(
     session: AsyncSession, submission
 ) -> tuple[list[EmbedField], list[str]]:
     submission_settings = await submission_svc.get_settings(session)
-    custom_fields = submission_svc.effective_custom_fields(
-        submission_settings, submission.item
-    )
+    custom_fields = submission_svc.effective_custom_fields(submission_settings, submission.item)
     files = list(submission.files)
     fields = build_merchandise_submission_fields(
         custom_fields=custom_fields,
@@ -96,9 +91,7 @@ async def _submission_discord_details(
         filenames=[file.filename for file in files],
     )
     image_urls = [
-        _discord_image_url(file)
-        for file in files
-        if file.content_type.lower().startswith("image/")
+        _discord_image_url(file) for file in files if file.content_type.lower().startswith("image/")
     ]
     return fields, image_urls
 
@@ -282,9 +275,7 @@ async def preview_submission_file(storage_key: str, session: DbDep, current_user
 
 
 @router.get("/discord-images/{file_id}", include_in_schema=False)
-async def preview_submission_image_for_discord(
-    file_id: uuid.UUID, token: str, session: DbDep
-):
+async def preview_submission_image_for_discord(file_id: uuid.UUID, token: str, session: DbDep):
     try:
         token_data = _DISCORD_IMAGE_SERIALIZER.loads(token, max_age=_DISCORD_IMAGE_TOKEN_MAX_AGE)
     except BadData as exc:
