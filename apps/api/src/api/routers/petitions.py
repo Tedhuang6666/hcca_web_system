@@ -47,6 +47,7 @@ from api.schemas.petition import (
     PetitionAttachmentOut,
     PetitionCaseListItem,
     PetitionCaseOut,
+    PetitionContentUpdate,
     PetitionCreate,
     PetitionCreatedOut,
     PetitionEventOut,
@@ -225,6 +226,7 @@ async def _decorate_case(
     include_internal: bool,
     can_view_submitter: bool,
     can_respond_public: bool = False,
+    can_edit_content: bool = False,
     editor_user_id: uuid.UUID | None = None,
 ) -> PetitionCaseOut:
     storage = get_storage()
@@ -282,6 +284,7 @@ async def _decorate_case(
         first_response_at=case_obj.first_response_at,
         resolved_at=case_obj.resolved_at,
         closed_at=case_obj.closed_at,
+        can_edit_content=can_edit_content and petition_svc.can_edit_content(case_obj),
         can_supplement=case_obj.status == PetitionStatus.NEEDS_INFO,
         can_respond_public=can_respond_public,
         can_view_submitter=can_view_submitter,
@@ -450,6 +453,7 @@ async def lookup_case(
             include_internal=False,
             can_view_submitter=False,
             can_respond_public=True,
+            can_edit_content=True,
         )
     )
 
@@ -666,7 +670,53 @@ async def get_case(case_id: uuid.UUID, session: DbDep, user: CurrentUser) -> Pet
         include_internal=include_internal,
         can_view_submitter=can_view_submitter,
         can_respond_public=case_obj.submitter_id == user.id,
+        can_edit_content=case_obj.submitter_id == user.id,
         editor_user_id=user.id if can_edit_events else None,
+    )
+
+
+@router.patch(
+    "/{case_id}/content", response_model=PetitionCaseOut, summary="編輯尚未分案的陳情內容"
+)
+async def update_case_content(
+    case_id: uuid.UUID,
+    payload: PetitionContentUpdate,
+    session: DbDep,
+    user: OptionalUser,
+) -> PetitionCaseOut:
+    case_obj = await _case_or_404(session, case_id)
+    is_submitter = user is not None and case_obj.submitter_id == user.id
+    if not is_submitter and (
+        not payload.verification_code
+        or not petition_svc.verify_code(case_obj, payload.verification_code)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="需要本人登入或正確驗證碼"
+        )
+    try:
+        case_obj = await petition_svc.update_content(session, case_obj, data=payload)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    await audit_svc.record(
+        session,
+        entity_type="petition_case",
+        entity_id=str(case_obj.id),
+        action="petition.content.update",
+        actor_id=str(user.id) if user else None,
+        actor_email=user.email if user else None,
+        meta={
+            "case_number": case_obj.case_number,
+            "fields": [
+                field for field in ("title", "content") if field in payload.model_fields_set
+            ],
+        },
+        summary=f"修改尚未分案的陳情內容 {case_obj.case_number}",
+    )
+    return await _decorate_case(
+        case_obj,
+        include_internal=False,
+        can_view_submitter=is_submitter,
+        can_edit_content=is_submitter or bool(payload.verification_code),
     )
 
 

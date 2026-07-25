@@ -70,6 +70,8 @@ export const petitionsApi = {
   },
   stats: () => get<PetitionStatsOut>("/petitions/stats"),
   get: (id: string) => get<PetitionCaseOut>(`/petitions/${id}`),
+  updateContent: (id: string, body: { title?: string; content?: string; verification_code?: string | null }) =>
+    patch<PetitionCaseOut>(`/petitions/${id}/content`, body),
   assignableUsers: (id: string) =>
     get<{ id: string; display_name: string; email: string }[]>(`/petitions/${id}/assignable-users`),
   supplement: (id: string, body: { content: string; verification_code?: string | null }) =>

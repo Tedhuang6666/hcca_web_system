@@ -9650,23 +9650,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/petitions/{case_id}/events/{event_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** 編輯使用者可見的陳情處理訊息 */
-        patch: operations["edit_event_petitions__case_id__events__event_id__patch"];
-        trace?: never;
-    };
     "/petitions/{case_id}/assign": {
         parameters: {
             query?: never;
@@ -9735,6 +9718,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/petitions/{case_id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 編輯尚未分案的陳情內容 */
+        patch: operations["update_case_content_petitions__case_id__content_patch"];
+        trace?: never;
+    };
     "/petitions/{case_id}/discord-channel": {
         parameters: {
             query?: never;
@@ -9750,6 +9750,23 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/petitions/{case_id}/events/{event_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 編輯使用者可見的陳情處理訊息 */
+        patch: operations["edit_event_petitions__case_id__events__event_id__patch"];
         trace?: never;
     };
     "/petitions/{case_id}/notes": {
@@ -26202,6 +26219,11 @@ export interface components {
              */
             attachments: components["schemas"]["PetitionAttachmentOut"][];
             /**
+             * Can Edit Content
+             * @default false
+             */
+            can_edit_content: boolean;
+            /**
              * Can Respond Public
              * @default false
              */
@@ -26319,6 +26341,15 @@ export interface components {
              */
             updated_at: string;
         };
+        /** PetitionContentUpdate */
+        PetitionContentUpdate: {
+            /** Content */
+            content?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Verification Code */
+            verification_code?: string | null;
+        };
         /** PetitionCreate */
         PetitionCreate: {
             /** Contact Email */
@@ -26377,7 +26408,7 @@ export interface components {
             /**
              * Created At
              * Format: date-time
-             */
+            */
             created_at: string;
             /** Can Edit */
             can_edit?: boolean;
@@ -26439,6 +26470,11 @@ export interface components {
              */
             attachments: components["schemas"]["PetitionAttachmentOut"][];
             /**
+             * Can Edit Content
+             * @default false
+             */
+            can_edit_content: boolean;
+            /**
              * Can Respond Public
              * @default false
              */
@@ -26550,8 +26586,7 @@ export interface components {
              * @default
              */
             type_name: string;
-            /**
-             * Updated At
+            /** Updated At
              * Format: date-time
              */
             updated_at: string;
@@ -56046,42 +56081,6 @@ export interface operations {
             };
         };
     };
-    edit_event_petitions__case_id__events__event_id__patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                case_id: string;
-                event_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PetitionEventUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PetitionCaseOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     assign_case_petitions__case_id__assign_patch: {
         parameters: {
             query?: never;
@@ -56219,6 +56218,41 @@ export interface operations {
             };
         };
     };
+    update_case_content_petitions__case_id__content_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PetitionContentUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PetitionCaseOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_petition_discord_channel_petitions__case_id__discord_channel_post: {
         parameters: {
             query?: never;
@@ -56229,6 +56263,42 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PetitionCaseOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    edit_event_petitions__case_id__events__event_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                case_id: string;
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PetitionEventUpdate"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

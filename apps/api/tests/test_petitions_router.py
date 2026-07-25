@@ -183,6 +183,63 @@ async def test_lookup_case_by_share_token_succeeds(db_session, client) -> None:
     assert resp.json()["title"] == "教室冷氣故障"
 
 
+async def test_submitter_can_edit_content_before_assignment(
+    db_session, authed_client_factory
+) -> None:
+    _, petition_type = await _make_org_and_type(db_session)
+    owner = await _bare_user(db_session)
+    case_obj, _code = await _create_case(db_session, petition_type, submitter=owner)
+
+    resp = await authed_client_factory(owner).patch(
+        f"/petitions/{case_obj.id}/content",
+        json={"title": "更新後標題", "content": "更新後的陳情內容"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["title"] == "更新後標題"
+    assert resp.json()["content"] == "更新後的陳情內容"
+    assert resp.json()["can_edit_content"] is True
+
+
+async def test_guest_can_edit_content_with_verification_code(db_session, client) -> None:
+    _, petition_type = await _make_org_and_type(db_session)
+    case_obj, code = await _create_case(db_session, petition_type)
+
+    forbidden = await client.patch(
+        f"/petitions/{case_obj.id}/content",
+        json={"content": "不應該成功"},
+    )
+    assert forbidden.status_code == 403
+
+    edited = await client.patch(
+        f"/petitions/{case_obj.id}/content",
+        json={"content": "訪客修改後的內容", "verification_code": code},
+    )
+    assert edited.status_code == 200
+    assert edited.json()["content"] == "訪客修改後的內容"
+    assert edited.json()["can_edit_content"] is True
+
+
+async def test_submitter_cannot_edit_content_after_assignment(
+    db_session, authed_client_factory
+) -> None:
+    org, petition_type = await _make_org_and_type(db_session)
+    owner = await _bare_user(db_session)
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:assign")
+    case_obj, _code = await _create_case(db_session, petition_type, submitter=owner)
+
+    assigned = await authed_client_factory(handler).patch(
+        f"/petitions/{case_obj.id}/assign", json={"assigned_to_id": str(handler.id)}
+    )
+    assert assigned.status_code == 200
+
+    edited = await authed_client_factory(owner).patch(
+        f"/petitions/{case_obj.id}/content", json={"content": "太晚了"}
+    )
+    assert edited.status_code == 409
+
+
 async def test_list_my_cases_returns_only_own_cases(db_session, authed_client_factory) -> None:
     _, petition_type = await _make_org_and_type(db_session)
     owner = await _bare_user(db_session)
