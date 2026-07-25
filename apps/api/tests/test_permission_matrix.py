@@ -121,6 +121,8 @@ KNOWN_PUBLIC_ROUTES: set[tuple[str, str]] = {
     ("/petitions/{case_id}/attachments", "POST"),
     ("/petitions/{case_id}/attachments/{attachment_id}/download", "GET"),
     ("/petitions/{case_id}/supplement", "POST"),
+    # 陳情人可透過登入身分或案件驗證碼修改尚未分案內容
+    ("/petitions/{case_id}/content", "PATCH"),
     ("/petitions/share", "POST"),
     # 議案（公開查閱）
     ("/council-proposals", "POST"),
@@ -141,6 +143,8 @@ KNOWN_PUBLIC_ROUTES: set[tuple[str, str]] = {
     ("/partner-map/rankings", "GET"),
     ("/partner-map/submissions", "POST"),
     ("/partner-map/tags", "GET"),
+    # 校商投稿圖片（URL 具簽名 token 與期限）
+    ("/merchandise-submissions/discord-images/{file_id}", "GET"),
     # 公開會議看板
     ("/public/meetings/screen/{token}", "GET"),
     # 政策同意（公開版本瀏覽）
