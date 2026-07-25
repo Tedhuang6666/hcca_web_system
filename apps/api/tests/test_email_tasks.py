@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import patch
 
+from api.core.config import settings
 from api.services.email_tasks import process_scheduled_emails
 
 
@@ -43,7 +45,7 @@ async def test_dispatch_scheduled_when_disabled_skips_email_query() -> None:
 
 
 async def test_error_report_email_flag_can_disable_delivery() -> None:
-    from api.services.error_report_tasks import _run
+    from api.services.error_report_tasks import ErrorEventBatch, _run
 
     with (
         patch("api.services.error_report_tasks.settings.ERROR_REPORT_EMAIL_ENABLED", True),
@@ -54,10 +56,99 @@ async def test_error_report_email_flag_can_disable_delivery() -> None:
         patch("api.services.error_report_tasks._read_last_sent", return_value=0),
         patch(
             "api.services.error_report_tasks._read_new_error_events",
-            return_value=[{"occurred_at": 1}],
+            return_value=ErrorEventBatch(events=[{"occurred_at": 1}]),
         ),
-        patch("api.services.error_report_tasks._read_recent_dlq", return_value=[]),
+        patch(
+            "api.services.error_report_tasks._read_recent_dlq",
+            return_value=ErrorEventBatch(events=[]),
+        ),
     ):
         result = await _run()
 
     assert result == {"ok": True, "skipped": "feature_flag_disabled"}
+
+
+class _ErrorReportRedisStub:
+    def __init__(self, items: list[dict[str, object]]) -> None:
+        self.items = [json.dumps(item) for item in items]
+        self.suppressed: dict[str, str] = {}
+
+    def lrange(self, _key: str, _start: int, _stop: int) -> list[str]:
+        return self.items
+
+    def hgetall(self, _key: str) -> dict[str, str]:
+        return self.suppressed.copy()
+
+    def hset(self, _key: str, *, mapping: dict[str, str]) -> None:
+        self.suppressed.update(mapping)
+
+    def hdel(self, _key: str, *keys: str) -> None:
+        for key in keys:
+            self.suppressed.pop(key, None)
+
+    def expire(self, _key: str, _seconds: int) -> None:
+        return None
+
+
+def _api_error(message: str, occurred_at: float) -> dict[str, object]:
+    return {
+        "occurred_at": occurred_at,
+        "error_id": f"error-{occurred_at}",
+        "request_id": f"request-{occurred_at}",
+        "category": "http",
+        "exc_type": "HTTPException",
+        "message": message,
+        "method": "GET",
+        "path": "/calendar/google/calendars/org",
+        "status_code": 502,
+        "traceback_head": "traceback",
+    }
+
+
+def test_error_report_assigns_severity_and_filters_warnings() -> None:
+    from api.services.error_report_tasks import (
+        _meets_min_severity,
+        _read_new_error_events,
+        _severity_for_event,
+    )
+
+    warning = _api_error("HTTPException: 503: Discord OAuth 尚未設定", 900)
+    redis_failure = _api_error("HTTPException: 503: 登入服務暫時不可用", 900)
+    redis_failure["category"] = "redis"
+
+    assert _severity_for_event(warning) == "warning"
+    assert _severity_for_event(redis_failure) == "critical"
+    with patch.object(settings, "ERROR_REPORT_MIN_SEVERITY", "error"):
+        assert not _meets_min_severity(warning)
+        assert _meets_min_severity(redis_failure)
+
+        client = _ErrorReportRedisStub([warning])
+        batch = _read_new_error_events(client, last_sent=0, now=1000)
+        assert batch.events == []
+        assert batch.filtered_occurrences == 1
+
+
+def test_error_report_aggregates_and_suppresses_repeated_events() -> None:
+    from api.services.error_report_tasks import _mark_notified, _read_new_error_events
+
+    client = _ErrorReportRedisStub(
+        [
+            _api_error("HTTPException: 502: network down", 1100),
+            _api_error("HTTPException: 502: network down", 1101),
+            _api_error("HTTPException: 502: network down", 1102),
+        ]
+    )
+    with (
+        patch.object(settings, "ERROR_REPORT_MIN_SEVERITY", "error"),
+        patch.object(settings, "ERROR_REPORT_REPEAT_COOLDOWN_SECONDS", 3600),
+    ):
+        first = _read_new_error_events(client, last_sent=0, now=2000)
+        assert len(first.events) == 1
+        assert first.events[0]["occurrences"] == 3
+
+        _mark_notified(client, [first.events[0]["signature"]], now=2000)
+        client.items.append(json.dumps(_api_error("HTTPException: 502: network down", 2001)))
+        second = _read_new_error_events(client, last_sent=1102, now=2001)
+
+    assert second.events == []
+    assert second.suppressed_occurrences == 1

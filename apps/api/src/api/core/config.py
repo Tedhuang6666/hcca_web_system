@@ -121,8 +121,13 @@ class Settings(BaseSettings):
     ERROR_REPORT_INTERVAL_SECONDS: int = Field(default=300, ge=60)
     ERROR_REPORT_WINDOW_SECONDS: int = Field(default=900, ge=60)
     ERROR_REPORT_MAX_ITEMS: int = Field(default=20, ge=1)
+    ERROR_REPORT_MIN_SEVERITY: str = Field(
+        default="error", pattern="^(critical|error|warning|info)$"
+    )
+    ERROR_REPORT_REPEAT_COOLDOWN_SECONDS: int = Field(default=86400, ge=0)
     ERROR_REPORT_REDIS_KEY: str = "error_report:events:v1"
     ERROR_REPORT_STATE_KEY: str = "error_report:last_sent_at:v1"
+    ERROR_REPORT_SUPPRESSION_KEY: str = "error_report:suppressed_signatures:v1"
     ERROR_REPORT_RETENTION_ITEMS: int = Field(default=1000, ge=1)
 
     # --- Cloudflare / 信任代理 ---
