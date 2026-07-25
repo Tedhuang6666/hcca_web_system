@@ -8,10 +8,12 @@ OWNER_EMAILS. It intentionally avoids request bodies, cookies, and tokens.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import html
 import json
 import logging
 import time
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -28,6 +30,19 @@ logger = logging.getLogger(__name__)
 
 _QUEUES = ("default", "email", "meal", "backup", "documents", "recovery")
 ERROR_REPORT_EMAIL_FLAG = "email_error_report"
+_SEVERITY_RANK = {"info": 0, "warning": 1, "error": 2, "critical": 3}
+_OPTIONAL_INTEGRATION_MARKERS = (
+    "尚未設定",
+    "尚未啟用",
+    "離線或尚未回報伺服器清單",
+)
+
+
+@dataclass(frozen=True)
+class ErrorEventBatch:
+    events: list[dict[str, Any]]
+    suppressed_occurrences: int = 0
+    filtered_occurrences: int = 0
 
 
 @celery_app.task(
@@ -65,10 +80,20 @@ async def _run() -> dict[str, Any]:
     try:
         now = time.time()
         last_sent = _read_last_sent(client, now)
-        events = _read_new_error_events(client, last_sent, now)
-        dlq = _read_recent_dlq(client, last_sent)
+        batch = _read_new_error_events(client, last_sent, now)
+        events = batch.events
+        dlq_batch = _read_recent_dlq(client, last_sent, now)
+        dlq = dlq_batch.events
+        suppressed_occurrences = batch.suppressed_occurrences + dlq_batch.suppressed_occurrences
         if not events and not dlq:
-            return {"ok": True, "sent": False, "reason": "no_new_errors"}
+            client.set(settings.ERROR_REPORT_STATE_KEY, str(now), ex=30 * 86400)
+            return {
+                "ok": True,
+                "sent": False,
+                "reason": "no_actionable_errors",
+                "suppressed": suppressed_occurrences,
+                "filtered": batch.filtered_occurrences,
+            }
 
         # 為本次 asyncio.run 建立專屬 engine（NullPool）。Celery worker 每次
         # asyncio.run 都是新 event loop，沿用全域 AsyncSessionLocal 的持久連線池
@@ -90,11 +115,18 @@ async def _run() -> dict[str, Any]:
             diagnostics=diagnostics,
             last_sent=last_sent,
             generated_at=now,
+            suppressed_occurrences=suppressed_occurrences,
+            filtered_occurrences=batch.filtered_occurrences,
         )
 
         from api.services.mail import send_email_now
 
         await send_email_now(settings.OWNER_EMAILS, subject, body)
+        _mark_notified(
+            client,
+            [str(item["signature"]) for item in [*events, *dlq]],
+            now,
+        )
         client.set(settings.ERROR_REPORT_STATE_KEY, str(now), ex=30 * 86400)
         logger.info(
             "owner error report sent owners=%d errors=%d dlq=%d",
@@ -102,7 +134,14 @@ async def _run() -> dict[str, Any]:
             len(events),
             len(dlq),
         )
-        return {"ok": True, "sent": True, "errors": len(events), "dlq": len(dlq)}
+        return {
+            "ok": True,
+            "sent": True,
+            "errors": len(events),
+            "dlq": len(dlq),
+            "suppressed": suppressed_occurrences,
+            "filtered": batch.filtered_occurrences,
+        }
     finally:
         client.close()
 
@@ -125,11 +164,12 @@ def _safe_json(raw: str) -> dict[str, Any] | None:
     return parsed if isinstance(parsed, dict) else None
 
 
-def _read_new_error_events(client: Redis, last_sent: float, now: float) -> list[dict[str, Any]]:
+def _read_new_error_events(client: Redis, last_sent: float, now: float) -> ErrorEventBatch:
     raw_items = client.lrange(
         settings.ERROR_REPORT_REDIS_KEY, 0, settings.ERROR_REPORT_MAX_ITEMS * 5
     )
-    events: list[dict[str, Any]] = []
+    candidates: list[dict[str, Any]] = []
+    filtered_occurrences = 0
     oldest = now - settings.ERROR_REPORT_WINDOW_SECONDS
     for raw in raw_items:
         item = _safe_json(raw)
@@ -138,15 +178,127 @@ def _read_new_error_events(client: Redis, last_sent: float, now: float) -> list[
         occurred_at = _float(item.get("occurred_at"))
         if occurred_at <= last_sent or occurred_at < oldest:
             continue
-        events.append(item)
+        if not _meets_min_severity(item):
+            filtered_occurrences += 1
+            continue
+        candidates.append(item)
+        if len(candidates) >= settings.ERROR_REPORT_MAX_ITEMS * 5:
+            break
+    grouped = _aggregate_events(candidates)
+    suppressed = _read_suppressed_signatures(client, grouped, now)
+    events: list[dict[str, Any]] = []
+    suppressed_occurrences = 0
+    for item in grouped:
+        if item["signature"] in suppressed:
+            suppressed_occurrences += int(item["occurrences"])
+        else:
+            events.append(item)
         if len(events) >= settings.ERROR_REPORT_MAX_ITEMS:
             break
-    return events
+    return ErrorEventBatch(
+        events=events,
+        suppressed_occurrences=suppressed_occurrences,
+        filtered_occurrences=filtered_occurrences,
+    )
 
 
-def _read_recent_dlq(client: Redis, last_sent: float) -> list[dict[str, Any]]:
+def _event_signature(item: dict[str, Any]) -> str:
+    fields = (
+        str(item.get("category") or ""),
+        str(item.get("exc_type") or ""),
+        str(item.get("method") or ""),
+        str(item.get("path") or ""),
+        str(item.get("status_code") or ""),
+        str(item.get("message") or ""),
+    )
+    payload = json.dumps(fields, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:24]
+
+
+def _severity_for_event(item: dict[str, Any]) -> str:
+    category = str(item.get("category") or "").lower()
+    message = str(item.get("message") or "")
+    status_code = int(item.get("status_code") or 500)
+    if category in {"db", "redis"} or "Redis unavailable" in message:
+        return "critical"
+    if "登入服務暫時不可用" in message:
+        return "critical"
+    if status_code >= 500 and any(marker in message for marker in _OPTIONAL_INTEGRATION_MARKERS):
+        return "warning"
+    if status_code >= 500:
+        return "critical" if status_code >= 500 and category == "unhandled" else "error"
+    return "info"
+
+
+def _meets_min_severity(item: dict[str, Any]) -> bool:
+    severity = _severity_for_event(item)
+    minimum = str(settings.ERROR_REPORT_MIN_SEVERITY).lower()
+    return _SEVERITY_RANK.get(severity, 0) >= _SEVERITY_RANK.get(minimum, 2)
+
+
+def _aggregate_events(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[str, dict[str, Any]] = {}
+    for item in items:
+        signature = _event_signature(item)
+        occurred_at = _float(item.get("occurred_at"))
+        current = grouped.get(signature)
+        if current is None:
+            current = dict(item)
+            current["signature"] = signature
+            current["severity"] = _severity_for_event(item)
+            current["occurrences"] = 0
+            current["first_seen"] = occurred_at
+            current["last_seen"] = occurred_at
+            current["request_ids"] = []
+            grouped[signature] = current
+        current["occurrences"] += 1
+        current["first_seen"] = min(float(current["first_seen"]), occurred_at)
+        current["last_seen"] = max(float(current["last_seen"]), occurred_at)
+        request_id = item.get("request_id")
+        if request_id and request_id not in current["request_ids"]:
+            current["request_ids"].append(request_id)
+            current["request_ids"] = current["request_ids"][:3]
+    return sorted(grouped.values(), key=lambda item: float(item["last_seen"]), reverse=True)
+
+
+def _read_suppressed_signatures(
+    client: Redis, events: list[dict[str, Any]], now: float
+) -> set[str]:
+    cooldown = settings.ERROR_REPORT_REPEAT_COOLDOWN_SECONDS
+    if cooldown <= 0 or not events:
+        return set()
+    stored = client.hgetall(settings.ERROR_REPORT_SUPPRESSION_KEY)
+    suppressed: set[str] = set()
+    stale: list[str] = []
+    for item in events:
+        signature = str(item["signature"])
+        notified_at = _float(stored.get(signature))
+        if notified_at and now - notified_at < cooldown:
+            suppressed.add(signature)
+    for signature, value in stored.items():
+        if now - _float(value) >= cooldown * 2:
+            stale.append(signature)
+    if stale:
+        client.hdel(settings.ERROR_REPORT_SUPPRESSION_KEY, *stale)
+    return suppressed
+
+
+def _mark_notified(client: Redis, signatures: list[str], now: float) -> None:
+    if not signatures or settings.ERROR_REPORT_REPEAT_COOLDOWN_SECONDS <= 0:
+        return
+    client.hset(
+        settings.ERROR_REPORT_SUPPRESSION_KEY,
+        mapping={signature: str(now) for signature in signatures},
+    )
+    client.expire(
+        settings.ERROR_REPORT_SUPPRESSION_KEY,
+        max(settings.ERROR_REPORT_REPEAT_COOLDOWN_SECONDS * 2, 86400),
+    )
+
+
+def _read_recent_dlq(client: Redis, last_sent: float, now: float) -> ErrorEventBatch:
     raw_items = client.lrange(settings.CELERY_DLQ_REDIS_KEY, 0, settings.ERROR_REPORT_MAX_ITEMS - 1)
-    items: list[dict[str, Any]] = []
+    candidates: list[dict[str, Any]] = []
     for raw in raw_items:
         item = _safe_json(raw)
         if item is None:
@@ -154,8 +306,49 @@ def _read_recent_dlq(client: Redis, last_sent: float) -> list[dict[str, Any]]:
         timestamp = _parse_timestamp(item.get("timestamp"))
         if timestamp is not None and timestamp <= last_sent:
             continue
-        items.append(item)
-    return items
+        candidates.append(item)
+    grouped: dict[str, dict[str, Any]] = {}
+    for item in candidates:
+        signature = _dlq_signature(item)
+        timestamp = _parse_timestamp(item.get("timestamp")) or now
+        current = grouped.get(signature)
+        if current is None:
+            current = dict(item)
+            current["signature"] = signature
+            current["occurrences"] = 0
+            current["first_seen"] = timestamp
+            current["last_seen"] = timestamp
+            current["task_ids"] = []
+            grouped[signature] = current
+        current["occurrences"] += 1
+        current["first_seen"] = min(float(current["first_seen"]), timestamp)
+        current["last_seen"] = max(float(current["last_seen"]), timestamp)
+        task_id = item.get("task_id")
+        if task_id and task_id not in current["task_ids"]:
+            current["task_ids"].append(task_id)
+            current["task_ids"] = current["task_ids"][:3]
+    grouped_items = sorted(
+        grouped.values(), key=lambda item: float(item["last_seen"]), reverse=True
+    )
+    suppressed = _read_suppressed_signatures(client, grouped_items, now)
+    events = [item for item in grouped_items if item["signature"] not in suppressed]
+    return ErrorEventBatch(
+        events=events[: settings.ERROR_REPORT_MAX_ITEMS],
+        suppressed_occurrences=sum(
+            int(item["occurrences"]) for item in grouped_items if item["signature"] in suppressed
+        ),
+    )
+
+
+def _dlq_signature(item: dict[str, Any]) -> str:
+    fields = (
+        "celery-dlq",
+        str(item.get("task") or ""),
+        str(item.get("exception_type") or ""),
+        str(item.get("exception") or ""),
+    )
+    payload = json.dumps(fields, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:24]
 
 
 async def _collect_diagnostics(
@@ -221,11 +414,16 @@ async def _outbox_dead_count(
 
 
 def _subject(events: list[dict[str, Any]], dlq: list[dict[str, Any]]) -> str:
+    parts: list[str] = []
     if events:
-        first = events[0]
-        path = str(first.get("path") or "unknown")
-        return f"[HCCA] 自動錯誤報告：{len(events)} 筆 API 錯誤（{path}）"
-    return f"[HCCA] 自動錯誤報告：{len(dlq)} 筆 Celery 失敗"
+        highest = max(
+            (str(item.get("severity") or "error") for item in events),
+            key=lambda value: _SEVERITY_RANK.get(value, 0),
+        )
+        parts.append(f"API {len(events)} 個問題/{highest}")
+    if dlq:
+        parts.append(f"Celery {len(dlq)} 個失敗")
+    return f"[HCCA] 系統異常摘要｜{'、'.join(parts)}"
 
 
 def _render_html_report(
@@ -235,13 +433,20 @@ def _render_html_report(
     diagnostics: dict[str, Any],
     last_sent: float,
     generated_at: float,
+    suppressed_occurrences: int = 0,
+    filtered_occurrences: int = 0,
 ) -> str:
     generated = _fmt_time(generated_at)
     since = _fmt_time(last_sent)
     return f"""
     <div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;line-height:1.55;color:#172033">
-      <h2>HCCA 自動錯誤報告</h2>
+      <h2>HCCA 系統異常摘要</h2>
       <p>時間範圍：{html.escape(since)} 到 {html.escape(generated)}</p>
+      <ul>
+        <li>本次通報 API 問題：{len(events)} 個</li>
+        <li>已合併的重複事件：{_e(suppressed_occurrences)} 次</li>
+        <li>低於通報門檻而略過：{_e(filtered_occurrences)} 次</li>
+      </ul>
       <p>
         <a href="{html.escape(settings.FRONTEND_BASE_URL.rstrip("/"))}/admin/system">
           開啟系統防護管理
@@ -282,51 +487,63 @@ def _render_diagnostics(diagnostics: dict[str, Any]) -> str:
 
 def _render_api_errors(events: list[dict[str, Any]]) -> str:
     if not events:
-        return "<h3>API 錯誤</h3><p>沒有新的 API 5xx 錯誤。</p>"
+        return "<h3>API 異常</h3><p>沒有新的可通報 API 異常。</p>"
     rows = []
     for item in events:
+        request_ids = ", ".join(str(value) for value in item.get("request_ids", []))
         rows.append(
             "<tr>"
-            f"<td>{_e(_fmt_time(_float(item.get('occurred_at'))))}</td>"
-            f"<td>{_e(item.get('error_id'))}</td>"
-            f"<td>{_e(item.get('request_id'))}</td>"
-            f"<td>{_e(item.get('method'))} {_e(item.get('path'))}</td>"
-            f"<td>{_e(item.get('status_code'))}</td>"
-            f"<td>{_e(item.get('client_ip'))}</td>"
+            f"<td><strong>{_e(item.get('severity'))}</strong></td>"
+            f"<td>{_e(item.get('occurrences'))}</td>"
+            f"<td>{_e(_fmt_time(_float(item.get('first_seen'))))}</td>"
+            f"<td>{_e(_fmt_time(_float(item.get('last_seen'))))}</td>"
+            f"<td>{_e(item.get('method'))} {_e(item.get('path'))} ({_e(item.get('status_code'))})</td>"
             f"<td>{_e(item.get('exc_type'))}: {_e(item.get('message'))}</td>"
+            f"<td>{_e(request_ids)}</td>"
             "</tr>"
         )
-    trace = _e(events[0].get("traceback_head") or "")
+    traces = []
+    for item in events[:5]:
+        traces.append(
+            "<details>"
+            f"<summary>{_e(item.get('severity'))} · {_e(item.get('method'))} "
+            f"{_e(item.get('path'))} · {_e(item.get('occurrences'))} 次</summary>"
+            f'<pre style="white-space:pre-wrap;background:#f8fafc;padding:12px;border-radius:6px">'
+            f"{_e(item.get('traceback_head') or '')}</pre></details>"
+        )
     return f"""
-    <h3>API 錯誤</h3>
+    <h3>API 異常</h3>
     <table border="1" cellspacing="0" cellpadding="6" style="border-collapse:collapse">
       <thead>
-        <tr><th>時間</th><th>錯誤代碼</th><th>請求代碼</th><th>路徑</th><th>狀態</th><th>IP</th><th>例外</th></tr>
+        <tr><th>嚴重度</th><th>次數</th><th>首次</th><th>最近</th><th>端點</th><th>錯誤</th><th>代表請求代碼</th></tr>
       </thead>
       <tbody>{"".join(rows)}</tbody>
     </table>
-    <h4>最新 stack 摘要</h4>
-    <pre style="white-space:pre-wrap;background:#f8fafc;padding:12px;border-radius:6px">{trace}</pre>
+    <h4>Stack 摘要（最多顯示 5 個問題）</h4>
+    {"".join(traces)}
     """
 
 
 def _render_dlq(dlq: list[dict[str, Any]]) -> str:
     if not dlq:
-        return "<h3>Celery Dead Letter</h3><p>沒有新的 Celery dead-letter。</p>"
+        return ""
     rows = []
     for item in dlq:
+        task_ids = ", ".join(str(value) for value in item.get("task_ids", []))
         rows.append(
             "<tr>"
-            f"<td>{_e(item.get('timestamp'))}</td>"
+            f"<td>{_e(item.get('occurrences'))}</td>"
+            f"<td>{_e(_fmt_time(_float(item.get('first_seen'))))}</td>"
+            f"<td>{_e(_fmt_time(_float(item.get('last_seen'))))}</td>"
             f"<td>{_e(item.get('task'))}</td>"
-            f"<td>{_e(item.get('task_id'))}</td>"
+            f"<td>{_e(task_ids)}</td>"
             f"<td>{_e(item.get('exception_type'))}: {_e(item.get('exception'))}</td>"
             "</tr>"
         )
     return f"""
     <h3>Celery Dead Letter</h3>
     <table border="1" cellspacing="0" cellpadding="6" style="border-collapse:collapse">
-      <thead><tr><th>時間</th><th>Task</th><th>Task ID</th><th>例外</th></tr></thead>
+      <thead><tr><th>次數</th><th>首次</th><th>最近</th><th>Task</th><th>代表 Task ID</th><th>例外</th></tr></thead>
       <tbody>{"".join(rows)}</tbody>
     </table>
     """
