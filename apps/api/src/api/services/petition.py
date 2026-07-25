@@ -70,7 +70,7 @@ STATUS_MESSAGES: dict[PetitionStatus, str] = {
     PetitionStatus.REJECTED: "案件經審查後不予受理。",
 }
 
-PUBLIC_EVENT_EDIT_WINDOW = timedelta(hours=1)
+PUBLIC_EVENT_EDIT_WINDOW = timedelta(hours=3)
 
 
 def can_edit_content(case_obj: PetitionCase) -> bool:
@@ -189,7 +189,7 @@ async def edit_public_event(
     if created_at.tzinfo is None:
         created_at = created_at.replace(tzinfo=UTC)
     if datetime.now(UTC) - created_at > PUBLIC_EVENT_EDIT_WINDOW:
-        raise ValueError("訊息建立已超過 1 小時，無法再編輯")
+        raise ValueError("訊息建立已超過 3 小時，無法再編輯")
 
     changes = data.model_dump(exclude_unset=True)
     if "title" in changes:

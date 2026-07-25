@@ -499,7 +499,7 @@ async def test_public_event_cannot_be_edited_after_one_hour(
         select(PetitionCaseEvent).where(PetitionCaseEvent.id == event.id)
     )
     event_obj = event_result.scalar_one()
-    event_obj.created_at = datetime.now(UTC) - timedelta(hours=1, seconds=1)
+    event_obj.created_at = datetime.now(UTC) - timedelta(hours=3, seconds=1)
     await db_session.flush()
 
     edited = await ac.patch(
