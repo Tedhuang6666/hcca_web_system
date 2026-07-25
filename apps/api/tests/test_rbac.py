@@ -58,6 +58,20 @@ async def test_active_user_has_permission(db_session: AsyncSession) -> None:
 
 
 @pytest.mark.asyncio
+async def test_active_user_has_org_default_permission(db_session: AsyncSession) -> None:
+    """現任職位持有人應取得所屬組織的預設權限碼"""
+    user, position = await _seed_data(db_session, start_offset=-10)
+    org = await db_session.get(Org, position.org_id)
+    assert org is not None
+    org.default_permission_codes = ["document:submit"]
+    await db_session.flush()
+
+    codes = await get_user_permission_codes(db_session, user.id)
+
+    assert "document:submit" in codes
+
+
+@pytest.mark.asyncio
 async def test_user_without_position_has_no_permission(db_session: AsyncSession) -> None:
     """沒有任何職位的使用者不應有任何權限"""
     user = User(email="nobody@school.edu", display_name="一般生", is_active=True, is_verified=True)

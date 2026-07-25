@@ -832,7 +832,7 @@ function OrgPanel({
           <div>
             <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>組織預設權限</h3>
             <p className="text-xs mt-1 max-w-2xl" style={{ color: "var(--text-muted)" }}>
-              建立職位時會先套用這組權限，再由職位頁面增加或移除個別權限。變更只影響之後建立的職位。
+              組織成員的有效權限會包含這組預設權限；職位仍可增加個別權限。
             </p>
           </div>
           <SmallButton onClick={save} tone="primary">儲存預設</SmallButton>
@@ -873,10 +873,12 @@ function PositionPanel({
   const [weight, setWeight] = useState(position.weight);
   const [parentId, setParentId] = useState(position.parent_id ?? "");
   const [codes, setCodes] = useState(position.permission_codes);
+  const [sourcePositionId, setSourcePositionId] = useState("");
   const [memberUserId, setMemberUserId] = useState("");
   const [startDate, setStartDate] = useState(today());
   const [endDate, setEndDate] = useState("");
   const orgPositions = positions.filter((p) => p.org_id === position.org_id && p.id !== position.id);
+  const copySources = positions.filter((p) => p.id !== position.id);
   const members = users.filter((u) => u.positions.some((p) => p.id === position.id));
   const candidates = users.filter((u) => !members.some((m) => m.id === u.id));
 
@@ -918,6 +920,23 @@ function PositionPanel({
       displayError(e, "新增成員失敗");
     }
   };
+  const copyPermissions = async () => {
+    if (!sourcePositionId) {
+      toast.error("請先選擇來源職位");
+      return;
+    }
+    const source = copySources.find((p) => p.id === sourcePositionId);
+    if (!source) return;
+    try {
+      const updated = await adminApi.copyPositionPermissions(position.id, source.id);
+      setCodes(updated.permission_codes);
+      setSourcePositionId("");
+      toast.success(`已從「${source.name}」複製 ${updated.permission_codes.length} 個權限`);
+      await onRefresh();
+    } catch (e) {
+      displayError(e, "複製權限失敗");
+    }
+  };
   return (
     <div className="w-full p-5 space-y-5">
       <div className="flex items-start justify-between gap-3">
@@ -951,6 +970,16 @@ function PositionPanel({
           <label className="text-xs" style={{ color: "var(--text-muted)" }}>權限係數<TextInput type="number" min={0} value={weight} onChange={(e) => setWeight(Number(e.target.value))} className="mt-1" /></label>
           <label className="text-xs sm:col-span-2" style={{ color: "var(--text-muted)" }}>描述<TextInput value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1" /></label>
           <label className="text-xs sm:col-span-2" style={{ color: "var(--text-muted)" }}>上級職位<SelectInput value={parentId} onChange={(e) => setParentId(e.target.value)} className="mt-1"><option value="">無上級</option>{orgPositions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</SelectInput></label>
+        </div>
+        <div className="flex flex-col gap-2 rounded-lg p-3 sm:flex-row sm:items-end" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+          <label className="flex-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            從其他職位複製權限
+            <SelectInput value={sourcePositionId} onChange={(e) => setSourcePositionId(e.target.value)} className="mt-1">
+              <option value="">選擇來源職位</option>
+              {copySources.map((source) => <option key={source.id} value={source.id}>{source.org_name} · {source.name}（{source.permission_codes.length}）</option>)}
+            </SelectInput>
+          </label>
+          <SmallButton onClick={copyPermissions} tone="primary" disabled={!sourcePositionId}>複製權限</SmallButton>
         </div>
         <PermCheckboxes selected={codes} onChange={setCodes} permCodes={permCodes} />
       </section>

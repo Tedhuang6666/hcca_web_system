@@ -4,14 +4,21 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.cache import cache_get, cache_invalidate, cache_set
+from api.core.cache import (
+    cache_get,
+    cache_invalidate,
+    cache_invalidate_user_permissions,
+    cache_set,
+)
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode, validate_permission_codes
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_any
+from api.models.org import Position, UserPosition
 from api.models.user import User
 from api.schemas.org import OrgCreate, OrgRead, OrgTree, OrgUpdate
 from api.services import audit as audit_svc
@@ -251,6 +258,17 @@ async def update_org(
     await cache_invalidate("org:list:active_only=False")
     await cache_invalidate("org:list:active_only=True")
     await cache_invalidate("org:tree")
+    if data.default_permission_codes is not None:
+        holder_ids = (
+            await db.scalars(
+                select(UserPosition.user_id)
+                .join(Position, UserPosition.position_id == Position.id)
+                .where(Position.org_id == org.id)
+                .distinct()
+            )
+        ).all()
+        for user_id in holder_ids:
+            await cache_invalidate_user_permissions(str(user_id))
     return org
 
 

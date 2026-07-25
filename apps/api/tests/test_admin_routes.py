@@ -125,6 +125,46 @@ async def test_replacing_position_permissions_invalidates_holder_caches(
 
 
 @pytest.mark.asyncio
+async def test_copying_position_permissions_replaces_target_permissions(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    admin, member, org, target, _ = await _seed_admin_data(db_session)
+    source = Position(org_id=org.id, name="副議長")
+    db_session.add(source)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            Permission(position_id=target.id, code="document:create"),
+            Permission(position_id=source.id, code="document:approve"),
+            Permission(position_id=source.id, code="finance:view"),
+        ]
+    )
+    await db_session.flush()
+    _override_user(admin)
+    invalidate = AsyncMock()
+    monkeypatch.setattr("api.routers.admin.cache_invalidate_user_permissions", invalidate)
+
+    response = await client.post(
+        f"/admin/positions/{target.id}/permissions/copy",
+        json={"source_position_id": str(source.id)},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["permission_codes"] == ["document:approve", "finance:view"]
+    codes = (
+        await db_session.scalars(
+            select(Permission.code)
+            .where(Permission.position_id == target.id)
+            .order_by(Permission.code)
+        )
+    ).all()
+    assert codes == ["document:approve", "finance:view"]
+    invalidate.assert_awaited_once_with(str(member.id))
+
+
+@pytest.mark.asyncio
 async def test_admin_route_without_admin_permission_returns_403(
     client: AsyncClient,
     db_session: AsyncSession,

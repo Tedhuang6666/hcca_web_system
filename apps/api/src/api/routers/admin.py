@@ -179,6 +179,10 @@ class PositionUpdate(BaseModel):
     parent_id: uuid.UUID | None = None
 
 
+class CopyPositionPermissionsRequest(BaseModel):
+    source_position_id: uuid.UUID
+
+
 class PermissionCatalogItem(BaseModel):
     group: str
     code: str
@@ -1001,6 +1005,88 @@ async def replace_position_permissions(
         category=position.category,
         weight=position.weight,
         parent_id=position.parent_id,
+        permission_codes=after_codes,
+    )
+
+
+@router.post(
+    "/positions/{position_id}/permissions/copy",
+    summary="從其他職位複製權限碼",
+)
+async def copy_position_permissions(
+    position_id: uuid.UUID,
+    body: CopyPositionPermissionsRequest,
+    db: DbDep,
+    admin_user: AdminUser,
+) -> PositionSummary:
+    if position_id == body.source_position_id:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="來源與目標職位不可相同")
+
+    target_result = await db.execute(
+        select(Position)
+        .options(selectinload(Position.permissions), selectinload(Position.org))
+        .where(Position.id == position_id)
+    )
+    target = target_result.scalar_one_or_none()
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="目標職位不存在")
+
+    source_result = await db.execute(
+        select(Position)
+        .options(selectinload(Position.permissions))
+        .where(Position.id == body.source_position_id)
+    )
+    source = source_result.scalar_one_or_none()
+    if source is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="來源職位不存在")
+
+    before_codes = sorted(permission.code for permission in target.permissions)
+    after_codes = sorted({permission.code for permission in source.permissions})
+    holder_ids = set(
+        (
+            await db.execute(
+                select(UserPosition.user_id).where(UserPosition.position_id == position_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    for permission in target.permissions:
+        await db.delete(permission)
+    await db.flush()
+    for code in after_codes:
+        db.add(Permission(position_id=position_id, code=code))
+    await db.flush()
+    for user_id in holder_ids:
+        await cache_invalidate_user_permissions(str(user_id))
+    await audit_svc.record(
+        db,
+        entity_type="position",
+        entity_id=str(target.id),
+        action="permission.copy",
+        actor_id=str(admin_user.id),
+        actor_email=admin_user.email,
+        meta={
+            "org_id": str(target.org_id),
+            "source_position_id": str(source.id),
+            "source_position_name": source.name,
+            "before": before_codes,
+            "after": after_codes,
+        },
+        summary=f"從職位「{source.name}」複製權限至「{target.name}」",
+    )
+
+    return PositionSummary(
+        id=target.id,
+        name=target.name,
+        org_id=target.org_id,
+        org_name=target.org.name if target.org else "",
+        org_is_active=target.org.is_active if target.org else True,
+        description=target.description,
+        category=target.category,
+        weight=target.weight,
+        parent_id=target.parent_id,
         permission_codes=after_codes,
     )
 

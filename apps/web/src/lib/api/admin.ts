@@ -73,6 +73,10 @@ export const adminApi = {
     request<PositionSummary>(`/admin/positions/${id}/permissions`, {
       method: "PUT", body: JSON.stringify(codes),
     }),
+  copyPositionPermissions: (id: string, sourcePositionId: string) =>
+    post<PositionSummary>(`/admin/positions/${id}/permissions/copy`, {
+      source_position_id: sourcePositionId,
+    }),
   deletePosition: (id: string) => del<void>(`/admin/positions/${id}`),
 
   // 系統資訊

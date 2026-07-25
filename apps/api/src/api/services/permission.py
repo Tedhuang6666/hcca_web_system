@@ -49,16 +49,21 @@ async def get_user_permission_codes(
             return frozenset(cached)
 
     result = await db.execute(
-        select(Permission.code)
-        .join(Position, Permission.position_id == Position.id)
-        .join(UserPosition, UserPosition.position_id == Position.id)
+        select(Permission.code, Org.default_permission_codes)
+        .select_from(UserPosition)
+        .join(Position, UserPosition.position_id == Position.id)
+        .join(Org, Org.id == Position.org_id)
+        .outerjoin(Permission, Permission.position_id == Position.id)
         .where(
             UserPosition.user_id == user_id,
             *active_tenure_filter(check_date),
         )
-        .distinct()
     )
-    codes = set(result.scalars().all())
+    codes: set[str] = set()
+    for position_code, default_codes in result.all():
+        if position_code:
+            codes.add(position_code)
+        codes.update(default_codes or [])
 
     # 快取今天的權限結果（180 秒 TTL）
     if on_date is None:
@@ -83,29 +88,40 @@ async def get_user_permission_codes_for_org(
     check_date = on_date or local_today()
 
     result = await db.execute(
-        select(Permission.code)
-        .join(Position, Permission.position_id == Position.id)
-        .join(UserPosition, UserPosition.position_id == Position.id)
+        select(Permission.code, Org.default_permission_codes)
+        .select_from(UserPosition)
+        .join(Position, UserPosition.position_id == Position.id)
+        .join(Org, Org.id == Position.org_id)
+        .outerjoin(Permission, Permission.position_id == Position.id)
         .where(
             UserPosition.user_id == user_id,
             Position.org_id == org_id,
             *active_tenure_filter(check_date),
         )
-        .distinct()
     )
-    codes = set(result.scalars().all())
+    codes: set[str] = set()
+    for position_code, default_codes in result.all():
+        if position_code:
+            codes.add(position_code)
+        codes.update(default_codes or [])
     return frozenset(codes)
 
 
 async def get_org_permission_codes(db: AsyncSession, org_id: uuid.UUID) -> frozenset[str]:
-    """回傳組織內所有職位權限碼聯集。"""
+    """回傳組織內所有職位與組織預設權限碼聯集。"""
     result = await db.execute(
-        select(Permission.code)
-        .join(Position, Permission.position_id == Position.id)
-        .where(Position.org_id == org_id)
-        .distinct()
+        select(Permission.code, Org.default_permission_codes)
+        .select_from(Org)
+        .outerjoin(Position, Position.org_id == Org.id)
+        .outerjoin(Permission, Permission.position_id == Position.id)
+        .where(Org.id == org_id)
     )
-    return frozenset(result.scalars().all())
+    codes: set[str] = set()
+    for position_code, default_codes in result.all():
+        if position_code:
+            codes.add(position_code)
+        codes.update(default_codes or [])
+    return frozenset(codes)
 
 
 async def get_user_org_ids_with_permission(
