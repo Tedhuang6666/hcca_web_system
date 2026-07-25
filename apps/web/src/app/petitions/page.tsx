@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { ApiError, petitionsApi } from "@/lib/api";
-import type { PetitionCaseListItem, PetitionCaseOut, PetitionStatsOut } from "@/lib/types";
+import type { PetitionCaseListItem, PetitionCaseOut, PetitionPublicListItem, PetitionStatsOut } from "@/lib/types";
 import { PetitionStatusBadge } from "@/components/ui/StatusBadge";
 import PetitionPublicConsent from "@/components/petitions/PetitionPublicConsent";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -20,9 +20,11 @@ export default function PetitionsPage() {
   const [verificationCode, setVerificationCode] = useState("");
   const [lookup, setLookup] = useState<PetitionCaseOut | null>(null);
   const [loadingLookup, setLoadingLookup] = useState(false);
+  const [publicCases, setPublicCases] = useState<PetitionPublicListItem[]>([]);
   const { can } = usePermissions();
 
   useEffect(() => {
+    petitionsApi.publicList({ limit: 6 }).then(setPublicCases).catch(() => setPublicCases([]));
     if (!localStorage.getItem("user_id")) return;
     petitionsApi.my().then(setMyCases).catch(() => null);
     if (can("petition:view_org") || can("petition:handle") || can("petition:assign") || can("petition:analytics_org")) {
@@ -133,6 +135,47 @@ export default function PetitionsPage() {
           )}
         </section>
       </div>
+
+      <section className="space-y-3">
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>公開陳情</h2>
+            <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
+              經陳情人同意公開的案件，分享校園中正在被處理的問題與回覆。
+            </p>
+          </div>
+          <Link href="/petitions/public" className="btn btn-ghost shrink-0">查看全部</Link>
+        </div>
+        {publicCases.length === 0 ? (
+          <div className="card p-5 text-sm" style={{ color: "var(--text-muted)" }}>
+            目前尚無已公開陳情。
+          </div>
+        ) : (
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {publicCases.map((item) => (
+              <Link
+                key={item.id}
+                href={`/petitions/public/${item.id}`}
+                className="card card-hover p-4 space-y-2"
+                style={{ textDecoration: "none" }}
+              >
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  #{item.case_number} · {item.current_org_name} · {item.type_name}
+                </p>
+                <h3 className="font-medium line-clamp-2" style={{ color: "var(--text-primary)" }}>
+                  {item.title}
+                </h3>
+                <p className="text-sm line-clamp-3" style={{ color: "var(--text-muted)" }}>
+                  {item.reply || "已結案，暫無公開回覆。"}
+                </p>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  公開於 {fmt(item.published_at)}
+                </p>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
