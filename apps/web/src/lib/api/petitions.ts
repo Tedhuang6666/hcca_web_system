@@ -89,6 +89,8 @@ export const petitionsApi = {
     verification_code?: string | null;
   }) => post<PetitionCaseOut>(`/petitions/${id}/public-response`, body),
   confirmPublic: (id: string) => post<PetitionCaseOut>(`/petitions/${id}/public-confirm`, {}),
+  editEvent: (id: string, eventId: string, body: { title?: string; content?: string | null }) =>
+    patch<PetitionCaseOut>(`/petitions/${id}/events/${eventId}`, body),
   updateStatus: (id: string, body: { status: PetitionStatus; public_message?: string | null; internal_note?: string | null }) =>
     patch<PetitionCaseOut>(`/petitions/${id}/status`, body),
   addNote: (id: string, content: string) => post<PetitionCaseOut>(`/petitions/${id}/notes`, { content }),

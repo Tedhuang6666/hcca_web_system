@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from typing import Annotated
 from urllib.parse import quote
 
@@ -48,6 +49,8 @@ from api.schemas.petition import (
     PetitionCaseOut,
     PetitionCreate,
     PetitionCreatedOut,
+    PetitionEventOut,
+    PetitionEventUpdate,
     PetitionInternalNoteCreate,
     PetitionLookupOut,
     PetitionPublicListItem,
@@ -222,13 +225,25 @@ async def _decorate_case(
     include_internal: bool,
     can_view_submitter: bool,
     can_respond_public: bool = False,
+    editor_user_id: uuid.UUID | None = None,
 ) -> PetitionCaseOut:
     storage = get_storage()
-    events = [
-        e
-        for e in case_obj.events
-        if include_internal or e.visibility == PetitionEventVisibility.PUBLIC
-    ]
+    now = datetime.now(UTC)
+    events = []
+    for event in case_obj.events:
+        if not include_internal and event.visibility != PetitionEventVisibility.PUBLIC:
+            continue
+        event_out = PetitionEventOut.model_validate(event)
+        created_at = event.created_at
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=UTC)
+        event_out.can_edit = bool(
+            editor_user_id
+            and event.visibility == PetitionEventVisibility.PUBLIC
+            and event.actor_id == editor_user_id
+            and now - created_at <= petition_svc.PUBLIC_EVENT_EDIT_WINDOW
+        )
+        events.append(event_out)
     attachments = []
     for att in case_obj.attachments:
         if not include_internal and att.visibility == PetitionAttachmentVisibility.INTERNAL:
@@ -637,11 +652,64 @@ async def petition_resolution_context(
 async def get_case(case_id: uuid.UUID, session: DbDep, user: CurrentUser) -> PetitionCaseOut:
     case_obj = await _case_or_404(session, case_id)
     include_internal, can_view_submitter = await _assert_case_access(session, case_obj, user)
+    permission_codes = await get_user_permission_codes(session, user.id)
+    can_edit_events = user.is_superuser or bool(
+        permission_codes
+        & {
+            str(PermissionCode.ADMIN_ALL),
+            str(PermissionCode.PETITION_ADMIN),
+            str(PermissionCode.PETITION_HANDLE),
+        }
+    )
     return await _decorate_case(
         case_obj,
         include_internal=include_internal,
         can_view_submitter=can_view_submitter,
         can_respond_public=case_obj.submitter_id == user.id,
+        editor_user_id=user.id if can_edit_events else None,
+    )
+
+
+@router.patch(
+    "/{case_id}/events/{event_id}",
+    response_model=PetitionCaseOut,
+    summary="編輯使用者可見的陳情處理訊息",
+    dependencies=[
+        Depends(require_any(PermissionCode.PETITION_HANDLE, PermissionCode.PETITION_ADMIN))
+    ],
+)
+async def edit_event(
+    case_id: uuid.UUID,
+    event_id: uuid.UUID,
+    payload: PetitionEventUpdate,
+    session: DbDep,
+    user: CurrentUser,
+) -> PetitionCaseOut:
+    case_obj = await _case_or_404(session, case_id)
+    include_internal, can_view_submitter = await _assert_case_access(session, case_obj, user)
+    if not include_internal:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="無權編輯陳情訊息")
+    try:
+        await petition_svc.edit_public_event(
+            session,
+            case_obj,
+            event_id=event_id,
+            data=payload,
+            actor_id=user.id,
+        )
+    except ValueError as e:
+        message = str(e)
+        code = (
+            status.HTTP_403_FORBIDDEN
+            if message == "只能編輯自己發布的訊息"
+            else status.HTTP_409_CONFLICT
+        )
+        raise HTTPException(status_code=code, detail=message) from e
+    return await _decorate_case(
+        case_obj,
+        include_internal=True,
+        can_view_submitter=can_view_submitter,
+        editor_user_id=user.id,
     )
 
 

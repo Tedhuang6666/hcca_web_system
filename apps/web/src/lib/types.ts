@@ -452,6 +452,7 @@ export type {
   PetitionCreatedOut,
   PetitionEventOut,
   PetitionEventType,
+  PetitionEventUpdate,
   PetitionOrgStatsItem,
   PetitionPublicListItem,
   PetitionPublicOut,

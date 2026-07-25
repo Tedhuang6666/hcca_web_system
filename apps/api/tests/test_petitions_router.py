@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
@@ -382,6 +382,74 @@ async def test_reply_case_marks_resolved_when_requested(db_session, authed_clien
     assert resp.status_code == 200
     assert resp.json()["status"] == "resolved"
     assert resp.json()["public_reply"] == "已派員修復完畢"
+
+
+async def test_handler_can_edit_own_public_reply_within_one_hour(
+    db_session, authed_client_factory
+) -> None:
+    org, petition_type = await _make_org_and_type(db_session)
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:handle")
+    case_obj, _code = await _create_case(db_session, petition_type)
+    ac = authed_client_factory(handler)
+
+    response = await ac.post(
+        f"/petitions/{case_obj.id}/reply",
+        json={"public_content": "原始回覆", "resolve": True},
+    )
+    assert response.status_code == 200
+    event_result = await db_session.execute(
+        select(PetitionCaseEvent).where(
+            PetitionCaseEvent.case_id == case_obj.id,
+            PetitionCaseEvent.event_type == "replied",
+        )
+    )
+    event = event_result.scalar_one()
+
+    edited = await ac.patch(
+        f"/petitions/{case_obj.id}/events/{event.id}",
+        json={"content": "修正後回覆"},
+    )
+    assert edited.status_code == 200
+    assert edited.json()["public_reply"] == "修正後回覆"
+    updated_event = next(item for item in edited.json()["events"] if item["id"] == str(event.id))
+    assert updated_event["content"] == "修正後回覆"
+    assert updated_event["can_edit"] is True
+
+
+async def test_public_event_cannot_be_edited_after_one_hour(
+    db_session, authed_client_factory
+) -> None:
+    org, petition_type = await _make_org_and_type(db_session)
+    handler = await _bare_user(db_session)
+    await _grant_org_permission(db_session, handler, org, "petition:handle")
+    case_obj, _code = await _create_case(db_session, petition_type)
+    ac = authed_client_factory(handler)
+
+    replied = await ac.post(
+        f"/petitions/{case_obj.id}/reply",
+        json={"public_content": "原始回覆", "resolve": True},
+    )
+    assert replied.status_code == 200
+    event_result = await db_session.execute(
+        select(PetitionCaseEvent).where(
+            PetitionCaseEvent.case_id == case_obj.id,
+            PetitionCaseEvent.event_type == "replied",
+        )
+    )
+    event = event_result.scalar_one()
+    event_result = await db_session.execute(
+        select(PetitionCaseEvent).where(PetitionCaseEvent.id == event.id)
+    )
+    event_obj = event_result.scalar_one()
+    event_obj.created_at = datetime.now(UTC) - timedelta(hours=1, seconds=1)
+    await db_session.flush()
+
+    edited = await ac.patch(
+        f"/petitions/{case_obj.id}/events/{event.id}",
+        json={"content": "太晚了"},
+    )
+    assert edited.status_code == 409
 
 
 async def test_reply_case_can_auto_assign_and_close(db_session, authed_client_factory) -> None:
