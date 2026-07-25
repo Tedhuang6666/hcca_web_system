@@ -645,6 +645,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/positions/{position_id}/permissions/copy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 從其他職位複製權限碼 */
+        post: operations["copy_position_permissions_admin_positions__position_id__permissions_copy_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/privacy/exports": {
         parameters: {
             query?: never;
@@ -8444,7 +8461,8 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        /** 刪除自己的投稿 */
+        delete: operations["delete_my_submission_merchandise_submissions_submissions__submission_id__delete"];
         options?: never;
         head?: never;
         /** Update My Submission */
@@ -16525,6 +16543,14 @@ export interface components {
             timestamp?: string | null;
             /** Title */
             title: string;
+        };
+        /** CopyPositionPermissionsRequest */
+        CopyPositionPermissionsRequest: {
+            /**
+             * Source Position Id
+             * Format: uuid
+             */
+            source_position_id: string;
         };
         /**
          * CouncilProposalCaseType
@@ -26403,15 +26429,18 @@ export interface components {
         PetitionEventOut: {
             /** Actor Id */
             actor_id: string | null;
+            /**
+             * Can Edit
+             * @default false
+             */
+            can_edit: boolean;
             /** Content */
             content: string | null;
             /**
              * Created At
              * Format: date-time
-            */
+             */
             created_at: string;
-            /** Can Edit */
-            can_edit?: boolean;
             event_type: components["schemas"]["PetitionEventType"];
             /** From Org Id */
             from_org_id: string | null;
@@ -26428,7 +26457,8 @@ export interface components {
             to_org_id: string | null;
             /** To Status */
             to_status: string | null;
-            /** Updated At
+            /**
+             * Updated At
              * Format: date-time
              */
             updated_at: string;
@@ -26586,7 +26616,8 @@ export interface components {
              * @default
              */
             type_name: string;
-            /** Updated At
+            /**
+             * Updated At
              * Format: date-time
              */
             updated_at: string;
@@ -35592,6 +35623,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": string[];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PositionSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    copy_position_permissions_admin_positions__position_id__permissions_copy_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                position_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CopyPositionPermissionsRequest"];
             };
         };
         responses: {
@@ -53299,6 +53365,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MerchandiseSubmissionOut"][];
+                };
+            };
+        };
+    };
+    delete_my_submission_merchandise_submissions_submissions__submission_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
