@@ -107,6 +107,19 @@ def test_build_embed_timestamp_is_iso8601():
     assert embed["timestamp"].startswith("2026-06-01T08:00:00")
 
 
+def test_build_embed_adds_absolute_image_url():
+    embed = build_embed(
+        Domain.SHOP,
+        Severity.INFO,
+        title="校商投稿",
+        image_url="/merchandise-submissions/discord-images/file-1?token=abc",
+    )
+
+    assert embed["image"]["url"].endswith(
+        "/merchandise-submissions/discord-images/file-1?token=abc"
+    )
+
+
 def test_link_button_and_action_row():
     btn = link_button("查看", "https://example.com", emoji="📄")
     assert btn["type"] == 2

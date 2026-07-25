@@ -5,9 +5,11 @@ from __future__ import annotations
 import logging
 import uuid
 from typing import Annotated
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse, RedirectResponse
+from itsdangerous import BadData, URLSafeTimedSerializer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.config import settings
@@ -37,7 +39,11 @@ from api.schemas.survey import SurveyOut
 from api.services import audit as audit_svc
 from api.services import merchandise_submission as submission_svc
 from api.services import survey as survey_svc
-from api.services.discord_embeds import Severity
+from api.services.discord_embeds import EmbedField, Severity
+from api.services.discord_notification_routes import (
+    build_merchandise_submission_fields,
+    emit_routed_notification,
+)
 from api.services.permission import get_user_permission_codes
 from api.services.storage import get_storage, validate_storage_key
 
@@ -56,9 +62,45 @@ _REVIEW_STATUS_LABELS = {
     MerchandiseSubmissionStatus.REJECTED: "未採用",
 }
 
+_DISCORD_IMAGE_TOKEN_MAX_AGE = 30 * 24 * 60 * 60
+_DISCORD_IMAGE_SERIALIZER = URLSafeTimedSerializer(
+    settings.SECRET_KEY, salt="merchandise-submission-discord-image"
+)
+
 
 def _upload_preview_url(storage_key: str) -> str:
     return f"/merchandise-submissions/uploads/{storage_key}"
+
+
+def _discord_image_url(file) -> str:
+    token = _DISCORD_IMAGE_SERIALIZER.dumps({"file_id": str(file.id)})
+    base = settings.API_PUBLIC_BASE_URL.rstrip("/")
+    return (
+        f"{base}/merchandise-submissions/discord-images/{file.id}"
+        f"?token={quote(token, safe='')}"
+    )
+
+
+async def _submission_discord_details(
+    session: AsyncSession, submission
+) -> tuple[list[EmbedField], list[str]]:
+    submission_settings = await submission_svc.get_settings(session)
+    custom_fields = submission_svc.effective_custom_fields(
+        submission_settings, submission.item
+    )
+    files = list(submission.files)
+    fields = build_merchandise_submission_fields(
+        custom_fields=custom_fields,
+        field_values=submission.field_values,
+        account_snapshot=submission.account_snapshot,
+        filenames=[file.filename for file in files],
+    )
+    image_urls = [
+        _discord_image_url(file)
+        for file in files
+        if file.content_type.lower().startswith("image/")
+    ]
+    return fields, image_urls
 
 
 def _notify_review_result_by_email(submission) -> None:
@@ -239,6 +281,41 @@ async def preview_submission_file(storage_key: str, session: DbDep, current_user
     )
 
 
+@router.get("/discord-images/{file_id}", include_in_schema=False)
+async def preview_submission_image_for_discord(
+    file_id: uuid.UUID, token: str, session: DbDep
+):
+    try:
+        token_data = _DISCORD_IMAGE_SERIALIZER.loads(token, max_age=_DISCORD_IMAGE_TOKEN_MAX_AGE)
+    except BadData as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到投稿圖片") from exc
+    if token_data.get("file_id") != str(file_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到投稿圖片")
+
+    stored_file = await submission_svc.get_submission_file_by_id(session, file_id)
+    if stored_file is None or not stored_file.content_type.lower().startswith("image/"):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到投稿圖片")
+
+    storage = get_storage()
+    local_path = storage.local_path(stored_file.storage_key)
+    if local_path is not None:
+        if not local_path.is_file():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到投稿圖片")
+        return FileResponse(
+            local_path,
+            media_type=stored_file.content_type,
+            filename=stored_file.filename,
+            content_disposition_type="inline",
+        )
+    return RedirectResponse(
+        await storage.get_url(
+            stored_file.storage_key,
+            disposition="inline",
+            download_name=stored_file.filename,
+        )
+    )
+
+
 @router.post(
     "/admin/voting-survey/prepare",
     response_model=SurveyOut,
@@ -307,17 +384,18 @@ async def create_submission(
         summary=f"{'送出' if submit else '儲存'}校商投稿「{submission.item.name}」",
     )
     if submit and submission.status == MerchandiseSubmissionStatus.SUBMITTED:
-        from api.services.discord_notification_routes import emit_routed_notification
-
+        fields, image_urls = await _submission_discord_details(session, submission)
         await emit_routed_notification(
             session,
             event_key="merchandise_submission.submitted",
             module="shop",
             title=f"校商投稿：{submission.item.name}",
-            body=f"有新的校商投稿送出，投稿編號 {submission.id}",
+            body=f"新投稿已送出，請依下方欄位審閱。\n投稿編號：{submission.id}",
             link=f"/merchandise-submissions/admin?submission={submission.id}",
+            fields=fields,
             severity=Severity.INFO,
             thread_name=f"投稿討論：{submission.item.name[:70]}",
+            image_urls=image_urls,
         )
     return _serialize_submission(submission, include_submitter=False)
 
@@ -615,8 +693,7 @@ async def review_admin_submission(
         link="/merchandise-submissions",
         related_id=submission.id,
     )
-    from api.services.discord_notification_routes import emit_routed_notification
-
+    fields, image_urls = await _submission_discord_details(session, submission)
     await emit_routed_notification(
         session,
         event_key="merchandise_submission.reviewed",
@@ -624,10 +701,12 @@ async def review_admin_submission(
         title=f"校商投稿審核完成：{submission.item.name}",
         body=submission.review_note or f"目前狀態：{submission.status.value}",
         link=f"/merchandise-submissions/admin?submission={submission.id}",
+        fields=fields,
         severity=Severity.SUCCESS
         if submission.status == MerchandiseSubmissionStatus.APPROVED
         else Severity.WARNING,
         thread_name=f"投稿審核：{submission.item.name[:70]}",
+        image_urls=image_urls,
     )
     await audit_svc.record(
         session,
