@@ -10,6 +10,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.clock import local_today
 from api.dependencies.auth import get_current_active_user
 from api.main import app
 from api.models.org import Org, Permission, Position, UserPosition
@@ -51,7 +52,7 @@ async def _seed_admin_data(db: AsyncSession) -> tuple[User, User, Org, Position,
     assignment = UserPosition(
         user_id=member.id,
         position_id=position.id,
-        start_date=date.today(),
+        start_date=local_today(),
         end_date=None,
     )
     db.add(assignment)
