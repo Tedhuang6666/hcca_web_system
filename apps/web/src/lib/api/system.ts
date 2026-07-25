@@ -153,6 +153,8 @@ export type DefenseRuleType =
   | "ip_block"
   | "cidr_block"
   | "ip_allow"
+  | "user_block"
+  | "email_block"
   | "rate_limit_override"
   | "endpoint_lockdown"
   | "bot_challenge_placeholder";

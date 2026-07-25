@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -11,6 +11,7 @@ import {
   Eraser,
   Gauge,
   Lock,
+  Pencil,
   Plus,
   Power,
   RefreshCcw,
@@ -23,6 +24,7 @@ import {
   Trash2,
   UserX,
   Wrench,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -84,11 +86,13 @@ function ruleTypeLabel(type: DefenseRuleType): string {
     ip_block: "IP 封鎖",
     cidr_block: "CIDR 封鎖",
     ip_allow: "IP/CIDR 白名單",
+    user_block: "使用者封鎖",
+    email_block: "Email 封鎖",
     rate_limit_override: "端點限流",
     endpoint_lockdown: "端點鎖定",
     bot_challenge_placeholder: "Bot Challenge 預留",
   };
-  return labels[type];
+  return labels[type] ?? type;
 }
 
 function modeLabel(mode: LoadShedMode): string {
@@ -236,10 +240,24 @@ export default function SystemDefensePage() {
   const [blockUserEmails, setBlockUserEmails] = useState(true);
   const [blockUserIps, setBlockUserIps] = useState(false);
   const [rateLimit, setRateLimit] = useState<RateLimitConfig>(DEFAULT_RATE_LIMIT);
+  const [rateLimitDirty, setRateLimitDirty] = useState(false);
+  const rateLimitDirtyRef = useRef(false);
+  const [overridePath, setOverridePath] = useState("");
+  const [overrideRequests, setOverrideRequests] = useState(30);
+  const [overrideWindowSeconds, setOverrideWindowSeconds] = useState(60);
   const [ruleType, setRuleType] = useState<DefenseRuleType>("ip_block");
   const [ruleTarget, setRuleTarget] = useState("");
   const [ruleReason, setRuleReason] = useState("");
   const [ruleTtlMinutes, setRuleTtlMinutes] = useState(60);
+  const [ruleConfigRequests, setRuleConfigRequests] = useState(30);
+  const [ruleConfigWindowSeconds, setRuleConfigWindowSeconds] = useState(60);
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+  const [editingRuleType, setEditingRuleType] = useState<DefenseRuleType>("ip_block");
+  const [editingRuleTarget, setEditingRuleTarget] = useState("");
+  const [editingRuleReason, setEditingRuleReason] = useState("");
+  const [editingRuleExpiresAt, setEditingRuleExpiresAt] = useState("");
+  const [editingRuleRequests, setEditingRuleRequests] = useState(30);
+  const [editingRuleWindowSeconds, setEditingRuleWindowSeconds] = useState(60);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -257,13 +275,15 @@ export default function SystemDefensePage() {
       const [summaryResult, flagsResult, rulesResult, ipsResult] = await Promise.allSettled([
         systemApi.defenseSummary(),
         systemApi.listFeatureFlags(),
-        systemApi.listDefenseRules({ limit: 100 }),
+        systemApi.listDefenseRules({ limit: 200 }),
         systemApi.listIpBlocks(),
       ]);
 
       if (summaryResult.status === "fulfilled") {
         setSummary(summaryResult.value);
-        setRateLimit(summaryResult.value.rate_limit ?? DEFAULT_RATE_LIMIT);
+        if (!rateLimitDirtyRef.current) {
+          setRateLimit(summaryResult.value.rate_limit ?? DEFAULT_RATE_LIMIT);
+        }
       } else {
         throw summaryResult.reason;
       }
@@ -286,7 +306,6 @@ export default function SystemDefensePage() {
   useEffect(() => { void refresh(); }, [refresh]);
   useResilientPoll(refresh, { enabled: isAdmin, intervalMs: POLL_INTERVAL_MS });
 
-  const activeRules = useMemo(() => rules.filter((rule) => rule.is_active), [rules]);
   const defenseHits = useMemo(() => {
     if (!summary) return 0;
     return (
@@ -325,6 +344,8 @@ export default function SystemDefensePage() {
   const saveRateLimit = async () => {
     try {
       await systemApi.setRateLimit(rateLimit);
+      rateLimitDirtyRef.current = false;
+      setRateLimitDirty(false);
       toast.success("限流策略已更新");
       refresh();
     } catch (e) {
@@ -332,6 +353,29 @@ export default function SystemDefensePage() {
     }
   };
 
+  const addRateLimitOverride = () => {
+    const path = overridePath.trim();
+    if (!path || overrideRequests < 1 || overrideWindowSeconds < 1) return;
+    setRateLimit((prev) => ({
+      ...prev,
+      overrides: [
+        ...prev.overrides.filter((item) => item.path_prefix !== path),
+        { path_prefix: path, requests: overrideRequests, window_seconds: overrideWindowSeconds },
+      ],
+    }));
+    rateLimitDirtyRef.current = true;
+    setRateLimitDirty(true);
+    setOverridePath("");
+  };
+
+  const removeRateLimitOverride = (path: string) => {
+    setRateLimit((prev) => ({
+      ...prev,
+      overrides: prev.overrides.filter((item) => item.path_prefix !== path),
+    }));
+    rateLimitDirtyRef.current = true;
+    setRateLimitDirty(true);
+  };
   const createRule = async () => {
     if (!ruleTarget.trim()) return;
     const expiresAt =
@@ -341,6 +385,10 @@ export default function SystemDefensePage() {
         rule_type: ruleType,
         target: ruleTarget.trim(),
         reason: ruleReason.trim(),
+        config:
+          ruleType === "rate_limit_override"
+            ? { requests: ruleConfigRequests, window_seconds: ruleConfigWindowSeconds }
+            : {},
         expires_at: expiresAt,
       });
       toast.success("防禦規則已建立");
@@ -352,14 +400,49 @@ export default function SystemDefensePage() {
     }
   };
 
-  const deactivateRule = async (id: string) => {
-    if (!window.confirm("停用這條防禦規則？")) return;
+  const startEditingRule = (rule: DefenseRule) => {
+    setEditingRuleId(rule.id);
+    setEditingRuleType(rule.rule_type);
+    setEditingRuleTarget(rule.target);
+    setEditingRuleReason(rule.reason);
+    setEditingRuleExpiresAt(toDateTimeLocal(rule.expires_at));
+    setEditingRuleRequests(Number(rule.config.requests ?? 30));
+    setEditingRuleWindowSeconds(Number(rule.config.window_seconds ?? 60));
+  };
+
+  const cancelEditingRule = () => setEditingRuleId(null);
+
+  const saveRule = async () => {
+    if (!editingRuleId || !editingRuleTarget.trim()) return;
     try {
-      await systemApi.deactivateDefenseRule(id);
-      toast.success("防禦規則已停用");
+      await systemApi.updateDefenseRule(editingRuleId, {
+        rule_type: editingRuleType,
+        target: editingRuleTarget.trim(),
+        reason: editingRuleReason.trim(),
+        expires_at: fromDateTimeLocal(editingRuleExpiresAt)
+          ? new Date(fromDateTimeLocal(editingRuleExpiresAt)! * 1000).toISOString()
+          : null,
+        config:
+          editingRuleType === "rate_limit_override"
+            ? { requests: editingRuleRequests, window_seconds: editingRuleWindowSeconds }
+            : {},
+      });
+      toast.success("防禦規則已更新");
+      cancelEditingRule();
       refresh();
     } catch (e) {
-      toast.error(apiErrorMessage(e, "停用規則失敗"));
+      toast.error(apiErrorMessage(e, "更新規則失敗"));
+    }
+  };
+
+  const setRuleActive = async (rule: DefenseRule, isActive: boolean) => {
+    if (!isActive && !window.confirm("停用這條防禦規則？")) return;
+    try {
+      await systemApi.updateDefenseRule(rule.id, { is_active: isActive });
+      toast.success(isActive ? "防禦規則已重新啟用" : "防禦規則已停用");
+      refresh();
+    } catch (e) {
+      toast.error(apiErrorMessage(e, isActive ? "重新啟用規則失敗" : "停用規則失敗"));
     }
   };
 
@@ -631,9 +714,12 @@ export default function SystemDefensePage() {
               <input
                 type="number"
                 value={rateLimit.global_requests}
-                onChange={(e) =>
-                  setRateLimit((prev) => ({ ...prev, global_requests: Number(e.target.value) }))
-                }
+                min={1}
+                onChange={(e) => {
+                  setRateLimit((prev) => ({ ...prev, global_requests: Number(e.target.value) }));
+                  rateLimitDirtyRef.current = true;
+                  setRateLimitDirty(true);
+                }}
                 className="input"
               />
             </Field>
@@ -641,19 +727,26 @@ export default function SystemDefensePage() {
               <input
                 type="number"
                 value={rateLimit.global_window_seconds}
-                onChange={(e) =>
+                min={1}
+                onChange={(e) => {
                   setRateLimit((prev) => ({
                     ...prev,
                     global_window_seconds: Number(e.target.value),
-                  }))
-                }
+                  }));
+                  rateLimitDirtyRef.current = true;
+                  setRateLimitDirty(true);
+                }}
                 className="input"
               />
             </Field>
             <Field label="狀態">
               <button
                 type="button"
-                onClick={() => setRateLimit((prev) => ({ ...prev, enabled: !prev.enabled }))}
+                onClick={() => {
+                  setRateLimit((prev) => ({ ...prev, enabled: !prev.enabled }));
+                  rateLimitDirtyRef.current = true;
+                  setRateLimitDirty(true);
+                }}
                 className={`btn w-full ${rateLimit.enabled ? "btn-secondary" : "btn-ghost"}`}
               >
                 <SlidersHorizontal size={16} aria-hidden />
@@ -666,7 +759,7 @@ export default function SystemDefensePage() {
             {rateLimit.overrides.length === 0 ? (
               <div className="text-xs text-[var(--text-muted)]">無</div>
             ) : (
-              <div className="flex max-h-24 flex-wrap gap-1.5 overflow-y-auto rounded-md border border-[var(--border)] bg-[var(--bg-hover)] p-2">
+              <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto rounded-md border border-[var(--border)] bg-[var(--bg-hover)] p-2">
                 {rateLimit.overrides.map((override) => (
                   <span
                     key={`${override.path_prefix}-${override.requests}-${override.window_seconds}`}
@@ -677,21 +770,63 @@ export default function SystemDefensePage() {
                     <span className="shrink-0 text-[var(--text-muted)]">
                       {override.requests}/{override.window_seconds}s
                     </span>
+                    <button
+                      type="button"
+                      onClick={() => removeRateLimitOverride(override.path_prefix)}
+                      className="ml-1 rounded p-0.5 text-[var(--text-muted)] hover:bg-[var(--danger-dim)] hover:text-[var(--danger)]"
+                      aria-label={`移除 ${override.path_prefix} 限流覆蓋`}
+                    >
+                      <X size={13} aria-hidden />
+                    </button>
                   </span>
                 ))}
               </div>
             )}
           </div>
-          <button type="button" onClick={saveRateLimit} className="btn btn-primary mt-3">
-            <Save size={16} aria-hidden />
-            儲存限流策略
-          </button>
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_7rem_7rem_auto]">
+            <input
+              type="text"
+              value={overridePath}
+              onChange={(e) => setOverridePath(e.target.value)}
+              placeholder="新增端點，例如 /api/documents"
+              className="input font-mono"
+            />
+            <input
+              type="number"
+              min={1}
+              value={overrideRequests}
+              onChange={(e) => setOverrideRequests(Number(e.target.value))}
+              aria-label="端點請求數"
+              className="input"
+            />
+            <input
+              type="number"
+              min={1}
+              value={overrideWindowSeconds}
+              onChange={(e) => setOverrideWindowSeconds(Number(e.target.value))}
+              aria-label="端點視窗秒數"
+              className="input"
+            />
+            <button type="button" onClick={addRateLimitOverride} className="btn btn-ghost">
+              <Plus size={15} aria-hidden />
+              加入
+            </button>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <button type="button" onClick={saveRateLimit} className="btn btn-primary">
+              <Save size={16} aria-hidden />
+              儲存限流策略
+            </button>
+            {rateLimitDirty && (
+              <span className="text-xs font-medium text-[var(--warning)]">有尚未儲存的變更</span>
+            )}
+          </div>
         </Panel>
       </div>
 
       <section className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_0.9fr]">
         <Panel title="長期防禦規則" icon={<Lock size={18} aria-hidden />}>
-          <div className="grid grid-cols-1 gap-2 lg:grid-cols-[180px_1fr_1fr_120px_auto]">
+          <div className="grid grid-cols-1 gap-2 lg:grid-cols-[180px_minmax(0,1fr)_minmax(0,1fr)_8rem_auto]">
             <select
               value={ruleType}
               onChange={(e) => setRuleType(e.target.value as DefenseRuleType)}
@@ -700,7 +835,11 @@ export default function SystemDefensePage() {
                 "ip_block",
                 "cidr_block",
                 "ip_allow",
+                "user_block",
+                "email_block",
+                "rate_limit_override",
                 "endpoint_lockdown",
+                "bot_challenge_placeholder",
               ] as DefenseRuleType[]).map(
                 (type) => (
                   <option key={type} value={type}>
@@ -725,6 +864,7 @@ export default function SystemDefensePage() {
             />
             <input
               type="number"
+              min={0}
               value={ruleTtlMinutes}
               onChange={(e) => setRuleTtlMinutes(Number(e.target.value))}
               className="input"
@@ -741,13 +881,41 @@ export default function SystemDefensePage() {
             </button>
           </div>
 
+          {ruleType === "rate_limit_override" && (
+            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <Field label="端點請求數">
+                <input
+                  type="number"
+                  min={1}
+                  value={ruleConfigRequests}
+                  onChange={(e) => setRuleConfigRequests(Number(e.target.value))}
+                  className="input w-full"
+                />
+              </Field>
+              <Field label="端點視窗秒數">
+                <input
+                  type="number"
+                  min={1}
+                  value={ruleConfigWindowSeconds}
+                  onChange={(e) => setRuleConfigWindowSeconds(Number(e.target.value))}
+                  className="input w-full"
+                />
+              </Field>
+            </div>
+          )}
+
+          <p className="mt-2 text-xs text-[var(--text-muted)]">
+            既有規則會直接從資料庫載入；可編輯目標、原因、到期時間與端點限流參數，停用規則也會保留在清單中。
+          </p>
+
           <div className="mt-4 overflow-x-auto">
-            {activeRules.length === 0 ? (
-              <EmptyRow text="目前沒有有效防禦規則。" />
+            {rules.length === 0 ? (
+              <EmptyRow text="目前沒有防禦規則。" />
             ) : (
-              <table className="w-full min-w-[720px] text-sm">
+              <table className="w-full min-w-[820px] text-sm">
                 <thead className="text-xs text-[var(--text-muted)]">
                   <tr className="border-b border-[var(--border)]">
+                    <th className="py-2 text-left font-medium">狀態</th>
                     <th className="py-2 text-left font-medium">類型</th>
                     <th className="text-left font-medium">目標</th>
                     <th className="text-left font-medium">原因</th>
@@ -756,23 +924,129 @@ export default function SystemDefensePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {activeRules.map((rule) => (
-                    <tr key={rule.id} className="border-b border-[var(--border)] last:border-0">
-                      <td className="py-2 text-[var(--text-primary)]">{ruleTypeLabel(rule.rule_type)}</td>
-                      <td className="font-mono text-xs text-[var(--text-primary)]">{rule.target}</td>
-                      <td className="text-[var(--text-secondary)]">{rule.reason || "-"}</td>
-                      <td className="text-[var(--text-muted)]">{fmtTime(rule.expires_at)}</td>
-                      <td className="text-right">
-                        <button
-                          type="button"
-                          onClick={() => deactivateRule(rule.id)}
-                          className="btn-sm btn-danger-ghost"
-                        >
-                          <Trash2 size={14} aria-hidden />
-                          停用
-                        </button>
-                      </td>
-                    </tr>
+                  {rules.map((rule) => (
+                    <Fragment key={rule.id}>
+                      <tr key={rule.id} className="border-b border-[var(--border)] last:border-0">
+                        <td className="py-2">
+                          <StatusPill active={rule.is_active}>
+                            {rule.is_active ? "啟用" : "停用"}
+                          </StatusPill>
+                        </td>
+                        <td className="text-[var(--text-primary)]">{ruleTypeLabel(rule.rule_type)}</td>
+                        <td className="font-mono text-xs text-[var(--text-primary)]">{rule.target}</td>
+                        <td className="max-w-[16rem] truncate text-[var(--text-secondary)]" title={rule.reason}>
+                          {rule.reason || "-"}
+                        </td>
+                        <td className="text-[var(--text-muted)]">{fmtTime(rule.expires_at)}</td>
+                        <td className="text-right">
+                          <div className="flex justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => startEditingRule(rule)}
+                              className="btn-sm btn-ghost"
+                            >
+                              <Pencil size={14} aria-hidden />
+                              編輯
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setRuleActive(rule, !rule.is_active)}
+                              className={`btn-sm ${rule.is_active ? "btn-danger-ghost" : "btn-secondary"}`}
+                            >
+                              {rule.is_active ? "停用" : "啟用"}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                      {editingRuleId === rule.id && (
+                        <tr key={`${rule.id}-edit`} className="border-b border-[var(--border)] bg-[var(--bg-hover)]">
+                          <td colSpan={6} className="p-3">
+                            <div className="grid grid-cols-1 gap-2 md:grid-cols-[170px_minmax(0,1fr)_minmax(0,1fr)_11rem]">
+                              <Field label="規則類型">
+                                <select
+                                  value={editingRuleType}
+                                  onChange={(e) => setEditingRuleType(e.target.value as DefenseRuleType)}
+                                  className="input w-full"
+                                >
+                                  {([
+                                    "ip_block",
+                                    "cidr_block",
+                                    "ip_allow",
+                                    "user_block",
+                                    "email_block",
+                                    "rate_limit_override",
+                                    "endpoint_lockdown",
+                                    "bot_challenge_placeholder",
+                                  ] as DefenseRuleType[]).map((type) => (
+                                    <option key={type} value={type}>{ruleTypeLabel(type)}</option>
+                                  ))}
+                                </select>
+                              </Field>
+                              <Field label="目標">
+                                <input
+                                  type="text"
+                                  value={editingRuleTarget}
+                                  onChange={(e) => setEditingRuleTarget(e.target.value)}
+                                  className="input w-full font-mono"
+                                />
+                              </Field>
+                              <Field label="原因">
+                                <input
+                                  type="text"
+                                  value={editingRuleReason}
+                                  onChange={(e) => setEditingRuleReason(e.target.value)}
+                                  className="input w-full"
+                                />
+                              </Field>
+                              <Field label="到期時間">
+                                <input
+                                  type="datetime-local"
+                                  value={editingRuleExpiresAt}
+                                  onChange={(e) => setEditingRuleExpiresAt(e.target.value)}
+                                  className="input w-full"
+                                />
+                              </Field>
+                            </div>
+                            {editingRuleType === "rate_limit_override" && (
+                              <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                <Field label="端點請求數">
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    value={editingRuleRequests}
+                                    onChange={(e) => setEditingRuleRequests(Number(e.target.value))}
+                                    className="input w-full"
+                                  />
+                                </Field>
+                                <Field label="端點視窗秒數">
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    value={editingRuleWindowSeconds}
+                                    onChange={(e) => setEditingRuleWindowSeconds(Number(e.target.value))}
+                                    className="input w-full"
+                                  />
+                                </Field>
+                              </div>
+                            )}
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={saveRule}
+                                disabled={!editingRuleTarget.trim()}
+                                className="btn btn-primary"
+                              >
+                                <Save size={15} aria-hidden />
+                                儲存規則
+                              </button>
+                              <button type="button" onClick={cancelEditingRule} className="btn btn-ghost">
+                                取消
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
