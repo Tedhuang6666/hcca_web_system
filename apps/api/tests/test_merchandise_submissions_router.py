@@ -131,6 +131,22 @@ async def test_merchandise_submission_flow_uses_school_account_and_notifies_subm
     assert submission["account_snapshot"]["email"] == member_user.email
     assert submission["files"][0]["filename"] == "design.png"
 
+    submitted_update_response = await student.patch(
+        f"/merchandise-submissions/submissions/{submission['id']}?submit=true",
+        json={
+            "item_id": item_id,
+            "field_values": {
+                "student_name": "王小明",
+                "seat_number": "12",
+                "design_name": "送出後仍可修改",
+            },
+            "files": [uploaded],
+        },
+    )
+    assert submitted_update_response.status_code == 200
+    assert submitted_update_response.json()["status"] == "submitted"
+    assert submitted_update_response.json()["field_values"]["design_name"] == "送出後仍可修改"
+
     student_forbidden_response = await student.post(
         f"/merchandise-submissions/admin/submissions/{submission['id']}/files",
         files={"file": ("forbidden.png", b"\x89PNG\r\n\x1a\nminimal", "image/png")},
@@ -226,6 +242,34 @@ async def test_merchandise_submission_flow_uses_school_account_and_notifies_subm
     assert mine_response.status_code == 200
     assert mine_response.json()[0]["status"] == "approved"
     assert mine_response.json()[0]["review_note"] is None
+
+    approved_delete_response = await student.delete(
+        f"/merchandise-submissions/submissions/{submission['id']}"
+    )
+    assert approved_delete_response.status_code == 422
+
+    second_upload_response = await student.post(
+        f"/merchandise-submissions/uploads?item_id={item_id}",
+        files={"file": ("second.png", b"\x89PNG\r\n\x1a\nminimal", "image/png")},
+    )
+    assert second_upload_response.status_code == 200
+    second_submission_response = await student.post(
+        "/merchandise-submissions/submissions",
+        json={
+            "item_id": item_id,
+            "field_values": {
+                "student_name": "王小明",
+                "seat_number": "12",
+                "design_name": "待刪除投稿",
+            },
+            "files": [second_upload_response.json()],
+        },
+    )
+    assert second_submission_response.status_code == 201
+    second_delete_response = await student.delete(
+        f"/merchandise-submissions/submissions/{second_submission_response.json()['id']}"
+    )
+    assert second_delete_response.status_code == 204
 
 
 async def test_merchandise_submission_rejects_non_school_email_when_required(
