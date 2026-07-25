@@ -48,7 +48,8 @@ export const adminApi = {
     del<void>(`/admin/users/${userId}/positions/${upId}`),
 
   // 職位
-  listPositions: () => get<PositionSummary[]>("/admin/positions"),
+  // 建立職位頁面與管理工作台會連續讀取此列表；禁止瀏覽器沿用建立前的 GET 回應。
+  listPositions: () => request<PositionSummary[]>("/admin/positions", { cache: "no-store" }),
   createPosition: (body: {
     org_id: string;
     name: string;
