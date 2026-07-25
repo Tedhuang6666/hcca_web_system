@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { ApiError, orgsApi, petitionsApi } from "@/lib/api";
-import type { PetitionCaseListItem, PetitionCaseOut, PetitionStatsOut, PetitionStatus } from "@/lib/types";
+import type { PetitionCaseListItem, PetitionCaseOut, PetitionEventOut, PetitionStatsOut, PetitionStatus } from "@/lib/types";
 import { cacheGet, cacheHas, cacheSet, cachePurge } from "@/lib/api-cache";
 import { PetitionStatusBadge } from "@/components/ui/StatusBadge";
 import { orgDisplayName } from "@/lib/orgs";
@@ -65,6 +65,9 @@ export default function PetitionManagePage() {
   const [publicTitle, setPublicTitle] = useState("");
   const [publicContent, setPublicContent] = useState("");
   const [internalNote, setInternalNote] = useState("");
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [editingEventTitle, setEditingEventTitle] = useState("");
+  const [editingEventContent, setEditingEventContent] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const { can } = usePermissions();
@@ -106,6 +109,9 @@ export default function PetitionManagePage() {
     setInternalNote("");
     setTargetOrg("");
     setFile(null);
+    setEditingEventId(null);
+    setEditingEventTitle("");
+    setEditingEventContent("");
   };
 
   const open = async (id: string) => {
@@ -135,6 +141,30 @@ export default function PetitionManagePage() {
     setSelected(await petitionsApi.get(updated.id));
     await load();
     resetForm();
+  };
+
+  const startEventEdit = (event: PetitionEventOut) => {
+    setEditingEventId(event.id);
+    setEditingEventTitle(event.title);
+    setEditingEventContent(event.content || "");
+  };
+
+  const saveEventEdit = async () => {
+    if (!selected || !editingEventId || busy) return;
+    setBusy(true);
+    try {
+      const updated = await petitionsApi.editEvent(selected.id, editingEventId, {
+        title: editingEventTitle.trim() || undefined,
+        content: editingEventContent.trim() || null,
+      });
+      setSelected(updated);
+      setEditingEventId(null);
+      toast.success("公開訊息已更新");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "編輯訊息失敗");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const run = async (action: string) => {
@@ -483,9 +513,25 @@ export default function PetitionManagePage() {
                 <h3 className="font-medium">處理事件</h3>
                 {selected.events.map((event) => (
                   <div key={event.id} className="text-sm pl-3 py-1" style={{ borderLeft: "2px solid var(--border)" }}>
-                    <p className="font-medium">{event.title}</p>
-                    {event.content && <p className="whitespace-pre-wrap mt-1" style={{ color: "var(--text-muted)" }}>{event.content}</p>}
-                    <p className="text-xs mt-1" style={{ color: "var(--text-disabled)" }}>{fmt(event.created_at)} · {event.visibility === "internal" ? "內部" : "公開"}</p>
+                    {editingEventId === event.id ? (
+                      <div className="space-y-2">
+                        <input className="input w-full" value={editingEventTitle} onChange={(e) => setEditingEventTitle(e.target.value)} />
+                        <textarea className="input w-full min-h-24" value={editingEventContent} onChange={(e) => setEditingEventContent(e.target.value)} />
+                        <div className="flex gap-2">
+                          <button className="btn btn-primary" disabled={busy || (!editingEventTitle.trim() && !editingEventContent.trim())} onClick={saveEventEdit}>儲存編輯</button>
+                          <button className="btn btn-ghost" disabled={busy} onClick={() => setEditingEventId(null)}>取消</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="font-medium">{event.title}{event.updated_at !== event.created_at ? "（已編輯）" : ""}</p>
+                          {event.can_edit && <button className="text-xs" style={{ color: "var(--primary)" }} onClick={() => startEventEdit(event)}>編輯</button>}
+                        </div>
+                        {event.content && <p className="whitespace-pre-wrap mt-1" style={{ color: "var(--text-muted)" }}>{event.content}</p>}
+                        <p className="text-xs mt-1" style={{ color: "var(--text-disabled)" }}>{fmt(event.created_at)} · {event.visibility === "internal" ? "內部" : "公開"}</p>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>

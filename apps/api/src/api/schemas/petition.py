@@ -113,6 +113,8 @@ class PetitionEventOut(BaseModel):
     title: str
     content: str | None
     created_at: datetime
+    updated_at: datetime
+    can_edit: bool = False
 
 
 class PetitionCaseListItem(BaseModel):
@@ -207,6 +209,17 @@ class PetitionStatusUpdate(BaseModel):
 
 class PetitionInternalNoteCreate(BaseModel):
     content: str = Field(..., min_length=1, max_length=3000)
+
+
+class PetitionEventUpdate(BaseModel):
+    title: str | None = Field(None, min_length=1, max_length=200)
+    content: str | None = Field(None, min_length=1, max_length=10000)
+
+    @model_validator(mode="after")
+    def require_change(self) -> PetitionEventUpdate:
+        if not self.model_fields_set:
+            raise ValueError("至少要提供標題或訊息內容")
+        return self
 
 
 class PetitionPublicRequest(BaseModel):

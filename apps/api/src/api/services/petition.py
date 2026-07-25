@@ -6,7 +6,7 @@ import hashlib
 import hmac
 import secrets
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import case, extract, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,6 +31,7 @@ from api.models.user import User
 from api.schemas.petition import (
     PetitionAssignUpdate,
     PetitionCreate,
+    PetitionEventUpdate,
     PetitionInternalNoteCreate,
     PetitionOrgStatsItem,
     PetitionPublicRequest,
@@ -67,6 +68,8 @@ STATUS_MESSAGES: dict[PetitionStatus, str] = {
     PetitionStatus.CLOSED: "案件已完成並結案。",
     PetitionStatus.REJECTED: "案件經審查後不予受理。",
 }
+
+PUBLIC_EVENT_EDIT_WINDOW = timedelta(hours=1)
 
 NEXT_ACTIONS: dict[PetitionStatus, str] = {
     PetitionStatus.SUBMITTED: "請等待機關分案。",
@@ -152,6 +155,49 @@ async def add_event(
     )
     session.add(event)
     await session.flush()
+    return event
+
+
+async def edit_public_event(
+    session: AsyncSession,
+    case_obj: PetitionCase,
+    *,
+    event_id: uuid.UUID,
+    data: PetitionEventUpdate,
+    actor_id: uuid.UUID,
+) -> PetitionCaseEvent:
+    result = await session.execute(
+        select(PetitionCaseEvent).where(
+            PetitionCaseEvent.id == event_id,
+            PetitionCaseEvent.case_id == case_obj.id,
+        )
+    )
+    event = result.scalar_one_or_none()
+    if event is None:
+        raise ValueError("找不到此處理訊息")
+    if event.visibility != PetitionEventVisibility.PUBLIC:
+        raise ValueError("只有使用者可見的訊息可以編輯")
+    if event.actor_id != actor_id:
+        raise ValueError("只能編輯自己發布的訊息")
+    created_at = event.created_at
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=UTC)
+    if datetime.now(UTC) - created_at > PUBLIC_EVENT_EDIT_WINDOW:
+        raise ValueError("訊息建立已超過 1 小時，無法再編輯")
+
+    changes = data.model_dump(exclude_unset=True)
+    if "title" in changes:
+        event.title = changes["title"]
+    if "content" in changes:
+        event.content = changes["content"]
+        if event.event_type == PetitionEventType.REPLIED:
+            case_obj.public_reply = changes["content"]
+        elif event.event_type == PetitionEventType.NEEDS_INFO:
+            case_obj.supplement_request = changes["content"]
+        elif event.event_type == PetitionEventType.REJECTED:
+            case_obj.rejection_reason = changes["content"]
+    await session.flush()
+    await session.refresh(case_obj, attribute_names=["events"])
     return event
 
 

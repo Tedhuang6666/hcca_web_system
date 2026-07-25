@@ -9650,6 +9650,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/petitions/{case_id}/events/{event_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 編輯使用者可見的陳情處理訊息 */
+        patch: operations["edit_event_petitions__case_id__events__event_id__patch"];
+        trace?: never;
+    };
     "/petitions/{case_id}/assign": {
         parameters: {
             query?: never;
@@ -26362,6 +26379,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Can Edit */
+            can_edit?: boolean;
             event_type: components["schemas"]["PetitionEventType"];
             /** From Org Id */
             from_org_id: string | null;
@@ -26378,6 +26397,10 @@ export interface components {
             to_org_id: string | null;
             /** To Status */
             to_status: string | null;
+            /** Updated At
+             * Format: date-time
+             */
+            updated_at: string;
             visibility: components["schemas"]["PetitionEventVisibility"];
         };
         /**
@@ -26385,6 +26408,13 @@ export interface components {
          * @enum {string}
          */
         PetitionEventType: "created" | "assigned" | "status_changed" | "transferred" | "needs_info" | "supplemented" | "replied" | "closed" | "rejected" | "note" | "attachment_added" | "public_requested" | "public_responded" | "public_confirmed" | "public_declined";
+        /** PetitionEventUpdate */
+        PetitionEventUpdate: {
+            /** Content */
+            content?: string | null;
+            /** Title */
+            title?: string | null;
+        };
         /**
          * PetitionEventVisibility
          * @enum {string}
@@ -55995,6 +56025,42 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PetitionCaseOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    edit_event_petitions__case_id__events__event_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                case_id: string;
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PetitionEventUpdate"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
