@@ -592,6 +592,7 @@ export type PetitionAttachmentOut = components['schemas']['PetitionAttachmentOut
 export type PetitionAttachmentVisibility = components['schemas']['PetitionAttachmentVisibility']
 export type PetitionCaseListItem = components['schemas']['PetitionCaseListItem']
 export type PetitionCaseOut = components['schemas']['PetitionCaseOut']
+export type PetitionContentUpdate = components['schemas']['PetitionContentUpdate']
 export type PetitionCreate = components['schemas']['PetitionCreate']
 export type PetitionCreatedOut = components['schemas']['PetitionCreatedOut']
 export type PetitionEventOut = components['schemas']['PetitionEventOut']

@@ -448,6 +448,7 @@ export type {
   PetitionAttachmentOut,
   PetitionCaseListItem,
   PetitionCaseOut,
+  PetitionContentUpdate,
   PetitionCreate,
   PetitionCreatedOut,
   PetitionEventOut,

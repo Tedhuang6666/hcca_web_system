@@ -30,6 +30,7 @@ from api.models.petition import (
 from api.models.user import User
 from api.schemas.petition import (
     PetitionAssignUpdate,
+    PetitionContentUpdate,
     PetitionCreate,
     PetitionEventUpdate,
     PetitionInternalNoteCreate,
@@ -70,6 +71,11 @@ STATUS_MESSAGES: dict[PetitionStatus, str] = {
 }
 
 PUBLIC_EVENT_EDIT_WINDOW = timedelta(hours=1)
+
+
+def can_edit_content(case_obj: PetitionCase) -> bool:
+    return case_obj.status == PetitionStatus.SUBMITTED
+
 
 NEXT_ACTIONS: dict[PetitionStatus, str] = {
     PetitionStatus.SUBMITTED: "請等待機關分案。",
@@ -278,6 +284,23 @@ async def create_case(
         actor_id=submitter.id if submitter else None,
     )
     return case_obj, code, share_token
+
+
+async def update_content(
+    session: AsyncSession,
+    case_obj: PetitionCase,
+    *,
+    data: PetitionContentUpdate,
+) -> PetitionCase:
+    if not can_edit_content(case_obj):
+        raise ValueError("案件已進入分案或處理流程，無法再編輯原始內容")
+    changes = data.model_dump(exclude_unset=True, exclude={"verification_code"})
+    if "title" in changes:
+        case_obj.title = changes["title"]
+    if "content" in changes:
+        case_obj.content = changes["content"]
+    await session.flush()
+    return case_obj
 
 
 async def get_case_by_share_token(session: AsyncSession, share_token: str) -> PetitionCase | None:

@@ -7,6 +7,7 @@ import { ApiError, petitionsApi } from "@/lib/api";
 import type { PetitionCaseListItem, PetitionCaseOut, PetitionPublicListItem, PetitionStatsOut } from "@/lib/types";
 import { PetitionStatusBadge } from "@/components/ui/StatusBadge";
 import PetitionPublicConsent from "@/components/petitions/PetitionPublicConsent";
+import PetitionContentEditor from "@/components/petitions/PetitionContentEditor";
 import { usePermissions } from "@/hooks/usePermissions";
 
 function fmt(iso: string) {
@@ -104,6 +105,9 @@ export default function PetitionsPage() {
                 <Link href={`/petitions/${caseNumber}/${verificationCode}`} className="btn btn-ghost mt-2">查看進度分享頁</Link>
               </div>
               {lookup.can_respond_public && <PetitionPublicConsent item={lookup} verificationCode={verificationCode} onUpdated={setLookup} />}
+              {lookup.can_edit_content && (
+                <PetitionContentEditor item={lookup} verificationCode={verificationCode} onUpdated={setLookup} />
+              )}
             </>
           )}
         </section>

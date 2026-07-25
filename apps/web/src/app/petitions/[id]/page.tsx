@@ -8,6 +8,7 @@ import { ApiError, petitionsApi } from "@/lib/api";
 import type { PetitionCaseOut } from "@/lib/types";
 import { PetitionStatusBadge } from "@/components/ui/StatusBadge";
 import PetitionPublicConsent from "@/components/petitions/PetitionPublicConsent";
+import PetitionContentEditor from "@/components/petitions/PetitionContentEditor";
 import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 
 function fmt(iso: string | null) {
@@ -136,6 +137,8 @@ export default function PetitionDetailPage() {
           )}
         </aside>
       </div>
+
+      <PetitionContentEditor item={item} onUpdated={setItem} />
 
       {item.can_respond_public && <PetitionPublicConsent item={item} onUpdated={setItem} />}
 

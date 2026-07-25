@@ -161,6 +161,7 @@ class PetitionCaseOut(PetitionCaseListItem):
     first_response_at: datetime | None
     resolved_at: datetime | None
     closed_at: datetime | None
+    can_edit_content: bool = False
     can_supplement: bool = False
     can_respond_public: bool = False
     can_view_submitter: bool = False
@@ -182,6 +183,21 @@ class PetitionShareLookup(BaseModel):
 class PetitionSupplementCreate(BaseModel):
     content: str = Field(..., min_length=1, max_length=10000)
     verification_code: str | None = Field(None, min_length=5, max_length=5, pattern=r"^\d{5}$")
+
+
+class PetitionContentUpdate(BaseModel):
+    title: str | None = Field(None, min_length=1, max_length=200)
+    content: str | None = Field(None, min_length=1, max_length=10000)
+    verification_code: str | None = Field(None, min_length=5, max_length=5, pattern=r"^\d{5}$")
+
+    @model_validator(mode="after")
+    def require_content_change(self) -> PetitionContentUpdate:
+        if not any(
+            field in self.model_fields_set and getattr(self, field) is not None
+            for field in ("title", "content")
+        ):
+            raise ValueError("至少要提供標題或內容")
+        return self
 
 
 class PetitionAssignUpdate(BaseModel):
