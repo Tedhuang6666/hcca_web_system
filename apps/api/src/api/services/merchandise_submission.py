@@ -237,6 +237,12 @@ async def get_submission_file(
     return (await session.execute(query)).scalar_one_or_none()
 
 
+async def get_submission_file_by_id(
+    session: AsyncSession, file_id: uuid.UUID
+) -> MerchandiseSubmissionFile | None:
+    return await session.get(MerchandiseSubmissionFile, file_id)
+
+
 async def list_my_submissions(
     session: AsyncSession, *, user_id: uuid.UUID
 ) -> list[MerchandiseSubmission]:

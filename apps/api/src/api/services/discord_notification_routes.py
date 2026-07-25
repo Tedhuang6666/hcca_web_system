@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Mapping
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -43,6 +45,45 @@ def list_event_catalog() -> list[dict[str, str]]:
     return [dict(item) for item in EVENT_CATALOG]
 
 
+def build_merchandise_submission_fields(
+    *,
+    custom_fields: list[dict[str, Any]],
+    field_values: Mapping[str, str],
+    account_snapshot: Mapping[str, str],
+    filenames: list[str],
+) -> list[EmbedField]:
+    """把校商投稿表單值轉成可直接審核的 Discord 欄位。"""
+    fields: list[EmbedField] = []
+    account_lines = [
+        f"姓名：{account_snapshot.get('display_name') or '—'}",
+        f"學校信箱：{account_snapshot.get('email') or '—'}",
+    ]
+    if account_snapshot.get("student_id"):
+        account_lines.append(f"學號：{account_snapshot['student_id']}")
+    fields.append({"name": "投稿者", "value": "\n".join(account_lines)})
+
+    configured_keys: set[str] = set()
+    for definition in custom_fields:
+        key = str(definition.get("key") or "")
+        if not key:
+            continue
+        configured_keys.add(key)
+        fields.append(
+            {
+                "name": str(definition.get("label") or key),
+                "value": field_values.get(key, "").strip() or "（未填寫）",
+            }
+        )
+
+    for key, value in field_values.items():
+        if key not in configured_keys:
+            fields.append({"name": key, "value": value.strip() or "（未填寫）"})
+
+    if filenames:
+        fields.append({"name": "投稿檔案", "value": "\n".join(f"• {name}" for name in filenames)})
+    return fields
+
+
 async def emit_routed_notification(
     db: AsyncSession,
     *,
@@ -56,6 +97,7 @@ async def emit_routed_notification(
     petition_type_id: uuid.UUID | None = None,
     org_id: uuid.UUID | None = None,
     thread_name: str | None = None,
+    image_urls: list[str] | None = None,
 ) -> int:
     """依已啟用規則將一則模組事件排入 Discord outbox。"""
     result = await db.execute(
@@ -70,14 +112,30 @@ async def emit_routed_notification(
     if not routes:
         return 0
 
-    embed = build_embed(
-        _DOMAIN_BY_MODULE.get(module, Domain.SYSTEM),
-        severity,
-        title=title,
-        body=body,
-        fields=fields,
-        link=link,
-    )
+    domain = _DOMAIN_BY_MODULE.get(module, Domain.SYSTEM)
+    urls = [url for url in (image_urls or []) if url][:4]
+    embeds = [
+        build_embed(
+            domain,
+            severity,
+            title=title,
+            body=body,
+            fields=fields,
+            link=link,
+            image_url=urls[0] if urls else None,
+        )
+    ]
+    for index, image_url in enumerate(urls[1:], start=2):
+        embeds.append(
+            build_embed(
+                domain,
+                severity,
+                title=f"{title}｜圖片 {index}",
+                link=link,
+                image_url=image_url,
+            )
+        )
+    embed = embeds[0]
     components = default_action_row(
         open_url=link, domain=_DOMAIN_BY_MODULE.get(module, Domain.SYSTEM)
     )
@@ -88,18 +146,21 @@ async def emit_routed_notification(
         if route.org_id and route.org_id != org_id:
             continue
         content = f"<@&{route.role_id}>" if route.role_id and route.mention_role else None
+        payload: dict[str, Any] = {
+            "guild_id": route.guild_id,
+            "channel_id": route.channel_id,
+            "content": content,
+            "embed": embed,
+            "components": [components] if components else None,
+            "thread_name": thread_name,
+            "event_key": event_key,
+        }
+        if len(embeds) > 1:
+            payload["embeds"] = embeds
         await emit(
             db,
             event_type="discord.channel_alert",
-            payload={
-                "guild_id": route.guild_id,
-                "channel_id": route.channel_id,
-                "content": content,
-                "embed": embed,
-                "components": [components] if components else None,
-                "thread_name": thread_name,
-                "event_key": event_key,
-            },
+            payload=payload,
         )
         sent += 1
     return sent
@@ -130,6 +191,7 @@ async def emit_personal_notification(
 
 __all__ = [
     "EVENT_CATALOG",
+    "build_merchandise_submission_fields",
     "emit_personal_notification",
     "emit_routed_notification",
     "list_event_catalog",

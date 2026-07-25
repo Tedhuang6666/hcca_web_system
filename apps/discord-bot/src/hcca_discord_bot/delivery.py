@@ -25,6 +25,20 @@ def _embed(payload: dict[str, Any]) -> discord.Embed | None:
     return discord.Embed(title=title, description=str(body) if body else None)
 
 
+def _embeds(payload: dict[str, Any]) -> list[discord.Embed]:
+    raw_embeds = payload.get("embeds")
+    if isinstance(raw_embeds, list):
+        embeds = [
+            discord.Embed.from_dict(item)
+            for item in raw_embeds[:10]
+            if isinstance(item, dict)
+        ]
+        if embeds:
+            return embeds
+    embed = _embed(payload)
+    return [embed] if embed is not None else []
+
+
 def _view(components: Any) -> discord.ui.View | None:
     if not isinstance(components, list) or not components:
         return None
@@ -66,9 +80,10 @@ async def _send_dm(client: discord.Client, payload: dict[str, Any]) -> None:
 
 async def _send_channel(client: discord.Client, payload: dict[str, Any]) -> None:
     channel = await _channel(client, str(payload["channel_id"]))
+    embeds = _embeds(payload)
     message = await channel.send(
         content=str(payload["content"]) if payload.get("content") else None,
-        embed=_embed(payload),
+        embeds=embeds or None,
         view=_view(payload.get("components")),
     )
     thread_name = payload.get("thread_name")
