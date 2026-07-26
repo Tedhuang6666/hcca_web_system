@@ -31,6 +31,10 @@
 		reverse_proxy api-blue:8000
 	}
 
+	handle /auth/discord/* {
+		reverse_proxy api-blue:8000
+	}
+
 	handle /health {
 		reverse_proxy api-blue:8000
 	}
