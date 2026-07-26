@@ -48,7 +48,13 @@ def _unb64url(value: str) -> bytes:
 
 
 def _expected_origins() -> list[str]:
-    return list(dict.fromkeys([settings.PASSKEY_ORIGIN, *settings.PASSKEY_ALLOWED_ORIGINS]))
+    origins = [
+        settings.PASSKEY_ORIGIN,
+        *settings.PASSKEY_ALLOWED_ORIGINS,
+        *settings.ALLOWED_ORIGINS,
+        settings.FRONTEND_BASE_URL,
+    ]
+    return list(dict.fromkeys(origin.rstrip("/") for origin in origins if origin))
 
 
 def _challenge_key(transaction_id: str) -> str:
@@ -136,8 +142,17 @@ async def verify_registration(
             expected_origin=_expected_origins(),
             require_user_verification=True,
         )
-    except Exception:
-        logger.warning("Passkey registration verification failed", extra={"user_id": str(user.id)})
+    except Exception as exc:
+        logger.warning(
+            "Passkey registration verification failed: %s",
+            exc,
+            extra={
+                "user_id": str(user.id),
+                "transaction_id": transaction_id,
+                "expected_origins": _expected_origins(),
+                "expected_rp_id": settings.PASSKEY_RP_ID,
+            },
+        )
         return None
 
     duplicate = await db.scalar(
@@ -224,10 +239,16 @@ async def verify_authentication(
             credential_current_sign_count=passkey.sign_count,
             require_user_verification=True,
         )
-    except Exception:
+    except Exception as exc:
         logger.warning(
-            "Passkey authentication verification failed",
-            extra={"credential_id": _b64url(credential_id)},
+            "Passkey authentication verification failed: %s",
+            exc,
+            extra={
+                "credential_id": _b64url(credential_id),
+                "transaction_id": transaction_id,
+                "expected_origins": _expected_origins(),
+                "expected_rp_id": settings.PASSKEY_RP_ID,
+            },
         )
         return None
     if passkey.sign_count and verification.new_sign_count < passkey.sign_count:

@@ -22,6 +22,7 @@ import { PolicyConsentBanner } from "@/components/legal/PolicyConsentBanner";
 import { isPublicRoute, requiresAuthentication } from "@/lib/route-access";
 import { ApiError, authApi } from "@/lib/api";
 import { cacheCurrentUser, clearAuthCache } from "@/lib/auth-cache";
+import PasskeySetupPrompt from "@/components/auth/PasskeySetupPrompt";
 
 /** 完全裸頁（不渲染 Shell）：公開官網、login、auth callback、Email 退訂落地頁 */
 const BARE_PATHS = [
@@ -251,6 +252,7 @@ function AppShellContent({
           isAuthenticated={isLoggedIn && !suppressPolicyConsent && !isPublicRoute(pathname)}
         />
       </div>
+      {isLoggedIn && <PasskeySetupPrompt />}
       </ConfirmProvider>
       </InboxCountsProvider>
     </PermissionProvider>
