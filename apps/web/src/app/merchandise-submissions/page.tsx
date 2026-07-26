@@ -314,6 +314,7 @@ export default function MerchandiseSubmissionsPage() {
     setEditingId(null);
     setValues({});
     setFiles([]);
+    setStep("form");
   };
   const continueToForm = () => {
     if (!selected) return;
