@@ -10,6 +10,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.database import AsyncSessionLocal
 from api.core.database import get_db
 from api.dependencies.api_key_auth import require_api_scope
 from api.models.api_key import ApiKey
@@ -43,19 +44,24 @@ async def bot_status(_api_key: BotKeyDep) -> DiscordBotStatusOut:
 
 @router.get("/events/claim", response_model=DiscordBotEventOut | None)
 async def claim_event(
-    db: DbDep,
     _api_key: BotKeyDep,
     wait_seconds: int = Query(20, ge=0, le=25),
 ) -> DiscordBotEventOut | Response:
     for attempt in range(wait_seconds + 1):
-        claimed = await discord_gateway.claim_next_event(db)
-        if claimed is not None:
-            event, payload = claimed
-            return DiscordBotEventOut(
-                id=event.id,
-                event_type=event.event_type,
-                payload=payload,
-            )
+        async with AsyncSessionLocal() as db:
+            try:
+                claimed = await discord_gateway.claim_next_event(db)
+                await db.commit()
+            except Exception:
+                await db.rollback()
+                raise
+            if claimed is not None:
+                event, payload = claimed
+                return DiscordBotEventOut(
+                    id=event.id,
+                    event_type=event.event_type,
+                    payload=payload,
+                )
         if attempt < wait_seconds:
             await asyncio.sleep(1)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
