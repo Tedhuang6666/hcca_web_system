@@ -524,6 +524,7 @@
   --public-border: var(--border);
   --public-accent: var(--primary);
   --public-accent-strong: var(--primary-hover);
+  --public-accent-text: var(--primary-text);
   --public-accent-soft: var(--primary-dim);
   --public-focus: var(--border-focus);
   display: flex;
@@ -1453,11 +1454,15 @@
 .public-link-row:hover,
 .public-link-row:focus-visible {
   border-color: var(--public-accent);
-  color: var(--public-accent);
+  color: var(--public-accent-text);
+}
+
+.public-link-row > span {
+  color: inherit;
 }
 
 .public-text-link {
-  color: var(--public-accent);
+  color: var(--public-accent-text);
   font-size: 0.82rem;
   font-weight: 800;
   text-decoration: none;
