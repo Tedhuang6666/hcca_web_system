@@ -7,6 +7,10 @@ import { cacheCurrentUser } from "@/lib/auth-cache";
 import { apiUrl } from "@/lib/config";
 import { safeNextPath } from "@/lib/safe-redirect";
 
+// Refresh token 會輪替；若 callback 因重新掛載或多個 effect 同時啟動，
+// 只能讓一個請求消耗舊 token，否則後發請求會被視為重放而回 401。
+let refreshFromCookiePromise: Promise<boolean> | null = null;
+
 export default function AuthCallbackPage() {
   const searchParams = useSearchParams();
   const bootstrapStarted = useRef(false);
@@ -47,22 +51,30 @@ export default function AuthCallbackPage() {
     }
 
     async function refreshFromCookie(): Promise<boolean> {
-      try {
-        const csrfToken = document.cookie
-          .split(";")
-          .map((c) => c.trim())
-          .find((c) => c.startsWith("csrf_token="))
-          ?.slice("csrf_token=".length);
-        const res = await fetch(apiUrl("/auth/refresh"), {
-          method: "POST",
-          credentials: "include",
-          cache: "no-store",
-          headers: csrfToken ? { "X-CSRF-Token": decodeURIComponent(csrfToken) } : {},
-        });
-        return res.ok;
-      } catch {
-        return false;
-      }
+      if (refreshFromCookiePromise) return refreshFromCookiePromise;
+
+      refreshFromCookiePromise = (async () => {
+        try {
+          const csrfToken = document.cookie
+            .split(";")
+            .map((c) => c.trim())
+            .find((c) => c.startsWith("csrf_token="))
+            ?.slice("csrf_token=".length);
+          const res = await fetch(apiUrl("/auth/refresh"), {
+            method: "POST",
+            credentials: "include",
+            cache: "no-store",
+            headers: csrfToken ? { "X-CSRF-Token": decodeURIComponent(csrfToken) } : {},
+          });
+          return res.ok;
+        } catch {
+          return false;
+        } finally {
+          refreshFromCookiePromise = null;
+        }
+      })();
+
+      return refreshFromCookiePromise;
     }
 
     async function bootstrapFromCookie() {
