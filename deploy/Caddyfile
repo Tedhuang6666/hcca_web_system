@@ -5,7 +5,7 @@
 	}
 }
 
-{$SITE_DOMAIN} {
+{$SITE_DOMAIN}, www.{$SITE_DOMAIN} {
 	encode zstd gzip
 
 	header {
@@ -69,4 +69,10 @@
 	handle {
 		reverse_proxy web:3000
 	}
+}
+
+# 舊網域保留相容入口，統一導向新 canonical domain；OAuth、Cookie 與 canonical URL
+# 因此不會在兩個不同網域間分裂。
+hcca40.hct.works, www.hcca40.hct.works {
+	redir https://{$SITE_DOMAIN}{uri} permanent
 }

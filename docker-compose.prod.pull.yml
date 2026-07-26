@@ -240,7 +240,7 @@ services:
     environment:
       NODE_ENV: production
       API_INTERNAL_URL: http://api:8000
-      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://hcca40.hct.works}
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://hcca.tw}
     depends_on:
       api:
         condition: service_healthy
