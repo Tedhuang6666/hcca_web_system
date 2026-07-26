@@ -36,6 +36,7 @@ from sqlalchemy.ext.asyncio import (  # noqa: E402
 )
 from sqlalchemy.pool import NullPool, StaticPool  # noqa: E402
 
+from api.core import database as database_core  # noqa: E402
 from api.core.config import settings  # noqa: E402
 from api.core.database import Base, get_db  # noqa: E402
 from api.core.security import create_access_token  # noqa: E402
@@ -72,6 +73,19 @@ async def _isolate_redis_client_per_test():
         with contextlib.suppress(Exception):
             await fresh_pool.disconnect(inuse_connections=True)
         _security.redis_client.connection_pool = old_pool
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _dispose_app_db_engine_per_test():
+    """避免 app 的 asyncpg pool 跨 pytest event loop 重用連線。
+
+    測試資料庫 session 使用獨立的 NullPool；部分 webhook／內部 API 流程則會
+    建立自己的 app session。pytest-asyncio 每個 test 使用新 event loop，故需在
+    test 邊界 dispose app engine，避免上一個 loop 的連線被下一個 test 取回。
+    """
+    await database_core.engine.dispose()
+    yield
+    await database_core.engine.dispose()
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -307,6 +321,25 @@ async def db_session(_build_schema_once: None) -> AsyncGenerator[AsyncSession, N
         async with _schema_engine.begin() as cleanup_connection:
             for table in reversed(Base.metadata.sorted_tables):
                 await cleanup_connection.execute(table.delete())
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _bind_standalone_app_sessions_to_test_db(db_session, monkeypatch):
+    """讓不經 get_db override 的 app session 也使用本 test 的資料庫交易。"""
+    from api.dependencies import api_key_auth
+    from api.routers import discord_internal
+    from api.services import line_bot
+
+    factory = async_sessionmaker(
+        bind=db_session.bind,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autoflush=False,
+        join_transaction_mode="create_savepoint",
+    )
+    monkeypatch.setattr(api_key_auth, "AsyncSessionLocal", factory)
+    monkeypatch.setattr(discord_internal, "AsyncSessionLocal", factory)
+    monkeypatch.setattr(line_bot, "AsyncSessionLocal", factory)
 
 
 def _make_override_get_db(

@@ -30,6 +30,7 @@ async def _bot_key(db_session) -> str:
         rate_limit_per_minute=120,
         expires_at=None,
     )
+    await db_session.commit()
     return raw
 
 
@@ -58,6 +59,7 @@ async def test_claim_and_ack_discord_event(client, db_session, monkeypatch):
         event_type="discord.channel_alert",
         payload={"channel_id": "123", "title": "測試"},
     )
+    await db_session.commit()
     monkeypatch.setattr(discord_gateway.redis_client, "set", AsyncMock(return_value=True))
     monkeypatch.setattr(discord_gateway.redis_client, "delete", AsyncMock(return_value=1))
 
@@ -97,6 +99,7 @@ async def test_ack_rejects_non_discord_event(client, db_session, monkeypatch):
     )
     db_session.add(event)
     await db_session.flush()
+    await db_session.commit()
     monkeypatch.setattr(discord_gateway.redis_client, "delete", AsyncMock(return_value=1))
 
     response = await client.post(
@@ -127,6 +130,7 @@ async def test_command_context_resolves_bound_user(client, db_session):
         )
     )
     await db_session.flush()
+    await db_session.commit()
 
     response = await client.post(
         "/internal/discord/commands/context",
