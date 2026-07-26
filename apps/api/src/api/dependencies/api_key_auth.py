@@ -21,9 +21,8 @@ from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
 from redis.exceptions import RedisError
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.database import get_db
+from api.core.database import AsyncSessionLocal
 from api.core.security import redis_client
 from api.models.api_key import ApiKey
 from api.services import api_key as api_key_svc
@@ -57,7 +56,6 @@ async def _enforce_rate_limit(api_key: ApiKey) -> None:
 
 async def api_key_required(
     request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ApiKey:
     raw = request.headers.get("x-api-key") or _extract_bearer(request)
     if not raw:
@@ -66,21 +64,27 @@ async def api_key_required(
             detail="缺少 X-API-Key header",
             headers={"WWW-Authenticate": "ApiKey"},
         )
-    row = await api_key_svc.find_active_by_raw(db, raw)
-    if row is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="API key 無效、已撤銷或已過期",
-            headers={"WWW-Authenticate": "ApiKey"},
-        )
-    await _enforce_rate_limit(row)
-    # 更新 last_used（best effort、不阻擋）
-    try:
-        ip = request.client.host if request.client else None
-        await api_key_svc.touch_used(db, row.id, ip=ip)
-    except Exception:  # pragma: no cover
-        logger.debug("API key last_used 更新失敗（non-critical）", exc_info=True)
-    return row
+    async with AsyncSessionLocal() as db:
+        try:
+            row = await api_key_svc.find_active_by_raw(db, raw)
+            if row is None:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="API key 無效、已撤銷或已過期",
+                    headers={"WWW-Authenticate": "ApiKey"},
+                )
+            await _enforce_rate_limit(row)
+            # 更新 last_used（best effort、不阻擋）
+            try:
+                ip = request.client.host if request.client else None
+                await api_key_svc.touch_used(db, row.id, ip=ip)
+            except Exception:  # pragma: no cover
+                logger.debug("API key last_used 更新失敗（non-critical）", exc_info=True)
+            await db.commit()
+            return row
+        except Exception:
+            await db.rollback()
+            raise
 
 
 def _extract_bearer(request: Request) -> str | None:
