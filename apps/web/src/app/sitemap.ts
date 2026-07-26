@@ -1,7 +1,9 @@
 import type { MetadataRoute } from "next";
 
+import { BRANDING } from "@/lib/branding";
 import { serverApiUrl } from "@/lib/config";
-import { SITE_URL } from "@/lib/seo";
+
+const INDEXABLE_SITE_URL = `https://${BRANDING.domain}`;
 
 type RegulationListItem = {
   id: string;
@@ -67,7 +69,7 @@ async function pagedFetch<T>(url: URL, limit = 200): Promise<T[]> {
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const site = SITE_URL;
+  const site = INDEXABLE_SITE_URL;
 
   const regUrl = new URL(serverApiUrl("/regulations"));
   regUrl.searchParams.set("active_only", "true");
