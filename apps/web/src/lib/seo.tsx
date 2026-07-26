@@ -8,14 +8,14 @@ const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "0.0.0.0"]);
 function resolveSiteUrl(configuredUrl: string | undefined): string {
   const productionFallback = `https://${BRANDING.domain}`;
   const developmentFallback = "http://localhost:3000";
-  const fallback = process.env.NODE_ENV === "production" ? productionFallback : developmentFallback;
+  const fallback = process.env.NODE_ENV === "development" ? developmentFallback : productionFallback;
   const value = configuredUrl?.trim();
   if (!value) return fallback;
 
   try {
     const url = new URL(value);
     if (!["http:", "https:"].includes(url.protocol)) return fallback;
-    if (process.env.NODE_ENV === "production" && LOCAL_HOSTNAMES.has(url.hostname)) {
+    if (process.env.NODE_ENV !== "development" && LOCAL_HOSTNAMES.has(url.hostname)) {
       return productionFallback;
     }
     return url.toString().replace(/\/$/, "");

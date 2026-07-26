@@ -1,7 +1,37 @@
+import { BRANDING } from "@/lib/branding";
+
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
+const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "0.0.0.0"]);
+const PUBLIC_API_FALLBACK = `https://${BRANDING.domain}/api`;
+
+function isAbsoluteHttpUrl(value: string | undefined): value is string {
+  if (!value?.trim()) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function isLocalUrl(value: string): boolean {
+  try {
+    return LOCAL_HOSTNAMES.has(new URL(value).hostname);
+  } catch {
+    return false;
+  }
+}
+
+const configuredInternalApi = [process.env.API_INTERNAL_URL, process.env.NEXT_PUBLIC_API_URL]
+  .find(isAbsoluteHttpUrl);
+
 export const API_INTERNAL_BASE =
-  process.env.API_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  configuredInternalApi && !(process.env.NODE_ENV !== "development" && isLocalUrl(configuredInternalApi))
+    ? configuredInternalApi
+    : process.env.NODE_ENV === "development"
+      ? "http://localhost:8000"
+      : PUBLIC_API_FALLBACK;
 
 export function wsBase(): string {
   const configured = process.env.NEXT_PUBLIC_WS_URL;
