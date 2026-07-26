@@ -82,6 +82,9 @@ KNOWN_PUBLIC_ROUTES: set[tuple[str, str]] = {
     ("/auth/refresh", "POST"),
     ("/auth/mfa/exchange-challenge", "GET"),
     ("/auth/mfa/login/verify", "POST"),
+    # Passkey 登入流程允許訪客開始驗證，完成後才建立登入 session
+    ("/auth/mfa/passkeys/authentication/options", "POST"),
+    ("/auth/mfa/passkeys/authentication/verify", "POST"),
     # Discord / LINE webhook（由外部服務呼叫，帶有 HMAC 簽章）
     ("/discord/callback", "GET"),
     ("/discord/open", "GET"),
