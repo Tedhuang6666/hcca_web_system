@@ -47,7 +47,3 @@
 		reverse_proxy web-blue:3000
 	}
 }
-
-hcca40.hct.works, www.hcca40.hct.works {
-	redir https://{$SITE_DOMAIN}{uri} permanent
-}
