@@ -237,14 +237,14 @@ class Settings(BaseSettings):
     MAIL_FROM: str = Field(default="noreply@hct.works")
     MAIL_FROM_NAME: str = Field(default="新竹高中班聯會 HCCA")
     # 部署網址單一來源 — 整個系統對外的基底 URL（前端入口；/api、/ws、OAuth 回呼皆同源轉發）。
-    # 只要在此填入正式網址（例如 https://hcca40.hct.works），derive_public_urls 會自動推導
+    # 只要在此填入正式網址（例如 https://hcca.tw），derive_public_urls 會自動推導
     # ALLOWED_ORIGINS / ALLOWED_HOSTS / 各 OAuth 回呼等仍停留在 localhost 預設的欄位，
     # 不需逐一手動填寫。email 內的絕對連結（退訂、CTA、通知偏好頁）亦以此為基底。
     FRONTEND_BASE_URL: str = Field(default="http://localhost:3000")
     # Email 客戶端載入使用者上傳檔案（/uploads/...）時需要可公開存取的 API base。
     API_PUBLIC_BASE_URL: str = Field(default="http://localhost:8000")
     # Email 內前端連結使用的公開 base；避免本機開發網址出現在寄出的信件中。
-    EMAIL_LINK_BASE_URL: str = Field(default="https://hcca40.hct.works")
+    EMAIL_LINK_BASE_URL: str = Field(default="https://hcca.tw")
     # Email header 會徽圖片 URL；可填外部圖床或正式站 public 圖片的完整網址。
     # 若填外部 host，須同步把該 host 加進 proxy.ts 與下方 SECURITY_CSP 的 img-src，
     # 否則寄信頁預覽 iframe 會被 CSP 擋下。

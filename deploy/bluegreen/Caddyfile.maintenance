@@ -1,4 +1,4 @@
-{$SITE_DOMAIN} {
+{$SITE_DOMAIN}, www.{$SITE_DOMAIN} {
 	encode zstd gzip
 
 	header {
@@ -13,4 +13,8 @@
 	root * /etc/caddy/bluegreen
 	rewrite * /maintenance.html
 	file_server
+}
+
+hcca40.hct.works, www.hcca40.hct.works {
+	redir https://{$SITE_DOMAIN}{uri} permanent
 }
