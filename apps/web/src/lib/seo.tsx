@@ -3,8 +3,30 @@ import type { Metadata } from "next";
 import { BRAND_TITLE, BRANDING } from "@/lib/branding";
 import { SOCIAL_IMAGE, SOCIAL_SITE_NAME } from "@/lib/social-metadata";
 
-export const SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL || process.env.FRONTEND_BASE_URL || "http://localhost:3000";
+const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "0.0.0.0"]);
+
+function resolveSiteUrl(configuredUrl: string | undefined): string {
+  const productionFallback = `https://${BRANDING.domain}`;
+  const developmentFallback = "http://localhost:3000";
+  const fallback = process.env.NODE_ENV === "production" ? productionFallback : developmentFallback;
+  const value = configuredUrl?.trim();
+  if (!value) return fallback;
+
+  try {
+    const url = new URL(value);
+    if (!["http:", "https:"].includes(url.protocol)) return fallback;
+    if (process.env.NODE_ENV === "production" && LOCAL_HOSTNAMES.has(url.hostname)) {
+      return productionFallback;
+    }
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return fallback;
+  }
+}
+
+export const SITE_URL = resolveSiteUrl(
+  process.env.NEXT_PUBLIC_SITE_URL || process.env.FRONTEND_BASE_URL,
+);
 
 export const SITE_BRAND = BRAND_TITLE;
 export const DEFAULT_SEO_DESCRIPTION = BRANDING.description;
