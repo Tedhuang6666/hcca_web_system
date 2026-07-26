@@ -51,6 +51,7 @@ function SessionGate({ children }: { children: React.ReactNode }) {
   const [authReady, setAuthReady] = useState(false);
   const [redirecting, setRedirecting] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const authCheckStarted = useRef(false);
   const redirectedFrom = useRef<string | null>(null);
 
   useEffect(() => {
@@ -65,7 +66,11 @@ function SessionGate({ children }: { children: React.ReactNode }) {
       };
     }
 
-    setAuthReady(false);
+    // 首次進入受保護頁面才需要遮住 Shell 等待驗證；站內換頁時保留既有
+    // Shell，避免底部導覽列跟著整個 AppShellContent 被卸載又重新掛載。
+    const isInitialAuthCheck = !authCheckStarted.current;
+    authCheckStarted.current = true;
+    if (isInitialAuthCheck) setAuthReady(false);
     const verifySession = async () => {
       const loggedIn = Boolean(localStorage.getItem("user_id"));
       if (!loggedIn) {
