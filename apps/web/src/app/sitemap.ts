@@ -30,6 +30,12 @@ type MeetingListItem = {
   created_at: string;
 };
 
+type PublicSitePageListItem = {
+  slug: string;
+  updated_at: string;
+  is_published: boolean;
+};
+
 async function pagedFetch<T>(url: URL, limit = 200): Promise<T[]> {
   const all: T[] = [];
   let offset = 0;
@@ -80,10 +86,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const meetings = (await pagedFetch<MeetingListItem>(meetingUrl))
     .filter((item) => ["closed", "archived"].includes(item.status));
 
+  const publicPages = await pagedFetch<PublicSitePageListItem>(
+    new URL(serverApiUrl("/site/pages")),
+  );
+
   const now = new Date();
 
   return [
     { url: `${site}/`, lastModified: now, changeFrequency: "daily", priority: 1 },
+    { url: `${site}/news`, lastModified: now, changeFrequency: "daily", priority: 0.8 },
     { url: `${site}/announcements`, lastModified: now, changeFrequency: "daily", priority: 0.8 },
     ...announcements.map((a) => ({
       url: `${site}/announcements/${encodeURIComponent(a.id)}`,
@@ -92,16 +103,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.7,
     })),
     { url: `${site}/public`, lastModified: now, changeFrequency: "daily", priority: 0.6 },
-    { url: `${site}/regulations`, lastModified: now, changeFrequency: "daily", priority: 0.8 },
+    { url: `${site}/about`, lastModified: now, changeFrequency: "monthly", priority: 0.7 },
+    { url: `${site}/officers`, lastModified: now, changeFrequency: "weekly", priority: 0.7 },
+    { url: `${site}/public/regulations`, lastModified: now, changeFrequency: "daily", priority: 0.8 },
     ...regs.map((r) => ({
-      url: `${site}/regulations/${encodeURIComponent(r.title)}`,
+      url: `${site}/public/regulations/${encodeURIComponent(r.id)}`,
       lastModified: new Date(r.updated_at),
       changeFrequency: "weekly" as const,
       priority: 0.7,
     })),
-    { url: `${site}/documents`, lastModified: now, changeFrequency: "daily", priority: 0.7 },
+    { url: `${site}/public/documents`, lastModified: now, changeFrequency: "daily", priority: 0.7 },
     ...docs.map((d) => ({
-      url: `${site}/documents/${encodeURIComponent(d.serial_number)}`,
+      url: `${site}/public/documents/${encodeURIComponent(d.id)}`,
       lastModified: new Date((d.updated_at as string | undefined) ?? d.created_at),
       changeFrequency: "weekly" as const,
       priority: 0.5,
@@ -113,5 +126,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "monthly" as const,
       priority: 0.5,
     })),
+    ...publicPages
+      .filter((page) => page.is_published && page.slug)
+      .map((page) => ({
+        url: `${site}/pages/${encodeURIComponent(page.slug)}`,
+        lastModified: new Date(page.updated_at),
+        changeFrequency: "monthly" as const,
+        priority: 0.5,
+      })),
   ];
 }

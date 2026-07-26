@@ -16,14 +16,14 @@ import type { ModuleId } from "@/lib/modules";
 
 const DATABASES = [
   {
-    href: "/regulations",
+    href: "/public/regulations",
     title: "法規資料庫",
     description: "查詢現行法規、條文沿革與版本差異，取得可穩定引用的公開連結。",
     icon: BookOpenText,
     meta: "條文、沿革、版本比對",
   },
   {
-    href: "/documents",
+    href: "/public/documents",
     title: "公文資料庫",
     description: "依字號、標題與主旨查找公開公文，查看附件與文件基本資訊。",
     icon: FileSearch,

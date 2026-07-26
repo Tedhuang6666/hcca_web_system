@@ -1,9 +1,28 @@
 import Image from "next/image";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import MarkdownBlock from "@/components/site/MarkdownBlock";
 import PublicSiteShell from "@/components/site/PublicSiteShell";
 import { fetchPublicBundle, fetchPublicPage } from "@/lib/serverFetch";
+import { pageMetadata } from "@/lib/seo";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const page = await fetchPublicPage(slug);
+  if (!page) return {};
+  return pageMetadata({
+    title: page.seo_title || page.title,
+    description: page.seo_description || page.summary || "新竹高中班聯會公開資訊。",
+    path: `/pages/${encodeURIComponent(slug)}`,
+    type: "website",
+    imagePath: page.cover_image_url || undefined,
+  });
+}
 
 export default async function CmsPage({
   params,
