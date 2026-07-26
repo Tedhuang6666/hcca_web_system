@@ -40,7 +40,7 @@ RUN apt-get update && \
 
 # 建立非 root 使用者（安全最佳實踐）
 RUN groupadd --gid 1001 appgroup && \
-    useradd --uid 1001 --gid appgroup --no-create-home appuser
+    useradd --uid 1001 --gid appgroup --create-home --home-dir /home/appuser appuser
 
 WORKDIR /app
 
@@ -68,6 +68,7 @@ COPY VERSION /app/VERSION
 RUN mkdir -p /app/uploads /app/backups && chown -R appuser:appgroup /app/uploads /app/backups
 
 ENV PATH="/app/.venv/bin:$PATH" \
+    HOME="/home/appuser" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH="/app/src" \

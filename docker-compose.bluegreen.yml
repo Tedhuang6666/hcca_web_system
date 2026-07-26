@@ -12,6 +12,7 @@ x-api-common: &api-common
     - ${PROD_ENV_FILE:-.env.production}
   environment: &api-env
     ENVIRONMENT: production
+    HOME: /tmp
     DEBUG: "false"
     ENABLE_API_DOCS: "false"
     COOKIE_SECURE: "true"
