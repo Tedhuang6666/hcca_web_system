@@ -549,6 +549,10 @@ class Settings(BaseSettings):
             self.DISCORD_LOGIN_REDIRECT_URI = f"{origin}/auth/discord/callback"
         if _is_local_url(self.API_PUBLIC_BASE_URL):
             self.API_PUBLIC_BASE_URL = origin
+        if _is_local_url(self.PASSKEY_ORIGIN):
+            self.PASSKEY_ORIGIN = origin
+        if self.PASSKEY_RP_ID in _LOCAL_HOSTS:
+            self.PASSKEY_RP_ID = host
 
         return self
 

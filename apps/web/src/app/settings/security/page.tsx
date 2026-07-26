@@ -70,6 +70,7 @@ export default function SecuritySettingsPage() {
         optionsJSON: optionResult.options as unknown as Parameters<typeof startRegistration>[0]["optionsJSON"],
       });
       await mfaApi.verifyRegistration(optionResult.transaction_id, credential, passkeyName.trim() || undefined);
+      localStorage.setItem("hcca_passkey_enabled", "1");
       toast.success("Passkey 已新增");
       setPasskeyName("");
       setPasskeys(await mfaApi.passkeys());
