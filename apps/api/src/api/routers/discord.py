@@ -37,6 +37,7 @@ from api.models.discord_notification_route import DiscordNotificationRoute
 from api.models.user import User
 from api.services import audit as audit_svc
 from api.services import discord_gateway, discord_governance
+from api.services import passkey as passkey_svc
 from api.services.discord_bot import (
     bot_health_snapshot,
     consume_open_token,
@@ -370,7 +371,7 @@ async def open_from_discord(
     if user is None or not user.is_active:
         return RedirectResponse(url=f"{frontend}/login")
 
-    if user.mfa_enabled:
+    if await passkey_svc.requires_mfa(db, user):
         challenge_token = create_mfa_challenge_token(subject=str(user_id))
         request.session["mfa_challenge"] = challenge_token
         qs = urlencode({"next": path})

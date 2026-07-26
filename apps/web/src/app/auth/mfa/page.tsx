@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { startAuthentication } from "@simplewebauthn/browser";
 import { toast } from "sonner";
 import { authApi, mfaApi, apiErrorMessage } from "@/lib/api";
 import { cacheCurrentUser } from "@/lib/auth-cache";
@@ -14,6 +15,7 @@ export default function MFALoginPage() {
   const [challenge, setChallenge] = useState<string>("");
   const [code, setCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [passkeySubmitting, setPasskeySubmitting] = useState(false);
 
   useEffect(() => {
     // challenge token 存放在 server session（不暴露在 URL），需 exchange 取出
@@ -38,6 +40,24 @@ export default function MFALoginPage() {
     }
   };
 
+  const submitWithPasskey = async () => {
+    setPasskeySubmitting(true);
+    try {
+      const optionResult = await mfaApi.authenticationOptions(challenge);
+      const assertion = await startAuthentication({
+        optionsJSON: optionResult.options as unknown as Parameters<typeof startAuthentication>[0]["optionsJSON"],
+      });
+      await mfaApi.verifyAuthentication(optionResult.transaction_id, assertion);
+      const me = await authApi.me();
+      cacheCurrentUser(me);
+      window.location.replace(next);
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "Passkey 驗證失敗，請改用驗證器 App"));
+    } finally {
+      setPasskeySubmitting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center p-6" style={{ background: "var(--bg-base)" }}>
       <main className="w-full max-w-sm rounded-2xl p-8 animate-slide-in"
@@ -50,6 +70,19 @@ export default function MFALoginPage() {
           <p className="mt-1.5 text-sm" style={{ color: "var(--text-muted)" }}>
             請輸入驗證器 App 的 6 位數代碼，或使用一組未使用過的備用碼。
           </p>
+        </div>
+
+        <button
+          className="btn btn-primary w-full"
+          disabled={passkeySubmitting || submitting || !challenge}
+          onClick={submitWithPasskey}>
+          {passkeySubmitting ? "Passkey 驗證中" : "使用 Passkey 驗證"}
+        </button>
+
+        <div className="my-5 flex items-center gap-3 text-xs" style={{ color: "var(--text-muted)" }}>
+          <span className="h-px flex-1" style={{ background: "var(--border)" }} />
+          或輸入驗證器 App／備用碼
+          <span className="h-px flex-1" style={{ background: "var(--border)" }} />
         </div>
 
         <label className="block space-y-1.5">

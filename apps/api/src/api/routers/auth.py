@@ -39,6 +39,7 @@ from api.dependencies.auth import get_current_active_user
 from api.models.user import User
 from api.models.user_identity import UserIdentity
 from api.schemas.auth import GoogleOneTapRequest, RefreshRequest
+from api.services import passkey as passkey_svc
 from api.services.discord_bot import (
     get_user_by_discord_id,
 )
@@ -445,7 +446,7 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
         error_qs = urlencode({"error": str(exc.detail)})
         return RedirectResponse(url=f"{frontend_origin}/login?{error_qs}")
 
-    if user.mfa_enabled:
+    if await passkey_svc.requires_mfa(db, user):
         challenge_token = create_mfa_challenge_token(subject=str(user.id))
         request.session["mfa_challenge"] = challenge_token
         challenge_qs = urlencode({"next": login_next})
@@ -548,7 +549,7 @@ async def discord_callback(
         )
     await record_login(str(user.id), client_ip, request.headers.get("user-agent"))
 
-    if user.mfa_enabled:
+    if await passkey_svc.requires_mfa(db, user):
         challenge_token = create_mfa_challenge_token(subject=str(user.id))
         request.session["mfa_challenge"] = challenge_token
         challenge_qs = urlencode({"next": login_next})
@@ -618,7 +619,7 @@ async def google_one_tap(
     )
 
     login_next = _safe_next_path(body.next)
-    if user.mfa_enabled:
+    if await passkey_svc.requires_mfa(db, user):
         challenge_token = create_mfa_challenge_token(subject=str(user.id))
         request.session["mfa_challenge"] = challenge_token
         return {"mfa_required": True, "next": login_next}

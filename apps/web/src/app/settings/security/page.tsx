@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
 import QRCode from "qrcode";
 import { toast } from "sonner";
 import { discordApi, mfaApi, apiErrorMessage } from "@/lib/api";
-import type { DiscordBindingOut, MFASetupOut, MFAStatusOut } from "@/lib/types";
+import type { DiscordBindingOut, MFASetupOut, MFAStatusOut, PasskeyOut } from "@/lib/types";
 import { SectionSkeleton } from "@/components/ui/Skeleton";
 import { safeNextPath } from "@/lib/safe-redirect";
 
@@ -28,6 +29,10 @@ export default function SecuritySettingsPage() {
   const [busy, setBusy] = useState(false);
   const [discordBinding, setDiscordBinding] = useState<DiscordBindingOut | null>(null);
   const [discordBusy, setDiscordBusy] = useState(false);
+  const [passkeys, setPasskeys] = useState<PasskeyOut[]>([]);
+  const [passkeyName, setPasskeyName] = useState("");
+  const [passkeyCode, setPasskeyCode] = useState("");
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
 
   const loadStatus = () => {
     setLoading(true);
@@ -47,6 +52,7 @@ export default function SecuritySettingsPage() {
 
   useEffect(() => {
     loadStatus();
+    mfaApi.passkeys().then(setPasskeys).catch(() => setPasskeys([]));
     discordApi.me().then(setDiscordBinding).catch(() => setDiscordBinding({
       linked: false,
       discord_user_id: null,
@@ -55,6 +61,47 @@ export default function SecuritySettingsPage() {
       linked_at: null,
     }));
   }, []);
+
+  const registerPasskey = async () => {
+    setPasskeyBusy(true);
+    try {
+      const optionResult = await mfaApi.registrationOptions();
+      const credential = await startRegistration({
+        optionsJSON: optionResult.options as unknown as Parameters<typeof startRegistration>[0]["optionsJSON"],
+      });
+      await mfaApi.verifyRegistration(optionResult.transaction_id, credential, passkeyName.trim() || undefined);
+      toast.success("Passkey 已新增");
+      setPasskeyName("");
+      setPasskeys(await mfaApi.passkeys());
+      loadStatus();
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "Passkey 新增失敗，請確認瀏覽器支援並重試"));
+    } finally {
+      setPasskeyBusy(false);
+    }
+  };
+
+  const removePasskey = async (credentialId: string) => {
+    setPasskeyBusy(true);
+    try {
+      if (!status?.mfa_enabled) {
+        const optionResult = await mfaApi.authenticationOptions();
+        const assertion = await startAuthentication({
+          optionsJSON: optionResult.options as unknown as Parameters<typeof startAuthentication>[0]["optionsJSON"],
+        });
+        await mfaApi.verifyAuthentication(optionResult.transaction_id, assertion);
+      }
+      await mfaApi.deletePasskey(credentialId, passkeyCode.trim() || undefined);
+      toast.success("Passkey 已刪除");
+      setPasskeyCode("");
+      setPasskeys(await mfaApi.passkeys());
+      loadStatus();
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "Passkey 刪除失敗；若已啟用 TOTP，請輸入目前驗證碼"));
+    } finally {
+      setPasskeyBusy(false);
+    }
+  };
 
   useEffect(() => {
     if (!setup?.qr_uri) {
@@ -364,6 +411,59 @@ export default function SecuritySettingsPage() {
             </button>
           </div>
         )}
+      </section>
+
+      <section className="card overflow-hidden">
+        <div
+          className="flex items-center justify-between gap-3 px-5 py-4"
+          style={{ borderBottom: "1px solid var(--border)" }}
+        >
+          <div>
+            <h2 className="text-sm font-semibold">Passkey</h2>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              使用指紋、臉部辨識、裝置 PIN 或安全金鑰完成登入與驗證。
+            </p>
+          </div>
+          <span className="rounded-full px-2.5 py-1 text-xs font-medium"
+            style={passkeys.length > 0
+              ? { background: "var(--success-dim)", color: "var(--success)" }
+              : { background: "var(--bg-hover)", color: "var(--text-muted)" }}>
+            {passkeys.length} 組
+          </span>
+        </div>
+        <div className="space-y-4 p-5">
+          {passkeys.length > 0 && (
+            <div className="space-y-2">
+              {passkeys.map((item) => (
+                <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg p-3"
+                  style={{ background: "var(--bg-hover)" }}>
+                  <div>
+                    <p className="text-sm font-medium">{item.device_name}</p>
+                    <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                      新增於 {new Date(item.created_at).toLocaleString()}
+                      {item.last_used_at ? ` · 上次使用 ${new Date(item.last_used_at).toLocaleString()}` : ""}
+                    </p>
+                  </div>
+                  <button className="btn btn-ghost btn-sm" disabled={passkeyBusy}
+                    onClick={() => removePasskey(item.credential_id)}>
+                    刪除
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          {status?.mfa_enabled && passkeys.length > 0 && (
+            <input className="input" inputMode="numeric" maxLength={8} value={passkeyCode}
+              onChange={(e) => setPasskeyCode(e.target.value)} placeholder="刪除 Passkey 時輸入目前 TOTP 驗證碼" />
+          )}
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input className="input" maxLength={100} value={passkeyName}
+              onChange={(e) => setPasskeyName(e.target.value)} placeholder="裝置名稱（例如：Windows Hello）" />
+            <button className="btn btn-primary whitespace-nowrap" disabled={passkeyBusy} onClick={registerPasskey}>
+              {passkeyBusy ? "處理中" : "新增 Passkey"}
+            </button>
+          </div>
+        </div>
       </section>
 
       <section className="card overflow-hidden">

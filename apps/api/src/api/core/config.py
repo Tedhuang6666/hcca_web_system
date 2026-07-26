@@ -281,6 +281,11 @@ class Settings(BaseSettings):
         default=5,
         description="OAuth 登入完成後 MFA challenge token 有效分鐘數",
     )
+    PASSKEY_RP_ID: str = Field(default="localhost", description="WebAuthn relying party ID")
+    PASSKEY_RP_NAME: str = Field(default="HCCA 校園自治整合平台")
+    PASSKEY_ORIGIN: str = Field(default="http://localhost:3000")
+    PASSKEY_ALLOWED_ORIGINS: list[str] = Field(default_factory=list)
+    PASSKEY_CHALLENGE_TTL_SECONDS: int = Field(default=300, ge=60, le=900)
 
     # --- 簡易 Rate Limit ---
     RATE_LIMIT_ENABLED: bool = True

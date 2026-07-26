@@ -72,7 +72,7 @@ def test_sensitive_tokens_use_keyed_or_password_hashes() -> None:
     assert key_hash.startswith("scrypt:")
     assert api_key._verify_key(raw, key_hash)
     assert not api_key._verify_key(f"{raw}x", key_hash)
-    assert backup_hash.startswith("scrypt:")
+    assert backup_hash.startswith("argon2:$argon2id$")
     assert "ABCD" not in backup_hash
 
 

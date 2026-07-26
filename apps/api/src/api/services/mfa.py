@@ -5,11 +5,15 @@ import hashlib
 import hmac
 import logging
 import secrets
+from contextlib import suppress
 
+from argon2 import PasswordHasher
+from argon2.exceptions import InvalidHash, VerificationError, VerifyMismatchError
 from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.config import settings
+from api.core.security import redis_client
 from api.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -17,6 +21,7 @@ logger = logging.getLogger(__name__)
 _ENCRYPTED_PREFIX = "enc:v1:"
 _BACKUP_CODE_COUNT = 8
 _BACKUP_CODE_SALT_BYTES = 16
+_ARGON2 = PasswordHasher()
 
 
 def _fernet() -> Fernet:
@@ -52,15 +57,7 @@ def _normalize_code(code: str) -> str:
 
 def _hash_backup_code(code: str) -> str:
     normalized = _normalize_code(code)
-    salt = secrets.token_bytes(_BACKUP_CODE_SALT_BYTES)
-    digest = hashlib.scrypt(
-        normalized.encode("utf-8"),
-        salt=salt,
-        n=2**14,
-        r=8,
-        p=1,
-    )
-    return f"scrypt:{salt.hex()}:{digest.hex()}"
+    return f"argon2:{_ARGON2.hash(normalized)}"
 
 
 def _generate_backup_codes() -> list[str]:
@@ -111,6 +108,15 @@ def _consume_backup_code(user: User, code: str) -> bool:
         return False
     normalized = _normalize_code(code)
     for index, item in enumerate(stored):
+        if item.startswith("argon2:"):
+            try:
+                if _ARGON2.verify(item.removeprefix("argon2:"), normalized):
+                    del stored[index]
+                    user.mfa_backup_code_hashes = {"codes": stored}
+                    return True
+            except (InvalidHash, VerificationError, VerifyMismatchError):
+                pass
+            continue
         try:
             algorithm, salt_hex, digest_hex = item.split(":", 2)
             if algorithm != "scrypt":
@@ -180,10 +186,14 @@ async def confirm_mfa(db: AsyncSession, user: User, code: str) -> bool:
 async def verify_mfa(db: AsyncSession, user: User, code: str) -> bool:
     """驗證使用者的 TOTP 或備用碼；備用碼成功後立即作廢。"""
     if not user.mfa_enabled or not user.mfa_secret:
-        return True  # 未啟用 2FA 的用戶直接通過
+        return False
 
     secret = decrypt_mfa_secret(user.mfa_secret)
     if secret and verify_totp_code(secret, code):
+        replay_key = f"mfa:totp:used:{user.id}:{_normalize_code(code)}"
+        with suppress(Exception):
+            if not await redis_client.set(replay_key, "1", ex=90, nx=True):
+                return False
         return True
     if _consume_backup_code(user, code):
         await db.flush()

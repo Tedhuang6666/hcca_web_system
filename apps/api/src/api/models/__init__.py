@@ -245,6 +245,7 @@ from api.models.partner_map import (  # noqa: F401
     PartnerTag,
     partner_business_tags,
 )
+from api.models.passkey import PasskeyCredential  # noqa: F401
 from api.models.person import (  # noqa: F401
     Person,
     PersonAffiliation,

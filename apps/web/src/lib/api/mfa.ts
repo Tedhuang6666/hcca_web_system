@@ -1,5 +1,6 @@
 import type {
-  MFASetupOut, MFAStatusOut,
+  MFASetupOut, MFAStatusOut, PasskeyAuthenticationOptionsOut, PasskeyOut,
+  PasskeyRegistrationOptionsOut,
 } from "../types";
 import { get, post, request } from "./core";
 
@@ -18,4 +19,32 @@ export const mfaApi = {
       method: "DELETE",
       body: JSON.stringify({ code }),
     }),
+  passkeys: () => get<PasskeyOut[]>("/auth/mfa/passkeys"),
+  registrationOptions: () =>
+    post<PasskeyRegistrationOptionsOut>("/auth/mfa/passkeys/registration/options", {}),
+  verifyRegistration: (
+    transaction_id: string,
+    credential: unknown,
+    device_name?: string,
+  ) => post<PasskeyOut>("/auth/mfa/passkeys/registration/verify", {
+    transaction_id,
+    credential,
+    device_name,
+  }),
+  deletePasskey: (credential_id: string, code?: string) =>
+    request<{ message: string }>(`/auth/mfa/passkeys/${encodeURIComponent(credential_id)}`, {
+      method: "DELETE",
+      body: JSON.stringify(code ? { code } : {}),
+    }),
+  authenticationOptions: (challenge_token?: string) =>
+    post<PasskeyAuthenticationOptionsOut>("/auth/mfa/passkeys/authentication/options", {
+      challenge_token,
+    }),
+  verifyAuthentication: (
+    transaction_id: string,
+    credential: unknown,
+  ) => post<{ message?: string; verified?: boolean }>("/auth/mfa/passkeys/authentication/verify", {
+    transaction_id,
+    credential,
+  }),
 };
