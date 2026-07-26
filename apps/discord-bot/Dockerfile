@@ -9,13 +9,14 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 FROM python:3.12-slim@sha256:a39549e211a16149edf74e5fdc9ef03a6767e46cd987c5048b6659b6c9904c94 AS runtime
 
 RUN groupadd --gid 1001 appgroup && \
-    useradd --uid 1001 --gid appgroup --no-create-home appuser
+    useradd --uid 1001 --gid appgroup --create-home --home-dir /home/appuser appuser
 
 WORKDIR /app
 COPY --from=builder /build/.venv /app/.venv
 COPY apps/discord-bot/src /app/src
 
 ENV PATH="/app/.venv/bin:$PATH" \
+    HOME="/home/appuser" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH="/app/src"
