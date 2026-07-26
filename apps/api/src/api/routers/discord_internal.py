@@ -10,8 +10,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.database import AsyncSessionLocal
-from api.core.database import get_db
+from api.core.database import AsyncSessionLocal, get_db
 from api.dependencies.api_key_auth import require_api_scope
 from api.models.api_key import ApiKey
 from api.schemas.discord_internal import (
