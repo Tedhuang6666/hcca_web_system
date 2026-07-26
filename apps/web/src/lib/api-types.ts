@@ -2322,6 +2322,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/mfa/passkeys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出已註冊 Passkey */
+        get: operations["list_passkeys_auth_mfa_passkeys_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/mfa/passkeys/authentication/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 產生 Passkey 驗證選項 */
+        post: operations["passkey_authentication_options_auth_mfa_passkeys_authentication_options_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/mfa/passkeys/authentication/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 完成 Passkey 驗證或登入 */
+        post: operations["passkey_authentication_verify_auth_mfa_passkeys_authentication_verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/mfa/passkeys/registration/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 產生 Passkey 註冊選項 */
+        post: operations["passkey_registration_options_auth_mfa_passkeys_registration_options_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/mfa/passkeys/registration/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 驗證並儲存 Passkey */
+        post: operations["passkey_registration_verify_auth_mfa_passkeys_registration_verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/mfa/passkeys/{credential_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 刪除 Passkey */
+        delete: operations["delete_passkey_auth_mfa_passkeys__credential_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/mfa/setup": {
         parameters: {
             query?: never;
@@ -21713,6 +21815,11 @@ export interface components {
             has_pending_setup: boolean;
             /** Mfa Enabled */
             mfa_enabled: boolean;
+            /**
+             * Passkey Count
+             * @default 0
+             */
+            passkey_count: number;
         };
         /** MFAVerifyIn */
         MFAVerifyIn: {
@@ -25700,6 +25807,77 @@ export interface components {
             name?: string | null;
             /** Sort Order */
             sort_order?: number | null;
+        };
+        /** PasskeyAuthenticationOptionsIn */
+        PasskeyAuthenticationOptionsIn: {
+            /** Challenge Token */
+            challenge_token?: string | null;
+        };
+        /** PasskeyAuthenticationOptionsOut */
+        PasskeyAuthenticationOptionsOut: {
+            /** Options */
+            options: {
+                [key: string]: unknown;
+            };
+            /** Transaction Id */
+            transaction_id: string;
+        };
+        /** PasskeyAuthenticationVerifyIn */
+        PasskeyAuthenticationVerifyIn: {
+            /** Credential */
+            credential: {
+                [key: string]: unknown;
+            };
+            /** Transaction Id */
+            transaction_id: string;
+        };
+        /** PasskeyDeleteIn */
+        PasskeyDeleteIn: {
+            /** Code */
+            code?: string | null;
+        };
+        /** PasskeyOut */
+        PasskeyOut: {
+            /** Backed Up */
+            backed_up: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Credential Id */
+            credential_id: string;
+            /** Device Name */
+            device_name: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Last Used At */
+            last_used_at: string | null;
+            /** Transports */
+            transports: string[];
+        };
+        /** PasskeyRegistrationOptionsOut */
+        PasskeyRegistrationOptionsOut: {
+            /** Options */
+            options: {
+                [key: string]: unknown;
+            };
+            /** Transaction Id */
+            transaction_id: string;
+        };
+        /** PasskeyRegistrationVerifyIn */
+        PasskeyRegistrationVerifyIn: {
+            /** Credential */
+            credential: {
+                [key: string]: unknown;
+            };
+            /** Device Name */
+            device_name?: string | null;
+            /** Transaction Id */
+            transaction_id: string;
         };
         /** PendingAlertItem */
         PendingAlertItem: {
@@ -38812,6 +38990,184 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["MFALoginVerifyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_passkeys_auth_mfa_passkeys_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyOut"][];
+                };
+            };
+        };
+    };
+    passkey_authentication_options_auth_mfa_passkeys_authentication_options_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PasskeyAuthenticationOptionsIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyAuthenticationOptionsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    passkey_authentication_verify_auth_mfa_passkeys_authentication_verify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasskeyAuthenticationVerifyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    passkey_registration_options_auth_mfa_passkeys_registration_options_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyRegistrationOptionsOut"];
+                };
+            };
+        };
+    };
+    passkey_registration_verify_auth_mfa_passkeys_registration_verify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasskeyRegistrationVerifyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_passkey_auth_mfa_passkeys__credential_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                credential_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PasskeyDeleteIn"] | null;
             };
         };
         responses: {
