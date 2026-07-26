@@ -317,7 +317,6 @@ export type {
   LoanUnitStatus,
   LoanUnitUpdate,
   MFASetupOut,
-  MFAStatusOut,
   MatterCreate,
   MatterLinkRef,
   MatterListItem,
@@ -842,6 +841,33 @@ export interface OrgWithPositions {
 
 export interface ApiError { detail: string; status: number }
 export interface PaginatedResponse<T> { items: T[]; total: number; page: number; size: number }
+
+export interface MFAStatusOut {
+  mfa_enabled: boolean;
+  has_pending_setup: boolean;
+  backup_code_count: number;
+  passkey_count: number;
+}
+
+export interface PasskeyAuthenticationOptionsOut {
+  transaction_id: string;
+  options: Record<string, unknown>;
+}
+
+export interface PasskeyRegistrationOptionsOut {
+  transaction_id: string;
+  options: Record<string, unknown>;
+}
+
+export interface PasskeyOut {
+  id: string;
+  credential_id: string;
+  device_name: string;
+  transports: string[];
+  backed_up: boolean;
+  created_at: string;
+  last_used_at: string | null;
+}
 
 // ── 財務總帳 ─────────────────────────────────────────────────────────────────
 

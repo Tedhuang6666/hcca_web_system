@@ -4,18 +4,23 @@ import { useEffect, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { startAuthentication } from "@simplewebauthn/browser";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 
 import BrandEmblem from "@/components/brand/BrandEmblem";
 import { BRANDING } from "@/lib/branding";
 import { apiUrl } from "@/lib/config";
 import { useModuleStatus } from "@/contexts/ModuleStatusContext";
+import { authApi, mfaApi, apiErrorMessage } from "@/lib/api";
+import { cacheCurrentUser } from "@/lib/auth-cache";
+import { safeNextPath } from "@/lib/safe-redirect";
 
 export default function LoginPage() {
   const searchParams = useSearchParams();
   const error = searchParams.get("error");
   const [googleLoginHref, setGoogleLoginHref] = useState(apiUrl("/auth/google/login"));
   const [discordLoginHref, setDiscordLoginHref] = useState(apiUrl("/auth/discord/login"));
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
   const { isModuleClosed } = useModuleStatus();
   const discordClosed = isModuleClosed("discord");
 
@@ -36,6 +41,24 @@ export default function LoginPage() {
     event.preventDefault();
     const next = searchParams.get("next") ?? "/dashboard";
     window.location.assign(oauthHref(provider, next));
+  };
+
+  const handlePasskeyLogin = async () => {
+    setPasskeyBusy(true);
+    try {
+      const optionResult = await mfaApi.authenticationOptions();
+      const assertion = await startAuthentication({
+        optionsJSON: optionResult.options as unknown as Parameters<typeof startAuthentication>[0]["optionsJSON"],
+      });
+      await mfaApi.verifyAuthentication(optionResult.transaction_id, assertion);
+      cacheCurrentUser(await authApi.me());
+      window.location.replace(safeNextPath(searchParams.get("next"), "/dashboard"));
+    } catch (e) {
+      window.history.replaceState(null, "", window.location.pathname);
+      alert(apiErrorMessage(e, "Passkey 登入失敗，請改用 Google 登入"));
+    } finally {
+      setPasskeyBusy(false);
+    }
   };
 
   useEffect(() => {
@@ -183,6 +206,22 @@ export default function LoginPage() {
                 aria-hidden="true"
               />
             </a>
+
+            <button
+              type="button"
+              className="mt-4 flex h-13 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2"
+              style={{
+                background: "var(--bg-surface)",
+                color: "var(--text-primary)",
+                border: "1px solid var(--border-strong)",
+                boxShadow: "0 8px 24px rgba(23, 54, 84, 0.08)",
+              }}
+              disabled={passkeyBusy}
+              onClick={handlePasskeyLogin}
+            >
+              <span aria-hidden="true">🔐</span>
+              {passkeyBusy ? "Passkey 驗證中" : "使用 Passkey 登入"}
+            </button>
 
             {!discordClosed && (
               <>

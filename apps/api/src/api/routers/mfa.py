@@ -1,7 +1,9 @@
 """2FA (TOTP) 路由 - 多因素認證管理"""
 
+import time
 import uuid
-from typing import Annotated
+from datetime import datetime
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from jwt.exceptions import InvalidTokenError
@@ -19,10 +21,11 @@ from api.core.security import (
     decode_token,
     is_blacklisted,
 )
-from api.dependencies.auth import get_current_active_user
+from api.dependencies.auth import get_current_active_user, get_optional_user
 from api.models.user import User
 from api.routers.auth import _access_token_claims
 from api.services import mfa as mfa_svc
+from api.services import passkey as passkey_svc
 
 router = APIRouter(prefix="/auth/mfa", tags=["多因素認證"])
 
@@ -40,6 +43,7 @@ class MFAStatusOut(BaseModel):
     mfa_enabled: bool
     has_pending_setup: bool
     backup_code_count: int = 0
+    passkey_count: int = 0
 
 
 class MFAConfirmIn(BaseModel):
@@ -57,6 +61,45 @@ class MFALoginVerifyIn(BaseModel):
 
 class MFABackupCodesOut(BaseModel):
     backup_codes: list[str]
+
+
+class PasskeyRegistrationOptionsOut(BaseModel):
+    transaction_id: str
+    options: dict[str, Any]
+
+
+class PasskeyRegistrationVerifyIn(BaseModel):
+    transaction_id: str = Field(..., min_length=1)
+    credential: dict[str, Any]
+    device_name: str | None = Field(default=None, max_length=100)
+
+
+class PasskeyAuthenticationOptionsIn(BaseModel):
+    challenge_token: str | None = None
+
+
+class PasskeyAuthenticationOptionsOut(BaseModel):
+    transaction_id: str
+    options: dict[str, Any]
+
+
+class PasskeyAuthenticationVerifyIn(BaseModel):
+    transaction_id: str = Field(..., min_length=1)
+    credential: dict[str, Any]
+
+
+class PasskeyDeleteIn(BaseModel):
+    code: str | None = Field(default=None, min_length=6, max_length=8)
+
+
+class PasskeyOut(BaseModel):
+    id: uuid.UUID
+    credential_id: str
+    device_name: str
+    transports: list[str]
+    backed_up: bool
+    created_at: datetime
+    last_used_at: datetime | None
 
 
 def _set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
@@ -81,11 +124,13 @@ def _set_auth_cookies(response: Response, access_token: str, refresh_token: str)
 
 
 @router.get("/status", response_model=MFAStatusOut, summary="查詢 2FA 狀態")
-async def mfa_status(user: CurrentUser) -> MFAStatusOut:
+async def mfa_status(db: DbDep, user: CurrentUser) -> MFAStatusOut:
+    passkeys = await passkey_svc.list_credentials(db, user)
     return MFAStatusOut(
         mfa_enabled=user.mfa_enabled,
         has_pending_setup=user.mfa_pending_secret is not None,
         backup_code_count=mfa_svc.backup_code_count(user),
+        passkey_count=len(passkeys),
     )
 
 
@@ -110,7 +155,9 @@ async def confirm_mfa(payload: MFAConfirmIn, db: DbDep, user: CurrentUser) -> di
 
 
 @router.post("/verify", summary="驗證 2FA 碼")
-async def verify_mfa(payload: MFAVerifyIn, db: DbDep, user: CurrentUser) -> dict[str, bool]:
+async def verify_mfa(
+    payload: MFAVerifyIn, request: Request, db: DbDep, user: CurrentUser
+) -> dict[str, bool]:
     """驗證 TOTP 碼（用於需要二次確認的敏感操作）。連續失敗會暫時鎖定。"""
     lockout_key = f"mfa:{user.id}"
     locked_seconds = await is_locked(lockout_key)
@@ -119,11 +166,12 @@ async def verify_mfa(payload: MFAVerifyIn, db: DbDep, user: CurrentUser) -> dict
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=f"嘗試次數過多，請於 {locked_seconds // 60 + 1} 分鐘後再試",
         )
-    valid = await mfa_svc.verify_mfa(db, user, payload.code)
+    valid = user.mfa_enabled and await mfa_svc.verify_mfa(db, user, payload.code)
     if not valid:
         await record_failure(lockout_key)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="2FA 驗證碼錯誤")
     await record_success(lockout_key)
+    request.session["mfa_reauth_until"] = time.time() + 300
     return {"verified": True}
 
 
@@ -181,7 +229,7 @@ async def verify_mfa_login(
             detail=f"嘗試次數過多，請於 {locked_seconds // 60 + 1} 分鐘後再試",
         )
 
-    valid = await mfa_svc.verify_mfa(db, user, payload.code)
+    valid = user.mfa_enabled and await mfa_svc.verify_mfa(db, user, payload.code)
     if not valid:
         await record_failure(lockout_key)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="2FA 驗證碼錯誤")
@@ -222,3 +270,123 @@ async def disable_mfa(payload: MFAConfirmIn, db: DbDep, user: CurrentUser) -> di
     if not success:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="驗證碼錯誤，停用失敗")
     return {"message": "2FA 已停用"}
+
+
+@router.post(
+    "/passkeys/registration/options",
+    response_model=PasskeyRegistrationOptionsOut,
+    summary="產生 Passkey 註冊選項",
+)
+async def passkey_registration_options(
+    db: DbDep, user: CurrentUser
+) -> PasskeyRegistrationOptionsOut:
+    return PasskeyRegistrationOptionsOut(**await passkey_svc.registration_options(db, user))
+
+
+@router.post(
+    "/passkeys/registration/verify",
+    response_model=PasskeyOut,
+    summary="驗證並儲存 Passkey",
+)
+async def passkey_registration_verify(
+    payload: PasskeyRegistrationVerifyIn,
+    db: DbDep,
+    user: CurrentUser,
+) -> PasskeyOut:
+    passkey = await passkey_svc.verify_registration(
+        db, user, payload.transaction_id, payload.credential, payload.device_name
+    )
+    if passkey is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Passkey 註冊驗證失敗")
+    return PasskeyOut(**passkey_svc.credential_out(passkey))
+
+
+@router.get("/passkeys", response_model=list[PasskeyOut], summary="列出已註冊 Passkey")
+async def list_passkeys(db: DbDep, user: CurrentUser) -> list[PasskeyOut]:
+    return [
+        PasskeyOut(**passkey_svc.credential_out(item))
+        for item in await passkey_svc.list_credentials(db, user)
+    ]
+
+
+@router.delete("/passkeys/{credential_id}", summary="刪除 Passkey")
+async def delete_passkey(
+    credential_id: str,
+    request: Request,
+    db: DbDep,
+    user: CurrentUser,
+    payload: PasskeyDeleteIn | None = None,
+) -> dict[str, str]:
+    if user.mfa_enabled and (
+        not payload or not payload.code or not await mfa_svc.verify_mfa(db, user, payload.code)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="請先通過 TOTP 重新驗證"
+        )
+    if not user.mfa_enabled and request.session.get("mfa_reauth_until", 0) < time.time():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="請先使用 Passkey 重新驗證"
+        )
+    if not await passkey_svc.delete_credential(db, user, credential_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到 Passkey")
+    return {"message": "Passkey 已刪除"}
+
+
+@router.post(
+    "/passkeys/authentication/options",
+    response_model=PasskeyAuthenticationOptionsOut,
+    summary="產生 Passkey 驗證選項",
+)
+async def passkey_authentication_options(
+    db: DbDep,
+    payload: PasskeyAuthenticationOptionsIn | None = None,
+    user: Annotated[User | None, Depends(get_optional_user)] = None,
+) -> PasskeyAuthenticationOptionsOut:
+    challenge_user = None
+    challenge_token = payload.challenge_token if payload else None
+    if challenge_token:
+        challenge_user = await passkey_svc.resolve_mfa_challenge_user(db, challenge_token)
+        if challenge_user is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="登入挑戰已失效")
+        if user and user.id != challenge_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="登入挑戰與帳號不符"
+            )
+        user = challenge_user
+    mode = "verify" if user and not challenge_token else "login"
+    result = await passkey_svc.authentication_options(
+        db, user=user, mode=mode, challenge_token=challenge_token
+    )
+    return PasskeyAuthenticationOptionsOut(**result)
+
+
+@router.post("/passkeys/authentication/verify", summary="完成 Passkey 驗證或登入")
+async def passkey_authentication_verify(
+    payload: PasskeyAuthenticationVerifyIn,
+    request: Request,
+    response: Response,
+    db: DbDep,
+    user: Annotated[User | None, Depends(get_optional_user)] = None,
+) -> dict[str, Any]:
+    result = await passkey_svc.verify_authentication(db, payload.transaction_id, payload.credential)
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Passkey 驗證失敗")
+    verified_user, mode, challenge_token = result
+    if mode == "verify":
+        if user is None or user.id != verified_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="需要有效的登入狀態"
+            )
+        request.session["mfa_reauth_until"] = time.time() + 300
+        return {"verified": True}
+
+    if challenge_token:
+        await add_to_blacklist(challenge_token)
+        request.session.pop("mfa_challenge", None)
+    access_token = create_access_token(
+        subject=str(verified_user.id),
+        extra_claims=await _access_token_claims(db, verified_user),
+    )
+    refresh_token = create_refresh_token(subject=str(verified_user.id))
+    _set_auth_cookies(response, access_token, refresh_token)
+    return {"message": "ok"}

@@ -12,6 +12,7 @@ from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
 from api.models.user import User
+from api.services import passkey as passkey_svc
 from api.services.permission import get_user_permission_codes, get_user_permission_codes_for_org
 
 
@@ -170,9 +171,10 @@ class AdminMFAChecker:
 
     async def __call__(
         self,
+        db: AsyncSession = Depends(get_db),
         current_user: User = Depends(get_current_active_user),
     ) -> User:
-        if not current_user.mfa_enabled:
+        if not await passkey_svc.requires_mfa(db, current_user):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="管理員必須啟用 MFA 才能存取此資源，請至 /mfa/setup 完成設定",

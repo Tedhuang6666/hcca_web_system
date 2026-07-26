@@ -41,6 +41,8 @@ dependencies = [
     "weasyprint>=68.1",
     "posthog>=7.16.2",
     "prometheus-client>=0.25.0",
+    "webauthn>=3.0.0",
+    "argon2-cffi>=25.1.0",
 ]
 
 [project.scripts]
