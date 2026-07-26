@@ -62,6 +62,10 @@
 		reverse_proxy api:8000
 	}
 
+	handle /auth/discord/* {
+		reverse_proxy api:8000
+	}
+
 	# Next.js 靜態資源（hashed 檔名，永久快取）
 	handle /_next/static/* {
 		header Cache-Control "public, max-age=31536000, immutable"
