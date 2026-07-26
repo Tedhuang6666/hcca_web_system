@@ -27,6 +27,7 @@ x-api-common: &api-common
     - ${PROD_ENV_FILE:-.env.production}
   environment:
     ENVIRONMENT: production
+    HOME: /tmp
     DEBUG: "false"
     ENABLE_API_DOCS: "false"
     COOKIE_SECURE: "true"
@@ -122,6 +123,7 @@ services:
       autoheal: "true"
     environment:
       ENVIRONMENT: production
+      HOME: /tmp
       DEBUG: "false"
       ENABLE_API_DOCS: "false"
       COOKIE_SECURE: "true"
@@ -217,6 +219,7 @@ services:
       --queues=email
     environment:
       ENVIRONMENT: production
+      HOME: /tmp
       DEBUG: "false"
       ENABLE_API_DOCS: "false"
       COOKIE_SECURE: "true"
@@ -262,6 +265,7 @@ services:
         --pidfile=/dev/shm/celerybeat.pid
     environment:
       ENVIRONMENT: production
+      HOME: /tmp
       DEBUG: "false"
       ENABLE_API_DOCS: "false"
       COOKIE_SECURE: "true"
