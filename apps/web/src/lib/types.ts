@@ -849,6 +849,11 @@ export interface MFAStatusOut {
   passkey_count: number;
 }
 
+export interface MFAChallengeOut {
+  challenge: string;
+  passkey_available: boolean;
+}
+
 export interface PasskeyAuthenticationOptionsOut {
   transaction_id: string;
   options: Record<string, unknown>;

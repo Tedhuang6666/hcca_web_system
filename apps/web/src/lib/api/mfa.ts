@@ -1,5 +1,5 @@
 import type {
-  MFASetupOut, MFAStatusOut, PasskeyAuthenticationOptionsOut, PasskeyOut,
+  MFAChallengeOut, MFASetupOut, MFAStatusOut, PasskeyAuthenticationOptionsOut, PasskeyOut,
   PasskeyRegistrationOptionsOut,
 } from "../types";
 import { get, post, request } from "./core";
@@ -9,7 +9,7 @@ export const mfaApi = {
   setup: () => post<MFASetupOut>("/auth/mfa/setup", {}),
   confirm: (code: string) => post<{ message: string }>("/auth/mfa/confirm", { code }),
   verify: (code: string) => post<{ verified: boolean }>("/auth/mfa/verify", { code }),
-  exchangeChallenge: () => get<{ challenge: string }>("/auth/mfa/exchange-challenge"),
+  exchangeChallenge: () => get<MFAChallengeOut>("/auth/mfa/exchange-challenge"),
   verifyLogin: (challenge_token: string, code: string) =>
     post<{ message: string }>("/auth/mfa/login/verify", { challenge_token, code }),
   regenerateBackupCodes: (code: string) =>
