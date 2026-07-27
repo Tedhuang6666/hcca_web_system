@@ -89,12 +89,6 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "judicialPetitions", href: "/judicial-petitions", iconKey: "shield", label: "評議訴訟" },
   { id: "examPapers", href: "/exam-papers", iconKey: "examPapers", label: "段考題庫" },
   { id: "about", href: "/about", iconKey: "info", label: "關於本系統" },
-  {
-    id: "settings",
-    href: "/settings",
-    iconKey: "settings",
-    label: "個人設定",
-  },
   { id: "analytics", href: "/analytics", iconKey: "analytics", label: "績效統計", perm: "analytics:view" },
   { id: "orgs", href: "/orgs", iconKey: "org", label: "組織管理", perm: "org:*" },
   {
@@ -327,7 +321,6 @@ export const NAV_DEF: NavEntry[] = [
       "moduleBackoffice",
       "adminDashboard",
       "navigationProfiles",
-      "settings",
       "about",
     ]),
   },
@@ -358,7 +351,7 @@ export const NAV_DEF_TEACHER: NavEntry[] = [
   {
     id: "teacher-services",
     heading: "常用模組",
-    items: byIds(["surveys", "examPapers", "shop", "merchandiseSubmissions", "meal", "recommendedVendors", "settings"]),
+    items: byIds(["surveys", "examPapers", "shop", "merchandiseSubmissions", "meal", "recommendedVendors"]),
   },
 ];
 
@@ -371,7 +364,7 @@ export const NAV_DEF_STUDENT: NavEntry[] = [
   {
     id: "student-services",
     heading: "常用入口",
-    items: byIds(["meal", "shop", "merchandiseSubmissions", "partnerMap", "recommendedVendors", "examPapers", "settings"]),
+    items: byIds(["meal", "shop", "merchandiseSubmissions", "partnerMap", "recommendedVendors", "examPapers"]),
   },
 ];
 
@@ -384,7 +377,7 @@ export const NAV_DEF_VENDOR: NavEntry[] = [
   {
     id: "vendor-services",
     heading: "營運入口",
-    items: byIds(["announcements", "activitiesAdmin", "settings"]),
+    items: byIds(["announcements", "activitiesAdmin"]),
   },
 ];
 
@@ -397,7 +390,7 @@ export const NAV_DEF_MEAL_VENDOR: NavEntry[] = [
   {
     id: "meal-vendor-services",
     heading: "營運入口",
-    items: byIds(["announcements", "settings"]),
+    items: byIds(["announcements"]),
   },
 ];
 
@@ -425,7 +418,6 @@ export const DEFAULT_MOBILE_ORDER = [
   "examPapers",
   "partnerMap",
   "recommendedVendors",
-  "settings",
 ];
 
 export const DEFAULT_NAV_PREFERENCES: NavPreferences = {
@@ -450,7 +442,7 @@ export const NAVIGATION_PROFILES: Record<NavigationProfile, NavigationProfileCon
     description: "把一般學生常用的公告、問卷、陳情、學餐、商品與特約地圖集中成服務入口。",
     audience: "一般學生、未持有行政或商家權限的登入使用者",
     desktopSections: NAV_DEF_STUDENT,
-    mobileOrder: ["dashboard", "announcements", "surveys", "meal", "shop", "merchandiseSubmissions", "petitions", "partnerMap", "settings"],
+    mobileOrder: ["dashboard", "announcements", "surveys", "meal", "shop", "merchandiseSubmissions", "petitions", "partnerMap"],
   },
   teacher: {
     id: "teacher",
@@ -460,7 +452,7 @@ export const NAVIGATION_PROFILES: Record<NavigationProfile, NavigationProfileCon
     matchAnyPrefixes: ["class:", "exam:"],
     matchAnyPermissions: ["survey:review", "survey:manage"],
     desktopSections: NAV_DEF_TEACHER,
-    mobileOrder: ["dashboard", "tasks", "surveys", "examPapers", "shop", "merchandiseSubmissions", "meal", "settings"],
+    mobileOrder: ["dashboard", "tasks", "surveys", "examPapers", "shop", "merchandiseSubmissions", "meal"],
   },
   vendor: {
     id: "vendor",
@@ -469,12 +461,12 @@ export const NAVIGATION_PROFILES: Record<NavigationProfile, NavigationProfileCon
     audience: "校商、合作廠商、外部合作窗口",
     matchAnyPrefixes: ["partner_map:"],
     desktopSections: NAV_DEF_VENDOR,
-    mobileOrder: ["dashboard", "tasks", "partnerMapAdmin", "partnerMap", "announcements", "settings"],
+    mobileOrder: ["dashboard", "tasks", "partnerMapAdmin", "partnerMap", "announcements"],
   },
   mealVendor: {
     id: "mealVendor",
     label: "餐商視角",
-    description: "把畫面集中在餐商管理、學餐訂購狀態、待辦與個人設定。",
+    description: "把畫面集中在餐商管理、學餐訂購狀態與待辦。",
     audience: "學生餐廳、合作餐商、供餐窗口",
     matchAnyPrefixes: ["meal:"],
     excludePrefixes: [
@@ -488,7 +480,7 @@ export const NAVIGATION_PROFILES: Record<NavigationProfile, NavigationProfileCon
       "election:",
     ],
     desktopSections: NAV_DEF_MEAL_VENDOR,
-    mobileOrder: ["dashboard", "tasks", "mealVendor", "meal", "announcements", "settings"],
+    mobileOrder: ["dashboard", "tasks", "mealVendor", "meal", "announcements"],
   },
 };
 
