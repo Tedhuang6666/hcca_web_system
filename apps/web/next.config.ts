@@ -16,11 +16,11 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: webRoot,
   },
-  // 圖片優化：自動轉 WebP/AVIF、長 CDN 快取（1 天）；
+  // 圖片優化：自動轉 WebP/AVIF、長 CDN 快取（30 天）；
   // remotePatterns 允許後端 /uploads 路徑與 Cloudflare 隧道測試環境。
   images: {
     formats: ["image/avif", "image/webp"],
-    minimumCacheTTL: 86400,
+    minimumCacheTTL: 2592000,
     deviceSizes: [640, 750, 828, 1080, 1200, 1920],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
     remotePatterns: [

@@ -63,7 +63,47 @@ function VendorDetail({ vendor, onClose }: { vendor: VendorDetail; onClose: () =
         {vendor.website_url && <a className="btn btn-secondary" href={vendor.website_url} target="_blank" rel="noreferrer"><ExternalLink size={15} aria-hidden="true" />官方網站</a>}
       </div>
       <section>
-        {vendor.menus.length > 0 && <section className="mb-5"><h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>菜單</h3><div className="mt-2 grid gap-3 sm:grid-cols-2">{vendor.menus.map((menu) => <a key={menu.id} className="group overflow-hidden rounded-md border" href={menuHref(menu.url)} target="_blank" rel="noreferrer" style={{ borderColor: "var(--border)" }}>{menu.kind === "image" && menu.url ? <img src={menuHref(menu.url)} alt={menu.title} className="aspect-[4/3] w-full object-cover transition-transform group-hover:scale-[1.02]" /> : <div className="flex min-h-24 items-center gap-3 p-4" style={{ background: "var(--bg)" }}><FilePreviewIcon kind={menu.kind} /><div><p className="font-medium" style={{ color: "var(--text-primary)" }}>{menu.title}</p><p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{menu.kind === "pdf" ? "PDF 預覽" : "開啟菜單連結"}</p></div></div>}</a>)}</div></section>}
+        {vendor.menus.length > 0 && (
+          <section className="mb-5">
+            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>菜單</h3>
+            <div className="mt-2 grid gap-3 sm:grid-cols-2">
+              {vendor.menus.map((menu) => (
+                <a
+                  key={menu.id}
+                  className="group overflow-hidden rounded-md border"
+                  href={menuHref(menu.url)}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  {menu.kind === "image" && menu.url ? (
+                    // Uploaded public vendor menus are optimized by Cloudflare Polish at the edge.
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={menuHref(menu.url)}
+                      alt={menu.title}
+                      width={640}
+                      height={480}
+                      loading="lazy"
+                      decoding="async"
+                      className="aspect-[4/3] w-full object-cover transition-transform group-hover:scale-[1.02]"
+                    />
+                  ) : (
+                    <div className="flex min-h-24 items-center gap-3 p-4" style={{ background: "var(--bg)" }}>
+                      <FilePreviewIcon kind={menu.kind} />
+                      <div>
+                        <p className="font-medium" style={{ color: "var(--text-primary)" }}>{menu.title}</p>
+                        <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                          {menu.kind === "pdf" ? "PDF 預覽" : "開啟菜單連結"}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </a>
+              ))}
+            </div>
+          </section>
+        )}
         <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>菜單／商品資訊</h3>
         {vendor.products.length === 0 ? <p className="mt-2 text-sm" style={{ color: "var(--text-muted)" }}>店家尚未提供品項資訊。</p> : (
           <div className="mt-2 divide-y rounded-md border" style={{ borderColor: "var(--border)" }}>
