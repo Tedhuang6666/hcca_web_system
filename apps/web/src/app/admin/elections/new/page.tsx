@@ -1,17 +1,30 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ImagePlus, Loader2, X } from "lucide-react";
 import { electionsApi } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
+import DraftStatus from "@/components/ui/DraftStatus";
+import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 
 type MemberForm = { position: string; name: string; photo_url: string | null };
 type CandidateForm = {
   number: number;
   color: string;
   members: MemberForm[];
+};
+
+type ElectionDraft = {
+  title: string;
+  description: string;
+  candidates: CandidateForm[];
+  boxes: { name: string; expected_total_votes: string }[];
+  seats: string;
+  eligibleVoters: string;
+  turnoutPct: string;
+  thresholdPct: string;
 };
 
 function createCandidate(number: number, color: string): CandidateForm {
@@ -40,6 +53,38 @@ export default function NewElectionPage() {
   const [thresholdPct, setThresholdPct] = useState("");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null);
+
+  const restoreDraft = useCallback((draft: ElectionDraft) => {
+    setTitle(draft.title);
+    setDescription(draft.description);
+    setCandidates(draft.candidates);
+    setBoxes(draft.boxes);
+    setSeats(draft.seats);
+    setEligibleVoters(draft.eligibleVoters);
+    setTurnoutPct(draft.turnoutPct);
+    setThresholdPct(draft.thresholdPct);
+    toast.info("已復原未送出的選舉草稿");
+  }, []);
+
+  const { clearDraft, flushDraft, lastSavedAt } = useDraftAutosave<ElectionDraft>({
+    key: "admin:elections:new",
+    value: {
+      title,
+      description,
+      candidates,
+      boxes,
+      seats,
+      eligibleVoters,
+      turnoutPct,
+      thresholdPct,
+    },
+    onRestore: restoreDraft,
+    isEmpty: useCallback((draft: ElectionDraft) => (
+      !draft.title.trim()
+      && draft.candidates.every((candidate) => candidate.members.every((member) => !member.name.trim()))
+      && draft.boxes.every((box) => !box.name.trim())
+    ), []),
+  });
 
   function patchMember(ci: number, mi: number, patch: Partial<MemberForm>) {
     setCandidates((prev) =>
@@ -101,9 +146,11 @@ export default function NewElectionPage() {
           sort_order: index,
         })),
       });
+      clearDraft();
       toast.success("選舉已建立");
       router.push(`/admin/elections/${election.id}/count`);
     } catch (error) {
+      flushDraft();
       toast.error(error instanceof Error ? error.message : "建立失敗");
     } finally {
       setSaving(false);
@@ -117,6 +164,7 @@ export default function NewElectionPage() {
         <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
           開始開票後，候選人、候選組合與票匭結構將固定
         </p>
+        <DraftStatus lastSavedAt={lastSavedAt} className="mt-2" />
       </div>
       <section className="card p-6 space-y-4">
         <label className="block">

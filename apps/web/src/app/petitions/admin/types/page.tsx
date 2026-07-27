@@ -5,6 +5,15 @@ import { toast } from "sonner";
 import { ApiError, orgsApi, petitionsApi, withFallback } from "@/lib/api";
 import type { PetitionTypeOut } from "@/lib/types";
 import { orgDisplayName } from "@/lib/orgs";
+import DraftStatus from "@/components/ui/DraftStatus";
+import { useDraftAutosave } from "@/hooks/useDraftAutosave";
+
+type PetitionTypeDraft = {
+  name: string;
+  description: string;
+  orgId: string;
+  sortOrder: number;
+};
 
 export default function PetitionTypesAdminPage() {
   const [types, setTypes] = useState<PetitionTypeOut[]>([]);
@@ -13,6 +22,21 @@ export default function PetitionTypesAdminPage() {
   const [description, setDescription] = useState("");
   const [orgId, setOrgId] = useState("");
   const [sortOrder, setSortOrder] = useState(0);
+
+  const restoreDraft = useCallback((draft: PetitionTypeDraft) => {
+    setName(draft.name);
+    setDescription(draft.description);
+    setOrgId(draft.orgId);
+    setSortOrder(draft.sortOrder);
+    toast.info("已復原未送出的陳情類型草稿");
+  }, []);
+
+  const { clearDraft, flushDraft, lastSavedAt } = useDraftAutosave<PetitionTypeDraft>({
+    key: "petitions:admin-types:new",
+    value: { name, description, orgId, sortOrder },
+    onRestore: restoreDraft,
+    isEmpty: useCallback((draft: PetitionTypeDraft) => !draft.name.trim(), []),
+  });
 
   const load = useCallback(async () => {
     const failedSections: string[] = [];
@@ -41,12 +65,14 @@ export default function PetitionTypesAdminPage() {
         sort_order: sortOrder,
         is_active: true,
       });
+      clearDraft();
       setName("");
       setDescription("");
       setSortOrder(0);
       await load();
       toast.success("已新增陳情類型");
     } catch (err) {
+      flushDraft();
       toast.error(err instanceof ApiError ? err.message : "新增失敗");
     }
   };
@@ -68,6 +94,7 @@ export default function PetitionTypesAdminPage() {
       <div>
         <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>陳情類型管理</h1>
         <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>設定前台可選類型與預設負責機關</p>
+        <DraftStatus lastSavedAt={lastSavedAt} className="mt-2" />
       </div>
 
       <form onSubmit={create} className="card p-5 grid md:grid-cols-[1fr_1fr_120px_auto] gap-3 items-end">

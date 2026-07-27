@@ -1,10 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { ApiError, petitionsApi } from "@/lib/api";
 import type { PetitionCreatedOut, PetitionTypeOut } from "@/lib/types";
+import DraftStatus from "@/components/ui/DraftStatus";
+import { useDraftAutosave } from "@/hooks/useDraftAutosave";
+
+type PetitionDraft = {
+  typeId: string;
+  isNamed: boolean;
+  contactName: string;
+  contactEmail: string;
+  title: string;
+  content: string;
+};
 
 export default function NewPetitionPage() {
   const [types, setTypes] = useState<PetitionTypeOut[]>([]);
@@ -20,11 +31,16 @@ export default function NewPetitionPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [accountName, setAccountName] = useState("");
   const [accountEmail, setAccountEmail] = useState("");
+  const [authReady, setAuthReady] = useState(false);
+  const [draftScope, setDraftScope] = useState("anonymous");
 
   useEffect(() => {
-    setIsLoggedIn(Boolean(localStorage.getItem("user_id")));
+    const userId = localStorage.getItem("user_id");
+    setIsLoggedIn(Boolean(userId));
     setAccountName(localStorage.getItem("user_name") ?? "");
     setAccountEmail(localStorage.getItem("user_email") ?? "");
+    setDraftScope(userId ? `user:${userId}` : "anonymous");
+    setAuthReady(true);
     petitionsApi.listTypes()
       .then((items) => {
         setTypes(items);
@@ -32,6 +48,26 @@ export default function NewPetitionPage() {
       })
       .catch(() => toast.error("無法載入陳情類型"));
   }, []);
+
+  const restoreDraft = useCallback((draft: PetitionDraft) => {
+    setTypeId(draft.typeId);
+    setIsNamed(draft.isNamed);
+    setContactName(draft.contactName);
+    setContactEmail(draft.contactEmail);
+    setTitle(draft.title);
+    setContent(draft.content);
+    toast.info("已復原未送出的陳情草稿");
+  }, []);
+
+  const { clearDraft, flushDraft, lastSavedAt } = useDraftAutosave<PetitionDraft>({
+    key: `petitions:new:${draftScope}`,
+    value: { typeId, isNamed, contactName, contactEmail, title, content },
+    onRestore: restoreDraft,
+    enabled: authReady,
+    isEmpty: useCallback((draft: PetitionDraft) => (
+      !draft.title.trim() && !draft.content.trim()
+    ), []),
+  });
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,9 +86,11 @@ export default function NewPetitionPage() {
           await petitionsApi.uploadAttachment(result.id, file, { verification_code: result.verification_code });
         }
       }
+      clearDraft();
       setCreated(result);
       toast.success("陳情案件已送出");
     } catch (err) {
+      flushDraft();
       toast.error(err instanceof ApiError ? err.message : "送件失敗");
     } finally {
       setSubmitting(false);
@@ -106,6 +144,7 @@ export default function NewPetitionPage() {
       <div>
         <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>我要陳情</h1>
         <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>選擇具名或匿名後送出，系統會依類型自動分派給負責機關。</p>
+        <DraftStatus lastSavedAt={lastSavedAt} className="mt-2" />
       </div>
       <form onSubmit={submit} className="card p-5 space-y-4">
         {!isLoggedIn && (

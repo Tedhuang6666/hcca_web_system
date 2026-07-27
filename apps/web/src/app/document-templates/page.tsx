@@ -15,6 +15,8 @@ import type {
 } from "@/lib/types";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
 import SmartEmptyState from "@/components/ui/SmartEmptyState";
+import DraftStatus from "@/components/ui/DraftStatus";
+import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 
 const CATEGORY_OPTIONS: { value: DocumentCategory; label: string }[] = [
   { value: "letter", label: "函" },
@@ -85,6 +87,25 @@ export default function DocumentTemplatesPage() {
     [form.org_id, orgs],
   );
 
+  const restoreDraft = useCallback((draft: DocumentTemplateCreate) => {
+    setForm(draft);
+    toast.info("已復原未儲存的公文範本草稿");
+  }, []);
+
+  const { clearDraft, flushDraft, lastSavedAt } = useDraftAutosave<DocumentTemplateCreate>({
+    key: `document-templates:${editingId || "new"}`,
+    value: form,
+    onRestore: restoreDraft,
+    isEmpty: useCallback((draft: DocumentTemplateCreate) => (
+      !draft.name.trim()
+      && !draft.subject?.trim()
+      && !draft.doc_description?.trim()
+      && !draft.action_required?.trim()
+      && !draft.content.trim()
+      && !draft.meeting_purpose?.trim()
+    ), []),
+  });
+
   const loadTemplates = useCallback(() => {
     setLoading(true);
     documentTemplatesApi
@@ -107,6 +128,7 @@ export default function DocumentTemplatesPage() {
   }, [loadTemplates]);
 
   const resetForm = () => {
+    clearDraft();
     setEditingId(null);
     setForm({ ...EMPTY_FORM, org_id: orgFilter });
   };
@@ -176,6 +198,7 @@ export default function DocumentTemplatesPage() {
       resetForm();
       loadTemplates();
     } catch (e) {
+      flushDraft();
       toast.error(apiErrorMessage(e, "儲存公文範本失敗"));
     } finally {
       setSaving(false);
@@ -299,6 +322,7 @@ export default function DocumentTemplatesPage() {
 
         <aside className="card h-fit p-4">
           <h2 className="text-sm font-semibold">{editingId ? "編輯範本" : "新增範本"}</h2>
+          <DraftStatus lastSavedAt={lastSavedAt} className="mt-1" />
           <div className="mt-4 space-y-3">
             <select
               value={form.org_id}

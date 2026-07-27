@@ -1,10 +1,18 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { toast } from "sonner";
 
 import { publicationsApi } from "@/lib/api";
+import DraftStatus from "@/components/ui/DraftStatus";
+import { useDraftAutosave } from "@/hooks/useDraftAutosave";
+
+type PublicationDraft = {
+  title: string;
+  body: string;
+  channels: string[];
+};
 
 const CHANNELS = [
   ["announcement", "站內公告"],
@@ -21,6 +29,22 @@ export default function NewPublicationPage() {
   const [body, setBody] = useState("");
   const [channels, setChannels] = useState<string[]>(["announcement"]);
   const activityId = search.get("activity_id");
+
+  const restoreDraft = useCallback((draft: PublicationDraft) => {
+    setTitle(draft.title);
+    setBody(draft.body);
+    setChannels(draft.channels.length > 0 ? draft.channels : ["announcement"]);
+    toast.info("已復原未送出的發布草稿");
+  }, []);
+
+  const { clearDraft, flushDraft, lastSavedAt } = useDraftAutosave<PublicationDraft>({
+    key: `publications:new:${activityId || "none"}`,
+    value: { title, body, channels },
+    onRestore: restoreDraft,
+    isEmpty: useCallback((draft: PublicationDraft) => (
+      !draft.title.trim() && !draft.body.trim()
+    ), []),
+  });
 
   const toggle = (channel: string) => {
     setChannels((current) =>
@@ -43,9 +67,11 @@ export default function NewPublicationPage() {
         channels,
         audience_type: "all",
       });
+      clearDraft();
       toast.success("已建立發布任務");
       router.push(`/publications#${created.id}`);
     } catch (error) {
+      flushDraft();
       toast.error(error instanceof Error ? error.message : "建立發布任務失敗");
     }
   };
@@ -55,6 +81,7 @@ export default function NewPublicationPage() {
       <header>
         <p className="text-sm" style={{ color: "var(--text-muted)" }}>發布中心</p>
         <h1 className="text-2xl font-semibold">新增多渠道發布</h1>
+        <DraftStatus lastSavedAt={lastSavedAt} className="mt-2" />
       </header>
 
       <section className="space-y-4">
