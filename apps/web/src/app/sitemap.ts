@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 
+import { regulationHref } from "@/lib/api/regulations";
 import { BRANDING } from "@/lib/branding";
 import { serverApiUrl } from "@/lib/config";
 import { resolvePublicNav } from "@/lib/publicNav";
@@ -158,13 +159,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.7,
     })),
     ...regs.map((r) => ({
-      url: `${site}/public/regulations/${encodeURIComponent(r.id)}`,
+      url: `${site}${regulationHref(r)}`,
       lastModified: new Date(r.updated_at),
       changeFrequency: "weekly" as const,
       priority: 0.7,
     })),
     ...docs.map((d) => ({
-      url: `${site}/public/documents/${encodeURIComponent(d.id)}`,
+      url: `${site}/documents/${encodeURIComponent(d.serial_number)}`,
       lastModified: new Date((d.updated_at as string | undefined) ?? d.created_at),
       changeFrequency: "weekly" as const,
       priority: 0.5,
