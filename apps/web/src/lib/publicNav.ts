@@ -9,6 +9,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   BookOpenText,
   FileSearch,
+  Info,
   Landmark,
   Link2,
   ListChecks,
@@ -53,6 +54,7 @@ export const PUBLIC_NAV_GROUP_META: Record<
 export const PUBLIC_NAV_ITEMS: PublicNavItemDef[] = [
   { key: "news", href: "/news", label: "最新公告", description: "公開消息與重要通知", icon: Megaphone, group: "primary", moduleId: "announcements" },
   { key: "about", href: "/about", label: "關於班聯會", description: "任務、沿革與公共角色", icon: Landmark, group: "primary" },
+  { key: "system-info", href: "/system-info", label: "關於本系統", description: "協助、回報與公開說明", icon: Info, group: "primary" },
 
   { key: "officers", href: "/officers", label: "班聯會幹部", description: "當屆幹部與公開資料", icon: UsersRound, group: "info", guestUsable: true },
   { key: "links", href: "/links", label: "平台連結", description: "常用服務與外部連結", icon: Link2, group: "info", guestUsable: true },
