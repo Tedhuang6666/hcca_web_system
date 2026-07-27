@@ -21,6 +21,11 @@ class PublicSiteSettingsBase(BaseModel):
     about_body_md: str = Field(..., min_length=1)
     mission_md: str | None = None
     history_md: str | None = None
+    support_md: str | None = None
+    error_report_md: str | None = None
+    contact_md: str | None = None
+    terms_md: str | None = None
+    developer_team_md: str | None = None
     cta_label: str = Field(..., min_length=1, max_length=60)
     cta_href: str = Field(..., min_length=1, max_length=500)
     public_database_label: str = Field(..., min_length=1, max_length=60)
@@ -45,6 +50,11 @@ class PublicSiteSettingsUpdate(BaseModel):
     about_body_md: str | None = Field(None, min_length=1)
     mission_md: str | None = None
     history_md: str | None = None
+    support_md: str | None = None
+    error_report_md: str | None = None
+    contact_md: str | None = None
+    terms_md: str | None = None
+    developer_team_md: str | None = None
     cta_label: str | None = Field(None, min_length=1, max_length=60)
     cta_href: str | None = Field(None, min_length=1, max_length=500)
     public_database_label: str | None = Field(None, min_length=1, max_length=60)

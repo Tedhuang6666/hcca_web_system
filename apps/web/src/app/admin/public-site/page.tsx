@@ -63,6 +63,11 @@ const emptySettings: PublicSiteSettingsOut = {
   about_body_md: "請在後台編輯關於本會內容。",
   mission_md: "",
   history_md: "",
+  support_md: "",
+  error_report_md: "",
+  contact_md: "",
+  terms_md: "",
+  developer_team_md: "",
   cta_label: "查看公開資料",
   cta_href: "/public",
   public_database_label: "公開資料庫",
@@ -507,6 +512,11 @@ export default function PublicSiteAdminPage() {
         about_body_md: settings.about_body_md,
         mission_md: settings.mission_md,
         history_md: settings.history_md,
+        support_md: settings.support_md,
+        error_report_md: settings.error_report_md,
+        contact_md: settings.contact_md,
+        terms_md: settings.terms_md,
+        developer_team_md: settings.developer_team_md,
         cta_label: settings.cta_label,
         cta_href: settings.cta_href,
         public_database_label: settings.public_database_label,
@@ -816,6 +826,34 @@ export default function PublicSiteAdminPage() {
             <Field label="關於內文 Markdown"><TextArea rows={8} value={settings.about_body_md} onChange={(e) => setSettings({ ...settings, about_body_md: e.target.value })} /></Field>
             <Field label="使命 Markdown"><TextArea value={settings.mission_md ?? ""} onChange={(e) => setSettings({ ...settings, mission_md: e.target.value })} /></Field>
             <Field label="沿革 Markdown"><TextArea value={settings.history_md ?? ""} onChange={(e) => setSettings({ ...settings, history_md: e.target.value })} /></Field>
+          </div>
+          <div className="card space-y-4 p-5 lg:col-span-2">
+            <div>
+              <h2 className="font-semibold">系統資訊（公開頁）</h2>
+              <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">
+                以 Markdown 維護公開頁的協助、錯誤回報、聯絡方式、使用者條款與開發團隊資訊；留白的區塊不會顯示。
+              </p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="需要協助嗎？ Markdown" hint="可填聯絡方式、服務時間或常見問題入口。">
+                <TextArea rows={6} value={settings.support_md ?? ""} onChange={(e) => setSettings({ ...settings, support_md: e.target.value })} />
+              </Field>
+              <Field label="錯誤報告 Markdown" hint="建議提醒使用者提供重現步驟，且不要填寫密碼或敏感資料。">
+                <TextArea rows={6} value={settings.error_report_md ?? ""} onChange={(e) => setSettings({ ...settings, error_report_md: e.target.value })} />
+              </Field>
+              <Field label="聯絡資訊 Markdown">
+                <TextArea rows={6} value={settings.contact_md ?? ""} onChange={(e) => setSettings({ ...settings, contact_md: e.target.value })} />
+              </Field>
+              <Field label="使用者條款 Markdown">
+                <TextArea rows={6} value={settings.terms_md ?? ""} onChange={(e) => setSettings({ ...settings, terms_md: e.target.value })} />
+              </Field>
+              <Field label="開發團隊 Markdown" hint="請填寫實際團隊與維護角色，不會自動帶入其他學校的範例資料。">
+                <TextArea rows={6} value={settings.developer_team_md ?? ""} onChange={(e) => setSettings({ ...settings, developer_team_md: e.target.value })} />
+              </Field>
+            </div>
+            <button type="button" onClick={saveSettings} className="btn btn-primary self-start">
+              <Save size={16} aria-hidden /> 儲存系統資訊
+            </button>
           </div>
         </section>
       )}
