@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { ChevronDown, Globe2, Megaphone } from "lucide-react";
+import { ChevronDown, Globe2 } from "lucide-react";
 import BrandEmblem from "@/components/brand/BrandEmblem";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useModuleStatus } from "@/contexts/ModuleStatusContext";
@@ -54,13 +54,14 @@ function writeCollapsed(set: Set<string>) {
 
 /* ── NavLink ──────────────────────────────────────────────────────────────── */
 function NavLink({ item, pathname, down }: { item: NavItem; pathname: string; down?: boolean }) {
+  const href = item.id === "about" || item.id === "publicAbout" ? "/system-info" : item.href;
   const active = item.end
-    ? pathname === item.href
-    : pathname === item.href || pathname.startsWith(item.href + "/");
+    ? pathname === href
+    : pathname === href || pathname.startsWith(href + "/");
 
   return (
     <Link
-      href={item.href}
+      href={href}
       className="sidebar-nav-item"
       aria-current={active ? "page" : undefined}>
       <span className="flex-shrink-0"><NavIcon iconKey={item.iconKey} size={15} /></span>
@@ -388,18 +389,6 @@ export default function Sidebar() {
             );
           })}
         </div>
-        <Link
-          href="/news"
-          className="sidebar-system-notice"
-          aria-label="查看系統資訊公告">
-          <span className="sidebar-system-notice-icon" aria-hidden="true">
-            <Megaphone size={15} />
-          </span>
-          <span className="min-w-0">
-            <span className="sidebar-system-notice-title">系統資訊</span>
-            <span className="sidebar-system-notice-copy">查看最新公告與服務更新</span>
-          </span>
-        </Link>
       </nav>
 
       {/* User footer */}
