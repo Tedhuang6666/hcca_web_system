@@ -132,6 +132,7 @@ class AnnouncementListItem(BaseModel):
     author_id: uuid.UUID
     author_name: str = ""
     created_at: datetime
+    updated_at: datetime
     audience_type: AnnouncementAudience = AnnouncementAudience.ALL
 
 
