@@ -4,10 +4,7 @@ import { Suspense } from "react";
 import "./globals.css";
 import "./accessibility.css";
 import "./design-system.css";
-import "./public-home.css";
 import { Toaster } from "sonner";
-import AppShell from "@/components/layout/AppShell";
-import GoogleOneTap from "@/components/auth/GoogleOneTap";
 import PwaInstallPrompt from "@/components/pwa/PwaInstallPrompt";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import TelemetryProvider from "@/components/providers/TelemetryProvider";
@@ -115,10 +112,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Suspense fallback={null}>
             <TelemetryProvider />
           </Suspense>
-          <AppShell>{children}</AppShell>
-          <Suspense fallback={null}>
-            <GoogleOneTap />
-          </Suspense>
+          {children}
           <PwaInstallPrompt />
           <Toaster
             position="top-right"

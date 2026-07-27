@@ -18,22 +18,30 @@ export default function PublicEmblem({
   className,
   sizes,
   priority = false,
+  variant = "default",
 }: {
   src: string;
   alt: string;
   className?: string;
   sizes: string;
   priority?: boolean;
+  variant?: "default" | "small";
 }) {
-  if (canOptimize(src)) {
+  const resolvedSrc = variant === "small" && src === "/brand/hcca-emblem-512.png"
+    ? "/brand/hcca-emblem-192.png"
+    : src;
+  const sourceSize = variant === "small" ? 192 : 512;
+
+  if (canOptimize(resolvedSrc)) {
     return (
       <Image
-        src={src}
+        src={resolvedSrc}
         alt={alt}
-        width={512}
-        height={512}
+        width={sourceSize}
+        height={sourceSize}
         sizes={sizes}
         priority={priority}
+        fetchPriority={priority ? "high" : "auto"}
         className={className}
       />
     );
@@ -44,10 +52,10 @@ export default function PublicEmblem({
   return (
     /* eslint-disable-next-line @next/next/no-img-element */
     <img
-      src={src}
+      src={resolvedSrc}
       alt={alt}
-      width={512}
-      height={512}
+      width={sourceSize}
+      height={sourceSize}
       loading={priority ? "eager" : "lazy"}
       decoding="async"
       fetchPriority={priority ? "high" : "auto"}
