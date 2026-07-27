@@ -28812,6 +28812,12 @@ export interface components {
             cta_label: string;
             /** Custom Css */
             custom_css?: string | null;
+            /** Contact Md */
+            contact_md?: string | null;
+            /** Developer Team Md */
+            developer_team_md?: string | null;
+            /** Error Report Md */
+            error_report_md?: string | null;
             /** Hero Image Alt */
             hero_image_alt?: string | null;
             /** Hero Image Url */
@@ -28849,6 +28855,10 @@ export interface components {
             site_logo_url?: string | null;
             /** Site Title */
             site_title: string;
+            /** Support Md */
+            support_md?: string | null;
+            /** Terms Md */
+            terms_md?: string | null;
             /** Theme Config */
             theme_config?: {
                 [key: string]: unknown;
@@ -28871,6 +28881,12 @@ export interface components {
             cta_label?: string | null;
             /** Custom Css */
             custom_css?: string | null;
+            /** Contact Md */
+            contact_md?: string | null;
+            /** Developer Team Md */
+            developer_team_md?: string | null;
+            /** Error Report Md */
+            error_report_md?: string | null;
             /** Hero Image Alt */
             hero_image_alt?: string | null;
             /** Hero Image Url */
@@ -28903,6 +28919,10 @@ export interface components {
             site_logo_url?: string | null;
             /** Site Title */
             site_title?: string | null;
+            /** Support Md */
+            support_md?: string | null;
+            /** Terms Md */
+            terms_md?: string | null;
             /** Theme Config */
             theme_config?: {
                 [key: string]: unknown;

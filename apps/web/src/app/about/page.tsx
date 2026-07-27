@@ -8,6 +8,13 @@ import Link from "next/link";
 export default async function AboutPage() {
   const [bundle, officers] = await Promise.all([fetchPublicBundle(), fetchPublicOfficers()]);
   const settings = bundle?.settings;
+  const systemInfo = [
+    { id: "support", title: "需要協助嗎？", markdown: settings?.support_md },
+    { id: "error-report", title: "錯誤報告", markdown: settings?.error_report_md },
+    { id: "contact", title: "聯絡資訊", markdown: settings?.contact_md },
+    { id: "terms", title: "使用者條款", markdown: settings?.terms_md },
+    { id: "developer-team", title: "開發團隊", markdown: settings?.developer_team_md },
+  ].filter((item) => item.markdown?.trim());
 
   return (
     <PublicSiteShell navPages={bundle?.nav_pages ?? []} settings={settings}>
@@ -46,6 +53,26 @@ export default async function AboutPage() {
             </div>
           )}
         </section>
+
+        {systemInfo.length > 0 && (
+          <section id="system-info" className="mt-20 scroll-mt-24 border-t pt-12" style={{ borderColor: "var(--border)" }}>
+            <header className="mb-8">
+              <p className="public-section-kicker">System information</p>
+              <h2 className="mt-2 text-3xl font-bold">系統資訊</h2>
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--text-secondary)]">
+                使用平台前後需要知道的協助方式、回報管道與公開說明，都整理在這裡。
+              </p>
+            </header>
+            <div className="grid gap-5 md:grid-cols-2">
+              {systemInfo.map((item) => (
+                <section key={item.id} className="card p-5" data-reveal>
+                  <h3 className="mb-3 text-lg font-semibold">{item.title}</h3>
+                  <MarkdownBlock markdown={item.markdown} />
+                </section>
+              ))}
+            </div>
+          </section>
+        )}
 
         <section id="officers" className="mt-20 scroll-mt-24 border-t pt-12" style={{ borderColor: "var(--border)" }}>
           <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
