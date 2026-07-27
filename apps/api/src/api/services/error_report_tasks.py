@@ -36,6 +36,11 @@ _OPTIONAL_INTEGRATION_MARKERS = (
     "尚未啟用",
     "離線或尚未回報伺服器清單",
 )
+_EXPECTED_AUTH_ERRORS = {
+    ("/auth/discord/login", "Discord OAuth 尚未設定"),
+    ("/auth/google/one-tap", "尚未設定 Google Client ID"),
+    ("/auth/refresh", "登入服務暫時不可用，請稍後再試"),
+}
 
 
 @dataclass(frozen=True)
@@ -178,7 +183,7 @@ def _read_new_error_events(client: Redis, last_sent: float, now: float) -> Error
         occurred_at = _float(item.get("occurred_at"))
         if occurred_at <= last_sent or occurred_at < oldest:
             continue
-        if not _meets_min_severity(item):
+        if _is_expected_auth_error(item) or not _meets_min_severity(item):
             filtered_occurrences += 1
             continue
         candidates.append(item)
@@ -199,6 +204,21 @@ def _read_new_error_events(client: Redis, last_sent: float, now: float) -> Error
         events=events,
         suppressed_occurrences=suppressed_occurrences,
         filtered_occurrences=filtered_occurrences,
+    )
+
+
+def _is_expected_auth_error(item: dict[str, Any]) -> bool:
+    if (
+        str(item.get("category") or "").lower() != "http"
+        or str(item.get("exc_type") or "") != "HTTPException"
+        or int(item.get("status_code") or 0) != 503
+    ):
+        return False
+    path = str(item.get("path") or "")
+    message = str(item.get("message") or "")
+    return any(
+        path == expected_path and message.endswith(detail)
+        for expected_path, detail in _EXPECTED_AUTH_ERRORS
     )
 
 
