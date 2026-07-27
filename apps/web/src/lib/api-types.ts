@@ -28855,6 +28855,8 @@ export interface components {
             site_logo_url?: string | null;
             /** Site Title */
             site_title: string;
+            /** System Info Md */
+            system_info_md?: string | null;
             /** Support Md */
             support_md?: string | null;
             /** Terms Md */
@@ -28919,6 +28921,8 @@ export interface components {
             site_logo_url?: string | null;
             /** Site Title */
             site_title?: string | null;
+            /** System Info Md */
+            system_info_md?: string | null;
             /** Support Md */
             support_md?: string | null;
             /** Terms Md */

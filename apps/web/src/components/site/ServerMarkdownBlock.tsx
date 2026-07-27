@@ -1,11 +1,13 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import remarkBreaks from "@/lib/remarkBreaks";
+
 export default function ServerMarkdownBlock({ markdown }: { markdown: string | null | undefined }) {
   return (
     <div className="prose max-w-none">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkBreaks]}
         components={{
           ul: ({ children, ...props }) => (
             <ul {...props} className="my-3 list-disc space-y-1 pl-6 first:mt-0 last:mb-0">

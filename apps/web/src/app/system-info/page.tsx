@@ -3,17 +3,12 @@ import Link from "next/link";
 import MarkdownBlock from "@/components/site/MarkdownBlock";
 import PublicSiteShell from "@/components/site/PublicSiteShell";
 import { fetchPublicBundle } from "@/lib/serverFetch";
+import { getSystemInfoMarkdown } from "@/lib/systemInfoMarkdown";
 
 export default async function SystemInfoPage() {
   const bundle = await fetchPublicBundle();
   const settings = bundle?.settings;
-  const sections = [
-    { id: "support", title: "需要協助嗎？", markdown: settings?.support_md },
-    { id: "error-report", title: "錯誤報告", markdown: settings?.error_report_md },
-    { id: "contact", title: "聯絡資訊", markdown: settings?.contact_md },
-    { id: "terms", title: "使用者條款", markdown: settings?.terms_md },
-    { id: "developer-team", title: "開發團隊", markdown: settings?.developer_team_md },
-  ].filter((item) => item.markdown?.trim());
+  const systemInfoMarkdown = settings ? getSystemInfoMarkdown(settings) : "";
 
   return (
     <PublicSiteShell navPages={bundle?.nav_pages ?? []} settings={settings}>
@@ -26,15 +21,10 @@ export default async function SystemInfoPage() {
           </p>
         </header>
 
-        {sections.length > 0 ? (
-          <div className="grid gap-5 md:grid-cols-2">
-            {sections.map((section) => (
-              <section key={section.id} className="card p-5" data-reveal>
-                <h2 className="mb-3 text-lg font-semibold">{section.title}</h2>
-                <MarkdownBlock markdown={section.markdown} />
-              </section>
-            ))}
-          </div>
+        {systemInfoMarkdown ? (
+          <section className="card p-6 sm:p-8" data-reveal>
+            <MarkdownBlock markdown={systemInfoMarkdown} />
+          </section>
         ) : (
           <section className="card p-6 text-sm leading-7 text-[var(--text-secondary)]">
             系統資訊尚未設定，請稍後再回來查看。

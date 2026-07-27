@@ -17,6 +17,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
 
+import remarkBreaks from "@/lib/remarkBreaks";
+
 import {
   loadDrafts,
   saveDrafts,
@@ -871,7 +873,7 @@ export default function RegulationDetailPageClient() {
             )}
             {activeArticles.length === 0 && reg.content ? (
               <div className={PROSE} style={zoomStyle}>
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{reg.content}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{reg.content}</ReactMarkdown>
               </div>
             ) : (
               <div className="space-y-3">

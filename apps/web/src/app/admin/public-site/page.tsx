@@ -28,6 +28,7 @@ import { toast } from "sonner";
 import { ApiError, siteApi } from "@/lib/api";
 import { safeImageUrl } from "@/lib/config";
 import MarkdownBlock from "@/components/site/MarkdownBlock";
+import { getSystemInfoMarkdown } from "@/lib/systemInfoMarkdown";
 import {
   PUBLIC_NAV_GROUP_META,
   PUBLIC_NAV_ITEMS,
@@ -69,6 +70,7 @@ const emptySettings: PublicSiteSettingsOut = {
   contact_md: "",
   terms_md: "",
   developer_team_md: "",
+  system_info_md: "",
   cta_label: "查看公開資料",
   cta_href: "/public",
   public_database_label: "公開資料庫",
@@ -93,6 +95,10 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
 
 function displayError(error: unknown, fallback: string) {
   toast.error(error instanceof ApiError ? error.message : fallback);
+}
+
+function normalizeSettingsForEditor(settings: PublicSiteSettingsOut): PublicSiteSettingsOut {
+  return { ...settings, system_info_md: getSystemInfoMarkdown(settings) };
 }
 
 function Field({
@@ -452,7 +458,7 @@ export default function PublicSiteAdminPage() {
         siteApi.officerCandidates(true),
         siteApi.officerProfiles(),
       ]);
-      setSettings(nextSettings);
+      setSettings(normalizeSettingsForEditor(nextSettings));
       setPages(nextPages);
       setCategories(nextCategories);
       setLinks(nextLinks);
@@ -582,7 +588,7 @@ export default function PublicSiteAdminPage() {
       const nextTheme = { ...(settings.theme_config ?? {}), officer_rosters: nextTabs };
       const next = await siteApi.updateSettings({ theme_config: nextTheme });
       setRosterTabs(nextTabs);
-      setSettings(next);
+      setSettings(normalizeSettingsForEditor(next));
       setThemeJson(JSON.stringify(next.theme_config ?? {}, null, 2));
       toast.success(`已儲存 ${rosterSummary.memberCount} 位幹部、${roster.length} 個職位`);
     } catch (error) {
@@ -607,11 +613,12 @@ export default function PublicSiteAdminPage() {
         about_body_md: settings.about_body_md,
         mission_md: settings.mission_md,
         history_md: settings.history_md,
-        support_md: settings.support_md,
-        error_report_md: settings.error_report_md,
-        contact_md: settings.contact_md,
-        terms_md: settings.terms_md,
-        developer_team_md: settings.developer_team_md,
+        support_md: null,
+        error_report_md: null,
+        contact_md: null,
+        terms_md: null,
+        developer_team_md: null,
+        system_info_md: settings.system_info_md,
         cta_label: settings.cta_label,
         cta_href: settings.cta_href,
         public_database_label: settings.public_database_label,
@@ -619,7 +626,7 @@ export default function PublicSiteAdminPage() {
         seo_title: settings.seo_title,
         seo_description: settings.seo_description,
       });
-      setSettings(next);
+      setSettings(normalizeSettingsForEditor(next));
       toast.success("公開網站設定已儲存");
     } catch (error) {
       displayError(error, "儲存設定失敗");
@@ -633,7 +640,7 @@ export default function PublicSiteAdminPage() {
         homepage_blocks: parseJsonObject(blocksJson, "首頁區塊"),
         custom_css: settings.custom_css,
       });
-      setSettings(next);
+      setSettings(normalizeSettingsForEditor(next));
       setThemeJson(JSON.stringify(next.theme_config ?? {}, null, 2));
       setBlocksJson(JSON.stringify(next.homepage_blocks ?? {}, null, 2));
       toast.success("進階設定已儲存");
@@ -681,7 +688,7 @@ export default function PublicSiteAdminPage() {
       });
       const nextTheme = { ...(settings.theme_config ?? {}), nav: { items } };
       const next = await siteApi.updateSettings({ theme_config: nextTheme });
-      setSettings(next);
+      setSettings(normalizeSettingsForEditor(next));
       setNavItems(resolvePublicNav(next.theme_config));
       setThemeJson(JSON.stringify(next.theme_config ?? {}, null, 2));
       toast.success("導覽列設定已儲存");
@@ -924,28 +931,14 @@ export default function PublicSiteAdminPage() {
           </div>
           <div className="card space-y-4 p-5 lg:col-span-2">
             <div>
-              <h2 className="font-semibold">系統資訊（公開頁）</h2>
+              <h2 className="font-semibold">關於本系統（公開頁）</h2>
               <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">
-                以 Markdown 維護公開頁的協助、錯誤回報、聯絡方式、使用者條款與開發團隊資訊；留白的區塊不會顯示。
+                整個公開頁只使用一份 Markdown。請直接在內容中用標題、段落、清單或連結整理資訊。
               </p>
             </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label="需要協助嗎？ Markdown" hint="可填聯絡方式、服務時間或常見問題入口。">
-                <MarkdownEditor value={settings.support_md ?? ""} onChange={(value) => setSettings({ ...settings, support_md: value })} />
-              </Field>
-              <Field label="錯誤報告 Markdown" hint="建議提醒使用者提供重現步驟，且不要填寫密碼或敏感資料。">
-                <MarkdownEditor value={settings.error_report_md ?? ""} onChange={(value) => setSettings({ ...settings, error_report_md: value })} />
-              </Field>
-              <Field label="聯絡資訊 Markdown">
-                <MarkdownEditor value={settings.contact_md ?? ""} onChange={(value) => setSettings({ ...settings, contact_md: value })} />
-              </Field>
-              <Field label="使用者條款 Markdown">
-                <MarkdownEditor value={settings.terms_md ?? ""} onChange={(value) => setSettings({ ...settings, terms_md: value })} />
-              </Field>
-              <Field label="開發團隊 Markdown" hint="請填寫實際團隊與維護角色，不會自動帶入其他學校的範例資料。">
-                <MarkdownEditor value={settings.developer_team_md ?? ""} onChange={(value) => setSettings({ ...settings, developer_team_md: value })} />
-              </Field>
-            </div>
+            <Field label="頁面內容 Markdown" hint="單換行會在公開頁保留；可用 ## 建立頁內標題。">
+              <MarkdownEditor rows={18} value={settings.system_info_md ?? ""} onChange={(value) => setSettings({ ...settings, system_info_md: value })} />
+            </Field>
             <button type="button" onClick={saveSettings} className="btn btn-primary self-start">
               <Save size={16} aria-hidden /> 儲存系統資訊
             </button>
