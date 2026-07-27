@@ -424,7 +424,10 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
                 "retrying": not oauth_retry,
             },
         )
-        if oauth_error in {"invalid_grant", "temporarily_unavailable", "server_error"} and not oauth_retry:
+        if (
+            oauth_error in {"invalid_grant", "temporarily_unavailable", "server_error"}
+            and not oauth_retry
+        ):
             request.session.clear()
             retry_qs = urlencode(
                 {
