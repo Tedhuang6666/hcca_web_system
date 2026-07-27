@@ -27,6 +27,7 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "**.trycloudflare.com" },
       { protocol: "https", hostname: "**.devtunnels.ms" },
       { protocol: "https", hostname: "lh3.googleusercontent.com" },
+      { protocol: "https", hostname: "hcca.buckets.hct.works" },
       // 本機後端（dev / docker compose）
       { protocol: "http", hostname: "localhost" },
       { protocol: "http", hostname: "127.0.0.1" },

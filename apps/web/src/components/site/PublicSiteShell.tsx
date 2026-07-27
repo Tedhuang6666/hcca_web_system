@@ -22,6 +22,7 @@ import LiveElectionBanner from "@/components/site/LiveElectionBanner";
 import ImportantAnnouncementBanner from "@/components/site/ImportantAnnouncementBanner";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { BRANDING } from "@/lib/branding";
+import PublicEmblem from "@/components/site/PublicEmblem";
 import {
   PUBLIC_NAV_GROUP_META,
   type PublicNavGroupId,
@@ -173,11 +174,11 @@ function PublicSiteShellContent({
         <div className="public-header-inner">
           <Link href="/" className="public-brand" onClick={() => setOpen(false)}>
             <span className="public-brand-mark">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+              <PublicEmblem
                 src={publicEmblemUrl}
                 alt={settings?.site_logo_alt || `${BRANDING.orgShortName}會徽`}
                 className="public-brand-logo"
+                sizes="40px"
               />
             </span>
             <span className="min-w-0">
@@ -350,8 +351,12 @@ function PublicSiteShellContent({
           <div className="public-footer-brand">
             <Link href="/" className="public-footer-brand-link">
               <span className="public-footer-mark" aria-hidden="true">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={publicEmblemUrl} alt="" className="h-full w-full object-contain" />
+                <PublicEmblem
+                  src={publicEmblemUrl}
+                  alt=""
+                  className="h-full w-full object-contain"
+                  sizes="36px"
+                />
               </span>
               <span>
                 <strong>{BRANDING.orgName}</strong>
