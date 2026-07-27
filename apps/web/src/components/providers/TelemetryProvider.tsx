@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import type { PostHog } from "posthog-js";
+import type { PostHog } from "posthog-js/dist/module.slim";
 import { analyticsApi } from "@/lib/api";
 import { requiresAuthentication } from "@/lib/route-access";
 
@@ -11,7 +11,8 @@ const DEFAULT_POSTHOG_HOST = "https://us.i.posthog.com";
 
 function ensureLoaded(key: string): Promise<PostHog> {
   if (!posthogPromise) {
-    posthogPromise = import("posthog-js").then(({ default: posthog }) => {
+    // 只使用 init/capture；slim build 不帶 session replay、surveys 等未使用模組。
+    posthogPromise = import("posthog-js/dist/module.slim").then(({ default: posthog }) => {
       posthog.init(key, {
         api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || DEFAULT_POSTHOG_HOST,
         capture_pageview: false,

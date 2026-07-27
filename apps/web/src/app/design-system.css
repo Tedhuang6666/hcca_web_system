@@ -985,11 +985,6 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
 }
 
 /* Public surface: solid institutional composition; no aurora, dot field or sheen. */
-.public-site {
-  --public-accent: var(--primary);
-  --public-accent-strong: var(--primary-hover);
-  --public-accent-soft: var(--primary-dim);
-}
 
 .public-header {
   box-shadow: 0 1px 4px rgba(16, 35, 39, 0.05);
