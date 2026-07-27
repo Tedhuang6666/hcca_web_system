@@ -176,7 +176,7 @@ async def verify_mfa(
 
 
 @router.get("/exchange-challenge", summary="從 session 取出 MFA challenge token（一次性）")
-async def exchange_mfa_challenge(request: Request) -> dict[str, str]:
+async def exchange_mfa_challenge(request: Request, db: DbDep) -> dict[str, str | bool]:
     """OAuth / One Tap 登入後，challenge token 存在 server session 而非 URL。
     前端 MFA 頁面呼叫此端點取得 token，取出後 session 中的值即清除（one-time use）。
     """
@@ -186,7 +186,9 @@ async def exchange_mfa_challenge(request: Request) -> dict[str, str]:
             status_code=status.HTTP_404_NOT_FOUND,
             detail="無待處理的 MFA 挑戰，請重新登入",
         )
-    return {"challenge": challenge}
+    user = await passkey_svc.resolve_mfa_challenge_user(db, challenge)
+    passkey_available = bool(user and await passkey_svc.list_credentials(db, user))
+    return {"challenge": challenge, "passkey_available": passkey_available}
 
 
 @router.post("/login/verify", summary="完成登入 2FA 挑戰")

@@ -15,10 +15,13 @@ import pyotp
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import Request
 
 from api.core.login_lockout import _failures_key, _lockout_key
 from api.core.security import create_access_token, create_mfa_challenge_token, redis_client
+from api.models.passkey import PasskeyCredential
 from api.models.user import User
+from api.routers.mfa import exchange_mfa_challenge
 from api.services import mfa as mfa_svc
 
 
@@ -181,6 +184,28 @@ async def test_exchange_challenge_without_pending_challenge_returns_404(
 ) -> None:
     response = await client.get("/auth/mfa/exchange-challenge")
     assert response.status_code == 404
+
+
+async def test_exchange_challenge_reports_registered_passkey(
+    make_user: Callable[..., Any], db_session: AsyncSession
+) -> None:
+    user = await make_user()
+    db_session.add(
+        PasskeyCredential(
+            user_id=user.id,
+            credential_id=b"credential-id",
+            public_key=b"public-key",
+        )
+    )
+    await db_session.flush()
+
+    request = Request({"type": "http", "method": "GET", "path": "/auth/mfa/exchange-challenge"})
+    request.scope["session"] = {"mfa_challenge": create_mfa_challenge_token(str(user.id))}
+
+    result = await exchange_mfa_challenge(request, db_session)
+
+    assert result["passkey_available"] is True
+    assert isinstance(result["challenge"], str)
 
 
 # ---------------------------------------------------------------------------
