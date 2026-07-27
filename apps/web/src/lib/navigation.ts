@@ -19,6 +19,15 @@ export type NavSection = {
 
 export type NavEntry = NavItem | NavSection;
 
+export type NavVisibilityOptions = {
+  can: (code: string) => boolean;
+  hasPrefix: (prefix: string) => boolean;
+  isAdmin: boolean;
+  navigationProfile?: RuntimeNavigationProfile;
+  meetingsUnlocked?: boolean;
+  isModuleClosed?: (item: NavItem) => boolean;
+};
+
 export type NavigationProfile = "default" | "student" | "teacher" | "vendor" | "mealVendor";
 export type RuntimeNavigationProfile = NavigationProfile | string;
 
@@ -40,6 +49,9 @@ export type NavPreferences = {
   mobileOrder: string[];
   mobileHidden: string[];
 };
+
+export const MOBILE_NAV_MIN_ITEMS = 4;
+export const MOBILE_NAV_MAX_ITEMS = 5;
 
 export const NAV_ITEMS: NavItem[] = [
   { id: "dashboard", href: "/dashboard", iconKey: "dashboard", label: "平台首頁", end: true },
@@ -514,6 +526,58 @@ export function isSection(entry: NavEntry): entry is NavSection {
   return "heading" in entry;
 }
 
+export function navItemsFromEntries(entries: NavEntry[]): NavItem[] {
+  const seen = new Set<string>();
+  return entries.flatMap((entry) => {
+    const items = isSection(entry) ? entry.items : [entry];
+    return items.filter((item) => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    });
+  });
+}
+
+export function isNavItemVisible(item: NavItem, options: NavVisibilityOptions): boolean {
+  if (options.isModuleClosed?.(item)) return false;
+  if (item.id === "tasks" && !options.hasPrefix("document:") && !options.hasPrefix("regulation:")) {
+    return false;
+  }
+  if (item.id === "governanceHub" && options.navigationProfile !== "default") return false;
+  if (item.id === "systemDefense" && !options.isAdmin) return false;
+  if (item.id === "moduleBackoffice") {
+    return (
+      options.isAdmin
+      || options.hasPrefix("class:")
+      || options.hasPrefix("document:")
+      || options.hasPrefix("serial:")
+      || options.hasPrefix("exam:")
+      || options.hasPrefix("shop:")
+      || options.hasPrefix("meal:")
+      || options.hasPrefix("partner_map:")
+      || options.hasPrefix("recommended_vendor:")
+      || options.hasPrefix("election:")
+      || options.hasPrefix("petition:")
+      || options.hasPrefix("org:")
+    );
+  }
+  if (item.id === "operations") {
+    return (
+      options.isAdmin
+      || options.hasPrefix("announcement:")
+      || options.hasPrefix("email:")
+      || options.hasPrefix("activity:")
+      || options.hasPrefix("site:")
+      || options.hasPrefix("analytics:")
+      || options.hasPrefix("finance:")
+    );
+  }
+  if (item.id === "meetings") {
+    return Boolean(options.meetingsUnlocked || options.hasPrefix("meeting:"));
+  }
+  return filterNavItems([item], options.can, options.hasPrefix).length > 0;
+}
+
 export function resolveNavigationProfile(
   permissions: Set<string>,
   isAdmin: boolean,
@@ -620,6 +684,21 @@ export function orderedItems(order: string[], hidden: string[], availableItems =
   const hiddenSet = new Set(hidden);
   const ids = normalizeOrder(order, availableItems.map((item) => item.id));
   return ids.map((id) => available.get(id)).filter((item): item is NavItem => !!item && !hiddenSet.has(item.id));
+}
+
+export function constrainMobileHidden(order: string[], hidden: string[], availableItems: NavItem[]) {
+  const ordered = orderedItems(order, [], availableItems);
+  const hiddenSet = new Set(hidden);
+  const visible = ordered.filter((item) => !hiddenSet.has(item.id));
+  if (visible.length > MOBILE_NAV_MAX_ITEMS) {
+    visible.slice(MOBILE_NAV_MAX_ITEMS).forEach((item) => hiddenSet.add(item.id));
+  } else if (visible.length < MOBILE_NAV_MIN_ITEMS) {
+    ordered
+      .filter((item) => hiddenSet.has(item.id))
+      .slice(0, MOBILE_NAV_MIN_ITEMS - visible.length)
+      .forEach((item) => hiddenSet.delete(item.id));
+  }
+  return Array.from(hiddenSet);
 }
 
 export function filterNavItems(
