@@ -1,7 +1,6 @@
 /**
  * 法規條文結構共用工具（純函數，無 React hooks）。
- * 供 server component（public/regulations/*）與 client component（regulations/*）共用，
- * 確保「新建立的憲章頁面」與「既有竹中憲章頁面」的編號與層級顯示完全一致。
+ * 供法規頁面共用，確保「新建立的憲章頁面」與「既有竹中憲章頁面」的編號與層級顯示完全一致。
  */
 
 export type ArticleStructureType =
