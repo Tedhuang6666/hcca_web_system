@@ -51,7 +51,7 @@ export type NavPreferences = {
 };
 
 export const MOBILE_NAV_MIN_ITEMS = 4;
-export const MOBILE_NAV_MAX_ITEMS = 5;
+export const MOBILE_NAV_MAX_ITEMS = 4;
 
 export const NAV_ITEMS: NavItem[] = [
   { id: "dashboard", href: "/dashboard", iconKey: "dashboard", label: "平台首頁", end: true },
