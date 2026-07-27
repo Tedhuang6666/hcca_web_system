@@ -167,10 +167,12 @@ export default function PublicOfficerDirectory({
   officers,
   themeConfig,
   showHeading = true,
+  showFullPageLink = true,
 }: {
   officers: PublicOfficerOut[];
   themeConfig?: Record<string, unknown>;
   showHeading?: boolean;
+  showFullPageLink?: boolean;
 }) {
   const directRosters = parseDirectOfficerRosters(themeConfig);
   const grouped = groupOfficersByOrganization(officers);
@@ -186,10 +188,12 @@ export default function PublicOfficerDirectory({
             </div>
             <h2 className="mt-2 text-2xl font-bold">班聯會幹部</h2>
           </div>
-          <Link href="/officers" className="public-text-link inline-flex items-center gap-1.5">
-            開啟完整幹部頁面
-            <ArrowUpRight size={15} aria-hidden />
-          </Link>
+          {showFullPageLink && (
+            <Link href="/officers" className="public-text-link inline-flex items-center gap-1.5">
+              開啟完整幹部頁面
+              <ArrowUpRight size={15} aria-hidden />
+            </Link>
+          )}
         </div>
       )}
       {directRosters.length > 0 && <OfficerRosterTabs tabs={directRosters} />}
