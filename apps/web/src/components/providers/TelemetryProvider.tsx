@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import type { PostHog } from "posthog-js";
 import { analyticsApi } from "@/lib/api";
+import { requiresAuthentication } from "@/lib/route-access";
 
 let posthogPromise: Promise<PostHog> | null = null;
 
@@ -39,7 +40,11 @@ export default function TelemetryProvider() {
   useEffect(() => {
     const query = searchParams.toString();
     const url = query ? `${pathname}?${query}` : pathname;
-    if (typeof window !== "undefined" && localStorage.getItem("user_id")) {
+    if (
+      requiresAuthentication(pathname)
+      && typeof window !== "undefined"
+      && localStorage.getItem("user_id")
+    ) {
       void analyticsApi.trackPageView(pathname).catch(() => undefined);
     }
 
