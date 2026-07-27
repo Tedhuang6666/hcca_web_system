@@ -28801,6 +28801,8 @@ export interface components {
             about_body_md: string;
             /** About Title */
             about_title: string;
+            /** Contact Md */
+            contact_md?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -28812,8 +28814,6 @@ export interface components {
             cta_label: string;
             /** Custom Css */
             custom_css?: string | null;
-            /** Contact Md */
-            contact_md?: string | null;
             /** Developer Team Md */
             developer_team_md?: string | null;
             /** Error Report Md */
@@ -28875,14 +28875,14 @@ export interface components {
             about_body_md?: string | null;
             /** About Title */
             about_title?: string | null;
+            /** Contact Md */
+            contact_md?: string | null;
             /** Cta Href */
             cta_href?: string | null;
             /** Cta Label */
             cta_label?: string | null;
             /** Custom Css */
             custom_css?: string | null;
-            /** Contact Md */
-            contact_md?: string | null;
             /** Developer Team Md */
             developer_team_md?: string | null;
             /** Error Report Md */
@@ -38994,7 +38994,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        [key: string]: string;
+                        [key: string]: string | boolean;
                     };
                 };
             };
