@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Plus, Save, ShieldCheck, Trash2 } from "lucide-react";
+import { Plus, Save, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import MobileNavConfigurator from "@/components/layout/MobileNavConfigurator";
 import NavIcon from "@/components/layout/NavIcon";
 import { adminApi, apiErrorMessage, navigationProfilesApi } from "@/lib/api";
 import {
@@ -349,59 +350,21 @@ function Editor({
 
 function MobileOrderEditor({ value, onChange }: { value: string[]; onChange: (value: string[]) => void }) {
   const order = value.filter((id, index) => NAV_ITEMS_BY_ID[id] && value.indexOf(id) === index);
-  const selected = new Set(order);
-
-  const move = (id: string, direction: -1 | 1) => {
-    const index = order.indexOf(id);
-    const nextIndex = index + direction;
-    if (index < 0 || nextIndex < 0 || nextIndex >= order.length) return;
-    const next = [...order];
-    [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
-    onChange(next);
-  };
-
-  const toggle = (id: string) => {
-    onChange(selected.has(id) ? order.filter((itemId) => itemId !== id) : [...order, id]);
-  };
+  const selectedIds = order.slice(0, 4);
 
   return (
     <div className="space-y-3 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
       <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-        前 4 個可用項目會出現在手機底部欄，其餘項目會收進「更多」。
+        固定四格手機入口；點擊方格更換功能，拖曳可交換排序，其餘項目會收進「更多」。
       </p>
-      <div className="space-y-1.5">
-        {order.map((id, index) => {
-          const item = NAV_ITEMS_BY_ID[id];
-          return (
-            <div key={id} className="flex items-center gap-2 rounded-md px-2 py-1.5" style={{ background: "var(--bg-muted)" }}>
-              <span className="w-5 text-center text-xs" style={{ color: "var(--text-muted)" }}>{index + 1}</span>
-              <NavIcon iconKey={item.iconKey} size={15} />
-              <span className="min-w-0 flex-1 truncate text-sm">{item.label}</span>
-              <button type="button" className="btn btn-ghost btn-icon" onClick={() => move(id, -1)} disabled={index === 0} aria-label={`上移 ${item.label}`}>
-                <ArrowUp size={14} aria-hidden />
-              </button>
-              <button type="button" className="btn btn-ghost btn-icon" onClick={() => move(id, 1)} disabled={index === order.length - 1} aria-label={`下移 ${item.label}`}>
-                <ArrowDown size={14} aria-hidden />
-              </button>
-              <button type="button" className="text-xs" style={{ color: "var(--danger)" }} onClick={() => toggle(id)}>
-                移除
-              </button>
-            </div>
-          );
-        })}
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        {NAV_ITEMS.filter((item) => !selected.has(item.id)).map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className="rounded-full border px-2.5 py-1 text-xs"
-            style={{ borderColor: "var(--border)", color: "var(--text-secondary)" }}
-            onClick={() => toggle(item.id)}>
-            ＋ {item.label}
-          </button>
-        ))}
-      </div>
+      <MobileNavConfigurator
+        items={NAV_ITEMS}
+        selectedIds={selectedIds}
+        onChange={(slotIds) => {
+          const selectedSet = new Set(slotIds);
+          onChange([...slotIds, ...order.filter((id) => !selectedSet.has(id))]);
+        }}
+      />
     </div>
   );
 }
