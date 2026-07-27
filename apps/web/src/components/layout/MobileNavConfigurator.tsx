@@ -73,13 +73,13 @@ export default function MobileNavConfigurator({
   };
 
   return (
-    <div>
+    <div className="@container">
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext
           items={slotItems.map((item) => item.id)}
           strategy={rectSwappingStrategy}
         >
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 @md:grid-cols-4">
             {Array.from({ length: MOBILE_NAV_MIN_ITEMS }, (_, slotIndex) => {
               const item = slotItems[slotIndex];
               if (!item) {
@@ -144,7 +144,7 @@ function MobileNavSlot({
       onClick={onClick}
       aria-pressed={selected}
       aria-label={`第 ${slotIndex + 1} 格：${item.label}，點擊設定功能或拖曳排序`}
-      className="relative flex aspect-square min-h-32 flex-col items-center justify-center gap-2 rounded-xl border p-3 text-center transition-colors sm:min-h-36"
+      className="relative flex aspect-square flex-col items-center justify-center gap-2 rounded-xl border p-3 text-center transition-colors"
       style={{
         ...style,
         borderColor: selected ? "var(--primary)" : "var(--border)",
@@ -183,7 +183,7 @@ function EmptyMobileNavSlot({ slotIndex, onClick }: { slotIndex: number; onClick
       type="button"
       onClick={onClick}
       aria-label={`設定第 ${slotIndex + 1} 格功能`}
-      className="relative flex aspect-square min-h-32 flex-col items-center justify-center gap-2 rounded-xl border border-dashed p-3 text-center transition-colors sm:min-h-36"
+      className="relative flex aspect-square flex-col items-center justify-center gap-2 rounded-xl border border-dashed p-3 text-center transition-colors"
       style={{ borderColor: "var(--border-strong)", color: "var(--text-muted)" }}
     >
       <span className="absolute left-2 top-2 text-[10px] font-semibold">
