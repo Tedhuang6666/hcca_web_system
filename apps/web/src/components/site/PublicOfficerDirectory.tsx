@@ -26,7 +26,7 @@ export function parseDirectOfficerRosters(
   return entries.length > 0 ? [{ id: "campus-council", label: "班聯會", entries }] : [];
 }
 
-function parseRosterEntries(value: unknown): Array<{ title: string; names: string[] }> {
+function parseRosterEntries(value: unknown): OfficerRosterTab["entries"] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item) => {
     if (!item || typeof item !== "object") return [];
@@ -38,7 +38,22 @@ function parseRosterEntries(value: unknown): Array<{ title: string; names: strin
           .map((name) => name.trim())
           .filter(Boolean)
       : [];
-    return title && names.length > 0 ? [{ title, names: [...new Set(names)] }] : [];
+    const highlightLabel = Object.prototype.hasOwnProperty.call(record, "highlight_label")
+      ? (typeof record.highlight_label === "string" ? record.highlight_label.trim() : "")
+      : undefined;
+    const isLead = typeof record.is_lead === "boolean" ? record.is_lead : false;
+    const memberLabels = record.member_labels && typeof record.member_labels === "object" && !Array.isArray(record.member_labels)
+      ? Object.fromEntries(
+          Object.entries(record.member_labels as Record<string, unknown>).flatMap(([name, label]) => (
+            typeof label === "string" && names.includes(name) && label.trim()
+              ? [[name, label.trim()]]
+              : []
+          )),
+        )
+      : highlightLabel && names[0] ? { [names[0]]: highlightLabel } : undefined;
+    return title && names.length > 0
+      ? [{ title, names: [...new Set(names)], member_labels: memberLabels, highlight_label: highlightLabel, is_lead: isLead }]
+      : [];
   });
 }
 
