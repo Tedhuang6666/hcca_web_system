@@ -11,6 +11,7 @@ import type { PublicSiteBundleOut } from "@/lib/types";
 export const dynamic = "force-dynamic";
 
 const INDEXABLE_SITE_URL = `https://${BRANDING.domain}`;
+const DEFAULT_PUBLIC_CONTENT_LAST_MODIFIED = new Date("2026-07-20T00:00:00+08:00");
 
 type RegulationListItem = {
   id: string;
@@ -30,6 +31,7 @@ type AnnouncementListItem = {
   is_published: boolean;
   published_at: string | null;
   created_at: string;
+  updated_at: string;
 };
 
 type PublicElectionListItem = {
@@ -85,6 +87,17 @@ async function pagedFetch<T>(url: URL, limit = 100): Promise<T[]> {
   return all;
 }
 
+function latestModifiedAt(
+  values: readonly (string | null | undefined)[],
+  fallback = DEFAULT_PUBLIC_CONTENT_LAST_MODIFIED,
+): Date {
+  return values.reduce((latest, value) => {
+    if (!value) return latest;
+    const candidate = new Date(value);
+    return Number.isNaN(candidate.getTime()) || candidate <= latest ? latest : candidate;
+  }, fallback);
+}
+
 function visiblePublicNavItems(
   bundle: Pick<PublicSiteBundleOut, "settings"> | null,
   moduleStatuses: PublicModuleStatusListItem[] | null,
@@ -102,13 +115,13 @@ function visiblePublicNavItems(
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const site = INDEXABLE_SITE_URL;
-  const now = new Date();
 
   const [bundle, moduleStatuses, publicPages] = await Promise.all([
-    fetchJson<Pick<PublicSiteBundleOut, "settings">>(new URL(serverApiUrl("/site/public"))),
+    fetchJson<PublicSiteBundleOut>(new URL(serverApiUrl("/site/public"))),
     fetchJson<PublicModuleStatusListItem[]>(new URL(serverApiUrl("/system/module-status"))),
     fetchJson<PublicSitePageListItem[]>(new URL(serverApiUrl("/site/pages"))),
   ]);
+  const settingsLastModified = latestModifiedAt([bundle?.settings.updated_at]);
   const visibleNavItems = visiblePublicNavItems(bundle, moduleStatuses);
   const visibleNavKeys = new Set(visibleNavItems.map((item) => item.key));
   const hasNavItem = (key: string) => visibleNavKeys.has(key);
@@ -140,9 +153,70 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       : Promise.resolve([] as PublicElectionListItem[]),
   ]);
 
+  const announcementLastModified = latestModifiedAt(
+    announcements.map((announcement) => announcement.updated_at),
+    settingsLastModified,
+  );
+  const regulationLastModified = latestModifiedAt(
+    regs.map((regulation) => regulation.updated_at),
+    settingsLastModified,
+  );
+  const documentLastModified = latestModifiedAt(
+    docs.map((document) => document.updated_at ?? document.created_at),
+    settingsLastModified,
+  );
+  const electionLastModified = latestModifiedAt(
+    elections.map((election) => election.updated_at),
+    settingsLastModified,
+  );
+  const linkLastModified = latestModifiedAt(
+    bundle?.links.map((link) => link.updated_at) ?? [],
+    settingsLastModified,
+  );
+  const publicPageLastModified = latestModifiedAt(
+    publicPages?.map((page) => page.updated_at) ?? [],
+    settingsLastModified,
+  );
+  const publicDatabaseLastModified = latestModifiedAt(
+    [
+      ...regs.map((regulation) => regulation.updated_at),
+      ...docs.map((document) => document.updated_at ?? document.created_at),
+      ...elections.map((election) => election.updated_at),
+      ...(publicPages?.map((page) => page.updated_at) ?? []),
+    ],
+    settingsLastModified,
+  );
+  const homepageLastModified = latestModifiedAt(
+    [
+      settingsLastModified.toISOString(),
+      announcementLastModified.toISOString(),
+      regulationLastModified.toISOString(),
+      documentLastModified.toISOString(),
+      electionLastModified.toISOString(),
+      linkLastModified.toISOString(),
+      publicPageLastModified.toISOString(),
+    ],
+    DEFAULT_PUBLIC_CONTENT_LAST_MODIFIED,
+  );
+  const lastModifiedByNavKey: Record<string, Date> = {
+    news: announcementLastModified,
+    about: settingsLastModified,
+    "system-info": settingsLastModified,
+    officers: settingsLastModified,
+    links: linkLastModified,
+    "public-db": publicDatabaseLastModified,
+    regulations: regulationLastModified,
+    documents: documentLastModified,
+    elections: electionLastModified,
+    "partner-map": settingsLastModified,
+    surveys: settingsLastModified,
+    "petition-new": settingsLastModified,
+    petitions: settingsLastModified,
+  };
+
   const navEntries = visibleNavItems.map((item) => ({
     url: `${site}${item.href}`,
-    lastModified: now,
+    lastModified: lastModifiedByNavKey[item.key] ?? settingsLastModified,
     changeFrequency: ["about", "system-info", "officers", "links"].includes(item.key)
       ? ("monthly" as const)
       : ("daily" as const),
@@ -150,11 +224,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }));
 
   return [
-    { url: `${site}/`, lastModified: now, changeFrequency: "daily", priority: 1 },
+    { url: `${site}/`, lastModified: homepageLastModified, changeFrequency: "daily", priority: 1 },
     ...navEntries,
     ...announcements.map((a) => ({
       url: `${site}/news/${encodeURIComponent(a.id)}`,
-      lastModified: new Date(a.published_at ?? a.created_at),
+      lastModified: new Date(a.updated_at),
       changeFrequency: "weekly" as const,
       priority: 0.7,
     })),
