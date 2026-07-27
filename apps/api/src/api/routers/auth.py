@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from urllib.parse import urlencode, urlsplit
 
 from anyio import to_thread
-from authlib.integrations.base_client import OAuthError
+from authlib.integrations.base_client import MismatchingStateError, OAuthError
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
 from google.auth.exceptions import GoogleAuthError
@@ -372,6 +372,7 @@ async def google_login(request: Request) -> RedirectResponse:
     frontend_origin = _frontend_origin_for(request, use_saved=False)
     request.session["frontend_origin"] = frontend_origin
     request.session["login_next"] = _safe_next_path(request.query_params.get("next"))
+    request.session["oauth_retry"] = request.query_params.get("oauth_retry") == "1"
     # Google OAuth callback 必須固定使用 Google Console 登記的 URI；前端來源只用於
     # OAuth 完成後的站內導回，不能拿來動態改變 provider 的 redirect_uri。
     return await google.authorize_redirect(request, settings.GOOGLE_REDIRECT_URI)
@@ -388,13 +389,51 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
     client_ip = request.client.host if request.client else "unknown"
     frontend_origin = _frontend_origin_for(request)
     login_next = _safe_next_path(request.session.get("login_next"))
+    oauth_retry = bool(request.session.pop("oauth_retry", False))
     try:
         token_data = await google.authorize_access_token(request, timeout=30.0)
+    except MismatchingStateError as e:
+        logger.warning(
+            "Google OAuth state validation failed",
+            extra={
+                "error": getattr(e, "error", "mismatching_state"),
+                "client_ip": client_ip,
+                "retrying": not oauth_retry,
+            },
+        )
+        if not oauth_retry:
+            request.session.clear()
+            retry_qs = urlencode(
+                {
+                    "frontend_origin": frontend_origin,
+                    "next": login_next,
+                    "oauth_retry": "1",
+                }
+            )
+            return RedirectResponse(url=f"{request.url_for('google_login')}?{retry_qs}")
+        error_qs = urlencode({"error": "OAuth2 授權失敗，請重新登入"})
+        return RedirectResponse(url=f"{frontend_origin}/login?{error_qs}")
     except OAuthError as e:
+        oauth_error = getattr(e, "error", "oauth_error")
         logger.warning(
             "OAuth2 authentication failed",
-            extra={"error": str(e), "client_ip": client_ip},
+            extra={
+                "error": oauth_error,
+                "description": getattr(e, "description", ""),
+                "client_ip": client_ip,
+                "retrying": not oauth_retry,
+            },
         )
+        if oauth_error in {"invalid_grant", "temporarily_unavailable", "server_error"} and not oauth_retry:
+            request.session.clear()
+            retry_qs = urlencode(
+                {
+                    "frontend_origin": frontend_origin,
+                    "next": login_next,
+                    "oauth_retry": "1",
+                }
+            )
+            return RedirectResponse(url=f"{request.url_for('google_login')}?{retry_qs}")
         error_qs = urlencode({"error": "OAuth2 授權失敗，請重新登入"})
         return RedirectResponse(url=f"{frontend_origin}/login?{error_qs}")
     except ConnectTimeout:
