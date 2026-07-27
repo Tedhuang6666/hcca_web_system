@@ -3,6 +3,10 @@ import type { MetadataRoute } from "next";
 import { BRANDING } from "@/lib/branding";
 import { serverApiUrl } from "@/lib/config";
 
+// Sitemap 必須在請求時讀取資料庫；若只在 build time 產生，API 尚未啟動時
+// 會把暫時的空集合快取成只有固定入口的 sitemap。
+export const dynamic = "force-dynamic";
+
 const INDEXABLE_SITE_URL = `https://${BRANDING.domain}`;
 
 type RegulationListItem = {
