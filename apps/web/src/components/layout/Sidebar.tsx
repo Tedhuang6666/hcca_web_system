@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Globe2, Megaphone } from "lucide-react";
 import BrandEmblem from "@/components/brand/BrandEmblem";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useModuleStatus } from "@/contexts/ModuleStatusContext";
@@ -319,6 +319,13 @@ export default function Sidebar() {
         className="flex-1 overflow-y-auto py-3 px-2"
         style={{ scrollbarWidth: "none" }}
         aria-label="主要導覽">
+        <Link
+          href="/"
+          className="sidebar-public-entry"
+          aria-label="返回公開網站">
+          <Globe2 size={15} aria-hidden={true} />
+          <span className="flex-1 truncate">返回公開頁</span>
+        </Link>
         <div className="space-y-0.5">
           <button
             type="button"
@@ -381,6 +388,18 @@ export default function Sidebar() {
             );
           })}
         </div>
+        <Link
+          href="/news"
+          className="sidebar-system-notice"
+          aria-label="查看系統資訊公告">
+          <span className="sidebar-system-notice-icon" aria-hidden="true">
+            <Megaphone size={15} />
+          </span>
+          <span className="min-w-0">
+            <span className="sidebar-system-notice-title">系統資訊</span>
+            <span className="sidebar-system-notice-copy">查看最新公告與服務更新</span>
+          </span>
+        </Link>
       </nav>
 
       {/* User footer */}
@@ -389,7 +408,7 @@ export default function Sidebar() {
         style={{ borderTop: "1px solid var(--sidebar-border)" }}>
         {isLoggedIn ? (
           <Link
-            href="/profile"
+            href="/settings/account"
             className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg cursor-pointer"
             style={{ background: "transparent", textDecoration: "none", transition: "background var(--transition)" }}
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--sidebar-hover)")}

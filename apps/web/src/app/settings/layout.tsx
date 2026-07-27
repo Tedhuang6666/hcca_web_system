@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, Eye, Gauge, ListTree, Plug, ShieldCheck } from "lucide-react";
+import { Bell, Eye, Gauge, ListTree, Plug, ShieldCheck, UserRound } from "lucide-react";
 
 const TABS = [
+  { href: "/settings/account", label: "帳號", icon: UserRound },
   { href: "/settings/navigation", label: "介面", icon: ListTree },
   { href: "/settings/notifications", label: "通知", icon: Bell },
   { href: "/settings/data-saver", label: "省流", icon: Gauge },
@@ -23,7 +24,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
           <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--primary)" }}>
             SETTINGS
           </p>
-          <h1 className="mt-1 text-2xl font-semibold">個人設定</h1>
+          <h1 className="mt-1 text-2xl font-semibold">帳號與設定</h1>
         </div>
         <nav
           aria-label="設定分類"

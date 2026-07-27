@@ -518,7 +518,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
 
                 <div className="py-1" role="none">
                   <Link
-                    href="/profile"
+                    href="/settings/account"
                     role="menuitem"
                     onClick={() => setShowMenu(false)}
                     className="w-full text-left px-4 py-2.5 text-sm flex items-center gap-2.5 transition-colors cursor-pointer"
@@ -530,7 +530,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
                       <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                       <circle cx="12" cy="7" r="4" />
                     </svg>
-                    個人資料
+                    帳號與個人資料
                   </Link>
                   <Link
                     href="/settings/notifications"

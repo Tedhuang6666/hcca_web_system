@@ -244,8 +244,8 @@ export default function SecuritySettingsPage() {
             管理帳號的多因素認證
           </p>
         </div>
-        <Link href="/profile" className="btn btn-ghost">
-          回個人資料
+        <Link href="/settings/account" className="btn btn-ghost">
+          回帳號設定
         </Link>
       </header>
 
