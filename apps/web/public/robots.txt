@@ -24,3 +24,5 @@ Disallow: /meetings/join/
 Disallow: /shop/cart
 Disallow: /shop/orders
 Disallow: /meal/orders
+
+Sitemap: https://hcca.tw/sitemap.xml
