@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ApiError, councilProposalsApi, regulationsApi } from "@/lib/api";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useDraftAutosave } from "@/hooks/useDraftAutosave";
+import DraftStatus from "@/components/ui/DraftStatus";
 import type {
   CouncilProposalCaseType,
   CouncilProposalEligibleMeeting,
@@ -85,6 +87,22 @@ const CASE_TYPE_LABEL: Record<CouncilProposalCaseType, string> = Object.fromEntr
   CASE_TYPE_OPTIONS.map((o) => [o.value, o.label]),
 ) as Record<CouncilProposalCaseType, string>;
 
+type CouncilProposalDraft = {
+  contact_name: string;
+  contact_email: string;
+  proposer_name: string;
+  co_sponsors: string;
+  case_type: CouncilProposalCaseType;
+  kind: CouncilProposalKind;
+  regulation_id: string;
+  title: string;
+  summary: string;
+  legal_basis: string;
+  proposal_text: string;
+  rationale: string;
+  expected_effect: string;
+};
+
 export default function CouncilProposalsPage() {
   const { canAny } = usePermissions();
   const isManager = canAny("council_proposal:manage", "meeting:manage");
@@ -93,7 +111,7 @@ export default function CouncilProposalsPage() {
   const [regulations, setRegulations] = useState<RegulationListItem[]>([]);
   const [created, setCreated] = useState<CouncilProposalOut | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<CouncilProposalDraft>({
     contact_name: "",
     contact_email: "",
     proposer_name: "",
@@ -108,10 +126,14 @@ export default function CouncilProposalsPage() {
     rationale: "",
     expected_effect: "",
   });
+  const [authReady, setAuthReady] = useState(false);
+  const [draftScope, setDraftScope] = useState("anonymous");
 
   useEffect(() => {
     const userId = localStorage.getItem("user_id");
     setIsLoggedIn(Boolean(userId));
+    setDraftScope(userId ? `user:${userId}` : "anonymous");
+    setAuthReady(true);
     setForm((prev) => ({
       ...prev,
       contact_name: localStorage.getItem("user_name") ?? "",
@@ -125,6 +147,24 @@ export default function CouncilProposalsPage() {
       .then((list) => setRegulations(list.filter((r) => !r.is_repealed)))
       .catch(() => null);
   }, []);
+
+  const restoreDraft = useCallback((draft: CouncilProposalDraft) => {
+    setForm(draft);
+    toast.info("已復原未送出的議會提案草稿");
+  }, []);
+
+  const { clearDraft, flushDraft, lastSavedAt } = useDraftAutosave<CouncilProposalDraft>({
+    key: `council-proposals:new:${draftScope}`,
+    value: form,
+    onRestore: restoreDraft,
+    enabled: authReady,
+    isEmpty: useCallback((draft: CouncilProposalDraft) => (
+      !draft.title.trim()
+      && !draft.summary.trim()
+      && !draft.proposal_text.trim()
+      && !draft.rationale.trim()
+    ), []),
+  });
 
   const activeCaseType = useMemo(
     () => CASE_TYPE_OPTIONS.find((o) => o.value === form.case_type)!,
@@ -156,10 +196,12 @@ export default function CouncilProposalsPage() {
         rationale: form.rationale,
         expected_effect: form.expected_effect || null,
       });
+      clearDraft();
       setCreated(result);
       if (isLoggedIn) setItems((prev) => [result, ...prev]);
       toast.success("議會提案已送出");
     } catch (err) {
+      flushDraft();
       toast.error(err instanceof ApiError ? err.message : "送出議會提案失敗");
     } finally {
       setSubmitting(false);
@@ -175,6 +217,7 @@ export default function CouncilProposalsPage() {
         <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
           送出的提案會先進入常務委員會審查；常委通過後，才會排入議會議程。
         </p>
+        <DraftStatus lastSavedAt={lastSavedAt} className="mt-2" />
       </div>
 
       {created && (

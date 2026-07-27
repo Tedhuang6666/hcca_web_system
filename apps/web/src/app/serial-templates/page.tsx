@@ -6,6 +6,8 @@ import type { OrgRead } from "@/lib/api";
 import type { SerialTemplateOut } from "@/lib/types";
 import { orgDisplayName } from "@/lib/orgs";
 import { usePermissions } from "@/hooks/usePermissions";
+import DraftStatus from "@/components/ui/DraftStatus";
+import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 
 type YearMode = "roc" | "ce";
 
@@ -29,6 +31,8 @@ const EMPTY_FORM: CreateForm = {
   is_default_president_publish: false,
 };
 
+type SerialTemplateDraft = CreateForm & { orgPrefixInput: string };
+
 type FormErrorKey = "org_id" | "category_char";
 
 export default function SerialTemplatesPage() {
@@ -51,6 +55,23 @@ export default function SerialTemplatesPage() {
   const [orgPrefixInput, setOrgPrefixInput] = useState<string>("");
 
   const selectedOrg = orgs.find(o => o.id === form.org_id) ?? null;
+
+  const restoreDraft = useCallback((draft: SerialTemplateDraft) => {
+    const { orgPrefixInput, ...formDraft } = draft;
+    setForm(formDraft);
+    setOrgPrefixInput(orgPrefixInput);
+    toast.info("已復原未送出的字號模板草稿");
+  }, []);
+
+  const { clearDraft, flushDraft, lastSavedAt } = useDraftAutosave<SerialTemplateDraft>({
+    key: "serial-templates:new",
+    value: { ...form, orgPrefixInput },
+    onRestore: restoreDraft,
+    enabled: showCreate,
+    isEmpty: useCallback((draft: SerialTemplateDraft) => (
+      !draft.org_id.trim() && !draft.category_char.trim() && !draft.description.trim()
+    ), []),
+  });
 
   const formErrors = {
     org_id:       !form.org_id.trim()        ? "請選擇組織" : "",
@@ -105,12 +126,14 @@ export default function SerialTemplatesPage() {
         is_default: form.is_default,
         is_default_president_publish: form.is_default_president_publish,
       });
+      clearDraft();
       toast.success("字號模板已建立");
       setShowCreate(false);
       setForm(EMPTY_FORM);
       setOrgPrefixInput("");
       load();
     } catch (e) {
+      flushDraft();
       toast.error(apiErrorMessage(e, "建立失敗"));
     } finally { setSaving(false); }
   };
@@ -182,6 +205,7 @@ export default function SerialTemplatesPage() {
       {showCreate && (
         <div className="card p-5 space-y-4">
           <h3 className="text-sm font-semibold">新增字號模板</h3>
+          <DraftStatus lastSavedAt={lastSavedAt} />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Step 1：選擇組織 */}
@@ -314,7 +338,7 @@ export default function SerialTemplatesPage() {
           </div>
 
           <div className="flex gap-2 justify-end">
-            <button onClick={() => { setShowCreate(false); setForm(EMPTY_FORM); setOrgPrefixInput(""); setFormTouched({}); }}
+            <button onClick={() => { clearDraft(); setShowCreate(false); setForm(EMPTY_FORM); setOrgPrefixInput(""); setFormTouched({}); }}
               className="px-4 py-2 rounded-lg text-sm hover:opacity-80 transition-colors">
               取消
             </button>

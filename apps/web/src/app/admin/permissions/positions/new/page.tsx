@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -8,6 +8,8 @@ import { toast } from "sonner";
 import AdminWorkbenchTabs from "@/components/admin/AdminWorkbenchTabs";
 import { ensurePermissionCatalog, PermCheckboxes } from "@/components/admin/PermissionCatalog";
 import { adminApi, apiErrorMessage, orgsApi } from "@/lib/api";
+import DraftStatus from "@/components/ui/DraftStatus";
+import { useDraftAutosave } from "@/hooks/useDraftAutosave";
 import type {
   OrgRead,
   PermissionCodeInfo,
@@ -16,6 +18,15 @@ import type {
 } from "@/lib/types";
 
 type OrgWithPermissionDefaults = OrgRead & { default_permission_codes: string[] };
+
+type PositionDraft = {
+  name: string;
+  description: string;
+  category: PositionCategory;
+  weight: number;
+  parentId: string;
+  codes: string[];
+};
 
 const CATEGORY_OPTIONS: { value: PositionCategory; label: string; description: string }[] = [
   { value: "council", label: "自治職位", description: "班聯會與自治組織幹部" },
@@ -126,6 +137,24 @@ export default function NewPositionPage() {
     setParentId("");
   }, [selectedOrg]);
 
+  const restoreDraft = useCallback((draft: PositionDraft) => {
+    setName(draft.name);
+    setDescription(draft.description);
+    setCategory(draft.category);
+    setWeight(draft.weight);
+    setParentId(draft.parentId);
+    setCodes(draft.codes);
+    toast.info("已復原未送出的職位草稿");
+  }, []);
+
+  const { clearDraft, flushDraft, lastSavedAt } = useDraftAutosave<PositionDraft>({
+    key: `admin:positions:new:${orgId || "pending"}`,
+    value: { name, description, category, weight, parentId, codes },
+    onRestore: restoreDraft,
+    enabled: !loading && Boolean(orgId),
+    isEmpty: useCallback((draft: PositionDraft) => !draft.name.trim(), []),
+  });
+
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedOrg || !name.trim()) {
@@ -143,9 +172,11 @@ export default function NewPositionPage() {
         parent_id: parentId || null,
         permission_codes: codes,
       });
+      clearDraft();
       toast.success(`「${name.trim()}」已建立`);
       router.push("/admin/permissions");
     } catch (error) {
+      flushDraft();
       toast.error(apiErrorMessage(error, "建立職位失敗"));
     } finally {
       setSaving(false);
@@ -174,6 +205,7 @@ export default function NewPositionPage() {
                 <p className="mt-1 max-w-2xl text-sm leading-6" style={{ color: "var(--text-secondary)" }}>
                   先選組織，再從組織預設權限開始調整。職位建立後，持有人會取得下方顯示的最終權限。
                 </p>
+                <DraftStatus lastSavedAt={lastSavedAt} className="mt-2" />
               </div>
             </div>
           </div>
