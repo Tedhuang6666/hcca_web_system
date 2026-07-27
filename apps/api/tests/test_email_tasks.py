@@ -128,6 +128,38 @@ def test_error_report_assigns_severity_and_filters_warnings() -> None:
         assert batch.filtered_occurrences == 1
 
 
+def test_error_report_filters_expected_auth_failures_only() -> None:
+    from api.services.error_report_tasks import _read_new_error_events
+
+    expected_errors = [
+        _api_error("HTTPException: 503: Discord OAuth 尚未設定", 900),
+        _api_error("HTTPException: 503: 尚未設定 Google Client ID", 901),
+        _api_error("HTTPException: 503: 登入服務暫時不可用，請稍後再試", 902),
+    ]
+    expected_errors[0]["path"] = "/auth/discord/login"
+    expected_errors[0]["status_code"] = 503
+    expected_errors[1]["path"] = "/auth/google/one-tap"
+    expected_errors[1]["method"] = "POST"
+    expected_errors[1]["status_code"] = 503
+    expected_errors[2]["path"] = "/auth/refresh"
+    expected_errors[2]["method"] = "POST"
+    expected_errors[2]["status_code"] = 503
+    unrelated_error = _api_error("HTTPException: 503: 登入服務暫時不可用，請稍後再試", 903)
+    unrelated_error["path"] = "/documents"
+    unrelated_error["status_code"] = 503
+
+    with patch.object(settings, "ERROR_REPORT_MIN_SEVERITY", "warning"):
+        batch = _read_new_error_events(
+            _ErrorReportRedisStub([*expected_errors, unrelated_error]),
+            last_sent=0,
+            now=1800,
+        )
+
+    assert len(batch.events) == 1
+    assert batch.events[0]["path"] == "/documents"
+    assert batch.filtered_occurrences == 3
+
+
 def test_error_report_aggregates_and_suppresses_repeated_events() -> None:
     from api.services.error_report_tasks import _mark_notified, _read_new_error_events
 
