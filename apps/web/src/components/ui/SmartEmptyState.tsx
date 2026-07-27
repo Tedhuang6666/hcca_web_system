@@ -115,7 +115,7 @@ export default function SmartEmptyState({
         )}
         {reason === "denied" && (
           <Link
-            href="/profile"
+            href="/settings/account"
             className="btn"
             style={{ textDecoration: "none" }}>
             查看我的權限

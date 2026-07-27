@@ -215,11 +215,11 @@ export default function NotificationSettingsPage() {
   const toggle = (key: keyof NotificationPreferences, channel: Channel) => {
     if (!prefs || saving) return;
     if (channel === "line" && !lineLinked) {
-      toast.error("請先到個人資料綁定 LINE");
+      toast.error("請先到帳號設定綁定 LINE");
       return;
     }
     if (channel === "discord" && !discordLinked) {
-      toast.error("請先到個人資料綁定 Discord");
+      toast.error("請先到帳號設定綁定 Discord");
       return;
     }
     update({ ...prefs, [key]: { ...prefs[key], [channel]: !prefs[key][channel] } });
@@ -392,12 +392,12 @@ export default function NotificationSettingsPage() {
             </p>
             {!lineClosed && !lineLinked && (
               <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                LINE 通知需先至個人資料完成綁定。
+                LINE 通知需先至帳號設定完成綁定。
               </p>
             )}
             {!discordClosed && !discordLinked && (
               <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                Discord 通知需先至個人資料完成綁定。
+                Discord 通知需先至帳號設定完成綁定。
               </p>
             )}
           </div>
