@@ -7,12 +7,13 @@ import { analyticsApi } from "@/lib/api";
 import { requiresAuthentication } from "@/lib/route-access";
 
 let posthogPromise: Promise<PostHog> | null = null;
+const DEFAULT_POSTHOG_HOST = "https://us.i.posthog.com";
 
 function ensureLoaded(key: string): Promise<PostHog> {
   if (!posthogPromise) {
     posthogPromise = import("posthog-js").then(({ default: posthog }) => {
       posthog.init(key, {
-        api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://app.posthog.com",
+        api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || DEFAULT_POSTHOG_HOST,
         capture_pageview: false,
         persistence: "localStorage+cookie",
       });

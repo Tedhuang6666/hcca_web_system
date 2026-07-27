@@ -245,6 +245,7 @@ services:
       NODE_ENV: production
       API_INTERNAL_URL: http://api:8000
       NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://hcca.tw}
+      NEXT_PUBLIC_POSTHOG_HOST: ${NEXT_PUBLIC_POSTHOG_HOST:-https://us.i.posthog.com}
     depends_on:
       api:
         condition: service_healthy
