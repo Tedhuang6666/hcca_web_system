@@ -27,6 +27,7 @@ import { toast } from "sonner";
 
 import { ApiError, siteApi } from "@/lib/api";
 import { safeImageUrl } from "@/lib/config";
+import MarkdownBlock from "@/components/site/MarkdownBlock";
 import {
   PUBLIC_NAV_GROUP_META,
   PUBLIC_NAV_ITEMS,
@@ -129,6 +130,42 @@ function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
       className={`min-h-28 w-full rounded-lg px-3 py-2 text-sm leading-6 outline-none ${props.className ?? ""}`}
       style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-primary)", ...props.style }}
     />
+  );
+}
+
+function MarkdownEditor({
+  value,
+  onChange,
+  rows = 6,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  rows?: number;
+}) {
+  const [preview, setPreview] = useState(false);
+
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="text-xs text-[var(--text-muted)]">支援 Markdown 語法</span>
+        <button
+          type="button"
+          className="btn btn-ghost min-h-8 px-2 text-xs"
+          onClick={() => setPreview((current) => !current)}>
+          {preview ? <Pencil size={13} aria-hidden /> : <Eye size={13} aria-hidden />}
+          {preview ? "編輯 Markdown" : "預覽格式"}
+        </button>
+      </div>
+      {preview ? (
+        <div
+          className="min-h-28 rounded-lg px-3 py-2 text-sm leading-6"
+          style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+          {value.trim() ? <MarkdownBlock markdown={value} /> : <span className="text-[var(--text-muted)]">尚未輸入內容</span>}
+        </div>
+      ) : (
+        <TextArea rows={rows} value={value} onChange={(event) => onChange(event.target.value)} />
+      )}
+    </div>
   );
 }
 
@@ -881,9 +918,9 @@ export default function PublicSiteAdminPage() {
           </div>
           <div className="card space-y-4 p-5">
             <Field label="關於標題"><TextInput value={settings.about_title} onChange={(e) => setSettings({ ...settings, about_title: e.target.value })} /></Field>
-            <Field label="關於內文 Markdown"><TextArea rows={8} value={settings.about_body_md} onChange={(e) => setSettings({ ...settings, about_body_md: e.target.value })} /></Field>
-            <Field label="使命 Markdown"><TextArea value={settings.mission_md ?? ""} onChange={(e) => setSettings({ ...settings, mission_md: e.target.value })} /></Field>
-            <Field label="沿革 Markdown"><TextArea value={settings.history_md ?? ""} onChange={(e) => setSettings({ ...settings, history_md: e.target.value })} /></Field>
+            <Field label="關於內文 Markdown"><MarkdownEditor rows={8} value={settings.about_body_md} onChange={(value) => setSettings({ ...settings, about_body_md: value })} /></Field>
+            <Field label="使命 Markdown"><MarkdownEditor value={settings.mission_md ?? ""} onChange={(value) => setSettings({ ...settings, mission_md: value })} /></Field>
+            <Field label="沿革 Markdown"><MarkdownEditor value={settings.history_md ?? ""} onChange={(value) => setSettings({ ...settings, history_md: value })} /></Field>
           </div>
           <div className="card space-y-4 p-5 lg:col-span-2">
             <div>
@@ -894,19 +931,19 @@ export default function PublicSiteAdminPage() {
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               <Field label="需要協助嗎？ Markdown" hint="可填聯絡方式、服務時間或常見問題入口。">
-                <TextArea rows={6} value={settings.support_md ?? ""} onChange={(e) => setSettings({ ...settings, support_md: e.target.value })} />
+                <MarkdownEditor value={settings.support_md ?? ""} onChange={(value) => setSettings({ ...settings, support_md: value })} />
               </Field>
               <Field label="錯誤報告 Markdown" hint="建議提醒使用者提供重現步驟，且不要填寫密碼或敏感資料。">
-                <TextArea rows={6} value={settings.error_report_md ?? ""} onChange={(e) => setSettings({ ...settings, error_report_md: e.target.value })} />
+                <MarkdownEditor value={settings.error_report_md ?? ""} onChange={(value) => setSettings({ ...settings, error_report_md: value })} />
               </Field>
               <Field label="聯絡資訊 Markdown">
-                <TextArea rows={6} value={settings.contact_md ?? ""} onChange={(e) => setSettings({ ...settings, contact_md: e.target.value })} />
+                <MarkdownEditor value={settings.contact_md ?? ""} onChange={(value) => setSettings({ ...settings, contact_md: value })} />
               </Field>
               <Field label="使用者條款 Markdown">
-                <TextArea rows={6} value={settings.terms_md ?? ""} onChange={(e) => setSettings({ ...settings, terms_md: e.target.value })} />
+                <MarkdownEditor value={settings.terms_md ?? ""} onChange={(value) => setSettings({ ...settings, terms_md: value })} />
               </Field>
               <Field label="開發團隊 Markdown" hint="請填寫實際團隊與維護角色，不會自動帶入其他學校的範例資料。">
-                <TextArea rows={6} value={settings.developer_team_md ?? ""} onChange={(e) => setSettings({ ...settings, developer_team_md: e.target.value })} />
+                <MarkdownEditor value={settings.developer_team_md ?? ""} onChange={(value) => setSettings({ ...settings, developer_team_md: value })} />
               </Field>
             </div>
             <button type="button" onClick={saveSettings} className="btn btn-primary self-start">
