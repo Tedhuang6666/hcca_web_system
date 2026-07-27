@@ -7,6 +7,12 @@ import { fetchPublicBundle } from "@/lib/serverFetch";
 import { fetchPublicRegulation } from "@/lib/publicSeoFetch";
 import { JsonLd, absoluteUrl, excerpt, pageMetadata } from "@/lib/seo";
 
+function commonRegulationTitle(title: string): string {
+  return title
+    .replaceAll("國立新竹高級中學", "新竹高中")
+    .replaceAll("班級聯合自治會", "班聯會");
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -15,9 +21,13 @@ export async function generateMetadata({
   const { id } = await params;
   const regulation = await fetchPublicRegulation(id);
   const title = regulation?.title ?? "公開法規";
+  const commonTitle = commonRegulationTitle(title);
   return pageMetadata({
     title,
-    description: excerpt(regulation?.preface ?? regulation?.content, "新竹高中班聯會公開法規。"),
+    description: `${commonTitle}｜${excerpt(
+      regulation?.preface ?? regulation?.content,
+      "新竹高中班聯會公開法規。",
+    )}`,
     path: `/public/regulations/${encodeURIComponent(id)}`,
   });
 }
@@ -35,6 +45,7 @@ export default async function PublicRegulationDetailPage({
   if (!regulation) notFound();
 
   const path = `/public/regulations/${encodeURIComponent(id)}`;
+  const commonTitle = commonRegulationTitle(regulation.title);
   return (
     <PublicSiteShell navPages={bundle?.nav_pages ?? []} settings={bundle?.settings}>
       <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
@@ -44,6 +55,7 @@ export default async function PublicRegulationDetailPage({
             "@type": "Legislation",
             name: regulation.title,
             headline: regulation.title,
+            alternateName: commonTitle !== regulation.title ? commonTitle : undefined,
             description: excerpt(regulation.preface ?? regulation.content, "公開法規。"),
             datePublished: regulation.published_at,
             dateModified: regulation.updated_at,
@@ -56,6 +68,9 @@ export default async function PublicRegulationDetailPage({
           <header className="public-page-head mb-8">
             <p className="public-section-kicker">Public Regulation</p>
             <h1 className="mt-2 text-3xl font-bold">{regulation.title}</h1>
+            {commonTitle !== regulation.title && (
+              <p className="mt-2 text-sm text-[var(--public-secondary)]">常用名稱：{commonTitle}</p>
+            )}
             <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1 text-sm text-[var(--public-secondary)]">
               <span>版本 {regulation.version}</span>
               {regulation.effective_date && <span>生效日 {regulation.effective_date}</span>}
