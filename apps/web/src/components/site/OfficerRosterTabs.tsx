@@ -1,7 +1,11 @@
 "use client";
 
-import { UserRound, UsersRound } from "lucide-react";
+import { Crown, UserRound, UsersRound } from "lucide-react";
 import { useState } from "react";
+
+export function isLeadershipTitle(title: string): boolean {
+  return /(?:長|主席|召集人)$/.test(title.trim());
+}
 
 export type OfficerRosterTab = {
   id: string;
@@ -65,10 +69,20 @@ export default function OfficerRosterTabs({ tabs }: { tabs: OfficerRosterTab[] }
           <div
             key={`${activeTab.id}-${role.title}`}
             className="grid gap-4 border-b px-5 py-5 last:border-0 sm:grid-cols-[10rem,1fr] sm:items-start"
-            style={{ borderColor: "var(--border)" }}
+            style={{
+              borderColor: "var(--border)",
+              background: isLeadershipTitle(role.title) ? "var(--primary-dim)" : undefined,
+            }}
           >
             <div>
-              <h4 className="text-sm font-bold">{role.title}</h4>
+              <div className="flex flex-wrap items-center gap-2">
+                <h4 className="text-sm font-bold">{role.title}</h4>
+                {isLeadershipTitle(role.title) && (
+                  <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ color: "var(--primary-text)", background: "var(--primary)" }}>
+                    <Crown size={10} aria-hidden /> 長級
+                  </span>
+                )}
+              </div>
             </div>
             <div className="flex flex-wrap gap-2">
               {role.names.map((name) => (

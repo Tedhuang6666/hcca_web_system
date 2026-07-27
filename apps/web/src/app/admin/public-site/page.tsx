@@ -1136,7 +1136,7 @@ export default function PublicSiteAdminPage() {
             </Field>
             <div className="grid gap-4 md:grid-cols-2">
               <Field label="公開姓名覆寫"><TextInput value={officerDraft.display_name_override} onChange={(e) => setOfficerDraft({ ...officerDraft, display_name_override: e.target.value })} /></Field>
-              <Field label="公開稱謂覆寫"><TextInput value={officerDraft.title_override} onChange={(e) => setOfficerDraft({ ...officerDraft, title_override: e.target.value })} /></Field>
+              <Field label="公開稱謂覆寫" hint="輸入以「長」或「主席」結尾的職稱（例如資訊長），公開頁會以長級樣式顯示；一般幹部可填資訊幹部。"><TextInput value={officerDraft.title_override} onChange={(e) => setOfficerDraft({ ...officerDraft, title_override: e.target.value })} /></Field>
             </div>
             <Field label="公開簡介"><TextArea value={officerDraft.bio} onChange={(e) => setOfficerDraft({ ...officerDraft, bio: e.target.value })} /></Field>
             <Field label="公開 Email" hint="後端仍會檢查使用者 show_email，未允許時不會對外顯示。">
