@@ -49,14 +49,20 @@
 		}
 	}
 
-	# 使用者上傳檔案（公告圖、問卷圖等公開素材）：快取 1 天
+	# 使用者上傳檔案（公告圖、問卷圖等公開素材）：瀏覽器快取 7 天、edge 快取 30 天。
 	# 財務憑證必須通過 /api/finance/journals/{id}/evidence 的帳本權限檢查，
 	# 不可由靜態 uploads 路徑繞過。
 	@private_finance_evidence path /uploads/finance/evidence/*
 	respond @private_finance_evidence 404
 
+	@public_uploads path /uploads/announcements/* /uploads/merchandise-submissions/templates/* /uploads/surveys/* /uploads/public-site/* /uploads/recommended-vendors/*
+	handle @public_uploads {
+		header Cache-Control "public, max-age=604800, s-maxage=2592000, stale-while-revalidate=604800"
+		reverse_proxy api:8000
+	}
+
 	handle /uploads/* {
-		header Cache-Control "public, max-age=86400"
+		header Cache-Control "no-store"
 		reverse_proxy api:8000
 	}
 
@@ -71,6 +77,12 @@
 	# Next.js 靜態資源（hashed 檔名，永久快取）
 	handle /_next/static/* {
 		header Cache-Control "public, max-age=31536000, immutable"
+		reverse_proxy web:3000
+	}
+
+	# Next Image 已依 width/format 產生可重用的變體；edge 快取 30 天。
+	handle /_next/image* {
+		header Cache-Control "public, max-age=86400, s-maxage=2592000, stale-while-revalidate=604800"
 		reverse_proxy web:3000
 	}
 

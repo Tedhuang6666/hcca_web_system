@@ -110,7 +110,7 @@ export default function GoogleOneTap() {
     <Script
       id="google-identity-services"
       src="https://accounts.google.com/gsi/client"
-      strategy="afterInteractive"
+      strategy="lazyOnload"
       onLoad={() => setScriptReady(true)}
     />
   );

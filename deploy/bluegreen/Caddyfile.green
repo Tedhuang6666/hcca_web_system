@@ -25,8 +25,25 @@
 		reverse_proxy api-green:8000
 	}
 
-	handle /uploads/* {
+	@public_uploads path /uploads/announcements/* /uploads/merchandise-submissions/templates/* /uploads/surveys/* /uploads/public-site/* /uploads/recommended-vendors/*
+	handle @public_uploads {
+		header Cache-Control "public, max-age=604800, s-maxage=2592000, stale-while-revalidate=604800"
 		reverse_proxy api-green:8000
+	}
+
+	handle /uploads/* {
+		header Cache-Control "no-store"
+		reverse_proxy api-green:8000
+	}
+
+	handle /_next/static/* {
+		header Cache-Control "public, max-age=31536000, immutable"
+		reverse_proxy web-green:3000
+	}
+
+	handle /_next/image* {
+		header Cache-Control "public, max-age=86400, s-maxage=2592000, stale-while-revalidate=604800"
+		reverse_proxy web-green:3000
 	}
 
 	handle /auth/google/* {
