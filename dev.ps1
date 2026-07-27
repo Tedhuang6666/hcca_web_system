@@ -15,6 +15,12 @@ function Start-PortGuardian($Port) {
 
 # ── 1. 初始化與環境檢查 ──────────────────────────────────────────────────────
 Write-Host "--- [Step 1] 環境初始化 ---" -ForegroundColor Cyan
+$NodeVersion = (node --version).TrimStart('v')
+if ([version]$NodeVersion -lt [version]'22.13.0') {
+    throw "Node.js 版本過舊：v$NodeVersion（需要 >=22.13.0；請升級至 Node.js 22）"
+}
+Write-Host "[OK] Node.js v$NodeVersion" -ForegroundColor Green
+
 $EnvFile = "$PSScriptRoot\.env"
 if (Test-Path $EnvFile) {
     Get-Content $EnvFile | Where-Object { $_ -match '=' -and $_ -notmatch '^#' } | ForEach-Object {
@@ -48,9 +54,9 @@ Pop-Location
 # ── 4. 前端健康檢查 (確保 if-else 區塊完整) ───────────────────────────────────
 Write-Host "`n--- [Step 4] 前端依賴健康檢查 ---" -ForegroundColor Cyan
 $WebDir = "$PSScriptRoot\apps\web"
-$NextBin = "$WebDir\node_modules\next"
+$NextPackage = "$WebDir\node_modules\next\package.json"
 
-if (-not (Test-Path $NextBin)) {
+if (-not (Test-Path $NextPackage)) {
     Write-Host "[!] 偵測到前端依賴缺失，啟動自動修復 (npm install)..." -ForegroundColor Yellow
     Push-Location $WebDir
     # 如果 node_modules 存在但內容不全，先刪除再裝

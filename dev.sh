@@ -178,17 +178,17 @@ _require() {
 _missing=0
 _require docker "https://docs.docker.com/desktop/install/windows-install/（並啟用 WSL Integration）" || _missing=1
 _require uv     "curl -LsSf https://astral.sh/uv/install.sh | sh" || _missing=1
-_require node   "nvm install 20 && nvm use 20" || _missing=1
+_require node   "nvm install 22 && nvm use 22" || _missing=1
 _require npm    "（隨 node 安裝）" || _missing=1
 _require curl   "sudo apt install -y curl" || _missing=1
 [[ $_missing -eq 1 ]] && exit 1
 
-# 0.4 Node 版本（package.json engines.node >=20.9.0）
+# 0.4 Node 版本（apps/web/package.json engines.node >=22.13.0）
 NODE_VERSION=$(node -v | sed 's/^v//')
-NODE_MAJOR=${NODE_VERSION%%.*}
-if [[ "$NODE_MAJOR" -lt 20 ]]; then
-    error "Node.js 版本過舊：v${NODE_VERSION}（需要 >=20.9.0）"
-    error "升級：nvm install 20 && nvm use 20"
+IFS=. read -r NODE_MAJOR NODE_MINOR NODE_PATCH <<< "$NODE_VERSION"
+if (( NODE_MAJOR < 22 || (NODE_MAJOR == 22 && NODE_MINOR < 13) )); then
+    error "Node.js 版本過舊：v${NODE_VERSION}（需要 >=22.13.0）"
+    error "升級：nvm install 22 && nvm use 22"
     exit 1
 fi
 
@@ -762,6 +762,10 @@ NEED_INSTALL=0
 NEED_REASON=""
 if [[ ! -d "${WEB_DIR}/node_modules" ]]; then
     NEED_INSTALL=1; NEED_REASON="node_modules 不存在"
+elif [[ ! -f "${WEB_DIR}/node_modules/next/package.json" ]]; then
+    NEED_INSTALL=1; NEED_REASON="Next.js 套件缺失"
+elif ! (cd "${WEB_DIR}" && node -e "require.resolve('next/package.json')" >/dev/null 2>&1); then
+    NEED_INSTALL=1; NEED_REASON="Next.js 套件無法解析"
 elif [[ "${WEB_DIR}/package-lock.json" -nt "${WEB_DIR}/node_modules" ]]; then
     NEED_INSTALL=1; NEED_REASON="package-lock.json 比 node_modules 新"
 elif [[ "${WEB_DIR}/package.json" -nt "${WEB_DIR}/node_modules" ]]; then
