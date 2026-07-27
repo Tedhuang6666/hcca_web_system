@@ -249,6 +249,9 @@ type OfficerRosterLine = {
 type OfficerRosterEntry = {
   title: string;
   names: string[];
+  member_labels?: Record<string, string>;
+  highlight_label?: string;
+  is_lead?: boolean;
 };
 
 type OfficerRosterTab = {
@@ -261,9 +264,9 @@ function parseOfficerRoster(value: string): OfficerRosterLine[] {
   return value.split(/\r?\n/).flatMap((rawLine, index) => {
     const line = rawLine.trim();
     if (!line) return [];
-    const separatorIndex = line.search(/[｜|]/);
+    const separatorIndex = line.search(/[｜|：:]/);
     if (separatorIndex < 0) {
-      return [{ lineNumber: index + 1, title: "", names: [], error: "請使用「職位｜姓名」格式" }];
+      return [{ lineNumber: index + 1, title: "", names: [], error: "請使用「職位｜姓名」格式（也支援冒號）" }];
     }
     const title = line.slice(0, separatorIndex).trim();
     const names = line
@@ -279,6 +282,19 @@ function parseOfficerRoster(value: string): OfficerRosterLine[] {
   });
 }
 
+function parseStoredMemberLabels(value: unknown, names: string[], legacyLabel?: string) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).flatMap(([name, label]) => (
+        typeof label === "string" && names.includes(name) && label.trim()
+          ? [[name, label.trim()]]
+          : []
+      )),
+    );
+  }
+  return legacyLabel && names[0] ? { [names[0]]: legacyLabel } : undefined;
+}
+
 function parseStoredOfficerRoster(value: unknown): OfficerRosterEntry[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item) => {
@@ -288,7 +304,14 @@ function parseStoredOfficerRoster(value: unknown): OfficerRosterEntry[] {
     const names = Array.isArray(record.names)
       ? record.names.filter((name): name is string => typeof name === "string").map((name) => name.trim()).filter(Boolean)
       : [];
-    return title && names.length > 0 ? [{ title, names: [...new Set(names)] }] : [];
+    const highlightLabel = Object.prototype.hasOwnProperty.call(record, "highlight_label")
+      ? (typeof record.highlight_label === "string" ? record.highlight_label.trim() : "")
+      : undefined;
+    const isLead = typeof record.is_lead === "boolean" ? record.is_lead : undefined;
+    const memberLabels = parseStoredMemberLabels(record.member_labels, names, highlightLabel);
+    return title && names.length > 0
+      ? [{ title, names: [...new Set(names)], member_labels: memberLabels, highlight_label: highlightLabel, is_lead: isLead }]
+      : [];
   });
 }
 
@@ -311,6 +334,10 @@ function serializeOfficerRoster(entries: OfficerRosterEntry[]) {
   return entries.map((entry) => `${entry.title}｜${entry.names.join(" ")}`).join("\n");
 }
 
+function rosterMemberKey(tabId: string, title: string, name: string) {
+  return `${tabId}::${title.trim()}::${name.trim()}`;
+}
+
 export default function PublicSiteAdminPage() {
   const [tab, setTab] = useState<Tab>("settings");
   const [loading, setLoading] = useState(true);
@@ -324,6 +351,7 @@ export default function PublicSiteAdminPage() {
   const [blocksJson, setBlocksJson] = useState("{}");
   const [rosterText, setRosterText] = useState("");
   const [rosterTabs, setRosterTabs] = useState<OfficerRosterTab[]>([]);
+  const [rosterMemberLabelOverrides, setRosterMemberLabelOverrides] = useState<Record<string, string>>({});
   const [activeRosterTabId, setActiveRosterTabId] = useState("");
   const [newRosterTabLabel, setNewRosterTabLabel] = useState("");
   const [rosterBusy, setRosterBusy] = useState(false);
@@ -397,6 +425,18 @@ export default function PublicSiteAdminPage() {
       setBlocksJson(JSON.stringify(nextSettings.homepage_blocks ?? {}, null, 2));
       const nextRosterTabs = parseStoredOfficerRosterTabs(nextSettings.theme_config);
       setRosterTabs(nextRosterTabs);
+      const nextMemberLabelOverrides: Record<string, string> = {};
+      nextRosterTabs.forEach((rosterTab) => {
+        rosterTab.entries.forEach((entry) => {
+          Object.entries(entry.member_labels ?? {}).forEach(([name, label]) => {
+            nextMemberLabelOverrides[rosterMemberKey(rosterTab.id, entry.title, name)] = label;
+          });
+          if (!entry.member_labels && entry.is_lead === true && entry.names[0]) {
+            nextMemberLabelOverrides[rosterMemberKey(rosterTab.id, entry.title, entry.names[0])] = "長級";
+          }
+        });
+      });
+      setRosterMemberLabelOverrides(nextMemberLabelOverrides);
       setActiveRosterTabId((currentId) => nextRosterTabs.some((tab) => tab.id === currentId) ? currentId : nextRosterTabs[0]?.id ?? "");
       setRosterText(serializeOfficerRoster(nextRosterTabs[0]?.entries ?? []));
       setNavItems(resolvePublicNav(nextSettings.theme_config));
@@ -425,7 +465,25 @@ export default function PublicSiteAdminPage() {
 
   const activeRosterTab = rosterTabs.find((tab) => tab.id === activeRosterTabId);
 
-  const currentRosterEntries = () => rosterSummary.validLines.map(({ title, names }) => ({ title, names }));
+  const getRosterMemberLabel = (title: string, name: string) => (
+    rosterMemberLabelOverrides[rosterMemberKey(activeRosterTabId, title, name)] ?? ""
+  );
+
+  const currentRosterEntries = () => rosterSummary.validLines.map(({ title, names }) => {
+    const memberLabels: Record<string, string> = {};
+    names.forEach((name) => {
+      const label = getRosterMemberLabel(title, name);
+      if (label) memberLabels[name] = label;
+    });
+    return { title, names, member_labels: memberLabels };
+  });
+
+  const setRosterMemberLabel = (title: string, name: string, value: string) => {
+    setRosterMemberLabelOverrides((current) => ({
+      ...current,
+      [rosterMemberKey(activeRosterTabId, title, name)]: value.trim(),
+    }));
+  };
 
   const selectRosterTab = (tabId: string) => {
     const tab = rosterTabs.find((item) => item.id === tabId);
@@ -482,7 +540,7 @@ export default function PublicSiteAdminPage() {
 
     setRosterBusy(true);
     try {
-      const roster = rosterSummary.validLines.map(({ title, names }) => ({ title, names }));
+      const roster = currentRosterEntries();
       const nextTabs = rosterTabs.map((tab) => tab.id === activeRosterTabId ? { ...tab, entries: roster } : tab);
       const nextTheme = { ...(settings.theme_config ?? {}), officer_rosters: nextTabs };
       const next = await siteApi.updateSettings({ theme_config: nextTheme });
@@ -1148,8 +1206,49 @@ export default function PublicSiteAdminPage() {
                 </p>
               )}
             </div>
+            {rosterSummary.validLines.length > 0 && (
+              <div className="overflow-hidden rounded-lg border" style={{ background: "var(--bg-elevated)", borderColor: "var(--border)" }}>
+                <div className="flex flex-wrap items-baseline justify-between gap-2 border-b px-4 py-3" style={{ borderColor: "var(--border)" }}>
+                  <div>
+                    <h3 className="text-sm font-semibold">解析預覽</h3>
+                    <p className="mt-1 text-xs text-[var(--text-muted)]">標示是設定在個人身上，不是整個職位；例如秘書兩人中可只標記一位為「秘書長」。</p>
+                  </div>
+                  <span className="text-xs text-[var(--text-muted)]">{rosterSummary.validLines.length} 個職位</span>
+                </div>
+                <div className="divide-y" style={{ borderColor: "var(--border)" }}>
+                  {rosterSummary.validLines.map((line) => {
+                    return (
+                      <div key={`${line.lineNumber}-${line.title}`} className="border-b last:border-0" style={{ borderColor: "var(--border)" }}>
+                        <div className="flex items-center justify-between gap-3 px-4 py-3">
+                          <span className="font-semibold">{line.title}</span>
+                          <span className="text-xs text-[var(--text-muted)]">{line.names.length} 位成員</span>
+                        </div>
+                        <div className="divide-y" style={{ borderColor: "var(--border)" }}>
+                          {line.names.map((name) => {
+                            const label = getRosterMemberLabel(line.title, name);
+                            return (
+                              <div key={`${line.title}-${name}`} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:pl-8">
+                                <span className="min-w-0 text-sm text-[var(--text-secondary)]">{name}</span>
+                                <TextInput
+                                  value={label}
+                                  onChange={(event) => setRosterMemberLabel(line.title, name, event.target.value)}
+                                  placeholder="個人標示（選填）"
+                                  aria-label={`${line.title}的${name}公開標示`}
+                                  className="min-h-11 w-full sm:max-w-52"
+                                  maxLength={24}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-xs text-[var(--text-muted)]">格式：職位｜姓名 姓名；同一人可出現在不同職位。</p>
+              <p className="text-xs text-[var(--text-muted)]">格式：職位｜姓名 姓名；也支援「職位：姓名」；同一人可出現在不同職位。</p>
               <button type="button" onClick={saveOfficerRoster} disabled={rosterBusy || rosterSummary.memberCount === 0} className="btn btn-primary min-h-11">
                 <ClipboardPaste size={16} aria-hidden /> {rosterBusy ? "儲存中…" : "儲存這份名單"}
               </button>
