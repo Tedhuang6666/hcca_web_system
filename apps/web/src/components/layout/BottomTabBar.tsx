@@ -10,12 +10,20 @@ import { navigationProfilesApi } from "@/lib/api";
 import { NAV_ID_TO_MODULE, moduleForPath } from "@/lib/modules";
 import {
   filterNavItems,
+  constrainMobileHidden,
+  hasSavedNavPreferences,
+  isMeetingsUnlocked,
+  isNavItemVisible,
   NAV_PREF_EVENT,
+  navItemsFromEntries,
+  NAVIGATION_PROFILES,
+  NAV_ITEMS,
+  navProfileFromApi,
   orderedItems,
-  PROFILE_MOBILE_ORDER,
   readNavPreferences,
   resolveNavigationProfile,
   type NavItem,
+  type NavigationProfileConfig,
 } from "@/lib/navigation";
 import NavIcon from "./NavIcon";
 
@@ -54,7 +62,9 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
   const [userRoom, setUserRoom] = useState<string | null>(null);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [navPrefs, setNavPrefs] = useState(() => readNavPreferences());
-  const [serverMobileOrder, setServerMobileOrder] = useState<string[] | null>(null);
+  const [hasCustomNav, setHasCustomNav] = useState(false);
+  const [meetingsUnlocked, setMeetingsUnlocked] = useState(false);
+  const [serverProfile, setServerProfile] = useState<NavigationProfileConfig | null>(null);
   const { isModuleClosed } = useModuleStatus();
   const {
     taskCount,
@@ -86,12 +96,18 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
       || perms.includes("admin:all")
       || perms.some((p) => CADRE_PREFIXES.some((pre) => p.startsWith(pre)));
     setRole(isCadre ? "cadre" : "student");
+    setMeetingsUnlocked(isMeetingsUnlocked());
     setRoleResolved(true);
   }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const syncPrefs = () => setNavPrefs(readNavPreferences());
+    const syncPrefs = () => {
+      setNavPrefs(readNavPreferences());
+      setHasCustomNav(hasSavedNavPreferences());
+      setMeetingsUnlocked(isMeetingsUnlocked());
+    };
+    syncPrefs();
     window.addEventListener(NAV_PREF_EVENT, syncPrefs);
     window.addEventListener("storage", syncPrefs);
     return () => {
@@ -109,19 +125,19 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
 
   useEffect(() => {
     if (role === "guest") {
-      setServerMobileOrder(null);
+      setServerProfile(null);
       return;
     }
     let alive = true;
     navigationProfilesApi.me()
       .then((result) => {
         if (!alive) return;
-        setServerMobileOrder(
-          result.source === "default" ? null : result.profile?.mobile_order ?? null,
+        setServerProfile(
+          result.source === "default" || !result.profile ? null : navProfileFromApi(result.profile),
         );
       })
       .catch(() => {
-        if (alive) setServerMobileOrder(null);
+        if (alive) setServerProfile(null);
       });
     return () => {
       alive = false;
@@ -164,21 +180,42 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
     const hasPrefix = (prefix: string) =>
       superuser || perms.has("admin:all") || Array.from(perms).some((perm) => perm.startsWith(prefix));
     const profile = resolveNavigationProfile(perms, superuser);
-    const mobileOrder =
-      serverMobileOrder ?? (profile === "default" ? navPrefs.mobileOrder : PROFILE_MOBILE_ORDER[profile]);
-    const mobileHidden = serverMobileOrder || profile !== "default" ? [] : navPrefs.mobileHidden;
+    const isAdmin = superuser || sessionStorage.getItem("is_owner") === "true";
+    const activeProfile = isAdmin || perms.has("admin:all")
+      ? NAVIGATION_PROFILES.default
+      : serverProfile ?? NAVIGATION_PROFILES[profile];
+    const profileItems = navItemsFromEntries(activeProfile.desktopSections);
+    const profileItemIds = new Set([
+      ...profileItems.map((item) => item.id),
+      ...activeProfile.mobileOrder,
+    ]);
+    const profileNavItems = NAV_ITEMS.filter((item) => profileItemIds.has(item.id));
     const available = filterNavItems(
-      orderedItems(mobileOrder, mobileHidden),
+      profileNavItems,
       can,
       hasPrefix,
-    ).filter((item) =>
-      (item.id !== "tasks" || hasPrefix("document:") || hasPrefix("regulation:"))
-      &&
-      !isModuleClosed(NAV_ID_TO_MODULE[item.id] ?? null),
     );
-    const topTabs = available.slice(0, 4).map(navItemToTab);
+    const isVisible = (item: NavItem) => isNavItemVisible(item, {
+      can,
+      hasPrefix,
+      isAdmin,
+      navigationProfile: activeProfile.id,
+      meetingsUnlocked,
+      isModuleClosed: (item) => isModuleClosed(NAV_ID_TO_MODULE[item.id] ?? null),
+    });
+    const visibleProfileItems = available.filter(isVisible);
+    const defaultMobileItems = orderedItems(activeProfile.mobileOrder, [], visibleProfileItems);
+    const mobileOrder = hasCustomNav ? navPrefs.mobileOrder : activeProfile.mobileOrder;
+    const mobileHidden = hasCustomNav
+      ? navPrefs.mobileHidden
+      : defaultMobileItems.slice(4).map((item) => item.id);
+    const constrainedHidden = constrainMobileHidden(mobileOrder, mobileHidden, visibleProfileItems);
+    const topTabs = orderedItems(mobileOrder, constrainedHidden, profileNavItems)
+      .filter(isVisible)
+      .slice(0, 5)
+      .map(navItemToTab);
     return [...topTabs, { label: "更多", icon: (p) => <MoreHorizontal {...p} />, onClick: onMoreClick }];
-  }, [navPrefs, role, onMoreClick, isModuleClosed, serverMobileOrder]);
+  }, [hasCustomNav, isModuleClosed, meetingsUnlocked, navPrefs, onMoreClick, role, serverProfile]);
 
   if (keyboardOpen) return null;
   if (!roleResolved) return null;

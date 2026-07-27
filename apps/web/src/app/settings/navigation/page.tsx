@@ -21,13 +21,28 @@ import { CSS } from "@dnd-kit/utilities";
 import { Check, GripVertical, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import NavIcon from "@/components/layout/NavIcon";
+import { useModuleStatus } from "@/contexts/ModuleStatusContext";
+import { usePermissions } from "@/hooks/usePermissions";
+import { navigationProfilesApi } from "@/lib/api";
+import { NAV_ID_TO_MODULE } from "@/lib/modules";
 import {
   DEFAULT_NAV_PREFERENCES,
-  filterNavItems,
-  NAV_ITEMS_BY_ID,
+  constrainMobileHidden,
+  hasSavedNavPreferences,
+  isMeetingsUnlocked,
+  isNavItemVisible,
+  MOBILE_NAV_MAX_ITEMS,
+  MOBILE_NAV_MIN_ITEMS,
+  navItemsFromEntries,
+  NAVIGATION_PROFILES,
+  NAV_ITEMS,
+  navProfileFromApi,
+  orderedItems,
   readNavPreferences,
+  resolveNavigationProfile,
   writeNavPreferences,
   type NavItem,
+  type NavigationProfileConfig,
   type NavPreferences,
 } from "@/lib/navigation";
 
@@ -36,52 +51,110 @@ type Surface = "desktop" | "mobile";
 export default function NavigationSettingsPage() {
   const [prefs, setPrefs] = useState<NavPreferences>(() => readNavPreferences());
   const [surface, setSurface] = useState<Surface>("desktop");
-  const [ready, setReady] = useState(false);
+  const [hasCustomPrefs, setHasCustomPrefs] = useState(false);
+  const [meetingsUnlocked, setMeetingsUnlocked] = useState(false);
+  const [serverProfile, setServerProfile] = useState<NavigationProfileConfig | null>(null);
+  const { can, isAdmin, permissions } = usePermissions();
+  const { isModuleClosed } = useModuleStatus();
 
   useEffect(() => {
-    setPrefs(readNavPreferences());
-    setReady(true);
+    const syncPrefs = () => {
+      setPrefs(readNavPreferences());
+      setHasCustomPrefs(hasSavedNavPreferences());
+      setMeetingsUnlocked(isMeetingsUnlocked());
+    };
+    syncPrefs();
+    window.addEventListener("hcca:navigation-preferences-changed", syncPrefs);
+    window.addEventListener("storage", syncPrefs);
+    return () => {
+      window.removeEventListener("hcca:navigation-preferences-changed", syncPrefs);
+      window.removeEventListener("storage", syncPrefs);
+    };
   }, []);
+
+  useEffect(() => {
+    if (!localStorage.getItem("user_id")) return;
+    let alive = true;
+    navigationProfilesApi.me()
+      .then((result) => {
+        if (alive && result.source !== "default" && result.profile) {
+          setServerProfile(navProfileFromApi(result.profile));
+        }
+      })
+      .catch(() => {
+        if (alive) setServerProfile(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const navigationProfile = useMemo(
+    () => resolveNavigationProfile(permissions, isAdmin),
+    [isAdmin, permissions],
+  );
+  const activeProfile = useMemo(() => {
+    if (isAdmin || permissions.has("admin:all")) return NAVIGATION_PROFILES.default;
+    return serverProfile ?? NAVIGATION_PROFILES[navigationProfile];
+  }, [isAdmin, navigationProfile, permissions, serverProfile]);
+  const profileItems = useMemo(() => navItemsFromEntries(activeProfile.desktopSections), [activeProfile]);
+  const profileItemIds = useMemo(
+    () => new Set([...profileItems.map((item) => item.id), ...activeProfile.mobileOrder]),
+    [activeProfile.mobileOrder, profileItems],
+  );
+  const profileNavItems = useMemo(
+    () => NAV_ITEMS.filter((item) => profileItemIds.has(item.id)),
+    [profileItemIds],
+  );
+  const hasPrefix = useMemo(
+    () => (prefix: string) =>
+      isAdmin
+      || permissions.has("admin:all")
+      || Array.from(permissions).some((permission) => permission.startsWith(prefix)),
+    [isAdmin, permissions],
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  const permissionHelpers = useMemo(() => {
-    if (typeof window === "undefined") return { can: () => false, hasPrefix: () => false, isAdmin: false };
-    const superuser =
-      sessionStorage.getItem("is_superuser") === "true" || sessionStorage.getItem("is_owner") === "true";
-    let permissions = new Set<string>();
-    try {
-      permissions = new Set(JSON.parse(sessionStorage.getItem("permissions") || "[]"));
-    } catch { /* ignore */ }
-    return {
-      can: (code: string) => superuser || permissions.has("admin:all") || permissions.has(code),
-      hasPrefix: (prefix: string) =>
-        superuser || permissions.has("admin:all") || Array.from(permissions).some((p) => p.startsWith(prefix)),
-      isAdmin: superuser,
-    };
-    // ready 翻 true（掛載後）刻意觸發重算，從 localStorage 取得真正權限；body 未直接引用故停用規則。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready]);
-
   const orderKey = surface === "desktop" ? "desktopOrder" : "mobileOrder";
   const hiddenKey = surface === "desktop" ? "desktopHidden" : "mobileHidden";
+  const defaultOrder = surface === "mobile"
+    ? (activeProfile.mobileOrder.length > 0 ? activeProfile.mobileOrder : profileItems.map((item) => item.id))
+    : profileItems.map((item) => item.id);
+  const effectiveOrder = hasCustomPrefs ? prefs[orderKey] : defaultOrder;
   const availableItems = useMemo(
-    () =>
-      filterNavItems(
-        prefs[orderKey].map((id) => NAV_ITEMS_BY_ID[id]).filter((item): item is NavItem => !!item),
-        permissionHelpers.can,
-        permissionHelpers.hasPrefix,
-      ),
-    [orderKey, permissionHelpers, prefs],
+    () => orderedItems(effectiveOrder, [], profileNavItems).filter((item) => isNavItemVisible(item, {
+      can,
+      hasPrefix,
+      isAdmin,
+      navigationProfile: activeProfile.id,
+      meetingsUnlocked,
+      isModuleClosed: (item) => isModuleClosed(NAV_ID_TO_MODULE[item.id] ?? null),
+    })),
+    [activeProfile.id, can, effectiveOrder, hasPrefix, isAdmin, isModuleClosed, meetingsUnlocked, profileNavItems],
   );
-  const hidden = new Set(prefs[hiddenKey]);
+  const hidden = useMemo(() => {
+    let baseHidden: string[];
+    if (surface === "mobile" && !hasCustomPrefs) {
+      const selected = new Set(defaultOrder.slice(0, MOBILE_NAV_MIN_ITEMS));
+      baseHidden = profileNavItems
+        .filter((item) => !selected.has(item.id))
+        .map((item) => item.id);
+    } else {
+      baseHidden = prefs[hiddenKey];
+    }
+    return new Set(surface === "mobile"
+      ? constrainMobileHidden(effectiveOrder, baseHidden, availableItems)
+      : baseHidden);
+  }, [availableItems, defaultOrder, effectiveOrder, hasCustomPrefs, hiddenKey, prefs, profileNavItems, surface]);
   const visibleCount = availableItems.filter((item) => !hidden.has(item.id)).length;
 
   const updatePrefs = (next: NavPreferences, message = "導覽設定已更新") => {
     setPrefs(next);
+    setHasCustomPrefs(true);
     writeNavPreferences(next);
     toast.success(message);
   };
@@ -91,20 +164,51 @@ export default function NavigationSettingsPage() {
   const onDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const oldIndex = prefs[orderKey].indexOf(String(active.id));
-    const newIndex = prefs[orderKey].indexOf(String(over.id));
+    const currentOrder = availableItems.map((item) => item.id);
+    const oldIndex = currentOrder.indexOf(String(active.id));
+    const newIndex = currentOrder.indexOf(String(over.id));
     if (oldIndex < 0 || newIndex < 0) return;
-    setOrder(arrayMove(prefs[orderKey], oldIndex, newIndex));
+    const nextVisibleOrder = arrayMove(currentOrder, oldIndex, newIndex);
+    const availableSet = new Set(currentOrder);
+    let nextIndex = 0;
+    const nextOrder = effectiveOrder.map((id) => {
+      if (!availableSet.has(id)) return id;
+      return nextVisibleOrder[nextIndex++];
+    });
+    setOrder(nextOrder);
   };
 
   const toggle = (id: string) => {
-    const current = new Set(prefs[hiddenKey]);
-    if (current.has(id)) current.delete(id);
+    const current = new Set(hidden);
+    if (surface === "mobile") {
+      const selectedCount = availableItems.filter((item) => !hidden.has(item.id)).length;
+      if (current.has(id) && selectedCount <= MOBILE_NAV_MIN_ITEMS) {
+        toast.info(`手機底欄至少保留 ${MOBILE_NAV_MIN_ITEMS} 個入口`);
+        return;
+      }
+      if (!current.has(id) && selectedCount >= MOBILE_NAV_MAX_ITEMS) {
+        toast.info(`手機底欄最多選擇 ${MOBILE_NAV_MAX_ITEMS} 個入口`);
+        return;
+      }
+    }
+    if (hidden.has(id)) current.delete(id);
     else current.add(id);
     updatePrefs({ ...prefs, [hiddenKey]: Array.from(current) });
   };
 
-  const reset = () => updatePrefs(DEFAULT_NAV_PREFERENCES, "已恢復預設導覽");
+  const reset = () => {
+    const mobileOrder = (activeProfile.mobileOrder.length > 0
+      ? activeProfile.mobileOrder
+      : profileItems.map((item) => item.id)
+    ).filter((id, index, order) => profileItemIds.has(id) && order.indexOf(id) === index);
+    const next = {
+      ...DEFAULT_NAV_PREFERENCES,
+      desktopOrder: profileItems.map((item) => item.id),
+      mobileOrder,
+      mobileHidden: mobileOrder.slice(MOBILE_NAV_MIN_ITEMS),
+    };
+    updatePrefs(next, "已恢復預設導覽");
+  };
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
@@ -132,7 +236,9 @@ export default function NavigationSettingsPage() {
           <div>
             <h2 className="text-sm font-semibold">導覽項目</h2>
             <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-              目前顯示 {visibleCount} 個項目；手機底欄會使用前 4 個可顯示項目
+              {surface === "mobile"
+                ? `已選 ${visibleCount} 個入口，可選 ${MOBILE_NAV_MIN_ITEMS}–${MOBILE_NAV_MAX_ITEMS} 個；拖曳可排序`
+                : `目前顯示 ${visibleCount} 個可用項目；拖曳可排序`}
             </p>
           </div>
           <div className="inline-flex rounded-md p-1" style={{ border: "1px solid var(--border)" }}>
@@ -146,13 +252,17 @@ export default function NavigationSettingsPage() {
         </div>
 
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-          <SortableContext items={prefs[orderKey]} strategy={verticalListSortingStrategy}>
+          <SortableContext items={availableItems.map((item) => item.id)} strategy={verticalListSortingStrategy}>
             <div className="divide-y" style={{ borderColor: "var(--border)" }}>
               {availableItems.map((item) => (
                 <SortableNavRow
                   key={item.id}
                   item={item}
                   visible={!hidden.has(item.id)}
+                  disabled={surface === "mobile" && (
+                    (visibleCount <= MOBILE_NAV_MIN_ITEMS && !hidden.has(item.id))
+                    || (visibleCount >= MOBILE_NAV_MAX_ITEMS && hidden.has(item.id))
+                  )}
                   onToggle={() => toggle(item.id)}
                 />
               ))}
@@ -191,10 +301,12 @@ function TabButton({
 function SortableNavRow({
   item,
   visible,
+  disabled,
   onToggle,
 }: {
   item: NavItem;
   visible: boolean;
+  disabled: boolean;
   onToggle: () => void;
 }) {
   const sortable = useSortable({ id: item.id });
@@ -235,9 +347,15 @@ function SortableNavRow({
         type="button"
         role="switch"
         aria-checked={visible}
+        aria-label={`${visible ? "隱藏" : "顯示"}${item.label}`}
+        disabled={disabled}
         onClick={onToggle}
         className="inline-flex h-6 w-11 items-center rounded-full transition-colors"
-        style={{ background: visible ? "var(--primary)" : "var(--border-strong)" }}
+        style={{
+          background: visible ? "var(--primary)" : "var(--border-strong)",
+          opacity: disabled ? 0.55 : 1,
+          cursor: disabled ? "not-allowed" : "pointer",
+        }}
       >
         <span
           className="flex h-4 w-4 items-center justify-center rounded-full bg-white transition-transform"
