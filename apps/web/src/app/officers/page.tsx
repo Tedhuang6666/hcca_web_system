@@ -31,6 +31,7 @@ export default async function OfficersPage() {
         <PublicOfficerDirectory
           officers={officers}
           themeConfig={bundle?.settings?.theme_config}
+          showFullPageLink={false}
         />
       </div>
     </PublicSiteShell>
