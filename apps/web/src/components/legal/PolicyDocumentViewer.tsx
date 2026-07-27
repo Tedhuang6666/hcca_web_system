@@ -6,6 +6,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { policiesApi, apiErrorMessage } from "@/lib/api";
 import { normalizeCouncilName } from "@/lib/copy";
+import remarkBreaks from "@/lib/remarkBreaks";
 import type { PolicyDocumentOut, PolicyKind } from "@/lib/types";
 
 export default function PolicyDocumentViewer({
@@ -78,12 +79,12 @@ export default function PolicyDocumentViewer({
           <p className="mb-1 font-semibold" style={{ color: "var(--text-primary)" }}>
             本版摘要
           </p>
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+          <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
             {normalizeCouncilName(doc.summary_md)}
           </ReactMarkdown>
         </section>
       )}
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{normalizeCouncilName(doc.content_md)}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{normalizeCouncilName(doc.content_md)}</ReactMarkdown>
     </>
   );
 }

@@ -40,6 +40,7 @@ class PublicSiteSettings(Base, TimestampMixin):
     contact_md: Mapped[str | None] = mapped_column(Text, nullable=True)
     terms_md: Mapped[str | None] = mapped_column(Text, nullable=True)
     developer_team_md: Mapped[str | None] = mapped_column(Text, nullable=True)
+    system_info_md: Mapped[str | None] = mapped_column(Text, nullable=True)
     cta_label: Mapped[str] = mapped_column(String(60), nullable=False)
     cta_href: Mapped[str] = mapped_column(String(500), nullable=False)
     public_database_label: Mapped[str] = mapped_column(String(60), nullable=False)

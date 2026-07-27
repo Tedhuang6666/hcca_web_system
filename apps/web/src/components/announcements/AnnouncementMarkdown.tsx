@@ -4,6 +4,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { API_BASE } from "@/lib/config";
+import remarkBreaks from "@/lib/remarkBreaks";
 
 function textFromLegacyTiptap(node: unknown): string {
   if (!node || typeof node !== "object") return "";
@@ -59,7 +60,7 @@ export default function AnnouncementMarkdown({
   return (
     <div className={`announcement-markdown ${className}`}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkBreaks]}
         components={{
           a: ({ href, children }) => (
             <a href={href} target="_blank" rel="noreferrer">

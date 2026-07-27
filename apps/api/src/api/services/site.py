@@ -53,6 +53,13 @@ DEFAULT_SETTINGS = {
     "contact_md": None,
     "terms_md": None,
     "developer_team_md": None,
+    "system_info_md": """## 需要協助嗎？
+
+若使用平台時遇到問題，請先查看最新公告；仍需要協助時，請透過聯絡資訊與管理團隊聯繫。
+
+## 錯誤回報
+
+回報錯誤時，請提供發生時間、操作步驟與畫面；請勿在公開內容中填寫密碼或其他敏感資料。""",
     "cta_label": "查看平台連結",
     "cta_href": "/links",
     "public_database_label": "公開資料庫",
