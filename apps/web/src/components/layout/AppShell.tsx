@@ -28,6 +28,7 @@ import PasskeySetupPrompt from "@/components/auth/PasskeySetupPrompt";
 const BARE_PATHS = [
   "/",
   "/about",
+  "/system-info",
   "/links",
   "/news",
   "/officers",

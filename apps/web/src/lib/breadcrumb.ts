@@ -64,6 +64,7 @@ const PATH_OVERRIDES: Record<string, string> = {
   "/settings/notifications":      "通知偏好",
   "/settings/security":           "安全設定",
   "/about":                       "關於本系統",
+  "/system-info":                 "關於本系統",
 };
 
 /**

@@ -429,53 +429,6 @@ textarea:focus {
   color: var(--sidebar-text-active);
 }
 
-.sidebar-system-notice {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.625rem;
-  margin-top: 0.75rem;
-  padding: 0.75rem 0.75rem 0.25rem;
-  border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 80%, transparent);
-  color: var(--sidebar-text);
-  text-decoration: none;
-  transition: color var(--transition);
-}
-
-.sidebar-system-notice:hover,
-.sidebar-system-notice:focus-visible {
-  color: var(--sidebar-text-hover);
-}
-
-.sidebar-system-notice-icon {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  width: 1.75rem;
-  height: 1.75rem;
-  border-radius: 7px;
-  background: var(--primary-dim);
-  color: var(--primary-text);
-}
-
-.sidebar-system-notice-title,
-.sidebar-system-notice-copy {
-  display: block;
-}
-
-.sidebar-system-notice-title {
-  color: inherit;
-  font-size: 0.75rem;
-  font-weight: 650;
-}
-
-.sidebar-system-notice-copy {
-  margin-top: 0.125rem;
-  color: var(--sidebar-text);
-  font-size: 0.6875rem;
-  line-height: 1.45;
-}
-
 .sidebar-nav-item svg {
   transition: color var(--transition), transform var(--transition);
 }
