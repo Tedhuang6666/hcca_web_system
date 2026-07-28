@@ -1,6 +1,7 @@
 import PublicSiteShell from "@/components/site/PublicSiteShell";
 import MarkdownBlock from "@/components/site/MarkdownBlock";
 import PublicOfficerDirectory from "@/components/site/PublicOfficerDirectory";
+import PublicContactSection from "@/components/site/PublicContactSection";
 import { fetchPublicBundle, fetchPublicOfficers } from "@/lib/serverFetch";
 import { ArrowDown, ArrowUpRight } from "lucide-react";
 import Link from "next/link";
@@ -63,6 +64,8 @@ export default async function AboutPage() {
           </div>
           <PublicOfficerDirectory officers={officers} themeConfig={settings?.theme_config} showHeading={false} />
         </section>
+
+        <PublicContactSection markdown={settings?.contact_md} />
       </div>
     </PublicSiteShell>
   );

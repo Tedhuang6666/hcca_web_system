@@ -14,6 +14,7 @@ import {
   Landmark,
   Link2,
   ListChecks,
+  Mail,
   MapPinned,
   Megaphone,
   MessageSquareText,
@@ -58,6 +59,7 @@ export const PUBLIC_NAV_ITEMS: PublicNavItemDef[] = [
   { key: "system-info", href: "/system-info", label: "關於本系統", description: "協助、回報與公開說明", icon: Info, group: "primary" },
 
   { key: "officers", href: "/officers", label: "班聯會幹部", description: "當屆幹部與公開資料", icon: UsersRound, group: "info", guestUsable: true },
+  { key: "contact", href: "/contact", label: "聯絡我們", description: "聯絡班聯會與提出問題", icon: Mail, group: "info", guestUsable: true },
   { key: "links", href: "/links", label: "平台連結", description: "常用服務與外部連結", icon: Link2, group: "info", guestUsable: true },
 
   { key: "public-db", href: "/public", label: "公開資料庫", description: "所有公開資料與參與入口", icon: BookOpenText, group: "data", guestUsable: true },
