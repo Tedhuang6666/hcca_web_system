@@ -63,6 +63,7 @@ function AIEvidencePanel({
   file: MerchandiseSubmissionAdminListItem["files"][number];
 }) {
   const evidence = file.ai_detection_evidence ?? [];
+  const metadata = file.ai_detection_metadata ?? [];
   const statusKey = file.ai_detection_status ?? "unscanned";
   const statusLabel = {
     detected: "發現可供判斷的 AI metadata 證據",
@@ -71,23 +72,23 @@ function AIEvidencePanel({
     not_applicable: "非圖片檔案，不適用",
     error: "無法完成原始檔分析",
     unscanned: "尚未分析（此檔案可能早於此功能建立）",
-  }[statusKey];
+  }[statusKey] ?? "未知狀態";
   const isFinding = file.ai_detection_status === "detected";
   return (
-    <div
+    <details
       className="mt-2 rounded border p-2"
       style={{
         borderColor: isFinding ? "var(--warning-border)" : "var(--border)",
         background: isFinding ? "var(--warning-dim)" : "var(--bg-elevated)",
       }}
     >
-      <p className="flex items-center gap-1 text-[11px] font-semibold">
+      <summary className="flex cursor-pointer list-none items-center gap-1 text-[11px] font-semibold">
         {isFinding ? <ShieldAlert size={13} /> : <ScanSearch size={13} />}
-        AI metadata 檢視
-      </p>
-      <p className="mt-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
-        {statusLabel}
-      </p>
+        <span>AI metadata 檢視</span>
+        <span className="ml-auto font-normal" style={{ color: "var(--text-muted)" }}>
+          {statusLabel}
+        </span>
+      </summary>
       {evidence.length > 0 && (
         <ul className="mt-2 space-y-1 text-[11px]">
           {evidence.map((item, index) => (
@@ -112,7 +113,43 @@ function AIEvidencePanel({
           SHA-256：{file.ai_detection_sha256}
         </p>
       )}
-    </div>
+      <div className="mt-3 border-t pt-2 text-[10px]" style={{ borderColor: "var(--border)" }}>
+        <p className="font-semibold" style={{ color: "var(--text-secondary)" }}>
+          原始檔詳細資料
+        </p>
+        <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+          <dt style={{ color: "var(--text-muted)" }}>檔名</dt>
+          <dd className="break-all">{file.filename}</dd>
+          <dt style={{ color: "var(--text-muted)" }}>格式</dt>
+          <dd>{file.content_type}</dd>
+          <dt style={{ color: "var(--text-muted)" }}>檔案大小</dt>
+          <dd>{file.file_size.toLocaleString()} bytes</dd>
+          <dt style={{ color: "var(--text-muted)" }}>掃描時間</dt>
+          <dd>{file.ai_detection_scanned_at ?? "尚未掃描"}</dd>
+          <dt style={{ color: "var(--text-muted)" }}>偵測版本</dt>
+          <dd>{file.ai_detection_version ?? "尚未記錄"}</dd>
+        </dl>
+        <p className="mt-3 font-semibold" style={{ color: "var(--text-secondary)" }}>
+          解析到的完整 metadata
+        </p>
+        {metadata.length > 0 ? (
+          <div className="mt-1 max-h-80 space-y-1 overflow-auto rounded border p-2">
+            {metadata.map((item, index) => (
+              <div key={item.source + item.key + index} className="break-words">
+                <span className="font-semibold">[{item.source}] {item.key}</span>
+                <span className="ml-1 whitespace-pre-wrap" style={{ color: "var(--text-secondary)" }}>
+                  {item.value}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-1" style={{ color: "var(--text-muted)" }}>
+            此檔案沒有可解析的 metadata；這不代表它一定不是 AI 生成。
+          </p>
+        )}
+      </div>
+    </details>
   );
 }
 

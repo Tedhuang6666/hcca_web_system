@@ -151,6 +151,8 @@ def _serialize_submission(submission, *, include_submitter: bool):
                 {
                     "ai_detection_status": file.ai_detection_status,
                     "ai_detection_evidence": file.ai_detection_evidence,
+                    "ai_detection_metadata": file.ai_detection_metadata,
+                    "ai_detection_version": file.ai_detection_version,
                     "ai_detection_sha256": file.ai_detection_sha256,
                     "ai_detection_scanned_at": file.ai_detection_scanned_at,
                 }
@@ -580,6 +582,7 @@ async def admin_submissions(
     status_filter: MerchandiseSubmissionStatus | None = Query(None, alias="status"),
 ) -> list[dict]:
     submissions = await submission_svc.list_submissions(session, status=status_filter)
+    await submission_svc.refresh_submission_file_analysis(session, submissions)
     return [_serialize_submission(submission, include_submitter=True) for submission in submissions]
 
 

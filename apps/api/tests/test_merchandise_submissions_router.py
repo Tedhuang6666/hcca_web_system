@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from unittest.mock import patch
+from uuid import UUID
 
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.models.merchandise_submission import MerchandiseSubmissionFile
 from api.models.org import Org
 from api.models.user import User
+from api.services.merchandise_submission_ai import AI_DETECTION_VERSION
 
 
 async def test_merchandise_submission_portal_requires_login(client: AsyncClient) -> None:
@@ -165,6 +168,8 @@ async def test_merchandise_submission_flow_uses_school_account_and_notifies_subm
     added_file = next(
         file for file in add_file_response.json()["files"] if file["filename"] == "back.png"
     )
+    assert "ai_detection_metadata" in added_file
+    assert added_file["ai_detection_version"] == AI_DETECTION_VERSION
 
     replace_file_response = await admin.put(
         f"/merchandise-submissions/admin/submissions/{submission['id']}/files/{added_file['id']}",
@@ -223,10 +228,20 @@ async def test_merchandise_submission_flow_uses_school_account_and_notifies_subm
         assert open_survey_response.status_code == 200
         voting_preview_response = await student.get(uploaded["url"])
         assert voting_preview_response.status_code == 200
+        stored_file = await db_session.get(
+            MerchandiseSubmissionFile, UUID(submission["files"][0]["id"])
+        )
+        assert stored_file is not None
+        stored_file.ai_detection_version = "old-detector"
+        await db_session.commit()
         linked_response = await admin.get("/merchandise-submissions/admin/submissions")
         linked = next(row for row in linked_response.json() if row["id"] == submission["id"])
         assert linked["voting_survey_id"] == survey_id
         assert linked["voting_survey_title"] == "校商投稿全校票選"
+        linked_file = next(
+            file for file in linked["files"] if file["id"] == submission["files"][0]["id"]
+        )
+        assert linked_file["ai_detection_version"] == AI_DETECTION_VERSION
 
         approve_response = await admin.patch(
             f"/merchandise-submissions/admin/submissions/{submission['id']}/review",

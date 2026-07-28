@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import mimetypes
 import uuid
+from collections.abc import Iterable
 from datetime import UTC, datetime
 
 from fastapi import UploadFile
@@ -32,6 +33,7 @@ from api.schemas.merchandise_submission import (
     MerchandiseSubmissionSettingsUpdate,
 )
 from api.services.merchandise_submission_ai import (
+    AI_DETECTION_VERSION,
     MerchandiseSubmissionAIDetection,
     analysis_error,
     analyze_image_ai_evidence,
@@ -86,8 +88,29 @@ async def _analyze_storage_file(
 def _apply_file_analysis(file: MerchandiseSubmissionFile, result: MerchandiseSubmissionAIDetection):
     file.ai_detection_status = result["status"]
     file.ai_detection_evidence = result["evidence"]
+    file.ai_detection_metadata = result["metadata"]
+    file.ai_detection_version = AI_DETECTION_VERSION
     file.ai_detection_sha256 = result["sha256"] or None
     file.ai_detection_scanned_at = datetime.fromisoformat(result["scanned_at"])
+
+
+def _needs_file_analysis(file: MerchandiseSubmissionFile) -> bool:
+    return file.ai_detection_status is None or file.ai_detection_version != AI_DETECTION_VERSION
+
+
+async def refresh_submission_file_analysis(
+    session: AsyncSession, submissions: Iterable[MerchandiseSubmission]
+) -> None:
+    refreshed = False
+    for submission in submissions:
+        for file in submission.files:
+            if _needs_file_analysis(file):
+                _apply_file_analysis(
+                    file, await _analyze_storage_file(file.storage_key, file.content_type)
+                )
+                refreshed = True
+    if refreshed:
+        await session.flush()
 
 
 async def update_settings(

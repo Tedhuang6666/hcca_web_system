@@ -18,15 +18,27 @@ class MerchandiseSubmissionAIEvidence(TypedDict):
     source: str
 
 
+class MerchandiseSubmissionAIMetadata(TypedDict):
+    source: str
+    key: str
+    value: str
+
+
 class MerchandiseSubmissionAIDetection(TypedDict):
     status: Literal["detected", "supporting", "no_evidence", "not_applicable", "error"]
     evidence: list[MerchandiseSubmissionAIEvidence]
+    metadata: list[MerchandiseSubmissionAIMetadata]
     sha256: str
     scanned_at: str
 
 
+AI_DETECTION_VERSION = "20260728.2"
+
+
 _AI_TOOLS: tuple[tuple[str, str], ...] = (
+    ("openai images", "OpenAI Images"),
     ("openai media generation api", "OpenAI Media Generation API"),
+    ("openai", "OpenAI"),
     ("gpt-image", "OpenAI GPT Image"),
     ("gpt image", "OpenAI GPT Image"),
     ("dall-e", "OpenAI DALL·E"),
@@ -146,10 +158,17 @@ def _decode_metadata(value: bytes) -> str:
     return "".join(char if char in "\r\n\t" or char.isprintable() else " " for char in text)[:4000]
 
 
-def _png_text_chunks(content: bytes) -> list[tuple[str, str]]:
+def _printable_fragments(value: bytes) -> str:
+    fragments = re.findall(rb"[ -~]{4,}", value)
+    return _clean_text(
+        " | ".join(fragment.decode("ascii", errors="ignore") for fragment in fragments)
+    )
+
+
+def _png_chunks(content: bytes) -> list[tuple[str, int, int, bytes]]:
     if not content.startswith(b"\x89PNG\r\n\x1a\n"):
         return []
-    result: list[tuple[str, str]] = []
+    result: list[tuple[str, int, int, bytes]] = []
     offset = 8
     while offset + 12 <= len(content):
         length = int.from_bytes(content[offset : offset + 4], "big")
@@ -157,12 +176,28 @@ def _png_text_chunks(content: bytes) -> list[tuple[str, str]]:
         end = offset + 12 + length
         if length > len(content) - offset - 12 or end > len(content):
             break
-        data = content[offset + 8 : offset + 8 + length]
-        if chunk_type == b"tEXt":
+        result.append(
+            (
+                chunk_type.decode("ascii", errors="replace"),
+                length,
+                offset,
+                content[offset + 8 : offset + 8 + length],
+            )
+        )
+        offset = end
+        if chunk_type == b"IEND":
+            break
+    return result
+
+
+def _png_text_chunks(content: bytes) -> list[tuple[str, str]]:
+    result: list[tuple[str, str]] = []
+    for chunk_type, _, _, data in _png_chunks(content):
+        if chunk_type == "tEXt":
             key, separator, value = data.partition(b"\x00")
             if separator:
                 result.append(("PNG tEXt chunk", _decode_metadata(key + b": " + value)))
-        elif chunk_type == b"zTXt":
+        elif chunk_type == "zTXt":
             key, separator, compressed = data.partition(b"\x00")
             if separator and compressed[:1] == b"\x00":
                 try:
@@ -171,7 +206,7 @@ def _png_text_chunks(content: bytes) -> list[tuple[str, str]]:
                     value = b""
                 if value:
                     result.append(("PNG zTXt chunk", _decode_metadata(key + b": " + value)))
-        elif chunk_type == b"iTXt":
+        elif chunk_type == "iTXt":
             parts = data.split(b"\x00", 5)
             if len(parts) == 6:
                 keyword, compressed, compression_method, language, translated, value = parts
@@ -183,9 +218,15 @@ def _png_text_chunks(content: bytes) -> list[tuple[str, str]]:
                         value = b""
                 if value:
                     result.append(("PNG iTXt chunk", _decode_metadata(keyword + b": " + value)))
-        offset = end
-        if chunk_type == b"IEND":
-            break
+        elif chunk_type == "caBX":
+            fragments = _printable_fragments(data)
+            result.append(
+                (
+                    "PNG caBX C2PA/JUMBF chunk",
+                    "C2PA/JUMBF binary manifest"
+                    + (f"；可讀片段：{fragments}" if fragments else ""),
+                )
+            )
     return result
 
 
@@ -212,8 +253,17 @@ def _jpeg_metadata_segments(content: bytes) -> list[tuple[str, str]]:
         if length < 2 or offset + length > len(content):
             break
         payload = content[offset + 2 : offset + length]
-        if marker in {0xE1, 0xE2, 0xEB, 0xEC, 0xED, 0xEE}:
+        if marker in {0xE1, 0xE2, 0xEC, 0xED, 0xEE}:
             result.append((f"JPEG APP{marker - 0xE0} metadata", _decode_metadata(payload)))
+        elif marker == 0xEB and (b"jumb" in payload.lower() or b"c2pa" in payload.lower()):
+            fragments = _printable_fragments(payload)
+            result.append(
+                (
+                    "JPEG APP11 C2PA/JUMBF segment",
+                    "C2PA/JUMBF binary manifest"
+                    + (f"；可讀片段：{fragments}" if fragments else ""),
+                )
+            )
         offset += length
     return result
 
@@ -249,6 +299,186 @@ def _metadata_texts(content: bytes, content_type: str) -> list[tuple[str, str]]:
     if content_type == "image/webp":
         return _webp_metadata_chunks(content)
     return []
+
+
+def _image_header_metadata(
+    content: bytes, content_type: str
+) -> list[MerchandiseSubmissionAIMetadata]:
+    result: list[MerchandiseSubmissionAIMetadata] = []
+    if content_type == "image/png" and content.startswith(b"\x89PNG\r\n\x1a\n"):
+        chunks = _png_chunks(content)
+        ihdr = next((data for chunk_type, _, _, data in chunks if chunk_type == "IHDR"), b"")
+        if len(ihdr) >= 13:
+            color_types = {
+                0: "灰階",
+                2: "真彩色",
+                3: "索引色",
+                4: "灰階含 alpha",
+                6: "真彩色含 alpha",
+            }
+            result.extend(
+                [
+                    {"source": "PNG IHDR", "key": "format", "value": "PNG"},
+                    {
+                        "source": "PNG IHDR",
+                        "key": "width",
+                        "value": str(int.from_bytes(ihdr[0:4], "big")),
+                    },
+                    {
+                        "source": "PNG IHDR",
+                        "key": "height",
+                        "value": str(int.from_bytes(ihdr[4:8], "big")),
+                    },
+                    {"source": "PNG IHDR", "key": "bit_depth", "value": str(ihdr[8])},
+                    {
+                        "source": "PNG IHDR",
+                        "key": "color_type",
+                        "value": color_types.get(ihdr[9], str(ihdr[9])),
+                    },
+                    {"source": "PNG IHDR", "key": "interlace_method", "value": str(ihdr[12])},
+                ]
+            )
+    elif content_type == "image/jpeg" and content.startswith(b"\xff\xd8"):
+        offset = 2
+        sof_markers = (
+            set(range(0xC0, 0xC4))
+            | set(range(0xC5, 0xC8))
+            | set(range(0xC9, 0xCC))
+            | set(range(0xCD, 0xD0))
+        )
+        while offset + 4 <= len(content):
+            if content[offset] != 0xFF:
+                offset += 1
+                continue
+            while offset < len(content) and content[offset] == 0xFF:
+                offset += 1
+            if offset >= len(content):
+                break
+            marker = content[offset]
+            offset += 1
+            if marker in {0xD8, 0xD9}:
+                continue
+            if marker == 0xDA:
+                break
+            length = int.from_bytes(content[offset : offset + 2], "big")
+            if length < 2 or offset + length > len(content):
+                break
+            payload = content[offset + 2 : offset + length]
+            if marker in sof_markers and len(payload) >= 6:
+                result.extend(
+                    [
+                        {"source": f"JPEG SOF{marker:02X}", "key": "format", "value": "JPEG"},
+                        {
+                            "source": f"JPEG SOF{marker:02X}",
+                            "key": "width",
+                            "value": str(int.from_bytes(payload[3:5], "big")),
+                        },
+                        {
+                            "source": f"JPEG SOF{marker:02X}",
+                            "key": "height",
+                            "value": str(int.from_bytes(payload[1:3], "big")),
+                        },
+                        {
+                            "source": f"JPEG SOF{marker:02X}",
+                            "key": "precision",
+                            "value": str(payload[0]),
+                        },
+                        {
+                            "source": f"JPEG SOF{marker:02X}",
+                            "key": "components",
+                            "value": str(payload[5]),
+                        },
+                    ]
+                )
+                break
+            offset += length
+    elif content_type == "image/webp" and content.startswith(b"RIFF") and content[8:12] == b"WEBP":
+        offset = 12
+        while offset + 8 <= len(content):
+            chunk_type = content[offset : offset + 4]
+            length = int.from_bytes(content[offset + 4 : offset + 8], "little")
+            start = offset + 8
+            end = start + length
+            if end > len(content):
+                break
+            data = content[start:end]
+            if chunk_type == b"VP8X" and len(data) >= 10:
+                result.extend(
+                    [
+                        {"source": "WEBP VP8X", "key": "format", "value": "WEBP"},
+                        {
+                            "source": "WEBP VP8X",
+                            "key": "width",
+                            "value": str(1 + int.from_bytes(data[4:7], "little")),
+                        },
+                        {
+                            "source": "WEBP VP8X",
+                            "key": "height",
+                            "value": str(1 + int.from_bytes(data[7:10], "little")),
+                        },
+                        {
+                            "source": "WEBP VP8X",
+                            "key": "alpha",
+                            "value": str(bool(data[0] & 0x10)).lower(),
+                        },
+                    ]
+                )
+                break
+            offset = end + (length % 2)
+    return result
+
+
+def _container_metadata(content: bytes, content_type: str) -> list[MerchandiseSubmissionAIMetadata]:
+    result: list[MerchandiseSubmissionAIMetadata] = []
+    if content_type == "image/png":
+        result.extend(
+            {
+                "source": "PNG chunk table",
+                "key": f"chunk[{index}]",
+                "value": f"type={chunk_type}, length={length}, offset={offset}",
+            }
+            for index, (chunk_type, length, offset, _) in enumerate(_png_chunks(content))
+        )
+    elif content_type == "image/webp" and content.startswith(b"RIFF") and content[8:12] == b"WEBP":
+        offset = 12
+        index = 0
+        while offset + 8 <= len(content):
+            chunk_type = content[offset : offset + 4].decode("ascii", errors="replace")
+            length = int.from_bytes(content[offset + 4 : offset + 8], "little")
+            end = offset + 8 + length
+            if end > len(content):
+                break
+            result.append(
+                {
+                    "source": "WEBP chunk table",
+                    "key": f"chunk[{index}]",
+                    "value": f"type={chunk_type}, length={length}, offset={offset}",
+                }
+            )
+            offset = end + (length % 2)
+            index += 1
+    return result
+
+
+def _metadata_details(
+    content: bytes,
+    content_type: str,
+    texts: list[tuple[str, str]],
+    fields: list[tuple[str, str, str]],
+) -> list[MerchandiseSubmissionAIMetadata]:
+    details = _image_header_metadata(content, content_type) + _container_metadata(
+        content, content_type
+    )
+    details.extend({"source": source, "key": "raw", "value": text} for source, text in texts)
+    details.extend({"source": source, "key": key, "value": value} for source, key, value in fields)
+    unique: list[MerchandiseSubmissionAIMetadata] = []
+    seen: set[tuple[str, str, str]] = set()
+    for item in details:
+        marker = (item["source"], item["key"], item["value"])
+        if marker not in seen:
+            seen.add(marker)
+            unique.append(item)
+    return unique
 
 
 def _metadata_fields(texts: Iterable[tuple[str, str]]) -> list[tuple[str, str, str]]:
@@ -378,12 +608,14 @@ def analyze_image_ai_evidence(
         return {
             "status": "not_applicable",
             "evidence": [],
+            "metadata": [],
             "sha256": digest,
             "scanned_at": scanned_at,
         }
 
     metadata = _metadata_texts(content, content_type.lower())
     fields = _metadata_fields(metadata)
+    metadata_details = _metadata_details(content, content_type.lower(), metadata, fields)
     metadata_text = "\n".join(text for _, text in metadata)
     lowered = metadata_text.lower()
     evidence: list[MerchandiseSubmissionAIEvidence] = []
@@ -419,7 +651,12 @@ def analyze_image_ai_evidence(
     tool_hits: list[str] = []
     software_fields = _matching_fields(fields, _SOFTWARE_FIELDS)
     workflow_fields = _matching_fields(fields, _WORKFLOW_FIELDS)
-    for source, _, value in [*software_fields, *workflow_fields]:
+    c2pa_texts = [(source, text) for source, text in metadata if "C2PA" in source]
+    c2pa_ai_text = "\n".join(text for _, text in c2pa_texts).lower()
+    c2pa_ai = c2pa_ai or any(marker in c2pa_ai_text for marker in _C2PA_AI_MARKERS)
+    tool_fields = [*software_fields, *workflow_fields]
+    tool_fields.extend((source, "c2pa", text) for source, text in c2pa_texts)
+    for source, _, value in tool_fields:
         value_lower = value.lower()
         for marker, label in _AI_TOOLS:
             if marker in value_lower and label not in tool_hits:
@@ -512,6 +749,7 @@ def analyze_image_ai_evidence(
     return {
         "status": status,
         "evidence": evidence,
+        "metadata": metadata_details,
         "sha256": digest,
         "scanned_at": scanned_at,
     }
@@ -522,6 +760,7 @@ def analysis_error() -> MerchandiseSubmissionAIDetection:
     return {
         "status": "error",
         "evidence": [],
+        "metadata": [],
         "sha256": "",
         "scanned_at": datetime.now(UTC).isoformat(),
     }
@@ -530,6 +769,8 @@ def analysis_error() -> MerchandiseSubmissionAIDetection:
 __all__ = [
     "MerchandiseSubmissionAIDetection",
     "MerchandiseSubmissionAIEvidence",
+    "MerchandiseSubmissionAIMetadata",
+    "AI_DETECTION_VERSION",
     "analyze_image_ai_evidence",
     "analysis_error",
 ]

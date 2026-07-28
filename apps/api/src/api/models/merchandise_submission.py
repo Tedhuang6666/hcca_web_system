@@ -166,6 +166,10 @@ class MerchandiseSubmissionFile(Base, TimestampMixin):
     ai_detection_evidence: Mapped[list] = mapped_column(
         JSONList, nullable=False, default=list, server_default="[]"
     )
+    ai_detection_metadata: Mapped[list] = mapped_column(
+        JSONList, nullable=False, default=list, server_default="[]"
+    )
+    ai_detection_version: Mapped[str | None] = mapped_column(String(30), nullable=True)
     ai_detection_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     ai_detection_scanned_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
