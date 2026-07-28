@@ -26,7 +26,7 @@ import { divIcon } from "leaflet";
 import { MapContainer, Marker, Popup, TileLayer, ZoomControl, useMap } from "react-leaflet";
 import type { LatLngBounds, LatLngExpression } from "leaflet";
 import type { PartnerMapItem } from "@/lib/types";
-import { getPartnerIcon } from "./partner-map-icons";
+import { defaultPartnerIconKey, getPartnerIcon, isPartnerIconKey } from "./partner-map-icons";
 
 export type PartnerMapBoundsState = {
   min_lat: string;
@@ -171,7 +171,15 @@ export function markerColor(item: PartnerMapItem): string {
 
 export function markerIcon(item: PartnerMapItem): LucideIcon {
   const configuredIconKey = item.tags.find((tag) => tag.icon_key)?.icon_key;
-  if (configuredIconKey) return getPartnerIcon(configuredIconKey);
+  if (configuredIconKey && isPartnerIconKey(configuredIconKey)) return getPartnerIcon(configuredIconKey);
+
+  const inferredIconKey = defaultPartnerIconKey([
+    item.business_name,
+    item.category ?? "",
+    ...item.tags.map((tag) => tag.name),
+  ].join(" "));
+  if (inferredIconKey !== "store") return getPartnerIcon(inferredIconKey);
+
   return MARKER_CONFIG[markerKind(item)].icon;
 }
 
