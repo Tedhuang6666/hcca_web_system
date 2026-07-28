@@ -5,7 +5,7 @@ import { ChevronDown, LogIn, Menu, Moon, Sun, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-import { ModuleStatusProvider, useModuleStatus } from "@/contexts/ModuleStatusContext";
+import { useModuleStatus } from "@/contexts/ModuleStatusContext";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import ImportantAnnouncementBanner from "@/components/site/ImportantAnnouncementBanner";
 import LiveElectionBanner from "@/components/site/LiveElectionBanner";
@@ -282,12 +282,10 @@ export default function PublicSiteHeader(props: {
   urgentAnnouncement?: AnnouncementOut | null;
 }) {
   return (
-    <ModuleStatusProvider authenticated={false}>
-      <PublicSiteHeaderContent
-        navPages={props.navPages ?? []}
-        settings={props.settings}
-        urgentAnnouncement={props.urgentAnnouncement}
-      />
-    </ModuleStatusProvider>
+    <PublicSiteHeaderContent
+      navPages={props.navPages ?? []}
+      settings={props.settings}
+      urgentAnnouncement={props.urgentAnnouncement}
+    />
   );
 }

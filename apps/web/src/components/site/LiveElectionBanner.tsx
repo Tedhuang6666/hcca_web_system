@@ -3,14 +3,15 @@
 import Link from "next/link";
 import { ArrowRight, Radio } from "lucide-react";
 
-import { liveLeader, useLiveElection } from "./useLiveElection";
+import { liveLeader } from "./useLiveElection";
+import { usePublicLiveElection } from "./PublicSiteRuntime";
 
 /**
  * 站台級「正在發生」橫幅：有進行中的開票時，於公開站每一頁頂端常駐，
  * 顯示大概狀況（開票進度、領先組合、總票數），點擊進入即時開票詳情頁。
  */
 export default function LiveElectionBanner() {
-  const active = useLiveElection();
+  const active = usePublicLiveElection();
   if (!active) return null;
 
   const { summary } = active;

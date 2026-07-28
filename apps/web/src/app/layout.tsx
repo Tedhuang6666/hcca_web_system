@@ -1,16 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
-import { Suspense } from "react";
 import "./globals.css";
 import "./accessibility.css";
-import "./design-system.css";
-import { Toaster } from "sonner";
-import PwaInstallPrompt from "@/components/pwa/PwaInstallPrompt";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
-import TelemetryProvider from "@/components/providers/TelemetryProvider";
-import AccessBlockGuard from "@/components/security/AccessBlockGuard";
-import ScrollProgressBar from "@/components/ui/ScrollProgressBar";
-import NavigationProgress from "@/components/layout/NavigationProgress";
 import { BRANDING } from "@/lib/branding";
 import { SOCIAL_IMAGE, SOCIAL_SHARE_TITLE, SOCIAL_SITE_NAME } from "@/lib/social-metadata";
 import { SITE_URL } from "@/lib/seo";
@@ -106,26 +98,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="antialiased">
         <ThemeProvider>
-          <AccessBlockGuard />
-          <NavigationProgress />
-          <ScrollProgressBar />
-          <Suspense fallback={null}>
-            <TelemetryProvider />
-          </Suspense>
           {children}
-          <PwaInstallPrompt />
-          <Toaster
-            position="top-right"
-            richColors
-            toastOptions={{
-              style: {
-                background: "var(--bg-elevated)",
-                border: "1px solid var(--border-strong)",
-                color: "var(--text-primary)",
-                fontSize: "0.875rem",
-              },
-            }}
-          />
         </ThemeProvider>
       </body>
     </html>

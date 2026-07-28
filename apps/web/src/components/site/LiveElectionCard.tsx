@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { ArrowRight, Radio } from "lucide-react";
 
-import { liveLeader, useLiveElection } from "@/components/site/useLiveElection";
+import { liveLeader } from "@/components/site/useLiveElection";
+import { usePublicLiveElection } from "@/components/site/PublicSiteRuntime";
 
 export default function LiveElectionCard({ standalone = false }: { standalone?: boolean }) {
-  const activeElection = useLiveElection();
+  const activeElection = usePublicLiveElection();
   if (!activeElection) return null;
 
   const liveSummary = activeElection.summary;

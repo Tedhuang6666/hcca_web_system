@@ -1,0 +1,308 @@
+/* 公開站只需要的品牌 token 與公開介面覆寫。
+   後台完整設計系統由 app route group 載入，避免公開頁面下載整份後台樣式。 */
+:root {
+  --brand-ink: #1a1a2e;
+  --brand-gold: #c9a84c;
+  --brand-lavender: #9896a8;
+  --brand-accent: var(--brand-gold);
+  --brand-accent-dim: #faf4e4;
+}
+
+[data-theme="dark"] {
+  --brand-accent: #c9a84c;
+  --brand-accent-dim: rgba(201, 168, 76, 0.12);
+}
+
+/* Public surface: solid institutional composition; no aurora, dot field or sheen. */
+.public-header {
+  box-shadow: 0 1px 4px rgba(16, 35, 39, 0.05);
+  backdrop-filter: blur(12px);
+}
+
+.public-hero {
+  background: color-mix(in srgb, var(--primary-dim) 42%, var(--public-bg));
+}
+
+.public-hero::before,
+.public-hero::after,
+.public-feature-card::after,
+.public-cta-primary::after,
+.public-section-kicker::before {
+  display: none;
+}
+
+.public-hero-copy > *,
+.public-signboard,
+.public-signboard-emblem img,
+.public-signboard-emblem span,
+.public-signboard-emblem svg,
+.public-signboard-topline {
+  animation: none;
+}
+
+.public-hero-copy h1 {
+  max-width: 16ch;
+  font-size: clamp(2.25rem, 6vw, 4.5rem);
+  font-weight: 780;
+  letter-spacing: -0.035em;
+}
+
+.public-hero-subtitle {
+  line-height: 1.75;
+}
+
+.public-eyebrow {
+  background: transparent;
+  color: var(--primary-text);
+  padding: 0;
+}
+
+.public-signboard {
+  border-radius: 10px;
+  background: var(--public-surface);
+  box-shadow: none;
+}
+
+.public-signboard::before {
+  border-color: color-mix(in srgb, var(--brand-accent) 42%, var(--public-border));
+}
+
+.public-signboard-topline {
+  background: var(--brand-accent);
+}
+
+.public-emblem-stage {
+  background: var(--public-surface);
+}
+
+.public-feature-card,
+.public-panel {
+  border-radius: 10px;
+}
+
+.public-feature-card {
+  transition: background-color var(--transition), border-color var(--transition);
+}
+
+.public-feature-card:hover,
+.public-feature-card:focus-visible,
+.public-about-panel:hover,
+.public-side-panel:hover {
+  transform: none;
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--public-soft) 54%, var(--public-surface));
+  box-shadow: none;
+}
+
+.public-feature-card:hover .public-feature-icon {
+  transform: none;
+  background: var(--primary);
+  color: var(--primary-fg);
+}
+
+.public-cta-primary,
+.public-cta-primary:hover {
+  box-shadow: none;
+  transform: none;
+}
+
+.public-cta-secondary:hover,
+.public-mini-item:hover,
+.public-link-row:hover {
+  transform: none;
+}
+
+.public-section-kicker {
+  color: var(--text-secondary);
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.public-hero-inner {
+  grid-template-columns: minmax(0, 1fr) minmax(15rem, 0.7fr);
+  gap: clamp(2rem, 7vw, 6rem);
+  padding-top: clamp(4rem, 8vw, 6.5rem);
+  padding-bottom: clamp(4rem, 8vw, 6rem);
+}
+
+.public-hero-copy h1 {
+  max-width: 13ch;
+  font-size: clamp(2.6rem, 5.8vw, 4.6rem);
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+}
+
+.public-hero-subtitle {
+  max-width: 34rem;
+  line-height: 1.75;
+}
+
+.public-signboard.public-identity-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  width: min(100%, 23rem);
+  justify-self: end;
+  place-items: center;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.public-signboard.public-identity-panel::before {
+  display: none;
+}
+
+.public-identity-panel .public-signboard-emblem {
+  box-sizing: border-box;
+  grid-template-columns: minmax(0, 1fr);
+  width: min(100%, 18rem);
+  max-width: 100%;
+  min-width: 0;
+  min-height: 0;
+  aspect-ratio: 1;
+  padding: 1.5rem;
+}
+
+.public-identity-panel > *,
+.public-identity-panel .public-signboard-emblem > * {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.public-identity-panel .public-signboard-emblem img,
+.public-identity-panel .public-signboard-emblem svg {
+  width: 100%;
+  max-width: 15rem;
+  max-height: 15rem;
+  filter: none;
+  transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.public-identity-panel:hover .public-signboard-emblem img,
+.public-identity-panel:hover .public-signboard-emblem svg {
+  transform: scale(1.025);
+}
+
+.public-quick-grid {
+  gap: 0;
+  margin-top: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-top: 1px solid var(--public-border);
+  border-bottom: 1px solid var(--public-border);
+}
+
+.public-feature-card {
+  min-height: 104px;
+  align-items: center;
+  border: 0;
+  border-right: 1px solid var(--public-border);
+  border-radius: 0;
+  background: transparent;
+  padding: 1.35rem 1.25rem;
+}
+
+.public-feature-card:last-child {
+  border-right: 0;
+}
+
+.public-feature-card:hover,
+.public-feature-card:focus-visible {
+  border-color: var(--public-border);
+  background: var(--public-soft);
+}
+
+.public-feature-icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 7px;
+}
+
+.public-feature-arrow {
+  flex: 0 0 auto;
+  color: var(--public-muted);
+  transition: transform var(--transition), color var(--transition);
+}
+
+.public-feature-card:hover .public-feature-arrow,
+.public-feature-card:focus-visible .public-feature-arrow {
+  color: var(--public-accent);
+  transform: translateX(3px);
+}
+
+.public-editorial {
+  gap: 2.5rem;
+  padding-top: 3.5rem;
+}
+
+.public-panel {
+  border: 0;
+  border-top: 1px solid var(--public-border);
+  border-radius: 0;
+  background: transparent;
+}
+
+.public-about-panel,
+.public-side-panel {
+  padding: 1.35rem 0 0;
+}
+
+.public-about-panel:hover,
+.public-side-panel:hover {
+  border-color: var(--public-border);
+  background: transparent;
+}
+
+.public-mini-item,
+.public-link-row {
+  border: 0;
+  border-bottom: 1px solid var(--public-border);
+  border-radius: 0;
+  background: transparent;
+  padding-inline: 0;
+}
+
+.public-mini-item:last-child,
+.public-link-row:last-child {
+  border-bottom: 0;
+}
+
+.public-link-row:hover,
+.public-link-row:focus-visible {
+  padding-inline: 0.25rem;
+}
+
+.public-header-actions > .public-system-button.hidden {
+  display: none;
+}
+
+@media (min-width: 640px) {
+  .public-header-actions > .public-system-button.hidden {
+    display: inline-flex;
+  }
+}
+
+@media (max-width: 767px) {
+  .public-identity-panel:hover .public-signboard-emblem img,
+  .public-identity-panel:hover .public-signboard-emblem svg,
+  .public-feature-card:hover .public-feature-arrow,
+  .public-feature-card:focus-visible .public-feature-arrow {
+    transform: none;
+  }
+}
+
+.public-site,
+.public-hero-inner,
+.public-quick-grid,
+.public-editorial,
+.public-hero-inner > *,
+.public-feature-card > * {
+  min-width: 0;
+}
+
+.public-feature-card {
+  box-sizing: border-box;
+}
