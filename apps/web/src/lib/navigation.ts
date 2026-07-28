@@ -83,6 +83,7 @@ export const NAV_ITEMS: NavItem[] = [
     perm: "inventory:*",
   },
   { id: "partnerMap", href: "/partner-map", iconKey: "partnerMap", label: "特約地圖" },
+  { id: "credential", href: "/credential", iconKey: "credential", label: "電子證件" },
   { id: "recommendedVendors", href: "/recommended-vendors", iconKey: "shopOrders", label: "推薦商家" },
   { id: "surveys", href: "/surveys", iconKey: "survey", label: "問卷專區" },
   { id: "petitions", href: "/petitions", iconKey: "petition", label: "陳情中心" },
@@ -302,7 +303,7 @@ export const NAV_DEF: NavEntry[] = [
   {
     id: "services",
     heading: "校園服務",
-    items: byIds(["shop", "merchandiseSubmissions", "meal", "surveys", "partnerMap", "recommendedVendors", "examPapers"]),
+    items: byIds(["shop", "merchandiseSubmissions", "meal", "surveys", "partnerMap", "credential", "recommendedVendors", "examPapers"]),
   },
   {
     id: "operations",
@@ -351,7 +352,7 @@ export const NAV_DEF_TEACHER: NavEntry[] = [
   {
     id: "teacher-services",
     heading: "常用模組",
-    items: byIds(["surveys", "examPapers", "shop", "merchandiseSubmissions", "meal", "recommendedVendors"]),
+    items: byIds(["surveys", "examPapers", "shop", "merchandiseSubmissions", "meal", "credential", "recommendedVendors"]),
   },
 ];
 
@@ -364,7 +365,7 @@ export const NAV_DEF_STUDENT: NavEntry[] = [
   {
     id: "student-services",
     heading: "常用入口",
-    items: byIds(["meal", "shop", "merchandiseSubmissions", "partnerMap", "recommendedVendors", "examPapers"]),
+    items: byIds(["meal", "shop", "merchandiseSubmissions", "partnerMap", "credential", "recommendedVendors", "examPapers"]),
   },
 ];
 
@@ -372,7 +373,7 @@ export const NAV_DEF_VENDOR: NavEntry[] = [
   {
     id: "vendor-main",
     heading: "合作夥伴工作台",
-    items: byIds(["dashboard", "tasks", "partnerMap", "partnerMapAdmin", "recommendedVendors", "recommendedVendorsAdmin"]),
+    items: byIds(["dashboard", "tasks", "partnerMap", "credential", "partnerMapAdmin", "recommendedVendors", "recommendedVendorsAdmin"]),
   },
   {
     id: "vendor-services",
@@ -385,7 +386,7 @@ export const NAV_DEF_MEAL_VENDOR: NavEntry[] = [
   {
     id: "meal-vendor-main",
     heading: "餐商工作台",
-    items: byIds(["dashboard", "tasks", "mealVendor", "meal"]),
+    items: byIds(["dashboard", "tasks", "mealVendor", "meal", "credential"]),
   },
   {
     id: "meal-vendor-services",
@@ -417,6 +418,7 @@ export const DEFAULT_MOBILE_ORDER = [
   "judicialPetitions",
   "examPapers",
   "partnerMap",
+  "credential",
   "recommendedVendors",
 ];
 
@@ -442,7 +444,7 @@ export const NAVIGATION_PROFILES: Record<NavigationProfile, NavigationProfileCon
     description: "把一般學生常用的公告、問卷、陳情、學餐、商品與特約地圖集中成服務入口。",
     audience: "一般學生、未持有行政或商家權限的登入使用者",
     desktopSections: NAV_DEF_STUDENT,
-    mobileOrder: ["dashboard", "announcements", "surveys", "meal", "shop", "merchandiseSubmissions", "petitions", "partnerMap"],
+    mobileOrder: ["dashboard", "announcements", "surveys", "meal", "shop", "merchandiseSubmissions", "petitions", "partnerMap", "credential"],
   },
   teacher: {
     id: "teacher",
@@ -461,7 +463,7 @@ export const NAVIGATION_PROFILES: Record<NavigationProfile, NavigationProfileCon
     audience: "校商、合作廠商、外部合作窗口",
     matchAnyPrefixes: ["partner_map:"],
     desktopSections: NAV_DEF_VENDOR,
-    mobileOrder: ["dashboard", "tasks", "partnerMapAdmin", "partnerMap", "announcements"],
+    mobileOrder: ["dashboard", "tasks", "partnerMapAdmin", "partnerMap", "credential", "announcements"],
   },
   mealVendor: {
     id: "mealVendor",

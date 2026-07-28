@@ -617,6 +617,15 @@ import type {
   RecipientType,
 } from './api-bridge'
 
+export interface ElectronicCredentialOut {
+  display_name: string;
+  email: string;
+  student_id: string | null;
+  identity_kind: "student" | "teacher" | "authorized";
+  identity_label: string;
+  status_label: string;
+}
+
 // ── 公文系統型別 ──────────────────────────────────────────────────────────────
 
 

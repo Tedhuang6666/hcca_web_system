@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  BadgeCheck,
   BarChart3,
   Barcode,
   Bell,
@@ -63,6 +64,7 @@ const Icons: Record<string, React.ComponentType<IconProps>> = {
   classes: Users,
   analytics: BarChart3,
   partnerMap: MapPinned,
+  credential: BadgeCheck,
   elections: Vote,
   tasks: Inbox,
   governance: Network,
