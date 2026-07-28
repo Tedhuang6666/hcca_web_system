@@ -1,5 +1,7 @@
 import { get, patch, post } from "./core";
 import type {
+  ElectronicCredentialAuthorizationBulkCreate,
+  ElectronicCredentialAuthorizationBulkOut,
   ElectronicCredentialAuthorizationCreate,
   ElectronicCredentialAuthorizationOut,
   ElectronicCredentialAuthorizationUpdate,
@@ -15,6 +17,11 @@ export const electronicCredentialsApi = {
   adminCreateAuthorization: (body: ElectronicCredentialAuthorizationCreate) =>
     post<ElectronicCredentialAuthorizationOut>(
       "/electronic-credentials/admin/authorizations",
+      body,
+    ),
+  adminBulkCreateAuthorizations: (body: ElectronicCredentialAuthorizationBulkCreate) =>
+    post<ElectronicCredentialAuthorizationBulkOut>(
+      "/electronic-credentials/admin/authorizations/bulk",
       body,
     ),
   adminUpdateAuthorization: (id: string, body: ElectronicCredentialAuthorizationUpdate) =>

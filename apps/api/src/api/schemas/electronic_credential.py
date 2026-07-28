@@ -27,6 +27,14 @@ class ElectronicCredentialAuthorizationCreate(BaseModel):
     note: str | None = Field(default=None, max_length=2000)
 
 
+class ElectronicCredentialAuthorizationBulkCreate(BaseModel):
+    """批量建立同一特殊身分授權。"""
+
+    emails: list[EmailStr] = Field(min_length=1, max_length=5000)
+    identity_label: str = Field(min_length=1, max_length=80)
+    note: str | None = Field(default=None, max_length=2000)
+
+
 class ElectronicCredentialAuthorizationUpdate(BaseModel):
     """更新特殊身分授權。"""
 
@@ -50,3 +58,10 @@ class ElectronicCredentialAuthorizationOut(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+
+
+class ElectronicCredentialAuthorizationBulkOut(BaseModel):
+    """批量建立結果。"""
+
+    created_count: int
+    skipped_emails: list[str]

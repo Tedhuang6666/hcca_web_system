@@ -12,6 +12,8 @@ from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import require_permission
 from api.models.user import User
 from api.schemas.electronic_credential import (
+    ElectronicCredentialAuthorizationBulkCreate,
+    ElectronicCredentialAuthorizationBulkOut,
     ElectronicCredentialAuthorizationCreate,
     ElectronicCredentialAuthorizationOut,
     ElectronicCredentialAuthorizationUpdate,
@@ -68,6 +70,20 @@ async def admin_create_authorization(
         return await credential_svc.create_authorization(db, body, manager.id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+@router.post(
+    "/admin/authorizations/bulk",
+    response_model=ElectronicCredentialAuthorizationBulkOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="批量建立電子證件特殊身分授權",
+)
+async def admin_bulk_create_authorizations(
+    body: ElectronicCredentialAuthorizationBulkCreate,
+    db: DbDep,
+    manager: ManagerUser,
+) -> ElectronicCredentialAuthorizationBulkOut:
+    return await credential_svc.create_authorizations(db, body, manager.id)
 
 
 @router.patch(

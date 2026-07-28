@@ -644,6 +644,17 @@ export interface ElectronicCredentialAuthorizationCreate {
   note?: string | null;
 }
 
+export interface ElectronicCredentialAuthorizationBulkCreate {
+  emails: string[];
+  identity_label: string;
+  note?: string | null;
+}
+
+export interface ElectronicCredentialAuthorizationBulkOut {
+  created_count: number;
+  skipped_emails: string[];
+}
+
 export interface ElectronicCredentialAuthorizationUpdate {
   email?: string;
   identity_label?: string;

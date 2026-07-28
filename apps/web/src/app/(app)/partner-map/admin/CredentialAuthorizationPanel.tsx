@@ -36,10 +36,22 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback;
 }
 
+function parseEmails(value: string): string[] {
+  return [
+    ...new Set(
+      value
+        .split(/[\s,;，；]+/)
+        .map((email) => email.trim())
+        .filter(Boolean),
+    ),
+  ];
+}
+
 export default function CredentialAuthorizationPanel() {
   const [authorizations, setAuthorizations] = useState<ElectronicCredentialAuthorizationOut[]>([]);
   const [form, setForm] = useState<AuthorizationForm>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [bulkMode, setBulkMode] = useState(false);
   const [includeInactive, setIncludeInactive] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -64,7 +76,7 @@ export default function CredentialAuthorizationPanel() {
   }, [load]);
 
   useEffect(() => {
-    if (!userMenuOpen) return;
+    if (!userMenuOpen || bulkMode) return;
 
     let cancelled = false;
     const timer = window.setTimeout(async () => {
@@ -83,11 +95,12 @@ export default function CredentialAuthorizationPanel() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [userMenuOpen, userSearch]);
+  }, [bulkMode, userMenuOpen, userSearch]);
 
   const resetForm = () => {
     setForm(emptyForm());
     setEditingId(null);
+    setBulkMode(false);
     setUserSearch("");
     setUserOptions([]);
     setUserMenuOpen(false);
@@ -95,7 +108,8 @@ export default function CredentialAuthorizationPanel() {
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!form.email.trim() || !form.identity_label.trim()) {
+    const emails = bulkMode ? parseEmails(form.email) : [form.email.trim()];
+    if (emails.length === 0 || !form.identity_label.trim()) {
       toast.error("請填寫登入 Email 與顯示身分");
       return;
     }
@@ -103,15 +117,26 @@ export default function CredentialAuthorizationPanel() {
     setSaving(true);
     try {
       const body = {
-        email: form.email.trim(),
         identity_label: form.identity_label.trim(),
         note: form.note.trim() || null,
       };
       if (editingId) {
-        await electronicCredentialsApi.adminUpdateAuthorization(editingId, body);
+        await electronicCredentialsApi.adminUpdateAuthorization(editingId, {
+          ...body,
+          email: emails[0],
+        });
         toast.success("特殊身分授權已更新");
+      } else if (bulkMode) {
+        const result = await electronicCredentialsApi.adminBulkCreateAuthorizations({
+          ...body,
+          emails,
+        });
+        const skippedMessage = result.skipped_emails.length
+          ? `，跳過 ${result.skipped_emails.length} 筆已有授權`
+          : "";
+        toast.success(`已建立 ${result.created_count} 筆特殊身分授權${skippedMessage}`);
       } else {
-        await electronicCredentialsApi.adminCreateAuthorization(body);
+        await electronicCredentialsApi.adminCreateAuthorization({ ...body, email: emails[0] });
         toast.success("特殊身分授權已建立");
       }
       resetForm();
@@ -125,6 +150,7 @@ export default function CredentialAuthorizationPanel() {
 
   const edit = (authorization: ElectronicCredentialAuthorizationOut) => {
     setEditingId(authorization.id);
+    setBulkMode(false);
     setForm({
       email: authorization.email,
       identity_label: authorization.identity_label,
@@ -138,6 +164,15 @@ export default function CredentialAuthorizationPanel() {
   const selectUser = (user: UserSummary) => {
     setForm((current) => ({ ...current, email: user.email }));
     setUserSearch(user.email);
+    setUserMenuOpen(false);
+  };
+
+  const switchCreationMode = (nextBulkMode: boolean) => {
+    if (editingId) return;
+    setBulkMode(nextBulkMode);
+    setForm((current) => ({ ...current, email: "" }));
+    setUserSearch("");
+    setUserOptions([]);
     setUserMenuOpen(false);
   };
 
@@ -165,7 +200,7 @@ export default function CredentialAuthorizationPanel() {
             </span>
             <div>
               <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
-                {editingId ? "編輯特殊身分" : "新增特殊身分"}
+                {editingId ? "編輯特殊身分" : bulkMode ? "批量新增特殊身分" : "新增特殊身分"}
               </h2>
               <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
                 指定帳號與電子證件上要顯示的身份名稱。
@@ -173,95 +208,137 @@ export default function CredentialAuthorizationPanel() {
             </div>
           </div>
 
-          <form className="space-y-4" onSubmit={submit}>
-            <label className="grid gap-1">
-              <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>登入 Email</span>
-              <div className="relative">
-                <Search
-                  size={15}
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
-                  style={{ color: "var(--text-muted)" }}
-                  aria-hidden="true"
-                />
-                <input
-                  className="input pr-9 pl-9"
-                  type="email"
-                  required
-                  placeholder="搜尋姓名或輸入 Email"
-                  value={form.email}
-                  onFocus={(event) => {
-                    event.currentTarget.select();
-                    setUserSearch("");
-                    setUserMenuOpen(true);
-                  }}
-                  onBlur={() => window.setTimeout(() => setUserMenuOpen(false), 120)}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    setForm((current) => ({ ...current, email: value }));
-                    setUserSearch(value);
-                    setUserMenuOpen(true);
-                  }}
-                />
-                <ChevronDown
-                  size={15}
-                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2"
-                  style={{ color: "var(--text-muted)" }}
-                  aria-hidden="true"
-                />
-
-                {userMenuOpen && (
-                  <div
-                    role="listbox"
-                    aria-label="選擇登入使用者"
-                    className="absolute left-0 right-0 top-[calc(100%+0.35rem)] z-20 max-h-64 overflow-y-auto rounded-lg border p-1"
+          {!editingId && (
+            <div className="mb-5 grid gap-2">
+              <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>建立方式</span>
+              <div className="flex rounded-lg border p-1" style={{ borderColor: "var(--border)" }} role="group" aria-label="特殊身分建立方式">
+                {[
+                  [false, "單筆建立"],
+                  [true, "批量建立"],
+                ].map(([isBulk, label]) => (
+                  <button
+                    key={label as string}
+                    type="button"
+                    className="flex-1 rounded-md px-3 py-2 text-xs font-medium transition-colors"
                     style={{
-                      borderColor: "var(--border-strong)",
-                      background: "var(--bg-surface)",
-                      boxShadow: "0 4px 8px rgba(0, 0, 0, 0.18)",
+                      background: bulkMode === isBulk ? "var(--primary-dim)" : "transparent",
+                      color: bulkMode === isBulk ? "var(--primary)" : "var(--text-secondary)",
                     }}
+                    onClick={() => switchCreationMode(isBulk as boolean)}
                   >
-                    {userSearchLoading ? (
-                      <p className="px-3 py-3 text-xs" style={{ color: "var(--text-muted)" }}>搜尋使用者中…</p>
-                    ) : userOptions.length > 0 ? (
-                      userOptions.map((user) => (
-                        <button
-                          key={user.id}
-                          type="button"
-                          role="option"
-                          aria-selected={form.email === user.email}
-                          className="flex w-full items-start gap-3 rounded-md px-3 py-2.5 text-left transition-colors hover:bg-[var(--bg-elevated)]"
-                          onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => selectUser(user)}
-                        >
-                          <span
-                            className="grid h-8 w-8 shrink-0 place-items-center rounded-full"
-                            style={{ color: "var(--primary)", background: "var(--primary-dim)" }}
-                          >
-                            <UserRound size={15} aria-hidden="true" />
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-                              {user.display_name || "未命名使用者"}
-                            </span>
-                            <span className="mt-0.5 block truncate text-xs" style={{ color: "var(--text-muted)" }}>
-                              {user.email}
-                            </span>
-                          </span>
-                          {form.email === user.email && <Check size={15} className="mt-1 shrink-0" style={{ color: "var(--primary)" }} aria-hidden="true" />}
-                        </button>
-                      ))
-                    ) : (
-                      <p className="px-3 py-3 text-xs leading-5" style={{ color: "var(--text-muted)" }}>
-                        找不到符合的使用者；仍可直接輸入尚未建立平台帳號的 Email。
-                      </p>
-                    )}
-                  </div>
-                )}
+                    {label as string}
+                  </button>
+                ))}
               </div>
-              <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
-                可搜尋姓名或 Email 選取使用者；帳號尚未登入也可以先建立授權。
-              </span>
-            </label>
+            </div>
+          )}
+
+          <form className="space-y-4" onSubmit={submit}>
+            {bulkMode ? (
+              <label className="grid gap-1">
+                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>登入 Email（可多筆）</span>
+                <textarea
+                  className="input min-h-40 resize-y"
+                  required
+                  rows={7}
+                  placeholder={"每行一個 Email，也可用逗號、分號或空白分隔\n例如：\nparent1@example.com\nparent2@example.com"}
+                  value={form.email}
+                  onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
+                />
+                <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                  最多 5000 個不同 Email；已存在授權的帳號會自動跳過，不影響其他新增。
+                </span>
+              </label>
+            ) : (
+              <label className="grid gap-1">
+                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>登入 Email</span>
+                <div className="relative">
+                  <Search
+                    size={15}
+                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+                    style={{ color: "var(--text-muted)" }}
+                    aria-hidden="true"
+                  />
+                  <input
+                    className="input pr-9 pl-9"
+                    type="email"
+                    required
+                    placeholder="搜尋姓名或輸入 Email"
+                    value={form.email}
+                    onFocus={(event) => {
+                      event.currentTarget.select();
+                      setUserSearch("");
+                      setUserMenuOpen(true);
+                    }}
+                    onBlur={() => window.setTimeout(() => setUserMenuOpen(false), 120)}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setForm((current) => ({ ...current, email: value }));
+                      setUserSearch(value);
+                      setUserMenuOpen(true);
+                    }}
+                  />
+                  <ChevronDown
+                    size={15}
+                    className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2"
+                    style={{ color: "var(--text-muted)" }}
+                    aria-hidden="true"
+                  />
+
+                  {userMenuOpen && (
+                    <div
+                      role="listbox"
+                      aria-label="選擇登入使用者"
+                      className="absolute left-0 right-0 top-[calc(100%+0.35rem)] z-20 max-h-64 overflow-y-auto rounded-lg border p-1"
+                      style={{
+                        borderColor: "var(--border-strong)",
+                        background: "var(--bg-surface)",
+                        boxShadow: "0 4px 8px rgba(0, 0, 0, 0.18)",
+                      }}
+                    >
+                      {userSearchLoading ? (
+                        <p className="px-3 py-3 text-xs" style={{ color: "var(--text-muted)" }}>搜尋使用者中…</p>
+                      ) : userOptions.length > 0 ? (
+                        userOptions.map((user) => (
+                          <button
+                            key={user.id}
+                            type="button"
+                            role="option"
+                            aria-selected={form.email === user.email}
+                            className="flex w-full items-start gap-3 rounded-md px-3 py-2.5 text-left transition-colors hover:bg-[var(--bg-elevated)]"
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => selectUser(user)}
+                          >
+                            <span
+                              className="grid h-8 w-8 shrink-0 place-items-center rounded-full"
+                              style={{ color: "var(--primary)", background: "var(--primary-dim)" }}
+                            >
+                              <UserRound size={15} aria-hidden="true" />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+                                {user.display_name || "未命名使用者"}
+                              </span>
+                              <span className="mt-0.5 block truncate text-xs" style={{ color: "var(--text-muted)" }}>
+                                {user.email}
+                              </span>
+                            </span>
+                            {form.email === user.email && <Check size={15} className="mt-1 shrink-0" style={{ color: "var(--primary)" }} aria-hidden="true" />}
+                          </button>
+                        ))
+                      ) : (
+                        <p className="px-3 py-3 text-xs leading-5" style={{ color: "var(--text-muted)" }}>
+                          找不到符合的使用者；仍可直接輸入尚未建立平台帳號的 Email。
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                  可搜尋姓名或 Email 選取使用者；帳號尚未登入也可以先建立授權。
+                </span>
+              </label>
+            )}
 
             <div className="grid gap-2">
               <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>常用身份</span>
@@ -315,7 +392,7 @@ export default function CredentialAuthorizationPanel() {
               )}
               <button type="submit" className="btn" disabled={saving} style={{ background: "var(--primary)", color: "var(--primary-fg)", border: "none" }}>
                 {editingId ? <Check size={15} aria-hidden="true" /> : <Plus size={15} aria-hidden="true" />}
-                {saving ? "儲存中…" : editingId ? "儲存變更" : "建立授權"}
+                {saving ? "儲存中…" : editingId ? "儲存變更" : bulkMode ? "批量建立授權" : "建立授權"}
               </button>
             </div>
           </form>
