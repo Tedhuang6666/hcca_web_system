@@ -130,6 +130,7 @@ export default function CommandMenu() {
       || hasPrefix("serial:")
       || hasPrefix("exam:")
       || hasPrefix("shop:")
+      || hasPrefix("merchandise_submission:")
       || hasPrefix("meal:")
       || hasPrefix("partner_map:")
       || hasPrefix("election:")

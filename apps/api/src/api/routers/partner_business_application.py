@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_optional_user
-from api.dependencies.permissions import require_permission
+from api.dependencies.permissions import require_any
 from api.models.partner_business_application import (
     PartnerApplicationSettings,
     PartnerBusinessApplication,
@@ -32,7 +32,24 @@ router = APIRouter(prefix="/partner-map", tags=["特約商家申請"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 OptionalUser = Annotated[User | None, Depends(get_optional_user)]
-ManagerUser = Annotated[User, Depends(require_permission(PermissionCode.PARTNER_MAP_MANAGE))]
+ApplicationManagerUser = Annotated[
+    User,
+    Depends(
+        require_any(
+            PermissionCode.PARTNER_MAP_MANAGE,
+            PermissionCode.PARTNER_MAP_APPLICATION_MANAGE,
+        )
+    ),
+]
+ApplicationReviewerUser = Annotated[
+    User,
+    Depends(
+        require_any(
+            PermissionCode.PARTNER_MAP_MANAGE,
+            PermissionCode.PARTNER_MAP_APPLICATION_REVIEW,
+        )
+    ),
+]
 
 
 def _settings_out(settings: PartnerApplicationSettings) -> PartnerApplicationSettingsOut:
@@ -84,7 +101,7 @@ async def create_application(
     summary="取得特約商家申請表單設定",
 )
 async def get_admin_application_settings(
-    db: DbDep, _: ManagerUser
+    db: DbDep, _: ApplicationManagerUser
 ) -> PartnerApplicationSettingsOut:
     return _settings_out(await application_svc.get_settings(db))
 
@@ -95,7 +112,7 @@ async def get_admin_application_settings(
     summary="更新特約商家申請表單設定",
 )
 async def update_admin_application_settings(
-    body: PartnerApplicationSettingsUpdate, db: DbDep, user: ManagerUser
+    body: PartnerApplicationSettingsUpdate, db: DbDep, user: ApplicationManagerUser
 ) -> PartnerApplicationSettingsOut:
     settings = await application_svc.update_settings(db, body, user.id)
     await audit_svc.record(
@@ -118,7 +135,7 @@ async def update_admin_application_settings(
 )
 async def list_admin_applications(
     db: DbDep,
-    _: ManagerUser,
+    _: ApplicationReviewerUser,
     status_filter: str | None = Query(None, alias="status", max_length=20),
 ) -> list[PartnerBusinessApplication]:
     return await application_svc.list_applications(db, status_filter)
@@ -133,7 +150,7 @@ async def review_admin_application(
     application_id: uuid.UUID,
     body: PartnerBusinessApplicationReview,
     db: DbDep,
-    user: ManagerUser,
+    user: ApplicationReviewerUser,
 ) -> PartnerBusinessApplicationOut:
     application = await application_svc.get_application(db, application_id)
     if application is None:

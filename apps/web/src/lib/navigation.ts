@@ -7,6 +7,7 @@ export type NavItem = {
   label: string;
   end?: boolean;
   perm?: string;
+  perms?: string[];
 };
 
 export type NavSection = {
@@ -215,14 +216,30 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "email", href: "/email", iconKey: "email", label: "電子郵件", perm: "email:*" },
   { id: "examPaperAdmin", href: "/exam-papers/admin", iconKey: "examPaperAdmin", label: "題庫管理", perm: "exam:manage" },
   { id: "shopAdmin", href: "/shop/admin", iconKey: "shopAdmin", label: "商品後台", perm: "shop:manage" },
-  { id: "merchandiseSubmissionsAdmin", href: "/merchandise-submissions/admin", iconKey: "shopAdmin", label: "校商投稿管理", perm: "shop:manage" },
+  {
+    id: "merchandiseSubmissionsAdmin",
+    href: "/merchandise-submissions/admin",
+    iconKey: "shopAdmin",
+    label: "校商投稿管理",
+    perms: [
+      "merchandise_submission:view",
+      "merchandise_submission:manage",
+      "merchandise_submission:review",
+      "shop:manage",
+    ],
+  },
   { id: "mealVendor", href: "/meal/vendor", iconKey: "mealVendor", label: "餐商管理", perm: "meal:manage" },
   {
     id: "partnerMapAdmin",
     href: "/partner-map/admin",
     iconKey: "partnerMap",
     label: "特約管理",
-    perm: "partner_map:manage",
+    perms: [
+      "partner_map:manage",
+      "partner_map:business_manage",
+      "partner_map:submission_review",
+      "electronic_credential:manage",
+    ],
   },
   {
     id: "recommendedVendorsAdmin",
@@ -461,7 +478,7 @@ export const NAVIGATION_PROFILES: Record<NavigationProfile, NavigationProfileCon
     label: "校商與廠商視角",
     description: "把合作商家需要的特約管理、合作活動、公告與待辦集中起來。",
     audience: "校商、合作廠商、外部合作窗口",
-    matchAnyPrefixes: ["partner_map:"],
+    matchAnyPrefixes: ["partner_map:", "electronic_credential:"],
     desktopSections: NAV_DEF_VENDOR,
     mobileOrder: ["dashboard", "tasks", "partnerMapAdmin", "partnerMap", "credential", "announcements"],
   },
@@ -547,6 +564,7 @@ export function isNavItemVisible(item: NavItem, options: NavVisibilityOptions): 
       || options.hasPrefix("serial:")
       || options.hasPrefix("exam:")
       || options.hasPrefix("shop:")
+      || options.hasPrefix("merchandise_submission:")
       || options.hasPrefix("meal:")
       || options.hasPrefix("partner_map:")
       || options.hasPrefix("recommended_vendor:")
@@ -591,6 +609,8 @@ export function resolveNavigationProfile(
     "election:",
     "audit:",
     "email:",
+    "merchandise_submission:",
+    "electronic_credential:",
   ].some((entry) => typeof entry === "string" ? hasPrefix(entry) : entry);
 
   if (hasGovernanceOrBackoffice) return "default";
@@ -701,6 +721,13 @@ export function filterNavItems(
   hasPrefix: (prefix: string) => boolean,
 ) {
   return items.filter((item) => {
+    if (item.perms?.length) {
+      return item.perms.some((permission) =>
+        permission.endsWith(":*")
+          ? hasPrefix(permission.slice(0, -1))
+          : can(permission),
+      );
+    }
     if (!item.perm) return true;
     if (item.perm.endsWith(":*")) return hasPrefix(item.perm.slice(0, -1));
     return can(item.perm);

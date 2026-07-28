@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user, get_optional_user
-from api.dependencies.permissions import require_permission
+from api.dependencies.permissions import require_any
 from api.models.partner_map import (
     PartnerBusiness,
     PartnerBusinessImage,
@@ -62,7 +62,24 @@ _PROMO_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 OptionalUser = Annotated[User | None, Depends(get_optional_user)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
-ManagerUser = Annotated[User, Depends(require_permission(PermissionCode.PARTNER_MAP_MANAGE))]
+BusinessManagerUser = Annotated[
+    User,
+    Depends(
+        require_any(
+            PermissionCode.PARTNER_MAP_MANAGE,
+            PermissionCode.PARTNER_MAP_BUSINESS_MANAGE,
+        )
+    ),
+]
+SubmissionReviewerUser = Annotated[
+    User,
+    Depends(
+        require_any(
+            PermissionCode.PARTNER_MAP_MANAGE,
+            PermissionCode.PARTNER_MAP_SUBMISSION_REVIEW,
+        )
+    ),
+]
 
 
 def _offer_out(offer: PartnerOffer, *, include_private: bool) -> PartnerOfferOut:
@@ -488,7 +505,7 @@ async def create_business_rating(
 async def admin_upload_business_flyer(
     business_id: uuid.UUID,
     db: DbDep,
-    _: ManagerUser,
+    _: BusinessManagerUser,
     file: UploadFile = File(...),
 ) -> PartnerBusinessOut:
     business = await _business_or_404(db, business_id)
@@ -521,7 +538,7 @@ async def admin_upload_business_flyer(
 async def admin_upload_business_image(
     business_id: uuid.UUID,
     db: DbDep,
-    _: ManagerUser,
+    _: BusinessManagerUser,
     file: UploadFile = File(...),
 ) -> PartnerBusinessOut:
     business = await _business_or_404(db, business_id)
@@ -560,7 +577,7 @@ async def admin_upload_business_image(
     summary="管理端預覽特約店家宣傳圖",
 )
 async def admin_preview_business_image(
-    business_id: uuid.UUID, image_id: uuid.UUID, db: DbDep, _: ManagerUser
+    business_id: uuid.UUID, image_id: uuid.UUID, db: DbDep, _: BusinessManagerUser
 ) -> FileResponse | RedirectResponse:
     await _business_or_404(db, business_id)
     return await _serve_business_image(await _business_image_or_404(db, business_id, image_id))
@@ -572,7 +589,7 @@ async def admin_preview_business_image(
     summary="移除特約店家宣傳圖",
 )
 async def admin_delete_business_image(
-    business_id: uuid.UUID, image_id: uuid.UUID, db: DbDep, _: ManagerUser
+    business_id: uuid.UUID, image_id: uuid.UUID, db: DbDep, _: BusinessManagerUser
 ) -> None:
     business = await _business_or_404(db, business_id)
     image = await _business_image_or_404(db, business_id, image_id)
@@ -588,7 +605,9 @@ async def admin_delete_business_image(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="移除特約店家照片或傳單",
 )
-async def admin_delete_business_flyer(business_id: uuid.UUID, db: DbDep, _: ManagerUser) -> None:
+async def admin_delete_business_flyer(
+    business_id: uuid.UUID, db: DbDep, _: BusinessManagerUser
+) -> None:
     business = await _business_or_404(db, business_id)
     storage_key = business.flyer_storage_key
     business.flyer_storage_key = None
@@ -621,7 +640,7 @@ async def create_submission(
 )
 async def admin_list_businesses(
     db: DbDep,
-    _: ManagerUser,
+    _: BusinessManagerUser,
     include_inactive: bool = Query(True),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
@@ -639,7 +658,7 @@ async def admin_list_businesses(
     summary="建立特約店家",
 )
 async def admin_create_business(
-    body: PartnerBusinessCreate, db: DbDep, user: ManagerUser
+    body: PartnerBusinessCreate, db: DbDep, user: BusinessManagerUser
 ) -> PartnerBusinessOut:
     try:
         business = await map_svc.create_business(db, body, created_by=user.id)
@@ -663,7 +682,7 @@ async def admin_create_business(
     summary="管理端取得特約店家詳情",
 )
 async def admin_get_business(
-    business_id: uuid.UUID, db: DbDep, _: ManagerUser
+    business_id: uuid.UUID, db: DbDep, _: BusinessManagerUser
 ) -> PartnerBusinessOut:
     return _business_out(
         await _business_or_404(db, business_id), include_private=True, include_internal=True
@@ -676,7 +695,10 @@ async def admin_get_business(
     summary="更新特約店家",
 )
 async def admin_update_business(
-    business_id: uuid.UUID, body: PartnerBusinessUpdate, db: DbDep, user: ManagerUser
+    business_id: uuid.UUID,
+    body: PartnerBusinessUpdate,
+    db: DbDep,
+    user: BusinessManagerUser,
 ) -> PartnerBusinessOut:
     business = await _business_or_404(db, business_id)
     try:
@@ -700,7 +722,9 @@ async def admin_update_business(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="刪除特約店家",
 )
-async def admin_delete_business(business_id: uuid.UUID, db: DbDep, user: ManagerUser) -> None:
+async def admin_delete_business(
+    business_id: uuid.UUID, db: DbDep, user: BusinessManagerUser
+) -> None:
     business = await _business_or_404(db, business_id)
     await audit_svc.record(
         db,
@@ -723,7 +747,7 @@ async def admin_delete_business(business_id: uuid.UUID, db: DbDep, user: Manager
 )
 async def admin_list_submissions(
     db: DbDep,
-    _: ManagerUser,
+    _: SubmissionReviewerUser,
     status_filter: str | None = Query(None, alias="status"),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
@@ -745,7 +769,7 @@ async def admin_review_submission(
     submission_id: uuid.UUID,
     body: PartnerSubmissionReview,
     db: DbDep,
-    user: ManagerUser,
+    user: SubmissionReviewerUser,
 ) -> PartnerSubmissionOut:
     submission = await map_svc.get_submission(db, submission_id)
     if submission is None:
@@ -759,7 +783,7 @@ async def admin_review_submission(
 
 
 @router.get("/admin/tags", response_model=list[PartnerTagOut], summary="管理端列出標籤")
-async def admin_list_tags(db: DbDep, _: ManagerUser) -> list[PartnerTag]:
+async def admin_list_tags(db: DbDep, _: BusinessManagerUser) -> list[PartnerTag]:
     return await map_svc.list_tags(db, include_inactive=True)
 
 
@@ -769,13 +793,13 @@ async def admin_list_tags(db: DbDep, _: ManagerUser) -> list[PartnerTag]:
     status_code=status.HTTP_201_CREATED,
     summary="建立特約標籤",
 )
-async def admin_create_tag(body: PartnerTagCreate, db: DbDep, _: ManagerUser) -> PartnerTag:
+async def admin_create_tag(body: PartnerTagCreate, db: DbDep, _: BusinessManagerUser) -> PartnerTag:
     return await map_svc.create_tag(db, body)
 
 
 @router.patch("/admin/tags/{tag_id}", response_model=PartnerTagOut, summary="更新特約標籤")
 async def admin_update_tag(
-    tag_id: uuid.UUID, body: PartnerTagUpdate, db: DbDep, _: ManagerUser
+    tag_id: uuid.UUID, body: PartnerTagUpdate, db: DbDep, _: BusinessManagerUser
 ) -> PartnerTag:
     return await map_svc.update_tag(db, await _tag_or_404(db, tag_id), body)
 
@@ -785,7 +809,7 @@ async def admin_update_tag(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="刪除特約標籤",
 )
-async def admin_delete_tag(tag_id: uuid.UUID, db: DbDep, _: ManagerUser) -> None:
+async def admin_delete_tag(tag_id: uuid.UUID, db: DbDep, _: BusinessManagerUser) -> None:
     await map_svc.delete_tag(db, await _tag_or_404(db, tag_id))
 
 
@@ -795,7 +819,7 @@ async def admin_delete_tag(tag_id: uuid.UUID, db: DbDep, _: ManagerUser) -> None
     summary="解析 Google Maps 據點連結",
 )
 async def admin_parse_google_maps_link(
-    body: PartnerGoogleMapsParseIn, _: ManagerUser
+    body: PartnerGoogleMapsParseIn, _: BusinessManagerUser
 ) -> PartnerGoogleMapsParseOut:
     try:
         parsed = await map_svc.parse_google_maps_link(body.url)
@@ -813,7 +837,10 @@ async def admin_parse_google_maps_link(
     summary="新增特約點位",
 )
 async def admin_create_location(
-    business_id: uuid.UUID, body: PartnerLocationCreate, db: DbDep, _: ManagerUser
+    business_id: uuid.UUID,
+    body: PartnerLocationCreate,
+    db: DbDep,
+    _: BusinessManagerUser,
 ) -> PartnerLocation:
     return await map_svc.create_location(db, await _business_or_404(db, business_id), body)
 
@@ -824,7 +851,10 @@ async def admin_create_location(
     summary="更新特約點位",
 )
 async def admin_update_location(
-    location_id: uuid.UUID, body: PartnerLocationUpdate, db: DbDep, _: ManagerUser
+    location_id: uuid.UUID,
+    body: PartnerLocationUpdate,
+    db: DbDep,
+    _: BusinessManagerUser,
 ) -> PartnerLocation:
     return await map_svc.update_location(db, await _location_or_404(db, location_id), body)
 
@@ -834,7 +864,7 @@ async def admin_update_location(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="刪除特約點位",
 )
-async def admin_delete_location(location_id: uuid.UUID, db: DbDep, _: ManagerUser) -> None:
+async def admin_delete_location(location_id: uuid.UUID, db: DbDep, _: BusinessManagerUser) -> None:
     await map_svc.delete_location(db, await _location_or_404(db, location_id))
 
 
@@ -845,7 +875,10 @@ async def admin_delete_location(location_id: uuid.UUID, db: DbDep, _: ManagerUse
     summary="新增特約優惠",
 )
 async def admin_create_offer(
-    business_id: uuid.UUID, body: PartnerOfferCreate, db: DbDep, _: ManagerUser
+    business_id: uuid.UUID,
+    body: PartnerOfferCreate,
+    db: DbDep,
+    _: BusinessManagerUser,
 ) -> PartnerOfferOut:
     offer = await map_svc.create_offer(db, await _business_or_404(db, business_id), body)
     return _offer_out(offer, include_private=True)
@@ -853,7 +886,10 @@ async def admin_create_offer(
 
 @router.patch("/admin/offers/{offer_id}", response_model=PartnerOfferOut, summary="更新特約優惠")
 async def admin_update_offer(
-    offer_id: uuid.UUID, body: PartnerOfferUpdate, db: DbDep, _: ManagerUser
+    offer_id: uuid.UUID,
+    body: PartnerOfferUpdate,
+    db: DbDep,
+    _: BusinessManagerUser,
 ) -> PartnerOfferOut:
     offer = await map_svc.update_offer(db, await _offer_or_404(db, offer_id), body)
     return _offer_out(offer, include_private=True)
@@ -864,5 +900,5 @@ async def admin_update_offer(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="刪除特約優惠",
 )
-async def admin_delete_offer(offer_id: uuid.UUID, db: DbDep, _: ManagerUser) -> None:
+async def admin_delete_offer(offer_id: uuid.UUID, db: DbDep, _: BusinessManagerUser) -> None:
     await map_svc.delete_offer(db, await _offer_or_404(db, offer_id))
