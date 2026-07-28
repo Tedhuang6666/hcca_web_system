@@ -23717,14 +23717,14 @@ export interface components {
             ai_detection_evidence: components["schemas"]["MerchandiseSubmissionAIEvidenceOut"][];
             /** Ai Detection Metadata */
             ai_detection_metadata: components["schemas"]["MerchandiseSubmissionAIMetadataOut"][];
-            /** Ai Detection Version */
-            ai_detection_version: string | null;
             /** Ai Detection Scanned At */
             ai_detection_scanned_at: string | null;
             /** Ai Detection Sha256 */
             ai_detection_sha256: string | null;
             /** Ai Detection Status */
             ai_detection_status: ("detected" | "supporting" | "no_evidence" | "not_applicable" | "error") | null;
+            /** Ai Detection Version */
+            ai_detection_version: string | null;
             /** Content Type */
             content_type: string;
             /** File Size */
