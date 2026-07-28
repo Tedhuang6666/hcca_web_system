@@ -4428,6 +4428,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/electronic-credentials/admin/authorizations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出電子證件特殊身分授權 */
+        get: operations["admin_list_authorizations_electronic_credentials_admin_authorizations_get"];
+        put?: never;
+        /** 建立電子證件特殊身分授權 */
+        post: operations["admin_create_authorization_electronic_credentials_admin_authorizations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/electronic-credentials/admin/authorizations/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 批量建立電子證件特殊身分授權 */
+        post: operations["admin_bulk_create_authorizations_electronic_credentials_admin_authorizations_bulk_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/electronic-credentials/admin/authorizations/{authorization_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 更新電子證件特殊身分授權 */
+        patch: operations["admin_update_authorization_electronic_credentials_admin_authorizations__authorization_id__patch"];
+        trace?: never;
+    };
     "/electronic-credentials/me": {
         parameters: {
             query?: never;
@@ -9076,6 +9128,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/partner-map/admin/applications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出特約商家申請 */
+        get: operations["list_admin_applications_partner_map_admin_applications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/partner-map/admin/applications/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 取得特約商家申請表單設定 */
+        get: operations["get_admin_application_settings_partner_map_admin_applications_settings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 更新特約商家申請表單設定 */
+        patch: operations["update_admin_application_settings_partner_map_admin_applications_settings_patch"];
+        trace?: never;
+    };
+    "/partner-map/admin/applications/{application_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 審核特約商家申請 */
+        patch: operations["review_admin_application_partner_map_admin_applications__application_id__patch"];
+        trace?: never;
+    };
     "/partner-map/admin/businesses": {
         parameters: {
             query?: never;
@@ -9321,6 +9425,40 @@ export interface paths {
         head?: never;
         /** 更新特約標籤 */
         patch: operations["admin_update_tag_partner_map_admin_tags__tag_id__patch"];
+        trace?: never;
+    };
+    "/partner-map/applications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 送出特約商家申請 */
+        post: operations["create_application_partner_map_applications_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/partner-map/applications/portal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 取得特約商家申請表單 */
+        get: operations["get_application_portal_partner_map_applications_portal_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/partner-map/businesses/{business_id}": {
@@ -18892,6 +19030,87 @@ export interface components {
             vote_threshold_pct?: number | null;
         };
         /**
+         * ElectronicCredentialAuthorizationBulkCreate
+         * @description 批量建立同一特殊身分授權。
+         */
+        ElectronicCredentialAuthorizationBulkCreate: {
+            /** Emails */
+            emails: string[];
+            /** Identity Label */
+            identity_label: string;
+            /** Note */
+            note?: string | null;
+        };
+        /**
+         * ElectronicCredentialAuthorizationBulkOut
+         * @description 批量建立結果。
+         */
+        ElectronicCredentialAuthorizationBulkOut: {
+            /** Created Count */
+            created_count: number;
+            /** Skipped Emails */
+            skipped_emails: string[];
+        };
+        /**
+         * ElectronicCredentialAuthorizationCreate
+         * @description 建立特殊身分授權。
+         */
+        ElectronicCredentialAuthorizationCreate: {
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+            /** Identity Label */
+            identity_label: string;
+            /** Note */
+            note?: string | null;
+        };
+        /**
+         * ElectronicCredentialAuthorizationOut
+         * @description 管理端特殊身分授權資料。
+         */
+        ElectronicCredentialAuthorizationOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Display Name */
+            display_name?: string | null;
+            /** Email */
+            email: string;
+            /** Id */
+            id: string;
+            /** Identity Label */
+            identity_label: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Note */
+            note?: string | null;
+            /** Student Id */
+            student_id?: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * ElectronicCredentialAuthorizationUpdate
+         * @description 更新特殊身分授權。
+         */
+        ElectronicCredentialAuthorizationUpdate: {
+            /** Email */
+            email?: string | null;
+            /** Identity Label */
+            identity_label?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Note */
+            note?: string | null;
+        };
+        /**
          * ElectronicCredentialOut
          * @description 登入者可出示的象徵性電子證件。
          */
@@ -25109,6 +25328,174 @@ export interface components {
             /** Path */
             path: string;
         };
+        /** PartnerApplicationFieldConfig */
+        PartnerApplicationFieldConfig: {
+            /**
+             * Field Type
+             * @default text
+             * @enum {string}
+             */
+            field_type: "text" | "textarea" | "email" | "tel" | "url" | "select";
+            /** Help Text */
+            help_text?: string | null;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Options */
+            options?: string[];
+            /** Placeholder */
+            placeholder?: string | null;
+            /**
+             * Required
+             * @default false
+             */
+            required: boolean;
+            /**
+             * Sort Order
+             * @default 0
+             */
+            sort_order: number;
+        };
+        /** PartnerApplicationFieldOut */
+        PartnerApplicationFieldOut: {
+            /**
+             * Field Type
+             * @default text
+             * @enum {string}
+             */
+            field_type: "text" | "textarea" | "email" | "tel" | "url" | "select";
+            /** Help Text */
+            help_text?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Options */
+            options?: string[];
+            /** Placeholder */
+            placeholder?: string | null;
+            /**
+             * Required
+             * @default false
+             */
+            required: boolean;
+            /**
+             * Sort Order
+             * @default 0
+             */
+            sort_order: number;
+        };
+        /** PartnerApplicationPortalOut */
+        PartnerApplicationPortalOut: {
+            /** Is Accepting */
+            is_accepting: boolean;
+            settings: components["schemas"]["PartnerApplicationSettingsOut"];
+        };
+        /** PartnerApplicationSettingsOut */
+        PartnerApplicationSettingsOut: {
+            /** Fields */
+            fields: components["schemas"]["PartnerApplicationFieldOut"][];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Intro */
+            intro: string;
+            /** Is Open */
+            is_open: boolean;
+            /** Privacy Notice */
+            privacy_notice: string | null;
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** PartnerApplicationSettingsUpdate */
+        PartnerApplicationSettingsUpdate: {
+            /** Fields */
+            fields?: components["schemas"]["PartnerApplicationFieldConfig"][] | null;
+            /** Intro */
+            intro?: string | null;
+            /** Is Open */
+            is_open?: boolean | null;
+            /** Privacy Notice */
+            privacy_notice?: string | null;
+            /** Title */
+            title?: string | null;
+        };
+        /** PartnerBusinessApplicationCreate */
+        PartnerBusinessApplicationCreate: {
+            /** Field Values */
+            field_values?: {
+                [key: string]: string;
+            };
+        };
+        /** PartnerBusinessApplicationOut */
+        PartnerBusinessApplicationOut: {
+            /** Business Id */
+            business_id: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Field Values */
+            field_values: {
+                [key: string]: string;
+            };
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Review Note */
+            review_note: string | null;
+            /** Reviewed At */
+            reviewed_at: string | null;
+            /** Reviewed By */
+            reviewed_by: string | null;
+            status: components["schemas"]["PartnerBusinessApplicationStatus"];
+            /** Submitted By */
+            submitted_by: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** PartnerBusinessApplicationReview */
+        PartnerBusinessApplicationReview: {
+            /** Business Id */
+            business_id?: string | null;
+            /** Review Note */
+            review_note?: string | null;
+            status: components["schemas"]["PartnerBusinessApplicationStatus"];
+        };
+        /**
+         * PartnerBusinessApplicationStatus
+         * @enum {string}
+         */
+        PartnerBusinessApplicationStatus: "pending" | "in_review" | "approved" | "needs_info" | "rejected";
         /** PartnerBusinessCreate */
         PartnerBusinessCreate: {
             /** Business Hours Text */
@@ -44434,6 +44821,138 @@ export interface operations {
             };
         };
     };
+    admin_list_authorizations_electronic_credentials_admin_authorizations_get: {
+        parameters: {
+            query?: {
+                include_inactive?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ElectronicCredentialAuthorizationOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_create_authorization_electronic_credentials_admin_authorizations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ElectronicCredentialAuthorizationCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ElectronicCredentialAuthorizationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_bulk_create_authorizations_electronic_credentials_admin_authorizations_bulk_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ElectronicCredentialAuthorizationBulkCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ElectronicCredentialAuthorizationBulkOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_update_authorization_electronic_credentials_admin_authorizations__authorization_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                authorization_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ElectronicCredentialAuthorizationUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ElectronicCredentialAuthorizationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_my_electronic_credential_electronic_credentials_me_get: {
         parameters: {
             query?: never;
@@ -55028,6 +55547,125 @@ export interface operations {
             };
         };
     };
+    list_admin_applications_partner_map_admin_applications_get: {
+        parameters: {
+            query?: {
+                status?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerBusinessApplicationOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_admin_application_settings_partner_map_admin_applications_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerApplicationSettingsOut"];
+                };
+            };
+        };
+    };
+    update_admin_application_settings_partner_map_admin_applications_settings_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PartnerApplicationSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerApplicationSettingsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_admin_application_partner_map_admin_applications__application_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PartnerBusinessApplicationReview"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerBusinessApplicationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     admin_list_businesses_partner_map_admin_businesses_get: {
         parameters: {
             query?: {
@@ -55762,6 +56400,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_application_partner_map_applications_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PartnerBusinessApplicationCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerBusinessApplicationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_application_portal_partner_map_applications_portal_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerApplicationPortalOut"];
                 };
             };
         };
