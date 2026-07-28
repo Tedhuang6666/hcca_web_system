@@ -4,49 +4,13 @@ import { ArrowRight, CheckCircle2, FileText, Handshake, MessageSquareText } from
 
 import MarkdownBlock from "@/components/site/MarkdownBlock";
 import PublicFileEmbed, { type PublicFileEmbedItem } from "@/components/site/PublicFileEmbed";
+import { fetchPublicBundle } from "@/lib/serverFetch";
+import { readSpecialAgreementContent } from "@/lib/specialAgreement";
 
 export const metadata: Metadata = {
   title: "特約洽談",
   description: "了解學生自治特約合作的洽談流程、合作資訊與參考文件。",
 };
-
-const PROCESS_STEPS = [
-  { number: "01", title: "提出合作構想", description: "先說明合作對象、希望提供的內容，以及對學生的幫助。" },
-  { number: "02", title: "初步洽談", description: "雙方確認需求、合作範圍、期間與聯絡窗口。" },
-  { number: "03", title: "確認合作內容", description: "整理優惠或服務細節，確認公開文字與執行方式。" },
-  { number: "04", title: "發布特約資訊", description: "完成確認後，將合作內容放上公開平台，方便學生查詢。" },
-];
-
-const INFORMATION_SECTIONS = [
-  {
-    title: "適合洽談的合作",
-    markdown: `可依合作對象與學生需求討論不同形式，例如：
-
-- 學生消費優惠或服務方案
-- 校園活動、講座與公共議題合作
-- 提供學生自治組織使用的場地、資源或專業支持
-- 其他有助於校園公共參與與學生生活的合作內容`,
-  },
-  {
-    title: "洽談前請準備",
-    markdown: `為了讓第一次聯絡就能聚焦，建議先整理以下資訊：
-
-- 合作單位與聯絡窗口
-- 希望合作的對象、期間與適用範圍
-- 優惠或服務的具體內容、使用限制與兌換方式
-- 希望班聯會協助的事項，以及可提供的宣傳素材`,
-  },
-  {
-    title: "公開與執行原則",
-    markdown: `特約資訊會以學生容易理解、可以實際使用為原則整理。正式發布前，雙方會再次確認：
-
-1. 文字是否與實際方案一致
-2. 期限、適用對象與使用條件是否清楚
-3. 聯絡方式與後續異動由誰負責更新
-
-> 若方案內容、期限或使用方式有變動，請儘早通知班聯會，以便同步更新公開資訊。`,
-  },
-];
 
 const FILES: PublicFileEmbedItem[] = [
   {
@@ -57,7 +21,10 @@ const FILES: PublicFileEmbedItem[] = [
   },
 ];
 
-export default function SpecialAgreementPage() {
+export default async function SpecialAgreementPage() {
+  const bundle = await fetchPublicBundle();
+  const content = readSpecialAgreementContent(bundle?.settings.homepage_blocks?.special_agreement);
+
   return (
     <div className="space-y-8 pb-8">
       <header className="overflow-hidden rounded-2xl bg-[#173654] px-6 py-9 text-[#f8f3e5] sm:px-9 sm:py-11">
@@ -70,9 +37,9 @@ export default function SpecialAgreementPage() {
             <h1 className="mt-3 font-serif text-3xl font-semibold leading-tight tracking-[-0.02em] sm:text-4xl">
               特約洽談
             </h1>
-            <p className="mt-4 max-w-2xl text-sm leading-7 text-[#d5e0e6] sm:text-base sm:leading-8">
-              如果你想和學生自治組織一起提供更好的校園服務，這裡整理了從提出構想到公開合作資訊的完整路徑。
-            </p>
+            <div className="mt-4 max-w-2xl text-sm leading-7 text-[#d5e0e6] sm:text-base sm:leading-8 [&_.prose_p]:my-0 [&_.prose]:text-inherit">
+              <MarkdownBlock markdown={content.intro_md} />
+            </div>
           </div>
           <div className="flex items-center gap-3 rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-sm text-[#e9eef1]">
             <CheckCircle2 size={18} className="shrink-0 text-[#e8c970]" aria-hidden />
@@ -91,15 +58,21 @@ export default function SpecialAgreementPage() {
             先從合作需求開始，逐步確認內容與責任，讓公開資訊在發布後仍然清楚、可使用。
           </p>
         </div>
-        <ol className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {PROCESS_STEPS.map((step) => (
-            <li key={step.number} className="rounded-xl border border-[var(--public-border)] bg-[var(--public-surface)] p-5">
-              <span className="text-xs font-semibold tracking-[0.14em] text-[var(--public-accent)]">{step.number}</span>
+        {content.process.length > 0 ? (
+          <ol className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {content.process.map((step, index) => (
+            <li key={step.id} className="rounded-xl border border-[var(--public-border)] bg-[var(--public-surface)] p-5">
+              <span className="text-xs font-semibold tracking-[0.14em] text-[var(--public-accent)]">{String(index + 1).padStart(2, "0")}</span>
               <h3 className="mt-5 text-lg font-semibold">{step.title}</h3>
               <p className="mt-2 text-sm leading-6 text-[var(--public-secondary)]">{step.description}</p>
             </li>
-          ))}
-        </ol>
+            ))}
+          </ol>
+        ) : (
+          <p className="rounded-xl border border-dashed border-[var(--public-border)] bg-[var(--public-surface)] px-5 py-10 text-center text-sm text-[var(--public-secondary)]">
+            特約流程尚在整理中，請稍後再回來查看。
+          </p>
+        )}
       </section>
 
       <section aria-labelledby="special-agreement-information" className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
@@ -108,15 +81,8 @@ export default function SpecialAgreementPage() {
           <h2 id="special-agreement-information" className="mt-2 text-2xl font-semibold">
             特約資訊
           </h2>
-          <div className="mt-6 divide-y divide-[var(--public-border)]">
-            {INFORMATION_SECTIONS.map((section) => (
-              <section key={section.title} className="py-6 first:pt-0 last:pb-0">
-                <h3 className="text-lg font-semibold">{section.title}</h3>
-                <div className="mt-3 text-sm leading-7 text-[var(--public-secondary)]">
-                  <MarkdownBlock markdown={section.markdown} />
-                </div>
-              </section>
-            ))}
+          <div className="mt-6 text-sm leading-7 text-[var(--public-secondary)]">
+            <MarkdownBlock markdown={content.info_md} />
           </div>
         </div>
         <aside className="rounded-2xl border border-[var(--public-border)] bg-[var(--public-soft)] p-5 sm:p-6">

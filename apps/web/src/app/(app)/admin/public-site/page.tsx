@@ -13,6 +13,9 @@ import {
   EyeOff,
   FileText,
   Globe2,
+  Handshake,
+  Home,
+  Info,
   Link as LinkIcon,
   Pencil,
   Plus,
@@ -42,11 +45,16 @@ import type {
   PublicLinkOut,
   PublicOfficerCandidateOut,
   PublicOfficerProfileOut,
+  PublicSpecialAgreementContent,
   PublicSitePageOut,
   PublicSiteSettingsOut,
 } from "@/lib/types";
+import {
+  DEFAULT_SPECIAL_AGREEMENT_CONTENT,
+  readSpecialAgreementContent,
+} from "@/lib/specialAgreement";
 
-type Tab = "settings" | "nav" | "pages" | "links" | "officers" | "advanced";
+type Tab = "homepage" | "system" | "special" | "nav" | "pages" | "links" | "officers" | "advanced";
 
 /** 後台導覽列分頁的群組顯示順序。 */
 const NAV_GROUP_ORDER: PublicNavGroupId[] = ["primary", "info", "data", "participation"];
@@ -85,7 +93,9 @@ const emptySettings: PublicSiteSettingsOut = {
 };
 
 const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
-  { id: "settings", label: "基本設定", icon: <Save size={16} aria-hidden /> },
+  { id: "homepage", label: "首頁資訊", icon: <Home size={16} aria-hidden /> },
+  { id: "system", label: "系統資訊", icon: <Info size={16} aria-hidden /> },
+  { id: "special", label: "特約資訊", icon: <Handshake size={16} aria-hidden /> },
   { id: "nav", label: "導覽列", icon: <Compass size={16} aria-hidden /> },
   { id: "pages", label: "頁面內容", icon: <FileText size={16} aria-hidden /> },
   { id: "links", label: "平台連結", icon: <LinkIcon size={16} aria-hidden /> },
@@ -382,7 +392,7 @@ function rosterMemberKey(tabId: string, title: string, name: string) {
 }
 
 export default function PublicSiteAdminPage() {
-  const [tab, setTab] = useState<Tab>("settings");
+  const [tab, setTab] = useState<Tab>("homepage");
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState<PublicSiteSettingsOut>(emptySettings);
   const [pages, setPages] = useState<PublicSitePageOut[]>([]);
@@ -390,6 +400,7 @@ export default function PublicSiteAdminPage() {
   const [links, setLinks] = useState<PublicLinkOut[]>([]);
   const [candidates, setCandidates] = useState<PublicOfficerCandidateOut[]>([]);
   const [profiles, setProfiles] = useState<PublicOfficerProfileOut[]>([]);
+  const [specialAgreement, setSpecialAgreement] = useState<PublicSpecialAgreementContent>(DEFAULT_SPECIAL_AGREEMENT_CONTENT);
   const [themeJson, setThemeJson] = useState("{}");
   const [blocksJson, setBlocksJson] = useState("{}");
   const [rosterText, setRosterText] = useState("");
@@ -466,6 +477,7 @@ export default function PublicSiteAdminPage() {
       setProfiles(nextProfiles);
       setThemeJson(JSON.stringify(nextSettings.theme_config ?? {}, null, 2));
       setBlocksJson(JSON.stringify(nextSettings.homepage_blocks ?? {}, null, 2));
+      setSpecialAgreement(readSpecialAgreementContent(nextSettings.homepage_blocks?.special_agreement));
       const nextRosterTabs = parseStoredOfficerRosterTabs(nextSettings.theme_config);
       setRosterTabs(nextRosterTabs);
       const nextMemberLabelOverrides: Record<string, string> = {};
@@ -613,12 +625,6 @@ export default function PublicSiteAdminPage() {
         about_body_md: settings.about_body_md,
         mission_md: settings.mission_md,
         history_md: settings.history_md,
-        support_md: null,
-        error_report_md: null,
-        contact_md: null,
-        terms_md: null,
-        developer_team_md: null,
-        system_info_md: settings.system_info_md,
         cta_label: settings.cta_label,
         cta_href: settings.cta_href,
         public_database_label: settings.public_database_label,
@@ -630,6 +636,16 @@ export default function PublicSiteAdminPage() {
       toast.success("公開網站設定已儲存");
     } catch (error) {
       displayError(error, "儲存設定失敗");
+    }
+  };
+
+  const saveSystemInfo = async () => {
+    try {
+      const next = await siteApi.updateSettings({ system_info_md: settings.system_info_md });
+      setSettings(normalizeSettingsForEditor(next));
+      toast.success("系統資訊已儲存");
+    } catch (error) {
+      displayError(error, "儲存系統資訊失敗");
     }
   };
 
@@ -752,6 +768,73 @@ export default function PublicSiteAdminPage() {
       await load();
     } catch (error) {
       displayError(error, editingLinkId ? "更新連結失敗" : "新增連結失敗");
+    }
+  };
+
+  const addSpecialProcess = () => {
+    setSpecialAgreement((current) => ({
+      ...current,
+      process: [
+        ...current.process,
+        {
+          id: `step-${Date.now()}`,
+          title: "",
+          description: "",
+        },
+      ],
+    }));
+  };
+
+  const updateSpecialProcess = (
+    id: string,
+    field: "title" | "description",
+    value: string,
+  ) => {
+    setSpecialAgreement((current) => ({
+      ...current,
+      process: current.process.map((step) => (step.id === id ? { ...step, [field]: value } : step)),
+    }));
+  };
+
+  const moveSpecialProcess = (id: string, direction: "up" | "down") => {
+    setSpecialAgreement((current) => {
+      const index = current.process.findIndex((step) => step.id === id);
+      const target = direction === "up" ? index - 1 : index + 1;
+      if (index < 0 || target < 0 || target >= current.process.length) return current;
+      const process = [...current.process];
+      [process[index], process[target]] = [process[target], process[index]];
+      return { ...current, process };
+    });
+  };
+
+  const removeSpecialProcess = (id: string) => {
+    setSpecialAgreement((current) => ({
+      ...current,
+      process: current.process.filter((step) => step.id !== id),
+    }));
+  };
+
+  const saveSpecialAgreement = async () => {
+    const invalidStep = specialAgreement.process.find(
+      (step) => !step.title.trim() || !step.description.trim(),
+    );
+    if (invalidStep) {
+      toast.error("請先完成每個流程的名稱與說明");
+      return;
+    }
+
+    try {
+      const homepageBlocks = {
+        ...(settings.homepage_blocks ?? {}),
+        special_agreement: specialAgreement,
+      };
+      const next = await siteApi.updateSettings({ homepage_blocks: homepageBlocks });
+      setSettings(normalizeSettingsForEditor(next));
+      setSpecialAgreement(readSpecialAgreementContent(next.homepage_blocks?.special_agreement));
+      setBlocksJson(JSON.stringify(next.homepage_blocks ?? {}, null, 2));
+      toast.success("特約資訊已儲存");
+    } catch (error) {
+      displayError(error, "儲存特約資訊失敗");
     }
   };
 
@@ -894,8 +977,8 @@ export default function PublicSiteAdminPage() {
         </div>
       </nav>
 
-      {tab === "settings" && (
-        <section key="settings" className="tab-panel-transition grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+      {tab === "homepage" && (
+        <section key="homepage" className="tab-panel-transition grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
           <div className="card space-y-4 p-5">
             <Field label="網站標題"><TextInput value={settings.site_title} onChange={(e) => setSettings({ ...settings, site_title: e.target.value })} /></Field>
             <Field label="網站描述"><TextArea value={settings.site_description ?? ""} onChange={(e) => setSettings({ ...settings, site_description: e.target.value })} /></Field>
@@ -929,19 +1012,140 @@ export default function PublicSiteAdminPage() {
             <Field label="使命 Markdown"><MarkdownEditor value={settings.mission_md ?? ""} onChange={(value) => setSettings({ ...settings, mission_md: value })} /></Field>
             <Field label="沿革 Markdown"><MarkdownEditor value={settings.history_md ?? ""} onChange={(value) => setSettings({ ...settings, history_md: value })} /></Field>
           </div>
-          <div className="card space-y-4 p-5 lg:col-span-2">
-            <div>
-              <h2 className="font-semibold">關於本系統（公開頁）</h2>
-              <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">
-                整個公開頁只使用一份 Markdown。請直接在內容中用標題、段落、清單或連結整理資訊。
-              </p>
+        </section>
+      )}
+
+      {tab === "system" && (
+        <section key="system" className="tab-panel-transition space-y-4">
+          <div className="card overflow-hidden border-[var(--primary)]/20 bg-[var(--primary-dim)] p-5">
+            <div className="flex items-start gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--bg-surface)] text-[var(--primary)]">
+                <Info size={19} aria-hidden />
+              </span>
+              <div>
+                <h2 className="font-semibold text-[var(--text-primary)]">系統資訊</h2>
+                <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--text-secondary)]">
+                  這裡只管理「關於本系統」公開頁的內容，不會混入首頁主視覺或特約洽談資料。
+                </p>
+              </div>
             </div>
-            <Field label="頁面內容 Markdown" hint="單換行會在公開頁保留；可用 ## 建立頁內標題。">
-              <MarkdownEditor rows={18} value={settings.system_info_md ?? ""} onChange={(value) => setSettings({ ...settings, system_info_md: value })} />
+          </div>
+          <div className="card space-y-4 p-5">
+            <Field label="頁面內容 Markdown" hint="單換行會在公開頁保留；可用 ## 建立頁內標題、清單或連結。">
+              <MarkdownEditor rows={22} value={settings.system_info_md ?? ""} onChange={(value) => setSettings({ ...settings, system_info_md: value })} />
             </Field>
-            <button type="button" onClick={saveSettings} className="btn btn-primary self-start">
+            <button type="button" onClick={saveSystemInfo} className="btn btn-primary self-start">
               <Save size={16} aria-hidden /> 儲存系統資訊
             </button>
+          </div>
+        </section>
+      )}
+
+      {tab === "special" && (
+        <section key="special" className="tab-panel-transition space-y-4">
+          <div className="card overflow-hidden border-[#173654]/20 bg-[#173654] p-5 text-[#f8f3e5] sm:p-6">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/10 text-[#e8c970]">
+                  <Handshake size={19} aria-hidden />
+                </span>
+                <div>
+                  <p className="text-xs font-semibold tracking-[0.16em] text-[#e8c970]">PUBLIC PARTNERSHIP</p>
+                  <h2 className="mt-2 text-xl font-semibold">特約資訊</h2>
+                  <p className="mt-1 max-w-2xl text-sm leading-6 text-[#d5e0e6]">
+                    管理前台特約洽談頁的介紹、Markdown 內容與流程順序。儲存後會同步顯示在公開頁。
+                  </p>
+                </div>
+              </div>
+              <div className="shrink-0 rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-center">
+                <strong className="block text-2xl font-semibold text-[#e8c970]">{specialAgreement.process.length}</strong>
+                <span className="text-xs text-[#d5e0e6]">個流程步驟</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_18rem] xl:items-start">
+            <div className="card space-y-5 p-5">
+              <div>
+                <h2 className="font-semibold">頁面內容</h2>
+                <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">
+                  介紹文字與特約說明都支援 Markdown；流程則用下方的步驟編輯器管理。
+                </p>
+              </div>
+              <Field label="頁首介紹 Markdown">
+                <MarkdownEditor rows={5} value={specialAgreement.intro_md} onChange={(value) => setSpecialAgreement((current) => ({ ...current, intro_md: value }))} />
+              </Field>
+              <Field label="特約資訊 Markdown" hint="建議使用 ## 分段，前台會以清楚的內容區塊呈現。">
+                <MarkdownEditor rows={18} value={specialAgreement.info_md} onChange={(value) => setSpecialAgreement((current) => ({ ...current, info_md: value }))} />
+              </Field>
+            </div>
+
+            <aside className="card space-y-4 p-5">
+              <div>
+                <p className="text-xs font-semibold tracking-[0.14em] text-[var(--primary)]">LIVE STRUCTURE</p>
+                <h2 className="mt-2 font-semibold">流程預覽</h2>
+                <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">確認順序與標題層級後，再儲存公開頁。</p>
+              </div>
+              {specialAgreement.process.length === 0 ? (
+                <p className="rounded-lg bg-[var(--bg-elevated)] p-4 text-sm text-[var(--text-muted)]">尚未建立流程。</p>
+              ) : (
+                <ol className="space-y-3">
+                  {specialAgreement.process.map((step, index) => (
+                    <li key={step.id} className="flex gap-3">
+                      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[var(--primary-dim)] text-xs font-semibold text-[var(--primary)]">{String(index + 1).padStart(2, "0")}</span>
+                      <span className="min-w-0">
+                        <strong className="block text-sm">{step.title || "未命名流程"}</strong>
+                        <span className="mt-0.5 block text-xs leading-5 text-[var(--text-muted)]">{step.description || "尚未填寫說明"}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </aside>
+          </div>
+
+          <div className="card space-y-4 p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="font-semibold">特約流程</h2>
+                <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">每一步都會依序顯示在前台；可用上下箭頭調整順序。</p>
+              </div>
+              <button type="button" onClick={addSpecialProcess} className="btn btn-secondary min-h-11 shrink-0">
+                <Plus size={16} aria-hidden /> 新增流程
+              </button>
+            </div>
+            {specialAgreement.process.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--bg-elevated)] px-5 py-10 text-center">
+                <Handshake size={26} className="mx-auto text-[var(--text-muted)]" aria-hidden />
+                <p className="mt-3 text-sm font-medium">還沒有特約流程</p>
+                <p className="mt-1 text-xs text-[var(--text-muted)]">按「新增流程」開始建立第一個步驟。</p>
+              </div>
+            ) : (
+              <ol className="space-y-3">
+                {specialAgreement.process.map((step, index) => (
+                  <li key={step.id} className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--primary-dim)] text-sm font-semibold text-[var(--primary)]">{String(index + 1).padStart(2, "0")}</span>
+                      <div className="grid min-w-0 flex-1 gap-3 md:grid-cols-[minmax(12rem,0.8fr)_minmax(0,1.5fr)]">
+                        <Field label="流程名稱"><TextInput value={step.title} onChange={(event) => updateSpecialProcess(step.id, "title", event.target.value)} placeholder="例如：提出合作構想" /></Field>
+                        <Field label="流程說明"><TextArea rows={3} value={step.description} onChange={(event) => updateSpecialProcess(step.id, "description", event.target.value)} placeholder="說明這個步驟需要完成什麼。" /></Field>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1 lg:pt-6">
+                        <button type="button" className="btn btn-sm btn-ghost" disabled={index === 0} onClick={() => moveSpecialProcess(step.id, "up")} aria-label="流程上移"><ArrowUp size={15} aria-hidden /></button>
+                        <button type="button" className="btn btn-sm btn-ghost" disabled={index === specialAgreement.process.length - 1} onClick={() => moveSpecialProcess(step.id, "down")} aria-label="流程下移"><ArrowDown size={15} aria-hidden /></button>
+                        <button type="button" className="btn btn-sm btn-ghost text-[var(--danger)]" onClick={() => removeSpecialProcess(step.id)} aria-label="刪除流程"><Trash2 size={15} aria-hidden /></button>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            )}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-4">
+              <p className="text-xs text-[var(--text-muted)]">儲存前會檢查每個流程是否都有名稱與說明。</p>
+              <button type="button" onClick={saveSpecialAgreement} className="btn btn-primary min-h-11">
+                <Save size={16} aria-hidden /> 儲存特約資訊
+              </button>
+            </div>
           </div>
         </section>
       )}

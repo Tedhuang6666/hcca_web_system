@@ -1042,6 +1042,18 @@ export interface EmailPosition {
 
 // ── 公開官網 / Linktree ──────────────────────────────────────────────────────
 
+export interface PublicSpecialAgreementStep {
+  id: string;
+  title: string;
+  description: string;
+}
+
+export interface PublicSpecialAgreementContent {
+  intro_md: string;
+  info_md: string;
+  process: PublicSpecialAgreementStep[];
+}
+
 
 // ── 物品借用系統 ───────────────────────────────────────────────────────────────
 
