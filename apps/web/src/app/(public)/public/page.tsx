@@ -5,6 +5,7 @@ import {
   ArrowRight,
   BookOpenText,
   FileSearch,
+  Handshake,
   Megaphone,
   MessageSquareText,
   Radio,
@@ -28,6 +29,13 @@ const DATABASES = [
     description: "依字號、標題與主旨查找公開公文，查看附件與文件基本資訊。",
     icon: FileSearch,
     meta: "字號、主旨、公開附件",
+  },
+  {
+    href: "/public/special-agreement",
+    title: "特約洽談",
+    description: "了解合作流程、洽談前準備事項與可供參考的文件。",
+    icon: Handshake,
+    meta: "合作流程、洽談資訊、文件預覽",
   },
 ];
 
