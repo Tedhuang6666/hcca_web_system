@@ -13,6 +13,7 @@ from api.core.database import get_db
 from api.dependencies.auth import get_current_active_user
 from api.models.user import User
 from api.schemas.auth import UserRead
+from api.services import audit as audit_svc
 from api.services import user_email_verification as email_verification_svc
 from api.services.permission import get_user_permission_codes
 from api.services.user_registration import UserRegistrationError
@@ -161,6 +162,20 @@ async def update_me(
             status_code=status.HTTP_409_CONFLICT,
             detail="資料衝突，請確認填入的資料是否唯一",
         ) from None
+    await audit_svc.record(
+        db,
+        entity_type="user",
+        entity_id=str(current_user.id),
+        action="user.update_self",
+        actor_id=str(current_user.id),
+        actor_email=current_user.email,
+        meta={
+            "display_name_changed": body.display_name is not None,
+            "student_id_changed": body.student_id is not None,
+            "show_email_changed": body.show_email is not None,
+        },
+        summary=f"使用者 {current_user.email} 更新個人資料",
+    )
     return current_user
 
 

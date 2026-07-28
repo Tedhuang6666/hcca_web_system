@@ -13,6 +13,7 @@ import { useWS } from "@/hooks/useWS";
 import { useLowDataMode } from "@/hooks/useLowDataMode";
 import { useInboxCountsContext } from "@/contexts/InboxCountsContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { clearAuthCache } from "@/lib/auth-cache";
 import { getBreadcrumbs, getCompactCrumbs, getPageTitle } from "@/lib/breadcrumb";
 import type { Crumb } from "@/lib/breadcrumb";
 import { OPEN_COMMAND_MENU_EVENT } from "./CommandMenu";
@@ -189,7 +190,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
         credentials: "include",
       });
     } catch { /* ignore */ }
-    localStorage.clear();
+    clearAuthCache();
     router.replace("/login");
   };
 

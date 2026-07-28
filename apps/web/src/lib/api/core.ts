@@ -1,10 +1,13 @@
 import { API_BASE, apiUrl } from "../config";
 import { ApiError } from "../api-helpers";
+import { clearAuthCache, clearImpersonationSession, getImpersonationSession } from "../auth-cache";
 
 export { ApiError };
 
 export const BASE = API_BASE;
 void apiUrl;
+
+export type HccaRequestInit = RequestInit & { skipImpersonation?: boolean };
 
 // ── 核心 fetch 包裝 ────────────────────────────────────────────────────────────
 
@@ -131,6 +134,15 @@ export function csrfHeaders(method?: string): Record<string, string> {
   return token ? { "X-CSRF-Token": decodeURIComponent(token) } : {};
 }
 
+/** 供上傳、下載等不能直接使用 request() 的 API 呼叫沿用代行身分。 */
+export function authFetch(input: RequestInfo | URL, init: HccaRequestInit = {}): Promise<Response> {
+  const { skipImpersonation: _skipImpersonation, ...requestInit } = init;
+  const impersonation = _skipImpersonation ? null : getImpersonationSession();
+  const headers = new Headers(requestInit.headers);
+  if (impersonation) headers.set("Authorization", `Bearer ${impersonation.token}`);
+  return fetch(input, { ...requestInit, headers });
+}
+
 // GET 在網路錯誤時最多重試 N 次，間隔逐步加長
 const GET_NETWORK_RETRIES = 2;
 
@@ -181,7 +193,7 @@ function isProtectionRecoveryPath(pathname: string): boolean {
 
 export async function request<T>(
   path: string,
-  init: RequestInit = {},
+  init: HccaRequestInit = {},
   retriedAfterRefresh = false,
 ): Promise<T> {
   const method = (init.method ?? "GET").toUpperCase();
@@ -200,17 +212,23 @@ export async function request<T>(
   let lastError: unknown = null;
   const maxRetries = method === "GET" ? GET_NETWORK_RETRIES : 0;
   let attempt = 0;
+  const fetchInit = (): RequestInit => {
+    const { skipImpersonation: _skipImpersonation, ...requestInit } = init;
+    const impersonation = _skipImpersonation ? null : getImpersonationSession();
+    return {
+      ...requestInit,
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...csrfHeaders(init.method),
+        ...init.headers,
+        ...(impersonation ? { Authorization: `Bearer ${impersonation.token}` } : {}),
+      },
+    };
+  };
   while (true) {
     try {
-      res = await fetch(`${BASE}${path}`, {
-        ...init,
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          ...csrfHeaders(init.method),
-          ...init.headers,
-        },
-      });
+      res = await fetch(`${BASE}${path}`, fetchInit());
       break;
     } catch (err) {
       lastError = err;
@@ -230,19 +248,18 @@ export async function request<T>(
 
   // 401 → 嘗試 silent refresh，成功後重試一次
   if (res.status === 401) {
+    if (getImpersonationSession() && !init.skipImpersonation) {
+      clearImpersonationSession();
+      if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+        window.location.reload();
+      }
+      throw new ApiError(401, "模擬登入已過期，已返回原本的管理員身分");
+    }
     const refreshStatus = await refreshWithStatus();
     if (refreshStatus === "ok") {
       let retry: Response;
       try {
-        retry = await fetch(`${BASE}${path}`, {
-          ...init,
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          ...csrfHeaders(init.method),
-          ...init.headers,
-        },
-      });
+        retry = await fetch(`${BASE}${path}`, fetchInit());
       } catch {
         throw new ApiError(0, `無法連線至後端 API：${BASE}`);
       }
@@ -262,7 +279,7 @@ export async function request<T>(
     if (typeof window !== "undefined") {
       const hasLocalLogin = Boolean(localStorage.getItem("user_id"));
       if (hasLocalLogin) {
-        localStorage.clear();
+        clearAuthCache();
         window.location.replace("/login");
       }
     }

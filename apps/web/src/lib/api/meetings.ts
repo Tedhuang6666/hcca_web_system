@@ -1,7 +1,7 @@
 import type {
   AgendaItemType, AttendanceRole, AttendanceSourceType, AttendanceStatus, BallotChoice, MeetingAgendaAttachmentOut, MeetingAgendaItemOut, MeetingArtifactLinkOut, MeetingArtifactType, MeetingAttendanceOut, MeetingAttendanceSourceOut, MeetingAttendanceSourcePreviewOut, MeetingBallotOut, MeetingBillStage, MeetingDecisionOut, MeetingDecisionStatus, MeetingEventOut, MeetingJoinOut, MeetingListItem, MeetingMinutesOut, MeetingMode, MeetingMotionOut, MeetingMotionStatus, MeetingMotionType, MeetingOut, MeetingRegulationBrief, MeetingRequestOut, MeetingRequestStatus, MeetingRequestType, MeetingScreenOut, MeetingScreenReadingMode, MeetingScreenStateOut, MeetingSpeechQueueItemOut, MeetingSpeechQueueStatus, MeetingVoteOption, MeetingVoteOut, MeetingVoteRecordMethod, MeetingWorkspaceOut, VoteThresholdType, VoteVisibility,
 } from "../types";
-import { BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
+import { authFetch, BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
 
 // ── 議事系統 ──────────────────────────────────────────────────────────────────
 
@@ -90,7 +90,7 @@ export const meetingsApi = {
     const fd = new FormData();
     fd.append("file", file);
     const doFetch = () =>
-      fetch(`${BASE}/meetings/${id}/agenda-items/${itemId}/attachments`, {
+      authFetch(`${BASE}/meetings/${id}/agenda-items/${itemId}/attachments`, {
         method: "POST",
         credentials: "include",
         headers: csrfHeaders("POST"),

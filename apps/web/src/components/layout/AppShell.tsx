@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { PermissionProvider } from "@/contexts/PermissionContext";
@@ -21,8 +21,10 @@ const CommandMenu = dynamic(() => import("./CommandMenu"), { ssr: false });
 import { PolicyConsentBanner } from "@/components/legal/PolicyConsentBanner";
 import { isPublicRoute, requiresAuthentication } from "@/lib/route-access";
 import { ApiError, authApi } from "@/lib/api";
-import { cacheCurrentUser, clearAuthCache } from "@/lib/auth-cache";
+import { API_BASE } from "@/lib/config";
+import { cacheCurrentUser, clearAuthCache, getImpersonationSession } from "@/lib/auth-cache";
 import PasskeySetupPrompt from "@/components/auth/PasskeySetupPrompt";
+import { ImpersonationBanner } from "@/components/admin/ImpersonationBanner";
 
 /** 完全裸頁（不渲染 Shell）：公開官網、login、auth callback、Email 退訂落地頁 */
 const BARE_PATHS = [
@@ -169,6 +171,33 @@ function AppShellContent({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
 
+  // 少數上傳、下載與舊頁面仍直接使用 fetch；集中補上代行 Authorization，避免
+  // 這些路徑退回使用瀏覽器裡原管理員的 HttpOnly cookie。
+  useLayoutEffect(() => {
+    const nativeFetch = window.fetch.bind(window);
+    const apiPrefix = new URL(API_BASE, window.location.origin).href;
+    const wrappedFetch: typeof window.fetch = (input, init) => {
+      const url = typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.href
+          : input.url;
+      const isApiRequest = url.startsWith(API_BASE) || url.startsWith(apiPrefix);
+      const isImpersonationEnd = url.includes(`${API_BASE}/admin/impersonate/end`);
+      const session = getImpersonationSession();
+      if (!session || !isApiRequest || isImpersonationEnd) return nativeFetch(input, init);
+
+      const headers = new Headers(input instanceof Request ? input.headers : undefined);
+      new Headers(init?.headers).forEach((value, key) => headers.set(key, value));
+      headers.set("Authorization", `Bearer ${session.token}`);
+      return nativeFetch(input, { ...init, headers });
+    };
+    window.fetch = wrappedFetch;
+    return () => {
+      if (window.fetch === wrappedFetch) window.fetch = nativeFetch;
+    };
+  }, []);
+
   // 路由變更時自動關閉行動版側邊欄
   useEffect(() => {
     setSidebarOpen(false);
@@ -218,6 +247,7 @@ function AppShellContent({
 
         {/* 主內容區 */}
         <div className="flex flex-col flex-1 overflow-hidden min-w-0">
+          <ImpersonationBanner />
           <ImportantAnnouncementBanner />
           <Topbar onMenuClick={toggleSidebar} />
           <main

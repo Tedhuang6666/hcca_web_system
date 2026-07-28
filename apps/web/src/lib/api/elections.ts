@@ -1,7 +1,7 @@
 import type {
   BallotBoxStatus, ElectionListItem, ElectionLiveSummary, ElectionOut, ElectionStatus, VoteEventKind, VoteEventOut,
 } from "../types";
-import { BASE, get, post, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, pathSegment } from "./core";
+import { authFetch, BASE, get, post, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, pathSegment } from "./core";
 
 export const electionsApi = {
   list: () => get<ElectionListItem[]>("/elections"),
@@ -31,7 +31,7 @@ export const electionsApi = {
     const fd = new FormData();
     fd.append("file", file);
     const doFetch = () =>
-      fetch(`${BASE}/elections/images`, {
+      authFetch(`${BASE}/elections/images`, {
         method: "POST",
         credentials: "include",
         headers: csrfHeaders("POST"),

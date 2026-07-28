@@ -128,6 +128,14 @@ async def write_audit_log_with_chain(
 
     呼叫端應在交易內呼叫；本函式不 commit。
     """
+    from api.services import impersonation as impersonation_svc
+
+    actor_id, actor_email, meta, summary = impersonation_svc.annotate_audit_fields(
+        actor_id=actor_id,
+        actor_email=actor_email,
+        meta=meta,
+        summary=summary,
+    )
     prev_hash = await get_last_hash(db)
     now = datetime.now(UTC)
     row = AuditLog(

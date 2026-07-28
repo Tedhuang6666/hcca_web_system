@@ -1,12 +1,8 @@
-import { post } from "./core";
+import { post, request } from "./core";
+import type { ImpersonationStartResponse } from "../types";
 
 // ── Impersonation ────────────────────────────────────────────────────────
-export interface ImpersonationStartResponse {
-  token: string;
-  expires_in_minutes: number;
-  target_user_id: string;
-  target_email: string;
-}
+export type { ImpersonationStartResponse } from "../types";
 
 export const impersonationApi = {
   start: (target_user_id: string, minutes: number) =>
@@ -15,5 +11,9 @@ export const impersonationApi = {
       { minutes },
     ),
   end: (token: string, reason: string) =>
-    post<void>("/admin/impersonate/end", { token, reason }),
+    request<void>("/admin/impersonate/end", {
+      method: "POST",
+      body: JSON.stringify({ token, reason }),
+      skipImpersonation: true,
+    }),
 };

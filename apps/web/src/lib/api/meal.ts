@@ -1,7 +1,7 @@
 import type {
   ItemStatOut, MealAvailabilityOut, MealClassPickupCodeOut, MealOrderListItem, MealOrderOut, MealPickupLookupOut, MealProductOut, MealVendorApplicationOut, MealVendorOut, MenuItemOut, MenuScheduleListItem, MenuScheduleOut, PickupListItemOut, VendorManagerOut,
 } from "../types";
-import { BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
+import { authFetch, BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
 
 // ── 學餐系統 ──────────────────────────────────────────────────────────────────
 
@@ -74,7 +74,7 @@ export const mealApi = {
     const fd = new FormData();
     fd.append("file", file);
     const doFetch = () =>
-      fetch(`${BASE}/meal/images`, {
+      authFetch(`${BASE}/meal/images`, {
         method: "POST",
         credentials: "include",
         headers: csrfHeaders("POST"),
@@ -192,7 +192,7 @@ export const mealApi = {
     if (params?.vendor_id) q.set("vendor_id", params.vendor_id);
     if (params?.schedule_id) q.set("schedule_id", params.schedule_id);
     const qs = q.toString() ? `?${q}` : "";
-    return fetch(`${BASE}/meal/reports/orders.${format}${qs}`, {
+    return authFetch(`${BASE}/meal/reports/orders.${format}${qs}`, {
       credentials: "include",
     });
   },

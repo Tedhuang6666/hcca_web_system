@@ -1,7 +1,7 @@
 import type {
   SurveyListItem, SurveyOut, SurveyQuestionOut, SurveyResponseAdminItem, SurveyResponseOut, SurveyStats,
 } from "../types";
-import { BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, pathSegment } from "./core";
+import { authFetch, BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, pathSegment } from "./core";
 
 // ── 問卷系統 ──────────────────────────────────────────────────────────────────
 
@@ -62,7 +62,7 @@ export const surveysApi = {
     const fd = new FormData();
     fd.append("file", file);
     const doFetch = () =>
-      fetch(`${BASE}/surveys/images`, {
+      authFetch(`${BASE}/surveys/images`, {
         method: "POST",
         credentials: "include",
         headers: csrfHeaders("POST"),
@@ -78,7 +78,7 @@ export const surveysApi = {
   },
   exportSpreadsheet: async (id: string): Promise<Blob> => {
     const doFetch = () =>
-      fetch(`${BASE}/surveys/${pathSegment(id)}/export`, { credentials: "include" });
+      authFetch(`${BASE}/surveys/${pathSegment(id)}/export`, { credentials: "include" });
     let res = await doFetch();
     if (res.status === 401) {
       const ok = await silentRefresh();

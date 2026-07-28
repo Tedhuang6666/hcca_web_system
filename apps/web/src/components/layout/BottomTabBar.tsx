@@ -7,6 +7,7 @@ import { useWS } from "@/hooks/useWS";
 import { useInboxCountsContext } from "@/contexts/InboxCountsContext";
 import { useModuleStatus } from "@/contexts/ModuleStatusContext";
 import { navigationProfilesApi } from "@/lib/api";
+import { AUTH_CACHE_EVENT } from "@/lib/auth-cache";
 import { NAV_ID_TO_MODULE, moduleForPath } from "@/lib/modules";
 import {
   filterNavItems,
@@ -65,6 +66,7 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
   const [hasCustomNav, setHasCustomNav] = useState(false);
   const [meetingsUnlocked, setMeetingsUnlocked] = useState(false);
   const [serverProfile, setServerProfile] = useState<NavigationProfileConfig | null>(null);
+  const [authVersion, setAuthVersion] = useState(0);
   const { isModuleClosed } = useModuleStatus();
   const {
     taskCount,
@@ -98,6 +100,12 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
     setRole(isCadre ? "cadre" : "student");
     setMeetingsUnlocked(isMeetingsUnlocked());
     setRoleResolved(true);
+  }, [authVersion]);
+
+  useEffect(() => {
+    const syncAuth = () => setAuthVersion((version) => version + 1);
+    window.addEventListener(AUTH_CACHE_EVENT, syncAuth);
+    return () => window.removeEventListener(AUTH_CACHE_EVENT, syncAuth);
   }, []);
 
   useEffect(() => {
@@ -142,7 +150,7 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
     return () => {
       alive = false;
     };
-  }, [role]);
+  }, [authVersion, role]);
 
   // 鍵盤彈起偵測：visualViewport 高度顯著縮小時隱藏
   useEffect(() => {

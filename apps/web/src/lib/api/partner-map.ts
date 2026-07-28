@@ -1,7 +1,7 @@
 import type {
   PartnerBusinessCreate, PartnerBusinessImageOut, PartnerBusinessListItem, PartnerBusinessOut, PartnerBusinessUpdate, PartnerLocationCreate, PartnerLocationOut, PartnerLocationUpdate, PartnerMapItem, PartnerOfferCreate, PartnerOfferOut, PartnerOfferUpdate, PartnerRankingItem, PartnerRatingCreate, PartnerRatingOut, PartnerSubmissionCreate, PartnerSubmissionOut, PartnerTagCreate, PartnerTagOut, PartnerTagUpdate,
 } from "../types";
-import { ApiError, BASE, csrfHeaders, errorMessageFromResponse, get, post, patch, del } from "./core";
+import { ApiError, authFetch, BASE, csrfHeaders, errorMessageFromResponse, get, post, patch, del } from "./core";
 
 export type PartnerBusinessListingType = "physical" | "online";
 type PartnerBusinessContactFields = {
@@ -119,7 +119,7 @@ export const partnerMapApi = {
   uploadFlyer: async (id: string, file: File): Promise<PartnerBusinessDetail> => {
     const form = new FormData();
     form.append("file", file);
-    const response = await fetch(`${BASE}/partner-map/admin/businesses/${id}/flyer`, {
+    const response = await authFetch(`${BASE}/partner-map/admin/businesses/${id}/flyer`, {
       method: "POST",
       credentials: "include",
       headers: csrfHeaders("POST"),
@@ -133,7 +133,7 @@ export const partnerMapApi = {
   uploadPromoImage: async (id: string, file: File): Promise<PartnerBusinessDetail> => {
     const form = new FormData();
     form.append("file", file);
-    const response = await fetch(`${BASE}/partner-map/admin/businesses/${id}/images`, {
+    const response = await authFetch(`${BASE}/partner-map/admin/businesses/${id}/images`, {
       method: "POST",
       credentials: "include",
       headers: csrfHeaders("POST"),

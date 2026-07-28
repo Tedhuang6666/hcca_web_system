@@ -1,42 +1,21 @@
-"""Impersonation read-only guard。
+"""Impersonation request context。
 
-對所有 unsafe HTTP method（POST/PATCH/PUT/DELETE）在 router 層注入此 dependency，
-當 request token 為 impersonation token 時 raise 403。
-
-例外白名單（仍允許）：
-- POST /admin/impersonate/end             結束 impersonation
-- POST /auth/logout                       登出
-- 任何 GET / HEAD / OPTIONS                read 不受影響
-
-建議掛法：在 router 級別加上：
-    @router.post(..., dependencies=[Depends(block_impersonation_write)])
-
-或全域：在 [api/__init__.py] 加一個 middleware（本檔提供）。
+Impersonation token 會讓下游以目標使用者進行 RBAC 與資料存取；本模組只負責把
+token 內的管理員／目標雙重身分放進 request context，讓所有 audit writer 自動標註代行者。
 """
 
 from __future__ import annotations
 
-import logging
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, Request, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import Depends, Request
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-from starlette.responses import JSONResponse, Response
+from starlette.responses import Response
 
 from api.core.config import settings
-from api.core.database import get_db
 from api.dependencies.auth import get_current_active_user
 from api.models.user import User
 from api.services import impersonation as impersonation_svc
-
-logger = logging.getLogger(__name__)
-
-WRITE_METHODS = frozenset({"POST", "PATCH", "PUT", "DELETE"})
-ALLOWED_PATHS_DURING_IMPERSONATION = (
-    "/admin/impersonate/end",
-    "/auth/logout",
-)
 
 
 def _extract_token(request: Request) -> str | None:
@@ -48,68 +27,32 @@ def _extract_token(request: Request) -> str | None:
 
 
 async def block_impersonation_write(
-    request: Request,
     current_user: Annotated[User, Depends(get_current_active_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> User:
-    """在 router decorator 用此 dep；impersonation 模式下嘗試寫入會 raise 403。"""
-    if request.method not in WRITE_METHODS:
-        return current_user
-    if any(request.url.path.startswith(p) for p in ALLOWED_PATHS_DURING_IMPERSONATION):
-        return current_user
-
-    token = _extract_token(request)
-    if not token:
-        return current_user
-    claims = impersonation_svc.parse_impersonation_token(token)
-    if claims is None:
-        return current_user
-
-    # 寫 audit log（best effort、不阻擋）
-    try:
-        await impersonation_svc.record_blocked_write(
-            db,
-            actor_id=str(claims.get("imp") or ""),
-            target_user_id=str(claims.get("sub") or ""),
-            method=request.method,
-            path=request.url.path,
-        )
-        await db.commit()
-    except Exception:
-        logger.exception("impersonation_blocked_write audit log failed")
-        await db.rollback()
-
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail="impersonation 模式為唯讀，不允許寫入操作",
-        headers={"X-Impersonation-Readonly": "true"},
-    )
+    """相容舊路由注入點；代行模式現在允許依目標權限執行寫入。"""
+    return current_user
 
 
-class ImpersonationReadOnlyMiddleware(BaseHTTPMiddleware):
-    """全域強制 impersonation 唯讀。
-
-    `block_impersonation_write` 是 router 層 dependency，需逐路由掛載，極易漏掛而
-    形同未啟用。改以 middleware 全域生效：任何寫入方法只要帶的是 impersonation
-    token（純 JWT 解碼即可判斷，不需 DB），即回 403。只會「增加」403、不會放寬任何
-    既有授權，故掛上絕對安全。audit log 仍由 router 層 dependency 負責（best effort）。
-    """
+class ImpersonationContextMiddleware(BaseHTTPMiddleware):
+    """在整個請求生命週期提供代行者與目標使用者的雙重身分。"""
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        if request.method not in WRITE_METHODS:
-            return await call_next(request)
-        if any(request.url.path.startswith(p) for p in ALLOWED_PATHS_DURING_IMPERSONATION):
-            return await call_next(request)
-
+        context_token = None
         token = _extract_token(request)
-        if token and impersonation_svc.parse_impersonation_token(token) is not None:
-            logger.info("impersonation write blocked: %s %s", request.method, request.url.path)
-            return JSONResponse(
-                status_code=status.HTTP_403_FORBIDDEN,
-                content={"detail": "impersonation 模式為唯讀，不允許寫入操作"},
-                headers={"X-Impersonation-Readonly": "true"},
-            )
-        return await call_next(request)
+        claims = impersonation_svc.parse_impersonation_token(token) if token else None
+        context = (
+            impersonation_svc.impersonation_context_from_claims(claims)
+            if claims is not None
+            else None
+        )
+        if context is not None:
+            context_token = impersonation_svc.set_impersonation_context(context)
+
+        try:
+            return await call_next(request)
+        finally:
+            if context_token is not None:
+                impersonation_svc.reset_impersonation_context(context_token)
 
 
-__all__ = ["ImpersonationReadOnlyMiddleware", "block_impersonation_write"]
+__all__ = ["ImpersonationContextMiddleware", "block_impersonation_write"]

@@ -39,7 +39,8 @@ async def _user_from_access_token(token: str, db: AsyncSession) -> User | None:
         payload = decode_token(token)
     except (ExpiredSignatureError, InvalidTokenError):
         return None
-    if payload.get("type") != "access":
+    token_type = payload.get("type")
+    if token_type not in {"access", "impersonation"}:
         return None
     raw_user_id: str | None = payload.get("sub")
     if not raw_user_id:
@@ -58,6 +59,25 @@ async def _user_from_access_token(token: str, db: AsyncSession) -> User | None:
     user = result.scalar_one_or_none()
     if user is None or not user.is_active:
         return None
+
+    if token_type == "impersonation":
+        raw_actor_id = payload.get("imp")
+        if not raw_actor_id:
+            return None
+        try:
+            actor_id = uuid.UUID(str(raw_actor_id))
+        except (TypeError, ValueError):
+            return None
+        actor = await db.scalar(select(User).where(User.id == actor_id))
+        if actor is None or not actor.is_active:
+            return None
+        if not actor.is_superuser:
+            from api.core.permission_codes import PermissionCode
+            from api.services.permission import get_user_permission_codes
+
+            actor_permissions = await get_user_permission_codes(db, actor.id)
+            if PermissionCode.ADMIN_IMPERSONATE not in actor_permissions:
+                return None
     return user
 
 
@@ -91,10 +111,6 @@ async def get_current_user(
     if token is None:
         raise _CREDENTIALS_EXCEPTION
 
-    # 檢查黑名單
-    if await is_blacklisted(token):
-        raise _CREDENTIALS_EXCEPTION
-
     # 解碼 JWT
     try:
         payload = decode_token(token)
@@ -107,26 +123,10 @@ async def get_current_user(
     except InvalidTokenError as e:
         raise _CREDENTIALS_EXCEPTION from e
 
-    if payload.get("type") != "access":
+    if payload.get("type") not in {"access", "impersonation"}:
         raise _CREDENTIALS_EXCEPTION
 
-    raw_user_id: str | None = payload.get("sub")
-    if raw_user_id is None:
-        raise _CREDENTIALS_EXCEPTION
-    try:
-        user_id = uuid.UUID(raw_user_id)
-    except (TypeError, ValueError) as e:
-        raise _CREDENTIALS_EXCEPTION from e
-
-    # 查詢使用者；register_active_token 只寫 Redis、不碰 db session，
-    # 與 DB 查詢並行以省一趟往返延遲（使用即註冊 jti，供 admin 端 revoke_user 強制登出）。
-    result, _ = await asyncio.gather(
-        db.execute(select(User).where(User.id == user_id)),
-        register_active_token(
-            str(user_id), payload.get("jti"), settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
-        ),
-    )
-    user = result.scalar_one_or_none()
+    user = await _user_from_access_token(token, db)
     if user is None:
         raise _CREDENTIALS_EXCEPTION
 

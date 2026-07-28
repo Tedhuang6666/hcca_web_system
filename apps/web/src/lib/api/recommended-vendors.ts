@@ -9,7 +9,7 @@ import type {
   RecommendedVendorProductUpdate,
   RecommendedVendorUpdate,
 } from "../types";
-import { del, get, patch, post, BASE, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
+import { authFetch, del, get, patch, post, BASE, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
 
 export const recommendedVendorsApi = {
   listCategories: () => get<RecommendedVendorCategoryOut[]>("/recommended-vendors/categories"),
@@ -57,7 +57,7 @@ export const recommendedVendorsApi = {
     const form = new FormData();
     form.append("file", file);
     if (title?.trim()) form.append("title", title.trim());
-    const request = () => fetch(`${BASE}/recommended-vendors/admin/vendors/${vendorId}/menus/upload`, {
+    const request = () => authFetch(`${BASE}/recommended-vendors/admin/vendors/${vendorId}/menus/upload`, {
       method: "POST",
       credentials: "include",
       headers: csrfHeaders("POST"),
