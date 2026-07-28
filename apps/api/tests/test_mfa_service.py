@@ -48,3 +48,29 @@ async def test_mfa_backup_code_can_be_used_once(db_session: AsyncSession) -> Non
     assert await mfa_svc.verify_mfa(db_session, user, backup_code)
     assert mfa_svc.backup_code_count(user) == 7
     assert not await mfa_svc.verify_mfa(db_session, user, backup_code)
+
+
+@pytest.mark.asyncio
+async def test_clear_mfa_removes_totp_and_pending_setup_state(
+    db_session: AsyncSession,
+) -> None:
+    user = User(
+        email="clear-mfa@example.com",
+        display_name="Clear MFA User",
+        is_verified=True,
+        mfa_enabled=True,
+        mfa_secret="enc:v1:secret",
+        mfa_pending_secret="enc:v1:pending",
+        mfa_backup_code_hashes={"codes": ["argon2:hash"]},
+        mfa_pending_backup_code_hashes={"codes": ["argon2:pending-hash"]},
+    )
+    db_session.add(user)
+    await db_session.flush()
+
+    await mfa_svc.clear_mfa(db_session, user)
+
+    assert user.mfa_enabled is False
+    assert user.mfa_secret is None
+    assert user.mfa_pending_secret is None
+    assert user.mfa_backup_code_hashes == {}
+    assert user.mfa_pending_backup_code_hashes == {}

@@ -247,6 +247,44 @@ async def test_admin_route_without_admin_permission_returns_403(
 
 
 @pytest.mark.asyncio
+async def test_admin_can_clear_user_mfa(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin, member, _, _, _ = await _seed_admin_data(db_session)
+    member.mfa_enabled = True
+    member.mfa_secret = "enc:v1:secret"
+    member.mfa_pending_secret = "enc:v1:pending"
+    member.mfa_backup_code_hashes = {"codes": ["argon2:hash"]}
+    member.mfa_pending_backup_code_hashes = {"codes": ["argon2:pending-hash"]}
+    await db_session.flush()
+    _override_user(admin)
+
+    response = await client.delete(f"/admin/users/{member.id}/mfa")
+
+    assert response.status_code == 200
+    assert response.json()["mfa_enabled"] is False
+    await db_session.refresh(member)
+    assert member.mfa_secret is None
+    assert member.mfa_pending_secret is None
+    assert member.mfa_backup_code_hashes == {}
+    assert member.mfa_pending_backup_code_hashes == {}
+
+
+@pytest.mark.asyncio
+async def test_member_cannot_clear_user_mfa(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    _, member, _, _, _ = await _seed_admin_data(db_session)
+    _override_user(member)
+
+    response = await client.delete(f"/admin/users/{member.id}/mfa")
+
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_update_missing_user_position_returns_404(
     client: AsyncClient,
     db_session: AsyncSession,

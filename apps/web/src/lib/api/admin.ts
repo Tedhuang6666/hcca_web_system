@@ -37,6 +37,7 @@ export const adminApi = {
     is_superuser?: boolean;
   }) =>
     patch<AdminUserDetail>(`/admin/users/${id}`, body),
+  clearUserMfa: (id: string) => del<AdminUserDetail>(`/admin/users/${id}/mfa`),
   addUserPosition: (userId: string, body: { position_id: string; start_date?: string; end_date?: string | null }) =>
     post<AdminUserDetail>(`/admin/users/${userId}/positions`, body),
   updateUserPosition: (

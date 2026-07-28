@@ -894,6 +894,7 @@ export interface AdminUserDetail {
   student_id: string | null;
   avatar_url: string | null;
   is_active: boolean;
+  mfa_enabled: boolean;
   is_superuser: boolean;
   /** Owner 為 OWNER_EMAILS 環境變數驅動的最高權限角色 */
   is_owner: boolean;
