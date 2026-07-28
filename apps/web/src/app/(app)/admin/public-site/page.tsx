@@ -17,6 +17,7 @@ import {
   Home,
   Info,
   Link as LinkIcon,
+  Mail,
   Pencil,
   Plus,
   RefreshCw,
@@ -54,7 +55,7 @@ import {
   readSpecialAgreementContent,
 } from "@/lib/specialAgreement";
 
-type Tab = "homepage" | "system" | "special" | "nav" | "pages" | "links" | "officers" | "advanced";
+type Tab = "homepage" | "system" | "contact" | "special" | "nav" | "pages" | "links" | "officers" | "advanced";
 
 /** 後台導覽列分頁的群組顯示順序。 */
 const NAV_GROUP_ORDER: PublicNavGroupId[] = ["primary", "info", "data", "participation"];
@@ -95,6 +96,7 @@ const emptySettings: PublicSiteSettingsOut = {
 const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "homepage", label: "首頁資訊", icon: <Home size={16} aria-hidden /> },
   { id: "system", label: "系統資訊", icon: <Info size={16} aria-hidden /> },
+  { id: "contact", label: "聯絡我們", icon: <Mail size={16} aria-hidden /> },
   { id: "special", label: "特約資訊", icon: <Handshake size={16} aria-hidden /> },
   { id: "nav", label: "導覽列", icon: <Compass size={16} aria-hidden /> },
   { id: "pages", label: "頁面內容", icon: <FileText size={16} aria-hidden /> },
@@ -649,6 +651,16 @@ export default function PublicSiteAdminPage() {
     }
   };
 
+  const saveContact = async () => {
+    try {
+      const next = await siteApi.updateSettings({ contact_md: settings.contact_md });
+      setSettings(normalizeSettingsForEditor(next));
+      toast.success("聯絡方式已儲存");
+    } catch (error) {
+      displayError(error, "儲存聯絡方式失敗");
+    }
+  };
+
   const saveAdvanced = async () => {
     try {
       const next = await siteApi.updateSettings({
@@ -1036,6 +1048,32 @@ export default function PublicSiteAdminPage() {
             </Field>
             <button type="button" onClick={saveSystemInfo} className="btn btn-primary self-start">
               <Save size={16} aria-hidden /> 儲存系統資訊
+            </button>
+          </div>
+        </section>
+      )}
+
+      {tab === "contact" && (
+        <section key="contact" className="tab-panel-transition space-y-4">
+          <div className="card overflow-hidden border-[var(--primary)]/20 bg-[var(--primary-dim)] p-5">
+            <div className="flex items-start gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--bg-surface)] text-[var(--primary)]">
+                <Mail size={19} aria-hidden />
+              </span>
+              <div>
+                <h2 className="font-semibold text-[var(--text-primary)]">聯絡我們</h2>
+                <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--text-secondary)]">
+                  編輯公開站台的聯絡方式；內容會同步顯示在聯絡專頁，以及關於班聯會與幹部名單頁面的最下方。
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="card space-y-4 p-5">
+            <Field label="聯絡方式 Markdown" hint="可使用 Markdown 建立信箱、社群、表單連結與分段說明。">
+              <MarkdownEditor rows={22} value={settings.contact_md ?? ""} onChange={(value) => setSettings({ ...settings, contact_md: value })} />
+            </Field>
+            <button type="button" onClick={saveContact} className="btn btn-primary self-start">
+              <Save size={16} aria-hidden /> 儲存聯絡方式
             </button>
           </div>
         </section>
