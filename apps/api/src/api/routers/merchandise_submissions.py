@@ -16,7 +16,7 @@ from api.core.config import settings
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
-from api.dependencies.permissions import require_permission
+from api.dependencies.permissions import require_any
 from api.email.sender import send_branded_email
 from api.models.merchandise_submission import MerchandiseSubmissionStatus
 from api.models.user import User
@@ -262,7 +262,12 @@ async def preview_submission_file(storage_key: str, session: DbDep, current_user
         )
         if not is_owner and not is_voting_asset and not current_user.is_superuser:
             codes = await get_user_permission_codes(session, current_user.id)
-            if str(PermissionCode.SHOP_MANAGE) not in codes:
+            if not {
+                str(PermissionCode.SHOP_MANAGE),
+                str(PermissionCode.MERCHANDISE_SUBMISSION_VIEW),
+                str(PermissionCode.MERCHANDISE_SUBMISSION_MANAGE),
+                str(PermissionCode.MERCHANDISE_SUBMISSION_REVIEW),
+            } & set(codes):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN, detail="無權檢視此投稿圖稿"
                 )
@@ -323,7 +328,15 @@ async def preview_submission_image_for_discord(file_id: uuid.UUID, token: str, s
     response_model=SurveyOut,
     status_code=status.HTTP_201_CREATED,
     summary="建立校商投稿全校票選問卷草稿",
-    dependencies=[Depends(require_permission(PermissionCode.SHOP_MANAGE))],
+    dependencies=[
+        Depends(
+            require_any(
+                PermissionCode.MERCHANDISE_SUBMISSION_REVIEW,
+                PermissionCode.MERCHANDISE_SUBMISSION_MANAGE,
+                PermissionCode.SHOP_MANAGE,
+            )
+        )
+    ],
 )
 async def prepare_voting_survey(
     payload: MerchandiseSubmissionVotingSurveyCreate,
@@ -471,7 +484,11 @@ async def delete_my_submission(
 @router.get(
     "/admin/settings",
     response_model=MerchandiseSubmissionSettingsOut,
-    dependencies=[Depends(require_permission(PermissionCode.SHOP_MANAGE))],
+    dependencies=[
+        Depends(
+            require_any(PermissionCode.MERCHANDISE_SUBMISSION_MANAGE, PermissionCode.SHOP_MANAGE)
+        )
+    ],
 )
 async def admin_settings(session: DbDep, _: CurrentUser):
     return await submission_svc.get_settings(session)
@@ -480,7 +497,11 @@ async def admin_settings(session: DbDep, _: CurrentUser):
 @router.patch(
     "/admin/settings",
     response_model=MerchandiseSubmissionSettingsOut,
-    dependencies=[Depends(require_permission(PermissionCode.SHOP_MANAGE))],
+    dependencies=[
+        Depends(
+            require_any(PermissionCode.MERCHANDISE_SUBMISSION_MANAGE, PermissionCode.SHOP_MANAGE)
+        )
+    ],
 )
 async def update_admin_settings(
     payload: MerchandiseSubmissionSettingsUpdate, session: DbDep, current_user: CurrentUser
@@ -499,7 +520,11 @@ async def update_admin_settings(
 @router.post(
     "/admin/template-images",
     response_model=MerchandiseSubmissionUploadOut,
-    dependencies=[Depends(require_permission(PermissionCode.SHOP_MANAGE))],
+    dependencies=[
+        Depends(
+            require_any(PermissionCode.MERCHANDISE_SUBMISSION_MANAGE, PermissionCode.SHOP_MANAGE)
+        )
+    ],
 )
 async def upload_template_image(
     _: CurrentUser, file: UploadFile = File(...)
@@ -528,7 +553,11 @@ async def upload_template_image(
 @router.get(
     "/admin/items",
     response_model=list[MerchandiseSubmissionItemOut],
-    dependencies=[Depends(require_permission(PermissionCode.SHOP_MANAGE))],
+    dependencies=[
+        Depends(
+            require_any(PermissionCode.MERCHANDISE_SUBMISSION_MANAGE, PermissionCode.SHOP_MANAGE)
+        )
+    ],
 )
 async def admin_items(session: DbDep, _: CurrentUser):
     return await submission_svc.list_items(session, include_inactive=True)
@@ -538,7 +567,11 @@ async def admin_items(session: DbDep, _: CurrentUser):
     "/admin/items",
     response_model=MerchandiseSubmissionItemOut,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_permission(PermissionCode.SHOP_MANAGE))],
+    dependencies=[
+        Depends(
+            require_any(PermissionCode.MERCHANDISE_SUBMISSION_MANAGE, PermissionCode.SHOP_MANAGE)
+        )
+    ],
 )
 async def create_admin_item(
     payload: MerchandiseSubmissionItemCreate, session: DbDep, current_user: CurrentUser
@@ -554,7 +587,11 @@ async def create_admin_item(
 @router.patch(
     "/admin/items/{item_id}",
     response_model=MerchandiseSubmissionItemOut,
-    dependencies=[Depends(require_permission(PermissionCode.SHOP_MANAGE))],
+    dependencies=[
+        Depends(
+            require_any(PermissionCode.MERCHANDISE_SUBMISSION_MANAGE, PermissionCode.SHOP_MANAGE)
+        )
+    ],
 )
 async def update_admin_item(
     item_id: uuid.UUID,
@@ -574,7 +611,16 @@ async def update_admin_item(
 @router.get(
     "/admin/submissions",
     response_model=list[MerchandiseSubmissionAdminListItem],
-    dependencies=[Depends(require_permission(PermissionCode.SHOP_MANAGE))],
+    dependencies=[
+        Depends(
+            require_any(
+                PermissionCode.MERCHANDISE_SUBMISSION_VIEW,
+                PermissionCode.MERCHANDISE_SUBMISSION_REVIEW,
+                PermissionCode.MERCHANDISE_SUBMISSION_MANAGE,
+                PermissionCode.SHOP_MANAGE,
+            )
+        )
+    ],
 )
 async def admin_submissions(
     session: DbDep,
@@ -590,7 +636,16 @@ async def admin_submissions(
     "/admin/submissions/{submission_id}/files",
     response_model=MerchandiseSubmissionAdminListItem,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_permission(PermissionCode.SHOP_MANAGE))],
+    dependencies=[
+        Depends(
+            require_any(
+                PermissionCode.MERCHANDISE_SUBMISSION_VIEW,
+                PermissionCode.MERCHANDISE_SUBMISSION_REVIEW,
+                PermissionCode.MERCHANDISE_SUBMISSION_MANAGE,
+                PermissionCode.SHOP_MANAGE,
+            )
+        )
+    ],
 )
 async def add_admin_submission_file(
     submission_id: uuid.UUID,
@@ -623,7 +678,16 @@ async def add_admin_submission_file(
 @router.put(
     "/admin/submissions/{submission_id}/files/{file_id}",
     response_model=MerchandiseSubmissionAdminListItem,
-    dependencies=[Depends(require_permission(PermissionCode.SHOP_MANAGE))],
+    dependencies=[
+        Depends(
+            require_any(
+                PermissionCode.MERCHANDISE_SUBMISSION_VIEW,
+                PermissionCode.MERCHANDISE_SUBMISSION_REVIEW,
+                PermissionCode.MERCHANDISE_SUBMISSION_MANAGE,
+                PermissionCode.SHOP_MANAGE,
+            )
+        )
+    ],
 )
 async def replace_admin_submission_file(
     submission_id: uuid.UUID,
@@ -659,7 +723,15 @@ async def replace_admin_submission_file(
 @router.patch(
     "/admin/submissions/{submission_id}/review",
     response_model=MerchandiseSubmissionAdminListItem,
-    dependencies=[Depends(require_permission(PermissionCode.SHOP_MANAGE))],
+    dependencies=[
+        Depends(
+            require_any(
+                PermissionCode.MERCHANDISE_SUBMISSION_REVIEW,
+                PermissionCode.MERCHANDISE_SUBMISSION_MANAGE,
+                PermissionCode.SHOP_MANAGE,
+            )
+        )
+    ],
 )
 async def review_admin_submission(
     submission_id: uuid.UUID,

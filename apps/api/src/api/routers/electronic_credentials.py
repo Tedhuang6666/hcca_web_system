@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.database import get_db
 from api.core.permission_codes import PermissionCode
 from api.dependencies.auth import get_current_active_user
-from api.dependencies.permissions import require_permission
+from api.dependencies.permissions import require_any
 from api.models.user import User
 from api.schemas.electronic_credential import (
     ElectronicCredentialAuthorizationBulkCreate,
@@ -25,7 +25,15 @@ router = APIRouter(prefix="/electronic-credentials", tags=["電子證件"])
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
-ManagerUser = Annotated[User, Depends(require_permission(PermissionCode.PARTNER_MAP_MANAGE))]
+ManagerUser = Annotated[
+    User,
+    Depends(
+        require_any(
+            PermissionCode.PARTNER_MAP_MANAGE,
+            PermissionCode.ELECTRONIC_CREDENTIAL_MANAGE,
+        )
+    ),
+]
 
 
 @router.get("/me", response_model=ElectronicCredentialOut, summary="取得我的電子證件")

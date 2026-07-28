@@ -91,6 +91,11 @@ class PermissionCode(StrEnum):
     SHOP_MANAGE = "shop:manage"
     SHOP_MANAGE_ORDERS = "shop:manage_orders"
     SHOP_VIEW_ALL = "shop:view_all"
+
+    MERCHANDISE_SUBMISSION_VIEW = "merchandise_submission:view"
+    MERCHANDISE_SUBMISSION_MANAGE = "merchandise_submission:manage"
+    MERCHANDISE_SUBMISSION_REVIEW = "merchandise_submission:review"
+
     FINANCE_VIEW = "finance:view"
     FINANCE_EXPENSE_CLAIM = "finance:expense_claim"
     FINANCE_RECORD = "finance:record"
@@ -148,7 +153,13 @@ class PermissionCode(StrEnum):
     CALENDAR_ADMIN = "calendar:admin"
 
     PARTNER_MAP_MANAGE = "partner_map:manage"
+    PARTNER_MAP_BUSINESS_MANAGE = "partner_map:business_manage"
+    PARTNER_MAP_SUBMISSION_REVIEW = "partner_map:submission_review"
+    PARTNER_MAP_APPLICATION_MANAGE = "partner_map:application_manage"
+    PARTNER_MAP_APPLICATION_REVIEW = "partner_map:application_review"
     PARTNER_MAP_VIEW_STATS = "partner_map:view_stats"
+
+    ELECTRONIC_CREDENTIAL_MANAGE = "electronic_credential:manage"
     RECOMMENDED_VENDOR_MANAGE = "recommended_vendor:manage"
 
     SITE_MANAGE = "site:manage"
@@ -228,6 +239,12 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "code": PermissionCode.AUDIT_VIEW_ORG,
         "label": "查看本組織稽核日誌",
         "desc": "查看目前任期所屬組織內的操作軌跡",
+    },
+    {
+        "group": "系統管理",
+        "code": PermissionCode.AUDIT_VIEW,
+        "label": "查看稽核日誌（相容）",
+        "desc": "舊版完整稽核檢視權限；新職位請依範圍使用 audit:view_org 或 audit:view_all",
     },
     {
         "group": "系統管理",
@@ -614,6 +631,24 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "desc": "財務用，唯讀查看所有訂單",
     },
     {
+        "group": "校商投稿",
+        "code": PermissionCode.MERCHANDISE_SUBMISSION_VIEW,
+        "label": "查看校商投稿",
+        "desc": "查看後台投稿清單、投稿附件與審核所需資料（唯讀）",
+    },
+    {
+        "group": "校商投稿",
+        "code": PermissionCode.MERCHANDISE_SUBMISSION_MANAGE,
+        "label": "管理校商投稿",
+        "desc": "管理投稿設定、投稿品項、範本圖片與後台附件",
+    },
+    {
+        "group": "校商投稿",
+        "code": PermissionCode.MERCHANDISE_SUBMISSION_REVIEW,
+        "label": "審核校商投稿",
+        "desc": "審核投稿、要求補件、決定採用結果與準備全校票選",
+    },
+    {
         "group": "財務系統",
         "code": PermissionCode.FINANCE_VIEW,
         "label": "查看財務帳本",
@@ -892,14 +927,44 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
     {
         "group": "特約地圖",
         "code": PermissionCode.PARTNER_MAP_MANAGE,
-        "label": "管理特約地圖",
-        "desc": "建立/修改/刪除特約店家、點位、標籤與優惠",
+        "label": "管理特約地圖（完整）",
+        "desc": "完整管理特約地圖；包含店家、投稿審核與申請流程等子權限",
+    },
+    {
+        "group": "特約地圖",
+        "code": PermissionCode.PARTNER_MAP_BUSINESS_MANAGE,
+        "label": "管理特約店家內容",
+        "desc": "建立/修改/刪除店家、點位、標籤、優惠與宣傳素材",
+    },
+    {
+        "group": "特約地圖",
+        "code": PermissionCode.PARTNER_MAP_SUBMISSION_REVIEW,
+        "label": "審核特約店家投稿",
+        "desc": "查看與審核學生送出的特約店家投稿",
+    },
+    {
+        "group": "特約地圖",
+        "code": PermissionCode.PARTNER_MAP_APPLICATION_MANAGE,
+        "label": "管理特約申請設定",
+        "desc": "開關特約申請、調整申請表單欄位與設定",
+    },
+    {
+        "group": "特約地圖",
+        "code": PermissionCode.PARTNER_MAP_APPLICATION_REVIEW,
+        "label": "審核特約商家申請",
+        "desc": "查看、處理與核准或退回特約商家合作申請",
     },
     {
         "group": "特約地圖",
         "code": PermissionCode.PARTNER_MAP_VIEW_STATS,
         "label": "查看特約地圖統計",
         "desc": "查看特約店家點擊、瀏覽與互動統計（預留）",
+    },
+    {
+        "group": "電子證件",
+        "code": PermissionCode.ELECTRONIC_CREDENTIAL_MANAGE,
+        "label": "管理電子證件授權",
+        "desc": "建立、調整與停用特殊身分的電子證件授權",
     },
     {
         "group": "推薦商家",
