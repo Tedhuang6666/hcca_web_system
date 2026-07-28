@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 _PROBE_QUEUE_KEY = "module_probe_queue"
 _PROBE_TIMEOUT = 5.0
+_ERROR_REPORT_EMAIL_FLAG = "email_error_report"
 
 
 def _probe_path_for(module_id: str) -> str | None:
@@ -214,8 +215,10 @@ async def _dispatch_all_channels(
                 "module_id": module_id,
             },
         )
-    # 2. Email 給 OWNER_EMAILS
-    if settings.OWNER_EMAILS:
+    # 2. Email 給 OWNER_EMAILS；與定時錯誤摘要共用全站寄信開關
+    from api.services import feature_flag
+
+    if settings.OWNER_EMAILS and await feature_flag.is_enabled(session, _ERROR_REPORT_EMAIL_FLAG):
         for addr in settings.OWNER_EMAILS:
             await outbox.emit(
                 session,
