@@ -134,6 +134,11 @@ def test_send_email_retries_on_failure() -> None:
         send_email(["x@y.com"], "s", "b")
 
     mock_retry.assert_called_once()
+    retry_call = mock_retry.call_args.kwargs
+    assert retry_call["args"] == ()
+    assert retry_call["kwargs"]["to"] == ["x@y.com"]
+    assert retry_call["kwargs"]["subject"] == "s"
+    assert retry_call["kwargs"]["body"] == "b"
 
 
 def test_send_email_does_not_retry_invalid_api_key() -> None:

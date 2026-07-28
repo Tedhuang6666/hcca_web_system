@@ -246,6 +246,7 @@ async def _create_automatic_email_message(
             )
             session.add(message)
             await session.flush()
+            message_id = str(message.id)
             for address in recipients:
                 session.add(
                     EmailCampaignRecipient(
@@ -255,7 +256,7 @@ async def _create_automatic_email_message(
                     )
                 )
             await session.commit()
-            return str(message.id)
+            return message_id
     finally:
         await engine.dispose()
 
@@ -382,6 +383,7 @@ def send_email(
         raise self.retry(
             exc=exc,
             countdown=delay,
+            args=(),
             kwargs={
                 "to": to,
                 "subject": subject,
