@@ -157,11 +157,39 @@ class PartnerBusiness(Base, TimestampMixin):
         cascade="all, delete-orphan",
         order_by="PartnerOffer.sort_order",
     )
+    promo_images: Mapped[list[PartnerBusinessImage]] = relationship(
+        "PartnerBusinessImage",
+        back_populates="business",
+        cascade="all, delete-orphan",
+        order_by="PartnerBusinessImage.sort_order",
+    )
     ratings: Mapped[list[PartnerRating]] = relationship(
         "PartnerRating", back_populates="business", cascade="all, delete-orphan"
     )
     checkins: Mapped[list[PartnerCheckin]] = relationship(
         "PartnerCheckin", back_populates="business", cascade="all, delete-orphan"
+    )
+
+
+class PartnerBusinessImage(Base, TimestampMixin):
+    """特約店家的宣傳圖片。"""
+
+    __tablename__ = "partner_business_images"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("partner_businesses.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    storage_key: Mapped[str] = mapped_column(Text, nullable=False)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+
+    business: Mapped[PartnerBusiness] = relationship(
+        "PartnerBusiness", back_populates="promo_images"
     )
 
 
@@ -312,6 +340,7 @@ class PartnerSubmission(Base, TimestampMixin):
 
 __all__ = [
     "PartnerBusiness",
+    "PartnerBusinessImage",
     "PartnerBusinessListingType",
     "PartnerBusinessStatus",
     "PartnerCheckin",

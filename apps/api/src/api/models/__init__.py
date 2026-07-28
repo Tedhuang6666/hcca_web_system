@@ -235,6 +235,7 @@ from api.models.org import Org, Permission, Position, UserPosition  # noqa: F401
 from api.models.outbox import OutboxEvent  # noqa: F401
 from api.models.partner_map import (  # noqa: F401
     PartnerBusiness,
+    PartnerBusinessImage,
     PartnerBusinessStatus,
     PartnerCheckin,
     PartnerLocation,

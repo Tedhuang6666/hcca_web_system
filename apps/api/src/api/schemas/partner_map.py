@@ -150,6 +150,19 @@ class PartnerOfferOut(BaseModel):
     updated_at: datetime
 
 
+class PartnerBusinessImageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    business_id: uuid.UUID
+    image_url: str = ""
+    filename: str
+    content_type: str
+    sort_order: int
+    created_at: datetime
+    updated_at: datetime
+
+
 class PartnerBusinessCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     summary: str | None = Field(None, max_length=300)
@@ -254,6 +267,7 @@ class PartnerBusinessOut(BaseModel):
     logo_url: str | None
     cover_image_url: str | None
     flyer_image_url: str | None = None
+    promo_images: list[PartnerBusinessImageOut]
     category: str | None
     business_hours_text: str | None
     listing_type: str

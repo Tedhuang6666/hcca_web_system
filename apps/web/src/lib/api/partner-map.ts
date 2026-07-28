@@ -1,5 +1,5 @@
 import type {
-  PartnerBusinessCreate, PartnerBusinessListItem, PartnerBusinessOut, PartnerBusinessUpdate, PartnerLocationCreate, PartnerLocationOut, PartnerLocationUpdate, PartnerMapItem, PartnerOfferCreate, PartnerOfferOut, PartnerOfferUpdate, PartnerRankingItem, PartnerRatingCreate, PartnerRatingOut, PartnerSubmissionCreate, PartnerSubmissionOut, PartnerTagCreate, PartnerTagOut, PartnerTagUpdate,
+  PartnerBusinessCreate, PartnerBusinessImageOut, PartnerBusinessListItem, PartnerBusinessOut, PartnerBusinessUpdate, PartnerLocationCreate, PartnerLocationOut, PartnerLocationUpdate, PartnerMapItem, PartnerOfferCreate, PartnerOfferOut, PartnerOfferUpdate, PartnerRankingItem, PartnerRatingCreate, PartnerRatingOut, PartnerSubmissionCreate, PartnerSubmissionOut, PartnerTagCreate, PartnerTagOut, PartnerTagUpdate,
 } from "../types";
 import { ApiError, BASE, csrfHeaders, errorMessageFromResponse, get, post, patch, del } from "./core";
 
@@ -17,6 +17,7 @@ export type PartnerBusinessDirectoryItem = PartnerBusinessListItem & PartnerBusi
 export type PartnerLocationWithMapUrl = PartnerLocationOut & { google_maps_url: string | null };
 type PartnerBusinessOutWithFlyer = PartnerBusinessOut & {
   flyer_image_url: string | null;
+  promo_images: PartnerBusinessImageOut[];
 };
 export type PartnerLocationCreateWithMapUrl = PartnerLocationCreate & {
   google_maps_url?: string | null;
@@ -129,6 +130,22 @@ export const partnerMapApi = {
     }
     return response.json() as Promise<PartnerBusinessDetail>;
   },
+  uploadPromoImage: async (id: string, file: File): Promise<PartnerBusinessDetail> => {
+    const form = new FormData();
+    form.append("file", file);
+    const response = await fetch(`${BASE}/partner-map/admin/businesses/${id}/images`, {
+      method: "POST",
+      credentials: "include",
+      headers: csrfHeaders("POST"),
+      body: form,
+    });
+    if (!response.ok) {
+      throw new ApiError(response.status, await errorMessageFromResponse(response));
+    }
+    return response.json() as Promise<PartnerBusinessDetail>;
+  },
+  deletePromoImage: (businessId: string, imageId: string) =>
+    del<void>(`/partner-map/admin/businesses/${businessId}/images/${imageId}`),
   deleteFlyer: (id: string) => del<void>(`/partner-map/admin/businesses/${id}/flyer`),
   deleteBusiness: (id: string) => del<void>(`/partner-map/admin/businesses/${id}`),
   adminSubmissions: (params?: { status?: string }) => {

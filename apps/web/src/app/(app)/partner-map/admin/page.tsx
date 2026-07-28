@@ -307,29 +307,42 @@ export default function PartnerMapAdminPage() {
     }
   };
 
-  const uploadBusinessFlyer = async (file: File | undefined) => {
-    if (!selected || !file) return;
+  const uploadBusinessPromos = async (files: FileList | null) => {
+    if (!selected || !files?.length) return;
+    const remainingSlots = Math.max(0, 12 - selected.promo_images.length);
+    const filesToUpload = Array.from(files).slice(0, remainingSlots);
+    if (!filesToUpload.length) {
+      toast.error("每個店家最多上傳 12 張宣傳圖");
+      return;
+    }
     setUploadingFlyer(true);
     try {
-      const business = await partnerMapApi.uploadFlyer(selected.id, file);
+      let business = selected;
+      for (const file of filesToUpload) {
+        business = await partnerMapApi.uploadPromoImage(selected.id, file);
+      }
       setSelected(business);
       load();
-      toast.success("已上傳店家照片／傳單");
+      toast.success(`已上傳 ${filesToUpload.length} 張宣傳圖`);
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : "上傳店家照片失敗");
+      toast.error(error instanceof ApiError ? error.message : "上傳宣傳圖失敗");
     } finally {
       setUploadingFlyer(false);
     }
   };
 
-  const removeBusinessFlyer = async () => {
-    if (!selected || !window.confirm("確定移除這張店家照片／傳單？")) return;
+  const removeBusinessPromo = async (imageId: string) => {
+    if (!selected || !window.confirm("確定移除這張宣傳圖？")) return;
     try {
-      await partnerMapApi.deleteFlyer(selected.id);
-      setSelected({ ...selected, flyer_image_url: null });
-      toast.success("已移除店家照片／傳單");
+      if (imageId === "legacy") {
+        await partnerMapApi.deleteFlyer(selected.id);
+      } else {
+        await partnerMapApi.deletePromoImage(selected.id, imageId);
+      }
+      selectBusiness(selected.id);
+      toast.success("已移除宣傳圖");
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : "移除店家照片失敗");
+      toast.error(error instanceof ApiError ? error.message : "移除宣傳圖失敗");
     }
   };
 
@@ -496,6 +509,12 @@ export default function PartnerMapAdminPage() {
     }));
   };
 
+  const selectedPromoImages = selected?.promo_images.length
+    ? selected.promo_images
+    : selected?.flyer_image_url
+      ? [{ id: "legacy", image_url: selected.flyer_image_url, filename: "店家傳單" }]
+      : [];
+
   return (
     <div className="mx-auto max-w-7xl space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -660,21 +679,25 @@ export default function PartnerMapAdminPage() {
                   <div className="mt-4 rounded-lg border p-3" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <h4 className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: "var(--text-primary)" }}><ImageIcon size={15} aria-hidden="true" />店家照片／傳單</h4>
-                        <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>可上傳 JPG、PNG、GIF 或 WebP，最大 10 MB。</p>
+                        <h4 className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: "var(--text-primary)" }}><ImageIcon size={15} aria-hidden="true" />店家宣傳圖</h4>
+                        <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>可一次選取多張 JPG、PNG、GIF 或 WebP，每張最大 10 MB，最多 12 張。</p>
                       </div>
                       <label className="btn btn-secondary shrink-0 cursor-pointer">
-                        <Upload size={15} aria-hidden="true" />{uploadingFlyer ? "上傳中…" : "上傳照片"}
-                        <input className="sr-only" type="file" accept="image/jpeg,image/png,image/gif,image/webp" disabled={uploadingFlyer} onChange={(event) => { void uploadBusinessFlyer(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+                        <Upload size={15} aria-hidden="true" />{uploadingFlyer ? "上傳中…" : "新增宣傳圖"}
+                        <input className="sr-only" type="file" multiple accept="image/jpeg,image/png,image/gif,image/webp" disabled={uploadingFlyer} onChange={(event) => { void uploadBusinessPromos(event.currentTarget.files); event.currentTarget.value = ""; }} />
                       </label>
                     </div>
-                    {selected.flyer_image_url ? (
-                      <div className="mt-3 flex items-start gap-3">
-                        <Image src={apiUrl(selected.flyer_image_url)} alt={`${selected.name} 店家傳單`} width={160} height={100} unoptimized className="h-24 w-40 rounded-md border object-contain" style={{ borderColor: "var(--border)", background: "var(--bg)" }} />
-                        <button type="button" className="btn btn-secondary" onClick={() => void removeBusinessFlyer()} style={{ color: "var(--danger)" }}><Trash2 size={14} aria-hidden="true" />移除</button>
+                    {selectedPromoImages.length ? (
+                      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                        {selectedPromoImages.map((image, index) => (
+                          <div key={image.id} className="overflow-hidden rounded-md border" style={{ borderColor: "var(--border)", background: "var(--bg)" }}>
+                            <Image src={apiUrl(image.image_url)} alt={`${selected.name} 宣傳圖 ${index + 1}`} width={240} height={150} unoptimized className="h-28 w-full object-contain" />
+                            <button type="button" className="flex min-h-11 w-full items-center justify-center gap-1 border-t px-2 text-xs font-medium" onClick={() => void removeBusinessPromo(image.id)} style={{ borderColor: "var(--border)", color: "var(--danger)" }}><Trash2 size={14} aria-hidden="true" />移除</button>
+                          </div>
+                        ))}
                       </div>
                     ) : (
-                      <p className="mt-3 text-xs" style={{ color: "var(--text-muted)" }}>尚未上傳照片或傳單。</p>
+                      <p className="mt-3 text-xs" style={{ color: "var(--text-muted)" }}>尚未上傳宣傳圖。</p>
                     )}
                   </div>
                 )}

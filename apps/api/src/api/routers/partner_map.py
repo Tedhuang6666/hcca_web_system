@@ -15,6 +15,7 @@ from api.dependencies.auth import get_current_active_user, get_optional_user
 from api.dependencies.permissions import require_permission
 from api.models.partner_map import (
     PartnerBusiness,
+    PartnerBusinessImage,
     PartnerBusinessListingType,
     PartnerBusinessStatus,
     PartnerLocation,
@@ -25,6 +26,7 @@ from api.models.user import User
 from api.routers._common import or_404
 from api.schemas.partner_map import (
     PartnerBusinessCreate,
+    PartnerBusinessImageOut,
     PartnerBusinessListItem,
     PartnerBusinessOut,
     PartnerBusinessUpdate,
@@ -53,6 +55,9 @@ from api.services import partner_map as map_svc
 from api.services.storage import get_storage
 
 router = APIRouter(prefix="/partner-map", tags=["特約地圖"])
+
+_MAX_PROMO_IMAGES = 12
+_PROMO_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 OptionalUser = Annotated[User | None, Depends(get_optional_user)]
@@ -89,6 +94,24 @@ def _business_out(
     out.flyer_image_url = (
         f"/partner-map/businesses/{business.id}/flyer" if business.flyer_storage_key else None
     )
+    image_prefix = (
+        f"/partner-map/admin/businesses/{business.id}/images"
+        if include_internal
+        else f"/partner-map/businesses/{business.id}/images"
+    )
+    out.promo_images = [
+        PartnerBusinessImageOut(
+            id=image.id,
+            business_id=image.business_id,
+            image_url=f"{image_prefix}/{image.id}",
+            filename=image.filename,
+            content_type=image.content_type,
+            sort_order=image.sort_order,
+            created_at=image.created_at,
+            updated_at=image.updated_at,
+        )
+        for image in business.promo_images
+    ]
     out.rating_avg = rating_avg
     out.rating_count = rating_count
     out.my_rating = (
@@ -180,6 +203,25 @@ def _map_item(location: PartnerLocation, *, include_private: bool) -> PartnerMap
 async def _business_or_404(db: AsyncSession, business_id: uuid.UUID) -> PartnerBusiness:
     business = await map_svc.get_business(db, business_id)
     return or_404(business, "找不到此特約店家")
+
+
+async def _business_image_or_404(
+    db: AsyncSession, business_id: uuid.UUID, image_id: uuid.UUID
+) -> PartnerBusinessImage:
+    image = await db.get(PartnerBusinessImage, image_id)
+    if image is None or image.business_id != business_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此宣傳圖")
+    return image
+
+
+async def _serve_business_image(image: PartnerBusinessImage) -> FileResponse | RedirectResponse:
+    storage = get_storage()
+    local = storage.local_path(image.storage_key)
+    if local is not None:
+        if not local.exists():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="宣傳圖不存在")
+        return FileResponse(str(local), media_type=image.content_type)
+    return RedirectResponse(await storage.get_url(image.storage_key, disposition="inline"))
 
 
 async def _tag_or_404(db: AsyncSession, tag_id: uuid.UUID) -> PartnerTag:
@@ -333,6 +375,20 @@ async def preview_business_flyer(
     return RedirectResponse(await storage.get_url(business.flyer_storage_key, disposition="inline"))
 
 
+@router.get(
+    "/businesses/{business_id}/images/{image_id}",
+    response_model=None,
+    summary="預覽特約店家宣傳圖",
+)
+async def preview_business_image(
+    business_id: uuid.UUID, image_id: uuid.UUID, db: DbDep
+) -> FileResponse | RedirectResponse:
+    business = await _business_or_404(db, business_id)
+    if business.status != PartnerBusinessStatus.ACTIVE.value:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到此特約店家")
+    return await _serve_business_image(await _business_image_or_404(db, business_id, image_id))
+
+
 @router.post(
     "/businesses/{business_id}/click",
     response_model=PartnerBusinessOut,
@@ -435,6 +491,76 @@ async def admin_upload_business_flyer(
     if old_storage_key:
         await get_storage().delete(old_storage_key)
     return _business_out(business, include_private=True, include_internal=True)
+
+
+@router.post(
+    "/admin/businesses/{business_id}/images",
+    response_model=PartnerBusinessOut,
+    summary="新增特約店家宣傳圖",
+)
+async def admin_upload_business_image(
+    business_id: uuid.UUID,
+    db: DbDep,
+    _: ManagerUser,
+    file: UploadFile = File(...),
+) -> PartnerBusinessOut:
+    business = await _business_or_404(db, business_id)
+    if len(business.promo_images) >= _MAX_PROMO_IMAGES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"每個店家最多上傳 {_MAX_PROMO_IMAGES} 張宣傳圖",
+        )
+    try:
+        stored = await get_storage().save(
+            file,
+            prefix=f"partner-map/{business.id}/promos",
+            max_file_size=10 * 1024 * 1024,
+            allowed_content_types=_PROMO_IMAGE_TYPES,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    image = PartnerBusinessImage(
+        business_id=business.id,
+        storage_key=stored.storage_key,
+        filename=stored.filename,
+        content_type=stored.content_type,
+        sort_order=max((item.sort_order for item in business.promo_images), default=-1) + 1,
+    )
+    db.add(image)
+    await db.flush()
+    await db.refresh(business, ["promo_images"])
+    return _business_out(business, include_private=True, include_internal=True)
+
+
+@router.get(
+    "/admin/businesses/{business_id}/images/{image_id}",
+    response_model=None,
+    summary="管理端預覽特約店家宣傳圖",
+)
+async def admin_preview_business_image(
+    business_id: uuid.UUID, image_id: uuid.UUID, db: DbDep, _: ManagerUser
+) -> FileResponse | RedirectResponse:
+    await _business_or_404(db, business_id)
+    return await _serve_business_image(await _business_image_or_404(db, business_id, image_id))
+
+
+@router.delete(
+    "/admin/businesses/{business_id}/images/{image_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="移除特約店家宣傳圖",
+)
+async def admin_delete_business_image(
+    business_id: uuid.UUID, image_id: uuid.UUID, db: DbDep, _: ManagerUser
+) -> None:
+    business = await _business_or_404(db, business_id)
+    image = await _business_image_or_404(db, business_id, image_id)
+    storage_key = image.storage_key
+    await db.delete(image)
+    await db.flush()
+    await db.refresh(business, ["promo_images"])
+    await get_storage().delete(storage_key)
 
 
 @router.delete(
@@ -565,8 +691,8 @@ async def admin_delete_business(business_id: uuid.UUID, db: DbDep, user: Manager
         actor_email=user.email,
         summary=f"刪除特約店家「{business.name}」",
     )
-    storage_key = await map_svc.delete_business(db, business)
-    if storage_key:
+    storage_keys = await map_svc.delete_business(db, business)
+    for storage_key in storage_keys:
         await get_storage().delete(storage_key)
 
 

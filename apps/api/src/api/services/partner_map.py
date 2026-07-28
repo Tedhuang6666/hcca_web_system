@@ -199,6 +199,7 @@ def _business_options():
         selectinload(PartnerBusiness.tags),
         selectinload(PartnerBusiness.locations),
         selectinload(PartnerBusiness.offers),
+        selectinload(PartnerBusiness.promo_images),
         selectinload(PartnerBusiness.ratings),
         selectinload(PartnerBusiness.checkins),
     )
@@ -276,7 +277,7 @@ async def create_business(
     business.offers = [PartnerOffer(**offer.model_dump()) for offer in data.initial_offers]
     db.add(business)
     await db.flush()
-    await db.refresh(business, ["tags", "locations", "offers", "ratings"])
+    await db.refresh(business, ["tags", "locations", "offers", "promo_images", "ratings"])
     return business
 
 
@@ -292,7 +293,9 @@ async def record_business_checkin(
     if result.rowcount:
         business.checkin_count += 1
         await db.flush()
-    await db.refresh(business, ["tags", "locations", "offers", "ratings", "checkins"])
+    await db.refresh(
+        business, ["tags", "locations", "offers", "promo_images", "ratings", "checkins"]
+    )
     return business
 
 
@@ -305,7 +308,7 @@ async def update_business(
     if data.tag_ids is not None:
         business.tags = await _resolve_tags(db, data.tag_ids)
     await db.flush()
-    await db.refresh(business, ["tags", "locations", "offers", "ratings"])
+    await db.refresh(business, ["tags", "locations", "offers", "promo_images", "ratings"])
     return business
 
 
@@ -369,10 +372,19 @@ async def list_contact_businesses(
     return list(result.scalars().unique().all())
 
 
-async def delete_business(db: AsyncSession, business: PartnerBusiness) -> str | None:
-    flyer_storage_key = business.flyer_storage_key
+async def delete_business(db: AsyncSession, business: PartnerBusiness) -> list[str]:
+    storage_keys = list(
+        dict.fromkeys(
+            key
+            for key in [
+                business.flyer_storage_key,
+                *(image.storage_key for image in business.promo_images),
+            ]
+            if key
+        )
+    )
     await db.delete(business)
-    return flyer_storage_key
+    return storage_keys
 
 
 def _business_matches_tag_ids(tag_ids: list[uuid.UUID]):
@@ -508,7 +520,7 @@ async def increment_business_metric(
     else:
         raise ValueError("不支援的統計類型")
     await db.flush()
-    await db.refresh(business, ["tags", "locations", "offers", "ratings"])
+    await db.refresh(business, ["tags", "locations", "offers", "promo_images", "ratings"])
     return business
 
 
