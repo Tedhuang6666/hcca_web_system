@@ -40,6 +40,11 @@ _EXPECTED_AUTH_ERRORS = {
     ("/auth/discord/login", "Discord OAuth 尚未設定"),
     ("/auth/google/one-tap", "尚未設定 Google Client ID"),
     ("/auth/refresh", "登入服務暫時不可用，請稍後再試"),
+    ("/discord/login", "Discord OAuth 尚未設定"),
+    ("/discord/available-guilds", "Discord 模組尚未啟用"),
+    ("/discord/available-guilds", "Discord Bot 離線或尚未回報伺服器清單"),
+    ("/line/webhook", "LINE Bot 尚未設定，請聯絡管理員"),
+    ("/email/resend/webhook", "RESEND_WEBHOOK_SECRET 未設定"),
 }
 
 

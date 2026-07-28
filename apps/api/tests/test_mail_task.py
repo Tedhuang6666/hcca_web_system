@@ -45,7 +45,13 @@ def test_enqueue_email_returns_task_id() -> None:
     mock_task_result = MagicMock()
     mock_task_result.id = "fake-task-id-12345"
 
-    with patch("api.services.mail.send_email.delay", return_value=mock_task_result) as mock_delay:
+    with (
+        patch("api.services.mail.send_email.delay", return_value=mock_task_result) as mock_delay,
+        patch(
+            "api.email.sender.render_generic_message",
+            return_value="<html>body</html>",
+        ),
+    ):
         task_id = enqueue_email("to@example.com", "subject", "body")
 
     assert task_id == "fake-task-id-12345"
@@ -53,12 +59,11 @@ def test_enqueue_email_returns_task_id() -> None:
     mock_delay.assert_called_once_with(
         ["to@example.com"],
         "subject",
-        "body",
+        "<html>body</html>",
         "html",
         email_message_id=None,
         email_recipient_id=None,
         attachments=None,
-        format_body=True,
     )
 
 
@@ -90,7 +95,6 @@ def test_enqueue_email_accepts_message_id() -> None:
         email_message_id="message-id",
         email_recipient_id=None,
         attachments=None,
-        format_body=False,
     )
 
 
@@ -116,7 +120,6 @@ def test_enqueue_email_accepts_campaign_recipient_id() -> None:
         email_message_id="message-id",
         email_recipient_id="recipient-id",
         attachments=None,
-        format_body=False,
     )
 
 

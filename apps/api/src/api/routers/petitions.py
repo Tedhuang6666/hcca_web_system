@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import UTC, datetime
 from typing import Annotated
@@ -77,6 +78,7 @@ from api.services.permission import get_user_org_ids_with_permission, get_user_p
 from api.services.storage import get_storage
 
 router = APIRouter(prefix="/petitions", tags=["陳情系統"])
+logger = logging.getLogger(__name__)
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_user)]
@@ -369,40 +371,47 @@ async def create_petition(
     petition_type = await petition_svc.get_type(session, case_obj.type_id)
     from api.services.discord_notification_routes import emit_routed_notification
 
-    await emit_routed_notification(
-        session,
-        event_key="petition.created",
-        module="petition",
-        title=f"新陳情案件 {case_obj.case_number}",
-        body=case_obj.title,
-        link=f"/petitions/{case_obj.id}",
-        petition_type_id=case_obj.type_id,
-        org_id=case_obj.current_org_id,
-        fields=[
-            {
-                "name": "分類",
-                "value": petition_type.name if petition_type else "未分類",
-                "inline": True,
-            }
-        ],
-        thread_name=f"陳情討論：{case_obj.case_number}",
-    )
-    await enqueue_petition_private_channel(session, case_obj)
+    try:
+        async with session.begin_nested():
+            await emit_routed_notification(
+                session,
+                event_key="petition.created",
+                module="petition",
+                title=f"新陳情案件 {case_obj.case_number}",
+                body=case_obj.title,
+                link=f"/petitions/{case_obj.id}",
+                petition_type_id=case_obj.type_id,
+                org_id=case_obj.current_org_id,
+                fields=[
+                    {
+                        "name": "分類",
+                        "value": petition_type.name if petition_type else "未分類",
+                        "inline": True,
+                    }
+                ],
+                thread_name=f"陳情討論：{case_obj.case_number}",
+            )
+            await enqueue_petition_private_channel(session, case_obj)
+    except Exception:
+        logger.warning("陳情可選 Discord 通知失敗，保留案件建立結果", exc_info=True)
     # 治理匯流：陳情建立經 audit_svc.record() 統一橋接進治理中樞（governance_events 登錄表），
     # 不再於此手寫 ingest，避免雙重時間軸。
 
     _ph = get_posthog_client()
     if _ph:
         _distinct_id = str(current_user.id) if current_user else "anonymous"
-        _ph.capture(
-            distinct_id=_distinct_id,
-            event="petition_submitted",
-            properties={
-                "petition_type_id": str(case_obj.type_id),
-                "is_named": case_obj.is_named,
-                "is_authenticated": current_user is not None,
-            },
-        )
+        try:
+            _ph.capture(
+                distinct_id=_distinct_id,
+                event="petition_submitted",
+                properties={
+                    "petition_type_id": str(case_obj.type_id),
+                    "is_named": case_obj.is_named,
+                    "is_authenticated": current_user is not None,
+                },
+            )
+        except Exception:
+            logger.warning("陳情 PostHog 事件記錄失敗，不影響送件", exc_info=True)
 
     return PetitionCreatedOut(
         id=case_obj.id,
