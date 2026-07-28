@@ -50,12 +50,6 @@ const SYSTEM_EMAIL_OPTIONS = [
     desc: "每 60 秒處理到期的預約郵件。關閉後，郵件會保留在排程中。",
     confirm: "確定關閉預約寄信？到期郵件會保留在排程中，不會被刪除。",
   },
-  {
-    key: "email_error_report",
-    label: "錯誤通報信",
-    desc: "將 API 5xx、Celery 失敗與服務狀態彙整後寄給 OWNER_EMAILS。",
-    confirm: "確定關閉錯誤通報信？系統仍會記錄錯誤，但不會寄出通知。",
-  },
 ] as const;
 
 type Channel = keyof ChannelPref;

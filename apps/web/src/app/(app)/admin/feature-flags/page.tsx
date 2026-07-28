@@ -15,7 +15,7 @@ import {
   featureFlagsApi,
   type FeatureFlagOut, apiErrorMessage } from "@/lib/api";
 
-const SYSTEM_EMAIL_FLAG_KEYS = ["email_scheduled_dispatch", "email_error_report"];
+const SYSTEM_EMAIL_FLAG_KEYS = ["email_scheduled_dispatch"];
 
 export default function FeatureFlagsPage() {
   const { isAdmin } = usePermissions();
