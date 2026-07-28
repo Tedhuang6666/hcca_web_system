@@ -4428,6 +4428,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/electronic-credentials/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 取得我的電子證件 */
+        get: operations["get_my_electronic_credential_electronic_credentials_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/email/attachments": {
         parameters: {
             query?: never;
@@ -9114,6 +9131,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/partner-map/admin/businesses/{business_id}/images": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 新增特約店家宣傳圖 */
+        post: operations["admin_upload_business_image_partner_map_admin_businesses__business_id__images_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/partner-map/admin/businesses/{business_id}/images/{image_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 管理端預覽特約店家宣傳圖 */
+        get: operations["admin_preview_business_image_partner_map_admin_businesses__business_id__images__image_id__get"];
+        put?: never;
+        post?: never;
+        /** 移除特約店家宣傳圖 */
+        delete: operations["admin_delete_business_image_partner_map_admin_businesses__business_id__images__image_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/partner-map/admin/businesses/{business_id}/locations": {
         parameters: {
             query?: never;
@@ -9331,6 +9383,23 @@ export interface paths {
         };
         /** 預覽特約店家照片或傳單 */
         get: operations["preview_business_flyer_partner_map_businesses__business_id__flyer_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/partner-map/businesses/{business_id}/images/{image_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 預覽特約店家宣傳圖 */
+        get: operations["preview_business_image_partner_map_businesses__business_id__images__image_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -15191,6 +15260,11 @@ export interface components {
             /** File */
             file: string;
         };
+        /** Body_admin_upload_business_image_partner_map_admin_businesses__business_id__images_post */
+        Body_admin_upload_business_image_partner_map_admin_businesses__business_id__images_post: {
+            /** File */
+            file: string;
+        };
         /** Body_admin_upload_image_site_admin_images_post */
         Body_admin_upload_image_site_admin_images_post: {
             /** File */
@@ -18816,6 +18890,27 @@ export interface components {
             turnout_threshold_pct?: number | null;
             /** Vote Threshold Pct */
             vote_threshold_pct?: number | null;
+        };
+        /**
+         * ElectronicCredentialOut
+         * @description 登入者可出示的象徵性電子證件。
+         */
+        ElectronicCredentialOut: {
+            /** Display Name */
+            display_name: string;
+            /** Email */
+            email: string;
+            /**
+             * Identity Kind
+             * @enum {string}
+             */
+            identity_kind: "student" | "teacher" | "authorized";
+            /** Identity Label */
+            identity_label: string;
+            /** Status Label */
+            status_label: string;
+            /** Student Id */
+            student_id?: string | null;
         };
         /**
          * EligibleMeetingBrief
@@ -25064,6 +25159,40 @@ export interface components {
             /** Website Url */
             website_url?: string | null;
         };
+        /** PartnerBusinessImageOut */
+        PartnerBusinessImageOut: {
+            /**
+             * Business Id
+             * Format: uuid
+             */
+            business_id: string;
+            /** Content Type */
+            content_type: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Filename */
+            filename: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Image Url
+             * @default
+             */
+            image_url: string;
+            /** Sort Order */
+            sort_order: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /** PartnerBusinessListItem */
         PartnerBusinessListItem: {
             /**
@@ -25241,6 +25370,8 @@ export interface components {
              * @default 0
              */
             popularity_score: number;
+            /** Promo Images */
+            promo_images: components["schemas"]["PartnerBusinessImageOut"][];
             /** Rating Avg */
             rating_avg?: number | null;
             /**
@@ -44303,6 +44434,26 @@ export interface operations {
             };
         };
     };
+    get_my_electronic_credential_electronic_credentials_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ElectronicCredentialOut"];
+                };
+            };
+        };
+    };
     upload_attachment_email_attachments_post: {
         parameters: {
             query?: {
@@ -55102,6 +55253,103 @@ export interface operations {
             };
         };
     };
+    admin_upload_business_image_partner_map_admin_businesses__business_id__images_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                business_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_admin_upload_business_image_partner_map_admin_businesses__business_id__images_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerBusinessOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_preview_business_image_partner_map_admin_businesses__business_id__images__image_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                business_id: string;
+                image_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_delete_business_image_partner_map_admin_businesses__business_id__images__image_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                business_id: string;
+                image_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     admin_create_location_partner_map_admin_businesses__business_id__locations_post: {
         parameters: {
             query?: never;
@@ -55617,6 +55865,38 @@ export interface operations {
             header?: never;
             path: {
                 business_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_business_image_partner_map_businesses__business_id__images__image_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                business_id: string;
+                image_id: string;
             };
             cookie?: never;
         };
