@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import uuid
 from datetime import UTC, datetime
 
@@ -123,10 +122,20 @@ def _validate_value(field: PartnerApplicationField, value: str) -> str:
     cleaned = value.strip()
     if len(cleaned) > 4000:
         raise ValueError(f"欄位「{field.label}」內容不可超過 4000 字")
-    if field.field_type == PartnerApplicationFieldType.EMAIL.value and not re.fullmatch(
-        r"[^@\s]+@[^@\s]+\.[^@\s]+", cleaned
-    ):
-        raise ValueError(f"欄位「{field.label}」請填寫有效 Email")
+    if field.field_type == PartnerApplicationFieldType.EMAIL.value:
+        local_part, separator, domain = cleaned.partition("@")
+        domain_prefix, dot, domain_suffix = domain.partition(".")
+        valid_email = (
+            bool(local_part)
+            and bool(separator)
+            and bool(domain_prefix)
+            and bool(dot)
+            and bool(domain_suffix)
+            and "@" not in domain
+            and not any(character.isspace() for character in cleaned)
+        )
+        if not valid_email:
+            raise ValueError(f"欄位「{field.label}」請填寫有效 Email")
     if field.field_type == PartnerApplicationFieldType.URL.value and not cleaned.startswith(
         ("https://", "http://")
     ):

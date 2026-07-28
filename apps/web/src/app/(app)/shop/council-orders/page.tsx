@@ -364,7 +364,7 @@ export default function CouncilOrdersPage() {
       {tab === "quantities" && (
         <section>
           <div className="mb-3 flex justify-end">
-            <a href={`/api/shop/reports/orders.xlsx${grade ? `?grade=${grade}` : ""}`}
+            <a href={`/api/shop/reports/orders.xlsx${grade ? `?grade=${encodeURIComponent(grade)}` : ""}`}
               className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs"
               style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
               <Download size={13} /> 匯出 Excel
