@@ -142,11 +142,19 @@ class MerchandiseSubmissionAIEvidenceOut(BaseModel):
     source: str
 
 
+class MerchandiseSubmissionAIMetadataOut(BaseModel):
+    source: str
+    key: str
+    value: str
+
+
 class MerchandiseSubmissionAdminFileOut(MerchandiseSubmissionFileOut):
     ai_detection_status: (
         Literal["detected", "supporting", "no_evidence", "not_applicable", "error"] | None
     )
     ai_detection_evidence: list[MerchandiseSubmissionAIEvidenceOut]
+    ai_detection_metadata: list[MerchandiseSubmissionAIMetadataOut]
+    ai_detection_version: str | None
     ai_detection_sha256: str | None
     ai_detection_scanned_at: datetime | None
 
