@@ -77,61 +77,6 @@
   padding-bottom: clamp(3.5rem, 8vw, 6rem);
 }
 
-/* 手機版改為單欄，避免公開設計系統的桌面雙欄最小寬度壓縮首頁內容。 */
-@media (max-width: 767px) {
-  .public-hero-inner {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-    align-items: stretch;
-    text-align: center;
-  }
-
-  .public-hero-copy {
-    display: contents;
-  }
-
-  .public-hero-copy h1,
-  .public-hero-subtitle {
-    margin-inline: auto;
-  }
-
-  .public-hero-copy h1 {
-    order: 1;
-    max-width: 100%;
-    font-size: clamp(2.35rem, 12vw, 3.4rem);
-    line-height: 1.15;
-    text-wrap: balance;
-  }
-
-  .public-hero-subtitle {
-    order: 2;
-  }
-
-  .public-hero-actions {
-    order: 4;
-    width: min(100%, 22rem);
-    margin-inline: auto;
-  }
-
-  .public-signboard.public-identity-panel {
-    order: 3;
-    width: min(82vw, 20rem);
-    align-self: center;
-    margin-inline: auto;
-  }
-
-  .public-identity-panel .public-signboard-emblem {
-    padding: 0.75rem;
-  }
-
-  .public-identity-panel .public-signboard-emblem img,
-  .public-identity-panel .public-signboard-emblem svg {
-    max-width: 18rem;
-    max-height: 18rem;
-  }
-}
-
 @media (min-width: 1024px) {
   .public-home-editorial-solo {
     grid-template-columns: minmax(0, 1fr);
