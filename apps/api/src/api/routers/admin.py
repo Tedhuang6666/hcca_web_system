@@ -35,6 +35,7 @@ from api.models.person import PersonAffiliationKind, PersonAffiliationSource
 from api.models.user import User
 from api.models.user_identity import UserIdentity
 from api.services import audit as audit_svc
+from api.services import mfa as mfa_svc
 from api.services import org as org_svc
 from api.services import person as person_svc
 from api.services import user_registration as user_registration_svc
@@ -78,6 +79,7 @@ class UserDetail(BaseModel):
     student_id: str | None
     avatar_url: str | None
     is_active: bool
+    mfa_enabled: bool
     is_superuser: bool
     # Owner 為環境變數 OWNER_EMAILS 驅動的最高權限角色，由路由層注入
     is_owner: bool = False
@@ -241,6 +243,7 @@ async def _enrich_user(db: AsyncSession, user: User) -> UserDetail:
         student_id=user.student_id,
         avatar_url=user.avatar_url,
         is_active=user.is_active,
+        mfa_enabled=user.mfa_enabled,
         is_superuser=user.is_superuser,
         is_owner=user.email.lower() in settings.OWNER_EMAILS,
         created_at=user.created_at.isoformat(),
@@ -315,6 +318,7 @@ async def _enrich_users_batch(db: AsyncSession, users: list[User]) -> list[UserD
                 student_id=user.student_id,
                 avatar_url=user.avatar_url,
                 is_active=user.is_active,
+                mfa_enabled=user.mfa_enabled,
                 is_superuser=user.is_superuser,
                 is_owner=user.email.lower() in settings.OWNER_EMAILS,
                 created_at=user.created_at.isoformat(),
@@ -450,6 +454,43 @@ async def get_user(user_id: uuid.UUID, db: DbDep, _: AdminUser) -> UserDetail:
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="使用者不存在")
+    return await _enrich_user(db, user)
+
+
+@router.delete(
+    "/users/{user_id}/mfa",
+    response_model=UserDetail,
+    summary="清除使用者的 2FA 設定",
+)
+async def clear_user_mfa(
+    user_id: uuid.UUID,
+    db: DbDep,
+    admin_user: AdminUser,
+) -> UserDetail:
+    """管理員清除使用者的 TOTP 設定，讓使用者可重新註冊。"""
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="使用者不存在")
+
+    before = {
+        "mfa_enabled": user.mfa_enabled,
+        "has_pending_setup": user.mfa_pending_secret is not None,
+        "backup_code_count": mfa_svc.backup_code_count(user),
+    }
+    await mfa_svc.clear_mfa(db, user)
+    await audit_svc.record(
+        db,
+        entity_type="user",
+        entity_id=str(user.id),
+        action="user.mfa.clear",
+        actor_id=str(admin_user.id),
+        actor_email=admin_user.email,
+        meta={
+            "before": before,
+            "after": {"mfa_enabled": False, "has_pending_setup": False, "backup_code_count": 0},
+        },
+        summary=f"清除使用者「{user.display_name}」的 2FA 設定",
+    )
     return await _enrich_user(db, user)
 
 

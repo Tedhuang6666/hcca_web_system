@@ -13,6 +13,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.config import settings
+from api.core.login_lockout import admin_unlock
 from api.core.security import redis_client
 from api.models.user import User
 
@@ -232,3 +233,17 @@ async def disable_mfa(db: AsyncSession, user: User, code: str) -> bool:
 
     logger.info("MFA disabled", extra={"user_id": str(user.id)})
     return True
+
+
+async def clear_mfa(db: AsyncSession, user: User) -> None:
+    """由管理員清除使用者的 TOTP 2FA 設定，讓使用者可重新註冊。"""
+    user.mfa_enabled = False
+    user.mfa_secret = None
+    user.mfa_pending_secret = None
+    user.mfa_backup_code_hashes = {}
+    user.mfa_pending_backup_code_hashes = {}
+
+    await db.flush()
+    await admin_unlock(f"mfa:{user.id}")
+    await admin_unlock(f"mfa_login:{user.id}")
+    logger.info("MFA cleared by administrator", extra={"user_id": str(user.id)})

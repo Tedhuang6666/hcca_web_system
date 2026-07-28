@@ -1099,6 +1099,11 @@ function UserPanel({
       displayError(e, "連結 Email 失敗");
     }
   };
+  const clearMfa = () => onConfirm({
+    title: "清除 2FA 設定",
+    body: `確定清除「${user.display_name}」的 TOTP 2FA 設定？使用者下次登入後可重新註冊；既有 Passkey 不受影響。`,
+    action: () => adminApi.clearUserMfa(user.id),
+  });
   return (
     <div className="w-full p-5 space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -1159,6 +1164,26 @@ function UserPanel({
           />
           <SmallButton onClick={addEmailAlias} tone="primary" disabled={!emailAlias.trim()}>
             連結 Email
+          </SmallButton>
+        </div>
+      </section>
+      <section className="rounded-xl p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+              兩步驟驗證（2FA）
+            </h3>
+            <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+              目前狀態：{user.mfa_enabled ? "已啟用 TOTP" : "未啟用"}。清除後使用者可重新設定驗證器。
+            </p>
+          </div>
+          <SmallButton
+            tone="danger"
+            disabled={!user.mfa_enabled}
+            title={!user.mfa_enabled ? "此使用者目前未啟用 TOTP 2FA" : undefined}
+            onClick={clearMfa}
+          >
+            清除 2FA 設定
           </SmallButton>
         </div>
       </section>
