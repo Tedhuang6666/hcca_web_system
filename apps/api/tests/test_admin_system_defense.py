@@ -70,6 +70,18 @@ async def test_non_admin_cannot_access_defense_summary(
     assert response.status_code == 403
 
 
+async def test_admin_system_route_does_not_require_mfa(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    admin, _ = await _seed_users(db_session)
+    admin.mfa_enabled = False
+    _override_user(admin)
+
+    response = await client.get("/admin/system/defense/summary")
+
+    assert response.status_code == 200
+
+
 async def test_admin_create_defense_rule_syncs_redis_and_audit_log(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:

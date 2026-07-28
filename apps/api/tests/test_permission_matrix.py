@@ -6,7 +6,6 @@
 
 保護等級（由強到弱）：
   PERMISSION   — 掛有 require_permission / require_any / require_org_permission
-  MFA_ADMIN    — 掛有 require_admin_mfa（系統管理員 + MFA）
   LOGIN        — 需登入（has get_current_active_user）但無明確權限碼
   PUBLIC       — 完全無需認證
 
@@ -21,7 +20,6 @@ from fastapi.routing import APIRoute
 from api.dependencies.api_key_auth import ApiScopeChecker, api_key_required
 from api.dependencies.auth import get_current_active_user
 from api.dependencies.permissions import (
-    AdminMFAChecker,
     AnyPermissionChecker,
     OrgScopedPermissionChecker,
     PermissionChecker,
@@ -202,8 +200,6 @@ def _classify_route(route: APIRoute) -> str:
         return "PERMISSION"
     if any(isinstance(c, ApiScopeChecker) or c is api_key_required for c in calls):
         return "API_KEY"
-    if any(isinstance(c, AdminMFAChecker) for c in calls):
-        return "MFA_ADMIN"
     if get_current_active_user in calls:
         return "LOGIN"
     return "PUBLIC"
@@ -269,7 +265,6 @@ def test_permission_coverage_report() -> None:
     counts: dict[str, int] = {
         "PERMISSION": 0,
         "API_KEY": 0,
-        "MFA_ADMIN": 0,
         "LOGIN": 0,
         "PUBLIC": 0,
     }
