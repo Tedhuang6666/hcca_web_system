@@ -60,15 +60,6 @@ export default function HomeContent({
           <div className="public-hero-copy">
             <h1>{heroTitle}</h1>
             {heroSubtitle && <p className="public-hero-subtitle">{heroSubtitle}</p>}
-            <div className="public-hero-actions">
-              <Link href={ctaHref} className="public-cta-primary">
-                {ctaLabel}
-                <ArrowRight size={16} aria-hidden />
-              </Link>
-              <Link href="/news" className="public-cta-secondary">
-                最新公告
-              </Link>
-            </div>
           </div>
           <div className="public-signboard public-identity-panel" aria-label={`${siteTitle}識別標誌`}>
             <div className="public-signboard-emblem">
@@ -79,6 +70,15 @@ export default function HomeContent({
                 priority
               />
             </div>
+          </div>
+          <div className="public-hero-actions">
+            <Link href={ctaHref} className="public-cta-primary">
+              {ctaLabel}
+              <ArrowRight size={16} aria-hidden />
+            </Link>
+            <Link href="/news" className="public-cta-secondary">
+              最新公告
+            </Link>
           </div>
         </div>
       </section>
