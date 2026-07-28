@@ -1625,6 +1625,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/users/{user_id}/mfa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * 清除使用者的 2FA 設定
+         * @description 管理員清除使用者的 TOTP 設定，讓使用者可重新註冊。
+         */
+        delete: operations["clear_user_mfa_admin_users__user_id__mfa_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/users/{user_id}/positions": {
         parameters: {
             query?: never;
@@ -33310,6 +33330,8 @@ export interface components {
             is_superuser: boolean;
             /** Linked Emails */
             linked_emails?: string[];
+            /** Mfa Enabled */
+            mfa_enabled: boolean;
             /**
              * Positions
              * @default []
@@ -38275,6 +38297,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StatusOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clear_user_mfa_admin_users__user_id__mfa_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserDetail"];
                 };
             };
             /** @description Validation Error */
