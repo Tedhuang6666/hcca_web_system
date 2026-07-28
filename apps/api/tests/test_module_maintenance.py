@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import contextlib
-from unittest.mock import patch
 
 import pytest_asyncio
 from httpx import AsyncClient
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core import maintenance as maint
@@ -18,8 +16,6 @@ from api.core.modules import MODULE_IDS, match_module
 from api.core.security import create_access_token, redis_client
 from api.dependencies.auth import get_current_active_user
 from api.main import app
-from api.models.feature_flag import FeatureFlag
-from api.models.outbox import OutboxEvent
 from api.models.user import User
 
 
@@ -213,25 +209,6 @@ async def test_closed_module_is_not_overwritten_by_auto_maintenance() -> None:
 
     assert state["mode"] == "closed"
     assert state["source"] == "manual"
-
-
-async def test_module_trip_email_respects_error_report_feature_flag(
-    db_session: AsyncSession,
-) -> None:
-    db_session.add(FeatureFlag(key="email_error_report", is_globally_enabled=False))
-    await db_session.flush()
-
-    with patch.object(settings, "OWNER_EMAILS", ["owner@example.com"]):
-        await module_recovery._dispatch_all_channels(
-            db_session,
-            module_id="shop",
-            title="模組跳閘",
-            body="測試",
-            severity="NORMAL",
-        )
-
-    events = list((await db_session.execute(select(OutboxEvent))).scalars().all())
-    assert [event.event_type for event in events] == ["admin.notification"]
 
 
 async def test_set_module_maintenance_requires_superuser_returns_403(

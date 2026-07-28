@@ -3,8 +3,8 @@
 設計：
   - half-open 探測由 Celery beat 觸發（每 30s 掃 Redis ZSET module_probe_queue）；
     這檔提供探測/恢復的純函式，task 端只負責排程與呼叫。
-  - 跳閘通知透過 outbox 三條事件分派：
-      discord.channel_alert / email.send / admin.notification
+  - 跳閘通知透過 outbox 兩條事件分派：
+      discord.channel_alert / admin.notification
     任一通道故障不阻塞跳閘流程（fire-and-forget + log）。
   - half-open 探測使用 httpx AsyncClient 打 self loopback 的 /{module}/__module_health__
     端點；通過則 clear_module_maintenance + set_module_reset；失敗則延長 cooldown 並排下一次。
@@ -30,7 +30,6 @@ logger = logging.getLogger(__name__)
 
 _PROBE_QUEUE_KEY = "module_probe_queue"
 _PROBE_TIMEOUT = 5.0
-_ERROR_REPORT_EMAIL_FLAG = "email_error_report"
 
 
 def _probe_path_for(module_id: str) -> str | None:
@@ -155,7 +154,7 @@ async def notify_module_tripped(
     cooldown_s: int,
     escalated: bool,
 ) -> None:
-    """跳閘事件透過 outbox 分派三條通知。
+    """跳閘事件透過 outbox 分派 Discord 與站內通知。
 
     任一通知失敗不影響跳閘決策；單一通道故障也不會拖延其他通道。
     """
@@ -215,23 +214,7 @@ async def _dispatch_all_channels(
                 "module_id": module_id,
             },
         )
-    # 2. Email 給 OWNER_EMAILS；與定時錯誤摘要共用全站寄信開關
-    from api.services import feature_flag
-
-    if settings.OWNER_EMAILS and await feature_flag.is_enabled(session, _ERROR_REPORT_EMAIL_FLAG):
-        for addr in settings.OWNER_EMAILS:
-            await outbox.emit(
-                session,
-                event_type="email.send",
-                payload={
-                    "to": addr,
-                    "subject": title,
-                    "body": body,
-                    "module_id": module_id,
-                    "severity": severity,
-                },
-            )
-    # 3. admin UI 通知中心
+    # 2. admin UI 通知中心
     await outbox.emit(
         session,
         event_type="admin.notification",

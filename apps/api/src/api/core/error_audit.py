@@ -21,6 +21,8 @@ from api.core.config import settings
 logger = logging.getLogger(__name__)
 
 _RING_MAX = 100
+_REDIS_EVENT_KEY = "error_audit:events:v1"
+_REDIS_RETENTION_ITEMS = 1000
 _MESSAGE_MAX = 300
 _TRACEBACK_MAX = 1600
 
@@ -119,9 +121,7 @@ def _sample_to_dict(sample: ErrorSample, *, source: str = "memory") -> dict[str,
 
 
 def _persist_error_event(sample: ErrorSample) -> None:
-    """Write a sanitized error event to Redis for cross-process reporting."""
-    if not settings.ERROR_REPORT_EMAIL_ENABLED:
-        return
+    """Write a sanitized error event to Redis for cross-process audit lookup."""
     try:
         from redis import Redis
 
@@ -146,12 +146,12 @@ def _persist_error_event(sample: ErrorSample) -> None:
             socket_connect_timeout=settings.REDIS_SOCKET_TIMEOUT,
         )
         pipe = client.pipeline()
-        pipe.lpush(settings.ERROR_REPORT_REDIS_KEY, json.dumps(payload, ensure_ascii=False))
-        pipe.ltrim(settings.ERROR_REPORT_REDIS_KEY, 0, settings.ERROR_REPORT_RETENTION_ITEMS - 1)
+        pipe.lpush(_REDIS_EVENT_KEY, json.dumps(payload, ensure_ascii=False))
+        pipe.ltrim(_REDIS_EVENT_KEY, 0, _REDIS_RETENTION_ITEMS - 1)
         pipe.execute()
         client.close()
     except Exception:
-        logger.debug("錯誤報告寫入 Redis 失敗（不影響原始回應）", exc_info=True)
+        logger.debug("錯誤稽核寫入 Redis 失敗（不影響原始回應）", exc_info=True)
 
 
 def record_error(
@@ -228,7 +228,7 @@ async def find_error_by_id(error_id: str) -> dict[str, object] | None:
     try:
         from api.core.security import redis_client
 
-        raw_items = await redis_client.lrange(settings.ERROR_REPORT_REDIS_KEY, 0, -1)
+        raw_items = await redis_client.lrange(_REDIS_EVENT_KEY, 0, -1)
     except Exception:
         return None
 

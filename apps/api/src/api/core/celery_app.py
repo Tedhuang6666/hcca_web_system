@@ -130,7 +130,6 @@ celery_app.conf.include = list(celery_app.conf.include or []) + [
     "api.services.document_reminder_tasks",
     "api.services.loan_tasks",
     "api.services.watchdog_tasks",
-    "api.services.error_report_tasks",
     "api.services.discord_reminders",
     "api.services.discord_sync_tasks",
     "api.services.metrics_tasks",
@@ -254,11 +253,6 @@ celery_app.conf.beat_schedule = {
         "task": "api.services.watchdog_tasks.run_watchdog",
         "schedule": 600.0,
     },
-    # 自動錯誤報告：聚合 API 5xx、Celery DLQ、DB/Redis/queue 狀態後寄給 OWNER_EMAILS
-    "owner-error-report": {
-        "task": "api.services.error_report_tasks.send_owner_error_report",
-        "schedule": float(settings.ERROR_REPORT_INTERVAL_SECONDS),
-    },
     "collect-celery-queue-depth-every-60s": {
         "task": "api.services.metrics_tasks.collect_queue_depth",
         "schedule": 60.0,
@@ -302,7 +296,6 @@ celery_app.conf.beat_schedule = {
 # Lifecycle 任務路由到 backup queue（同樣是低頻、可長跑、不阻塞線上請求）
 celery_app.conf.task_routes["api.services.data_lifecycle_tasks.*"] = {"queue": "backup"}
 celery_app.conf.task_routes["api.services.watchdog_tasks.*"] = {"queue": "backup"}
-celery_app.conf.task_routes["api.services.error_report_tasks.*"] = {"queue": "email"}
 
 
 def _task_payload(sender, **kwargs) -> dict:
