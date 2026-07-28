@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import {
   BadgeCheck,
   ChevronRight,
@@ -46,8 +47,38 @@ function AccessDenied() {
 }
 
 function CredentialCard({ credential }: { credential: ElectronicCredentialOut }) {
+  const cardRef = useRef<HTMLElement | null>(null);
+
+  function resetTilt() {
+    const card = cardRef.current;
+    if (!card) return;
+    card.style.setProperty("--credential-rotate-x", "0deg");
+    card.style.setProperty("--credential-rotate-y", "0deg");
+    card.style.setProperty("--credential-glint-x", "36%");
+  }
+
+  function handlePointerMove(event: ReactPointerEvent<HTMLElement>) {
+    const card = event.currentTarget;
+    const rect = card.getBoundingClientRect();
+    const pointerX = (event.clientX - rect.left) / rect.width - 0.5;
+    const pointerY = (event.clientY - rect.top) / rect.height - 0.5;
+    const maxTilt = event.pointerType === "touch" ? 2.25 : 3.5;
+
+    card.style.setProperty("--credential-rotate-x", `${(-pointerY * maxTilt).toFixed(2)}deg`);
+    card.style.setProperty("--credential-rotate-y", `${(pointerX * maxTilt).toFixed(2)}deg`);
+    card.style.setProperty("--credential-glint-x", `${((pointerX + 0.5) * 100).toFixed(1)}%`);
+  }
+
   return (
-    <section className="credential-card" aria-labelledby="credential-name">
+    <section
+      ref={cardRef}
+      className="credential-card"
+      aria-labelledby="credential-name"
+      onPointerMove={handlePointerMove}
+      onPointerLeave={resetTilt}
+      onPointerCancel={resetTilt}
+      onPointerUp={resetTilt}
+    >
       <div className="credential-card__shine" aria-hidden="true" />
       <div className="credential-card__header">
         <div className="flex items-center gap-3">
