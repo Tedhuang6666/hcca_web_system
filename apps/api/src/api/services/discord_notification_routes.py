@@ -20,6 +20,7 @@ from api.services.discord_embeds import (
 from api.services.outbox import emit
 
 EVENT_CATALOG: tuple[dict[str, str], ...] = (
+    {"key": "partner_application.submitted", "module": "shop", "label": "特約商家申請送出"},
     {"key": "merchandise_submission.submitted", "module": "shop", "label": "校商投稿送出"},
     {"key": "merchandise_submission.reviewed", "module": "shop", "label": "校商投稿審核完成"},
     {"key": "petition.created", "module": "petition", "label": "陳情建立"},

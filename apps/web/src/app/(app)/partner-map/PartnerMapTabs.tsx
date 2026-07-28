@@ -2,7 +2,7 @@
 
 import ModuleTabs, { type ModuleTab } from "@/components/layout/ModuleTabs";
 import { usePermissions } from "@/hooks/usePermissions";
-import { MapPinned, Settings } from "lucide-react";
+import { ClipboardCheck, MapPinned, Settings } from "lucide-react";
 
 export default function PartnerMapTabs() {
   const { isAdmin, permissions } = usePermissions();
@@ -13,6 +13,7 @@ export default function PartnerMapTabs() {
   const tabs: ModuleTab[] = [
     { href: "/partner-map", label: "地圖", icon: MapPinned, end: true },
     ...(canManage ? [{ href: "/partner-map/admin", label: "管理", icon: Settings }] : []),
+    ...(canManage ? [{ href: "/partner-map/admin/applications", label: "申請審核", icon: ClipboardCheck }] : []),
   ];
 
   return <ModuleTabs label="特約地圖分頁" tabs={tabs} />;

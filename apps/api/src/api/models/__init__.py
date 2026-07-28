@@ -233,6 +233,13 @@ from api.models.org import Org, Permission, Position, UserPosition  # noqa: F401
 
 # Outbox 事件表（at-least-once 通知保障）
 from api.models.outbox import OutboxEvent  # noqa: F401
+from api.models.partner_business_application import (  # noqa: F401
+    PartnerApplicationField,
+    PartnerApplicationFieldType,
+    PartnerApplicationSettings,
+    PartnerBusinessApplication,
+    PartnerBusinessApplicationStatus,
+)
 from api.models.partner_map import (  # noqa: F401
     PartnerBusiness,
     PartnerBusinessImage,

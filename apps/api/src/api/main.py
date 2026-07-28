@@ -90,6 +90,7 @@ from api.routers import (
     navigation_profiles,
     notifications,
     orgs,
+    partner_business_application,
     partner_map,
     people,
     petitions,
@@ -428,6 +429,7 @@ def create_app() -> FastAPI:
     app.include_router(orgs.router)
     app.include_router(people.router)
     app.include_router(partner_map.router)
+    app.include_router(partner_business_application.router)
     app.include_router(council_proposals.router)
     app.include_router(judicial_petitions.router)
     app.include_router(petitions.router)
