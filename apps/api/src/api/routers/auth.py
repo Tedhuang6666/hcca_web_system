@@ -410,8 +410,6 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)) 
         logger.warning(
             "OAuth2 authentication failed",
             extra={
-                "error": oauth_error,
-                "description": getattr(e, "description", ""),
                 "client_ip": client_ip,
                 "retrying": not oauth_retry,
             },
