@@ -422,15 +422,25 @@ def enqueue_email(
         Celery task_id 字串
     """
     recipients = [to] if isinstance(to, str) else to
+    queued_body = body
+    queued_subtype = subtype
+    if email_message_id is None and not already_rendered:
+        from api.email.sender import render_generic_message
+
+        queued_body = render_generic_message(
+            subject,
+            body,
+            {"body_format": "html" if subtype == "html" else "markdown"},
+        )
+        queued_subtype = "html"
     result = send_email.delay(
         recipients,
         subject,
-        body,
-        subtype,
+        queued_body,
+        queued_subtype,
         email_message_id=email_message_id,
         email_recipient_id=email_recipient_id,
         attachments=attachments,
-        format_body=email_message_id is None and not already_rendered,
     )
     logger.info("郵件任務已排入佇列 task_id=%s", result.id)
     return result.id

@@ -160,6 +160,34 @@ def test_error_report_filters_expected_auth_failures_only() -> None:
     assert batch.filtered_occurrences == 3
 
 
+def test_error_report_filters_expected_optional_integration_failures() -> None:
+    from api.services.error_report_tasks import _read_new_error_events
+
+    expected = [
+        ("/line/webhook", "LINE Bot 尚未設定，請聯絡管理員"),
+        ("/email/resend/webhook", "RESEND_WEBHOOK_SECRET 未設定"),
+        ("/discord/available-guilds", "Discord 模組尚未啟用"),
+        ("/discord/available-guilds", "Discord Bot 離線或尚未回報伺服器清單"),
+        ("/discord/login", "Discord OAuth 尚未設定"),
+    ]
+    errors = []
+    for index, (path, detail) in enumerate(expected):
+        error = _api_error(f"HTTPException: 503: {detail}", 1000 + index)
+        error["path"] = path
+        error["status_code"] = 503
+        errors.append(error)
+
+    with patch.object(settings, "ERROR_REPORT_MIN_SEVERITY", "warning"):
+        batch = _read_new_error_events(
+            _ErrorReportRedisStub(errors),
+            last_sent=0,
+            now=1800,
+        )
+
+    assert batch.events == []
+    assert batch.filtered_occurrences == len(expected)
+
+
 def test_error_report_aggregates_and_suppresses_repeated_events() -> None:
     from api.services.error_report_tasks import _mark_notified, _read_new_error_events
 

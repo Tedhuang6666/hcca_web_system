@@ -91,6 +91,39 @@ async def test_create_petition_as_guest_with_contact_email_succeeds(db_session, 
     assert len(payload["case_number"]) == 7
 
 
+async def test_create_petition_survives_optional_integration_failure(
+    db_session, client, monkeypatch
+) -> None:
+    _, petition_type = await _make_org_and_type(db_session)
+
+    async def fail_notification(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("Discord route unavailable")
+
+    monkeypatch.setattr(
+        "api.services.discord_notification_routes.emit_routed_notification",
+        fail_notification,
+    )
+    monkeypatch.setattr(
+        "api.routers.petitions.enqueue_petition_private_channel",
+        fail_notification,
+    )
+
+    response = await client.post(
+        "/petitions",
+        json={
+            "type_id": str(petition_type.id),
+            "is_named": False,
+            "contact_name": "訪客",
+            "contact_email": "guest@example.com",
+            "title": "整合故障時仍可送件",
+            "content": "核心陳情流程不應被可選通知服務阻斷。",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["status"] == "submitted"
+
+
 async def test_create_petition_as_guest_without_contact_email_returns_422(
     db_session, client
 ) -> None:

@@ -87,7 +87,27 @@ def _business_out(
     include_internal: bool = False,
     viewer_id: uuid.UUID | None = None,
 ) -> PartnerBusinessOut:
-    out = PartnerBusinessOut.model_validate(business)
+    derived_fields = {
+        "promo_images",
+        "tags",
+        "locations",
+        "offers",
+        "flyer_image_url",
+        "rating_avg",
+        "rating_count",
+        "my_rating",
+        "has_checked_in",
+        "popularity_score",
+        "can_view_private_details",
+    }
+    scalar_data = {
+        field_name: getattr(business, field_name)
+        for field_name in PartnerBusinessOut.model_fields
+        if field_name not in derived_fields
+    }
+    scalar_data["promo_images"] = []
+    out = PartnerBusinessOut.model_validate(scalar_data)
+    out.tags = [PartnerTagOut.model_validate(tag) for tag in business.tags]
     rating_avg, rating_count = map_svc.rating_stats(business)
     out.can_view_private_details = include_private
     out.internal_note = business.internal_note if include_internal else None
