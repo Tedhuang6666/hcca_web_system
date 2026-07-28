@@ -69,3 +69,4 @@ export * from "./api/impersonation";
 export * from "./api/privacy-requests";
 export * from "./api/loans";
 export * from "./api/inventory";
+export * from "./api/electronic-credentials";
