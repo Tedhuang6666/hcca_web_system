@@ -14202,11 +14202,6 @@ export interface components {
              */
             created_at: string;
             /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-            /**
              * Id
              * Format: uuid
              */
@@ -14221,6 +14216,11 @@ export interface components {
             published_at: string | null;
             /** Title */
             title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /** AnnouncementMediaOut */
         AnnouncementMediaOut: {
@@ -23688,39 +23688,45 @@ export interface components {
         };
         /** MerchandiseSubmissionAIEvidenceOut */
         MerchandiseSubmissionAIEvidenceOut: {
-            /** Level */
-            level: "A" | "B" | "C";
             /** Category */
             category: string;
             /** Label */
             label: string;
-            /** Value */
-            value: string;
+            /**
+             * Level
+             * @enum {string}
+             */
+            level: "A" | "B" | "C";
             /** Source */
             source: string;
+            /** Value */
+            value: string;
         };
         /** MerchandiseSubmissionAdminFileOut */
         MerchandiseSubmissionAdminFileOut: {
+            /** Ai Detection Evidence */
+            ai_detection_evidence: components["schemas"]["MerchandiseSubmissionAIEvidenceOut"][];
+            /** Ai Detection Scanned At */
+            ai_detection_scanned_at: string | null;
+            /** Ai Detection Sha256 */
+            ai_detection_sha256: string | null;
+            /** Ai Detection Status */
+            ai_detection_status: ("detected" | "supporting" | "no_evidence" | "not_applicable" | "error") | null;
             /** Content Type */
             content_type: string;
             /** File Size */
             file_size: number;
             /** Filename */
             filename: string;
-            /** Id */
+            /**
+             * Id
+             * Format: uuid
+             */
             id: string;
             /** Storage Key */
             storage_key: string;
             /** Url */
             url: string;
-            /** Ai Detection Status */
-            ai_detection_status: ("detected" | "supporting" | "no_evidence" | "not_applicable" | "error") | null;
-            /** Ai Detection Evidence */
-            ai_detection_evidence: components["schemas"]["MerchandiseSubmissionAIEvidenceOut"][];
-            /** Ai Detection Sha256 */
-            ai_detection_sha256: string | null;
-            /** Ai Detection Scanned At */
-            ai_detection_scanned_at: string | null;
         };
         /** MerchandiseSubmissionAdminListItem */
         MerchandiseSubmissionAdminListItem: {
