@@ -22,7 +22,7 @@ const nextConfig: NextConfig = {
     formats: ["image/avif", "image/webp"],
     minimumCacheTTL: 2592000,
     deviceSizes: [384, 640, 750, 828, 1080, 1200, 1920],
-    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+    imageSizes: [16, 32, 48, 64, 96, 128, 192, 256, 320, 384, 512],
     remotePatterns: [
       { protocol: "https", hostname: "**.trycloudflare.com" },
       { protocol: "https", hostname: "**.devtunnels.ms" },
@@ -35,6 +35,19 @@ const nextConfig: NextConfig = {
       // S3 / MinIO 後端附件（依實際 bucket domain 自行調整）
       { protocol: "https", hostname: "*.s3.amazonaws.com" },
     ],
+  },
+  async headers() {
+    return [
+      {
+        source: "/brand/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=2592000, stale-while-revalidate=86400",
+          },
+        ],
+      },
+    ];
   },
   async rewrites() {
     return [

@@ -2,6 +2,19 @@ import Image from "next/image";
 
 const OPTIMIZABLE_HOSTS = new Set(["hcca.buckets.hct.works"]);
 
+const STATIC_EMBLEM_ASSETS = {
+  default: {
+    avif: "/brand/hcca-emblem-320.avif",
+    webp: "/brand/hcca-emblem-320.webp",
+    size: 320,
+  },
+  small: {
+    avif: "/brand/hcca-emblem-64.avif",
+    webp: "/brand/hcca-emblem-64.webp",
+    size: 64,
+  },
+} as const;
+
 function canOptimize(src: string) {
   if (src.startsWith("/")) return true;
 
@@ -30,7 +43,28 @@ export default function PublicEmblem({
   const resolvedSrc = variant === "small" && src === "/brand/hcca-emblem-512.png"
     ? "/brand/hcca-emblem-192.png"
     : src;
-  const sourceSize = variant === "small" ? 192 : 512;
+  const staticAsset = src === "/brand/hcca-emblem-512.png"
+    ? STATIC_EMBLEM_ASSETS[variant]
+    : null;
+  const sourceSize = staticAsset?.size ?? (variant === "small" ? 192 : 512);
+
+  if (staticAsset) {
+    return (
+      <picture>
+        <source type="image/avif" srcSet={staticAsset.avif} />
+        <img
+          src={staticAsset.webp}
+          alt={alt}
+          width={sourceSize}
+          height={sourceSize}
+          loading={priority ? "eager" : "lazy"}
+          decoding="async"
+          fetchPriority={priority ? "high" : "auto"}
+          className={className}
+        />
+      </picture>
+    );
+  }
 
   if (canOptimize(resolvedSrc)) {
     return (

@@ -1,3 +1,5 @@
+import "leaflet/dist/leaflet.css";
+
 import type { Metadata } from "next";
 
 import ModuleBoundary from "@/components/ModuleBoundary";

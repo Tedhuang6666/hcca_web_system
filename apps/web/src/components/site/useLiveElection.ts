@@ -34,7 +34,7 @@ async function fetchPublicElections(): Promise<PublicElectionItem[]> {
  * 並抓取即時摘要，供站台級 banner 與首頁卡片共用，避免兩處各抓一份。
  * 用 useResilientPoll 週期更新，分頁隱藏 / 離線時自動暫停。
  */
-export function useLiveElection(pollMs = 25_000): ActiveLiveElection | null {
+export function useLiveElection(pollMs = 25_000, enabled = true): ActiveLiveElection | null {
   const [active, setActive] = useState<ActiveLiveElection | null>(null);
   const { moduleInfo } = useModuleStatus();
   const electionModule = moduleInfo("elections");
@@ -43,8 +43,8 @@ export function useLiveElection(pollMs = 25_000): ActiveLiveElection | null {
   const pollingEnabled = electionModule !== null && !electionModule.on;
 
   useEffect(() => {
-    if (!pollingEnabled) setActive(null);
-  }, [pollingEnabled]);
+    if (!enabled || !pollingEnabled) setActive(null);
+  }, [enabled, pollingEnabled]);
 
   useResilientPoll(
     async () => {
@@ -71,7 +71,7 @@ export function useLiveElection(pollMs = 25_000): ActiveLiveElection | null {
       });
       return "ok";
     },
-    { enabled: pollingEnabled, intervalMs: pollMs },
+    { enabled: enabled && pollingEnabled, intervalMs: pollMs },
   );
 
   return active;
