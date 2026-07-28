@@ -11,6 +11,8 @@ from api.core.config import settings
 from api.models.electronic_credential import ElectronicCredentialAuthorization
 from api.models.user import User
 from api.schemas.electronic_credential import (
+    ElectronicCredentialAuthorizationBulkCreate,
+    ElectronicCredentialAuthorizationBulkOut,
     ElectronicCredentialAuthorizationCreate,
     ElectronicCredentialAuthorizationOut,
     ElectronicCredentialAuthorizationUpdate,
@@ -141,6 +143,44 @@ async def create_authorization(
     await db.flush()
     await db.refresh(authorization)
     return await _authorization_out(db, authorization)
+
+
+async def create_authorizations(
+    db: AsyncSession,
+    data: ElectronicCredentialAuthorizationBulkCreate,
+    actor_id: uuid.UUID,
+) -> ElectronicCredentialAuthorizationBulkOut:
+    emails = list(dict.fromkeys(str(email).strip().lower() for email in data.emails))
+    existing_emails: set[str] = set()
+    for offset in range(0, len(emails), 500):
+        existing_emails.update(
+            await db.scalars(
+                select(ElectronicCredentialAuthorization.email).where(
+                    ElectronicCredentialAuthorization.email.in_(emails[offset : offset + 500])
+                )
+            )
+        )
+
+    new_emails = [email for email in emails if email not in existing_emails]
+    identity_label = data.identity_label.strip()
+    note = data.note.strip() if data.note else None
+    db.add_all(
+        [
+            ElectronicCredentialAuthorization(
+                email=email,
+                identity_label=identity_label,
+                note=note,
+                created_by=actor_id,
+                updated_by=actor_id,
+            )
+            for email in new_emails
+        ]
+    )
+    await db.flush()
+    return ElectronicCredentialAuthorizationBulkOut(
+        created_count=len(new_emails),
+        skipped_emails=[email for email in emails if email in existing_emails],
+    )
 
 
 async def get_authorization(
