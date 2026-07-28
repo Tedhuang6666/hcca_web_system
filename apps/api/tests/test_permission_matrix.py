@@ -145,6 +145,9 @@ KNOWN_PUBLIC_ROUTES: set[tuple[str, str]] = {
     ("/partner-map/rankings", "GET"),
     ("/partner-map/submissions", "POST"),
     ("/partner-map/tags", "GET"),
+    # 特約商家申請（公開表單與匿名送出）
+    ("/partner-map/applications/portal", "GET"),
+    ("/partner-map/applications", "POST"),
     # 校商投稿圖片（URL 具簽名 token 與期限）
     ("/merchandise-submissions/discord-images/{file_id}", "GET"),
     # 公開會議看板

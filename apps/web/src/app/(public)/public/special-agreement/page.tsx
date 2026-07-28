@@ -6,6 +6,7 @@ import MarkdownBlock from "@/components/site/MarkdownBlock";
 import PublicFileEmbed, { type PublicFileEmbedItem } from "@/components/site/PublicFileEmbed";
 import { fetchPublicBundle } from "@/lib/serverFetch";
 import { readSpecialAgreementContent } from "@/lib/specialAgreement";
+import MerchantApplicationForm from "./MerchantApplicationForm";
 
 export const metadata: Metadata = {
   title: "特約洽談",
@@ -100,6 +101,8 @@ export default async function SpecialAgreementPage() {
           </Link>
         </aside>
       </section>
+
+      <MerchantApplicationForm />
 
       <section aria-labelledby="special-agreement-files">
         <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">

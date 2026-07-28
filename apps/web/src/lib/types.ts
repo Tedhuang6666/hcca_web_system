@@ -715,6 +715,58 @@ export interface PartnerBusinessImageOut {
   updated_at: string;
 }
 
+export type PartnerApplicationFieldType = "text" | "textarea" | "email" | "tel" | "url" | "select";
+export type PartnerBusinessApplicationStatus =
+  | "pending"
+  | "in_review"
+  | "approved"
+  | "needs_info"
+  | "rejected";
+
+export interface PartnerApplicationFieldConfig {
+  key: string;
+  label: string;
+  field_type: PartnerApplicationFieldType;
+  required: boolean;
+  placeholder: string | null;
+  help_text: string | null;
+  options: string[];
+  sort_order: number;
+  is_active: boolean;
+}
+
+export interface PartnerApplicationFieldOut extends PartnerApplicationFieldConfig {
+  id: string;
+}
+
+export interface PartnerApplicationSettingsOut {
+  id: string;
+  is_open: boolean;
+  title: string;
+  intro: string;
+  privacy_notice: string | null;
+  fields: PartnerApplicationFieldOut[];
+  updated_at: string;
+}
+
+export interface PartnerApplicationPortalOut {
+  settings: PartnerApplicationSettingsOut;
+  is_accepting: boolean;
+}
+
+export interface PartnerBusinessApplicationOut {
+  id: string;
+  status: PartnerBusinessApplicationStatus;
+  field_values: Record<string, string>;
+  submitted_by: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
+  business_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 
 // ── 班級系統型別 ──────────────────────────────────────────────────────────────
 
