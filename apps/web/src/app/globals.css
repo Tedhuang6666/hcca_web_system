@@ -4845,11 +4845,16 @@ html[data-reveal-ready] [data-reveal].is-reveal-in {
 
 .credential-card__shine {
   position: absolute;
-  inset: -35% 42% 35% -12%;
-  background: radial-gradient(circle at var(--credential-glint-x) 35%, rgba(255, 255, 255, 0.14), transparent 68%);
+  inset: 0;
+  background: radial-gradient(
+    ellipse 42% 72% at var(--credential-glint-x) 24%,
+    rgba(255, 255, 255, 0.12) 0%,
+    rgba(255, 255, 255, 0.04) 48%,
+    transparent 100%
+  );
+  opacity: 0.78;
   pointer-events: none;
   transform: translateZ(1px);
-  transition: background-position 180ms ease;
 }
 
 .credential-card__header,
