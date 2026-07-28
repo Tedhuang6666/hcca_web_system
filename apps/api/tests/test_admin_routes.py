@@ -82,6 +82,20 @@ async def test_admin_can_update_position_weight(
 
 
 @pytest.mark.asyncio
+async def test_admin_route_does_not_require_mfa(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin, _, _, position, _ = await _seed_admin_data(db_session)
+    admin.mfa_enabled = False
+    _override_user(admin)
+
+    response = await client.patch(f"/admin/positions/{position.id}", json={"weight": 42})
+
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_admin_can_update_user_position_dates(
     client: AsyncClient,
     db_session: AsyncSession,

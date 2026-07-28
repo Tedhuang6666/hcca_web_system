@@ -417,7 +417,7 @@ async def make_user(db_session: AsyncSession) -> Callable[..., Any]:
 
 @pytest_asyncio.fixture
 async def admin_user(make_user: Callable[..., Any]) -> User:
-    """具 MFA 的系統管理員帳號，供需要 require_admin_mfa 的端點測試使用。"""
+    """系統管理員帳號，供管理員端點測試使用。"""
     return await make_user(
         email="admin@school.edu",
         display_name="系統管理員",

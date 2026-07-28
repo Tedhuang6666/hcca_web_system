@@ -68,7 +68,6 @@ from api.core.query_audit import get_slow_queries
 from api.core.security import redis_client, revoke_user
 from api.core.ws_manager import manager as ws_manager
 from api.dependencies.auth import get_current_active_user, get_optional_user
-from api.dependencies.permissions import require_admin_mfa
 from api.models.email_message import EmailMessage
 from api.models.user import User
 from api.models.user_identity import UserIdentity
@@ -81,7 +80,6 @@ from api.services.discord_bot import emit_security_alert
 router = APIRouter(
     prefix="/admin/system",
     tags=["管理員 / 系統"],
-    dependencies=[Depends(require_admin_mfa)],
 )
 public_router = APIRouter(prefix="/system", tags=["系統"])
 logger = logging.getLogger(__name__)
@@ -639,7 +637,6 @@ async def list_dead_letters(_admin: AdminUser, limit: int = 50) -> DeadLetterRes
     "/dead-letters",
     response_model=dict,
     summary="清空 Celery Dead Letter Queue",
-    dependencies=[Depends(require_admin_mfa)],
 )
 async def clear_dead_letters(session: DbDep, _admin: AdminUser) -> dict:
     removed = await redis_client.delete(settings.CELERY_DLQ_REDIS_KEY)
@@ -660,7 +657,6 @@ async def clear_dead_letters(session: DbDep, _admin: AdminUser) -> dict:
     "/dead-letters/{index}/replay",
     response_model=dict,
     summary="安全重放單筆 Celery Dead Letter",
-    dependencies=[Depends(require_admin_mfa)],
 )
 async def replay_dead_letter(
     index: int,
@@ -731,9 +727,7 @@ async def get_maintenance(_admin: AdminUser) -> MaintenanceView:
     return MaintenanceView(**state)
 
 
-@router.put(
-    "/maintenance", response_model=MaintenanceView, dependencies=[Depends(require_admin_mfa)]
-)
+@router.put("/maintenance", response_model=MaintenanceView)
 async def update_maintenance(
     body: MaintenanceBody, session: DbDep, _admin: AdminUser
 ) -> MaintenanceView:
@@ -768,7 +762,6 @@ async def list_flags(_admin: AdminUser) -> list[FeatureFlagItem]:
 @router.patch(
     "/feature-flags/{key:path}",
     response_model=FeatureFlagItem,
-    dependencies=[Depends(require_admin_mfa)],
 )
 async def update_flag(
     key: str, body: SetFlagBody, session: DbDep, _admin: AdminUser
@@ -794,7 +787,7 @@ async def update_flag(
 # ── Load Shed Mode ───────────────────────────────────────────────────────────
 
 
-@router.put("/load-shed", response_model=dict, dependencies=[Depends(require_admin_mfa)])
+@router.put("/load-shed", response_model=dict)
 async def update_load_shed_mode(body: LoadShedBody, session: DbDep, _admin: AdminUser) -> dict:
     mode = await set_load_shed_force_mode(body.mode)
     await audit_svc.record(
@@ -852,7 +845,6 @@ async def list_modules(_admin: AdminUser) -> list[ModuleStatusOut]:
 @router.put(
     "/modules/{module_id}/maintenance",
     response_model=ModuleStatusOut,
-    dependencies=[Depends(require_admin_mfa)],
 )
 async def update_module_maintenance(
     module_id: str, body: ModuleMaintenanceBody, session: DbDep, _admin: AdminUser
@@ -1165,7 +1157,6 @@ async def list_defense_rules(
     "/defense/rules",
     response_model=DefenseRuleOut,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_admin_mfa)],
 )
 async def create_defense_rule(
     body: DefenseRuleCreate, session: DbDep, _admin: AdminUser
@@ -1190,7 +1181,6 @@ async def create_defense_rule(
 @router.patch(
     "/defense/rules/{rule_id}",
     response_model=DefenseRuleOut,
-    dependencies=[Depends(require_admin_mfa)],
 )
 async def update_defense_rule(
     rule_id: uuid.UUID, body: DefenseRuleUpdate, session: DbDep, _admin: AdminUser
@@ -1208,7 +1198,6 @@ async def update_defense_rule(
 @router.delete(
     "/defense/rules/{rule_id}",
     response_model=DefenseRuleOut,
-    dependencies=[Depends(require_admin_mfa)],
 )
 async def deactivate_defense_rule(
     rule_id: uuid.UUID, session: DbDep, _admin: AdminUser
@@ -1242,7 +1231,6 @@ async def preview_user_block(
     "/defense/user-blocks",
     response_model=UserBlockResult,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_admin_mfa)],
 )
 async def block_user(
     body: UserBlockBody,
@@ -1299,7 +1287,7 @@ async def get_rate_limit(_admin: AdminUser) -> dict:
     return await get_rate_limit_config()
 
 
-@router.put("/rate-limit", response_model=dict, dependencies=[Depends(require_admin_mfa)])
+@router.put("/rate-limit", response_model=dict)
 async def update_rate_limit(body: RateLimitConfigBody, session: DbDep, _admin: AdminUser) -> dict:
     config = body.model_dump()
     return await defense_svc.set_rate_limit_config(session, actor=_admin, config=config)
@@ -1317,7 +1305,6 @@ async def get_ip_blocklist(_admin: AdminUser) -> list[IpBlockedItem]:
     "/ip-blocklist",
     response_model=IpBlockedItem,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_admin_mfa)],
 )
 async def add_ip_block(body: IpBlockBody, session: DbDep, _admin: AdminUser) -> IpBlockedItem:
     await ip_block(body.ip, reason=body.reason, ttl_seconds=body.ttl_seconds)
@@ -1340,7 +1327,7 @@ async def add_ip_block(body: IpBlockBody, session: DbDep, _admin: AdminUser) -> 
     return IpBlockedItem(ip=body.ip, reason=body.reason, expires_at=expires_at)
 
 
-@router.delete("/ip-blocklist/{ip}", response_model=dict, dependencies=[Depends(require_admin_mfa)])
+@router.delete("/ip-blocklist/{ip}", response_model=dict)
 async def remove_ip_block(ip: str, session: DbDep, _admin: AdminUser) -> dict:
     ok = await ip_unblock(ip)
     if not ok:
@@ -1366,7 +1353,7 @@ async def remove_ip_block(ip: str, session: DbDep, _admin: AdminUser) -> dict:
 # ── 強制登出 ────────────────────────────────────────────────────────────────
 
 
-@router.post("/revoke-user-tokens", response_model=dict, dependencies=[Depends(require_admin_mfa)])
+@router.post("/revoke-user-tokens", response_model=dict)
 async def force_logout_user(body: RevokeUserBody, session: DbDep, _admin: AdminUser) -> dict:
     count = await revoke_user(str(body.user_id))
     await audit_svc.record(
@@ -1468,7 +1455,6 @@ async def clear_recent_errors(_admin: AdminUser) -> dict:
     "/recovery/clear-cache",
     response_model=dict,
     summary="清除應用層快取",
-    dependencies=[Depends(require_admin_mfa)],
 )
 async def recovery_clear_cache(session: DbDep, _admin: AdminUser) -> dict:
     result = await recovery.clear_app_cache()
@@ -1494,7 +1480,6 @@ async def recovery_clear_cache(session: DbDep, _admin: AdminUser) -> dict:
     "/recovery/db-upgrade",
     response_model=dict,
     summary="升級資料庫到最新版本",
-    dependencies=[Depends(require_admin_mfa)],
 )
 async def recovery_db_upgrade(session: DbDep, _admin: AdminUser) -> dict:
     """執行 alembic upgrade head。"""
@@ -1534,7 +1519,6 @@ async def recovery_db_upgrade(session: DbDep, _admin: AdminUser) -> dict:
     "/recovery/restart",
     response_model=dict,
     summary="重啟服務",
-    dependencies=[Depends(require_admin_mfa)],
 )
 async def recovery_restart(background: BackgroundTasks, session: DbDep, _admin: AdminUser) -> dict:
     """依環境觸發重啟（dev 熱重載 / prod SIGHUP gunicorn master）。回應送出後才執行。"""
