@@ -12,6 +12,18 @@ export interface CurrentUserCache {
 }
 
 export const AUTH_CACHE_EVENT = "hcca:auth-cache-updated";
+export const IMPERSONATION_EVENT = "hcca:impersonation-updated";
+const IMPERSONATION_STORAGE_KEY = "hcca_impersonation";
+
+export interface ImpersonationSession {
+  token: string;
+  target_user_id: string;
+  target_email: string;
+  target_display_name: string;
+  actor_email: string;
+  actor_display_name: string;
+  expires_at: number;
+}
 
 // SECURITY: 敏感權限資料（is_superuser、is_owner、permissions）改存 sessionStorage，
 // 在瀏覽器關閉後自動清除，減少 XSS 或本機存取攻擊的曝露窗口。
@@ -27,6 +39,40 @@ function ss(): Storage | null {
 
 function notifyAuthCacheUpdated(): void {
   if (typeof window !== "undefined") window.dispatchEvent(new Event(AUTH_CACHE_EVENT));
+}
+
+function notifyImpersonationUpdated(): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(IMPERSONATION_EVENT));
+}
+
+export function saveImpersonationSession(session: ImpersonationSession): void {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(IMPERSONATION_STORAGE_KEY, JSON.stringify(session));
+  notifyImpersonationUpdated();
+}
+
+export function getImpersonationSession(): ImpersonationSession | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(IMPERSONATION_STORAGE_KEY);
+    if (!raw) return null;
+    const session = JSON.parse(raw) as ImpersonationSession;
+    if (!session.token || session.expires_at <= Date.now()) {
+      window.sessionStorage.removeItem(IMPERSONATION_STORAGE_KEY);
+      notifyImpersonationUpdated();
+      return null;
+    }
+    return session;
+  } catch {
+    window.sessionStorage.removeItem(IMPERSONATION_STORAGE_KEY);
+    return null;
+  }
+}
+
+export function clearImpersonationSession(): void {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.removeItem(IMPERSONATION_STORAGE_KEY);
+  notifyImpersonationUpdated();
 }
 
 export function cacheCurrentUser(me: CurrentUserCache): void {
@@ -62,6 +108,7 @@ export function clearAuthCache(): void {
   ss()?.removeItem("is_superuser");
   ss()?.removeItem("is_owner");
   ss()?.removeItem("permissions");
+  clearImpersonationSession();
   notifyAuthCacheUpdated();
 }
 

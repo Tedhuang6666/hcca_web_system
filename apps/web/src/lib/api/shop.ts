@@ -1,7 +1,7 @@
 import type {
   CartOut, CatalogCategoryOut, CloseStatusOut, OrderListItem, OrderOut, OrderQuantityRow, OrderSummaryOut, ProductCategoryOut, ProductOut, ProductSeriesOut, ProductVariantGroupOut, ProductVariantOptionOut, ShopClassSummaryOut, ShopOrderCloseOut,
 } from "../types";
-import { BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
+import { authFetch, BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
 
 // ── 商店 ──────────────────────────────────────────────────────────────────────
 
@@ -91,7 +91,7 @@ export const shopApi = {
     const q = new URLSearchParams();
     if (params?.activity_id) q.set("activity_id", params.activity_id);
     const qs = q.toString();
-    return fetch(`${BASE}/shop/reports/orders.${format}${qs ? `?${qs}` : ""}`, {
+    return authFetch(`${BASE}/shop/reports/orders.${format}${qs ? `?${qs}` : ""}`, {
       credentials: "include",
     });
   },
@@ -167,7 +167,7 @@ export const shopApi = {
     const fd = new FormData();
     fd.append("file", file);
     const doFetch = () =>
-      fetch(`${BASE}/shop/images`, {
+      authFetch(`${BASE}/shop/images`, {
         method: "POST",
         credentials: "include",
         headers: csrfHeaders("POST"),

@@ -1,7 +1,7 @@
 import type {
   AmendmentComparisonRow, RegulationArticleOut, RegulationCategory, RegulationListItem, RegulationOut, RegulationRevisionOut, RegulationSearchResult, RegulationTreeNodeOut, RegulationWorkflowLogOut,
 } from "../types";
-import { BASE, get, post, patch, put, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, pathSegment } from "./core";
+import { authFetch, BASE, get, post, patch, put, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError, pathSegment } from "./core";
 
 // ── 法規 ──────────────────────────────────────────────────────────────────────
 
@@ -56,7 +56,7 @@ export const regulationsApi = {
     fd.append("change_brief", body.change_brief ?? "匯入既有現行法規");
 
     const doFetch = () =>
-      fetch(`${BASE}/regulations/import-docx`, {
+      authFetch(`${BASE}/regulations/import-docx`, {
         method: "POST",
         credentials: "include",
         headers: csrfHeaders("POST"),
@@ -94,7 +94,7 @@ export const regulationsApi = {
     fd.append("change_brief", body.change_brief ?? "匯入既有現行法規");
 
     const doFetch = () =>
-      fetch(`${BASE}/regulations/import-documents`, {
+      authFetch(`${BASE}/regulations/import-documents`, {
         method: "POST",
         credentials: "include",
         headers: csrfHeaders("POST"),
@@ -188,7 +188,7 @@ export const regulationsApi = {
     rows: AmendmentComparisonRow[];
   }): Promise<Blob> => {
     const doFetch = () =>
-      fetch(`${BASE}${regulationPath(id)}/amendment-comparison/export.pdf`, {
+      authFetch(`${BASE}${regulationPath(id)}/amendment-comparison/export.pdf`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json", ...csrfHeaders("POST") },

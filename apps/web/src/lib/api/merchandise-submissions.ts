@@ -9,7 +9,7 @@ import type {
   MerchandiseSubmissionSettingsUpdate,
   MerchandiseSubmissionUploadOut,
 } from "../types";
-import { BASE, ApiError, csrfHeaders, del, errorMessageFromResponse, get, patch, post, silentRefresh } from "./core";
+import { BASE, ApiError, authFetch, csrfHeaders, del, errorMessageFromResponse, get, patch, post, silentRefresh } from "./core";
 
 type MerchandiseSubmissionReviewBody = Omit<MerchandiseSubmissionReview, "status"> & {
   status: MerchandiseSubmissionReview["status"] | "review_completed";
@@ -19,7 +19,7 @@ type MerchandiseSubmissionReviewBody = Omit<MerchandiseSubmissionReview, "status
 async function upload<T>(path: string, file: File, query = "", method = "POST"): Promise<T> {
   const body = new FormData();
   body.append("file", file);
-  const request = () => fetch(`${BASE}${path}${query}`, {
+  const request = () => authFetch(`${BASE}${path}${query}`, {
     method,
     credentials: "include",
     headers: csrfHeaders("POST"),

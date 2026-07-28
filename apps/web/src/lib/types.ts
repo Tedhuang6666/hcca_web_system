@@ -1315,5 +1315,15 @@ export interface DiscordNotificationEventOut {
   label: string;
 }
 
+export interface ImpersonationStartResponse {
+  token: string;
+  expires_in_minutes: number;
+  target_user_id: string;
+  target_email: string;
+  target_display_name: string;
+  actor_email: string;
+  actor_display_name: string;
+}
+
 
 // ── Google Calendar 同步 ──────────────────────────────────────────────────────

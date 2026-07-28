@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
-  Copy,
   Lock,
   LogOut,
   ShieldHalf,
@@ -12,11 +12,14 @@ import { toast } from "sonner";
 
 import { usePermissions } from "@/hooks/usePermissions";
 import {
+  authApi,
   impersonationApi,
   type ImpersonationStartResponse, apiErrorMessage } from "@/lib/api";
+import { cacheCurrentUser, clearImpersonationSession, saveImpersonationSession } from "@/lib/auth-cache";
 
 export default function ImpersonationPage() {
-  const { isAdmin } = usePermissions();
+  const { can } = usePermissions();
+  const router = useRouter();
   const [userId, setUserId] = useState("");
   const [minutes, setMinutes] = useState(30);
   const [busy, setBusy] = useState(false);
@@ -31,8 +34,7 @@ export default function ImpersonationPage() {
     if (
       !window.confirm(
         `將以該使用者身分檢視 ${minutes} 分鐘。\n` +
-          `所有操作會被記為「以 ${id} 身分（actor=你）」。\n` +
-          `預設 read-only：嘗試寫入會被中介層擋下。\n\n` +
+          `所有修改會被記為「以 ${id} 身分，由你管理員代行」。\n\n` +
           `繼續？`,
       )
     )
@@ -40,8 +42,14 @@ export default function ImpersonationPage() {
     setBusy(true);
     try {
       const r = await impersonationApi.start(id, minutes);
+      saveImpersonationSession({
+        ...r,
+        expires_at: Date.now() + r.expires_in_minutes * 60_000,
+      });
+      cacheCurrentUser(await authApi.me());
       setActive(r);
-      toast.success(`已啟動 ${r.expires_in_minutes} 分鐘 impersonation`);
+      toast.success(`已啟動 ${r.expires_in_minutes} 分鐘代行，現在套用目標使用者視角`);
+      router.replace("/");
     } catch (e) {
       toast.error(apiErrorMessage(e, "啟動失敗"));
     } finally {
@@ -54,8 +62,11 @@ export default function ImpersonationPage() {
     setBusy(true);
     try {
       await impersonationApi.end(active.token, "manual_end");
+      clearImpersonationSession();
+      cacheCurrentUser(await authApi.me());
       toast.success("已結束 impersonation（token 已撤銷）");
       setActive(null);
+      router.replace("/admin/impersonation");
     } catch (e) {
       toast.error(apiErrorMessage(e, "結束失敗"));
     } finally {
@@ -63,17 +74,7 @@ export default function ImpersonationPage() {
     }
   };
 
-  const copyToken = async () => {
-    if (!active) return;
-    try {
-      await navigator.clipboard.writeText(active.token);
-      toast.success("已複製 token");
-    } catch {
-      toast.error("複製失敗，請手動選取");
-    }
-  };
-
-  if (!isAdmin) {
+  if (!can("admin:impersonate")) {
     return (
       <main className="mx-auto max-w-3xl p-6">
         <section
@@ -97,8 +98,8 @@ export default function ImpersonationPage() {
         </div>
         <h1 className="text-2xl font-bold text-[var(--text-primary)]">Impersonation</h1>
         <p className="mt-1 max-w-3xl text-xs text-[var(--text-muted)]">
-          以另一名使用者身分檢視平台（read-only 模式）。需要 <code>admin:impersonate</code>{" "}
-          權限。所有操作會寫入 audit log，actor 顯示為你、subject 顯示為目標使用者。
+          以另一名使用者身分操作平台，權限、視角與導覽都依目標使用者套用。需要{" "}
+          <code>admin:impersonate</code> 權限；所有修改會在 audit log 註明由你代行。
         </p>
       </header>
 
@@ -118,7 +119,7 @@ export default function ImpersonationPage() {
           <input
             type="number"
             min={1}
-            max={120}
+            max={60}
             value={minutes}
             onChange={(e) => setMinutes(Number(e.target.value))}
             className="input"
@@ -157,18 +158,10 @@ export default function ImpersonationPage() {
                 目標：<code>{active.target_email}</code>（{active.target_user_id.slice(0, 8)}…）
               </p>
               <p className="mt-2 text-xs">
-                <strong>使用方式</strong>：複製下方 token，在 Postman / curl
-                / 開無痕視窗手動設定 <code>Authorization: Bearer {"{token}"}</code>{" "}
-                呼叫 API。
+                現在的頁面、權限與所有 API 請求都已切換為目標使用者；可依目標使用者的實際
+                權限執行修改，稽核紀錄會標示代行管理員。
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <code className="break-all rounded bg-[var(--bg-surface)] px-2 py-1 font-mono text-[10px] max-w-full">
-                  {active.token}
-                </code>
-                <button type="button" className="btn-sm btn-primary" onClick={copyToken}>
-                  <Copy size={12} aria-hidden />
-                  複製
-                </button>
                 <button type="button" className="btn-sm btn-danger" onClick={onEnd} disabled={busy}>
                   <LogOut size={12} aria-hidden />
                   結束代理
@@ -186,11 +179,11 @@ export default function ImpersonationPage() {
           安全規則
         </h3>
         <ul className="ml-5 list-disc space-y-1 text-[var(--text-secondary)]">
-          <li>不能 impersonate 自己</li>
           <li>不能 impersonate superuser（除非自己也是 superuser）</li>
-          <li>token 預設 read-only：嘗試寫入請求會被中介層拒絕</li>
-          <li>token 寫入 jti 黑名單後立即失效；最長 120 分鐘自動過期</li>
-          <li>所有 start / end 都會寫 audit log，方便事後稽核</li>
+          <li>修改權限完全依目標使用者，無法借用管理員本身的額外權限</li>
+          <li>所有修改的 audit log 都會標示「由 XX 管理員代行」</li>
+          <li>token 寫入 jti 黑名單後立即失效；最長 60 分鐘自動過期</li>
+          <li>不能 impersonate 自己</li>
         </ul>
       </div>
     </main>

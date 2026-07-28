@@ -1,7 +1,7 @@
 import type {
   AnnouncementCreate, AnnouncementListItem, AnnouncementMediaOut, AnnouncementOut, AnnouncementStatsOut, AnnouncementUpdate,
 } from "../types";
-import { BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
+import { authFetch, BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
 
 // ── 公告系統 ───────────────────────────────────────────────────────────────────
 
@@ -41,7 +41,7 @@ export const announcementsApi = {
     const fd = new FormData();
     fd.append("file", file);
     const doFetch = () =>
-      fetch(`${BASE}/announcements/${id}/media`, {
+      authFetch(`${BASE}/announcements/${id}/media`, {
         method: "POST",
         credentials: "include",
         headers: csrfHeaders("POST"),

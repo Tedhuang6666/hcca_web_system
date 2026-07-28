@@ -10,7 +10,7 @@
     3. 上方顯示橘色 banner、點「結束模擬」→ POST .../end + 清 token
 
 注意：
-    - impersonation 預設 read-only（middleware 攔截寫入）
+    - 寫入操作依目標使用者權限執行，所有稽核紀錄會標註代行管理員
     - 不能 impersonate 自己 / superuser（除非自己也是 superuser）
 """
 
@@ -42,6 +42,9 @@ class ImpersonationStartResponse(BaseModel):
     expires_in_minutes: int
     target_user_id: uuid.UUID
     target_email: str
+    target_display_name: str
+    actor_email: str
+    actor_display_name: str
 
 
 class ImpersonationEndBody(BaseModel):
@@ -123,4 +126,7 @@ async def start_impersonation(
         expires_in_minutes=minutes_used,
         target_user_id=target.id,
         target_email=target.email,
+        target_display_name=target.display_name,
+        actor_email=actor.email,
+        actor_display_name=actor.display_name,
     )

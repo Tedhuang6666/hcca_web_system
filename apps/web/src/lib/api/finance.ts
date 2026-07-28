@@ -12,13 +12,13 @@ import type {
   PeriodOut,
   TransferCreate,
 } from "@/lib/types";
-import { ApiError, BASE, csrfHeaders, errorMessageFromResponse, get, patch, post, silentRefresh } from "./core";
+import { ApiError, authFetch, BASE, csrfHeaders, errorMessageFromResponse, get, patch, post, silentRefresh } from "./core";
 
 export const financeApi = {
   uploadEvidence: async (ledgerId: string, file: File): Promise<FinanceEvidenceUploadOut> => {
     const form = new FormData();
     form.append("file", file);
-    const doFetch = () => fetch(`${BASE}/finance/ledgers/${ledgerId}/evidence`, {
+    const doFetch = () => authFetch(`${BASE}/finance/ledgers/${ledgerId}/evidence`, {
       method: "POST",
       credentials: "include",
       headers: csrfHeaders("POST"),

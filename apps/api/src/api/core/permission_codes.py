@@ -1037,7 +1037,7 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "group": "企業級治理",
         "code": PermissionCode.ADMIN_IMPERSONATE,
         "label": "代理登入（客服）",
-        "desc": "以目標使用者身分檢視介面（read-only、有時效、完整 audit log）",
+        "desc": "以目標使用者身分檢視並操作介面（有時效，修改完整標註代行管理員）",
     },
     {
         "group": "企業級治理",

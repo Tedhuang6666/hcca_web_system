@@ -2,7 +2,7 @@ import type {
   BatchDocumentOperationOut, DocumentApprovalDelegationOut, DocumentCreate, DocumentListItem,
   DocumentOut, RecipientDownloadVariant,
 } from "../types";
-import { BASE, get, post, put, patch, del, request, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
+import { authFetch, BASE, get, post, put, patch, del, request, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
 
 export type DocumentWithArchive = DocumentOut & {
   archive_at: string | null;
@@ -103,7 +103,7 @@ export const documentsApi = {
     fd.append("file", file);
 
     const doFetch = () =>
-      fetch(`${BASE}/documents/${id}/attachments`, {
+      authFetch(`${BASE}/documents/${id}/attachments`, {
         method: "POST",
         credentials: "include",
         headers: csrfHeaders("POST"),
@@ -151,7 +151,7 @@ export const documentsApi = {
     if (opts?.recipientId) qs.set("recipient_id", opts.recipientId);
     if (opts?.variant) qs.set("variant", opts.variant);
     const url = `${BASE}/documents/${id}/print${qs.toString() ? `?${qs}` : ""}`;
-    const res = await fetch(url, {
+    const res = await authFetch(url, {
       credentials: "include",
     });
     if (!res.ok) throw new ApiError(res.status, await errorMessageFromResponse(res));

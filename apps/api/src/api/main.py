@@ -49,7 +49,7 @@ from api.core.sentry import init_sentry
 from api.core.structured_logging import configure_logging
 from api.core.trusted_proxy import TrustedProxyMiddleware
 from api.core.waf import WAFMiddleware
-from api.dependencies.impersonation_guard import ImpersonationReadOnlyMiddleware
+from api.dependencies.impersonation_guard import ImpersonationContextMiddleware
 from api.routers import (
     activities,
     admin,
@@ -301,9 +301,9 @@ def create_app() -> FastAPI:
         window_seconds=settings.RATE_LIMIT_WINDOW_SECONDS,
     )
     app.add_middleware(IdempotencyMiddleware)
-    # impersonation 唯讀守衛：帶 impersonation token 的寫入請求一律 403。
-    # 純 JWT 解碼判斷、只增不減授權，故掛在此處安全。
-    app.add_middleware(ImpersonationReadOnlyMiddleware)
+    # impersonation context：讓目標使用者的 RBAC 生效，並讓所有 audit writer
+    # 能記錄「哪位管理員代行」，寫入權限仍由目標使用者的 router RBAC 決定。
+    app.add_middleware(ImpersonationContextMiddleware)
     app.add_middleware(CSRFMiddleware, enabled=True, secure=settings.COOKIE_SECURE)
     app.add_middleware(
         CORSMiddleware,

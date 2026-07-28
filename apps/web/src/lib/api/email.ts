@@ -1,7 +1,7 @@
 import type {
   EmailAnalyticsOut, EmailAttachmentOut, EmailCampaignRecipientOut, EmailComposePayload, EmailMessageCreate, EmailMessageDetailOut, EmailMessageOut, EmailPosition, EmailPreflightOut, EmailRecipientListOut, EmailTemplateOut, RecipientPreviewOut, RecipientSelector, UploadedImageOut,
 } from "../types";
-import { BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
+import { authFetch, BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
 
 // ── 電子郵件 ──────────────────────────────────────────────────────────────────
 
@@ -55,7 +55,7 @@ export const emailApi = {
     const fd = new FormData();
     fd.append("file", file);
     const doFetch = () =>
-      fetch(`${BASE}/email/images`, {
+      authFetch(`${BASE}/email/images`, {
         method: "POST",
         credentials: "include",
         headers: csrfHeaders("POST"),
@@ -114,7 +114,7 @@ export const emailApi = {
     fd.append("file", file);
     const q = templateId ? `?template_id=${encodeURIComponent(templateId)}` : "";
     const doFetch = () =>
-      fetch(`${BASE}/email/attachments${q}`, {
+      authFetch(`${BASE}/email/attachments${q}`, {
         method: "POST",
         credentials: "include",
         headers: csrfHeaders("POST"),

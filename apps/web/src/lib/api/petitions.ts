@@ -2,13 +2,13 @@ import type {
   PetitionCaseListItem, PetitionCaseOut, PetitionCreate, PetitionCreatedOut, PetitionStatsOut, PetitionStatus, PetitionTypeOut,
   PetitionPublicListItem, PetitionPublicOut,
 } from "../types";
-import { BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
+import { authFetch, BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
 
 // ── 陳情系統 ──────────────────────────────────────────────────────────────────
 
 async function uploadPetitionFile<T>(path: string, fd: FormData): Promise<T> {
   const doFetch = () =>
-    fetch(`${BASE}${path}`, {
+    authFetch(`${BASE}${path}`, {
       method: "POST",
       credentials: "include",
       headers: csrfHeaders("POST"),

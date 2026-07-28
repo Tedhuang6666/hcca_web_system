@@ -1,7 +1,7 @@
 import type {
   ExamGradeTrack, ExamPaperDownloadOut, ExamPaperListItem, ExamPaperOut, ExamPaperUpdate, ExamTraceInspectOut,
 } from "../types";
-import { BASE, get, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
+import { authFetch, BASE, get, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
 
 // ── 段考題庫 ────────────────────────────────────────────────────────────────
 
@@ -44,7 +44,7 @@ export const examPapersApi = {
     fd.append("exam_number", String(body.exam_number));
     fd.append("is_published", String(body.is_published));
     const doFetch = () =>
-      fetch(`${BASE}/exam-papers`, {
+      authFetch(`${BASE}/exam-papers`, {
         method: "POST",
         credentials: "include",
         headers: csrfHeaders("POST"),
@@ -63,7 +63,7 @@ export const examPapersApi = {
     const fd = new FormData();
     fd.append("file", file);
     const doFetch = () =>
-      fetch(`${BASE}/exam-papers/trace/inspect`, {
+      authFetch(`${BASE}/exam-papers/trace/inspect`, {
         method: "POST",
         credentials: "include",
         headers: csrfHeaders("POST"),

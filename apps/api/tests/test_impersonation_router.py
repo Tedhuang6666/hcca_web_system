@@ -12,9 +12,11 @@ from collections.abc import Callable
 from typing import Any
 
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.security import is_blacklisted
+from api.models.audit_log import AuditLog
 from api.models.user import User
 from api.services import impersonation as impersonation_svc
 
@@ -50,8 +52,49 @@ async def test_superuser_can_start_impersonation(
     payload = response.json()
     assert payload["target_user_id"] == str(target.id)
     assert payload["target_email"] == target.email
+    assert payload["target_display_name"] == target.display_name
+    assert payload["actor_email"] == admin_user.email
+    assert payload["actor_display_name"] == admin_user.display_name
     assert payload["expires_in_minutes"] == impersonation_svc.IMPERSONATION_DEFAULT_MINUTES
     assert payload["token"]
+
+
+async def test_impersonation_uses_target_permissions_and_attributes_writes(
+    authed_client_factory: Callable[[User], AsyncClient],
+    admin_user: User,
+    make_user: Callable[..., Any],
+    db_session: AsyncSession,
+) -> None:
+    target = await make_user(email="write-target@school.edu", display_name="被代行使用者")
+    ac = authed_client_factory(admin_user)
+
+    start_resp = await ac.post(f"/admin/impersonate/{target.id}")
+    token = start_resp.json()["token"]
+    impersonated_headers = {"Authorization": f"Bearer {token}"}
+
+    me_resp = await ac.get("/auth/me", headers=impersonated_headers)
+    assert me_resp.status_code == 200
+    assert me_resp.json()["id"] == str(target.id)
+
+    admin_resp = await ac.get("/admin/users", headers=impersonated_headers)
+    assert admin_resp.status_code == 403
+
+    update_resp = await ac.patch(
+        "/users/me",
+        json={"display_name": "被代行後名稱"},
+        headers=impersonated_headers,
+    )
+    assert update_resp.status_code == 200
+    assert update_resp.json()["id"] == str(target.id)
+
+    audit = await db_session.scalar(
+        select(AuditLog)
+        .where(AuditLog.entity_id == str(target.id), AuditLog.action == "user.update_self")
+        .order_by(AuditLog.created_at.desc())
+    )
+    assert audit is not None
+    assert audit.meta["impersonation"]["actor_id"] == str(admin_user.id)
+    assert "管理員代行" in (audit.summary or "")
 
 
 async def test_start_impersonation_with_custom_minutes(

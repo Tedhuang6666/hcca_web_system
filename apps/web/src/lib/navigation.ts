@@ -158,6 +158,13 @@ export const NAV_ITEMS: NavItem[] = [
     perm: "admin:all",
   },
   {
+    id: "impersonation",
+    href: "/admin/impersonation",
+    iconKey: "people",
+    label: "代理登入",
+    perm: "admin:impersonate",
+  },
+  {
     id: "systemDiagnostics",
     href: "/admin/diagnostics",
     iconKey: "analytics",
@@ -339,6 +346,7 @@ export const NAV_DEF: NavEntry[] = [
       "moduleBackoffice",
       "adminDashboard",
       "navigationProfiles",
+      "impersonation",
       "about",
     ]),
   },

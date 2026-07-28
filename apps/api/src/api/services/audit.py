@@ -27,6 +27,14 @@ async def record(
     summary: str | None = None,
 ) -> AuditLog:
     """寫入一筆不可變稽核日誌，立即 flush（不 commit，由呼叫端事務決定）。"""
+    from api.services import impersonation as impersonation_svc
+
+    actor_id, actor_email, meta, summary = impersonation_svc.annotate_audit_fields(
+        actor_id=actor_id,
+        actor_email=actor_email,
+        meta=meta,
+        summary=summary,
+    )
     log = AuditLog(
         entity_type=entity_type,
         entity_id=str(entity_id),

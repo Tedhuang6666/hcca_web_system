@@ -1,7 +1,7 @@
 import type {
   PublicLinkCategoryCreate, PublicLinkCategoryOut, PublicLinkCategoryUpdate, PublicLinkCreate, PublicLinkOut, PublicLinkUpdate, PublicOfficerCandidateOut, PublicOfficerOut, PublicOfficerProfileCreate, PublicOfficerProfileOut, PublicOfficerProfileUpdate, PublicSiteBundleOut, PublicSitePageCreate, PublicSitePageOut, PublicSitePageUpdate, PublicSiteSettingsOut, PublicSiteSettingsUpdate, UploadedImageOut,
 } from "../types";
-import { BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
+import { authFetch, BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
 
 // ── 公開官網 / Linktree ──────────────────────────────────────────────────────
 
@@ -22,7 +22,7 @@ export const siteApi = {
     const fd = new FormData();
     fd.append("file", file);
     const doFetch = () =>
-      fetch(`${BASE}/site/admin/images`, {
+      authFetch(`${BASE}/site/admin/images`, {
         method: "POST",
         credentials: "include",
         headers: csrfHeaders("POST"),

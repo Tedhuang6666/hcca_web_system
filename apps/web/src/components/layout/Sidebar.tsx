@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { ChevronDown, Globe2 } from "lucide-react";
 import BrandEmblem from "@/components/brand/BrandEmblem";
 import { usePermissions } from "@/hooks/usePermissions";
+import { AUTH_CACHE_EVENT } from "@/lib/auth-cache";
 import { useModuleStatus } from "@/contexts/ModuleStatusContext";
 import { BRANDING } from "@/lib/branding";
 import { navigationProfilesApi } from "@/lib/api";
@@ -98,6 +99,7 @@ export default function Sidebar() {
   const [hydrated, setHydrated] = useState(false);
   const [serverProfile, setServerProfile] = useState<NavigationProfileConfig | null>(null);
   const [publicProfile, setPublicProfile] = useState<NavigationProfileConfig | null>(null);
+  const [authVersion, setAuthVersion] = useState(0);
   const navigationProfile = useMemo(
     () => resolveNavigationProfile(permissions, isAdmin),
     [isAdmin, permissions],
@@ -143,17 +145,22 @@ export default function Sidebar() {
     return () => {
       alive = false;
     };
-  }, [isLoggedIn]);
+  }, [authVersion, isLoggedIn]);
 
   // 初始化：讀 localStorage、設定 event listener，僅在 mount 時執行一次
   useEffect(() => {
-    const userId = localStorage.getItem("user_id");
-    setIsLoggedIn(!!userId);
-    setUserName(localStorage.getItem("user_name") ?? "使用者");
-    setUserEmail(localStorage.getItem("user_email") ?? "");
-    setUserAvatar(localStorage.getItem("user_avatar"));
-    setHasCustomNav(hasSavedNavPreferences());
-    setMeetingsUnlocked(isMeetingsUnlocked());
+    const syncAuth = () => {
+      const userId = localStorage.getItem("user_id");
+      setIsLoggedIn(!!userId);
+      setUserName(localStorage.getItem("user_name") ?? "使用者");
+      setUserEmail(localStorage.getItem("user_email") ?? "");
+      setUserAvatar(localStorage.getItem("user_avatar"));
+      setDesktopPrefs(readNavPreferences());
+      setHasCustomNav(hasSavedNavPreferences());
+      setMeetingsUnlocked(isMeetingsUnlocked());
+      setAuthVersion((version) => version + 1);
+    };
+    syncAuth();
 
     const persisted = readCollapsed();
     const startCollapsed = persisted.size === 0
@@ -175,9 +182,11 @@ export default function Sidebar() {
       setMeetingsUnlocked(isMeetingsUnlocked());
     };
     window.addEventListener(NAV_PREF_EVENT, syncPrefs);
+    window.addEventListener(AUTH_CACHE_EVENT, syncAuth);
     window.addEventListener("storage", syncPrefs);
     return () => {
       window.removeEventListener(NAV_PREF_EVENT, syncPrefs);
+      window.removeEventListener(AUTH_CACHE_EVENT, syncAuth);
       window.removeEventListener("storage", syncPrefs);
     };
   }, [activeNavDef]);
