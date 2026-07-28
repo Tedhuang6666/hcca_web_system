@@ -9,7 +9,7 @@ import { AtSign, Clock, ExternalLink, LocateFixed, Mail, MapPin, MessageCircle, 
 import { toast } from "sonner";
 import { partnerMapApi, ApiError } from "@/lib/api";
 import type { PartnerBusinessDetail, PartnerBusinessDirectoryItem } from "@/lib/api";
-import { apiUrl, uploadUrl } from "@/lib/config";
+import { uploadUrl } from "@/lib/config";
 import type {
   PartnerMapItem,
   PartnerRankingItem,
@@ -17,6 +17,7 @@ import type {
   PartnerTagOut,
 } from "@/lib/types";
 import { markerColor, markerLabel, type PartnerMapBoundsState } from "./PartnerLeafletMap";
+import PartnerPromoCarousel, { type PartnerPromoImage } from "./PartnerPromoCarousel";
 
 const DEFAULT_CENTER: [number, number] = [24.795151, 120.98018];
 const PartnerLeafletMap = dynamic(() => import("./PartnerLeafletMap"), {
@@ -39,6 +40,13 @@ function instagramUrl(handle: string): string {
 
 function externalUrl(url: string): string {
   return /^https?:\/\//i.test(url) ? url : `https://${url}`;
+}
+
+function promoImagesFor(business: PartnerBusinessDetail): PartnerPromoImage[] {
+  if (business.promo_images.length > 0) return business.promo_images;
+  return business.flyer_image_url
+    ? [{ id: `legacy-${business.id}`, image_url: business.flyer_image_url, filename: "店家傳單" }]
+    : [];
 }
 
 function attachCategoryTag<T extends { category: string | null; tags: PartnerTagOut[] }>(
@@ -101,26 +109,7 @@ function DetailPanel({
               className="h-36 w-full rounded-lg object-cover"
             />
           )}
-          {business.flyer_image_url && (
-            <a
-              className="block overflow-hidden rounded-lg border"
-              href={apiUrl(business.flyer_image_url)}
-              target="_blank"
-              rel="noreferrer"
-              style={{ borderColor: "var(--border)" }}>
-              <Image
-                src={apiUrl(business.flyer_image_url)}
-                alt={`${business.name} 店家傳單`}
-                width={640}
-                height={420}
-                unoptimized
-                className="max-h-64 w-full object-contain"
-              />
-              <span className="block border-t px-3 py-2 text-xs font-medium" style={{ borderColor: "var(--border)", color: "var(--primary)" }}>
-                查看店家照片／傳單 <ExternalLink size={12} className="ml-1 inline" aria-hidden="true" />
-              </span>
-            </a>
-          )}
+          <PartnerPromoCarousel images={promoImagesFor(business)} businessName={business.name} />
           <div className="flex items-start gap-3">
             {business.logo_url && (
               <Image

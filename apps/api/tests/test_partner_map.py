@@ -12,6 +12,7 @@ from api.dependencies.auth import get_current_active_user, get_optional_user
 from api.main import app
 from api.models.partner_map import (
     PartnerBusiness,
+    PartnerBusinessImage,
     PartnerBusinessListingType,
     PartnerBusinessStatus,
     PartnerLocation,
@@ -123,6 +124,102 @@ async def test_logged_in_partner_map_keeps_member_note_private_to_visitors(
     assert payload["offers"][0]["full_description"] == "全品項九折"
     assert payload["offers"][0]["instructions"] == "結帳前出示學生證"
     assert payload["offers"][0]["member_note"] == "登入學生可見的補充提醒"
+
+
+@pytest.mark.asyncio
+async def test_partner_business_returns_multiple_promo_images_and_preview(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    from api.services.storage import LocalStorageBackend
+
+    _, business, _ = await _seed_partner_map(db_session)
+    storage = LocalStorageBackend(base_dir=str(tmp_path))
+    monkeypatch.setattr("api.routers.partner_map.get_storage", lambda: storage)
+    image_paths = []
+    for index in range(2):
+        storage_key = f"partner-map/{business.id}/promos/image-{index}.png"
+        path = tmp_path / storage_key
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"\x89PNG\r\n\x1a\n" + bytes([index]) * 8)
+        image_paths.append(path)
+        db_session.add(
+            PartnerBusinessImage(
+                business_id=business.id,
+                storage_key=storage_key,
+                filename=f"image-{index}.png",
+                content_type="image/png",
+                sort_order=index,
+            )
+        )
+    await db_session.flush()
+
+    response = await client.get(f"/partner-map/businesses/{business.id}", headers=HOST_HEADERS)
+    images = response.json()["promo_images"]
+    preview = await client.get(images[0]["image_url"], headers=HOST_HEADERS)
+
+    assert response.status_code == 200
+    assert [image["filename"] for image in images] == ["image-0.png", "image-1.png"]
+    assert preview.status_code == 200
+    assert preview.headers["content-type"] == "image/png"
+    assert image_paths[0].exists()
+
+
+@pytest.mark.asyncio
+async def test_partner_business_admin_can_upload_and_delete_promo_images(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    from api.services.storage import LocalStorageBackend
+
+    admin = User(
+        email="promo-admin@school.edu",
+        display_name="宣傳圖管理員",
+        is_active=True,
+        is_verified=True,
+        is_superuser=True,
+    )
+    _, business, _ = await _seed_partner_map(db_session)
+    db_session.add(admin)
+    await db_session.flush()
+    _override_current_user(admin)
+    monkeypatch.setattr(
+        "api.routers.partner_map.get_storage",
+        lambda: LocalStorageBackend(base_dir=str(tmp_path)),
+    )
+
+    upload_responses = [
+        await client.post(
+            f"/partner-map/admin/businesses/{business.id}/images",
+            files={
+                "file": (
+                    f"promo-{index}.png",
+                    b"\x89PNG\r\n\x1a\n" + bytes([index]) * 8,
+                    "image/png",
+                )
+            },
+            headers=HOST_HEADERS,
+        )
+        for index in range(2)
+    ]
+
+    assert all(response.status_code == 200 for response in upload_responses)
+    assert len(upload_responses[-1].json()["promo_images"]) == 2
+    image_id = upload_responses[-1].json()["promo_images"][0]["id"]
+    delete_response = await client.delete(
+        f"/partner-map/admin/businesses/{business.id}/images/{image_id}",
+        headers=HOST_HEADERS,
+    )
+    detail_response = await client.get(
+        f"/partner-map/admin/businesses/{business.id}", headers=HOST_HEADERS
+    )
+
+    assert delete_response.status_code == 204
+    assert len(detail_response.json()["promo_images"]) == 1
 
 
 @pytest.mark.asyncio

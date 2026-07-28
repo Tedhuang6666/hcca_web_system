@@ -695,6 +695,17 @@ export interface LayoutDecoration {
 
 // ── 特約地圖型別 ──────────────────────────────────────────────────────────────
 
+export interface PartnerBusinessImageOut {
+  id: string;
+  business_id: string;
+  image_url: string;
+  filename: string;
+  content_type: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
 
 // ── 班級系統型別 ──────────────────────────────────────────────────────────────
 

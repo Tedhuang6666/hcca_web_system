@@ -140,6 +140,7 @@ KNOWN_PUBLIC_ROUTES: set[tuple[str, str]] = {
     ("/partner-map", "GET"),
     ("/partner-map/businesses/{business_id}", "GET"),
     ("/partner-map/businesses/{business_id}/flyer", "GET"),
+    ("/partner-map/businesses/{business_id}/images/{image_id}", "GET"),
     ("/partner-map/businesses/{business_id}/check-in", "POST"),
     ("/partner-map/businesses/{business_id}/click", "POST"),
     ("/partner-map/businesses/{business_id}/ratings", "GET"),
