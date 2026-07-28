@@ -9,6 +9,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   BookOpenText,
   FileSearch,
+  Handshake,
   Info,
   Landmark,
   Link2,
@@ -63,6 +64,7 @@ export const PUBLIC_NAV_ITEMS: PublicNavItemDef[] = [
   { key: "regulations", href: "/regulations", label: "法規查詢", description: "現行條文、沿革與版本", icon: Scale, group: "data", guestUsable: true, moduleId: "regulations" },
   { key: "documents", href: "/documents", label: "公文查詢", description: "公開公文、字號與附件", icon: FileSearch, group: "data", guestUsable: true, moduleId: "documents" },
   { key: "elections", href: "/public/elections", label: "即時開票", description: "公開選舉票數與進度", icon: Radio, group: "data", guestUsable: true, moduleId: "elections" },
+  { key: "special-agreement", href: "/public/special-agreement", label: "特約洽談", description: "合作流程、洽談資訊與文件", icon: Handshake, group: "data", guestUsable: true },
   { key: "partner-map", href: "/partner-map", label: "特約地圖", description: "合作店家與學生優惠", icon: MapPinned, group: "data", guestUsable: true, moduleId: "partnerMap" },
   { key: "surveys", href: "/surveys", label: "公開問卷", description: "參與目前開放的校園調查", icon: ListChecks, group: "data", guestUsable: true, moduleId: "surveys" },
 
