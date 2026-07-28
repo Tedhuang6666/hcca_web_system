@@ -93,7 +93,7 @@ export default async function SpecialAgreementPage() {
             先整理合作想法與可提供的方案，再從公開聯絡方式找到班聯會窗口。
           </p>
           <Link
-            href="/about"
+            href="/contact"
             className="mt-5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[var(--public-accent)] px-4 text-sm font-semibold text-[var(--primary-fg)] transition-colors hover:bg-[var(--public-accent-strong)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--public-focus)]"
           >
             查看聯絡方式
