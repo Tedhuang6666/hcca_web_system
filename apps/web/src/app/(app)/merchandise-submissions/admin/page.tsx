@@ -175,7 +175,7 @@ function AIEvidencePanel({
           </div>
           <button
             type="button"
-            className="btn btn-ghost min-h-8 shrink-0 px-2 text-[11px]"
+            className="btn btn-ghost min-h-11 shrink-0 px-3 text-[11px] sm:min-h-8 sm:px-2"
             onClick={() => setIsOpen(true)}
             aria-haspopup="dialog"
           >
@@ -892,22 +892,22 @@ function ReviewRow({
   };
   return (
     <article
-      className="border-b py-4 last:border-0"
+      className="min-w-0 border-b py-4 last:border-0"
       style={{ borderColor: "var(--border)" }}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="font-semibold">
+        <div className="min-w-0 flex-1">
+          <p className="break-words font-semibold">
             {submission.item_name}{" "}
             <span
-              className="font-normal"
+              className="font-normal break-words"
               style={{ color: "var(--text-muted)" }}
             >
               · {submission.submitter_name} ·{" "}
               {submission.submitter_student_id || "未填學號"}
             </span>
           </p>
-          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+          <p className="mt-1 break-words text-xs" style={{ color: "var(--text-muted)" }}>
             {submission.submitter_email} ·{" "}
             {submission.submitted_at
               ? new Date(submission.submitted_at).toLocaleString("zh-TW")
@@ -930,27 +930,27 @@ function ReviewRow({
             <dt className="text-xs" style={{ color: "var(--text-muted)" }}>
               {fields.find((field) => field.key === key)?.label ?? key}
             </dt>
-            <dd style={{ color: "var(--text-secondary)" }}>{value}</dd>
+            <dd className="break-words" style={{ color: "var(--text-secondary)" }}>{value}</dd>
           </div>
         ))}
       </dl>
       {submission.voting_survey_title && submission.voting_survey_id && (
-        <p className="mt-3 text-sm" style={{ color: "var(--text-secondary)" }}>
+        <p className="mt-3 break-words text-sm" style={{ color: "var(--text-secondary)" }}>
           已加入票選問卷：
           <Link
             href={`/surveys/${submission.voting_survey_id}`}
-            className="ml-1 underline"
+            className="ml-1 break-all underline"
           >
             {submission.voting_survey_title}
           </Link>
           {submission.voting_survey_status === "draft" && "（尚未發布）"}
         </p>
       )}
-      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+      <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {submission.files.map((file) => (
           <div
             key={file.id}
-            className="overflow-hidden rounded-lg border p-2 text-xs"
+            className="min-w-0 overflow-hidden rounded-lg border p-2 text-xs"
             style={{ borderColor: "var(--border)" }}
           >
             <a
@@ -980,7 +980,7 @@ function ReviewRow({
                 {file.filename}
               </span>
               <label
-                className="shrink-0 cursor-pointer"
+                className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded"
                 style={{ color: "var(--primary-text)" }}
                 title="替換檔案"
               >
