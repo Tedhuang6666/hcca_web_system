@@ -3,18 +3,19 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   Check,
+  ChevronDown,
   Mail,
   Pencil,
   Plus,
   RefreshCw,
+  Search,
   ShieldCheck,
   UserRound,
   X,
 } from "lucide-react";
-import { ApiError, electronicCredentialsApi } from "@/lib/api";
-import type {
-  ElectronicCredentialAuthorizationOut,
-} from "@/lib/types";
+import { ApiError, electronicCredentialsApi, usersApi } from "@/lib/api";
+import type { UserSummary } from "@/lib/api/core";
+import type { ElectronicCredentialAuthorizationOut } from "@/lib/types";
 import { toast } from "sonner";
 
 const IDENTITY_PRESETS = ["特殊授權", "家長會志工", "活動協力人員", "校友志工"];
@@ -42,6 +43,10 @@ export default function CredentialAuthorizationPanel() {
   const [includeInactive, setIncludeInactive] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [userSearch, setUserSearch] = useState("");
+  const [userOptions, setUserOptions] = useState<UserSummary[]>([]);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [userSearchLoading, setUserSearchLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -58,9 +63,34 @@ export default function CredentialAuthorizationPanel() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (!userMenuOpen) return;
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      setUserSearchLoading(true);
+      try {
+        const options = await usersApi.listForSearch(userSearch.trim());
+        if (!cancelled) setUserOptions(options);
+      } catch (error) {
+        if (!cancelled) toast.error(getErrorMessage(error, "搜尋使用者失敗"));
+      } finally {
+        if (!cancelled) setUserSearchLoading(false);
+      }
+    }, 180);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [userMenuOpen, userSearch]);
+
   const resetForm = () => {
     setForm(emptyForm());
     setEditingId(null);
+    setUserSearch("");
+    setUserOptions([]);
+    setUserMenuOpen(false);
   };
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -100,7 +130,15 @@ export default function CredentialAuthorizationPanel() {
       identity_label: authorization.identity_label,
       note: authorization.note || "",
     });
+    setUserSearch(authorization.email);
+    setUserMenuOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const selectUser = (user: UserSummary) => {
+    setForm((current) => ({ ...current, email: user.email }));
+    setUserSearch(user.email);
+    setUserMenuOpen(false);
   };
 
   const toggle = async (authorization: ElectronicCredentialAuthorizationOut) => {
@@ -138,16 +176,90 @@ export default function CredentialAuthorizationPanel() {
           <form className="space-y-4" onSubmit={submit}>
             <label className="grid gap-1">
               <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>登入 Email</span>
-              <input
-                className="input"
-                type="email"
-                required
-                placeholder="例如：parent@example.com"
-                value={form.email}
-                onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
-              />
+              <div className="relative">
+                <Search
+                  size={15}
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+                  style={{ color: "var(--text-muted)" }}
+                  aria-hidden="true"
+                />
+                <input
+                  className="input pr-9 pl-9"
+                  type="email"
+                  required
+                  placeholder="搜尋姓名或輸入 Email"
+                  value={form.email}
+                  onFocus={(event) => {
+                    event.currentTarget.select();
+                    setUserSearch("");
+                    setUserMenuOpen(true);
+                  }}
+                  onBlur={() => window.setTimeout(() => setUserMenuOpen(false), 120)}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setForm((current) => ({ ...current, email: value }));
+                    setUserSearch(value);
+                    setUserMenuOpen(true);
+                  }}
+                />
+                <ChevronDown
+                  size={15}
+                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2"
+                  style={{ color: "var(--text-muted)" }}
+                  aria-hidden="true"
+                />
+
+                {userMenuOpen && (
+                  <div
+                    role="listbox"
+                    aria-label="選擇登入使用者"
+                    className="absolute left-0 right-0 top-[calc(100%+0.35rem)] z-20 max-h-64 overflow-y-auto rounded-lg border p-1"
+                    style={{
+                      borderColor: "var(--border-strong)",
+                      background: "var(--bg-surface)",
+                      boxShadow: "0 4px 8px rgba(0, 0, 0, 0.18)",
+                    }}
+                  >
+                    {userSearchLoading ? (
+                      <p className="px-3 py-3 text-xs" style={{ color: "var(--text-muted)" }}>搜尋使用者中…</p>
+                    ) : userOptions.length > 0 ? (
+                      userOptions.map((user) => (
+                        <button
+                          key={user.id}
+                          type="button"
+                          role="option"
+                          aria-selected={form.email === user.email}
+                          className="flex w-full items-start gap-3 rounded-md px-3 py-2.5 text-left transition-colors hover:bg-[var(--bg-elevated)]"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => selectUser(user)}
+                        >
+                          <span
+                            className="grid h-8 w-8 shrink-0 place-items-center rounded-full"
+                            style={{ color: "var(--primary)", background: "var(--primary-dim)" }}
+                          >
+                            <UserRound size={15} aria-hidden="true" />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+                              {user.display_name || "未命名使用者"}
+                            </span>
+                            <span className="mt-0.5 block truncate text-xs" style={{ color: "var(--text-muted)" }}>
+                              {user.email}
+                            </span>
+                          </span>
+                          {form.email === user.email && <Check size={15} className="mt-1 shrink-0" style={{ color: "var(--primary)" }} aria-hidden="true" />}
+                        </button>
+                      ))
+                    ) : (
+                      <p className="px-3 py-3 text-xs leading-5" style={{ color: "var(--text-muted)" }}>
+                        找不到符合的使用者；仍可直接輸入尚未建立平台帳號的 Email。
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
               <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
-                帳號尚未登入也可以先建立授權。
+                可搜尋姓名或 Email 選取使用者；帳號尚未登入也可以先建立授權。
               </span>
             </label>
 
