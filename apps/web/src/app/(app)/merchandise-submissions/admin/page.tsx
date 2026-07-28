@@ -8,6 +8,8 @@ import {
   LoaderCircle,
   Plus,
   Save,
+  ScanSearch,
+  ShieldAlert,
   Upload,
   X,
 } from "lucide-react";
@@ -52,6 +54,65 @@ function isPreviewableImage(file: { content_type: string; filename: string }) {
   return (
     file.content_type.startsWith("image/") ||
     /\.(jpe?g|png|webp)$/i.test(file.filename)
+  );
+}
+
+function AIEvidencePanel({
+  file,
+}: {
+  file: MerchandiseSubmissionAdminListItem["files"][number];
+}) {
+  const evidence = file.ai_detection_evidence ?? [];
+  const statusKey = file.ai_detection_status ?? "unscanned";
+  const statusLabel = {
+    detected: "發現可供判斷的 AI metadata 證據",
+    supporting: "發現來源／製作流程 metadata",
+    no_evidence: "未發現可用 metadata 證據",
+    not_applicable: "非圖片檔案，不適用",
+    error: "無法完成原始檔分析",
+    unscanned: "尚未分析（此檔案可能早於此功能建立）",
+  }[statusKey];
+  const isFinding = file.ai_detection_status === "detected";
+  return (
+    <div
+      className="mt-2 rounded border p-2"
+      style={{
+        borderColor: isFinding ? "var(--warning-border)" : "var(--border)",
+        background: isFinding ? "var(--warning-dim)" : "var(--bg-elevated)",
+      }}
+    >
+      <p className="flex items-center gap-1 text-[11px] font-semibold">
+        {isFinding ? <ShieldAlert size={13} /> : <ScanSearch size={13} />}
+        AI metadata 檢視
+      </p>
+      <p className="mt-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
+        {statusLabel}
+      </p>
+      {evidence.length > 0 && (
+        <ul className="mt-2 space-y-1 text-[11px]">
+          {evidence.map((item, index) => (
+            <li key={`${item.category}-${index}`}>
+              <span className="font-semibold">{item.level} 級・{item.category}</span>
+              <span className="ml-1" style={{ color: "var(--text-secondary)" }}>
+                {item.label}：{item.value}
+              </span>
+              <span className="block" style={{ color: "var(--text-muted)" }}>
+                來源：{item.source}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {file.ai_detection_sha256 && (
+        <p
+          className="mt-2 truncate text-[10px]"
+          style={{ color: "var(--text-muted)" }}
+          title={file.ai_detection_sha256}
+        >
+          SHA-256：{file.ai_detection_sha256}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -722,6 +783,7 @@ function ReviewRow({
                 />
               </label>
             </div>
+            <AIEvidencePanel file={file} />
           </div>
         ))}
       </div>

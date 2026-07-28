@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import mimetypes
 import uuid
 from datetime import UTC, datetime
 
@@ -29,6 +30,11 @@ from api.schemas.merchandise_submission import (
     MerchandiseSubmissionReview,
     MerchandiseSubmissionSave,
     MerchandiseSubmissionSettingsUpdate,
+)
+from api.services.merchandise_submission_ai import (
+    MerchandiseSubmissionAIDetection,
+    analysis_error,
+    analyze_image_ai_evidence,
 )
 from api.services.storage import get_storage
 
@@ -58,6 +64,30 @@ def require_eligible_submitter(settings: MerchandiseSubmissionSettings, user: Us
 
 def _as_utc(value: datetime) -> datetime:
     return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
+def _stored_content_type(storage_key: str, fallback: str) -> str:
+    """以伺服器產生的副檔名判斷檔案類型，避免信任用戶端回傳的 MIME。"""
+    content_type, _ = mimetypes.guess_type(storage_key)
+    return content_type or fallback
+
+
+async def _analyze_storage_file(
+    storage_key: str, content_type: str
+) -> MerchandiseSubmissionAIDetection:
+    safe_content_type = _stored_content_type(storage_key, content_type)
+    try:
+        content = await get_storage().read_bytes(storage_key)
+    except (FileNotFoundError, OSError, ValueError):
+        return analysis_error()
+    return analyze_image_ai_evidence(content, safe_content_type)
+
+
+def _apply_file_analysis(file: MerchandiseSubmissionFile, result: MerchandiseSubmissionAIDetection):
+    file.ai_detection_status = result["status"]
+    file.ai_detection_evidence = result["evidence"]
+    file.ai_detection_sha256 = result["sha256"] or None
+    file.ai_detection_scanned_at = datetime.fromisoformat(result["scanned_at"])
 
 
 async def update_settings(
@@ -336,15 +366,17 @@ async def save_submission(
     session.add(submission)
     await session.flush()
     for file in data.files:
-        session.add(
-            MerchandiseSubmissionFile(
-                submission_id=submission.id,
-                storage_key=file.storage_key,
-                filename=file.filename,
-                content_type=file.content_type,
-                file_size=file.file_size,
-            )
+        submission_file = MerchandiseSubmissionFile(
+            submission_id=submission.id,
+            storage_key=file.storage_key,
+            filename=file.filename,
+            content_type=file.content_type,
+            file_size=file.file_size,
         )
+        _apply_file_analysis(
+            submission_file, await _analyze_storage_file(file.storage_key, file.content_type)
+        )
+        session.add(submission_file)
     await session.flush()
     session.expire(submission, ["files"])
     return (await get_submission(session, submission.id)) or submission
@@ -404,16 +436,22 @@ async def update_submission(
             existing.filename = file.filename
             existing.content_type = file.content_type
             existing.file_size = file.file_size
+            if existing.ai_detection_status is None:
+                _apply_file_analysis(
+                    existing, await _analyze_storage_file(file.storage_key, file.content_type)
+                )
             continue
-        session.add(
-            MerchandiseSubmissionFile(
-                submission_id=submission.id,
-                storage_key=file.storage_key,
-                filename=file.filename,
-                content_type=file.content_type,
-                file_size=file.file_size,
-            )
+        submission_file = MerchandiseSubmissionFile(
+            submission_id=submission.id,
+            storage_key=file.storage_key,
+            filename=file.filename,
+            content_type=file.content_type,
+            file_size=file.file_size,
         )
+        _apply_file_analysis(
+            submission_file, await _analyze_storage_file(file.storage_key, file.content_type)
+        )
+        session.add(submission_file)
     await session.flush()
     session.expire(submission, ["files"])
     return (await get_submission(session, submission.id)) or submission
@@ -473,20 +511,22 @@ async def admin_upload_submission_file(
 
     old_storage_key = target.storage_key if target else None
     if target is None:
-        session.add(
-            MerchandiseSubmissionFile(
-                submission_id=submission.id,
-                storage_key=stored.storage_key,
-                filename=stored.filename,
-                content_type=stored.content_type,
-                file_size=stored.file_size,
-            )
+        target = MerchandiseSubmissionFile(
+            submission_id=submission.id,
+            storage_key=stored.storage_key,
+            filename=stored.filename,
+            content_type=stored.content_type,
+            file_size=stored.file_size,
         )
+        session.add(target)
     else:
         target.storage_key = stored.storage_key
         target.filename = stored.filename
         target.content_type = stored.content_type
         target.file_size = stored.file_size
+    _apply_file_analysis(
+        target, await _analyze_storage_file(stored.storage_key, stored.content_type)
+    )
     await session.flush()
     if old_storage_key:
         await storage.delete(old_storage_key)

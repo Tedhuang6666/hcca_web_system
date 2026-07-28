@@ -91,6 +91,7 @@ async def test_merchandise_submission_flow_uses_school_account_and_notifies_subm
     )
     assert upload_response.status_code == 200
     uploaded = upload_response.json()
+    assert "ai_detection_status" not in uploaded
     preview_response = await student.get(uploaded["url"])
     assert preview_response.status_code == 200
 
@@ -130,6 +131,7 @@ async def test_merchandise_submission_flow_uses_school_account_and_notifies_subm
     assert submission["status"] == "submitted"
     assert submission["account_snapshot"]["email"] == member_user.email
     assert submission["files"][0]["filename"] == "design.png"
+    assert "ai_detection_status" not in submission["files"][0]
 
     submitted_update_response = await student.patch(
         f"/merchandise-submissions/submissions/{submission['id']}?submit=true",
@@ -159,6 +161,7 @@ async def test_merchandise_submission_flow_uses_school_account_and_notifies_subm
     )
     assert add_file_response.status_code == 201
     assert len(add_file_response.json()["files"]) == 2
+    assert all("ai_detection_status" in file for file in add_file_response.json()["files"])
     added_file = next(
         file for file in add_file_response.json()["files"] if file["filename"] == "back.png"
     )
@@ -242,6 +245,7 @@ async def test_merchandise_submission_flow_uses_school_account_and_notifies_subm
     assert mine_response.status_code == 200
     assert mine_response.json()[0]["status"] == "approved"
     assert mine_response.json()[0]["review_note"] is None
+    assert all("ai_detection_status" not in file for file in mine_response.json()[0]["files"])
 
     approved_delete_response = await student.delete(
         f"/merchandise-submissions/submissions/{submission['id']}"

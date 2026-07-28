@@ -49,6 +49,10 @@ class StorageBackend(abc.ABC):
         """刪除指定 key 的檔案"""
 
     @abc.abstractmethod
+    async def read_bytes(self, storage_key: str) -> bytes:
+        """讀取已儲存檔案的原始 bytes，供需要驗證內容的服務使用。"""
+
+    @abc.abstractmethod
     async def get_url(
         self,
         storage_key: str,
@@ -267,6 +271,12 @@ class LocalStorageBackend(StorageBackend):
             target.unlink()
             logger.info("檔案刪除 key=%s", storage_key)
 
+    async def read_bytes(self, storage_key: str) -> bytes:
+        path = self.local_path(storage_key)
+        if path is None or not path.is_file():
+            raise FileNotFoundError(storage_key)
+        return await anyio.to_thread.run_sync(path.read_bytes)
+
     async def get_url(
         self,
         storage_key: str,
@@ -373,6 +383,14 @@ class S3StorageBackend(StorageBackend):
         client = self._client
         bucket = self._bucket
         await anyio.to_thread.run_sync(lambda: client.delete_object(Bucket=bucket, Key=storage_key))
+
+    async def read_bytes(self, storage_key: str) -> bytes:
+        storage_key = validate_storage_key(storage_key)
+        client = self._client
+        response = await anyio.to_thread.run_sync(
+            lambda: client.get_object(Bucket=self._bucket, Key=storage_key)
+        )
+        return await anyio.to_thread.run_sync(response["Body"].read)
 
     async def get_url(
         self,
