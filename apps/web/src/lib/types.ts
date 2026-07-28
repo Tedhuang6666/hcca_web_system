@@ -626,6 +626,31 @@ export interface ElectronicCredentialOut {
   status_label: string;
 }
 
+export interface ElectronicCredentialAuthorizationOut {
+  id: string;
+  email: string;
+  display_name: string | null;
+  student_id: string | null;
+  identity_label: string;
+  note: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ElectronicCredentialAuthorizationCreate {
+  email: string;
+  identity_label: string;
+  note?: string | null;
+}
+
+export interface ElectronicCredentialAuthorizationUpdate {
+  email?: string;
+  identity_label?: string;
+  note?: string | null;
+  is_active?: boolean;
+}
+
 // ── 公文系統型別 ──────────────────────────────────────────────────────────────
 
 

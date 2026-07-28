@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
-import { CheckCircle, Image as ImageIcon, MapPin, Pencil, Plus, RefreshCw, Save, Store, Tag, Trash2, Upload, XCircle } from "lucide-react";
+import { CheckCircle, Image as ImageIcon, MapPin, Pencil, Plus, RefreshCw, Save, ShieldCheck, Store, Tag, Trash2, Upload, XCircle } from "lucide-react";
 import { partnerMapApi, ApiError } from "@/lib/api";
 import { apiUrl } from "@/lib/config";
 import type {
@@ -22,6 +22,7 @@ import {
   PARTNER_ICON_OPTIONS,
   type PartnerIconKey,
 } from "../partner-map-icons";
+import CredentialAuthorizationPanel from "./CredentialAuthorizationPanel";
 
 const emptyBusiness = {
   name: "",
@@ -143,7 +144,7 @@ export default function PartnerMapAdminPage() {
   const [offerForm, setOfferForm] = useState<OfferDraft>(newOfferDraft());
   const [editingOfferId, setEditingOfferId] = useState<string | null>(null);
   const [initialOfferForms, setInitialOfferForms] = useState<OfferDraft[]>([newOfferDraft()]);
-  const [activeTab, setActiveTab] = useState<"businesses" | "tags">("businesses");
+  const [activeTab, setActiveTab] = useState<"businesses" | "tags" | "credentials">("businesses");
 
   const load = useCallback(() => {
     partnerMapApi
@@ -557,6 +558,19 @@ export default function PartnerMapAdminPage() {
           }}>
           <Tag size={16} aria-hidden="true" />標籤管理
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "credentials"}
+          aria-controls="credentials-panel"
+          onClick={() => setActiveTab("credentials")}
+          className="flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-4 text-sm font-medium transition-colors"
+          style={{
+            borderColor: activeTab === "credentials" ? "var(--primary)" : "transparent",
+            color: activeTab === "credentials" ? "var(--primary)" : "var(--text-muted)",
+          }}>
+          <ShieldCheck size={16} aria-hidden="true" />特殊身分
+        </button>
       </div>
 
       {activeTab === "businesses" ? <div id="businesses-panel" role="tabpanel" aria-label="店家管理" className="grid gap-4 lg:grid-cols-[320px_1fr]">
@@ -850,7 +864,7 @@ export default function PartnerMapAdminPage() {
             </div>
           )}
         </main>
-      </div> : (
+      </div> : activeTab === "tags" ? (
         <section id="tags-panel" role="tabpanel" aria-label="標籤管理" className="card p-5">
           <div className="mb-5 flex items-start gap-3">
             <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ color: "var(--primary)", background: "var(--primary-dim)" }}>
@@ -930,7 +944,7 @@ export default function PartnerMapAdminPage() {
             })}
           </div>
         </section>
-      )}
+      ) : <CredentialAuthorizationPanel />}
     </div>
   );
 }
