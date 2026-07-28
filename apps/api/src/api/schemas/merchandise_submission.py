@@ -134,6 +134,23 @@ class MerchandiseSubmissionFileOut(MerchandiseSubmissionUploadOut):
     id: uuid.UUID
 
 
+class MerchandiseSubmissionAIEvidenceOut(BaseModel):
+    level: Literal["A", "B", "C"]
+    category: str
+    label: str
+    value: str
+    source: str
+
+
+class MerchandiseSubmissionAdminFileOut(MerchandiseSubmissionFileOut):
+    ai_detection_status: (
+        Literal["detected", "supporting", "no_evidence", "not_applicable", "error"] | None
+    )
+    ai_detection_evidence: list[MerchandiseSubmissionAIEvidenceOut]
+    ai_detection_sha256: str | None
+    ai_detection_scanned_at: datetime | None
+
+
 class MerchandiseSubmissionSave(BaseModel):
     item_id: uuid.UUID
     field_values: dict[str, str] = Field(default_factory=dict)
@@ -180,6 +197,7 @@ class MerchandiseSubmissionPortalOut(BaseModel):
 
 
 class MerchandiseSubmissionAdminListItem(MerchandiseSubmissionOut):
+    files: list[MerchandiseSubmissionAdminFileOut] = []
     submitter_name: str
     submitter_email: str
     submitter_student_id: str | None

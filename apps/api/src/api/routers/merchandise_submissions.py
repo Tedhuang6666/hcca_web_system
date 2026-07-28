@@ -124,17 +124,7 @@ def _serialize_submission(submission, *, include_submitter: bool):
         "status": submission.status,
         "account_snapshot": submission.account_snapshot,
         "field_values": submission.field_values,
-        "files": [
-            {
-                "id": file.id,
-                "storage_key": file.storage_key,
-                "filename": file.filename,
-                "content_type": file.content_type,
-                "file_size": file.file_size,
-                "url": _upload_preview_url(file.storage_key),
-            }
-            for file in submission.files
-        ],
+        "files": [],
         "submitted_at": submission.submitted_at,
         "reviewed_at": submission.reviewed_at,
         "reviewer_name": submission.reviewer.display_name if submission.reviewer else None,
@@ -147,6 +137,25 @@ def _serialize_submission(submission, *, include_submitter: bool):
         "created_at": submission.created_at,
         "updated_at": submission.updated_at,
     }
+    for file in submission.files:
+        file_payload = {
+            "id": file.id,
+            "storage_key": file.storage_key,
+            "filename": file.filename,
+            "content_type": file.content_type,
+            "file_size": file.file_size,
+            "url": _upload_preview_url(file.storage_key),
+        }
+        if include_submitter:
+            file_payload.update(
+                {
+                    "ai_detection_status": file.ai_detection_status,
+                    "ai_detection_evidence": file.ai_detection_evidence,
+                    "ai_detection_sha256": file.ai_detection_sha256,
+                    "ai_detection_scanned_at": file.ai_detection_scanned_at,
+                }
+            )
+        payload["files"].append(file_payload)
     if include_submitter:
         payload.update(
             {

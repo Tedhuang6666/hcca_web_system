@@ -162,6 +162,14 @@ class MerchandiseSubmissionFile(Base, TimestampMixin):
     filename: Mapped[str] = mapped_column(String(500), nullable=False)
     content_type: Mapped[str] = mapped_column(String(100), nullable=False)
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    ai_detection_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    ai_detection_evidence: Mapped[list] = mapped_column(
+        JSONList, nullable=False, default=list, server_default="[]"
+    )
+    ai_detection_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    ai_detection_scanned_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     submission: Mapped[MerchandiseSubmission] = relationship(
         "MerchandiseSubmission", back_populates="files"

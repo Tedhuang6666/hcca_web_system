@@ -23686,6 +23686,42 @@ export interface components {
             /** Order Open Time */
             order_open_time?: string | null;
         };
+        /** MerchandiseSubmissionAIEvidenceOut */
+        MerchandiseSubmissionAIEvidenceOut: {
+            /** Level */
+            level: "A" | "B" | "C";
+            /** Category */
+            category: string;
+            /** Label */
+            label: string;
+            /** Value */
+            value: string;
+            /** Source */
+            source: string;
+        };
+        /** MerchandiseSubmissionAdminFileOut */
+        MerchandiseSubmissionAdminFileOut: {
+            /** Content Type */
+            content_type: string;
+            /** File Size */
+            file_size: number;
+            /** Filename */
+            filename: string;
+            /** Id */
+            id: string;
+            /** Storage Key */
+            storage_key: string;
+            /** Url */
+            url: string;
+            /** Ai Detection Status */
+            ai_detection_status: ("detected" | "supporting" | "no_evidence" | "not_applicable" | "error") | null;
+            /** Ai Detection Evidence */
+            ai_detection_evidence: components["schemas"]["MerchandiseSubmissionAIEvidenceOut"][];
+            /** Ai Detection Sha256 */
+            ai_detection_sha256: string | null;
+            /** Ai Detection Scanned At */
+            ai_detection_scanned_at: string | null;
+        };
         /** MerchandiseSubmissionAdminListItem */
         MerchandiseSubmissionAdminListItem: {
             /** Account Snapshot */
@@ -23705,7 +23741,7 @@ export interface components {
              * Files
              * @default []
              */
-            files: components["schemas"]["MerchandiseSubmissionFileOut"][];
+            files: components["schemas"]["MerchandiseSubmissionAdminFileOut"][];
             /**
              * Id
              * Format: uuid
