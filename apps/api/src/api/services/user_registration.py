@@ -1156,9 +1156,7 @@ async def link_user_emails(
         ).all()
     )
     if other_user_ids and not merge_existing_accounts:
-        raise UserRegistrationError(
-            409, "此 Email 已屬於其他帳號，使用者無法自行合併，請聯絡管理員"
-        )
+        raise UserRegistrationError(409, "此 Email 已屬於其他帳號，請使用帳戶合併功能")
     other_users: list[User] = []
     candidate_student_id = user.student_id or parsed_student_id
     if merge_existing_accounts:

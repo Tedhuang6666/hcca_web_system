@@ -1220,7 +1220,7 @@ function UserPanel({
             合併其他帳戶
           </h3>
           <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-            可一次選擇最多 20 個次要帳戶；所有登入身分與歷史資料都會歸到目前帳戶，使用者本人無法執行合併。
+            可一次選擇最多 20 個次要帳戶；使用者也可透過 Email 驗證自行合併，這裡提供管理員批次處理與衝突選擇。
           </p>
         </div>
         <div className="space-y-2">

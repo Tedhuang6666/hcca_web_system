@@ -425,7 +425,7 @@ export default function ProfilePage() {
                 </div>
               )}
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                新 Email 驗證成功後，可使用該 Google 帳號登入同一個平台帳戶；若 Email 已屬其他帳號，須由管理員合併，使用者不能自行合併。
+                新 Email 驗證成功後，可使用該 Google 帳號登入同一個平台帳戶；若 Email 已屬其他帳號，驗證成功後會自動合併，資料衝突則交由管理員處理。
               </p>
             </div>
           </div>

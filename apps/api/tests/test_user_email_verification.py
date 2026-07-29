@@ -114,9 +114,10 @@ async def test_user_verifies_email_before_it_is_linked(
 
 
 @pytest.mark.asyncio
-async def test_user_cannot_self_link_email_owned_by_another_account(
+async def test_user_can_self_merge_email_owned_by_another_account_without_conflict(
     client: AsyncClient,
     db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     user = User(
         email="primary@hchs.hc.edu.tw",
@@ -126,7 +127,7 @@ async def test_user_cannot_self_link_email_owned_by_another_account(
     )
     other = User(
         email="already-owned@gmail.com",
-        display_name="其他帳戶",
+        display_name="自助綁定",
         is_active=True,
         is_verified=True,
     )
@@ -145,10 +146,39 @@ async def test_user_cannot_self_link_email_owned_by_another_account(
     await db_session.flush()
     _override_user(user)
 
+    fake_redis = FakeRedis()
+    sent_to: list[str] = []
+    monkeypatch.setattr(verification_svc, "redis_client", fake_redis)
+    monkeypatch.setattr(verification_svc.secrets, "randbelow", lambda _limit: 123456)
+    monkeypatch.setattr(
+        verification_svc,
+        "send_branded_email",
+        lambda recipients, *_args, **_kwargs: sent_to.extend(recipients) or ["task-id"],
+    )
+
     response = await client.post(
         "/users/me/emails/verification",
         json={"email": other.email},
     )
 
-    assert response.status_code == 409
-    assert "無法自行合併" in response.json()["detail"]
+    assert response.status_code == 202
+    assert sent_to == [other.email]
+
+    verify_response = await client.post(
+        "/users/me/emails/verify",
+        json={"email": other.email, "code": "123456"},
+    )
+
+    assert verify_response.status_code == 200
+    assert verify_response.json()["emails"] == [
+        "already-owned@gmail.com",
+        "primary@hchs.hc.edu.tw",
+    ]
+    await db_session.refresh(other)
+    assert other.is_active is False
+    assert other.email.endswith("@deleted.local")
+    identity = await db_session.scalar(
+        select(UserIdentity).where(UserIdentity.email == "already-owned@gmail.com")
+    )
+    assert identity is not None
+    assert identity.user_id == user.id

@@ -16,7 +16,11 @@ from api.core.security import redis_client
 from api.email.sender import send_branded_email
 from api.models.user import User
 from api.models.user_identity import UserIdentity
-from api.services.user_registration import UserRegistrationError, link_user_emails
+from api.services.user_registration import (
+    UserRegistrationError,
+    link_user_emails,
+    merge_user_accounts,
+)
 
 CODE_TTL_SECONDS = 600
 RESEND_COOLDOWN_SECONDS = 60
@@ -49,25 +53,60 @@ async def list_user_emails(db: AsyncSession, user: User) -> list[str]:
     return sorted({user.email, *(email for email in identity_emails if email)})
 
 
+async def _find_external_accounts(
+    db: AsyncSession,
+    *,
+    user: User,
+    email: str,
+) -> list[User]:
+    owner_ids = set(
+        (await db.scalars(select(User.id).where(User.email == email, User.id != user.id))).all()
+    )
+    owner_ids.update(
+        (
+            await db.scalars(
+                select(UserIdentity.user_id).where(
+                    UserIdentity.email == email,
+                    UserIdentity.user_id != user.id,
+                )
+            )
+        ).all()
+    )
+    if not owner_ids:
+        return []
+    return list((await db.scalars(select(User).where(User.id.in_(owner_ids)))).all())
+
+
+async def _ensure_self_mergeable(accounts: list[User]) -> User | None:
+    if len(accounts) > 1:
+        raise UserRegistrationError(409, "此 Email 同時對應多個帳戶，請由管理員處理")
+    if not accounts:
+        return None
+    source = accounts[0]
+    if not source.is_active:
+        raise UserRegistrationError(409, "此 Email 屬於已停用帳戶，請由管理員處理")
+    return source
+
+
 async def request_verification(db: AsyncSession, user: User, email: str) -> None:
     normalized_email = email.strip().lower()
     if "@" not in normalized_email:
         raise UserRegistrationError(422, "Email 格式不正確")
 
-    existing_user = await db.scalar(select(User).where(User.email == normalized_email))
-    if existing_user and existing_user.id != user.id:
-        raise UserRegistrationError(
-            409, "此 Email 已屬於其他帳號，使用者無法自行合併，請聯絡管理員"
-        )
+    external_accounts = await _find_external_accounts(
+        db,
+        user=user,
+        email=normalized_email,
+    )
+    await _ensure_self_mergeable(external_accounts)
     existing_identity = await db.scalar(
-        select(UserIdentity).where(UserIdentity.email == normalized_email)
+        select(UserIdentity).where(
+            UserIdentity.email == normalized_email,
+            UserIdentity.user_id == user.id,
+        )
     )
     if existing_identity:
-        if existing_identity.user_id == user.id:
-            raise UserRegistrationError(409, "此 Email 已連結到您的帳號")
-        raise UserRegistrationError(
-            409, "此 Email 已連結其他帳號，使用者無法自行合併，請聯絡管理員"
-        )
+        raise UserRegistrationError(409, "此 Email 已連結到您的帳號")
 
     allowed = await redis_client.set(
         _rate_key(user.id, normalized_email),
@@ -129,6 +168,28 @@ async def verify_and_link(
         await redis_client.setex(key, CODE_TTL_SECONDS, json.dumps(payload))
         raise UserRegistrationError(400, "驗證碼不正確")
 
-    await link_user_emails(db, user=user, emails=[normalized_email], actor=user)
+    external_accounts = await _find_external_accounts(
+        db,
+        user=user,
+        email=normalized_email,
+    )
+    source = await _ensure_self_mergeable(external_accounts)
+    if source is None:
+        await link_user_emails(db, user=user, emails=[normalized_email], actor=user)
+    else:
+        try:
+            await merge_user_accounts(
+                db,
+                user=user,
+                source_user=source,
+                actor=user,
+            )
+        except UserRegistrationError as exc:
+            if exc.payload and exc.payload.get("conflicts"):
+                raise UserRegistrationError(
+                    409,
+                    "帳戶資料有衝突，請由管理員在後台選擇要保留的資料",
+                ) from exc
+            raise
     await redis_client.delete(key)
     return user
