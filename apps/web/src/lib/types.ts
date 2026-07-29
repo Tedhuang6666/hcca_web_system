@@ -13,6 +13,43 @@
 
 // ── 自動生成型別（從 OpenAPI schema 衍生，do not edit）─────────────────────────
 export type {
+  DiscordNotificationRouteIn,
+  DiscordNotificationRouteOut,
+  ElectronicCredentialAuthorizationBulkCreate,
+  ElectronicCredentialAuthorizationBulkOut,
+  ElectronicCredentialAuthorizationCreate,
+  ElectronicCredentialAuthorizationOut,
+  ElectronicCredentialAuthorizationUpdate,
+  ElectronicCredentialOut,
+  ImpersonationStartResponse,
+  MFAStatusOut,
+  PartnerApplicationFieldConfig,
+  PartnerApplicationFieldOut,
+  PartnerApplicationPortalOut,
+  PartnerApplicationSettingsOut,
+  PartnerBusinessApplicationOut,
+  PartnerBusinessApplicationStatus,
+  PartnerBusinessImageOut,
+  PasskeyAuthenticationOptionsOut,
+  PasskeyOut,
+  PasskeyRegistrationOptionsOut
+} from './api-bridge'
+
+/**
+ * types.ts — 型別薄層（部分自動生成）
+ *
+ * 本檔案的主要型別從 api-bridge.ts 再匯出（api-bridge.ts 由 openapi-typescript 自動生成）。
+ * 只有無法對應到 OpenAPI schema 的前端特有型別才在此手寫。
+ *
+ * 更新型別：
+ *   ./scripts/update-openapi.sh              # 從 FastAPI 匯出最新 openapi.json
+ *   cd apps/web && npm run generate:types     # 重建 api-types.ts
+ *   node ../../scripts/generate-bridge.mjs > /tmp/bridge_coverage.json
+ *   python3 ../../scripts/rewrite-types-ts.py # 重建本檔
+ */
+
+// ── 自動生成型別（從 OpenAPI schema 衍生，do not edit）─────────────────────────
+export type {
 
 } from './api-bridge'
 
@@ -617,50 +654,6 @@ import type {
   RecipientType,
 } from './api-bridge'
 
-export interface ElectronicCredentialOut {
-  display_name: string;
-  email: string;
-  student_id: string | null;
-  identity_kind: "student" | "teacher" | "authorized";
-  identity_label: string;
-  status_label: string;
-}
-
-export interface ElectronicCredentialAuthorizationOut {
-  id: string;
-  email: string;
-  display_name: string | null;
-  student_id: string | null;
-  identity_label: string;
-  note: string | null;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface ElectronicCredentialAuthorizationCreate {
-  email: string;
-  identity_label: string;
-  note?: string | null;
-}
-
-export interface ElectronicCredentialAuthorizationBulkCreate {
-  emails: string[];
-  identity_label: string;
-  note?: string | null;
-}
-
-export interface ElectronicCredentialAuthorizationBulkOut {
-  created_count: number;
-  skipped_emails: string[];
-}
-
-export interface ElectronicCredentialAuthorizationUpdate {
-  email?: string;
-  identity_label?: string;
-  note?: string | null;
-  is_active?: boolean;
-}
 
 // ── 公文系統型別 ──────────────────────────────────────────────────────────────
 
@@ -740,68 +733,8 @@ export interface LayoutDecoration {
 
 // ── 特約地圖型別 ──────────────────────────────────────────────────────────────
 
-export interface PartnerBusinessImageOut {
-  id: string;
-  business_id: string;
-  image_url: string;
-  filename: string;
-  content_type: string;
-  sort_order: number;
-  created_at: string;
-  updated_at: string;
-}
 
 export type PartnerApplicationFieldType = "text" | "textarea" | "email" | "tel" | "url" | "select";
-export type PartnerBusinessApplicationStatus =
-  | "pending"
-  | "in_review"
-  | "approved"
-  | "needs_info"
-  | "rejected";
-
-export interface PartnerApplicationFieldConfig {
-  key: string;
-  label: string;
-  field_type: PartnerApplicationFieldType;
-  required: boolean;
-  placeholder: string | null;
-  help_text: string | null;
-  options: string[];
-  sort_order: number;
-  is_active: boolean;
-}
-
-export interface PartnerApplicationFieldOut extends PartnerApplicationFieldConfig {
-  id: string;
-}
-
-export interface PartnerApplicationSettingsOut {
-  id: string;
-  is_open: boolean;
-  title: string;
-  intro: string;
-  privacy_notice: string | null;
-  fields: PartnerApplicationFieldOut[];
-  updated_at: string;
-}
-
-export interface PartnerApplicationPortalOut {
-  settings: PartnerApplicationSettingsOut;
-  is_accepting: boolean;
-}
-
-export interface PartnerBusinessApplicationOut {
-  id: string;
-  status: PartnerBusinessApplicationStatus;
-  field_values: Record<string, string>;
-  submitted_by: string | null;
-  reviewed_by: string | null;
-  reviewed_at: string | null;
-  review_note: string | null;
-  business_id: string | null;
-  created_at: string;
-  updated_at: string;
-}
 
 
 // ── 班級系統型別 ──────────────────────────────────────────────────────────────
@@ -974,37 +907,12 @@ export interface OrgWithPositions {
 export interface ApiError { detail: string; status: number }
 export interface PaginatedResponse<T> { items: T[]; total: number; page: number; size: number }
 
-export interface MFAStatusOut {
-  mfa_enabled: boolean;
-  has_pending_setup: boolean;
-  backup_code_count: number;
-  passkey_count: number;
-}
 
 export interface MFAChallengeOut {
   challenge: string;
   passkey_available: boolean;
 }
 
-export interface PasskeyAuthenticationOptionsOut {
-  transaction_id: string;
-  options: Record<string, unknown>;
-}
-
-export interface PasskeyRegistrationOptionsOut {
-  transaction_id: string;
-  options: Record<string, unknown>;
-}
-
-export interface PasskeyOut {
-  id: string;
-  credential_id: string;
-  device_name: string;
-  transports: string[];
-  backed_up: boolean;
-  created_at: string;
-  last_used_at: string | null;
-}
 
 // ── 財務總帳 ─────────────────────────────────────────────────────────────────
 
@@ -1311,39 +1219,11 @@ export interface InventoryProcurementUpdate {
   line_items?: InventoryProcurementItemIn[];
 }
 
-export interface DiscordNotificationRouteIn {
-  guild_id: string;
-  event_key: string;
-  module: string;
-  channel_id: string;
-  role_id?: string | null;
-  petition_type_id?: string | null;
-  org_id?: string | null;
-  priority?: number;
-  mention_role?: boolean;
-  is_active?: boolean;
-}
-
-export interface DiscordNotificationRouteOut extends DiscordNotificationRouteIn {
-  id: string;
-  created_at: string;
-  updated_at: string;
-}
 
 export interface DiscordNotificationEventOut {
   key: string;
   module: string;
   label: string;
-}
-
-export interface ImpersonationStartResponse {
-  token: string;
-  expires_in_minutes: number;
-  target_user_id: string;
-  target_email: string;
-  target_display_name: string;
-  actor_email: string;
-  actor_display_name: string;
 }
 
 
