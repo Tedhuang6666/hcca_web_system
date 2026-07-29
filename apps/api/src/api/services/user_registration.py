@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterable
 from datetime import UTC, date, datetime
+from typing import Any
 
 from sqlalchemy import and_, delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,10 +38,17 @@ SCHOOL_EMAIL_DOMAIN = "hchs.hc.edu.tw"
 
 
 class UserRegistrationError(Exception):
-    def __init__(self, status_code: int, detail: str) -> None:
+    def __init__(
+        self,
+        status_code: int,
+        detail: str,
+        *,
+        payload: dict[str, Any] | None = None,
+    ) -> None:
         super().__init__(detail)
         self.status_code = status_code
         self.detail = detail
+        self.payload = payload
 
 
 _ACCOUNT_MERGE_EXCLUDED_TABLES = frozenset(
@@ -62,6 +71,33 @@ _ACCOUNT_MERGE_SAFE_DUPLICATE_TABLES = frozenset(
         "meeting_agenda_recusals",
     }
 )
+
+
+def _serialize_merge_value(value: Any) -> str:
+    if value is None:
+        return "空白"
+    return str(value)
+
+
+def _merge_record_id(table_name: str, primary_key_columns, row) -> str:
+    return ":".join(
+        [
+            table_name,
+            *(
+                f"{column.name}={_serialize_merge_value(_row_value(row, column))}"
+                for column in primary_key_columns
+            ),
+        ]
+    )
+
+
+def _public_merge_conflict(conflict: dict[str, Any]) -> dict[str, Any]:
+    public = {key: value for key, value in conflict.items() if not key.startswith("_")}
+    public["records"] = [
+        {key: value for key, value in record.items() if not key.startswith("_")}
+        for record in conflict["records"]
+    ]
+    return public
 
 
 def _user_fk_columns(table):
@@ -89,6 +125,475 @@ def _row_value(row, column):
 
 def _row_key(row, columns):
     return tuple(_row_value(row, column) for column in columns)
+
+
+def _merge_record_descriptor(
+    table,
+    row,
+    user_columns,
+    *,
+    target_user_id: uuid.UUID,
+    user_names: dict[uuid.UUID, str],
+    fields: Iterable,
+) -> dict[str, Any]:
+    primary_key_columns = tuple(table.primary_key.columns)
+    user_ids = [
+        _row_value(row, column) for column in user_columns if _row_value(row, column) is not None
+    ]
+    owner_user_id = next(
+        (user_id for user_id in user_ids if user_id != target_user_id),
+        target_user_id,
+    )
+    side = "target" if owner_user_id == target_user_id else "source"
+    record_id = _merge_record_id(table.name, primary_key_columns, row)
+    field_values = {
+        column.name: _serialize_merge_value(_row_value(row, column)) for column in fields
+    }
+    return {
+        "id": record_id,
+        "side": side,
+        "owner_user_id": str(owner_user_id),
+        "owner_name": user_names.get(owner_user_id, "帳戶"),
+        "label": "、".join(f"{name}={value}" for name, value in field_values.items()),
+        "fields": field_values,
+        "_table": table,
+        "_primary_key": _row_key(row, primary_key_columns),
+    }
+
+
+async def _collect_table_merge_conflicts(
+    db: AsyncSession,
+    table,
+    *,
+    target_user_id: uuid.UUID,
+    user_ids: set[uuid.UUID],
+    user_names: dict[uuid.UUID, str],
+    require_user_column: bool = True,
+) -> list[dict[str, Any]]:
+    user_columns = _user_fk_columns(table)
+    if not user_columns:
+        return []
+    rows = (
+        await db.execute(
+            select(table).where(or_(*(column.in_(user_ids) for column in user_columns)))
+        )
+    ).all()
+    if not rows:
+        return []
+
+    user_column_names = {column.name for column in user_columns}
+    conflicts: list[dict[str, Any]] = []
+    for unique_columns in _unique_column_sets(table):
+        if require_user_column and not {column.name for column in unique_columns}.intersection(
+            user_column_names
+        ):
+            continue
+        groups: dict[tuple[Any, ...], list[Any]] = {}
+        for row in rows:
+            projected_values = tuple(
+                target_user_id
+                if column.name in user_column_names and _row_value(row, column) in user_ids
+                else _row_value(row, column)
+                for column in unique_columns
+            )
+            if any(value is None for value in projected_values):
+                continue
+            groups.setdefault(projected_values, []).append(row)
+
+        for grouped_rows in groups.values():
+            if len(grouped_rows) < 2 or table.name in _ACCOUNT_MERGE_SAFE_DUPLICATE_TABLES:
+                continue
+            descriptors = [
+                _merge_record_descriptor(
+                    table,
+                    row,
+                    user_columns,
+                    target_user_id=target_user_id,
+                    user_names=user_names,
+                    fields=unique_columns,
+                )
+                for row in grouped_rows
+            ]
+            descriptors.sort(key=lambda item: item["id"])
+            constraint_name = ",".join(column.name for column in unique_columns)
+            record_ids = "|".join(item["id"] for item in descriptors)
+            conflicts.append(
+                {
+                    "key": f"records:{table.name}:{constraint_name}:{record_ids}",
+                    "category": "record",
+                    "title": f"{table.name} 的重複資料",
+                    "message": f"唯一欄位：{constraint_name}",
+                    "records": descriptors,
+                }
+            )
+    return conflicts
+
+
+def _field_record(
+    *,
+    record_id: str,
+    side: str,
+    owner_user_id: uuid.UUID,
+    owner_name: str,
+    field: str,
+    value: Any,
+) -> dict[str, Any]:
+    serialized = _serialize_merge_value(value)
+    return {
+        "id": record_id,
+        "side": side,
+        "owner_user_id": str(owner_user_id),
+        "owner_name": owner_name,
+        "label": f"{field}：{serialized}",
+        "fields": {field: serialized},
+        "_value": value,
+    }
+
+
+def _field_conflict(
+    *,
+    key: str,
+    title: str,
+    field: str,
+    records: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return {
+        "key": key,
+        "category": "field",
+        "title": title,
+        "message": f"欄位：{field}，請選擇要保留的值",
+        "records": records,
+    }
+
+
+async def _collect_identity_conflicts(
+    db: AsyncSession,
+    *,
+    target_user: User,
+    source_users: list[User],
+) -> list[dict[str, Any]]:
+    users = [target_user, *source_users]
+    user_names = {item.id: item.display_name for item in users}
+    records: list[dict[str, Any]] = []
+    for item in users:
+        if item.student_id:
+            records.append(
+                _field_record(
+                    record_id=f"user:{item.id}:student_id",
+                    side="target" if item.id == target_user.id else "source",
+                    owner_user_id=item.id,
+                    owner_name=user_names[item.id],
+                    field="學號",
+                    value=item.student_id,
+                )
+            )
+
+    people = (
+        await db.scalars(select(Person).where(Person.user_id.in_([item.id for item in users])))
+    ).all()
+    for person in people:
+        if person.student_id and not any(
+            item.id == person.user_id and item.student_id == person.student_id for item in users
+        ):
+            records.append(
+                _field_record(
+                    record_id=f"person:{person.id}:student_id",
+                    side="target" if person.user_id == target_user.id else "source",
+                    owner_user_id=person.user_id or target_user.id,
+                    owner_name=user_names.get(person.user_id, "人員檔案"),
+                    field="學號",
+                    value=person.student_id,
+                )
+            )
+    values = {record["_value"] for record in records}
+    if len(values) < 2:
+        return []
+    records.sort(key=lambda item: item["id"])
+    return [
+        _field_conflict(
+            key="field:identity:student_id:" + "|".join(item["id"] for item in records),
+            title="學號身分衝突",
+            field="student_id",
+            records=records,
+        )
+    ]
+
+
+async def _collect_profile_conflicts(
+    db: AsyncSession,
+    *,
+    target_user: User,
+    source_users: list[User],
+) -> list[dict[str, Any]]:
+    users = [target_user, *source_users]
+    user_names = {item.id: item.display_name for item in users}
+    conflicts: list[dict[str, Any]] = []
+    for field, label in (("display_name", "顯示名稱"),):
+        values = {item.display_name for item in users if getattr(item, field)}
+        if len(values) > 1:
+            records = [
+                _field_record(
+                    record_id=f"user:{item.id}:{field}",
+                    side="target" if item.id == target_user.id else "source",
+                    owner_user_id=item.id,
+                    owner_name=item.display_name,
+                    field=label,
+                    value=getattr(item, field),
+                )
+                for item in users
+            ]
+            records.sort(key=lambda item: item["id"])
+            conflicts.append(
+                _field_conflict(
+                    key=f"field:user:{field}:" + "|".join(item["id"] for item in records),
+                    title=f"{label}衝突",
+                    field=field,
+                    records=records,
+                )
+            )
+
+    people = (
+        await db.scalars(select(Person).where(Person.user_id.in_([item.id for item in users])))
+    ).all()
+    for field, label in (
+        ("legal_name", "法定姓名"),
+        ("display_name", "人員顯示名稱"),
+        ("email", "人員 Email"),
+        ("note", "人員備註"),
+        ("status", "人員狀態"),
+    ):
+        values = {getattr(person, field) for person in people if getattr(person, field)}
+        if len(values) < 2:
+            continue
+        records = [
+            _field_record(
+                record_id=f"person:{person.id}:{field}",
+                side="target" if person.user_id == target_user.id else "source",
+                owner_user_id=person.user_id or target_user.id,
+                owner_name=user_names.get(person.user_id, "人員檔案"),
+                field=label,
+                value=getattr(person, field),
+            )
+            for person in people
+            if getattr(person, field)
+        ]
+        records.sort(key=lambda item: item["id"])
+        conflicts.append(
+            _field_conflict(
+                key=f"field:person:{field}:" + "|".join(item["id"] for item in records),
+                title=f"{label}衝突",
+                field=field,
+                records=records,
+            )
+        )
+    return conflicts
+
+
+async def _collect_class_merge_conflicts(
+    db: AsyncSession,
+    *,
+    target_user: User,
+    source_users: list[User],
+) -> list[dict[str, Any]]:
+    users = [target_user, *source_users]
+    user_ids = {item.id for item in users}
+    user_names = {item.id: item.display_name for item in users}
+    conflicts: list[dict[str, Any]] = []
+    for model in (ClassCadre, ClassManualMember, ClassRosterEntry):
+        conflicts.extend(
+            await _collect_table_merge_conflicts(
+                db,
+                model.__table__,
+                target_user_id=target_user.id,
+                user_ids=user_ids,
+                user_names=user_names,
+                require_user_column=model is not ClassRosterEntry,
+            )
+        )
+
+    membership_rows = (
+        await db.scalars(select(ClassMembership).where(ClassMembership.user_id.in_(user_ids)))
+    ).all()
+    grouped: dict[tuple[Any, ...], list[ClassMembership]] = {}
+    for row in membership_rows:
+        key = (row.class_id, row.academic_year, row.status, row.start_date, row.end_date)
+        grouped.setdefault(key, []).append(row)
+    for rows in grouped.values():
+        if len(rows) < 2:
+            continue
+        descriptors = [
+            {
+                "id": f"class_memberships:id={row.id}",
+                "side": "target" if row.user_id == target_user.id else "source",
+                "owner_user_id": str(row.user_id),
+                "owner_name": user_names.get(row.user_id, "帳戶"),
+                "label": f"class_id={row.class_id}、academic_year={row.academic_year}、status={row.status}",
+                "fields": {
+                    "class_id": str(row.class_id),
+                    "academic_year": str(row.academic_year),
+                    "status": str(row.status),
+                },
+                "_table": ClassMembership.__table__,
+                "_primary_key": (row.id,),
+            }
+            for row in rows
+        ]
+        descriptors.sort(key=lambda item: item["id"])
+        conflicts.append(
+            {
+                "key": "records:class_memberships:logical:"
+                + "|".join(item["id"] for item in descriptors),
+                "category": "record",
+                "title": "班級歷史紀錄重複",
+                "message": "同一班級、學年度與狀態已有多筆資料",
+                "records": descriptors,
+            }
+        )
+    return conflicts
+
+
+async def collect_merge_conflicts(
+    db: AsyncSession,
+    *,
+    target_user: User,
+    source_users: Iterable[User],
+) -> list[dict[str, Any]]:
+    """建立帳戶合併預覽；不會寫入資料庫。"""
+    sources = list(source_users)
+    users = [target_user, *sources]
+    user_ids = {item.id for item in users}
+    user_names = {item.id: item.display_name for item in users}
+    conflicts = [
+        *await _collect_identity_conflicts(
+            db,
+            target_user=target_user,
+            source_users=sources,
+        ),
+        *await _collect_profile_conflicts(
+            db,
+            target_user=target_user,
+            source_users=sources,
+        ),
+        *await _collect_class_merge_conflicts(
+            db,
+            target_user=target_user,
+            source_users=sources,
+        ),
+    ]
+    for table in Base.metadata.sorted_tables:
+        if table.name in _ACCOUNT_MERGE_EXCLUDED_TABLES or table.name == "users":
+            continue
+        conflicts.extend(
+            await _collect_table_merge_conflicts(
+                db,
+                table,
+                target_user_id=target_user.id,
+                user_ids=user_ids,
+                user_names=user_names,
+            )
+        )
+    conflicts.sort(key=lambda item: item["key"])
+    return conflicts
+
+
+async def _apply_record_conflict_resolutions(
+    db: AsyncSession,
+    *,
+    conflicts: list[dict[str, Any]],
+    resolutions: dict[str, str],
+) -> None:
+    for conflict in conflicts:
+        if conflict["category"] != "record":
+            continue
+        selected_id = resolutions[conflict["key"]]
+        selected = next(
+            (record for record in conflict["records"] if record["id"] == selected_id),
+            None,
+        )
+        if selected is None:
+            raise UserRegistrationError(422, f"衝突選擇無效：{conflict['title']}")
+        table = selected["_table"]
+        primary_key_columns = tuple(table.primary_key.columns)
+        for record in conflict["records"]:
+            if record["id"] == selected_id:
+                continue
+            await db.execute(
+                delete(table).where(
+                    and_(
+                        *(
+                            column == value
+                            for column, value in zip(
+                                primary_key_columns,
+                                record["_primary_key"],
+                                strict=True,
+                            )
+                        )
+                    )
+                )
+            )
+
+
+async def _apply_field_conflict_resolutions(
+    db: AsyncSession,
+    *,
+    target_user: User,
+    source_users: list[User],
+    conflicts: list[dict[str, Any]],
+    resolutions: dict[str, str],
+) -> None:
+    users = [target_user, *source_users]
+    people = (
+        await db.scalars(select(Person).where(Person.user_id.in_([item.id for item in users])))
+    ).all()
+    people_by_user = {person.user_id: person for person in people if person.user_id}
+    identity_value: Any = None
+    for conflict in conflicts:
+        if conflict["category"] != "field":
+            continue
+        selected_id = resolutions[conflict["key"]]
+        selected = next(
+            (record for record in conflict["records"] if record["id"] == selected_id),
+            None,
+        )
+        if selected is None:
+            raise UserRegistrationError(422, f"衝突選擇無效：{conflict['title']}")
+        if conflict["key"].startswith("field:identity:student_id"):
+            identity_value = selected["_value"]
+        elif conflict["key"].startswith("field:user:"):
+            owner = next(
+                (item for item in users if str(item.id) == selected["owner_user_id"]), None
+            )
+            if owner is not None:
+                setattr(
+                    target_user,
+                    conflict["message"].split("，", 1)[0].removeprefix("欄位："),
+                    selected["_value"],
+                )
+        elif conflict["key"].startswith("field:person:"):
+            target_field = conflict["key"].split(":", 3)[2]
+            for person in people:
+                setattr(person, target_field, selected["_value"])
+
+    identity_conflict = next(
+        (
+            conflict
+            for conflict in conflicts
+            if conflict["key"].startswith("field:identity:student_id")
+        ),
+        None,
+    )
+    if identity_conflict is not None:
+        for item in source_users:
+            if item.student_id != identity_value:
+                item.student_id = None
+        target_user.student_id = identity_value
+        target_person = people_by_user.get(target_user.id)
+        if target_person is not None:
+            target_person.student_id = identity_value
+        for person in people:
+            if person.user_id != target_user.id and person.student_id != identity_value:
+                person.student_id = None
+    await db.flush()
 
 
 async def _preflight_user_record_reparenting(
@@ -651,7 +1156,9 @@ async def link_user_emails(
         ).all()
     )
     if other_user_ids and not merge_existing_accounts:
-        raise UserRegistrationError(409, "其中一個 Email 已連結其他帳號")
+        raise UserRegistrationError(
+            409, "此 Email 已屬於其他帳號，使用者無法自行合併，請聯絡管理員"
+        )
     other_users: list[User] = []
     candidate_student_id = user.student_id or parsed_student_id
     if merge_existing_accounts:
@@ -726,6 +1233,10 @@ async def _merge_login_identities(
     if user.student_id and source_student_id and user.student_id != source_student_id:
         raise UserRegistrationError(422, "要合併的帳戶學號不一致")
     if source_student_id and not user.student_id:
+        # users.student_id 有唯一索引；先釋放次要帳戶的值，避免資料庫
+        # 先 flush 主要帳戶而在同一個 transaction 內撞到唯一鍵。
+        other_user.student_id = None
+        await db.flush()
         user.student_id = source_student_id
     if source_student_id == user.student_id:
         # users.student_id 是唯一欄位，先釋放次要帳戶的值才能把校務學號
@@ -826,9 +1337,82 @@ async def merge_user_accounts(
     db: AsyncSession,
     *,
     user: User,
-    source_user: User,
+    source_user: User | None = None,
+    source_users: Iterable[User] | None = None,
     actor: User,
+    conflict_resolutions: dict[str, str] | None = None,
 ) -> User:
     """公開的管理員帳戶合併入口；user 是保留的主要帳戶。"""
-    await _merge_login_identities(db, user=user, other_user=source_user, actor=actor)
+    sources = list(source_users or ([] if source_user is None else [source_user]))
+    if not sources:
+        raise UserRegistrationError(422, "至少要選擇一個次要帳戶")
+    if any(item.id == user.id for item in sources):
+        raise UserRegistrationError(422, "不可合併主要帳戶本身")
+    if len({item.id for item in sources}) != len(sources):
+        raise UserRegistrationError(422, "次要帳戶不可重複")
+
+    conflicts = await collect_merge_conflicts(
+        db,
+        target_user=user,
+        source_users=sources,
+    )
+    resolutions = conflict_resolutions or {}
+    conflict_keys = {conflict["key"] for conflict in conflicts}
+    unknown_keys = set(resolutions) - conflict_keys
+    if unknown_keys:
+        raise UserRegistrationError(422, "包含不存在的衝突選項，請重新預覽後再合併")
+    unresolved = [
+        _public_merge_conflict(conflict)
+        for conflict in conflicts
+        if conflict["key"] not in resolutions
+    ]
+    if unresolved:
+        raise UserRegistrationError(
+            409,
+            "帳戶資料存在衝突，請先選擇要保留的資料",
+            payload={"conflicts": unresolved},
+        )
+    for conflict in conflicts:
+        selected_id = resolutions[conflict["key"]]
+        if selected_id not in {record["id"] for record in conflict["records"]}:
+            raise UserRegistrationError(422, f"衝突選擇無效：{conflict['title']}")
+
+    await _apply_record_conflict_resolutions(
+        db,
+        conflicts=conflicts,
+        resolutions=resolutions,
+    )
+    await _apply_field_conflict_resolutions(
+        db,
+        target_user=user,
+        source_users=sources,
+        conflicts=conflicts,
+        resolutions=resolutions,
+    )
+    for source in sources:
+        await _merge_login_identities(db, user=user, other_user=source, actor=actor)
     return user
+
+
+async def preview_merge_user_accounts(
+    db: AsyncSession,
+    *,
+    user: User,
+    source_users: Iterable[User],
+) -> list[dict[str, Any]]:
+    """預覽管理員帳戶合併衝突；不會寫入資料庫。"""
+    sources = list(source_users)
+    if not sources:
+        raise UserRegistrationError(422, "至少要選擇一個次要帳戶")
+    if any(item.id == user.id for item in sources):
+        raise UserRegistrationError(422, "不可合併主要帳戶本身")
+    if len({item.id for item in sources}) != len(sources):
+        raise UserRegistrationError(422, "次要帳戶不可重複")
+    return [
+        _public_merge_conflict(conflict)
+        for conflict in await collect_merge_conflicts(
+            db,
+            target_user=user,
+            source_users=sources,
+        )
+    ]

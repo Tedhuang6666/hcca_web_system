@@ -903,6 +903,27 @@ export interface AdminUserDetail {
   effective_permissions: string[];
 }
 
+export interface AccountMergeConflictRecord {
+  id: string;
+  side: "target" | "source";
+  owner_user_id: string;
+  owner_name: string;
+  label: string;
+  fields: Record<string, string>;
+}
+
+export interface AccountMergeConflict {
+  key: string;
+  category: "record" | "field";
+  title: string;
+  message: string;
+  records: AccountMergeConflictRecord[];
+}
+
+export interface AccountMergePreview {
+  conflicts: AccountMergeConflict[];
+}
+
 
 export interface OrgWithPositions {
   id: string;

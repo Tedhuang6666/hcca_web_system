@@ -12,6 +12,7 @@ import MobileBackToList from "@/components/ui/MobileBackToList";
 import { adminApi, ApiError, apiErrorMessage, classApi, orgsApi, withFallback } from "@/lib/api";
 import type { OrgRead } from "@/lib/api";
 import type {
+  AccountMergeConflict,
   AdminUserDetail,
   MeetingBillStage,
   PermissionCodeInfo,
@@ -1059,7 +1060,11 @@ function UserPanel({
   const [classId, setClassId] = useState("");
   const [asCadre, setAsCadre] = useState(false);
   const [emailAlias, setEmailAlias] = useState("");
-  const [mergeSourceId, setMergeSourceId] = useState("");
+  const [mergeSourceIds, setMergeSourceIds] = useState<string[]>([]);
+  const [mergeConflicts, setMergeConflicts] = useState<AccountMergeConflict[]>([]);
+  const [mergeChoices, setMergeChoices] = useState<Record<string, string>>({});
+  const [mergeConflictOpen, setMergeConflictOpen] = useState(false);
+  const [mergePreviewing, setMergePreviewing] = useState(false);
   const [start, setStart] = useState(today());
   const [end, setEnd] = useState("");
   const available = uniquePositionsById(positions)
@@ -1106,14 +1111,45 @@ function UserPanel({
     body: `確定清除「${user.display_name}」的 TOTP 2FA 設定？使用者下次登入後可重新註冊；既有 Passkey 不受影響。`,
     action: () => adminApi.clearUserMfa(user.id),
   });
-  const mergeSource = users.find((candidate) => candidate.id === mergeSourceId);
-  const mergeAccount = () => {
-    if (!mergeSource) return;
+  const mergeSources = users.filter((candidate) => mergeSourceIds.includes(candidate.id));
+  const openMergeConfirmation = (conflictResolutions: Record<string, string>) => {
+    const sourceNames = mergeSources.map((source) => `「${source.display_name}」`).join("、");
     onConfirm({
       title: "合併帳戶並歸戶歷史資料",
-      body: `確定將「${mergeSource.display_name}」合併到「${user.display_name}」？登入身分、權限職位、班級設定、人員檔案及所有歷史資料都會改以主要帳戶呈現，次要帳戶會停用。此操作不可逆。`,
-      action: () => adminApi.mergeUserAccounts(user.id, mergeSource.id),
+      body: `確定將${sourceNames}合併到「${user.display_name}」？登入身分、權限職位、班級設定、人員檔案及所有歷史資料都會改以主要帳戶呈現，次要帳戶會停用。此操作不可逆。`,
+      action: () => adminApi.mergeUserAccounts(user.id, mergeSourceIds, conflictResolutions),
     });
+  };
+  const mergeAccount = async () => {
+    if (mergeSourceIds.length === 0) return;
+    setMergePreviewing(true);
+    try {
+      const preview = await adminApi.previewUserMerge(user.id, mergeSourceIds);
+      if (preview.conflicts.length === 0) {
+        openMergeConfirmation({});
+        return;
+      }
+      setMergeConflicts(preview.conflicts);
+      setMergeChoices(
+        Object.fromEntries(
+          preview.conflicts.map((conflict) => [
+            conflict.key,
+            conflict.records.find((record) => record.side === "target")?.id
+              ?? conflict.records[0]?.id,
+          ]),
+        ),
+      );
+      setMergeConflictOpen(true);
+    } catch (e) {
+      displayError(e, "預覽帳戶合併失敗");
+    } finally {
+      setMergePreviewing(false);
+    }
+  };
+  const confirmMergeWithChoices = () => {
+    if (mergeConflicts.some((conflict) => !mergeChoices[conflict.key])) return;
+    setMergeConflictOpen(false);
+    openMergeConfirmation(mergeChoices);
   };
   return (
     <div className="w-full p-5 space-y-5">
@@ -1181,28 +1217,69 @@ function UserPanel({
       <section className="rounded-xl p-4 space-y-3" style={{ border: "1px solid rgba(245,158,11,0.35)" }}>
         <div>
           <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-            合併另一個帳戶
+            合併其他帳戶
           </h3>
           <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-            適用於同一人曾用不同 Google 帳號登入的情況；會把所有登入身分與歷史資料歸到目前帳戶。
+            可一次選擇最多 20 個次要帳戶；所有登入身分與歷史資料都會歸到目前帳戶，使用者本人無法執行合併。
           </p>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
-          <SelectInput value={mergeSourceId} onChange={(event) => setMergeSourceId(event.target.value)}>
-            <option value="">選擇要合併的帳戶</option>
+        <div className="space-y-2">
+          <div className="max-h-44 overflow-y-auto rounded-lg p-2 space-y-1" style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}>
             {users
               .filter((candidate) => candidate.id !== user.id && candidate.is_active)
               .map((candidate) => (
-                <option key={candidate.id} value={candidate.id}>
-                  {candidate.display_name} · {candidate.student_id ?? candidate.email}
-                </option>
+                <label key={candidate.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md text-xs cursor-pointer hover:bg-white/5" style={{ color: "var(--text-secondary)" }}>
+                  <input
+                    type="checkbox"
+                    checked={mergeSourceIds.includes(candidate.id)}
+                    onChange={(event) => setMergeSourceIds((current) => event.target.checked
+                      ? [...current, candidate.id]
+                      : current.filter((id) => id !== candidate.id))}
+                  />
+                  <span className="min-w-0 truncate">{candidate.display_name} · {candidate.student_id ?? candidate.email}</span>
+                </label>
               ))}
-          </SelectInput>
-          <SmallButton onClick={mergeAccount} tone="warning" disabled={!mergeSource}>
-            合併並歸戶
+          </div>
+          <SmallButton onClick={mergeAccount} tone="warning" disabled={mergeSourceIds.length === 0 || mergePreviewing}>
+            {mergePreviewing ? "檢查衝突中…" : `合併並歸戶${mergeSourceIds.length ? `（${mergeSourceIds.length}）` : ""}`}
           </SmallButton>
         </div>
       </section>
+      {mergeConflictOpen && (
+        <Modal title="選擇要保留的資料" onClose={() => setMergeConflictOpen(false)}>
+          <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+            <p className="text-sm leading-6" style={{ color: "var(--text-secondary)" }}>
+              發現 {mergeConflicts.length} 組衝突。每組請選擇要保留的資料；未選擇的欄位值不會套用，重複紀錄才會移除。
+            </p>
+            {mergeConflicts.map((conflict) => (
+              <fieldset key={conflict.key} className="rounded-lg p-3 space-y-2" style={{ border: "1px solid var(--border)" }}>
+                <legend className="px-1 text-xs font-semibold" style={{ color: "var(--text-primary)" }}>{conflict.title}</legend>
+                <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>{conflict.message}</p>
+                {conflict.records.map((record) => (
+                  <label key={record.id} className="flex items-start gap-2 rounded-md p-2 cursor-pointer" style={{ background: mergeChoices[conflict.key] === record.id ? "var(--primary-dim)" : "var(--bg-elevated)" }}>
+                    <input
+                      type="radio"
+                      name={conflict.key}
+                      checked={mergeChoices[conflict.key] === record.id}
+                      onChange={() => setMergeChoices((current) => ({ ...current, [conflict.key]: record.id }))}
+                    />
+                    <span className="text-xs leading-5" style={{ color: "var(--text-secondary)" }}>
+                      <span className="font-medium" style={{ color: "var(--text-primary)" }}>{record.side === "target" ? "主要帳戶" : "次要帳戶"}：{record.owner_name}</span>
+                      <br />{record.label}
+                    </span>
+                  </label>
+                ))}
+              </fieldset>
+            ))}
+          </div>
+          <div className="flex justify-end gap-2">
+            <SmallButton onClick={() => setMergeConflictOpen(false)}>取消</SmallButton>
+            <SmallButton onClick={confirmMergeWithChoices} tone="warning" disabled={mergeConflicts.some((conflict) => !mergeChoices[conflict.key])}>
+              套用選擇並繼續
+            </SmallButton>
+          </div>
+        </Modal>
+      )}
       <section className="rounded-xl p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>

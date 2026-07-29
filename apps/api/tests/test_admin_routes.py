@@ -79,7 +79,7 @@ async def test_admin_can_update_position_weight(
 
     response = await client.patch(f"/admin/positions/{position.id}", json={"weight": 42})
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     assert response.json()["weight"] == 42
 
 
@@ -426,7 +426,7 @@ async def test_admin_can_link_school_email_to_existing_user_and_extract_student_
         json={"emails": ["g0112040105@hchs.hc.edu.tw", "member.private@gmail.com"]},
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["student_id"] == "112040105"
     assert set(payload["linked_emails"]) == {
@@ -466,9 +466,25 @@ async def test_admin_can_merge_previously_logged_in_secondary_account(
     await db_session.flush()
     _override_user(admin)
 
+    preview_response = await client.post(
+        f"/admin/users/{member.id}/merge/preview",
+        json={"source_user_ids": [str(secondary.id)]},
+    )
+    assert preview_response.status_code == 200
+    preview = preview_response.json()
+    resolutions = {
+        conflict["key"]: next(
+            record["id"] for record in conflict["records"] if record["side"] == "target"
+        )
+        for conflict in preview["conflicts"]
+    }
+
     response = await client.post(
-        f"/admin/users/{member.id}/emails",
-        json={"emails": [secondary.email]},
+        f"/admin/users/{member.id}/merge",
+        json={
+            "source_user_ids": [str(secondary.id)],
+            "conflict_resolutions": resolutions,
+        },
     )
 
     assert response.status_code == 200
@@ -555,6 +571,8 @@ async def test_admin_account_merge_reparents_profile_roles_classes_and_history(
     )
     db_session.add(school_class)
     await db_session.flush()
+    db_session.add(ClassCadre(class_id=school_class.id, user_id=member.id))
+    await db_session.flush()
     db_session.add_all(
         [
             ClassMembership(
@@ -578,12 +596,33 @@ async def test_admin_account_merge_reparents_profile_roles_classes_and_history(
     await db_session.flush()
     _override_user(admin)
 
+    preview_response = await client.post(
+        f"/admin/users/{member.id}/merge/preview",
+        json={"source_user_ids": [str(source.id)]},
+    )
+    assert preview_response.status_code == 200
+    preview = preview_response.json()
+    assert any(conflict["category"] == "record" for conflict in preview["conflicts"])
+    resolutions = {
+        conflict["key"]: next(
+            (
+                record["id"]
+                for record in conflict["records"]
+                if (conflict["title"] == "class_cadres 的重複資料" and record["side"] == "source")
+            ),
+            next(record["id"] for record in conflict["records"] if record["side"] == "target"),
+        )
+        for conflict in preview["conflicts"]
+    }
     response = await client.post(
         f"/admin/users/{member.id}/merge",
-        json={"source_user_id": str(source.id)},
+        json={
+            "source_user_ids": [str(source.id)],
+            "conflict_resolutions": resolutions,
+        },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["student_id"] == school_student_id
     assert "finance:view" in payload["effective_permissions"]
@@ -618,6 +657,55 @@ async def test_admin_account_merge_reparents_profile_roles_classes_and_history(
     assert len(people) == 1
     assert people[0].user_id == member.id
     assert people[0].legal_name == "校務正式姓名"
+
+
+@pytest.mark.asyncio
+async def test_admin_can_merge_multiple_secondary_accounts_into_one_primary(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin, member, _, _, _ = await _seed_admin_data(db_session)
+    secondary_users = [
+        User(
+            email=f"secondary-{index}@gmail.com",
+            display_name=member.display_name,
+            google_sub=f"secondary-google-sub-{index}",
+            is_active=True,
+            is_verified=True,
+        )
+        for index in (1, 2)
+    ]
+    secondary_google_subs = [secondary.google_sub for secondary in secondary_users]
+    db_session.add_all(secondary_users)
+    await db_session.flush()
+    for secondary in secondary_users:
+        db_session.add(
+            UserIdentity(
+                user_id=secondary.id,
+                provider="google",
+                external_id=secondary.google_sub,
+                email=secondary.email,
+                display_name=secondary.display_name,
+                linked_at=datetime.now(UTC),
+            )
+        )
+    await db_session.flush()
+    _override_user(admin)
+
+    response = await client.post(
+        f"/admin/users/{member.id}/merge",
+        json={"source_user_ids": [str(secondary.id) for secondary in secondary_users]},
+    )
+
+    assert response.status_code == 200
+    for secondary, google_sub in zip(secondary_users, secondary_google_subs, strict=True):
+        await db_session.refresh(secondary)
+        assert secondary.is_active is False
+        identity = await db_session.scalar(
+            select(UserIdentity).where(UserIdentity.external_id == google_sub)
+        )
+        assert identity is not None
+        assert identity.user_id == member.id
 
 
 @pytest.mark.asyncio
