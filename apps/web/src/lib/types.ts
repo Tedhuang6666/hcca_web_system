@@ -1066,10 +1066,26 @@ export interface PublicSpecialAgreementStep {
   description: string;
 }
 
+export interface PublicSpecialAgreementFile {
+  id: string;
+  title: string;
+  description: string;
+  url: string;
+  mimeType?: string;
+}
+
 export interface PublicSpecialAgreementContent {
   intro_md: string;
   info_md: string;
   process: PublicSpecialAgreementStep[];
+  files: PublicSpecialAgreementFile[];
+}
+
+export interface UploadedPublicFileOut {
+  url: string;
+  filename: string;
+  content_type: string;
+  file_size: number;
 }
 
 

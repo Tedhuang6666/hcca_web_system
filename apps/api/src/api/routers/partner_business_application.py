@@ -38,6 +38,7 @@ ApplicationManagerUser = Annotated[
         require_any(
             PermissionCode.PARTNER_MAP_MANAGE,
             PermissionCode.PARTNER_MAP_APPLICATION_MANAGE,
+            PermissionCode.SITE_MANAGE,
         )
     ),
 ]

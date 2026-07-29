@@ -133,6 +133,25 @@ class UploadedImageOut(BaseModel):
 
 
 _IMAGE_TYPES = frozenset({"image/jpeg", "image/png", "image/gif", "image/webp"})
+_PUBLIC_FILE_TYPES = frozenset(
+    {
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-powerpoint",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        *_IMAGE_TYPES,
+    }
+)
+
+
+class UploadedPublicFileOut(BaseModel):
+    url: str
+    filename: str
+    content_type: str
+    file_size: int
 
 
 @router.post(
@@ -159,6 +178,36 @@ async def admin_upload_image(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
         ) from exc
     return UploadedImageOut(
+        url=stored.url or f"/uploads/{stored.storage_key}",
+        filename=stored.filename,
+        content_type=stored.content_type,
+        file_size=stored.file_size,
+    )
+
+
+@router.post(
+    "/admin/files",
+    response_model=UploadedPublicFileOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[SiteAdminDep],
+    summary="上傳公開官網參考文件，回傳可直接填入公開頁附件的 URL",
+)
+async def admin_upload_public_file(
+    _: CurrentUser,
+    file: UploadFile = File(...),
+) -> UploadedPublicFileOut:
+    storage = get_storage()
+    try:
+        stored = await storage.save(
+            file,
+            prefix="public-site",
+            allowed_content_types=_PUBLIC_FILE_TYPES,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    return UploadedPublicFileOut(
         url=stored.url or f"/uploads/{stored.storage_key}",
         filename=stored.filename,
         content_type=stored.content_type,

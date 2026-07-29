@@ -24,12 +24,13 @@ import {
   RotateCcw,
   Save,
   Trash2,
+  Upload,
   Users,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { ApiError, siteApi } from "@/lib/api";
+import { ApiError, partnerApplicationApi, siteApi } from "@/lib/api";
 import { safeImageUrl } from "@/lib/config";
 import MarkdownBlock from "@/components/site/MarkdownBlock";
 import { getSystemInfoMarkdown } from "@/lib/systemInfoMarkdown";
@@ -46,7 +47,11 @@ import type {
   PublicLinkOut,
   PublicOfficerCandidateOut,
   PublicOfficerProfileOut,
+  PartnerApplicationFieldConfig,
+  PartnerApplicationFieldType,
+  PartnerApplicationSettingsOut,
   PublicSpecialAgreementContent,
+  PublicSpecialAgreementFile,
   PublicSitePageOut,
   PublicSiteSettingsOut,
 } from "@/lib/types";
@@ -105,12 +110,49 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "advanced", label: "進階樣式", icon: <Eye size={16} aria-hidden /> },
 ];
 
+const APPLICATION_FIELD_TYPE_LABELS: Record<PartnerApplicationFieldType, string> = {
+  text: "單行文字",
+  textarea: "多行文字",
+  email: "Email",
+  tel: "電話",
+  url: "網址",
+  select: "下拉選單",
+};
+
+const EMPTY_APPLICATION_FIELD: PartnerApplicationFieldConfig = {
+  key: "new_field",
+  label: "新欄位",
+  field_type: "text",
+  required: false,
+  placeholder: null,
+  help_text: null,
+  options: [],
+  sort_order: 100,
+  is_active: true,
+};
+
 function displayError(error: unknown, fallback: string) {
   toast.error(error instanceof ApiError ? error.message : fallback);
 }
 
 function normalizeSettingsForEditor(settings: PublicSiteSettingsOut): PublicSiteSettingsOut {
   return { ...settings, system_info_md: getSystemInfoMarkdown(settings) };
+}
+
+function applicationFieldsForEditor(
+  fields: PartnerApplicationSettingsOut["fields"],
+): PartnerApplicationFieldConfig[] {
+  return fields.map((field) => ({
+    key: field.key,
+    label: field.label,
+    field_type: field.field_type,
+    required: field.required,
+    placeholder: field.placeholder,
+    help_text: field.help_text,
+    options: field.options,
+    sort_order: field.sort_order,
+    is_active: field.is_active,
+  }));
 }
 
 function Field({
@@ -403,6 +445,10 @@ export default function PublicSiteAdminPage() {
   const [candidates, setCandidates] = useState<PublicOfficerCandidateOut[]>([]);
   const [profiles, setProfiles] = useState<PublicOfficerProfileOut[]>([]);
   const [specialAgreement, setSpecialAgreement] = useState<PublicSpecialAgreementContent>(DEFAULT_SPECIAL_AGREEMENT_CONTENT);
+  const [applicationSettings, setApplicationSettings] = useState<PartnerApplicationSettingsOut | null>(null);
+  const [applicationFields, setApplicationFields] = useState<PartnerApplicationFieldConfig[]>([]);
+  const [savingApplicationSettings, setSavingApplicationSettings] = useState(false);
+  const [uploadingSpecialFileId, setUploadingSpecialFileId] = useState<string | null>(null);
   const [themeJson, setThemeJson] = useState("{}");
   const [blocksJson, setBlocksJson] = useState("{}");
   const [rosterText, setRosterText] = useState("");
@@ -463,6 +509,7 @@ export default function PublicSiteAdminPage() {
         nextLinks,
         nextCandidates,
         nextProfiles,
+        nextApplicationSettings,
       ] = await Promise.all([
         siteApi.adminSettings(),
         siteApi.adminPages(),
@@ -470,6 +517,7 @@ export default function PublicSiteAdminPage() {
         siteApi.adminLinks(),
         siteApi.officerCandidates(true),
         siteApi.officerProfiles(),
+        partnerApplicationApi.adminSettings(),
       ]);
       setSettings(normalizeSettingsForEditor(nextSettings));
       setPages(nextPages);
@@ -480,6 +528,8 @@ export default function PublicSiteAdminPage() {
       setThemeJson(JSON.stringify(nextSettings.theme_config ?? {}, null, 2));
       setBlocksJson(JSON.stringify(nextSettings.homepage_blocks ?? {}, null, 2));
       setSpecialAgreement(readSpecialAgreementContent(nextSettings.homepage_blocks?.special_agreement));
+      setApplicationSettings(nextApplicationSettings);
+      setApplicationFields(applicationFieldsForEditor(nextApplicationSettings.fields));
       const nextRosterTabs = parseStoredOfficerRosterTabs(nextSettings.theme_config);
       setRosterTabs(nextRosterTabs);
       const nextMemberLabelOverrides: Record<string, string> = {};
@@ -826,12 +876,87 @@ export default function PublicSiteAdminPage() {
     }));
   };
 
+  const addSpecialFile = () => {
+    setSpecialAgreement((current) => ({
+      ...current,
+      files: [
+        ...current.files,
+        {
+          id: `file-${Date.now()}`,
+          title: "",
+          description: "",
+          url: "",
+          mimeType: "",
+        },
+      ],
+    }));
+  };
+
+  const updateSpecialFile = (id: string, patch: Partial<PublicSpecialAgreementFile>) => {
+    setSpecialAgreement((current) => ({
+      ...current,
+      files: current.files.map((file) => (file.id === id ? { ...file, ...patch } : file)),
+    }));
+  };
+
+  const removeSpecialFile = (id: string) => {
+    setSpecialAgreement((current) => ({
+      ...current,
+      files: current.files.filter((file) => file.id !== id),
+    }));
+  };
+
+  const uploadSpecialFile = async (id: string, file: File) => {
+    setUploadingSpecialFileId(id);
+    try {
+      const uploaded = await siteApi.uploadPublicFile(file);
+      updateSpecialFile(id, { url: uploaded.url, mimeType: uploaded.content_type });
+      toast.success("參考文件已上傳");
+    } catch (error) {
+      displayError(error, "參考文件上傳失敗");
+    } finally {
+      setUploadingSpecialFileId(null);
+    }
+  };
+
+  const saveApplicationSettings = async () => {
+    if (!applicationSettings) return;
+    setSavingApplicationSettings(true);
+    try {
+      const next = await partnerApplicationApi.updateSettings({
+        is_open: applicationSettings.is_open,
+        title: applicationSettings.title,
+        intro: applicationSettings.intro,
+        privacy_notice: applicationSettings.privacy_notice,
+        fields: applicationFields,
+      });
+      setApplicationSettings(next);
+      setApplicationFields(applicationFieldsForEditor(next.fields));
+      toast.success("申請表單設定已儲存");
+    } catch (error) {
+      displayError(error, "儲存申請表單設定失敗");
+    } finally {
+      setSavingApplicationSettings(false);
+    }
+  };
+
+  const updateApplicationField = (index: number, patch: Partial<PartnerApplicationFieldConfig>) => {
+    setApplicationFields((current) => current.map((field, fieldIndex) => (
+      fieldIndex === index ? { ...field, ...patch } : field
+    )));
+  };
+
   const saveSpecialAgreement = async () => {
     const invalidStep = specialAgreement.process.find(
       (step) => !step.title.trim() || !step.description.trim(),
     );
     if (invalidStep) {
       toast.error("請先完成每個流程的名稱與說明");
+      return;
+    }
+    const invalidFile = specialAgreement.files.find((file) => !file.title.trim() || !file.url.trim());
+    if (invalidFile) {
+      toast.error("請先完成每個參考文件的名稱與網址，或移除空白項目");
       return;
     }
 
@@ -1140,6 +1265,139 @@ export default function PublicSiteAdminPage() {
                 </ol>
               )}
             </aside>
+          </div>
+
+          {applicationSettings && (
+            <div className="card space-y-5 p-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h2 className="font-semibold">公開申請表單</h2>
+                  <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">
+                    這裡直接管理特約洽談頁的申請標題、說明與輸入欄位；儲存後公開頁會立即套用。
+                  </p>
+                </div>
+                <label className="flex min-h-11 items-center gap-2 text-sm text-[var(--text-secondary)]">
+                  <input
+                    type="checkbox"
+                    checked={applicationSettings.is_open}
+                    onChange={(event) => setApplicationSettings((current) => current ? { ...current, is_open: event.target.checked } : current)}
+                  />
+                  開放合作申請
+                </label>
+              </div>
+              <div className="grid gap-4">
+                <Field label="表單標題">
+                  <TextInput value={applicationSettings.title} onChange={(event) => setApplicationSettings((current) => current ? { ...current, title: event.target.value } : current)} />
+                </Field>
+                <Field label="開頭說明">
+                  <TextArea rows={4} value={applicationSettings.intro} onChange={(event) => setApplicationSettings((current) => current ? { ...current, intro: event.target.value } : current)} />
+                </Field>
+                <Field label="個資／聯絡說明（選填）">
+                  <TextArea rows={3} value={applicationSettings.privacy_notice ?? ""} onChange={(event) => setApplicationSettings((current) => current ? { ...current, privacy_notice: event.target.value || null } : current)} placeholder="例如：資料僅用於特約合作聯繫與審核。" />
+                </Field>
+              </div>
+
+              <div className="flex flex-col gap-3 border-t border-[var(--border)] pt-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold">申請輸入欄位</h3>
+                  <p className="mt-1 text-xs text-[var(--text-muted)]">欄位代碼只接受小寫英數與底線；既有欄位可停用以保留歷史申請資料。</p>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary shrink-0"
+                  onClick={() => setApplicationFields((current) => [...current, { ...EMPTY_APPLICATION_FIELD, key: `field_${current.length + 1}`, sort_order: (current.length + 1) * 10 }])}
+                >
+                  <Plus size={15} aria-hidden /> 新增欄位
+                </button>
+              </div>
+              <div className="space-y-3">
+                {applicationFields.map((field, index) => (
+                  <div key={`${field.key}-${index}`} className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4" style={{ opacity: field.is_active ? 1 : 0.6 }}>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-[var(--text-muted)]">欄位 {index + 1}</span>
+                      <label className="ml-auto flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+                        <input type="checkbox" checked={field.is_active} onChange={(event) => updateApplicationField(index, { is_active: event.target.checked })} /> 啟用
+                      </label>
+                    </div>
+                    <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_100px]">
+                      <Field label="欄位名稱"><TextInput value={field.label} onChange={(event) => updateApplicationField(index, { label: event.target.value })} /></Field>
+                      <Field label="欄位代碼"><TextInput className="font-mono" value={field.key} onChange={(event) => updateApplicationField(index, { key: event.target.value })} /></Field>
+                      <Field label="型別">
+                        <Select value={field.field_type} onChange={(event) => updateApplicationField(index, { field_type: event.target.value as PartnerApplicationFieldType })}>
+                          {Object.entries(APPLICATION_FIELD_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                        </Select>
+                      </Field>
+                      <Field label="排序"><TextInput type="number" min={0} value={field.sort_order} onChange={(event) => updateApplicationField(index, { sort_order: Number(event.target.value) })} /></Field>
+                    </div>
+                    <div className="mt-3 grid gap-3 md:grid-cols-2">
+                      <Field label="輸入框提示"><TextInput value={field.placeholder ?? ""} onChange={(event) => updateApplicationField(index, { placeholder: event.target.value || null })} placeholder="選填" /></Field>
+                      <Field label="填寫說明"><TextInput value={field.help_text ?? ""} onChange={(event) => updateApplicationField(index, { help_text: event.target.value || null })} placeholder="選填" /></Field>
+                    </div>
+                    {field.field_type === "select" && (
+                      <Field label="下拉選項（用逗號分隔）">
+                        <TextInput className="mt-3" value={field.options?.join(", ") ?? ""} onChange={(event) => updateApplicationField(index, { options: event.target.value.split(",").map((option) => option.trim()).filter(Boolean) })} />
+                      </Field>
+                    )}
+                    <label className="mt-3 inline-flex min-h-11 items-center gap-2 text-xs text-[var(--text-secondary)]">
+                      <input type="checkbox" checked={field.required} onChange={(event) => updateApplicationField(index, { required: event.target.checked })} /> 必填欄位
+                    </label>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-end border-t border-[var(--border)] pt-4">
+                <button type="button" className="btn btn-primary" disabled={savingApplicationSettings} onClick={() => void saveApplicationSettings()}>
+                  <Save size={16} aria-hidden /> {savingApplicationSettings ? "儲存中…" : "儲存申請表單"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="card space-y-4 p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="font-semibold">參考附件</h2>
+                <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">管理前台「參考文件」區塊，可貼上網址或直接上傳 PDF、圖片與 Office 文件。</p>
+              </div>
+              <button type="button" onClick={addSpecialFile} className="btn btn-secondary min-h-11 shrink-0">
+                <Plus size={16} aria-hidden /> 新增附件
+              </button>
+            </div>
+            {specialAgreement.files.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--bg-elevated)] px-5 py-10 text-center text-sm text-[var(--text-muted)]">尚未設定參考附件。</p>
+            ) : (
+              <div className="space-y-3">
+                {specialAgreement.files.map((file) => (
+                  <div key={file.id} className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4">
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <Field label="附件名稱"><TextInput value={file.title} onChange={(event) => updateSpecialFile(file.id, { title: event.target.value })} placeholder="例如：合作說明 PDF" /></Field>
+                      <Field label="附件說明"><TextInput value={file.description} onChange={(event) => updateSpecialFile(file.id, { description: event.target.value })} placeholder="選填" /></Field>
+                    </div>
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+                      <Field label="附件網址" hint={file.mimeType ? `檔案類型：${file.mimeType}` : undefined}>
+                        <TextInput value={file.url} onChange={(event) => updateSpecialFile(file.id, { url: event.target.value })} placeholder="https://… 或上傳檔案" />
+                      </Field>
+                      <label className={`btn btn-secondary min-h-10 shrink-0 ${uploadingSpecialFileId === file.id ? "cursor-wait opacity-70" : "cursor-pointer"}`}>
+                        <Upload size={15} aria-hidden /> {uploadingSpecialFileId === file.id ? "上傳中…" : "上傳替換"}
+                        <input
+                          type="file"
+                          accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
+                          className="hidden"
+                          disabled={uploadingSpecialFileId !== null}
+                          onChange={(event) => {
+                            const selected = event.target.files?.[0];
+                            if (selected) void uploadSpecialFile(file.id, selected);
+                            event.currentTarget.value = "";
+                          }}
+                        />
+                      </label>
+                      <button type="button" className="btn btn-ghost min-h-10 text-[var(--danger)]" onClick={() => removeSpecialFile(file.id)}>
+                        <Trash2 size={15} aria-hidden /> 移除
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="card space-y-4 p-5">

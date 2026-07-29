@@ -1,4 +1,8 @@
-import type { PublicSpecialAgreementContent, PublicSpecialAgreementStep } from "./types";
+import type {
+  PublicSpecialAgreementContent,
+  PublicSpecialAgreementFile,
+  PublicSpecialAgreementStep,
+} from "./types";
 
 export const DEFAULT_SPECIAL_AGREEMENT_CONTENT: PublicSpecialAgreementContent = {
   intro_md: "如果你想和學生自治組織一起提供更好的校園服務，這裡整理了從提出構想到公開合作資訊的完整路徑。",
@@ -35,6 +39,15 @@ export const DEFAULT_SPECIAL_AGREEMENT_CONTENT: PublicSpecialAgreementContent = 
     { id: "confirmation", title: "確認合作內容", description: "整理優惠或服務細節，確認公開文字與執行方式。" },
     { id: "publication", title: "發布特約資訊", description: "完成確認後，將合作內容放上公開平台，方便學生查詢。" },
   ],
+  files: [
+    {
+      id: "partner-information",
+      title: "特約洽談資訊摘要",
+      description: "將合作流程、準備事項與公開原則整理成可直接閱讀的文件。",
+      url: "/special-agreement/partner-information.html",
+      mimeType: "text/html",
+    },
+  ],
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -49,6 +62,17 @@ function readStep(value: unknown, index: number): PublicSpecialAgreementStep | n
   return { id, title, description };
 }
 
+function readFile(value: unknown, index: number): PublicSpecialAgreementFile | null {
+  if (!isRecord(value)) return null;
+  const title = typeof value.title === "string" ? value.title.trim() : "";
+  const url = typeof value.url === "string" ? value.url.trim() : "";
+  if (!title || !url) return null;
+  const description = typeof value.description === "string" ? value.description.trim() : "";
+  const mimeType = typeof value.mimeType === "string" ? value.mimeType.trim() : undefined;
+  const id = typeof value.id === "string" && value.id.trim() ? value.id.trim() : `file-${index + 1}`;
+  return { id, title, description, url, mimeType };
+}
+
 export function readSpecialAgreementContent(value: unknown): PublicSpecialAgreementContent {
   if (!isRecord(value)) return DEFAULT_SPECIAL_AGREEMENT_CONTENT;
 
@@ -58,6 +82,12 @@ export function readSpecialAgreementContent(value: unknown): PublicSpecialAgreem
         return parsed ? [parsed] : [];
       })
     : DEFAULT_SPECIAL_AGREEMENT_CONTENT.process;
+  const files = Array.isArray(value.files)
+    ? value.files.flatMap((file, index) => {
+        const parsed = readFile(file, index);
+        return parsed ? [parsed] : [];
+      })
+    : DEFAULT_SPECIAL_AGREEMENT_CONTENT.files;
 
   return {
     intro_md:
@@ -69,5 +99,6 @@ export function readSpecialAgreementContent(value: unknown): PublicSpecialAgreem
         ? value.info_md
         : DEFAULT_SPECIAL_AGREEMENT_CONTENT.info_md,
     process,
+    files,
   };
 }
