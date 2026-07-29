@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
@@ -13,6 +14,7 @@ from api.models.partner_map import (
     PartnerOfferBenefitType,
     PartnerSubmissionStatus,
 )
+from api.schemas.business_hours import BusinessHours
 
 
 class PartnerTagCreate(BaseModel):
@@ -173,6 +175,7 @@ class PartnerBusinessCreate(BaseModel):
     cover_image_url: str | None = None
     category: str | None = Field(None, max_length=50)
     business_hours_text: str | None = Field(None, max_length=300)
+    business_hours: BusinessHours = Field(default_factory=dict)
     listing_type: PartnerBusinessListingType = PartnerBusinessListingType.PHYSICAL
     contact_name: str | None = Field(None, max_length=100)
     contact_phone: str | None = Field(None, max_length=50)
@@ -204,6 +207,7 @@ class PartnerBusinessUpdate(BaseModel):
     cover_image_url: str | None = None
     category: str | None = Field(None, max_length=50)
     business_hours_text: str | None = Field(None, max_length=300)
+    business_hours: BusinessHours | None = None
     listing_type: PartnerBusinessListingType | None = None
     contact_name: str | None = Field(None, max_length=100)
     contact_phone: str | None = Field(None, max_length=50)
@@ -234,6 +238,7 @@ class PartnerBusinessListItem(BaseModel):
     cover_image_url: str | None = None
     category: str | None = None
     business_hours_text: str | None = None
+    business_hours: BusinessHours = {}
     listing_type: str
     contact_name: str | None = None
     contact_phone: str | None = None
@@ -270,6 +275,7 @@ class PartnerBusinessOut(BaseModel):
     promo_images: list[PartnerBusinessImageOut]
     category: str | None
     business_hours_text: str | None
+    business_hours: BusinessHours
     listing_type: str
     contact_name: str | None
     contact_phone: str | None
@@ -297,6 +303,47 @@ class PartnerBusinessOut(BaseModel):
     can_view_private_details: bool = False
 
 
+class PartnerBusinessSelfUpdate(BaseModel):
+    """店家帳號可自行維護的公開資料；不含上架、排序、標籤與內部備註。"""
+
+    name: str | None = Field(None, min_length=1, max_length=200)
+    summary: str | None = Field(None, max_length=300)
+    description: str | None = None
+    website_url: str | None = None
+    social_url: str | None = None
+    logo_url: str | None = None
+    cover_image_url: str | None = None
+    category: str | None = Field(None, max_length=50)
+    business_hours_text: str | None = Field(None, max_length=300)
+    business_hours: BusinessHours | None = None
+    contact_name: str | None = Field(None, max_length=100)
+    contact_phone: str | None = Field(None, max_length=50)
+    contact_email: EmailStr | None = None
+    instagram_handle: str | None = Field(None, max_length=100)
+    line_id: str | None = Field(None, max_length=100)
+    other_contact: str | None = None
+
+    @field_validator("instagram_handle")
+    @classmethod
+    def normalize_instagram_handle(cls, value: str | None) -> str | None:
+        return value.strip().lstrip("@").rstrip("/") if value else value
+
+
+class PartnerBusinessAccountOut(BaseModel):
+    id: uuid.UUID
+    business_id: uuid.UUID
+    user_id: uuid.UUID
+    display_name: str
+    email: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class PartnerBusinessAccountsUpdate(BaseModel):
+    user_ids: list[uuid.UUID] = Field(default_factory=list, max_length=20)
+
+
 class PartnerDiscoveryItem(BaseModel):
     """學生端優惠探索清單：讓實體與線上合作共用同一套入口。"""
 
@@ -316,6 +363,7 @@ class PartnerDiscoveryItem(BaseModel):
 
 
 class PartnerMapItem(BaseModel):
+    source: Literal["partner", "recommended"] = "partner"
     business_id: uuid.UUID
     location_id: uuid.UUID
     business_name: str
@@ -325,12 +373,14 @@ class PartnerMapItem(BaseModel):
     cover_image_url: str | None
     category: str | None
     business_hours_text: str | None
+    business_hours: BusinessHours = {}
     address: str
     latitude: float
     longitude: float
     phone: str | None
     tags: list[PartnerTagOut]
     has_active_offer: bool
+    has_discount_offer: bool = False
     active_offer_titles: list[str]
     rating_avg: float | None = None
     rating_count: int = 0

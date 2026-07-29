@@ -15,6 +15,7 @@ from api.dependencies.auth import get_current_active_user, get_optional_user
 from api.dependencies.permissions import require_any
 from api.models.partner_map import (
     PartnerBusiness,
+    PartnerBusinessAccount,
     PartnerBusinessImage,
     PartnerBusinessListingType,
     PartnerBusinessStatus,
@@ -25,10 +26,13 @@ from api.models.partner_map import (
 from api.models.user import User
 from api.routers._common import or_404
 from api.schemas.partner_map import (
+    PartnerBusinessAccountOut,
+    PartnerBusinessAccountsUpdate,
     PartnerBusinessCreate,
     PartnerBusinessImageOut,
     PartnerBusinessListItem,
     PartnerBusinessOut,
+    PartnerBusinessSelfUpdate,
     PartnerBusinessUpdate,
     PartnerDiscoveryItem,
     PartnerGoogleMapsParseIn,
@@ -213,6 +217,7 @@ def _map_item(location: PartnerLocation, *, include_private: bool) -> PartnerMap
     current_offers = [offer for offer in business.offers if map_svc.is_offer_current(offer)]
     rating_avg, rating_count = map_svc.rating_stats(business)
     return PartnerMapItem(
+        source="partner",
         business_id=business.id,
         location_id=location.id,
         business_name=business.name,
@@ -222,12 +227,14 @@ def _map_item(location: PartnerLocation, *, include_private: bool) -> PartnerMap
         cover_image_url=business.cover_image_url,
         category=business.category,
         business_hours_text=business.business_hours_text,
+        business_hours=location.business_hours or business.business_hours,
         address=location.address,
         latitude=location.latitude,
         longitude=location.longitude,
         phone=location.phone if include_private else None,
         tags=[PartnerTagOut.model_validate(tag) for tag in business.tags if tag.is_active],
         has_active_offer=bool(current_offers),
+        has_discount_offer=any(offer.benefit_type == "discount" for offer in current_offers),
         active_offer_titles=[offer.title for offer in current_offers],
         rating_avg=rating_avg,
         rating_count=rating_count,
@@ -240,6 +247,26 @@ def _map_item(location: PartnerLocation, *, include_private: bool) -> PartnerMap
 async def _business_or_404(db: AsyncSession, business_id: uuid.UUID) -> PartnerBusiness:
     business = await map_svc.get_business(db, business_id)
     return or_404(business, "找不到此特約店家")
+
+
+async def _managed_business_or_404(
+    db: AsyncSession, business_id: uuid.UUID, user_id: uuid.UUID
+) -> PartnerBusiness:
+    business = await map_svc.get_managed_business(db, business_id, user_id)
+    return or_404(business, "你沒有這間店家的編輯權限")
+
+
+def _account_out(account: PartnerBusinessAccount) -> PartnerBusinessAccountOut:
+    return PartnerBusinessAccountOut(
+        id=account.id,
+        business_id=account.business_id,
+        user_id=account.user_id,
+        display_name=account.user.display_name,
+        email=account.user.email,
+        is_active=account.is_active,
+        created_at=account.created_at,
+        updated_at=account.updated_at,
+    )
 
 
 async def _business_image_or_404(
@@ -349,6 +376,57 @@ async def list_contact_directory(
             db, keyword=keyword, limit=limit, offset=offset
         )
     ]
+
+
+@router.get(
+    "/my-businesses",
+    response_model=list[PartnerBusinessListItem],
+    summary="列出我可管理的店家",
+)
+async def list_my_businesses(db: DbDep, user: CurrentUser) -> list[PartnerBusinessListItem]:
+    return [_list_item(business) for business in await map_svc.list_managed_businesses(db, user.id)]
+
+
+@router.get(
+    "/businesses/{business_id}/self",
+    response_model=PartnerBusinessOut,
+    summary="店家帳號取得自己的店家資料",
+)
+async def get_self_business(
+    business_id: uuid.UUID, db: DbDep, user: CurrentUser
+) -> PartnerBusinessOut:
+    business = await _managed_business_or_404(db, business_id, user.id)
+    return _business_out(business, include_private=True)
+
+
+@router.patch(
+    "/businesses/{business_id}/self",
+    response_model=PartnerBusinessOut,
+    summary="店家帳號更新自己的店家資料",
+)
+async def update_self_business(
+    business_id: uuid.UUID,
+    body: PartnerBusinessSelfUpdate,
+    db: DbDep,
+    user: CurrentUser,
+) -> PartnerBusinessOut:
+    business = await _managed_business_or_404(db, business_id, user.id)
+    try:
+        business = await map_svc.update_business(db, business, body)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    await audit_svc.record(
+        db,
+        entity_type="partner_business",
+        entity_id=str(business.id),
+        action="partner_map.business_self_update",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        summary=f"店家帳號更新「{business.name}」",
+    )
+    return _business_out(business, include_private=True)
 
 
 @router.get("/rankings", response_model=list[PartnerRankingItem], summary="學生常去排行")
@@ -687,6 +765,52 @@ async def admin_get_business(
     return _business_out(
         await _business_or_404(db, business_id), include_private=True, include_internal=True
     )
+
+
+@router.get(
+    "/admin/businesses/{business_id}/accounts",
+    response_model=list[PartnerBusinessAccountOut],
+    summary="列出店家可編輯帳號",
+)
+async def admin_list_business_accounts(
+    business_id: uuid.UUID, db: DbDep, _: BusinessManagerUser
+) -> list[PartnerBusinessAccountOut]:
+    await _business_or_404(db, business_id)
+    return [
+        _account_out(account) for account in await map_svc.list_business_accounts(db, business_id)
+    ]
+
+
+@router.put(
+    "/admin/businesses/{business_id}/accounts",
+    response_model=list[PartnerBusinessAccountOut],
+    summary="設定店家可編輯帳號",
+)
+async def admin_replace_business_accounts(
+    business_id: uuid.UUID,
+    body: PartnerBusinessAccountsUpdate,
+    db: DbDep,
+    user: BusinessManagerUser,
+) -> list[PartnerBusinessAccountOut]:
+    business = await _business_or_404(db, business_id)
+    try:
+        accounts = await map_svc.replace_business_accounts(
+            db, business, body.user_ids, granted_by=user.id
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    await audit_svc.record(
+        db,
+        entity_type="partner_business",
+        entity_id=str(business.id),
+        action="partner_map.business_accounts_update",
+        actor_id=str(user.id),
+        actor_email=user.email,
+        summary=f"更新「{business.name}」店家帳號",
+    )
+    return [_account_out(account) for account in accounts]
 
 
 @router.patch(

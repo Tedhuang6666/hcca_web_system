@@ -16,6 +16,7 @@ from sqlalchemy.orm import selectinload
 from api.core.search import like_contains
 from api.models.partner_map import (
     PartnerBusiness,
+    PartnerBusinessAccount,
     PartnerBusinessListingType,
     PartnerBusinessStatus,
     PartnerCheckin,
@@ -26,8 +27,10 @@ from api.models.partner_map import (
     PartnerTag,
     partner_business_tags,
 )
+from api.models.user import User
 from api.schemas.partner_map import (
     PartnerBusinessCreate,
+    PartnerBusinessSelfUpdate,
     PartnerBusinessUpdate,
     PartnerLocationCreate,
     PartnerLocationUpdate,
@@ -300,13 +303,16 @@ async def record_business_checkin(
 
 
 async def update_business(
-    db: AsyncSession, business: PartnerBusiness, data: PartnerBusinessUpdate
+    db: AsyncSession,
+    business: PartnerBusiness,
+    data: PartnerBusinessUpdate | PartnerBusinessSelfUpdate,
 ) -> PartnerBusiness:
     fields = data.model_dump(exclude_unset=True, exclude={"tag_ids"})
     for key, value in fields.items():
         setattr(business, key, str(value) if key == "status" and value is not None else value)
-    if data.tag_ids is not None:
-        business.tags = await _resolve_tags(db, data.tag_ids)
+    tag_ids = getattr(data, "tag_ids", None)
+    if tag_ids is not None:
+        business.tags = await _resolve_tags(db, tag_ids)
     await db.flush()
     await db.refresh(business, ["tags", "locations", "offers", "promo_images", "ratings"])
     return business
@@ -334,6 +340,86 @@ async def list_businesses(
     q = q.order_by(PartnerBusiness.sort_order, PartnerBusiness.name).offset(offset).limit(limit)
     result = await db.execute(q)
     return list(result.scalars().unique().all())
+
+
+async def list_business_accounts(
+    db: AsyncSession, business_id: uuid.UUID
+) -> list[PartnerBusinessAccount]:
+    result = await db.execute(
+        select(PartnerBusinessAccount)
+        .where(PartnerBusinessAccount.business_id == business_id)
+        .options(selectinload(PartnerBusinessAccount.user))
+        .order_by(PartnerBusinessAccount.created_at)
+    )
+    return list(result.scalars().all())
+
+
+async def replace_business_accounts(
+    db: AsyncSession,
+    business: PartnerBusiness,
+    user_ids: list[uuid.UUID],
+    granted_by: uuid.UUID,
+) -> list[PartnerBusinessAccount]:
+    unique_user_ids = list(dict.fromkeys(user_ids))
+    if unique_user_ids:
+        result = await db.execute(
+            select(User).where(User.id.in_(unique_user_ids), User.is_active == True)  # noqa: E712
+        )
+        users = {user.id: user for user in result.scalars().all()}
+        if len(users) != len(unique_user_ids):
+            raise ValueError("部分指定的店家帳號不存在或已停用")
+    else:
+        users = {}
+
+    existing = {
+        account.user_id: account for account in await list_business_accounts(db, business.id)
+    }
+    for user_id, account in existing.items():
+        account.is_active = user_id in users
+        if account.is_active:
+            account.granted_by = granted_by
+    for user_id in unique_user_ids:
+        if user_id not in existing:
+            db.add(
+                PartnerBusinessAccount(
+                    business_id=business.id,
+                    user_id=user_id,
+                    granted_by=granted_by,
+                    is_active=True,
+                )
+            )
+    await db.flush()
+    return await list_business_accounts(db, business.id)
+
+
+async def list_managed_businesses(db: AsyncSession, user_id: uuid.UUID) -> list[PartnerBusiness]:
+    result = await db.execute(
+        select(PartnerBusiness)
+        .join(PartnerBusinessAccount)
+        .where(
+            PartnerBusinessAccount.user_id == user_id,
+            PartnerBusinessAccount.is_active == True,  # noqa: E712
+        )
+        .options(*_business_options())
+        .order_by(PartnerBusiness.name)
+    )
+    return list(result.scalars().unique().all())
+
+
+async def get_managed_business(
+    db: AsyncSession, business_id: uuid.UUID, user_id: uuid.UUID
+) -> PartnerBusiness | None:
+    result = await db.execute(
+        select(PartnerBusiness)
+        .join(PartnerBusinessAccount)
+        .where(
+            PartnerBusiness.id == business_id,
+            PartnerBusinessAccount.user_id == user_id,
+            PartnerBusinessAccount.is_active == True,  # noqa: E712
+        )
+        .options(*_business_options())
+    )
+    return result.scalar_one_or_none()
 
 
 async def list_contact_businesses(

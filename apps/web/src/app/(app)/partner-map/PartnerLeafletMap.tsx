@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   Coffee,
   BookOpen,
+  BookmarkCheck,
   Croissant,
   Dumbbell,
   GraduationCap,
@@ -25,7 +26,8 @@ import {
 import { divIcon } from "leaflet";
 import { MapContainer, Marker, Popup, TileLayer, ZoomControl, useMap } from "react-leaflet";
 import type { LatLngBounds, LatLngExpression } from "leaflet";
-import type { PartnerMapItem } from "@/lib/types";
+import type { UnifiedMapItem } from "@/lib/partner-map-types";
+import { businessOpenState } from "@/lib/business-hours";
 import { defaultPartnerIconKey, getPartnerIcon, isPartnerIconKey } from "./partner-map-icons";
 
 export type PartnerMapBoundsState = {
@@ -121,7 +123,7 @@ export const MARKER_CONFIG: Record<Exclude<MarkerKind, "all">, { label: string; 
   other: { label: "特約", color: "#C9A84C", icon: Landmark },
 };
 
-export function markerKind(item: PartnerMapItem): Exclude<MarkerKind, "all"> {
+export function markerKind(item: UnifiedMapItem): Exclude<MarkerKind, "all"> {
   const text = [
     item.business_name,
     item.summary ?? "",
@@ -160,16 +162,19 @@ function escapeHtml(value: string): string {
   })[character] ?? character);
 }
 
-export function markerLabel(item: PartnerMapItem): string {
+export function markerLabel(item: UnifiedMapItem): string {
+  if (item.source === "recommended") return "推薦商家";
   return item.category?.trim() || item.tags.find((tag) => tag.name.trim())?.name.trim() || MARKER_CONFIG[markerKind(item)].label;
 }
 
-export function markerColor(item: PartnerMapItem): string {
+export function markerColor(item: UnifiedMapItem): string {
+  if (item.source === "recommended") return "#2563EB";
   const fallback = MARKER_CONFIG[markerKind(item)].color;
   return safeMarkerColor(item.tags.find((tag) => tag.color)?.color, fallback);
 }
 
-export function markerIcon(item: PartnerMapItem): LucideIcon {
+export function markerIcon(item: UnifiedMapItem): LucideIcon {
+  if (item.source === "recommended") return BookmarkCheck;
   const configuredIconKey = item.tags.find((tag) => tag.icon_key)?.icon_key;
   if (configuredIconKey && isPartnerIconKey(configuredIconKey)) return getPartnerIcon(configuredIconKey);
 
@@ -183,17 +188,23 @@ export function markerIcon(item: PartnerMapItem): LucideIcon {
   return MARKER_CONFIG[markerKind(item)].icon;
 }
 
-function storeIcon(item: PartnerMapItem) {
+function storeIcon(item: UnifiedMapItem) {
   const Icon = markerIcon(item);
-  const iconMarkup = renderToStaticMarkup(<Icon size={17} strokeWidth={2.4} aria-hidden="true" />);
+  const iconMarkup = renderToStaticMarkup(<Icon size={14} strokeWidth={2.2} aria-hidden="true" />);
+  const openState = businessOpenState(item.business_hours);
+  const sourceClass = item.source === "recommended" ? "is-recommended" : "is-partner";
+  const offerBadge = item.has_discount_offer
+    ? '<span class="partner-map-marker-offer-badge" aria-label="折扣優惠">★</span>'
+    : "";
   return divIcon({
     className: "partner-map-marker-shell",
-    iconSize: [44, 44],
-    iconAnchor: [22, 40],
-    popupAnchor: [0, -38],
+    iconSize: [36, 36],
+    iconAnchor: [18, 32],
+    popupAnchor: [0, -30],
     html: `
-      <div class="partner-map-marker ${item.has_active_offer ? "has-offer" : ""}" style="--marker-color: ${markerColor(item)}">
+      <div class="partner-map-marker ${sourceClass} ${openState === false ? "is-closed" : ""}" style="--marker-color: ${markerColor(item)}">
         <div class="partner-map-marker-icon">${iconMarkup}</div>
+        ${offerBadge}
         <div class="partner-map-marker-label" title="${escapeHtml(markerLabel(item))}">${escapeHtml(markerLabel(item))}</div>
       </div>
     `,
@@ -246,10 +257,10 @@ export default function PartnerLeafletMap({
   onOpenBusiness,
   onBoundsChange,
 }: {
-  items: PartnerMapItem[];
+  items: UnifiedMapItem[];
   center: LatLngExpression;
   userLocation: [number, number] | null;
-  onOpenBusiness: (businessId: string) => void;
+  onOpenBusiness: (businessId: string, source?: "partner" | "recommended") => void;
   onBoundsChange: (bounds: PartnerMapBoundsState) => void;
 }) {
   const theme = useMapTheme();
@@ -301,7 +312,7 @@ export default function PartnerLeafletMap({
           key={item.location_id}
           position={[item.latitude, item.longitude]}
           icon={storeIcon(item)}
-          eventHandlers={{ click: () => onOpenBusiness(item.business_id) }}>
+          eventHandlers={{ click: () => onOpenBusiness(item.business_id, item.source) }}>
           <Popup>
             <div className="min-w-48">
               <p className="text-sm font-semibold">{item.business_name}</p>
@@ -310,13 +321,14 @@ export default function PartnerLeafletMap({
                 {markerLabel(item)}
               </p>
               <p className="mt-1 text-xs">{item.address}</p>
+              {item.has_discount_offer && <p className="mt-1 text-xs text-amber-600">★ 有折扣優惠</p>}
               {item.has_active_offer && (
                 <p className="mt-2 text-xs text-emerald-700">{item.active_offer_titles.join("、")}</p>
               )}
               <button
                 type="button"
                 className="mt-2 text-xs font-medium text-blue-700"
-                onClick={() => onOpenBusiness(item.business_id)}>
+                onClick={() => onOpenBusiness(item.business_id, item.source)}>
                 查看詳情
               </button>
             </div>

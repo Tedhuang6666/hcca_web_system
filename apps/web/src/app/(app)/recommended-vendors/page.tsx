@@ -7,11 +7,12 @@ import { ExternalLink, FileText, Image as ImageIcon, Link2, MapPin, Menu, Phone,
 import { toast } from "sonner";
 import { recommendedVendorsApi, ApiError } from "@/lib/api";
 import { apiUrl } from "@/lib/config";
-import type { RecommendedVendorCategoryOut, RecommendedVendorListItem, RecommendedVendorOut } from "@/lib/types";
+import type { RecommendedVendorCategoryOut } from "@/lib/types";
+import type { RecommendedVendorListItemWithHours, RecommendedVendorOutWithHours } from "@/lib/partner-map-types";
 
-type VendorDetail = Omit<RecommendedVendorOut, "products" | "menus"> & {
-  products: NonNullable<RecommendedVendorOut["products"]>;
-  menus: NonNullable<RecommendedVendorOut["menus"]>;
+type VendorDetail = Omit<RecommendedVendorOutWithHours, "products" | "menus"> & {
+  products: NonNullable<RecommendedVendorOutWithHours["products"]>;
+  menus: NonNullable<RecommendedVendorOutWithHours["menus"]>;
 };
 
 const RecommendedVendorMap = dynamic(() => import("./RecommendedVendorMap"), {
@@ -19,7 +20,7 @@ const RecommendedVendorMap = dynamic(() => import("./RecommendedVendorMap"), {
   loading: () => <div className="flex h-full items-center justify-center text-sm" style={{ color: "var(--text-muted)" }}>載入地圖中…</div>,
 });
 
-function inspectionText(item: RecommendedVendorListItem | RecommendedVendorOut): string {
+function inspectionText(item: RecommendedVendorListItemWithHours | RecommendedVendorOutWithHours): string {
   return item.hygiene_inspection_expires_at
     ? `檢驗有效至 ${item.hygiene_inspection_expires_at}`
     : `檢驗日期 ${item.hygiene_inspection_date ?? "—"}`;
@@ -122,7 +123,7 @@ function VendorDetail({ vendor, onClose }: { vendor: VendorDetail; onClose: () =
 export default function RecommendedVendorsPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [vendors, setVendors] = useState<RecommendedVendorListItem[]>([]);
+  const [vendors, setVendors] = useState<RecommendedVendorListItemWithHours[]>([]);
   const [categories, setCategories] = useState<RecommendedVendorCategoryOut[]>([]);
   const [selected, setSelected] = useState<VendorDetail | null>(null);
   const [keyword, setKeyword] = useState("");
