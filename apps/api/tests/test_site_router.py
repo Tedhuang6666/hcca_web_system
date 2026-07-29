@@ -149,10 +149,47 @@ async def test_admin_update_settings_succeeds(
     await _grant(db_session, member_user, "site:manage")
     ac = authed_client_factory(member_user)
 
-    resp = await ac.patch("/site/admin/settings", json={"site_title": "新標題"})
+    resp = await ac.patch(
+        "/site/admin/settings",
+        json={
+            "site_title": "新標題",
+            "homepage_blocks": {
+                "special_agreement": {
+                    "intro_md": "自訂介紹",
+                    "info_md": "自訂資訊",
+                    "process": [],
+                    "files": [
+                        {
+                            "id": "guide",
+                            "title": "合作指南",
+                            "description": "說明",
+                            "url": "/uploads/public-site/guide.pdf",
+                            "mimeType": "application/pdf",
+                        }
+                    ],
+                }
+            },
+        },
+    )
 
     assert resp.status_code == 200
     assert resp.json()["site_title"] == "新標題"
+    assert resp.json()["homepage_blocks"]["special_agreement"]["files"][0]["title"] == "合作指南"
+
+
+async def test_site_manager_can_update_special_application_settings(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant(db_session, member_user, "site:manage")
+    ac = authed_client_factory(member_user)
+
+    resp = await ac.patch(
+        "/partner-map/admin/applications/settings",
+        json={"title": "特約合作申請"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["title"] == "特約合作申請"
 
 
 # ---------------------------------------------------------------------------
@@ -333,3 +370,37 @@ async def test_admin_upload_image_succeeds(
     )
     assert resp.status_code == 201
     assert resp.json()["content_type"] == "image/png"
+
+
+async def test_admin_upload_public_file_succeeds(
+    db_session, member_user, authed_client_factory, tmp_path, monkeypatch
+) -> None:
+    from api.core import config as config_module
+
+    monkeypatch.setattr(config_module.settings, "STORAGE_LOCAL_DIR", str(tmp_path))
+    await _grant(db_session, member_user, "site:manage")
+    ac = authed_client_factory(member_user)
+
+    pdf_magic = b"%PDF-1.7\n" + b"0" * 32
+    resp = await ac.post(
+        "/site/admin/files",
+        files={"file": ("partner-guide.pdf", pdf_magic, "application/pdf")},
+    )
+
+    assert resp.status_code == 201
+    assert resp.json()["content_type"] == "application/pdf"
+    assert resp.json()["url"].startswith("/uploads/public-site/")
+
+
+async def test_admin_upload_public_file_rejects_unsupported_type(
+    db_session, member_user, authed_client_factory
+) -> None:
+    await _grant(db_session, member_user, "site:manage")
+    ac = authed_client_factory(member_user)
+
+    resp = await ac.post(
+        "/site/admin/files",
+        files={"file": ("partner-guide.txt", b"not allowed", "text/plain")},
+    )
+
+    assert resp.status_code == 422

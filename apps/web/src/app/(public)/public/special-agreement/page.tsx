@@ -13,18 +13,10 @@ export const metadata: Metadata = {
   description: "了解學生自治特約合作的洽談流程、合作資訊與參考文件。",
 };
 
-const FILES: PublicFileEmbedItem[] = [
-  {
-    title: "特約洽談資訊摘要",
-    description: "將合作流程、準備事項與公開原則整理成可直接閱讀的文件。",
-    url: "/special-agreement/partner-information.html",
-    mimeType: "text/html",
-  },
-];
-
 export default async function SpecialAgreementPage() {
   const bundle = await fetchPublicBundle();
   const content = readSpecialAgreementContent(bundle?.settings.homepage_blocks?.special_agreement);
+  const files: PublicFileEmbedItem[] = content.files;
 
   return (
     <div className="space-y-8 pb-8">
@@ -118,7 +110,13 @@ export default async function SpecialAgreementPage() {
           </p>
         </div>
         <div className="grid gap-4">
-          {FILES.map((file) => <PublicFileEmbed key={file.url} file={file} />)}
+          {files.length > 0 ? (
+            files.map((file) => <PublicFileEmbed key={file.url} file={file} />)
+          ) : (
+            <p className="rounded-xl border border-dashed border-[var(--public-border)] bg-[var(--public-surface)] px-5 py-10 text-center text-sm text-[var(--public-secondary)]">
+              目前尚未提供參考文件。
+            </p>
+          )}
         </div>
       </section>
 

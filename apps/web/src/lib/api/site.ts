@@ -1,6 +1,7 @@
 import type {
   PublicLinkCategoryCreate, PublicLinkCategoryOut, PublicLinkCategoryUpdate, PublicLinkCreate, PublicLinkOut, PublicLinkUpdate, PublicOfficerCandidateOut, PublicOfficerOut, PublicOfficerProfileCreate, PublicOfficerProfileOut, PublicOfficerProfileUpdate, PublicSiteBundleOut, PublicSitePageCreate, PublicSitePageOut, PublicSitePageUpdate, PublicSiteSettingsOut, PublicSiteSettingsUpdate, UploadedImageOut,
 } from "../types";
+import type { UploadedPublicFileOut } from "../types";
 import { authFetch, BASE, get, post, patch, del, csrfHeaders, silentRefresh, errorMessageFromResponse, ApiError } from "./core";
 
 // ── 公開官網 / Linktree ──────────────────────────────────────────────────────
@@ -23,6 +24,27 @@ export const siteApi = {
     fd.append("file", file);
     const doFetch = () =>
       authFetch(`${BASE}/site/admin/images`, {
+        method: "POST",
+        credentials: "include",
+        headers: csrfHeaders("POST"),
+        body: fd,
+      });
+    let res = await doFetch();
+    if (res.status === 401) {
+      const ok = await silentRefresh();
+      if (ok) res = await doFetch();
+    }
+    if (!res.ok) {
+      throw new ApiError(res.status, await errorMessageFromResponse(res));
+    }
+    return res.json();
+  },
+
+  uploadPublicFile: async (file: File): Promise<UploadedPublicFileOut> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const doFetch = () =>
+      authFetch(`${BASE}/site/admin/files`, {
         method: "POST",
         credentials: "include",
         headers: csrfHeaders("POST"),
