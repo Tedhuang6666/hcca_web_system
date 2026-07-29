@@ -56,14 +56,18 @@ async def request_verification(db: AsyncSession, user: User, email: str) -> None
 
     existing_user = await db.scalar(select(User).where(User.email == normalized_email))
     if existing_user and existing_user.id != user.id:
-        raise UserRegistrationError(409, "此 Email 已屬於其他帳號")
+        raise UserRegistrationError(
+            409, "此 Email 已屬於其他帳號，使用者無法自行合併，請聯絡管理員"
+        )
     existing_identity = await db.scalar(
         select(UserIdentity).where(UserIdentity.email == normalized_email)
     )
     if existing_identity:
         if existing_identity.user_id == user.id:
             raise UserRegistrationError(409, "此 Email 已連結到您的帳號")
-        raise UserRegistrationError(409, "此 Email 已連結其他帳號")
+        raise UserRegistrationError(
+            409, "此 Email 已連結其他帳號，使用者無法自行合併，請聯絡管理員"
+        )
 
     allowed = await redis_client.set(
         _rate_key(user.id, normalized_email),

@@ -135,7 +135,37 @@ class LinkUserEmailsRequest(BaseModel):
 
 
 class MergeUserAccountsRequest(BaseModel):
-    source_user_id: uuid.UUID = Field(..., description="要被歸戶的次要帳戶 ID")
+    source_user_id: uuid.UUID | None = Field(None, description="相容舊版的單一次要帳戶 ID")
+    source_user_ids: list[uuid.UUID] = Field(
+        default_factory=list,
+        max_length=20,
+        description="要被歸戶的次要帳戶 ID 清單",
+    )
+    conflict_resolutions: dict[str, str] = Field(
+        default_factory=dict,
+        description="衝突 key 對應要保留的資料 record id",
+    )
+
+
+class MergeConflictRecord(BaseModel):
+    id: str
+    side: Literal["target", "source"]
+    owner_user_id: str
+    owner_name: str
+    label: str
+    fields: dict[str, str] = {}
+
+
+class MergeConflict(BaseModel):
+    key: str
+    category: Literal["record", "field"]
+    title: str
+    message: str
+    records: list[MergeConflictRecord]
+
+
+class MergePreview(BaseModel):
+    conflicts: list[MergeConflict]
 
 
 class AssignPositionsRequest(BaseModel):
@@ -523,7 +553,8 @@ async def link_user_emails(
         )
     except UserRegistrationError as exc:
         await db.rollback()
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+        detail = {"message": exc.detail, **exc.payload} if exc.payload else exc.detail
+        raise HTTPException(status_code=exc.status_code, detail=detail) from exc
     except IntegrityError as exc:
         await db.rollback()
         raise HTTPException(
@@ -531,6 +562,77 @@ async def link_user_emails(
             detail="帳戶合併遇到資料一致性衝突，未套用任何變更",
         ) from exc
     return await _enrich_user(db, user)
+
+
+def _merge_source_ids(body: MergeUserAccountsRequest) -> list[uuid.UUID]:
+    values = [*body.source_user_ids]
+    if body.source_user_id is not None:
+        values.append(body.source_user_id)
+    return list(dict.fromkeys(values))
+
+
+async def _load_merge_users(
+    db: AsyncSession,
+    *,
+    target_user_id: uuid.UUID,
+    source_user_ids: list[uuid.UUID],
+) -> tuple[User, list[User]]:
+    if not source_user_ids:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="至少要選擇一個次要帳戶",
+        )
+    if len(source_user_ids) > 20:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="一次最多合併 20 個次要帳戶",
+        )
+    if target_user_id in source_user_ids:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="不可合併主要帳戶本身",
+        )
+    target_user = await db.get(User, target_user_id)
+    if target_user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到主要帳戶")
+    result = await db.execute(select(User).where(User.id.in_(source_user_ids)))
+    source_users = list(result.scalars().all())
+    if len(source_users) != len(source_user_ids):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到次要帳戶")
+    if any(not source.is_active for source in source_users):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="已停用的帳戶不可再次合併",
+        )
+    return target_user, source_users
+
+
+@router.post(
+    "/users/{user_id}/merge/preview",
+    response_model=MergePreview,
+    summary="預覽多個帳戶合併衝突",
+)
+async def preview_user_account_merge(
+    user_id: uuid.UUID,
+    body: MergeUserAccountsRequest,
+    db: DbDep,
+    _: AdminUser,
+) -> MergePreview:
+    source_user_ids = _merge_source_ids(body)
+    target_user, source_users = await _load_merge_users(
+        db,
+        target_user_id=user_id,
+        source_user_ids=source_user_ids,
+    )
+    try:
+        conflicts = await user_registration_svc.preview_merge_user_accounts(
+            db,
+            user=target_user,
+            source_users=source_users,
+        )
+    except UserRegistrationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    return MergePreview(conflicts=conflicts)
 
 
 @router.post(
@@ -544,22 +646,24 @@ async def merge_user_accounts(
     db: DbDep,
     admin_user: AdminUser,
 ) -> UserDetail:
-    if user_id == body.source_user_id:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="不可合併自己")
-    target_user = await db.get(User, user_id)
-    source_user = await db.get(User, body.source_user_id)
-    if target_user is None or source_user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到要合併的帳戶")
+    source_user_ids = _merge_source_ids(body)
+    target_user, source_users = await _load_merge_users(
+        db,
+        target_user_id=user_id,
+        source_user_ids=source_user_ids,
+    )
     try:
         await user_registration_svc.merge_user_accounts(
             db,
             user=target_user,
-            source_user=source_user,
+            source_users=source_users,
             actor=admin_user,
+            conflict_resolutions=body.conflict_resolutions,
         )
     except UserRegistrationError as exc:
         await db.rollback()
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+        detail = {"message": exc.detail, **exc.payload} if exc.payload else exc.detail
+        raise HTTPException(status_code=exc.status_code, detail=detail) from exc
     except IntegrityError as exc:
         await db.rollback()
         raise HTTPException(

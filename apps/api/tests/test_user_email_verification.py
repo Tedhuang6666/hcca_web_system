@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
@@ -109,3 +111,44 @@ async def test_user_verifies_email_before_it_is_linked(
     )
     assert identity is not None
     assert identity.user_id == user.id
+
+
+@pytest.mark.asyncio
+async def test_user_cannot_self_link_email_owned_by_another_account(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    user = User(
+        email="primary@hchs.hc.edu.tw",
+        display_name="自助綁定",
+        is_active=True,
+        is_verified=True,
+    )
+    other = User(
+        email="already-owned@gmail.com",
+        display_name="其他帳戶",
+        is_active=True,
+        is_verified=True,
+    )
+    db_session.add_all([user, other])
+    await db_session.flush()
+    db_session.add(
+        UserIdentity(
+            user_id=other.id,
+            provider="email",
+            external_id=other.email,
+            email=other.email,
+            display_name=other.display_name,
+            linked_at=datetime.now(UTC),
+        )
+    )
+    await db_session.flush()
+    _override_user(user)
+
+    response = await client.post(
+        "/users/me/emails/verification",
+        json={"email": other.email},
+    )
+
+    assert response.status_code == 409
+    assert "無法自行合併" in response.json()["detail"]
