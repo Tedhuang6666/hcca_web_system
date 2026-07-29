@@ -7,15 +7,16 @@ import Image from "next/image";
 import dynamic from "next/dynamic";
 import { AtSign, Clock, ExternalLink, LocateFixed, Mail, MapPin, MessageCircle, Phone, Search, Send, Star, Tag, Trophy } from "lucide-react";
 import { toast } from "sonner";
-import { partnerMapApi, ApiError } from "@/lib/api";
+import { partnerMapApi, recommendedVendorsApi, ApiError } from "@/lib/api";
 import type { PartnerBusinessDetail, PartnerBusinessDirectoryItem } from "@/lib/api";
 import { uploadUrl } from "@/lib/config";
 import type {
-  PartnerMapItem,
   PartnerRankingItem,
   PartnerSubmissionCreate,
   PartnerTagOut,
 } from "@/lib/types";
+import type { RecommendedVendorOutWithHours, UnifiedMapItem } from "@/lib/partner-map-types";
+import { formatBusinessHours } from "@/lib/business-hours";
 import { markerColor, markerLabel, type PartnerMapBoundsState } from "./PartnerLeafletMap";
 import PartnerPromoCarousel, { type PartnerPromoImage } from "./PartnerPromoCarousel";
 
@@ -29,7 +30,8 @@ const PartnerLeafletMap = dynamic(() => import("./PartnerLeafletMap"), {
   ),
 });
 
-function formatOffers(item: PartnerMapItem): string {
+function formatOffers(item: UnifiedMapItem): string {
+  if (item.source === "recommended") return "推薦商家資訊";
   if (!item.has_active_offer) return "目前無有效優惠";
   return item.active_offer_titles.join("、");
 }
@@ -128,9 +130,9 @@ function DetailPanel({
                   {business.category}
                 </p>
               )}
-              {business.business_hours_text && (
+              {(business.business_hours_text || formatBusinessHours(business.business_hours)) && (
                 <p className="mt-1 flex items-center gap-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                  <Clock size={13} aria-hidden="true" /> {business.business_hours_text}
+                  <Clock size={13} aria-hidden="true" /> {business.business_hours_text || formatBusinessHours(business.business_hours)}
                 </p>
               )}
             </div>
@@ -307,18 +309,74 @@ function DetailPanel({
   return typeof document === "undefined" ? null : createPortal(panel, document.body);
 }
 
+function RecommendedDetailPanel({
+  vendor,
+  onClose,
+}: {
+  vendor: RecommendedVendorOutWithHours | null;
+  onClose: () => void;
+}) {
+  if (!vendor) return null;
+  const panel = (
+    <aside
+      className="partner-map-detail-panel fixed inset-x-3 bottom-3 max-h-[calc(100dvh-1.5rem)] overflow-y-auto rounded-lg border p-4 shadow-xl lg:top-20 lg:right-5 lg:bottom-5 lg:left-auto lg:w-96"
+      role="dialog"
+      aria-modal="true"
+      aria-label="推薦商家詳情"
+      style={{ background: "var(--bg)", borderColor: "var(--border)" }}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-medium" style={{ color: "#2563EB" }}>推薦商家</p>
+          <h2 className="mt-1 text-lg font-semibold" style={{ color: "var(--text-primary)" }}>{vendor.name}</h2>
+        </div>
+        <button className="topbar-icon-btn" onClick={onClose} aria-label="關閉推薦商家詳情">×</button>
+      </div>
+      <div className="mt-4 space-y-4">
+        {vendor.category && <p className="text-xs font-medium" style={{ color: "#2563EB" }}>{vendor.category}</p>}
+        {vendor.summary && <p className="text-sm" style={{ color: "var(--text-secondary)" }}>{vendor.summary}</p>}
+        {vendor.description && (
+          <p className="whitespace-pre-wrap text-sm" style={{ color: "var(--text-secondary)" }}>{vendor.description}</p>
+        )}
+        {(vendor.address || vendor.contact_phone || vendor.contact_email) && (
+          <section className="rounded-lg border p-3" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
+            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>店家資訊</h3>
+            <div className="mt-2 space-y-2 text-sm" style={{ color: "var(--text-secondary)" }}>
+              {vendor.address && <p className="flex items-start gap-2"><MapPin size={14} className="mt-0.5 shrink-0" aria-hidden="true" />{vendor.address}</p>}
+              {vendor.contact_phone && <a className="flex items-center gap-2 hover:underline" href={`tel:${vendor.contact_phone}`}><Phone size={14} aria-hidden="true" />{vendor.contact_phone}</a>}
+              {vendor.contact_email && <a className="flex items-center gap-2 hover:underline" href={`mailto:${vendor.contact_email}`}><Mail size={14} aria-hidden="true" />{vendor.contact_email}</a>}
+            </div>
+          </section>
+        )}
+        {vendor.business_hours_text && <p className="flex items-center gap-2 text-sm" style={{ color: "var(--text-muted)" }}><Clock size={14} aria-hidden="true" />{vendor.business_hours_text}</p>}
+        {formatBusinessHours(vendor.business_hours) && <p className="text-xs" style={{ color: "var(--text-muted)" }}>{formatBusinessHours(vendor.business_hours)}</p>}
+        {(vendor.website_url || vendor.social_url || vendor.google_maps_url || vendor.menu_url) && (
+          <div className="flex flex-wrap gap-2">
+            {(vendor.website_url || vendor.social_url) && <a className="btn btn-secondary w-fit" href={externalUrl(vendor.website_url || vendor.social_url || "")} target="_blank" rel="noreferrer">前往網站 <ExternalLink size={15} aria-hidden="true" /></a>}
+            {vendor.google_maps_url && <a className="btn btn-secondary w-fit" href={vendor.google_maps_url} target="_blank" rel="noreferrer">開啟地圖 <ExternalLink size={15} aria-hidden="true" /></a>}
+            {vendor.menu_url && <a className="btn btn-secondary w-fit" href={vendor.menu_url} target="_blank" rel="noreferrer">查看菜單 <ExternalLink size={15} aria-hidden="true" /></a>}
+          </div>
+        )}
+        {vendor.hygiene_verified && <p className="text-xs font-medium text-emerald-700">✓ 衛生檢驗資訊已確認</p>}
+      </div>
+    </aside>
+  );
+  return typeof document === "undefined" ? null : createPortal(panel, document.body);
+}
+
 export default function PartnerMapPage() {
-  const [items, setItems] = useState<PartnerMapItem[]>([]);
+  const [items, setItems] = useState<UnifiedMapItem[]>([]);
   const [contactBusinesses, setContactBusinesses] = useState<PartnerBusinessDirectoryItem[]>([]);
   const [tags, setTags] = useState<PartnerTagOut[]>([]);
   const [keyword, setKeyword] = useState("");
   const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [selectedBusiness, setSelectedBusiness] = useState<PartnerBusinessDetail | null>(null);
+  const [selectedVendor, setSelectedVendor] = useState<RecommendedVendorOutWithHours | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [viewportOnly, setViewportOnly] = useState(false);
   const [mapBounds, setMapBounds] = useState<PartnerMapBoundsState | null>(null);
   const [rankings, setRankings] = useState<PartnerRankingItem[]>([]);
+  const [myBusinesses, setMyBusinesses] = useState<PartnerBusinessDirectoryItem[]>([]);
   const [submissionOpen, setSubmissionOpen] = useState(false);
   const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
   const [submission, setSubmission] = useState<PartnerSubmissionCreate>({
@@ -344,19 +402,68 @@ export default function PartnerMapPage() {
     [activeMapBounds, keyword, selectedTagIds],
   );
 
-  const load = useCallback(() => {
+  const load = useCallback(async () => {
     setLoading(true);
-    partnerMapApi
-      .list(query)
-      .then(setItems)
-      .catch((error) => toast.error(error instanceof ApiError ? error.message : "載入特約地圖失敗"))
-      .finally(() => setLoading(false));
-  }, [query]);
+    try {
+      const [partnerResult, recommendedResult] = await Promise.allSettled([
+        partnerMapApi.list(query),
+        recommendedVendorsApi.list({ keyword: keyword.trim() || undefined, map_only: true }),
+      ]);
+      const partnerItems = partnerResult.status === "fulfilled" ? partnerResult.value : [];
+      if (partnerResult.status === "rejected") {
+        toast.error(partnerResult.reason instanceof ApiError ? partnerResult.reason.message : "載入特約地圖失敗");
+      }
+      const recommendedItems = recommendedResult.status === "fulfilled"
+        ? recommendedResult.value
+            .filter((item) => item.latitude !== null && item.longitude !== null)
+            .filter((item) => {
+              if (!activeMapBounds) return true;
+              return item.latitude! >= Number(activeMapBounds.min_lat)
+                && item.latitude! <= Number(activeMapBounds.max_lat)
+                && item.longitude! >= Number(activeMapBounds.min_lng)
+                && item.longitude! <= Number(activeMapBounds.max_lng);
+            })
+            .map((item): UnifiedMapItem => ({
+              source: "recommended",
+              business_id: item.id,
+              location_id: item.id,
+              business_name: item.name,
+              location_name: null,
+              summary: item.summary,
+              logo_url: null,
+              cover_image_url: null,
+              category: item.category,
+              business_hours_text: item.business_hours_text,
+              business_hours: item.business_hours ?? {},
+              address: item.address ?? "",
+              latitude: item.latitude!,
+              longitude: item.longitude!,
+              phone: item.contact_phone,
+              tags: [],
+              has_active_offer: false,
+              has_discount_offer: false,
+              active_offer_titles: [],
+              rating_avg: null,
+              rating_count: 0,
+              popularity_score: 0,
+              view_count: 0,
+              checkin_count: 0,
+            }))
+        : [];
+      if (recommendedResult.status === "rejected") {
+        toast.error(recommendedResult.reason instanceof ApiError ? recommendedResult.reason.message : "載入推薦商家失敗");
+      }
+      setItems([...partnerItems, ...recommendedItems]);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeMapBounds, keyword, query]);
 
   useEffect(() => {
     partnerMapApi.tags().then(setTags).catch(() => {});
     partnerMapApi.directory().then(setContactBusinesses).catch(() => {});
     partnerMapApi.rankings(5).then(setRankings).catch(() => {});
+    partnerMapApi.myBusinesses().then(setMyBusinesses).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -369,11 +476,20 @@ export default function PartnerMapPage() {
   const handleMapBoundsChange = useCallback((bounds: PartnerMapBoundsState) => {
     setMapBounds(bounds);
     setSelectedBusiness(null);
+    setSelectedVendor(null);
     setDetailLoading(false);
   }, []);
 
-  const openBusiness = (businessId: string) => {
+  const openBusiness = (businessId: string, source: "partner" | "recommended" = "partner") => {
     setSelectedBusiness(null);
+    setSelectedVendor(null);
+    if (source === "recommended") {
+      recommendedVendorsApi
+        .get(businessId)
+        .then(setSelectedVendor)
+        .catch((error) => toast.error(error instanceof ApiError ? error.message : "載入推薦商家失敗"));
+      return;
+    }
     setDetailLoading(true);
     partnerMapApi.recordClick(businessId).catch(() => {});
     partnerMapApi
@@ -439,7 +555,7 @@ export default function PartnerMapPage() {
     [items, tags],
   );
 
-  const thumbFor = (item: PartnerMapItem) => item.logo_url || item.cover_image_url;
+  const thumbFor = (item: UnifiedMapItem) => item.logo_url || item.cover_image_url;
 
   return (
     <div className="h-[calc(100dvh-92px)] min-h-[620px] overflow-hidden rounded-lg border partner-map-shell" style={{ borderColor: "var(--border)" }}>
@@ -447,8 +563,8 @@ export default function PartnerMapPage() {
         <aside className="hidden min-h-0 flex-col border-b lg:flex lg:border-b-0 lg:border-r" style={{ borderColor: "var(--border)", background: "var(--bg)" }}>
           <div className="space-y-4 p-4">
             <div>
-              <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>特約地圖</h1>
-              <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>以新竹高中周邊為中心，搜尋校園特約店家與有效優惠</p>
+              <div className="flex items-center justify-between gap-2"><h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>店家地圖</h1>{myBusinesses.length > 0 && <Link href="/partner-map/my-businesses" className="text-xs font-medium hover:underline" style={{ color: "var(--primary)" }}>我的店家</Link>}</div>
+              <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>以新竹高中周邊為中心，搜尋特約店家與推薦商家</p>
             </div>
             <label className="flex items-center gap-2 rounded-lg border px-3 py-2" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
               <Search size={16} aria-hidden="true" />
@@ -547,7 +663,7 @@ export default function PartnerMapPage() {
                 {filteredItems.map((item) => (
                   <button
                     key={item.location_id}
-                    onClick={() => openBusiness(item.business_id)}
+                    onClick={() => openBusiness(item.business_id, item.source)}
                     className="w-full rounded-lg border p-3 text-left transition-colors hover:border-[var(--primary)]"
                     style={{ borderColor: "var(--border)", background: "var(--bg)" }}>
                     <div className="flex items-start justify-between gap-3">
@@ -570,16 +686,16 @@ export default function PartnerMapPage() {
                         <p className="mt-0.5 flex items-center gap-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
                           <Star size={11} aria-hidden="true" /> {item.rating_avg ?? "-"} · 熱度 {item.popularity_score}
                         </p>
-                        {item.business_hours_text && (
+                        {(item.business_hours_text || formatBusinessHours(item.business_hours)) && (
                           <p className="mt-0.5 flex items-center gap-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
-                            <Clock size={11} aria-hidden="true" /> {item.business_hours_text}
+                            <Clock size={11} aria-hidden="true" /> {item.business_hours_text || formatBusinessHours(item.business_hours)}
                           </p>
                         )}
                         <p className="mt-1 line-clamp-2 text-xs" style={{ color: "var(--text-muted)" }}>{item.address}</p>
                       </div>
                       {item.has_active_offer && (
                         <span className="shrink-0 rounded-full px-2 py-1 text-[11px]" style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
-                          優惠
+                          {item.has_discount_offer ? "★ 折扣" : "優惠"}
                         </span>
                       )}
                     </div>
@@ -595,8 +711,8 @@ export default function PartnerMapPage() {
           <div className="partner-map-mobile-controls absolute left-2.5 right-2.5 top-2.5 z-[500] rounded-lg border p-3 lg:hidden">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <h1 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>特約地圖</h1>
-                <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>新竹高中周邊</p>
+                <div className="flex items-center gap-2"><h1 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>店家地圖</h1>{myBusinesses.length > 0 && <Link href="/partner-map/my-businesses" className="text-[11px] font-medium" style={{ color: "var(--primary)" }}>我的店家</Link>}</div>
+                <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>特約與推薦商家</p>
               </div>
               <div className="flex items-center gap-2">
                 <span className="partner-map-count-pill rounded-full px-2 py-1 text-[11px]">
@@ -699,7 +815,7 @@ export default function PartnerMapPage() {
             {filteredItems.map((item) => (
               <button
                 key={item.location_id}
-                onClick={() => openBusiness(item.business_id)}
+                onClick={() => openBusiness(item.business_id, item.source)}
                 className="min-w-[82vw] snap-center rounded-lg border p-3 text-left shadow-lg"
                 style={{ background: "var(--bg)", borderColor: "var(--border)" }}>
                 <div className="flex items-start justify-between gap-3">
@@ -720,9 +836,9 @@ export default function PartnerMapPage() {
                       <span>·</span>
                       <Trophy size={11} aria-hidden="true" /> {item.checkin_count}
                     </p>
-                    {item.business_hours_text && (
+                    {(item.business_hours_text || formatBusinessHours(item.business_hours)) && (
                       <p className="mt-0.5 flex items-center gap-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
-                        <Clock size={11} aria-hidden="true" /> {item.business_hours_text}
+                        <Clock size={11} aria-hidden="true" /> {item.business_hours_text || formatBusinessHours(item.business_hours)}
                       </p>
                     )}
                     <p className="mt-1 line-clamp-2 text-xs" style={{ color: "var(--text-muted)" }}>{item.address}</p>
@@ -732,19 +848,20 @@ export default function PartnerMapPage() {
                     {markerLabel(item)}
                   </span>
                 </div>
-                <p className="mt-2 truncate text-xs" style={{ color: item.has_active_offer ? "var(--success)" : "var(--text-secondary)" }}>
+                <p className="mt-2 truncate text-xs" style={{ color: item.has_discount_offer ? "#B45309" : item.has_active_offer ? "var(--success)" : "var(--text-secondary)" }}>
                   {formatOffers(item)}
                 </p>
               </button>
             ))}
           </div>
-          {(selectedBusiness || detailLoading) && typeof document !== "undefined" && createPortal(
+          {(selectedBusiness || selectedVendor || detailLoading) && typeof document !== "undefined" && createPortal(
             <button
               type="button"
               className="partner-map-detail-backdrop fixed inset-0 lg:hidden"
               aria-label="關閉特約詳情"
               onClick={() => {
                 setSelectedBusiness(null);
+                setSelectedVendor(null);
                 setDetailLoading(false);
               }}
             />,
@@ -757,8 +874,13 @@ export default function PartnerMapPage() {
             onCheckIn={checkInSelected}
             onClose={() => {
               setSelectedBusiness(null);
+              setSelectedVendor(null);
               setDetailLoading(false);
             }}
+          />
+          <RecommendedDetailPanel
+            vendor={selectedVendor}
+            onClose={() => setSelectedVendor(null)}
           />
           <div className="pointer-events-none absolute left-4 top-4 hidden rounded-lg border px-3 py-2 text-xs shadow lg:block" style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text-secondary)" }}>
             <span className="inline-flex items-center gap-1"><MapPin size={13} aria-hidden="true" /> {filteredItems.length} 個點位</span>

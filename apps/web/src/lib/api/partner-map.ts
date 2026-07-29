@@ -1,7 +1,15 @@
 import type {
-  PartnerBusinessCreate, PartnerBusinessImageOut, PartnerBusinessListItem, PartnerBusinessOut, PartnerBusinessUpdate, PartnerLocationCreate, PartnerLocationOut, PartnerLocationUpdate, PartnerMapItem, PartnerOfferCreate, PartnerOfferOut, PartnerOfferUpdate, PartnerRankingItem, PartnerRatingCreate, PartnerRatingOut, PartnerSubmissionCreate, PartnerSubmissionOut, PartnerTagCreate, PartnerTagOut, PartnerTagUpdate,
+  PartnerBusinessCreate, PartnerBusinessImageOut, PartnerBusinessListItem, PartnerBusinessUpdate, PartnerLocationCreate, PartnerLocationOut, PartnerLocationUpdate, PartnerOfferCreate, PartnerOfferOut, PartnerOfferUpdate, PartnerRankingItem, PartnerRatingCreate, PartnerRatingOut, PartnerSubmissionCreate, PartnerSubmissionOut, PartnerTagCreate, PartnerTagOut, PartnerTagUpdate,
 } from "../types";
-import { ApiError, authFetch, BASE, csrfHeaders, errorMessageFromResponse, get, post, patch, del } from "./core";
+import type {
+  PartnerBusinessAccount,
+  PartnerBusinessCreateWithHours,
+  PartnerBusinessOutWithHours,
+  PartnerBusinessSelfUpdate,
+  PartnerBusinessUpdateWithHours,
+  UnifiedMapItem,
+} from "../partner-map-types";
+import { ApiError, authFetch, BASE, csrfHeaders, errorMessageFromResponse, get, post, patch, put, del } from "./core";
 
 export type PartnerBusinessListingType = "physical" | "online";
 type PartnerBusinessContactFields = {
@@ -15,7 +23,7 @@ type PartnerBusinessContactFields = {
 };
 export type PartnerBusinessDirectoryItem = PartnerBusinessListItem & PartnerBusinessContactFields;
 export type PartnerLocationWithMapUrl = PartnerLocationOut & { google_maps_url: string | null };
-type PartnerBusinessOutWithFlyer = PartnerBusinessOut & {
+type PartnerBusinessOutWithFlyer = PartnerBusinessOutWithHours & {
   flyer_image_url: string | null;
   promo_images: PartnerBusinessImageOut[];
 };
@@ -70,7 +78,7 @@ export const partnerMapApi = {
       if (key === "tag_ids" || value === undefined || value === null || value === "") return;
       p.set(key, String(value));
     });
-    return get<PartnerMapItem[]>(`/partner-map${p.size ? `?${p.toString()}` : ""}`);
+    return get<UnifiedMapItem[]>(`/partner-map${p.size ? `?${p.toString()}` : ""}`);
   },
   tags: () => get<PartnerTagOut[]>("/partner-map/tags"),
   discover: (params?: {
@@ -96,6 +104,10 @@ export const partnerMapApi = {
   },
   rankings: (limit = 10) => get<PartnerRankingItem[]>(`/partner-map/rankings?limit=${limit}`),
   getBusiness: (id: string) => get<PartnerBusinessDetail>(`/partner-map/businesses/${id}`),
+  myBusinesses: () => get<PartnerBusinessDirectoryItem[]>("/partner-map/my-businesses"),
+  getSelfBusiness: (id: string) => get<PartnerBusinessDetail>(`/partner-map/businesses/${id}/self`),
+  updateSelfBusiness: (id: string, body: PartnerBusinessSelfUpdate) =>
+    patch<PartnerBusinessDetail>(`/partner-map/businesses/${id}/self`, body),
   recordClick: (id: string) => post<PartnerBusinessDetail>(`/partner-map/businesses/${id}/click`, {}),
   checkIn: (id: string) => post<PartnerBusinessDetail>(`/partner-map/businesses/${id}/check-in`, {}),
   listRatings: (id: string) => get<PartnerRatingOut[]>(`/partner-map/businesses/${id}/ratings`),
@@ -112,9 +124,9 @@ export const partnerMapApi = {
     return get<PartnerBusinessDirectoryItem[]>(`/partner-map/admin/businesses${p.size ? `?${p}` : ""}`);
   },
   adminGetBusiness: (id: string) => get<PartnerBusinessDetail>(`/partner-map/admin/businesses/${id}`),
-  createBusiness: (body: PartnerBusinessCreateWithInitialLocations) =>
+  createBusiness: (body: PartnerBusinessCreateWithInitialLocations & PartnerBusinessCreateWithHours) =>
     post<PartnerBusinessDetail>("/partner-map/admin/businesses", body),
-  updateBusiness: (id: string, body: PartnerBusinessUpdate) =>
+  updateBusiness: (id: string, body: PartnerBusinessUpdate & PartnerBusinessUpdateWithHours) =>
     patch<PartnerBusinessDetail>(`/partner-map/admin/businesses/${id}`, body),
   uploadFlyer: async (id: string, file: File): Promise<PartnerBusinessDetail> => {
     const form = new FormData();
@@ -148,6 +160,10 @@ export const partnerMapApi = {
     del<void>(`/partner-map/admin/businesses/${businessId}/images/${imageId}`),
   deleteFlyer: (id: string) => del<void>(`/partner-map/admin/businesses/${id}/flyer`),
   deleteBusiness: (id: string) => del<void>(`/partner-map/admin/businesses/${id}`),
+  adminBusinessAccounts: (id: string) =>
+    get<PartnerBusinessAccount[]>(`/partner-map/admin/businesses/${id}/accounts`),
+  replaceBusinessAccounts: (id: string, user_ids: string[]) =>
+    put<PartnerBusinessAccount[]>(`/partner-map/admin/businesses/${id}/accounts`, { user_ids }),
   adminSubmissions: (params?: { status?: string }) => {
     const qs = params?.status ? `?${new URLSearchParams({ status: params.status }).toString()}` : "";
     return get<PartnerSubmissionOut[]>(`/partner-map/admin/submissions${qs}`);

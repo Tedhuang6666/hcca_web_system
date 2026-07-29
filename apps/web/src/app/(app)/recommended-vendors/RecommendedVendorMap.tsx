@@ -5,9 +5,10 @@ import { useEffect, useState } from "react";
 import { Store } from "lucide-react";
 import { divIcon, LatLngBounds } from "leaflet";
 import { MapContainer, Marker, Popup, TileLayer, ZoomControl, useMap } from "react-leaflet";
-import type { RecommendedVendorListItem } from "@/lib/types";
+import type { RecommendedVendorListItemWithHours } from "@/lib/partner-map-types";
+import { businessOpenState } from "@/lib/business-hours";
 
-function FitBounds({ items }: { items: RecommendedVendorListItem[] }) {
+function FitBounds({ items }: { items: RecommendedVendorListItemWithHours[] }) {
   const map = useMap();
   useEffect(() => {
     if (items.length === 0) return;
@@ -44,14 +45,15 @@ function ThemeClassSync({ theme }: { theme: "light" | "dark" }) {
   return null;
 }
 
-function vendorIcon() {
-  const icon = renderToStaticMarkup(<Store size={18} strokeWidth={2.4} aria-hidden="true" />);
+function vendorIcon(item: RecommendedVendorListItemWithHours) {
+  const icon = renderToStaticMarkup(<Store size={14} strokeWidth={2.2} aria-hidden="true" />);
+  const closedClass = businessOpenState(item.business_hours) === false ? " is-closed" : "";
   return divIcon({
     className: "partner-map-marker-shell",
-    iconSize: [44, 44],
-    iconAnchor: [22, 40],
-    popupAnchor: [0, -38],
-    html: `<div class="partner-map-marker" style="--marker-color:#15803D"><div class="partner-map-marker-icon">${icon}</div><div class="partner-map-marker-label">推薦</div></div>`,
+    iconSize: [36, 36],
+    iconAnchor: [18, 32],
+    popupAnchor: [0, -30],
+    html: `<div class="partner-map-marker is-recommended${closedClass}" style="--marker-color:#2563EB"><div class="partner-map-marker-icon">${icon}</div><div class="partner-map-marker-label">推薦</div></div>`,
   });
 }
 
@@ -59,7 +61,7 @@ export default function RecommendedVendorMap({
   items,
   onSelect,
 }: {
-  items: RecommendedVendorListItem[];
+  items: RecommendedVendorListItemWithHours[];
   onSelect: (id: string) => void;
 }) {
   const theme = useMapTheme();
@@ -86,7 +88,7 @@ export default function RecommendedVendorMap({
       <ThemeClassSync theme={theme} />
       <FitBounds items={mapped} />
       {mapped.map((item) => (
-        <Marker key={item.id} position={[item.latitude!, item.longitude!]} icon={vendorIcon()}>
+        <Marker key={item.id} position={[item.latitude!, item.longitude!]} icon={vendorIcon(item)}>
           <Popup>
             <div className="space-y-1 text-sm">
               <strong>{item.name}</strong>

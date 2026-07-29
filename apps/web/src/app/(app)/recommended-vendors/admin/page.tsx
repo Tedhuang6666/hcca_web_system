@@ -10,13 +10,16 @@ import { recommendedVendorsApi, ApiError } from "@/lib/api";
 import { apiUrl } from "@/lib/config";
 import type {
   RecommendedVendorCategoryOut, RecommendedVendorCreate, RecommendedVendorListItem,
-  RecommendedVendorMenuOut, RecommendedVendorOut, RecommendedVendorProductOut,
+  RecommendedVendorMenuOut, RecommendedVendorProductOut,
   RecommendedVendorStatus,
 } from "@/lib/types";
+import BusinessHoursEditor from "../../partner-map/BusinessHoursEditor";
+import type { BusinessHours, RecommendedVendorOutWithHours } from "@/lib/partner-map-types";
 
 type VendorForm = {
   name: string; summary: string; description: string; category_id: string; address: string;
   latitude: string; longitude: string; google_maps_url: string; business_hours_text: string;
+  business_hours: BusinessHours;
   contact_name: string; contact_phone: string; contact_email: string; line_id: string;
   social_url: string; website_url: string; ordering_instructions: string; menu_url: string;
   hygiene_inspection_date: string; hygiene_inspection_expires_at: string;
@@ -24,14 +27,15 @@ type VendorForm = {
   sort_order: string; is_active: boolean; internal_note: string;
 };
 
-type VendorDetail = Omit<RecommendedVendorOut, "products" | "menus"> & {
-  products: NonNullable<RecommendedVendorOut["products"]>;
-  menus: NonNullable<RecommendedVendorOut["menus"]>;
+type VendorDetail = Omit<RecommendedVendorOutWithHours, "products" | "menus"> & {
+  products: NonNullable<RecommendedVendorOutWithHours["products"]>;
+  menus: NonNullable<RecommendedVendorOutWithHours["menus"]>;
 };
 
 const emptyForm: VendorForm = {
   name: "", summary: "", description: "", category_id: "", address: "", latitude: "", longitude: "",
   google_maps_url: "", business_hours_text: "", contact_name: "", contact_phone: "", contact_email: "",
+  business_hours: {},
   line_id: "", social_url: "", website_url: "", ordering_instructions: "", menu_url: "",
   hygiene_inspection_date: "", hygiene_inspection_expires_at: "", hygiene_certificate_url: "",
   hygiene_note: "", status: "draft", sort_order: "0", is_active: true, internal_note: "",
@@ -39,16 +43,17 @@ const emptyForm: VendorForm = {
 
 const emptyProduct = { name: "", description: "", price_text: "", sort_order: 0, is_active: true };
 
-function normalizeVendor(vendor: RecommendedVendorOut): VendorDetail {
+function normalizeVendor(vendor: RecommendedVendorOutWithHours): VendorDetail {
   return { ...vendor, products: vendor.products ?? [], menus: vendor.menus ?? [] };
 }
 
-function formFromVendor(vendor: RecommendedVendorOut): VendorForm {
+function formFromVendor(vendor: RecommendedVendorOutWithHours): VendorForm {
   return {
     name: vendor.name, summary: vendor.summary || "", description: vendor.description || "",
     category_id: vendor.category_id || "", address: vendor.address || "",
     latitude: vendor.latitude?.toString() || "", longitude: vendor.longitude?.toString() || "",
     google_maps_url: vendor.google_maps_url || "", business_hours_text: vendor.business_hours_text || "",
+    business_hours: vendor.business_hours || {},
     contact_name: vendor.contact_name || "", contact_phone: vendor.contact_phone || "",
     contact_email: vendor.contact_email || "", line_id: vendor.line_id || "", social_url: vendor.social_url || "",
     website_url: vendor.website_url || "", ordering_instructions: vendor.ordering_instructions || "",
@@ -109,6 +114,7 @@ export default function RecommendedVendorsAdminPage() {
     category_id: form.category_id || null, address: form.address.trim() || null,
     latitude: form.latitude ? Number(form.latitude) : null, longitude: form.longitude ? Number(form.longitude) : null,
     google_maps_url: form.google_maps_url.trim() || null, business_hours_text: form.business_hours_text.trim() || null,
+    business_hours: form.business_hours,
     contact_name: form.contact_name.trim() || null, contact_phone: form.contact_phone.trim() || null,
     contact_email: form.contact_email.trim() || null, line_id: form.line_id.trim() || null,
     social_url: form.social_url.trim() || null, website_url: form.website_url.trim() || null,
@@ -225,7 +231,8 @@ function VendorFormPanel({ form, categories, selected, saving, update, onSave }:
   return <section className="rounded-lg border p-5" style={{ borderColor: "var(--border)" }}><div className="mb-4 flex items-start justify-between gap-3"><div><h2 className="font-semibold" style={{ color: "var(--text-primary)" }}>{selected ? `編輯：${selected.name}` : "建立推薦商家"}</h2><p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>商家名稱、分類為必填；衛生檢驗日期在上架時必填，其餘資訊選填。</p></div><ShieldCheck size={22} style={{ color: "#15803D" }} aria-hidden="true" /></div><div className="grid gap-3 md:grid-cols-2">
     <Field label="商家名稱" required value={form.name} onChange={(value) => update("name", value)} />
     <label className="grid gap-1 text-sm"><span style={{ color: "var(--text-secondary)" }}>分類 <Required /></span><select className="input" value={form.category_id} onChange={(event) => update("category_id", event.target.value)} required><option value="">請選擇分類</option>{categories.filter((category) => category.is_active || category.id === form.category_id).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select>{categories.length === 0 && <span className="text-xs" style={{ color: "#B91C1C" }}>請先到「分類」頁籤建立分類。</span>}</label>
-    <Field label="簡介" value={form.summary} onChange={(value) => update("summary", value)} /><Field label="地址" value={form.address} onChange={(value) => update("address", value)} /><Field label="聯絡人" value={form.contact_name} onChange={(value) => update("contact_name", value)} /><Field label="電話" value={form.contact_phone} onChange={(value) => update("contact_phone", value)} /><Field label="Email" type="email" value={form.contact_email} onChange={(value) => update("contact_email", value)} /><Field label="LINE ID" value={form.line_id} onChange={(value) => update("line_id", value)} /><Field label="Google Maps 連結" type="url" value={form.google_maps_url} onChange={(value) => update("google_maps_url", value)} /><Field label="營業時間" value={form.business_hours_text} onChange={(value) => update("business_hours_text", value)} /><Field label="官方網站" type="url" value={form.website_url} onChange={(value) => update("website_url", value)} /><Field label="社群連結" type="url" value={form.social_url} onChange={(value) => update("social_url", value)} /><Field label="菜單主連結（選填）" type="url" value={form.menu_url} onChange={(value) => update("menu_url", value)} /><Field label="衛生檢驗日期（上架必填）" type="date" required={form.status === "active"} value={form.hygiene_inspection_date} onChange={(value) => update("hygiene_inspection_date", value)} /><Field label="檢驗有效期限" type="date" value={form.hygiene_inspection_expires_at} onChange={(value) => update("hygiene_inspection_expires_at", value)} /><Field label="檢驗證明連結" type="url" value={form.hygiene_certificate_url} onChange={(value) => update("hygiene_certificate_url", value)} /><Field label="排序" type="number" value={form.sort_order} onChange={(value) => update("sort_order", value)} /><label className="flex items-center gap-2 pt-6 text-sm"><input type="checkbox" checked={form.is_active} onChange={(event) => update("is_active", event.target.checked)} />允許顯示</label><TextArea label="介紹" value={form.description} onChange={(value) => update("description", value)} /><TextArea label="訂購方式" value={form.ordering_instructions} onChange={(value) => update("ordering_instructions", value)} placeholder="例如：請先電話預訂，取餐時付款。" /><TextArea label="衛生檢驗備註" value={form.hygiene_note} onChange={(value) => update("hygiene_note", value)} /><TextArea label="管理備註" value={form.internal_note} onChange={(value) => update("internal_note", value)} />
+    <Field label="簡介" value={form.summary} onChange={(value) => update("summary", value)} /><Field label="地址" value={form.address} onChange={(value) => update("address", value)} /><Field label="聯絡人" value={form.contact_name} onChange={(value) => update("contact_name", value)} /><Field label="電話" value={form.contact_phone} onChange={(value) => update("contact_phone", value)} /><Field label="Email" type="email" value={form.contact_email} onChange={(value) => update("contact_email", value)} /><Field label="LINE ID" value={form.line_id} onChange={(value) => update("line_id", value)} /><Field label="Google Maps 連結" type="url" value={form.google_maps_url} onChange={(value) => update("google_maps_url", value)} /><Field label="營業時間說明" value={form.business_hours_text} onChange={(value) => update("business_hours_text", value)} /><Field label="官方網站" type="url" value={form.website_url} onChange={(value) => update("website_url", value)} /><Field label="社群連結" type="url" value={form.social_url} onChange={(value) => update("social_url", value)} /><Field label="菜單主連結（選填）" type="url" value={form.menu_url} onChange={(value) => update("menu_url", value)} /><Field label="衛生檢驗日期（上架必填）" type="date" required={form.status === "active"} value={form.hygiene_inspection_date} onChange={(value) => update("hygiene_inspection_date", value)} /><Field label="檢驗有效期限" type="date" value={form.hygiene_inspection_expires_at} onChange={(value) => update("hygiene_inspection_expires_at", value)} /><Field label="檢驗證明連結" type="url" value={form.hygiene_certificate_url} onChange={(value) => update("hygiene_certificate_url", value)} /><Field label="排序" type="number" value={form.sort_order} onChange={(value) => update("sort_order", value)} /><label className="flex items-center gap-2 pt-6 text-sm"><input type="checkbox" checked={form.is_active} onChange={(event) => update("is_active", event.target.checked)} />允許顯示</label><TextArea label="介紹" value={form.description} onChange={(value) => update("description", value)} /><TextArea label="訂購方式" value={form.ordering_instructions} onChange={(value) => update("ordering_instructions", value)} placeholder="例如：請先電話預訂，取餐時付款。" /><TextArea label="衛生檢驗備註" value={form.hygiene_note} onChange={(value) => update("hygiene_note", value)} /><TextArea label="管理備註" value={form.internal_note} onChange={(value) => update("internal_note", value)} />
+    <BusinessHoursEditor value={form.business_hours} onChange={(business_hours) => update("business_hours", business_hours)} />
     <label className="grid gap-1 text-sm"><span style={{ color: "var(--text-secondary)" }}>狀態 <Optional /></span><select className="input" value={form.status} onChange={(event) => update("status", event.target.value as RecommendedVendorStatus)}><option value="draft">草稿</option><option value="active">上架</option><option value="hidden">暫不上架</option><option value="archived">已封存</option></select></label>
   </div><div className="mt-4 flex justify-end"><button type="button" className="btn btn-primary" disabled={saving} onClick={onSave}><Save size={15} aria-hidden="true" />{saving ? "儲存中…" : "儲存商家"}</button></div></section>;
 }

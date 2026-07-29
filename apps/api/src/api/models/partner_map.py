@@ -114,6 +114,9 @@ class PartnerBusiness(Base, TimestampMixin):
     flyer_content_type: Mapped[str | None] = mapped_column(String(120), nullable=True)
     category: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     business_hours_text: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    business_hours: Mapped[dict] = mapped_column(
+        JSONDict, nullable=False, default=dict, server_default="{}"
+    )
     listing_type: Mapped[str] = mapped_column(
         String(20),
         nullable=False,
@@ -169,6 +172,44 @@ class PartnerBusiness(Base, TimestampMixin):
     checkins: Mapped[list[PartnerCheckin]] = relationship(
         "PartnerCheckin", back_populates="business", cascade="all, delete-orphan"
     )
+    accounts: Mapped[list[PartnerBusinessAccount]] = relationship(
+        "PartnerBusinessAccount",
+        back_populates="business",
+        cascade="all, delete-orphan",
+        order_by="PartnerBusinessAccount.created_at",
+    )
+
+
+class PartnerBusinessAccount(Base, TimestampMixin):
+    """可代表特約店家更新公開資料的登入帳號。"""
+
+    __tablename__ = "partner_business_accounts"
+    __table_args__ = (
+        UniqueConstraint(
+            "business_id", "user_id", name="uq_partner_business_accounts_business_user"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("partner_businesses.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    granted_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true", index=True
+    )
+
+    business: Mapped[PartnerBusiness] = relationship("PartnerBusiness", back_populates="accounts")
+    user: Mapped[User] = relationship("User", foreign_keys=[user_id])
+    grantor: Mapped[User | None] = relationship("User", foreign_keys=[granted_by])
 
 
 class PartnerBusinessImage(Base, TimestampMixin):
@@ -340,6 +381,7 @@ class PartnerSubmission(Base, TimestampMixin):
 
 __all__ = [
     "PartnerBusiness",
+    "PartnerBusinessAccount",
     "PartnerBusinessImage",
     "PartnerBusinessListingType",
     "PartnerBusinessStatus",

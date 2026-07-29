@@ -13,6 +13,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.core.database import Base
 from api.models.base import TimestampMixin
+from api.models.types import JSONDict
 
 if TYPE_CHECKING:
     from api.models.user import User
@@ -67,6 +68,9 @@ class RecommendedVendor(Base, TimestampMixin):
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
     google_maps_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     business_hours_text: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    business_hours: Mapped[dict] = mapped_column(
+        JSONDict, nullable=False, default=dict, server_default="{}"
+    )
     contact_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     contact_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     contact_email: Mapped[str | None] = mapped_column(String(255), nullable=True)

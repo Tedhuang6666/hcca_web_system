@@ -8,6 +8,7 @@ from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from api.models.recommended_vendor import RecommendedVendorMenuKind, RecommendedVendorStatus
+from api.schemas.business_hours import BusinessHours
 
 
 class RecommendedVendorCategoryCreate(BaseModel):
@@ -114,6 +115,7 @@ class RecommendedVendorCreate(BaseModel):
     longitude: float | None = Field(None, ge=-180, le=180)
     google_maps_url: str | None = None
     business_hours_text: str | None = Field(None, max_length=300)
+    business_hours: BusinessHours = Field(default_factory=dict)
     contact_name: str | None = Field(None, max_length=100)
     contact_phone: str | None = Field(None, max_length=50)
     contact_email: EmailStr | None = None
@@ -143,6 +145,7 @@ class RecommendedVendorUpdate(BaseModel):
     longitude: float | None = Field(None, ge=-180, le=180)
     google_maps_url: str | None = None
     business_hours_text: str | None = Field(None, max_length=300)
+    business_hours: BusinessHours | None = None
     contact_name: str | None = Field(None, max_length=100)
     contact_phone: str | None = Field(None, max_length=50)
     contact_email: EmailStr | None = None
@@ -174,6 +177,7 @@ class RecommendedVendorListItem(BaseModel):
     longitude: float | None
     google_maps_url: str | None
     business_hours_text: str | None
+    business_hours: BusinessHours
     contact_phone: str | None
     contact_email: str | None
     line_id: str | None

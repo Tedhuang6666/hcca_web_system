@@ -23,6 +23,9 @@ import {
   type PartnerIconKey,
 } from "../partner-map-icons";
 import CredentialAuthorizationPanel from "./CredentialAuthorizationPanel";
+import BusinessAccountPanel from "./BusinessAccountPanel";
+import BusinessHoursEditor from "../BusinessHoursEditor";
+import type { BusinessHours } from "@/lib/partner-map-types";
 
 const emptyBusiness = {
   name: "",
@@ -34,6 +37,7 @@ const emptyBusiness = {
   cover_image_url: "",
   category: "",
   business_hours_text: "",
+  business_hours: {} as BusinessHours,
   listing_type: "physical" as PartnerBusinessListingType,
   contact_name: "",
   contact_phone: "",
@@ -190,6 +194,7 @@ export default function PartnerMapAdminPage() {
           cover_image_url: business.cover_image_url || "",
           category: business.category || "",
           business_hours_text: business.business_hours_text || "",
+          business_hours: business.business_hours || {},
           listing_type: business.listing_type as PartnerBusinessListingType,
           contact_name: business.contact_name || "",
           contact_phone: business.contact_phone || "",
@@ -260,6 +265,7 @@ export default function PartnerMapAdminPage() {
         cover_image_url: businessForm.cover_image_url || null,
         category: businessForm.category || null,
         business_hours_text: businessForm.business_hours_text || null,
+        business_hours: businessForm.business_hours,
         contact_name: businessForm.contact_name || null,
         contact_phone: businessForm.contact_phone || null,
         contact_email: businessForm.contact_email || null,
@@ -687,7 +693,8 @@ export default function PartnerMapAdminPage() {
 
               <section className="border-t pt-6" style={{ borderColor: "var(--border)" }}>
                 <div className="mb-3"><h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>顯示素材與分類</h3><p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>選填，讓學生更容易辨識合作夥伴。</p></div>
-                <div className="grid gap-3 md:grid-cols-2"><label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>社群連結</span><input className="input" type="url" value={businessForm.social_url} onChange={(e) => setBusinessForm((f) => ({ ...f, social_url: e.target.value }))} /></label><label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>營業時間</span><input className="input" value={businessForm.business_hours_text} onChange={(e) => setBusinessForm((f) => ({ ...f, business_hours_text: e.target.value }))} /></label><label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Logo URL</span><input className="input" value={businessForm.logo_url} onChange={(e) => setBusinessForm((f) => ({ ...f, logo_url: e.target.value }))} /></label><label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>封面圖片 URL</span><input className="input" value={businessForm.cover_image_url} onChange={(e) => setBusinessForm((f) => ({ ...f, cover_image_url: e.target.value }))} /></label></div>
+                <div className="grid gap-3 md:grid-cols-2"><label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>社群連結</span><input className="input" type="url" value={businessForm.social_url} onChange={(e) => setBusinessForm((f) => ({ ...f, social_url: e.target.value }))} /></label><label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>營業時間說明</span><input className="input" value={businessForm.business_hours_text} onChange={(e) => setBusinessForm((f) => ({ ...f, business_hours_text: e.target.value }))} placeholder="例如：週一至週五 09:00–18:00" /></label><label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Logo URL</span><input className="input" value={businessForm.logo_url} onChange={(e) => setBusinessForm((f) => ({ ...f, logo_url: e.target.value }))} /></label><label className="space-y-1"><span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>封面圖片 URL</span><input className="input" value={businessForm.cover_image_url} onChange={(e) => setBusinessForm((f) => ({ ...f, cover_image_url: e.target.value }))} /></label></div>
+                <BusinessHoursEditor value={businessForm.business_hours} onChange={(business_hours) => setBusinessForm((form) => ({ ...form, business_hours }))} />
                 <div className="mt-4 flex flex-wrap gap-2">{tags.map((tag) => { const active = businessForm.tag_ids.includes(tag.id); return <button type="button" key={tag.id} onClick={() => toggleTag(tag.id)} className="rounded-full border px-3 py-1.5 text-xs" style={{ borderColor: active ? "var(--primary)" : "var(--border)", color: active ? "var(--primary)" : "var(--text-secondary)", background: active ? "var(--primary-dim)" : "transparent" }}>{tag.name}</button>; })}</div>
                 {selected && (
                   <div className="mt-4 rounded-lg border p-3" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
@@ -863,6 +870,7 @@ export default function PartnerMapAdminPage() {
               </section>
             </div>
           )}
+          {selected && <BusinessAccountPanel businessId={selected.id} />}
         </main>
       </div> : activeTab === "tags" ? (
         <section id="tags-panel" role="tabpanel" aria-label="標籤管理" className="card p-5">

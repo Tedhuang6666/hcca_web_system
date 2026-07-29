@@ -250,6 +250,62 @@ async def test_partner_map_filters_by_keyword_tag_bounds_and_offer(
 
 
 @pytest.mark.asyncio
+async def test_admin_can_assign_multiple_store_accounts_and_store_account_can_update_hours(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    store_user, business, _ = await _seed_partner_map(db_session)
+    second_store_user = User(
+        email="second-store@school.edu",
+        display_name="第二位店家帳號",
+        is_active=True,
+        is_verified=True,
+    )
+    admin = User(
+        email="map-admin@school.edu",
+        display_name="地圖管理員",
+        is_active=True,
+        is_verified=True,
+        is_superuser=True,
+    )
+    db_session.add_all([second_store_user, admin])
+    await db_session.flush()
+
+    _override_current_user(admin)
+    assign_response = await client.put(
+        f"/partner-map/admin/businesses/{business.id}/accounts",
+        json={"user_ids": [str(store_user.id), str(second_store_user.id)]},
+        headers=HOST_HEADERS,
+    )
+
+    assert assign_response.status_code == 200
+    assert {item["user_id"] for item in assign_response.json()} == {
+        str(store_user.id),
+        str(second_store_user.id),
+    }
+
+    _override_current_user(store_user)
+    my_businesses_response = await client.get("/partner-map/my-businesses", headers=HOST_HEADERS)
+    update_response = await client.patch(
+        f"/partner-map/businesses/{business.id}/self",
+        json={
+            "summary": "更新後的店家介紹",
+            "business_hours": {"mon": [{"open": "09:00", "close": "18:00"}]},
+        },
+        headers=HOST_HEADERS,
+    )
+
+    assert my_businesses_response.status_code == 200
+    assert my_businesses_response.json()[0]["id"] == str(business.id)
+    assert update_response.status_code == 200
+    assert update_response.json()["summary"] == "更新後的店家介紹"
+    assert update_response.json()["business_hours"]["mon"][0] == {
+        "open": "09:00",
+        "close": "18:00",
+    }
+
+
+@pytest.mark.asyncio
 async def test_partner_map_category_filter_includes_business_with_category_only(
     client: AsyncClient,
     db_session: AsyncSession,

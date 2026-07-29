@@ -243,6 +243,7 @@ from api.models.partner_business_application import (  # noqa: F401
 )
 from api.models.partner_map import (  # noqa: F401
     PartnerBusiness,
+    PartnerBusinessAccount,
     PartnerBusinessImage,
     PartnerBusinessStatus,
     PartnerCheckin,
