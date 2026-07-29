@@ -5,17 +5,32 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, date, datetime
 
-from sqlalchemy import or_, select
+from sqlalchemy import and_, delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.schema import UniqueConstraint
 
+from api.core.cache import cache_invalidate_user_permissions
+from api.core.database import Base
 from api.core.permission_codes import validate_permission_codes
 from api.models.org import Org, Permission, Position, PositionCategory, UserPosition
-from api.models.person import PersonAffiliationKind, PersonAffiliationSource
+from api.models.person import (
+    Person,
+    PersonAffiliation,
+    PersonAffiliationKind,
+    PersonAffiliationSource,
+)
+from api.models.school_class import (
+    ClassCadre,
+    ClassManualMember,
+    ClassMembership,
+    ClassRosterEntry,
+)
 from api.models.user import User
 from api.models.user_identity import UserIdentity
 from api.services import audit as audit_svc
 from api.services import person as person_svc
+from api.services.discord_bot import enqueue_role_sync
 
 SCHOOL_EMAIL_DOMAIN = "hchs.hc.edu.tw"
 
@@ -25,6 +40,392 @@ class UserRegistrationError(Exception):
         super().__init__(detail)
         self.status_code = status_code
         self.detail = detail
+
+
+_ACCOUNT_MERGE_EXCLUDED_TABLES = frozenset(
+    {
+        "people",
+        "user_identities",
+        "class_cadres",
+        "class_manual_members",
+        "class_memberships",
+        "class_roster_entries",
+    }
+)
+_ACCOUNT_MERGE_SAFE_DUPLICATE_TABLES = frozenset(
+    {
+        "activity_members",
+        "announcement_audience_users",
+        "calendar_event_participants",
+        "email_recipient_list_members",
+        "meal_vendor_managers",
+        "meeting_agenda_recusals",
+    }
+)
+
+
+def _user_fk_columns(table):
+    return [
+        column
+        for column in table.columns
+        if any(foreign_key.target_fullname == "users.id" for foreign_key in column.foreign_keys)
+    ]
+
+
+def _unique_column_sets(table):
+    unique_sets = []
+    for constraint in table.constraints:
+        if isinstance(constraint, UniqueConstraint):
+            unique_sets.append(tuple(constraint.columns))
+    for index in table.indexes:
+        if index.unique:
+            unique_sets.append(tuple(index.columns))
+    return unique_sets
+
+
+def _row_value(row, column):
+    return row._mapping[column]
+
+
+def _row_key(row, columns):
+    return tuple(_row_value(row, column) for column in columns)
+
+
+async def _preflight_user_record_reparenting(
+    db: AsyncSession,
+    *,
+    target_user_id: uuid.UUID,
+    source_user_id: uuid.UUID,
+) -> None:
+    """確認所有 User 外鍵都能安全轉移，避免合併途中才遇到唯一鍵衝突。"""
+    for table in Base.metadata.sorted_tables:
+        if table.name in _ACCOUNT_MERGE_EXCLUDED_TABLES or table.name == "users":
+            continue
+        user_columns = _user_fk_columns(table)
+        if not user_columns:
+            continue
+
+        source_rows = (
+            await db.execute(
+                select(table).where(or_(*(column == source_user_id for column in user_columns)))
+            )
+        ).all()
+        if not source_rows:
+            continue
+
+        primary_key_columns = tuple(table.primary_key.columns)
+        user_column_names = {column.name for column in user_columns}
+        for unique_columns in _unique_column_sets(table):
+            if not {column.name for column in unique_columns}.intersection(user_column_names):
+                continue
+            for source_row in source_rows:
+                unique_values = [
+                    target_user_id
+                    if column.name in user_column_names
+                    else _row_value(source_row, column)
+                    for column in unique_columns
+                ]
+                if any(value is None for value in unique_values):
+                    continue
+                target_row = (
+                    await db.execute(
+                        select(*primary_key_columns).where(
+                            and_(
+                                *(
+                                    column == value
+                                    for column, value in zip(
+                                        unique_columns, unique_values, strict=True
+                                    )
+                                )
+                            )
+                        )
+                    )
+                ).first()
+                if target_row is None or tuple(target_row) == _row_key(
+                    source_row, primary_key_columns
+                ):
+                    continue
+                if table.name not in _ACCOUNT_MERGE_SAFE_DUPLICATE_TABLES:
+                    raise UserRegistrationError(
+                        409,
+                        f"兩個帳戶在 {table.name} 有無法自動合併的重複歷史資料，請先處理後再合併",
+                    )
+
+
+async def _reparent_user_records(
+    db: AsyncSession,
+    *,
+    target_user_id: uuid.UUID,
+    source_user_id: uuid.UUID,
+) -> None:
+    """將所有 ORM metadata 中指向 users.id 的歷史關聯轉到主要帳戶。"""
+    for table in Base.metadata.sorted_tables:
+        if table.name in _ACCOUNT_MERGE_EXCLUDED_TABLES or table.name == "users":
+            continue
+        user_columns = _user_fk_columns(table)
+        if not user_columns:
+            continue
+
+        source_rows = (
+            await db.execute(
+                select(table).where(or_(*(column == source_user_id for column in user_columns)))
+            )
+        ).all()
+        if not source_rows:
+            continue
+
+        user_column_names = {column.name for column in user_columns}
+        duplicate_keys = set()
+        for unique_columns in _unique_column_sets(table):
+            if not {column.name for column in unique_columns}.intersection(user_column_names):
+                continue
+            for source_row in source_rows:
+                unique_values = [
+                    target_user_id
+                    if column.name in user_column_names
+                    else _row_value(source_row, column)
+                    for column in unique_columns
+                ]
+                if any(value is None for value in unique_values):
+                    continue
+                target_row = (
+                    await db.execute(
+                        select(*table.primary_key.columns).where(
+                            and_(
+                                *(
+                                    column == value
+                                    for column, value in zip(
+                                        unique_columns, unique_values, strict=True
+                                    )
+                                )
+                            )
+                        )
+                    )
+                ).first()
+                if target_row is not None and tuple(target_row) != _row_key(
+                    source_row, table.primary_key.columns
+                ):
+                    duplicate_keys.add(_row_key(source_row, table.primary_key.columns))
+
+        if duplicate_keys:
+            delete_conditions = [
+                and_(
+                    *(
+                        column == value
+                        for column, value in zip(
+                            table.primary_key.columns, primary_key, strict=True
+                        )
+                    )
+                )
+                for primary_key in duplicate_keys
+            ]
+            await db.execute(delete(table).where(or_(*delete_conditions)))
+
+        await db.execute(
+            update(table)
+            .where(or_(*(column == source_user_id for column in user_columns)))
+            .values({column: target_user_id for column in user_columns})
+        )
+
+
+def _person_affiliation_key(affiliation: PersonAffiliation) -> tuple:
+    return (
+        affiliation.kind,
+        affiliation.academic_year,
+        affiliation.class_id,
+        affiliation.org_id,
+        affiliation.position_id,
+        affiliation.role_key,
+        affiliation.title,
+        affiliation.start_date,
+        affiliation.end_date,
+        affiliation.status,
+        affiliation.source,
+        affiliation.note,
+    )
+
+
+async def _merge_person_profiles(
+    db: AsyncSession,
+    *,
+    target_user: User,
+    source_user: User,
+) -> None:
+    """把兩個 User 對應的人員主檔合併成一筆，保留所有身分歸屬紀錄。"""
+    target_person = await db.scalar(
+        select(Person)
+        .options(selectinload(Person.affiliations))
+        .where(Person.user_id == target_user.id)
+    )
+    source_person = await db.scalar(
+        select(Person)
+        .options(selectinload(Person.affiliations))
+        .where(Person.user_id == source_user.id)
+    )
+    profile_student_ids = {
+        student_id
+        for student_id in (
+            target_user.student_id,
+            source_user.student_id,
+            target_person.student_id if target_person else None,
+            source_person.student_id if source_person else None,
+        )
+        if student_id
+    }
+    if len(profile_student_ids) > 1:
+        raise UserRegistrationError(422, "要合併的人員檔案學號不一致")
+    merged_student_id = next(iter(profile_student_ids), None)
+    if merged_student_id and target_user.student_id is None:
+        target_user.student_id = merged_student_id
+    if target_person is None and target_user.student_id:
+        target_person = await db.scalar(
+            select(Person)
+            .options(selectinload(Person.affiliations))
+            .where(Person.student_id == target_user.student_id)
+        )
+        if target_person is not None:
+            if target_person.user_id not in (None, target_user.id):
+                raise UserRegistrationError(409, "學號已連結其他人員主檔")
+            target_person.user_id = target_user.id
+
+    if target_person is None and source_person is not None:
+        source_person.user_id = target_user.id
+        target_person = source_person
+        source_person = None
+
+    if target_person is None:
+        return
+
+    if (
+        source_person is not None
+        and source_person is not target_person
+        and source_person.student_id == target_user.student_id
+    ):
+        # people.student_id 也是唯一欄位，先釋放次要檔案的值再套用到主要檔案。
+        source_person.student_id = None
+        await db.flush()
+
+    target_person.student_id = merged_student_id
+    target_person.email = target_person.email or target_user.email
+    target_person.display_name = target_person.display_name or target_user.display_name
+    if target_person.status == "inactive" and source_user.is_active:
+        target_person.status = "active"
+
+    if source_person is None or source_person is target_person:
+        await db.flush()
+        await person_svc.sync_pending_affiliations_for_person(db, target_person)
+        return
+
+    target_keys = {_person_affiliation_key(item) for item in target_person.affiliations}
+    for affiliation in source_person.affiliations:
+        if _person_affiliation_key(affiliation) in target_keys:
+            await db.delete(affiliation)
+        else:
+            affiliation.person_id = target_person.id
+            target_keys.add(_person_affiliation_key(affiliation))
+
+    if not target_person.legal_name and source_person.legal_name:
+        target_person.legal_name = source_person.legal_name
+    if not target_person.note and source_person.note:
+        target_person.note = source_person.note
+    await db.delete(source_person)
+    await db.flush()
+    await person_svc.sync_pending_affiliations_for_person(db, target_person)
+
+
+async def _merge_class_records(
+    db: AsyncSession,
+    *,
+    target_user: User,
+    source_user: User,
+) -> None:
+    """合併班級名冊、手動成員與幹部設定。"""
+    target_roster = list(
+        (
+            await db.scalars(
+                select(ClassRosterEntry).where(ClassRosterEntry.user_id == target_user.id)
+            )
+        ).all()
+    )
+    by_class = {row.class_id: row for row in target_roster}
+    by_seat = {(row.class_id, row.seat_number): row for row in target_roster}
+    source_roster = list(
+        (
+            await db.scalars(
+                select(ClassRosterEntry).where(ClassRosterEntry.user_id == source_user.id)
+            )
+        ).all()
+    )
+    for row in source_roster:
+        class_row = by_class.get(row.class_id)
+        seat_row = by_seat.get((row.class_id, row.seat_number))
+        if class_row is not None and class_row.student_id != row.student_id:
+            raise UserRegistrationError(409, "兩個帳戶的班級名冊資料互相衝突，請先整理名冊")
+        if (
+            class_row is None
+            and seat_row is not None
+            and seat_row.id != row.id
+            and seat_row.student_id != row.student_id
+        ):
+            raise UserRegistrationError(409, "兩個帳戶的班級座號資料互相衝突，請先整理名冊")
+
+    for model in (ClassCadre, ClassManualMember):
+        target_class_ids = set(
+            (await db.scalars(select(model.class_id).where(model.user_id == target_user.id))).all()
+        )
+        source_rows = list(
+            (await db.scalars(select(model).where(model.user_id == source_user.id))).all()
+        )
+        for row in source_rows:
+            if row.class_id in target_class_ids:
+                await db.delete(row)
+            else:
+                row.user_id = target_user.id
+                target_class_ids.add(row.class_id)
+
+    target_memberships = list(
+        (
+            await db.scalars(
+                select(ClassMembership).where(ClassMembership.user_id == target_user.id)
+            )
+        ).all()
+    )
+    membership_keys = {
+        (row.class_id, row.academic_year, row.status, row.start_date, row.end_date)
+        for row in target_memberships
+    }
+    source_memberships = list(
+        (
+            await db.scalars(
+                select(ClassMembership).where(ClassMembership.user_id == source_user.id)
+            )
+        ).all()
+    )
+    for row in source_memberships:
+        key = (row.class_id, row.academic_year, row.status, row.start_date, row.end_date)
+        if key in membership_keys:
+            await db.delete(row)
+        else:
+            row.user_id = target_user.id
+            membership_keys.add(key)
+
+    for row in source_roster:
+        class_row = by_class.get(row.class_id)
+        seat_row = by_seat.get((row.class_id, row.seat_number))
+        if class_row is not None:
+            if class_row.student_id != row.student_id:
+                raise UserRegistrationError(409, "兩個帳戶的班級名冊資料互相衝突，請先整理名冊")
+            await db.delete(row)
+            continue
+        if seat_row is not None and seat_row.id != row.id:
+            if seat_row.student_id != row.student_id:
+                raise UserRegistrationError(409, "兩個帳戶的班級座號資料互相衝突，請先整理名冊")
+            await db.delete(row)
+            continue
+        row.user_id = target_user.id
+        by_class[row.class_id] = row
+        by_seat[(row.class_id, row.seat_number)] = row
+    await db.flush()
 
 
 def student_id_from_school_email(email: str) -> str | None:
@@ -251,14 +652,27 @@ async def link_user_emails(
     )
     if other_user_ids and not merge_existing_accounts:
         raise UserRegistrationError(409, "其中一個 Email 已連結其他帳號")
+    other_users: list[User] = []
+    candidate_student_id = user.student_id or parsed_student_id
     if merge_existing_accounts:
         for other_user_id in other_user_ids:
             other_user = await db.get(User, other_user_id)
-            if other_user is not None:
-                await _merge_login_identities(db, user=user, other_user=other_user, actor=actor)
+            if other_user is None:
+                continue
+            if (
+                candidate_student_id
+                and other_user.student_id
+                and candidate_student_id != other_user.student_id
+            ):
+                raise UserRegistrationError(422, "要合併的帳戶學號不一致")
+            candidate_student_id = candidate_student_id or other_user.student_id
+            other_users.append(other_user)
 
-    if parsed_student_id and not user.student_id:
-        user.student_id = parsed_student_id
+    if candidate_student_id and not user.student_id:
+        user.student_id = candidate_student_id
+
+    for other_user in other_users:
+        await merge_user_accounts(db, user=user, source_user=other_user, actor=actor)
 
     existing_emails = set(
         (
@@ -304,13 +718,39 @@ async def _merge_login_identities(
     other_user: User,
     actor: User,
 ) -> None:
-    """將已先登入建立的帳號歸戶到管理員指定的主要帳號。
-
-    保留原 User 及其業務資料，只移動登入 identities，並封存原 User，避免刪除歷史外鍵
-    資料；原本的 Google sub 若尚未寫入 UserIdentity，也會轉成 identity 保存。
-    """
+    """將次要帳戶的登入身分、設定、權限與所有歷史資料歸戶。"""
     if other_user.id == user.id:
         return
+
+    source_student_id = other_user.student_id
+    if user.student_id and source_student_id and user.student_id != source_student_id:
+        raise UserRegistrationError(422, "要合併的帳戶學號不一致")
+    if source_student_id and not user.student_id:
+        user.student_id = source_student_id
+    if source_student_id == user.student_id:
+        # users.student_id 是唯一欄位，先釋放次要帳戶的值才能把校務學號
+        # 套用到主要帳戶；Person 檔案仍保留原始學號快照。
+        other_user.student_id = None
+    await _preflight_user_record_reparenting(
+        db,
+        target_user_id=user.id,
+        source_user_id=other_user.id,
+    )
+
+    await _merge_class_records(db, target_user=user, source_user=other_user)
+
+    if other_user.notification_preferences:
+        user.notification_preferences = {
+            **other_user.notification_preferences,
+            **(user.notification_preferences or {}),
+        }
+    if user.ui_theme == "auto" and other_user.ui_theme != "auto":
+        user.ui_theme = other_user.ui_theme
+    if user.ui_locale == "zh-TW" and other_user.ui_locale != "zh-TW":
+        user.ui_locale = other_user.ui_locale
+    user.is_verified = user.is_verified or other_user.is_verified
+    if user.avatar_url is None:
+        user.avatar_url = other_user.avatar_url
 
     identities = list(
         (await db.scalars(select(UserIdentity).where(UserIdentity.user_id == other_user.id))).all()
@@ -354,16 +794,41 @@ async def _merge_login_identities(
             existing_keys.add(google_key)
             other_user.google_sub = None
 
+    await _reparent_user_records(
+        db,
+        target_user_id=user.id,
+        source_user_id=other_user.id,
+    )
+    await _merge_person_profiles(db, target_user=user, source_user=other_user)
     other_user.email = f"merged-{other_user.id}@deleted.local"
     other_user.is_active = False
     await db.flush()
+    await cache_invalidate_user_permissions(str(user.id))
+    await cache_invalidate_user_permissions(str(other_user.id))
+    await enqueue_role_sync(db, user.id)
     await audit_svc.record(
         db,
         entity_type="user",
         entity_id=str(user.id),
-        action="user.login_identity_merge",
+        action="user.account_merge",
         actor_id=str(actor.id),
         actor_email=actor.email,
-        meta={"merged_user_id": str(other_user.id)},
-        summary=f"將已登入帳號「{other_user.display_name}」歸戶至「{user.display_name}」",
+        meta={
+            "merged_user_id": str(other_user.id),
+            "student_id": user.student_id,
+            "scope": "identities_and_user_records",
+        },
+        summary=f"將帳號「{other_user.display_name}」的身分與歷史資料歸戶至「{user.display_name}」",
     )
+
+
+async def merge_user_accounts(
+    db: AsyncSession,
+    *,
+    user: User,
+    source_user: User,
+    actor: User,
+) -> User:
+    """公開的管理員帳戶合併入口；user 是保留的主要帳戶。"""
+    await _merge_login_identities(db, user=user, other_user=source_user, actor=actor)
+    return user
