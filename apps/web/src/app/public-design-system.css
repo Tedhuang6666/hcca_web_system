@@ -205,6 +205,16 @@
 }
 
 @media (max-width: 767px) {
+  .public-hero-copy {
+    max-width: 40rem;
+    margin-inline: auto;
+    text-align: center;
+  }
+
+  .public-hero-subtitle {
+    margin-inline: auto;
+  }
+
   .public-signboard.public-identity-panel {
     width: min(82vw, 20rem);
     justify-self: center;
