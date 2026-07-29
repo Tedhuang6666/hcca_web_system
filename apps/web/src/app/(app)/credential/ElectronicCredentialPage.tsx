@@ -2,11 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
+import Link from "next/link";
 import {
   BadgeCheck,
   ChevronRight,
   CircleAlert,
-  LockKeyhole,
+  CircleX,
+  Link2,
+  LogIn,
   ShieldCheck,
 } from "lucide-react";
 import BrandEmblem from "@/components/brand/BrandEmblem";
@@ -25,23 +28,77 @@ function CredentialSkeleton() {
   );
 }
 
-function AccessDenied() {
+function CredentialPageIntro({ denied = false }: { denied?: boolean }) {
   return (
-    <div className="credential-page mx-auto max-w-3xl">
-      <div className="credential-denied" role="alert">
-        <div className="credential-denied__icon" aria-hidden="true">
-          <LockKeyhole size={24} />
-        </div>
-        <p className="text-xs font-semibold tracking-[0.18em]" style={{ color: "var(--primary)" }}>
-          ACCESS RESTRICTED
-        </p>
-        <h1 className="mt-3 text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
-          目前沒有可出示的電子證件
-        </h1>
-        <p className="mt-3 max-w-md text-sm leading-6" style={{ color: "var(--text-secondary)" }}>
-          電子證件僅提供校內帳號，或經平台管理者特別授權的個人帳號使用。若你認為自己應有資格，請洽平台管理者確認帳號授權。
+    <header className={`credential-page__intro${denied ? " credential-page__intro--denied" : ""}`}>
+      <div>
+        <p className="credential-page__kicker">PERSONAL PROOF</p>
+        <h1>電子證件</h1>
+        <p>
+          {denied
+            ? "電子證件只提供學校帳號或已連結學校 Email 的帳號使用。"
+            : "前往特約店家兌換時，出示這張證件即可完成身分核驗。"}
         </p>
       </div>
+      <div
+        className={`credential-page__trust${denied ? " credential-page__trust--denied" : ""}`}
+        aria-label={denied ? "需要使用學校帳號" : "電子證件安全說明"}
+      >
+        {denied ? <CircleX size={18} aria-hidden="true" /> : <ShieldCheck size={18} aria-hidden="true" />}
+        <span>{denied ? "需要學校帳號" : "由平台即時確認"}</span>
+      </div>
+    </header>
+  );
+}
+
+function AccessDenied({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="credential-page mx-auto max-w-5xl space-y-7">
+      <CredentialPageIntro denied />
+
+      <section className="credential-denied" role="alert" aria-labelledby="credential-denied-title">
+        <div className="credential-denied__icon" aria-hidden="true">
+          <CircleX size={72} strokeWidth={1.7} />
+        </div>
+        <p className="credential-page__kicker credential-denied__kicker">ACCESS UNAVAILABLE</p>
+        <h2 id="credential-denied-title">這個帳號目前無法顯示電子證件</h2>
+        <p className="credential-denied__message">
+          請使用學校帳號登入，或將目前帳號與學校 Email 連結；完成後再重新確認帳號資格。
+        </p>
+
+        <div className="credential-denied__guidance" aria-label="可用的處理方式">
+          <div>
+            <LogIn size={20} aria-hidden="true" />
+            <div>
+              <strong>使用學校帳號登入</strong>
+              <span>以學校核發的 Email 登入平台。</span>
+            </div>
+          </div>
+          <div>
+            <Link2 size={20} aria-hidden="true" />
+            <div>
+              <strong>將學校 Email 連結至目前帳號</strong>
+              <span>到帳號設定完成 Email 驗證後即可使用。</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="credential-denied__actions">
+          <Link href="/login?next=%2Fcredential" className="btn btn-primary">
+            使用學校帳號登入
+          </Link>
+          <Link href="/settings/account" className="btn btn-secondary">
+            前往帳號設定
+          </Link>
+          <button type="button" className="btn btn-ghost" onClick={onRetry}>
+            重新確認
+          </button>
+        </div>
+      </section>
+
+      <p className="credential-note">
+        若你已完成學校 Email 連結但仍無法使用，請先重新確認；仍有問題時再洽平台管理者。
+      </p>
     </div>
   );
 }
@@ -161,21 +218,11 @@ export default function ElectronicCredentialPage() {
   }, []);
 
   if (loading) return <CredentialSkeleton />;
-  if (error?.status === 403) return <AccessDenied />;
+  if (error?.status === 403) return <AccessDenied onRetry={() => void loadCredential()} />;
 
   return (
     <div className="credential-page mx-auto max-w-5xl space-y-7">
-      <header className="credential-page__intro">
-        <div>
-          <p className="credential-page__kicker">PERSONAL PROOF</p>
-          <h1>電子證件</h1>
-          <p>前往特約店家兌換時，出示這張證件即可完成身分核驗。</p>
-        </div>
-        <div className="credential-page__trust" aria-label="電子證件安全說明">
-          <ShieldCheck size={18} aria-hidden="true" />
-          <span>由平台即時確認</span>
-        </div>
-      </header>
+      <CredentialPageIntro />
 
       {error ? (
         <section className="credential-error" role="alert">
