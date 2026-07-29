@@ -217,7 +217,7 @@ export default function PartnerApplicationsAdminPage() {
                   <label className="space-y-1 text-xs"><span style={{ color: "var(--text-secondary)" }}>提示文字</span><input className="input w-full" placeholder="選填" value={field.placeholder ?? ""} onChange={(event) => updateField(index, { placeholder: event.target.value || null })} /></label>
                   <label className="space-y-1 text-xs"><span style={{ color: "var(--text-secondary)" }}>填寫說明</span><input className="input w-full" placeholder="選填" value={field.help_text ?? ""} onChange={(event) => updateField(index, { help_text: event.target.value || null })} /></label>
                 </div>
-                {field.field_type === "select" ? <label className="mt-3 block space-y-1 text-xs"><span style={{ color: "var(--text-secondary)" }}>下拉選項（用逗號分隔）</span><input className="input w-full" value={field.options.join(", ")} onChange={(event) => updateField(index, { options: event.target.value.split(",").map((option) => option.trim()).filter(Boolean) })} /></label> : null}
+                {field.field_type === "select" ? <label className="mt-3 block space-y-1 text-xs"><span style={{ color: "var(--text-secondary)" }}>下拉選項（用逗號分隔）</span><input className="input w-full" value={field.options?.join(", ") ?? ""} onChange={(event) => updateField(index, { options: event.target.value.split(",").map((option) => option.trim()).filter(Boolean) })} /></label> : null}
                 <label className="mt-3 inline-flex min-h-11 items-center gap-2 text-xs" style={{ color: "var(--text-secondary)" }}><input type="checkbox" checked={field.required} onChange={(event) => updateField(index, { required: event.target.checked })} />必填欄位</label>
               </div>
             ))}

@@ -33,7 +33,7 @@ function FieldControl({
     return (
       <select {...commonProps} className="input w-full">
         <option value="">請選擇</option>
-        {field.options.map((option) => <option key={option} value={option}>{option}</option>)}
+        {(field.options ?? []).map((option) => <option key={option} value={option}>{option}</option>)}
       </select>
     );
   }
