@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.clock import local_today
 from api.dependencies.auth import get_current_active_user
 from api.main import app
+from api.models.council_proposal import CouncilProposal
 from api.models.org import Org, Permission, Position, UserPosition
 from api.models.person import (
     Person,
@@ -21,6 +22,7 @@ from api.models.person import (
     PersonAffiliationSource,
     PersonAffiliationStatus,
 )
+from api.models.school_class import ClassCadre, ClassMembership, SchoolClass
 from api.models.user import User
 from api.models.user_identity import UserIdentity
 from api.routers import auth as auth_router
@@ -501,6 +503,121 @@ async def test_admin_can_merge_previously_logged_in_secondary_account(
         user_agent="pytest",
     )
     assert logged_in.id == member.id
+
+
+@pytest.mark.asyncio
+async def test_admin_account_merge_reparents_profile_roles_classes_and_history(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin, member, org, _, _ = await _seed_admin_data(db_session)
+    school_student_id = "112040106"
+    source = User(
+        email="school-account@gmail.com",
+        display_name="校務帳號姓名",
+        student_id=school_student_id,
+        is_active=True,
+        is_verified=True,
+    )
+    db_session.add(source)
+    await db_session.flush()
+
+    source_position = Position(org_id=org.id, name="校務職位")
+    db_session.add(source_position)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            Permission(position_id=source_position.id, code="finance:view"),
+            UserPosition(
+                user_id=source.id,
+                position_id=source_position.id,
+                start_date=local_today(),
+            ),
+            Person(
+                user_id=member.id,
+                display_name="平台檔案",
+                email=member.email,
+            ),
+            Person(
+                user_id=source.id,
+                student_id=school_student_id,
+                display_name=source.display_name,
+                legal_name="校務正式姓名",
+                email=source.email,
+            ),
+        ]
+    )
+    school_class = SchoolClass(
+        academic_year=115,
+        class_code="106",
+        grade=1,
+        created_by=admin.id,
+    )
+    db_session.add(school_class)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            ClassMembership(
+                class_id=school_class.id,
+                user_id=source.id,
+                academic_year=115,
+            ),
+            ClassCadre(class_id=school_class.id, user_id=source.id),
+            CouncilProposal(
+                serial_number="CP-MERGE-001",
+                submitter_id=source.id,
+                contact_email=source.email,
+                proposer_name=source.display_name,
+                title="合併前的歷史投稿",
+                summary="測試摘要",
+                proposal_text="測試內容",
+                rationale="測試理由",
+            ),
+        ]
+    )
+    await db_session.flush()
+    _override_user(admin)
+
+    response = await client.post(
+        f"/admin/users/{member.id}/merge",
+        json={"source_user_id": str(source.id)},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["student_id"] == school_student_id
+    assert "finance:view" in payload["effective_permissions"]
+    assert any(position["id"] == str(source_position.id) for position in payload["positions"])
+
+    await db_session.refresh(source)
+    assert source.is_active is False
+    assert source.email.endswith("@deleted.local")
+    assert (
+        await db_session.scalar(
+            select(CouncilProposal.submitter_id).where(
+                CouncilProposal.serial_number == "CP-MERGE-001"
+            )
+        )
+        == member.id
+    )
+    assert (
+        await db_session.scalar(
+            select(ClassMembership.user_id).where(ClassMembership.class_id == school_class.id)
+        )
+        == member.id
+    )
+    assert (
+        await db_session.scalar(
+            select(ClassCadre.user_id).where(ClassCadre.class_id == school_class.id)
+        )
+        == member.id
+    )
+    people = (
+        await db_session.scalars(select(Person).where(Person.student_id == school_student_id))
+    ).all()
+    assert len(people) == 1
+    assert people[0].user_id == member.id
+    assert people[0].legal_name == "校務正式姓名"
 
 
 @pytest.mark.asyncio

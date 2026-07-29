@@ -646,7 +646,7 @@ function DetailPanel({
     return <PositionPanel position={selectedPosition} positions={positions} users={users} permCodes={permCodes} onRefresh={onRefresh} onSelect={onSelect} onConfirm={onConfirm} />;
   }
   if (detail?.type === "user" && selectedUser) {
-    return <UserPanel user={selectedUser} positions={positions} classes={classes} permCodes={permCodes} onRefresh={onRefresh} onConfirm={onConfirm} />;
+    return <UserPanel user={selectedUser} users={users} positions={positions} classes={classes} permCodes={permCodes} onRefresh={onRefresh} onConfirm={onConfirm} />;
   }
   if (selectedOrg) {
     return <OrgPanel org={selectedOrg} orgs={orgs} positions={positions} users={users} permCodes={permCodes} onRefresh={onRefresh} onConfirm={onConfirm} metrics={metrics} />;
@@ -1045,9 +1045,10 @@ function AssignmentRow({
 }
 
 function UserPanel({
-  user, positions, classes, permCodes, onRefresh, onConfirm,
+  user, users, positions, classes, permCodes, onRefresh, onConfirm,
 }: {
   user: AdminUserDetail;
+  users: AdminUserDetail[];
   positions: PositionSummary[];
   classes: SchoolClassListItem[];
   permCodes: PermissionCodeInfo[];
@@ -1058,6 +1059,7 @@ function UserPanel({
   const [classId, setClassId] = useState("");
   const [asCadre, setAsCadre] = useState(false);
   const [emailAlias, setEmailAlias] = useState("");
+  const [mergeSourceId, setMergeSourceId] = useState("");
   const [start, setStart] = useState(today());
   const [end, setEnd] = useState("");
   const available = uniquePositionsById(positions)
@@ -1104,6 +1106,15 @@ function UserPanel({
     body: `確定清除「${user.display_name}」的 TOTP 2FA 設定？使用者下次登入後可重新註冊；既有 Passkey 不受影響。`,
     action: () => adminApi.clearUserMfa(user.id),
   });
+  const mergeSource = users.find((candidate) => candidate.id === mergeSourceId);
+  const mergeAccount = () => {
+    if (!mergeSource) return;
+    onConfirm({
+      title: "合併帳戶並歸戶歷史資料",
+      body: `確定將「${mergeSource.display_name}」合併到「${user.display_name}」？登入身分、權限職位、班級設定、人員檔案及所有歷史資料都會改以主要帳戶呈現，次要帳戶會停用。此操作不可逆。`,
+      action: () => adminApi.mergeUserAccounts(user.id, mergeSource.id),
+    });
+  };
   return (
     <div className="w-full p-5 space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -1164,6 +1175,31 @@ function UserPanel({
           />
           <SmallButton onClick={addEmailAlias} tone="primary" disabled={!emailAlias.trim()}>
             連結 Email
+          </SmallButton>
+        </div>
+      </section>
+      <section className="rounded-xl p-4 space-y-3" style={{ border: "1px solid rgba(245,158,11,0.35)" }}>
+        <div>
+          <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+            合併另一個帳戶
+          </h3>
+          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+            適用於同一人曾用不同 Google 帳號登入的情況；會把所有登入身分與歷史資料歸到目前帳戶。
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
+          <SelectInput value={mergeSourceId} onChange={(event) => setMergeSourceId(event.target.value)}>
+            <option value="">選擇要合併的帳戶</option>
+            {users
+              .filter((candidate) => candidate.id !== user.id && candidate.is_active)
+              .map((candidate) => (
+                <option key={candidate.id} value={candidate.id}>
+                  {candidate.display_name} · {candidate.student_id ?? candidate.email}
+                </option>
+              ))}
+          </SelectInput>
+          <SmallButton onClick={mergeAccount} tone="warning" disabled={!mergeSource}>
+            合併並歸戶
           </SmallButton>
         </div>
       </section>

@@ -17,6 +17,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -131,6 +132,10 @@ class UserBatchPreRegisterResult(BaseModel):
 
 class LinkUserEmailsRequest(BaseModel):
     emails: list[str] = Field(..., min_length=1, max_length=10)
+
+
+class MergeUserAccountsRequest(BaseModel):
+    source_user_id: uuid.UUID = Field(..., description="要被歸戶的次要帳戶 ID")
 
 
 class AssignPositionsRequest(BaseModel):
@@ -517,8 +522,51 @@ async def link_user_emails(
             merge_existing_accounts=True,
         )
     except UserRegistrationError as exc:
+        await db.rollback()
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="帳戶合併遇到資料一致性衝突，未套用任何變更",
+        ) from exc
     return await _enrich_user(db, user)
+
+
+@router.post(
+    "/users/{user_id}/merge",
+    response_model=UserDetail,
+    summary="將另一個帳戶的身分與歷史資料歸戶",
+)
+async def merge_user_accounts(
+    user_id: uuid.UUID,
+    body: MergeUserAccountsRequest,
+    db: DbDep,
+    admin_user: AdminUser,
+) -> UserDetail:
+    if user_id == body.source_user_id:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="不可合併自己")
+    target_user = await db.get(User, user_id)
+    source_user = await db.get(User, body.source_user_id)
+    if target_user is None or source_user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到要合併的帳戶")
+    try:
+        await user_registration_svc.merge_user_accounts(
+            db,
+            user=target_user,
+            source_user=source_user,
+            actor=admin_user,
+        )
+    except UserRegistrationError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="帳戶合併遇到資料一致性衝突，未套用任何變更",
+        ) from exc
+    return await _enrich_user(db, target_user)
 
 
 @router.patch(

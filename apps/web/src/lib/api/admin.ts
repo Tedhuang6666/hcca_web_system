@@ -31,6 +31,8 @@ export const adminApi = {
   }) => post<UserBatchPreRegisterResult>("/admin/users/pre-register/batch", body),
   linkUserEmails: (id: string, emails: string[]) =>
     post<AdminUserDetail>(`/admin/users/${id}/emails`, { emails }),
+  mergeUserAccounts: (id: string, sourceUserId: string) =>
+    post<AdminUserDetail>(`/admin/users/${id}/merge`, { source_user_id: sourceUserId }),
   updateUser: (id: string, body: {
     display_name?: string;
     is_active?: boolean;
