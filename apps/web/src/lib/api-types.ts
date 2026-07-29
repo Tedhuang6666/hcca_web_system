@@ -12537,6 +12537,23 @@ export interface paths {
         patch: operations["update_variant_option_shop_variant_options__option_id__patch"];
         trace?: never;
     };
+    "/site/admin/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 上傳公開官網參考文件，回傳可直接填入公開頁附件的 URL */
+        post: operations["admin_upload_public_file_site_admin_files_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/site/admin/images": {
         parameters: {
             query?: never;
@@ -15517,6 +15534,11 @@ export interface components {
         };
         /** Body_admin_upload_menu_recommended_vendors_admin_vendors__vendor_id__menus_upload_post */
         Body_admin_upload_menu_recommended_vendors_admin_vendors__vendor_id__menus_upload_post: {
+            /** File */
+            file: string;
+        };
+        /** Body_admin_upload_public_file_site_admin_files_post */
+        Body_admin_upload_public_file_site_admin_files_post: {
             /** File */
             file: string;
         };
@@ -33456,6 +33478,17 @@ export interface components {
         };
         /** UploadedImageOut */
         UploadedImageOut: {
+            /** Content Type */
+            content_type: string;
+            /** File Size */
+            file_size: number;
+            /** Filename */
+            filename: string;
+            /** Url */
+            url: string;
+        };
+        /** UploadedPublicFileOut */
+        UploadedPublicFileOut: {
             /** Content Type */
             content_type: string;
             /** File Size */
@@ -63969,6 +64002,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProductVariantOptionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_upload_public_file_site_admin_files_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_admin_upload_public_file_site_admin_files_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadedPublicFileOut"];
                 };
             };
             /** @description Validation Error */
