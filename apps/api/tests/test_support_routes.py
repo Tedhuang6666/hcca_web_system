@@ -7,16 +7,18 @@ from httpx import AsyncClient
 
 from api.dependencies.auth import get_current_active_user
 from api.main import app
+from api.models.user import User
 from api.services.support import (
     create_support_impersonation_token,
     mask_email,
     mask_identifier,
     mask_name,
+    user_summary,
 )
 
 
 @pytest.mark.asyncio
-async def test_support_user_search_masks_personal_data(
+async def test_support_superuser_user_search_returns_full_personal_data(
     client: AsyncClient,
     admin_user,
     make_user,
@@ -35,9 +37,24 @@ async def test_support_user_search_masks_personal_data(
 
     assert response.status_code == 200, response.text
     item = next(row for row in response.json() if row["id"] == str(target.id))
-    assert item["email"] == mask_email(target.email)
-    assert item["student_id"] == mask_identifier(target.student_id, visible_end=2)
-    assert item["email"] != target.email
+    assert item["display_name"] == target.display_name
+    assert item["email"] == target.email
+    assert item["student_id"] == target.student_id
+    assert item["masked_email"] == mask_email(target.email)
+
+
+def test_support_user_summary_masks_without_sensitive_access() -> None:
+    user = User(
+        email="student-number-1234@school.edu",
+        display_name="王小明",
+        student_id="B12345678",
+    )
+
+    summary = user_summary(user)
+
+    assert summary["display_name"] == mask_name(user.display_name)
+    assert summary["email"] == mask_email(user.email)
+    assert summary["student_id"] == mask_identifier(user.student_id, visible_end=2)
 
 
 @pytest.mark.asyncio

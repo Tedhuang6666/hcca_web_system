@@ -7,12 +7,14 @@ import {
   BookUser,
   ClipboardList,
   Database,
+  Headset,
   Puzzle,
   Settings,
   Shield,
   SlidersHorizontal,
   UserCog,
   Users,
+  type LucideIcon,
 } from "lucide-react";
 import { adminApi, auditLogsApi, systemApi, type ModuleStatus } from "@/lib/api";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -89,8 +91,19 @@ function entityLabel(type: string) {
 
 /* ── 快速操作定義 ─────────────────────────────────────────────────────────── */
 
-const QUICK_ACTIONS = [
+type QuickAction = {
+  href: string;
+  icon: LucideIcon;
+  label: string;
+  desc: string;
+  requiredPermission?: string;
+  requiredPermissions?: string[];
+};
+
+const QUICK_ACTIONS: QuickAction[] = [
   { href: "/admin/people",       icon: Users,      label: "人員管理",   desc: "新增、搜尋與管理人員身分" },
+  { href: "/admin/users",        icon: Users,      label: "帳號維護",   desc: "帳號狀態、連結 Email 與 MFA 管理", requiredPermission: "admin:users" },
+  { href: "/admin/support",      icon: Headset,    label: "客服作業平台", desc: "搜尋使用者、處理工單與問題排查", requiredPermissions: ["support.users.read", "support.tickets.read"] },
   { href: "/admin/permissions",  icon: BookUser,   label: "權限管理",   desc: "組織職位與使用者權限指派" },
   { href: "/admin/classes",      icon: Users,      label: "班級管理",   desc: "班級名冊、幹部與學年度設定" },
   { href: "/admin/system",       icon: Shield,     label: "系統防護",   desc: "維護模式、限流與封鎖規則" },
@@ -108,6 +121,7 @@ const ADMIN_CACHE_KEY = "admin/dashboard";
 
 export default function AdminDashboardPage() {
   const { isAdmin, can } = usePermissions();
+  const canAccessAdmin = isAdmin || can("admin:users") || can("support.users.read") || can("support.tickets.read");
 
   const [userCount, setUserCount] = useState<number | null>(() => cacheGet<number>(ADMIN_CACHE_KEY + "/userCount") ?? null);
   const [downModules, setDownModules] = useState<number | null>(() => cacheGet<number>(ADMIN_CACHE_KEY + "/downModules") ?? null);
@@ -117,7 +131,7 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(!cacheHas(ADMIN_CACHE_KEY + "/userCount"));
 
   useEffect(() => {
-    if (!isAdmin && !can("admin:users")) return;
+    if (!canAccessAdmin) return;
     Promise.allSettled([
       adminApi.listUsers({ active_only: true }),
       systemApi.listModules(),
@@ -145,9 +159,9 @@ export default function AdminDashboardPage() {
       if (status.status === "fulfilled") setMaintenance(status.value.maintenance);
       setLoading(false);
     });
-  }, [isAdmin, can]);
+  }, [canAccessAdmin, can]);
 
-  if (!isAdmin && !can("admin:users")) {
+  if (!canAccessAdmin) {
     return (
       <div className="p-6 text-center" style={{ color: "var(--text-muted)" }}>
         您沒有存取管理後台的權限。
@@ -230,7 +244,12 @@ export default function AdminDashboardPage() {
           快速操作
         </h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
-          {QUICK_ACTIONS.filter((action) => !action.requiredPermission || isAdmin || can(action.requiredPermission)).map((action) => {
+          {QUICK_ACTIONS.filter((action) => {
+            if (isAdmin) return true;
+            if (action.requiredPermission) return can(action.requiredPermission);
+            if (action.requiredPermissions) return action.requiredPermissions.some(can);
+            return true;
+          }).map((action) => {
             const Icon = action.icon;
             return (
               <Link key={action.href} href={action.href} style={{ textDecoration: "none" }}>
