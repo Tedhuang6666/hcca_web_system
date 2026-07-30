@@ -1,6 +1,7 @@
 import { API_BASE, apiUrl } from "../config";
 import { ApiError } from "../api-helpers";
 import { clearAuthCache, clearImpersonationSession, getImpersonationSession } from "../auth-cache";
+import { reportClientError } from "../client-error-reporter";
 
 export { ApiError };
 
@@ -201,10 +202,12 @@ export async function request<T>(
 
   // 離線：直接快速失敗，不浪費一輪 fetch（由呼叫端/輪詢退避處理）
   if (isOffline()) {
+    reportClientError({ scope: "api.offline", message: `離線狀態：${path}` });
     throw new ApiError(0, "目前處於離線狀態");
   }
   // 熔斷開斷中：同一端點剛連續失敗過，60 秒內不再嘗試
   if (circuitOpen(cKey)) {
+    reportClientError({ scope: "api.circuit-open", message: `熔斷：${path}` });
     throw new ApiError(0, "暫時無法連線至後端（熔斷中），請稍候再試");
   }
 
@@ -234,6 +237,11 @@ export async function request<T>(
       lastError = err;
       if (attempt >= maxRetries) {
         recordHardFailure(cKey);
+        reportClientError({
+          scope: "api.network",
+          message: lastError instanceof Error ? lastError.message : `無法連線：${path}`,
+          stack: lastError instanceof Error ? lastError.stack : undefined,
+        });
         throw new ApiError(0, `無法連線至後端 API：${BASE}`);
       }
       await new Promise((r) => setTimeout(r, RETRY_BACKOFF_MS[attempt] ?? 1500));
@@ -261,6 +269,7 @@ export async function request<T>(
       try {
         retry = await fetch(`${BASE}${path}`, fetchInit());
       } catch {
+        reportClientError({ scope: "api.refresh-network", message: `刷新後重試失敗：${path}` });
         throw new ApiError(0, `無法連線至後端 API：${BASE}`);
       }
       if (retry.ok) {

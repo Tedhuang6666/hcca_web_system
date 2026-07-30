@@ -4,6 +4,7 @@ import { useModuleStatus } from "@/contexts/ModuleStatusContext";
 import ModuleMaintenance from "@/components/ui/ModuleMaintenance";
 import RouteError from "@/components/ui/RouteError";
 import type { ModuleId } from "@/lib/modules";
+import { reportClientError } from "@/lib/client-error-reporter";
 
 interface ModuleBoundaryProps {
   /** 模組 ID，用於查 ModuleStatusContext 決定是否顯示維護畫面 */
@@ -48,20 +49,12 @@ class ModuleErrorBoundary extends Component<
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error(`[ModuleBoundary:${this.props.scope}]`, error, info);
-    // 上報到後端 error_audit（best-effort，失敗不影響）
-    try {
-      void fetch("/admin/system/errors/client", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          scope: this.props.scope,
-          message: String(error?.message ?? error),
-          stack: String(error?.stack ?? ""),
-        }),
-      }).catch(() => {});
-    } catch {
-      /* swallow */
-    }
+    reportClientError({
+      scope: `module:${this.props.scope}`,
+      message: String(error?.message ?? error),
+      stack: String(error?.stack ?? ""),
+    });
+    void info;
   }
 
   reset = () => this.setState({ error: null });

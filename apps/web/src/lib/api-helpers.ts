@@ -1,3 +1,5 @@
+import { reportClientError } from "./client-error-reporter";
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -22,6 +24,11 @@ export async function withFallback<T>(
   try {
     return await promise;
   } catch (error) {
+    reportClientError({
+      scope: "api.withFallback",
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     onError?.(error);
     return fallback;
   }

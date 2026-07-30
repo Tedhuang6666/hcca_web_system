@@ -83,6 +83,9 @@ class CSRFMiddleware:
             "/internal/discord",
             # 退訂端點以簽章 token 保護，免登入且無 CSRF cookie，故豁免
             "/notifications/unsubscribe",
+            # 匿名瀏覽器錯誤回報不能依賴既有登入 session；端點本身只接收
+            # 有長度限制的診斷資料，並受 rate limit / payload limit 保護。
+            "/system/client-errors",
         ]
 
     def _is_exempt(self, path: str) -> bool:

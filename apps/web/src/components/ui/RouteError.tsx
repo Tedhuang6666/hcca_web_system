@@ -2,6 +2,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
+import { reportClientError } from "@/lib/client-error-reporter";
 
 /**
  * Next.js App Router 共用錯誤邊界元件。
@@ -18,6 +19,11 @@ export default function RouteError({
 }) {
   useEffect(() => {
     console.error(`[${scope}] route error`, error);
+    reportClientError({
+      scope: `route:${scope}`,
+      message: error.message || "Route error",
+      stack: error.stack,
+    });
   }, [error, scope]);
 
   return (

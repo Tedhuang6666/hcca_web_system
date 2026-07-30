@@ -32,7 +32,12 @@ from api.core.anomaly_detection import get_login_ips
 from api.core.config import settings
 from api.core.database import engine, get_db
 from api.core.defense import find_identity_block
-from api.core.error_audit import clear_errors, find_error_by_id, get_recent_errors
+from api.core.error_audit import (
+    clear_errors,
+    find_error_by_id,
+    get_recent_errors,
+    record_client_error,
+)
 from api.core.ip_blocklist import block as ip_block
 from api.core.ip_blocklist import get_block as get_ip_block
 from api.core.ip_blocklist import list_blocked as ip_list_blocked
@@ -1427,10 +1432,44 @@ class RecentErrorsResponse(BaseModel):
     items: list[RecentErrorItem]
 
 
+class ClientErrorReport(BaseModel):
+    """瀏覽器 runtime error 的最小且有長度限制的回報格式。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    scope: str = Field(default="unknown", max_length=100)
+    message: str = Field(min_length=1, max_length=1000)
+    stack: str = Field(default="", max_length=6000)
+    pathname: str = Field(default="", max_length=500)
+
+
+@public_router.post(
+    "/client-errors",
+    response_model=dict,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="接收瀏覽器錯誤回報",
+)
+async def report_client_error(body: ClientErrorReport, request: Request) -> dict[str, str]:
+    """接收匿名前端錯誤；不依賴登入，才能記錄登入頁與公開頁面的崩潰。"""
+    error_id = await record_client_error(
+        message=body.message,
+        stack=body.stack,
+        scope=body.scope,
+        path=body.pathname,
+        request_id=getattr(request.state, "request_id", None),
+        client_ip=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
+    return {
+        "error_id": error_id,
+        "request_id": str(getattr(request.state, "request_id", "")),
+    }
+
+
 @router.get("/errors", response_model=RecentErrorsResponse, summary="近期伺服器錯誤")
 async def recent_errors(_admin: AdminUser, top: int = 50) -> RecentErrorsResponse:
-    """記憶體 ring buffer 中最近的 5xx／未處理例外，依 last_seen 由新到舊。重啟後清空。"""
-    items = get_recent_errors(top=top)
+    """跨 worker 的最近錯誤，依 last_seen 由新到舊。"""
+    items = await get_recent_errors(top=top)
     return RecentErrorsResponse(count=len(items), items=[RecentErrorItem(**i) for i in items])
 
 
@@ -1445,7 +1484,7 @@ async def error_by_id(error_id: str, _admin: AdminUser) -> RecentErrorItem:
 
 @router.post("/errors/clear", response_model=dict, summary="清空錯誤緩衝")
 async def clear_recent_errors(_admin: AdminUser) -> dict:
-    return {"cleared": clear_errors()}
+    return {"cleared": await clear_errors()}
 
 
 # ── 復原工具（清快取 / 升級資料庫 / 重啟） ──────────────────────────────────

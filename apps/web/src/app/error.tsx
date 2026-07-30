@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import Link from "next/link";
 
 import { BRANDING } from "@/lib/branding";
+import { reportClientError } from "@/lib/client-error-reporter";
 
 export default function GlobalError({
   error,
@@ -13,6 +14,11 @@ export default function GlobalError({
 }) {
   useEffect(() => {
     console.error(error);
+    reportClientError({
+      scope: "global.error",
+      message: error.message || "Global error",
+      stack: error.stack,
+    });
   }, [error]);
 
   return (

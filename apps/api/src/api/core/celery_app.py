@@ -379,6 +379,7 @@ def _record_task_failure(
     einfo=None,
     **_kwargs,
 ) -> None:
+    from api.core.error_audit import record_background_error
     from api.core.prometheus_metrics import record_celery_task
 
     payload = _task_payload(
@@ -402,6 +403,13 @@ def _record_task_failure(
             "exception_type": payload.get("exception_type"),
         },
     )
+    if exception is not None:
+        record_background_error(
+            task=payload.get("task") or "unknown",
+            task_id=payload.get("task_id") or task_id,
+            exc=exception,
+            traceback_text=str(traceback or "")[:6000],
+        )
     _push_dead_letter(payload)
 
 
