@@ -20,6 +20,9 @@ x-api-common: &api-common
     DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
     HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
     REDIS_URL: redis://:${REDIS_PASSWORD:-dev-redis-change-in-prod}@redis:6379/0
+    OTEL_ENABLED: ${OTEL_ENABLED:-false}
+    OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+    APP_RELEASE: ${APP_RELEASE:-}
     # Bot secrets belong only to the standalone discord-bot service.
     DISCORD_BOT_TOKEN: ""
     HCCA_DISCORD_BOT_API_KEY: ""
@@ -131,6 +134,10 @@ services:
       SENTRY_DSN: ${SENTRY_DSN:-}
       SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.1}
       SENTRY_PROFILES_SAMPLE_RATE: ${SENTRY_PROFILES_SAMPLE_RATE:-0.0}
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-hcca-api}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+      APP_RELEASE: ${APP_RELEASE:-}
       MEILISEARCH_URL: http://meilisearch:7700
       MEILISEARCH_API_KEY: ${MEILISEARCH_API_KEY:-}
       MEILISEARCH_INDEX_PREFIX: ${MEILISEARCH_INDEX_PREFIX:-hcca}
@@ -173,6 +180,10 @@ services:
       DB_POOL_SIZE: ${ADMIN_DB_POOL_SIZE:-5}
       DB_MAX_OVERFLOW: ${ADMIN_DB_MAX_OVERFLOW:-5}
       REDIS_URL: redis://:${REDIS_PASSWORD:-dev-redis-change-in-prod}@redis:6379/0
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: hcca-api-admin
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+      APP_RELEASE: ${APP_RELEASE:-}
       REDIS_MAX_CONNECTIONS: ${REDIS_MAX_CONNECTIONS:-50}
       TRUST_CLOUDFLARE_PROXY: ${TRUST_CLOUDFLARE_PROXY:-false}
       CF_TRUSTED_PROXIES: ${CF_TRUSTED_PROXIES:-[]}
@@ -219,6 +230,11 @@ services:
       DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
       REDIS_URL: redis://:${REDIS_PASSWORD:-dev-redis-change-in-prod}@redis:6379/0
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: hcca-celery-core
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+      APP_RELEASE: ${APP_RELEASE:-}
+      PROMETHEUS_METRICS_PORT: "9100"
     # 不設 healthcheck：`inspect ping` 每 30s 起重量級 python 行程、等 broker 回覆，
     # 忙時 ping 卡住會堆積吃光 CPU；且 Docker 判 unhealthy 自動重啟反而打掉忙碌 worker。
     # 存活交給 restart: unless-stopped。
@@ -246,6 +262,11 @@ services:
       DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
       REDIS_URL: redis://:${REDIS_PASSWORD:-dev-redis-change-in-prod}@redis:6379/0
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: hcca-celery-email
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+      APP_RELEASE: ${APP_RELEASE:-}
+      PROMETHEUS_METRICS_PORT: "9101"
     # 同 worker：不設 healthcheck，避免 inspect ping 堆積與 unhealthy 自動重啟。
     healthcheck:
       disable: true
@@ -271,6 +292,11 @@ services:
       DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
       REDIS_URL: redis://:${REDIS_PASSWORD:-dev-redis-change-in-prod}@redis:6379/0
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: hcca-celery-util
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+      APP_RELEASE: ${APP_RELEASE:-}
+      PROMETHEUS_METRICS_PORT: "9102"
     # 同 worker：不設 healthcheck，避免 inspect ping 堆積與 unhealthy 自動重啟。
     healthcheck:
       disable: true
@@ -359,6 +385,11 @@ services:
       NODE_ENV: production
       API_INTERNAL_URL: http://api:8000
       NEXT_PUBLIC_POSTHOG_HOST: ${NEXT_PUBLIC_POSTHOG_HOST:-https://us.i.posthog.com}
+      NEXT_PUBLIC_ENVIRONMENT: ${ENVIRONMENT:-production}
+      APP_RELEASE: ${APP_RELEASE:-}
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: ${OTEL_WEB_SERVICE_NAME:-hcca-web}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_WEB_OTLP_ENDPOINT:-http://otel-collector:4318}
     depends_on:
       api:
         condition: service_healthy
@@ -390,8 +421,185 @@ services:
       redis:
         condition: service_healthy
 
+  # ── 可觀測性堆疊（docker compose --profile observability up -d） ────────
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    container_name: campus_prometheus
+    restart: unless-stopped
+    profiles: ["observability"]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-15d}
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheusdata:/prometheus
+    depends_on:
+      alertmanager:
+        condition: service_started
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    container_name: campus_alertmanager
+    restart: unless-stopped
+    profiles: ["observability"]
+    command:
+      - sh
+      - -c
+      - >-
+        sed "s|__ALERTMANAGER_DISCORD_WEBHOOK_URL__|$${ALERTMANAGER_DISCORD_WEBHOOK_URL:-http://127.0.0.1/disabled}|g"
+        /etc/alertmanager/alertmanager.yml.tmpl > /tmp/alertmanager.yml &&
+        exec /bin/alertmanager --config.file=/tmp/alertmanager.yml
+    environment:
+      ALERTMANAGER_DISCORD_WEBHOOK_URL: ${ALERTMANAGER_DISCORD_WEBHOOK_URL:-}
+    ports:
+      - "127.0.0.1:9093:9093"
+    volumes:
+      - ./observability/alertmanager/alertmanager.yml.tmpl:/etc/alertmanager/alertmanager.yml.tmpl:ro
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    container_name: campus_grafana
+    restart: unless-stopped
+    profiles: ["observability"]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-change-me}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "127.0.0.1:3001:3000"
+    volumes:
+      - grafanadata:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+
+  loki:
+    image: grafana/loki:3.5.0
+    container_name: campus_loki
+    restart: unless-stopped
+    profiles: ["observability"]
+    command: -config.file=/etc/loki/loki-config.yml
+    ports:
+      - "127.0.0.1:3100:3100"
+    volumes:
+      - ./observability/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - lokidata:/loki
+
+  promtail:
+    image: grafana/promtail:3.5.0
+    container_name: campus_promtail
+    restart: unless-stopped
+    profiles: ["observability"]
+    command: -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./observability/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - promtailpositions:/tmp
+    depends_on:
+      - loki
+
+  tempo:
+    image: grafana/tempo:2.8.2
+    container_name: campus_tempo
+    restart: unless-stopped
+    profiles: ["observability"]
+    command: -config.file=/etc/tempo/tempo.yml
+    ports:
+      - "127.0.0.1:3200:3200"
+      - "127.0.0.1:4320:4317"
+      - "127.0.0.1:4321:4318"
+    volumes:
+      - ./observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - tempodata:/var/tempo
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.134.0
+    container_name: campus_otel_collector
+    restart: unless-stopped
+    profiles: ["observability"]
+    command: --config=/etc/otelcol-contrib/config.yml
+    ports:
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+      - "127.0.0.1:8889:8889"
+    volumes:
+      - ./observability/otel-collector/config.yml:/etc/otelcol-contrib/config.yml:ro
+    depends_on:
+      - tempo
+
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    container_name: campus_node_exporter
+    restart: unless-stopped
+    profiles: ["observability"]
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/rootfs
+    ports:
+      - "127.0.0.1:9103:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.52.1
+    container_name: campus_cadvisor
+    restart: unless-stopped
+    profiles: ["observability"]
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.17.1
+    container_name: campus_postgres_exporter
+    restart: unless-stopped
+    profiles: ["observability"]
+    environment:
+      DATA_SOURCE_NAME: >-
+        postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-campus_platform}?sslmode=disable
+    ports:
+      - "127.0.0.1:9187:9187"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.75.0
+    container_name: campus_redis_exporter
+    restart: unless-stopped
+    profiles: ["observability"]
+    environment:
+      REDIS_ADDR: redis://redis:6379
+      REDIS_USER: default
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-dev-redis-change-in-prod}
+    ports:
+      - "127.0.0.1:9121:9121"
+    depends_on:
+      redis:
+        condition: service_healthy
+
 volumes:
   pgdata:
   redisdata:
   meilidata:
   celerybeat:
+  prometheusdata:
+  grafanadata:
+  lokidata:
+  promtailpositions:
+  tempodata:

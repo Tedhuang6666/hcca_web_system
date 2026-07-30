@@ -52,11 +52,16 @@ def _scrub(value: Any) -> Any:
 def _before_send(event: Event, _hint: dict[str, Any]) -> Event | None:
     """過濾 request headers / cookies / data 中的敏感欄位。"""
     from api.core.structured_logging import get_request_id
+    from api.core.trace_context import get_trace_id
 
     request_id = get_request_id()
     if request_id:
         event.setdefault("tags", {})["request_id"] = request_id
         event.setdefault("extra", {})["request_id"] = request_id
+    trace_id = get_trace_id()
+    if trace_id:
+        event.setdefault("tags", {})["trace_id"] = trace_id
+        event.setdefault("extra", {})["trace_id"] = trace_id
 
     request = event.get("request")
     if isinstance(request, dict):
@@ -98,7 +103,7 @@ def init_sentry() -> bool:
     sentry_sdk.init(
         dsn=settings.SENTRY_DSN,
         environment=settings.ENVIRONMENT,
-        release=settings.APP_VERSION,
+        release=settings.APP_RELEASE or settings.APP_VERSION,
         traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
         profiles_sample_rate=settings.SENTRY_PROFILES_SAMPLE_RATE,
         send_default_pii=False,

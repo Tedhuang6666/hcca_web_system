@@ -42,6 +42,10 @@ x-api-common: &api-common
     # 沿用 Caddy 的 SITE_DOMAIN，避免 production 預設仍只允許 localhost。
     FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-https://${SITE_DOMAIN:?set SITE_DOMAIN}}
     REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
+    OTEL_ENABLED: ${OTEL_ENABLED:-false}
+    OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-hcca-api}
+    OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+    APP_RELEASE: ${APP_RELEASE:-}
   depends_on:
     db:
       condition: service_healthy
@@ -135,6 +139,10 @@ services:
       DB_POOL_RECYCLE_SECONDS: ${DB_POOL_RECYCLE_SECONDS:-1800}
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
       REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-hcca-api}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+      APP_RELEASE: ${APP_RELEASE:-}
       DB_BACKUP_DIR: ${DB_BACKUP_DIR:-/app/backups}
       GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
       GUNICORN_KEEPALIVE: ${GUNICORN_KEEPALIVE:-5}
@@ -190,6 +198,10 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
       DB_BACKUP_DIR: ${DB_BACKUP_DIR:-/app/backups}
       PROMETHEUS_METRICS_PORT: "9101"
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: hcca-celery-core
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+      APP_RELEASE: ${APP_RELEASE:-}
     # file-based heartbeat：beat 每 60s 寫 /tmp/celery-heartbeat；healthcheck 檢查檔案
     # 存在且不超過 180s，避免 inspect ping 帶起重量級 Python 行程的舊問題。
     healthcheck:
@@ -232,7 +244,11 @@ services:
       HEALTHCHECK_TIMEOUT_SECONDS: ${HEALTHCHECK_TIMEOUT_SECONDS:-2}
       REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
       DB_BACKUP_DIR: ${DB_BACKUP_DIR:-/app/backups}
-      PROMETHEUS_METRICS_PORT: "9101"
+      PROMETHEUS_METRICS_PORT: "9102"
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: hcca-celery-email
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+      APP_RELEASE: ${APP_RELEASE:-}
     # 同 worker：不設 healthcheck，避免 Docker 判 unhealthy 自動重啟把忙碌 worker 打掉。
     healthcheck:
       disable: true
@@ -311,6 +327,11 @@ services:
       API_INTERNAL_URL: http://api:8000
       NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://hcca.tw}
       NEXT_PUBLIC_POSTHOG_HOST: ${NEXT_PUBLIC_POSTHOG_HOST:-https://us.i.posthog.com}
+      NEXT_PUBLIC_ENVIRONMENT: production
+      APP_RELEASE: ${APP_RELEASE:-}
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_SERVICE_NAME: ${OTEL_WEB_SERVICE_NAME:-hcca-web}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_WEB_OTLP_ENDPOINT:-http://otel-collector:4318}
     depends_on:
       api:
         condition: service_healthy
@@ -409,6 +430,7 @@ services:
     volumes:
       - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./infra/prometheus/rules:/etc/prometheus/rules:ro
+      - ./observability/prometheus/rules:/etc/prometheus/observability-rules:ro
       - prometheusdata:/prometheus
     depends_on:
       api:
@@ -431,6 +453,99 @@ services:
       - grafanadata:/var/lib/grafana
     depends_on:
       - prometheus
+      - loki
+      - tempo
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    restart: unless-stopped
+    profiles: ["monitoring"]
+    logging: *default-logging
+    command:
+      - sh
+      - -c
+      - >-
+        sed "s|__ALERTMANAGER_DISCORD_WEBHOOK_URL__|$${ALERTMANAGER_DISCORD_WEBHOOK_URL:-http://127.0.0.1/disabled}|g"
+        /etc/alertmanager/alertmanager.yml.tmpl > /tmp/alertmanager.yml &&
+        exec /bin/alertmanager --config.file=/tmp/alertmanager.yml
+    environment:
+      ALERTMANAGER_DISCORD_WEBHOOK_URL: ${ALERTMANAGER_DISCORD_WEBHOOK_URL:-}
+    volumes:
+      - ./observability/alertmanager/alertmanager.yml.tmpl:/etc/alertmanager/alertmanager.yml.tmpl:ro
+
+  loki:
+    image: grafana/loki:3.5.0
+    restart: unless-stopped
+    profiles: ["monitoring"]
+    logging: *default-logging
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./observability/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - lokidata:/loki
+
+  promtail:
+    image: grafana/promtail:3.5.0
+    restart: unless-stopped
+    profiles: ["monitoring"]
+    logging: *default-logging
+    command: -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./observability/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - promtailpositions:/tmp
+    depends_on:
+      - loki
+
+  tempo:
+    image: grafana/tempo:2.8.2
+    restart: unless-stopped
+    profiles: ["monitoring"]
+    logging: *default-logging
+    command: -config.file=/etc/tempo/tempo.yml
+    volumes:
+      - ./observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - tempodata:/var/tempo
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.134.0
+    restart: unless-stopped
+    profiles: ["monitoring"]
+    logging: *default-logging
+    command: --config=/etc/otelcol-contrib/config.yml
+    ports:
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+      - "127.0.0.1:8889:8889"
+    volumes:
+      - ./observability/otel-collector/config.yml:/etc/otelcol-contrib/config.yml:ro
+    depends_on:
+      - tempo
+
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    restart: unless-stopped
+    profiles: ["monitoring"]
+    logging: *default-logging
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/rootfs
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.52.1
+    restart: unless-stopped
+    profiles: ["monitoring"]
+    logging: *default-logging
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
 
   redis-exporter:
     image: oliver006/redis_exporter:v1.67.0
@@ -489,4 +604,7 @@ volumes:
   caddyconfig:
   prometheusdata:
   grafanadata:
+  lokidata:
+  promtailpositions:
+  tempodata:
   meilisearchdata:

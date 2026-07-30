@@ -1,0 +1,24 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: discord
+  group_by: ["alertname", "service", "severity"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers:
+        - severity="P0"
+      receiver: discord
+      repeat_interval: 30m
+    - matchers:
+        - severity="P1"
+      receiver: discord
+      repeat_interval: 1h
+
+receivers:
+  - name: discord
+    discord_configs:
+      - webhook_url: "__ALERTMANAGER_DISCORD_WEBHOOK_URL__"
+        send_resolved: true

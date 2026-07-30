@@ -1,5 +1,5 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 import { reportClientError } from "@/lib/client-error-reporter";
@@ -17,12 +17,16 @@ export default function RouteError({
   reset: () => void;
   scope?: string;
 }) {
+  const [errorId, setErrorId] = useState(error.digest ?? "");
+
   useEffect(() => {
     console.error(`[${scope}] route error`, error);
-    reportClientError({
+    void reportClientError({
       scope: `route:${scope}`,
       message: error.message || "Route error",
       stack: error.stack,
+    }).then((receipt) => {
+      if (receipt?.error_id) setErrorId(receipt.error_id);
     });
   }, [error, scope]);
 
@@ -36,9 +40,9 @@ export default function RouteError({
         <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
           可能是網路暫時不穩，或伺服器有狀況。
         </p>
-        {error.digest && (
+        {errorId && (
           <p className="text-xs mt-2 font-mono" style={{ color: "var(--text-disabled)" }}>
-            錯誤代碼：{error.digest}
+            錯誤代碼：{errorId}
           </p>
         )}
       </div>

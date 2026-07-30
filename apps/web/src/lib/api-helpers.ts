@@ -6,6 +6,7 @@ export class ApiError extends Error {
     message: string,
     public requestId?: string | null,
     public errorId?: string | null,
+    public traceId?: string | null,
   ) {
     super(message);
   }

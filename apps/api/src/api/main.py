@@ -26,7 +26,7 @@ from api.core.config import settings
 from api.core.csrf import CSRFMiddleware
 from api.core.database import engine
 from api.core.defense import record_status as record_defense_status
-from api.core.error_audit import record_error
+from api.core.error_audit import classify, record_error
 from api.core.idempotency import IdempotencyMiddleware
 from api.core.load_shed import LoadShedMiddleware
 from api.core.load_signals import dec_active, inc_active, record_status
@@ -124,6 +124,7 @@ from api.routers import (
 )
 from api.routers._module_health import attach_module_health
 from api.routers.documents_serial import serial_router, template_router
+from api.services.incident import persist_error_incident
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +135,9 @@ _QUIET_POLLING_PATHS: frozenset[str] = frozenset(
         "/health",
         "/live",
         "/ready",
+        "/health/live",
+        "/health/ready",
+        "/health/detail",
         "/system/maintenance",
         "/system/module-status",
         "/notifications/inbox/count",
@@ -277,6 +281,9 @@ def create_app() -> FastAPI:
         redoc_url="/redoc" if (settings.DEBUG or settings.ENABLE_API_DOCS) else None,
         lifespan=lifespan,
     )
+    from api.core.observability import init_api_tracing
+
+    init_api_tracing(app, engine=engine)
 
     # Middleware 注意：Starlette 是 LIFO 包裝，最後 add 的最外層先執行。
     # 所以「越早」需要的（信任代理 / payload 上限）應該「最後」add，
@@ -310,7 +317,23 @@ def create_app() -> FastAPI:
         allow_origins=settings.ALLOWED_ORIGINS,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
-        allow_headers=["Content-Type", "Authorization", "X-CSRF-Token", "X-API-Key"],
+        allow_headers=[
+            "Content-Type",
+            "Authorization",
+            "X-CSRF-Token",
+            "X-API-Key",
+            "X-Request-ID",
+            "X-Trace-ID",
+            "traceparent",
+        ],
+        expose_headers=[
+            "X-Request-ID",
+            "X-Error-ID",
+            "X-Trace-ID",
+            "X-Process-Time-Ms",
+            "X-DB-Queries",
+            "X-DB-Time-Ms",
+        ],
     )
     app.add_middleware(
         SessionMiddleware,
@@ -517,9 +540,22 @@ def create_app() -> FastAPI:
                 status_code=status_code,
                 category=category,
                 request_id=getattr(request.state, "request_id", None),
+                trace_id=getattr(request.state, "trace_id", None),
                 client_ip=request.client.host if request.client else None,
                 user_agent=request.headers.get("user-agent"),
             )
+            if status_code >= 500:
+                incident_category = category or classify(type(exc).__name__, str(exc))
+                await persist_error_incident(
+                    error_id=error_id,
+                    exception_type=type(exc).__name__,
+                    message=str(exc),
+                    path=request.url.path,
+                    status_code=status_code,
+                    category=incident_category,
+                    trace_id=getattr(request.state, "trace_id", None),
+                    request_id=getattr(request.state, "request_id", None),
+                )
         except Exception:
             logger.exception("Error audit pipeline failed id=%s", error_id)
         return error_id
@@ -639,7 +675,11 @@ def create_app() -> FastAPI:
                 exc_info=True,
             )
             return JSONResponse(
-                {"detail": "伺服器內部錯誤", "error_id": err_id},
+                {
+                    "detail": "伺服器內部錯誤",
+                    "error_id": err_id,
+                    "trace_id": getattr(request.state, "trace_id", None),
+                },
                 status_code=exc.status_code,
                 headers=getattr(exc, "headers", None) or {},
             )
@@ -651,7 +691,11 @@ def create_app() -> FastAPI:
             exc.detail,
         )
         return JSONResponse(
-            {"detail": exc.detail},
+            {
+                "detail": exc.detail,
+                "error_id": err_id,
+                "trace_id": getattr(request.state, "trace_id", None),
+            },
             status_code=exc.status_code,
             headers=getattr(exc, "headers", None) or {},
         )
@@ -660,9 +704,16 @@ def create_app() -> FastAPI:
     async def _validation_exception_handler(
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
-        await _record_request_error(request, exc, status_code=422, category="validation")
+        err_id = await _record_request_error(request, exc, status_code=422, category="validation")
         return JSONResponse(
-            jsonable_encoder({"detail": "請求格式驗證失敗", "errors": exc.errors()}),
+            jsonable_encoder(
+                {
+                    "detail": "請求格式驗證失敗",
+                    "errors": exc.errors(),
+                    "error_id": err_id,
+                    "trace_id": getattr(request.state, "trace_id", None),
+                }
+            ),
             status_code=422,
         )
 
@@ -677,7 +728,11 @@ def create_app() -> FastAPI:
             exc_info=True,
         )
         return JSONResponse(
-            {"detail": "伺服器內部錯誤", "error_id": err_id},
+            {
+                "detail": "伺服器內部錯誤",
+                "error_id": err_id,
+                "trace_id": getattr(request.state, "trace_id", None),
+            },
             status_code=500,
         )
 
@@ -686,10 +741,12 @@ def create_app() -> FastAPI:
         return {"status": "ok", "version": settings.APP_VERSION}
 
     @app.get("/live", tags=["系統"], summary="存活檢查")
+    @app.get("/health/live", tags=["系統"], summary="存活檢查")
     async def liveness_check() -> dict[str, str]:
         return {"status": "ok", "version": settings.APP_VERSION}
 
     @app.get("/ready", tags=["系統"], summary="就緒檢查")
+    @app.get("/health/ready", tags=["系統"], summary="就緒檢查")
     async def readiness_check() -> JSONResponse:
         db_ok, db_error = await _check_database()
         redis_ok, redis_error = await _check_redis()

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import { BRANDING } from "@/lib/branding";
@@ -12,12 +12,16 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const [errorId, setErrorId] = useState(error.digest ?? "");
+
   useEffect(() => {
     console.error(error);
-    reportClientError({
+    void reportClientError({
       scope: "global.error",
       message: error.message || "Global error",
       stack: error.stack,
+    }).then((receipt) => {
+      if (receipt?.error_id) setErrorId(receipt.error_id);
     });
   }, [error]);
 
@@ -37,9 +41,9 @@ export default function GlobalError({
           <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
             {BRANDING.acronym} 頁面載入時發生問題，請稍後再試。
           </p>
-          {error.digest && (
+          {errorId && (
             <p className="text-xs mt-2 font-mono" style={{ color: "var(--text-disabled)" }}>
-              錯誤代碼：{error.digest}
+              錯誤代碼：{errorId}
             </p>
           )}
         </div>

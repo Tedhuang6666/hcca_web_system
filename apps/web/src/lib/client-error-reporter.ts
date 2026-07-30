@@ -12,6 +12,12 @@ export interface ClientErrorInput {
   pathname?: string;
 }
 
+export interface ClientErrorReceipt {
+  error_id: string;
+  request_id: string;
+  trace_id: string;
+}
+
 function limit(value: string | undefined, length: number): string {
   return (value ?? "").slice(0, length);
 }
@@ -27,8 +33,8 @@ function csrfHeader(): Record<string, string> {
 }
 
 /** 將瀏覽器錯誤送到後端；回報失敗絕不能再製造一個未處理 rejection。 */
-export function reportClientError(input: ClientErrorInput): void {
-  if (typeof window === "undefined") return;
+export function reportClientError(input: ClientErrorInput): Promise<ClientErrorReceipt | null> {
+  if (typeof window === "undefined") return Promise.resolve(null);
 
   const payload = JSON.stringify({
     message: limit(input.message || "Unknown client error", MAX_MESSAGE_LENGTH),
@@ -37,7 +43,7 @@ export function reportClientError(input: ClientErrorInput): void {
     pathname: limit(input.pathname || window.location.pathname, MAX_PATH_LENGTH),
   });
 
-  void fetch(apiUrl("/system/client-errors"), {
+  return fetch(apiUrl("/system/client-errors"), {
     method: "POST",
     credentials: "include",
     keepalive: true,
@@ -46,7 +52,18 @@ export function reportClientError(input: ClientErrorInput): void {
       ...csrfHeader(),
     },
     body: payload,
-  }).catch(() => undefined);
+  })
+    .then(async (response) => {
+      if (!response.ok) return null;
+      const receipt = (await response.json()) as Partial<ClientErrorReceipt>;
+      if (typeof receipt.error_id !== "string") return null;
+      return {
+        error_id: receipt.error_id,
+        request_id: typeof receipt.request_id === "string" ? receipt.request_id : "",
+        trace_id: typeof receipt.trace_id === "string" ? receipt.trace_id : "",
+      };
+    })
+    .catch(() => null);
 }
 
 function errorDetails(value: unknown): { message: string; stack?: string } {

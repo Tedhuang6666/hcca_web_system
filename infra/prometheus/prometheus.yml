@@ -28,7 +28,7 @@ scrape_configs:
       - targets: ["celery-worker:9101"]
         labels:
           worker: default
-      - targets: ["email-worker:9101"]
+      - targets: ["email-worker:9102"]
         labels:
           worker: email
 
@@ -40,11 +40,23 @@ scrape_configs:
     static_configs:
       - targets: ["postgres-exporter:9187"]
 
+  - job_name: otel-collector
+    static_configs:
+      - targets: ["otel-collector:8889"]
+
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]
+
+  - job_name: cadvisor
+    static_configs:
+      - targets: ["cadvisor:8080"]
+
 rule_files:
   - /etc/prometheus/rules/*.yml
+  - /etc/prometheus/observability-rules/*.yml
 
-# Alertmanager 整合（建議 Phase A2 補；先用 Sentry + UptimeRobot 接 Discord 即可）
-# alerting:
-#   alertmanagers:
-#     - static_configs:
-#         - targets: ["alertmanager:9093"]
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]

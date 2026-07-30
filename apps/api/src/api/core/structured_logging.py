@@ -11,6 +11,7 @@ from logging.config import dictConfig
 from typing import Any
 
 from api.core.config import settings
+from api.core.trace_context import get_trace_id
 
 _request_id: contextvars.ContextVar[str | None] = contextvars.ContextVar("request_id", default=None)
 _configured = False
@@ -31,6 +32,9 @@ def get_request_id() -> str | None:
 class RequestContextFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         record.request_id = get_request_id() or "-"
+        record.trace_id = get_trace_id() or "-"
+        record.service = "api"
+        record.release = settings.APP_RELEASE or settings.APP_VERSION
         record.environment = settings.ENVIRONMENT
         return True
 
@@ -76,7 +80,10 @@ class JsonLogFormatter(logging.Formatter):
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
+            "service": getattr(record, "service", "api"),
+            "release": getattr(record, "release", settings.APP_RELEASE or settings.APP_VERSION),
             "request_id": getattr(record, "request_id", "-"),
+            "trace_id": getattr(record, "trace_id", "-"),
             "environment": getattr(record, "environment", settings.ENVIRONMENT),
         }
         for key, value in record.__dict__.items():
