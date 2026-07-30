@@ -135,7 +135,7 @@ function IconButton({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+      className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
       style={{ border: "1px solid var(--border)", color }}
     >
       {children}
@@ -257,7 +257,7 @@ export default function PeopleAdminPage() {
   return (
     <>
       <AdminWorkbenchTabs />
-      <div className="mx-auto flex h-[calc(100vh-8rem)] max-w-7xl flex-col gap-4 p-4 md:p-5">
+      <div className="mx-auto flex h-[calc(100dvh-8rem)] min-h-0 max-w-7xl flex-col gap-4 p-4 md:p-5">
       <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase" style={{ color: "var(--primary)" }}>
@@ -288,7 +288,7 @@ export default function PeopleAdminPage() {
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-[24rem_1fr]">
-        <Panel className={`min-h-[420px] flex-col overflow-hidden ${mobileDetailOpen ? "hidden xl:flex" : "flex"}`}>
+        <Panel className={`min-h-0 flex-col overflow-hidden ${mobileDetailOpen ? "hidden xl:flex" : "flex"}`}>
           <div className="space-y-2 p-3" style={{ borderBottom: "1px solid var(--border)" }}>
             <div className="flex items-center gap-2">
               <div className="flex flex-1 items-center gap-2 rounded-md px-3 py-2" style={{ border: "1px solid var(--border)" }}>
@@ -377,8 +377,8 @@ export default function PeopleAdminPage() {
           </div>
         </Panel>
 
-        <Panel className={`min-h-[560px] overflow-hidden ${mobileDetailOpen ? "block" : "hidden xl:block"}`}>
-          <div className="xl:hidden p-3" style={{ borderBottom: "1px solid var(--border)" }}>
+        <Panel className={`min-h-0 flex-col overflow-hidden ${mobileDetailOpen ? "flex" : "hidden xl:flex"}`}>
+          <div className="xl:hidden flex-shrink-0 p-3" style={{ borderBottom: "1px solid var(--border)" }}>
             <MobileBackToList onBack={() => setMobileDetailOpen(false)} label="返回人員列表" />
           </div>
           {detailLoading ? (
@@ -508,8 +508,8 @@ function PersonDetailPanel({
   };
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="p-5" style={{ borderBottom: "1px solid var(--border)" }}>
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex-shrink-0 p-5" style={{ borderBottom: "1px solid var(--border)" }}>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="flex items-center gap-2">
@@ -572,7 +572,7 @@ function PersonDetailPanel({
         </div>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-auto p-5 xl:grid-cols-[1fr_18rem]">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto overscroll-contain p-5 [touch-action:pan-y] xl:grid-cols-[1fr_18rem]">
         <div className="space-y-4">
           <AffiliationSection title="有效身分" items={active} onChanged={onChanged} />
           <AffiliationSection title="歷史紀錄" items={ended} onChanged={onChanged} muted />

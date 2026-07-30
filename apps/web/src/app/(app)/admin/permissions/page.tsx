@@ -242,7 +242,7 @@ export default function PermissionsAdminPage() {
   };
 
   return (
-    <div className="h-full flex flex-col" style={{ maxHeight: "calc(100vh - 4rem)" }}>
+    <div className="h-full min-h-0 flex flex-col" style={{ maxHeight: "calc(100vh - 4rem)" }}>
       <AdminWorkbenchTabs />
       <header className="flex flex-col items-stretch gap-3 px-4 py-4 flex-shrink-0 sm:flex-row sm:items-center sm:justify-between sm:px-5" style={{ borderBottom: "1px solid var(--border)" }}>
         <div className="min-w-0">
@@ -290,7 +290,7 @@ export default function PermissionsAdminPage() {
             />
           </aside>
 
-          <section className={`w-full lg:w-[410px] xl:w-[470px] flex-shrink-0 overflow-hidden flex-col ${mobileDetailOpen ? "hidden lg:flex" : "flex"}`} style={{ borderRight: "1px solid var(--border)" }}>
+          <section className={`w-full min-h-0 lg:w-[410px] xl:w-[470px] flex-shrink-0 overflow-hidden flex-col ${mobileDetailOpen ? "hidden lg:flex" : "flex"}`} style={{ borderRight: "1px solid var(--border)" }}>
             <div className="p-3 space-y-3 flex-shrink-0" style={{ borderBottom: "1px solid var(--border)" }}>
               <div className="grid grid-cols-3 gap-1 rounded-xl p-1" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
                 {[
@@ -326,7 +326,7 @@ export default function PermissionsAdminPage() {
             />
           </section>
 
-          <section className={`${mobileDetailOpen ? "flex" : "hidden"} lg:flex flex-1 min-w-0 flex-col overflow-y-auto`}>
+          <section className={`${mobileDetailOpen ? "flex" : "hidden"} lg:flex flex-1 min-h-0 min-w-0 flex-col overflow-y-auto`}>
             <div
               className="lg:hidden sticky top-0 z-10 flex-shrink-0 p-3"
               style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-surface)" }}
@@ -400,7 +400,7 @@ function OrgWorkbenchSidebar({
               return next;
             });
           }}
-          className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left cursor-pointer transition-colors"
+          className="w-full min-h-11 flex items-center gap-2 px-2.5 py-2 rounded-lg text-left cursor-pointer transition-colors"
           style={{
             ...(selectedOrgId === org.id && !selectedPositionId
               ? { background: "var(--primary-dim)", color: "var(--primary)" }
@@ -419,7 +419,7 @@ function OrgWorkbenchSidebar({
               <button
                 key={position.id}
                 onClick={() => onSelectPosition(position.id)}
-                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left cursor-pointer transition-colors"
+                className="w-full min-h-11 flex items-center gap-2 px-2 py-2 rounded-lg text-left cursor-pointer transition-colors"
                 style={selectedPositionId === position.id ? { background: "var(--primary-dim)", color: "var(--primary)" } : { color: "var(--text-muted)" }}
               >
                 <span className="w-1.5 h-1.5 rounded-full" style={{ background: selectedPositionId === position.id ? "var(--primary)" : "var(--border-strong)" }} />
@@ -650,13 +650,13 @@ function DetailPanel({
     return <UserPanel user={selectedUser} users={users} positions={positions} classes={classes} permCodes={permCodes} onRefresh={onRefresh} onConfirm={onConfirm} />;
   }
   if (selectedOrg) {
-    return <OrgPanel org={selectedOrg} orgs={orgs} positions={positions} users={users} permCodes={permCodes} onRefresh={onRefresh} onConfirm={onConfirm} metrics={metrics} />;
+    return <OrgPanel org={selectedOrg} orgs={orgs} positions={positions} users={users} permCodes={permCodes} onRefresh={onRefresh} onSelect={onSelect} onConfirm={onConfirm} metrics={metrics} />;
   }
   return <div className="p-6 text-sm" style={{ color: "var(--text-muted)" }}>尚無可管理資料</div>;
 }
 
 function OrgPanel({
-  org, orgs, positions, users, permCodes, onRefresh, onConfirm, metrics,
+  org, orgs, positions, users, permCodes, onRefresh, onSelect, onConfirm, metrics,
 }: {
   org: OrgWithPermissionDefaults;
   orgs: OrgRead[];
@@ -664,6 +664,7 @@ function OrgPanel({
   users: AdminUserDetail[];
   permCodes: PermissionCodeInfo[];
   onRefresh: () => Promise<void>;
+  onSelect: (detail: Detail) => void;
   onConfirm: (state: ConfirmState) => void;
   metrics: {
     orphanPositions: PositionSummary[];
@@ -804,6 +805,43 @@ function OrgPanel({
         <Metric label="空職位" value={metrics.orphanPositions.filter((p) => p.org_id === org.id).length} />
         <Metric label="高風險人員" value={metrics.riskyUsers.filter((u) => orgMembers.some((m) => m.id === u.id)).length} tone="warning" />
       </div>
+      <section className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+        <div className="flex items-center justify-between px-4 py-3" style={{ background: "var(--bg-elevated)", borderBottom: "1px solid var(--border)" }}>
+          <div>
+            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>職位清單</h3>
+            <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>點選職位查看權限與成員任期</p>
+          </div>
+          <span className="text-xs" style={{ color: "var(--text-muted)" }}>{orgPositions.length} 個</span>
+        </div>
+        {orgPositions.length === 0 ? (
+          <p className="px-4 py-6 text-center text-sm" style={{ color: "var(--text-muted)" }}>此組織尚無職位</p>
+        ) : (
+          <div>
+            {orgPositions.map((position, index) => {
+              const memberCount = orgMembers.filter((member) => member.positions.some((item) => item.id === position.id)).length;
+              return (
+                <button
+                  key={position.id}
+                  type="button"
+                  onClick={() => onSelect({ type: "position", id: position.id })}
+                  className="flex min-h-11 w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/5"
+                  style={index < orgPositions.length - 1 ? { borderBottom: "1px solid var(--border)" } : undefined}
+                >
+                  <span className="h-2 w-2 flex-shrink-0 rounded-full" style={{ background: "var(--primary)" }} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium" style={{ color: "var(--text-primary)" }}>{position.name}</span>
+                    <span className="mt-0.5 block truncate text-xs" style={{ color: "var(--text-muted)" }}>
+                      {POSITION_CATEGORY_LABEL[position.category]} · {position.permission_codes.length} 個權限
+                    </span>
+                  </span>
+                  <span className="flex-shrink-0 text-xs" style={{ color: "var(--text-muted)" }}>{memberCount} 位成員</span>
+                  <span aria-hidden="true" style={{ color: "var(--text-disabled)" }}>›</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </section>
       <section className="rounded-xl p-4 space-y-3" style={{ border: "1px solid var(--border)" }}>
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>組織資料</h3>
