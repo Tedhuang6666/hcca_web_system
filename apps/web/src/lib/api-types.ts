@@ -933,7 +933,7 @@ export interface paths {
         };
         /**
          * 近期伺服器錯誤
-         * @description 記憶體 ring buffer 中最近的 5xx／未處理例外，依 last_seen 由新到舊。重啟後清空。
+         * @description 跨 worker 的最近錯誤，依 last_seen 由新到舊。
          */
         get: operations["recent_errors_admin_system_errors_get"];
         put?: never;
@@ -1013,6 +1013,75 @@ export interface paths {
         head?: never;
         /** Update Flag */
         patch: operations["update_flag_admin_system_feature_flags__key__patch"];
+        trace?: never;
+    };
+    "/admin/system/incidents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 查詢事故紀錄 */
+        get: operations["admin_incidents_admin_system_incidents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/system/incidents/{incident_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 查詢事故與事件歷程 */
+        get: operations["admin_incident_detail_admin_system_incidents__incident_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 更新事故狀態 */
+        patch: operations["update_incident_admin_system_incidents__incident_id__patch"];
+        trace?: never;
+    };
+    "/admin/system/incidents/{incident_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 新增事故事件 */
+        post: operations["create_incident_event_admin_system_incidents__incident_id__events_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/system/incidents/{incident_id}/recover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 執行白名單事故緩解動作 */
+        post: operations["recover_incident_admin_system_incidents__incident_id__recover_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/admin/system/ip-blocklist": {
@@ -6090,6 +6159,40 @@ export interface paths {
         };
         /** 健康檢查 */
         get: operations["health_check_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/health/live": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 存活檢查 */
+        get: operations["liveness_check_health_live_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/health/ready": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 就緒檢查 */
+        get: operations["readiness_check_health_ready_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -12869,6 +12972,451 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/support/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Support Approvals */
+        get: operations["list_support_approvals_support_approvals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/approvals/{approval_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Review Support Approval */
+        post: operations["review_support_approval_support_approvals__approval_id__review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/assistance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Support Assistance */
+        post: operations["create_support_assistance_support_assistance_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/assistance/join": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Join Support Assistance */
+        post: operations["join_support_assistance_support_assistance_join_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/assistance/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Support Assistance */
+        get: operations["get_support_assistance_support_assistance__session_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/assistance/{session_id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Close Support Assistance */
+        post: operations["close_support_assistance_support_assistance__session_id__close_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/assistance/{session_id}/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Support Assistance State */
+        patch: operations["update_support_assistance_state_support_assistance__session_id__state_patch"];
+        trace?: never;
+    };
+    "/support/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Support Audit */
+        get: operations["list_support_audit_support_audit_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/audit/export.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Support Audit */
+        get: operations["export_support_audit_support_audit_export_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Support Dashboard */
+        get: operations["support_dashboard_support_dashboard_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/guides": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Support Guides */
+        get: operations["list_support_guides_support_guides_get"];
+        put?: never;
+        /** Create Support Guide */
+        post: operations["create_support_guide_support_guides_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/guides/{guide_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Support Guide */
+        patch: operations["update_support_guide_support_guides__guide_id__patch"];
+        trace?: never;
+    };
+    "/support/impersonation/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Support Impersonation */
+        post: operations["start_support_impersonation_support_impersonation_start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/impersonation/{session_id}/end": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** End Support Impersonation */
+        post: operations["end_support_impersonation_support_impersonation__session_id__end_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/tickets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Support Tickets */
+        get: operations["list_support_tickets_support_tickets_get"];
+        put?: never;
+        /** Create Support Ticket */
+        post: operations["create_support_ticket_support_tickets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/tickets/{ticket_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Support Ticket */
+        get: operations["get_support_ticket_support_tickets__ticket_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Support Ticket */
+        patch: operations["update_support_ticket_support_tickets__ticket_id__patch"];
+        trace?: never;
+    };
+    "/support/tickets/{ticket_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Support Ticket Event */
+        post: operations["add_support_ticket_event_support_tickets__ticket_id__events_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search Support Users */
+        get: operations["search_support_users_support_users_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/users/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Support User */
+        get: operations["get_support_user_support_users__user_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/users/{user_id}/actions/{action}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run Support Repair */
+        post: operations["run_support_repair_support_users__user_id__actions__action__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/users/{user_id}/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request Support Approval */
+        post: operations["request_support_approval_support_users__user_id__approvals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/users/{user_id}/contact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Edit Support Contact */
+        patch: operations["edit_support_contact_support_users__user_id__contact_patch"];
+        trace?: never;
+    };
+    "/support/users/{user_id}/diagnose": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Diagnose Support User */
+        post: operations["diagnose_support_user_support_users__user_id__diagnose_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/users/{user_id}/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Edit Support Profile */
+        patch: operations["edit_support_profile_support_users__user_id__profile_patch"];
+        trace?: never;
+    };
+    "/support/users/{user_id}/sensitive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reveal Sensitive User */
+        post: operations["reveal_sensitive_user_support_users__user_id__sensitive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/support/verify-email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Verify Support Email */
+        get: operations["verify_support_email_support_verify_email_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/surveys": {
         parameters: {
             query?: never;
@@ -13113,6 +13661,26 @@ export interface paths {
         get: operations["public_access_status_system_access_status_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system/client-errors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 接收瀏覽器錯誤回報
+         * @description 接收匿名前端錯誤；不依賴登入，才能記錄登入頁與公開頁面的崩潰。
+         */
+        post: operations["report_client_error_system_client_errors_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -16967,6 +17535,29 @@ export interface components {
             id: string;
             /** Student Id */
             student_id?: string | null;
+        };
+        /**
+         * ClientErrorReport
+         * @description 瀏覽器 runtime error 的最小且有長度限制的回報格式。
+         */
+        ClientErrorReport: {
+            /** Message */
+            message: string;
+            /**
+             * Pathname
+             * @default
+             */
+            pathname: string;
+            /**
+             * Scope
+             * @default unknown
+             */
+            scope: string;
+            /**
+             * Stack
+             * @default
+             */
+            stack: string;
         };
         /** CloseStatusItem */
         CloseStatusItem: {
@@ -21452,6 +22043,185 @@ export interface components {
              * @description 短效 impersonation JWT，請存入記憶體並用作後續 Authorization Bearer
              */
             token: string;
+        };
+        /** IncidentDetailOut */
+        IncidentDetailOut: {
+            /** Assigned To */
+            assigned_to?: string | null;
+            /** Automatic Recovery Attempted */
+            automatic_recovery_attempted: boolean;
+            /** Automatic Recovery Succeeded */
+            automatic_recovery_succeeded?: boolean | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Environment */
+            environment: string;
+            /** Error Id */
+            error_id: string;
+            /** Events */
+            events?: components["schemas"]["IncidentEventOut"][];
+            /** Fingerprint */
+            fingerprint: string;
+            /**
+             * First Seen At
+             * Format: date-time
+             */
+            first_seen_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+            /** Occurrence Count */
+            occurrence_count: number;
+            /** Recovery Action */
+            recovery_action?: string | null;
+            /** Release Version */
+            release_version?: string | null;
+            /** Request Id */
+            request_id?: string | null;
+            /** Resolution Note */
+            resolution_note?: string | null;
+            /** Resolved At */
+            resolved_at?: string | null;
+            /** Service */
+            service: string;
+            severity: components["schemas"]["IncidentSeverity"];
+            status: components["schemas"]["IncidentStatus"];
+            /** Summary */
+            summary?: string | null;
+            /** Title */
+            title: string;
+            /** Trace Id */
+            trace_id?: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** IncidentEventBody */
+        IncidentEventBody: {
+            /** Details */
+            details?: {
+                [key: string]: unknown;
+            };
+            /** Event Type */
+            event_type: string;
+        };
+        /** IncidentEventOut */
+        IncidentEventOut: {
+            /** Actor Id */
+            actor_id?: string | null;
+            /** Actor Type */
+            actor_type: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Details */
+            details: {
+                [key: string]: unknown;
+            };
+            /** Event Type */
+            event_type: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Incident Id
+             * Format: uuid
+             */
+            incident_id: string;
+        };
+        /** IncidentOut */
+        IncidentOut: {
+            /** Assigned To */
+            assigned_to?: string | null;
+            /** Automatic Recovery Attempted */
+            automatic_recovery_attempted: boolean;
+            /** Automatic Recovery Succeeded */
+            automatic_recovery_succeeded?: boolean | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Environment */
+            environment: string;
+            /** Error Id */
+            error_id: string;
+            /** Fingerprint */
+            fingerprint: string;
+            /**
+             * First Seen At
+             * Format: date-time
+             */
+            first_seen_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+            /** Occurrence Count */
+            occurrence_count: number;
+            /** Recovery Action */
+            recovery_action?: string | null;
+            /** Release Version */
+            release_version?: string | null;
+            /** Request Id */
+            request_id?: string | null;
+            /** Resolution Note */
+            resolution_note?: string | null;
+            /** Resolved At */
+            resolved_at?: string | null;
+            /** Service */
+            service: string;
+            severity: components["schemas"]["IncidentSeverity"];
+            status: components["schemas"]["IncidentStatus"];
+            /** Summary */
+            summary?: string | null;
+            /** Title */
+            title: string;
+            /** Trace Id */
+            trace_id?: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * IncidentSeverity
+         * @enum {string}
+         */
+        IncidentSeverity: "P0" | "P1" | "P2" | "P3";
+        /**
+         * IncidentStatus
+         * @enum {string}
+         */
+        IncidentStatus: "open" | "investigating" | "mitigated" | "monitoring" | "resolved" | "ignored" | "regression";
+        /** IncidentUpdateBody */
+        IncidentUpdateBody: {
+            /** Resolution Note */
+            resolution_note?: string | null;
+            status?: components["schemas"]["IncidentStatus"] | null;
         };
         /** InsightItem */
         InsightItem: {
@@ -30238,6 +31008,8 @@ export interface components {
             source: string;
             /** Status Code */
             status_code: number;
+            /** Trace Id */
+            trace_id?: string | null;
             /** Traceback Head */
             traceback_head: string;
             /** User Agent */
@@ -30844,6 +31616,18 @@ export interface components {
              * Format: uuid
              */
             voter_id: string;
+        };
+        /** RecoveryActionBody */
+        RecoveryActionBody: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "clear_cache" | "restart" | "reload_caddy" | "maintenance_mode" | "retry_task";
+            /** Target */
+            target: string;
+            /** Task Id */
+            task_id?: string | null;
         };
         /** RecusalCreate */
         RecusalCreate: {
@@ -32731,6 +33515,466 @@ export interface components {
              * @description 審核人 ID 清單（按順序逐關審核）
              */
             approver_ids: string[];
+        };
+        /** SupportApprovalCreateRequest */
+        SupportApprovalCreateRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "user.role.grant" | "user.profile.restore";
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            };
+            /** Reason */
+            reason: string;
+            /**
+             * Target User Id
+             * Format: uuid
+             */
+            target_user_id: string;
+            /**
+             * Ticket Id
+             * Format: uuid
+             */
+            ticket_id: string;
+        };
+        /** SupportApprovalReviewRequest */
+        SupportApprovalReviewRequest: {
+            /** Approved */
+            approved: boolean;
+            /** Note */
+            note: string;
+        };
+        /** SupportAssistanceCreateRequest */
+        SupportAssistanceCreateRequest: {
+            /** Current Route */
+            current_route?: string | null;
+            /**
+             * Expires Minutes
+             * @default 15
+             */
+            expires_minutes: number;
+            /** Reason */
+            reason: string;
+            /**
+             * Ticket Id
+             * Format: uuid
+             */
+            ticket_id: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /** SupportAssistanceJoinRequest */
+        SupportAssistanceJoinRequest: {
+            /** Code */
+            code: string;
+        };
+        /** SupportAssistanceStateRequest */
+        SupportAssistanceStateRequest: {
+            /** Client State */
+            client_state?: {
+                [key: string]: unknown;
+            };
+            /** Current Route */
+            current_route?: string | null;
+        };
+        /** SupportContactUpdateRequest */
+        SupportContactUpdateRequest: {
+            /**
+             * Confirm Change
+             * @default false
+             */
+            confirm_change: boolean;
+            /** Email */
+            email: string;
+            /** Reason */
+            reason: string;
+            /**
+             * Ticket Id
+             * Format: uuid
+             */
+            ticket_id: string;
+        };
+        /** SupportDashboardOut */
+        SupportDashboardOut: {
+            /** Active Assistance Sessions */
+            active_assistance_sessions: number;
+            /** Active Impersonation Sessions */
+            active_impersonation_sessions: number;
+            /** Open Tickets */
+            open_tickets: number;
+            /** Pending Approvals */
+            pending_approvals: number;
+            /** Recent Actions */
+            recent_actions: {
+                [key: string]: unknown;
+            }[];
+            /** Urgent Tickets */
+            urgent_tickets: number;
+        };
+        /** SupportDiagnosticOut */
+        SupportDiagnosticOut: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+            /** Repair Action */
+            repair_action?: string | null;
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "info" | "warning" | "error";
+        };
+        /** SupportGuideCreateRequest */
+        SupportGuideCreateRequest: {
+            /** Body */
+            body: string;
+            /**
+             * Category
+             * @default general
+             */
+            category: string;
+            /** Required Permissions */
+            required_permissions?: string[];
+            /** Route */
+            route?: string | null;
+            /** Slug */
+            slug: string;
+            /** Summary */
+            summary: string;
+            /** Title */
+            title: string;
+        };
+        /** SupportGuideUpdateRequest */
+        SupportGuideUpdateRequest: {
+            /** Body */
+            body?: string | null;
+            /** Category */
+            category?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Required Permissions */
+            required_permissions?: string[] | null;
+            /** Route */
+            route?: string | null;
+            /** Summary */
+            summary?: string | null;
+            /** Title */
+            title?: string | null;
+        };
+        /** SupportImpersonationStartOut */
+        SupportImpersonationStartOut: {
+            /** Actor Display Name */
+            actor_display_name: string;
+            /** Actor Email */
+            actor_email: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Read Only */
+            read_only: boolean;
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            /** Target Display Name */
+            target_display_name: string;
+            /** Target Email */
+            target_email: string;
+            /**
+             * Target User Id
+             * Format: uuid
+             */
+            target_user_id: string;
+            /** Token */
+            token: string;
+        };
+        /** SupportImpersonationStartRequest */
+        SupportImpersonationStartRequest: {
+            /**
+             * Minutes
+             * @default 15
+             */
+            minutes: number;
+            /**
+             * Mode
+             * @default read_only
+             * @enum {string}
+             */
+            mode: "read_only" | "interactive";
+            /** Reason */
+            reason: string;
+            /**
+             * Target User Id
+             * Format: uuid
+             */
+            target_user_id: string;
+            /**
+             * Ticket Id
+             * Format: uuid
+             */
+            ticket_id: string;
+        };
+        /** SupportProfileUpdateRequest */
+        SupportProfileUpdateRequest: {
+            /**
+             * Confirm Change
+             * @default false
+             */
+            confirm_change: boolean;
+            /** Display Name */
+            display_name?: string | null;
+            /** Reason */
+            reason: string;
+            /** Show Email */
+            show_email?: boolean | null;
+            /** Student Id */
+            student_id?: string | null;
+            /**
+             * Ticket Id
+             * Format: uuid
+             */
+            ticket_id: string;
+        };
+        /** SupportReasonRequest */
+        SupportReasonRequest: {
+            /** Reason */
+            reason: string;
+            /**
+             * Ticket Id
+             * Format: uuid
+             */
+            ticket_id: string;
+        };
+        /** SupportRoleOut */
+        SupportRoleOut: {
+            /** End Date */
+            end_date: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Org Id
+             * Format: uuid
+             */
+            org_id: string;
+            /** Org Name */
+            org_name: string;
+            /** Permission Codes */
+            permission_codes: string[];
+            /** Start Date */
+            start_date: string;
+        };
+        /** SupportSensitiveOut */
+        SupportSensitiveOut: {
+            /** Email */
+            email: string;
+            /** Linked Emails */
+            linked_emails: string[];
+            /** Reason */
+            reason: string;
+            /** Student Id */
+            student_id: string | null;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /** SupportTicketCompactOut */
+        SupportTicketCompactOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Priority */
+            priority: string;
+            /** Status */
+            status: string;
+            /** Ticket Number */
+            ticket_number: string;
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** SupportTicketCreateRequest */
+        SupportTicketCreateRequest: {
+            /**
+             * Channel
+             * @default internal
+             */
+            channel: string;
+            /** Description */
+            description: string;
+            /** Error Code */
+            error_code?: string | null;
+            /**
+             * Priority
+             * @default normal
+             * @enum {string}
+             */
+            priority: "low" | "normal" | "high" | "urgent";
+            /** Related Data */
+            related_data?: {
+                [key: string]: unknown;
+            };
+            /** Request Id */
+            request_id?: string | null;
+            /** Title */
+            title: string;
+            /** User Id */
+            user_id?: string | null;
+        };
+        /** SupportTicketEventCreateRequest */
+        SupportTicketEventCreateRequest: {
+            /** Body */
+            body: string;
+            /**
+             * Event Type
+             * @default note
+             * @enum {string}
+             */
+            event_type: "note" | "customer_message" | "internal_note" | "system";
+        };
+        /** SupportTicketOut */
+        SupportTicketOut: {
+            /** Assigned To Id */
+            assigned_to_id: string | null;
+            /** Channel */
+            channel: string;
+            /** Closed At */
+            closed_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description: string;
+            /** Error Code */
+            error_code: string | null;
+            /** Events */
+            events?: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Priority */
+            priority: string;
+            /** Related Data */
+            related_data: {
+                [key: string]: unknown;
+            };
+            /** Reported By User Id */
+            reported_by_user_id: string | null;
+            /** Request Id */
+            request_id: string | null;
+            /** Resolution */
+            resolution: string | null;
+            /** Status */
+            status: string;
+            /** Ticket Number */
+            ticket_number: string;
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** User Id */
+            user_id: string | null;
+        };
+        /** SupportTicketUpdateRequest */
+        SupportTicketUpdateRequest: {
+            /** Assigned To Id */
+            assigned_to_id?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Priority */
+            priority?: ("low" | "normal" | "high" | "urgent") | null;
+            /** Resolution */
+            resolution?: string | null;
+            /** Status */
+            status?: ("new" | "assigned" | "investigating" | "waiting_user" | "waiting_internal" | "resolved" | "closed" | "reopened") | null;
+        };
+        /** SupportUserDetailOut */
+        SupportUserDetailOut: {
+            /** Account */
+            account: {
+                [key: string]: unknown;
+            };
+            /** Diagnostics */
+            diagnostics?: components["schemas"]["SupportDiagnosticOut"][];
+            /** Effective Permissions */
+            effective_permissions: string[];
+            /** Linked Emails */
+            linked_emails: string[];
+            /** Masked Linked Emails */
+            masked_linked_emails: string[];
+            /** Roles */
+            roles: components["schemas"]["SupportRoleOut"][];
+            /** Settings */
+            settings: {
+                [key: string]: unknown;
+            };
+            /** Tickets */
+            tickets: components["schemas"]["SupportTicketCompactOut"][];
+            user: components["schemas"]["SupportUserSummaryOut"];
+        };
+        /** SupportUserSummaryOut */
+        SupportUserSummaryOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Display Name */
+            display_name: string;
+            /** Email */
+            email: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Is Superuser */
+            is_superuser: boolean;
+            /** Is Verified */
+            is_verified: boolean;
+            /** Masked Email */
+            masked_email: string;
+            /** Masked Name */
+            masked_name: string;
+            /** Masked Student Id */
+            masked_student_id: string | null;
+            /** Mfa Enabled */
+            mfa_enabled: boolean;
+            /** Student Id */
+            student_id: string | null;
         };
         /** SurveyAnswerOut */
         SurveyAnswerOut: {
@@ -37489,6 +38733,176 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FeatureFlagItem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_incidents_admin_system_incidents_get: {
+        parameters: {
+            query?: {
+                incident_status?: components["schemas"]["IncidentStatus"] | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_incident_detail_admin_system_incidents__incident_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                incident_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_incident_admin_system_incidents__incident_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                incident_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IncidentUpdateBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_incident_event_admin_system_incidents__incident_id__events_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                incident_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IncidentEventBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentEventOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recover_incident_admin_system_incidents__incident_id__recover_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                incident_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecoveryActionBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
@@ -49105,6 +50519,48 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+        };
+    };
+    liveness_check_health_live_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+        };
+    };
+    readiness_check_health_ready_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };
@@ -64867,6 +66323,985 @@ export interface operations {
             };
         };
     };
+    list_support_approvals_support_approvals_get: {
+        parameters: {
+            query?: {
+                status?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_support_approval_support_approvals__approval_id__review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                approval_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupportApprovalReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_support_assistance_support_assistance_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupportAssistanceCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    join_support_assistance_support_assistance_join_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupportAssistanceJoinRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_support_assistance_support_assistance__session_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    close_support_assistance_support_assistance__session_id__close_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupportReasonRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_support_assistance_state_support_assistance__session_id__state_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupportAssistanceStateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_support_audit_support_audit_get: {
+        parameters: {
+            query?: {
+                actor_user_id?: string | null;
+                target_user_id?: string | null;
+                ticket_id?: string | null;
+                action?: string | null;
+                risk_level?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_support_audit_support_audit_export_csv_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    support_dashboard_support_dashboard_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportDashboardOut"];
+                };
+            };
+        };
+    };
+    list_support_guides_support_guides_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+        };
+    };
+    create_support_guide_support_guides_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupportGuideCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_support_guide_support_guides__guide_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                guide_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupportGuideUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_support_impersonation_support_impersonation_start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupportImpersonationStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportImpersonationStartOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    end_support_impersonation_support_impersonation__session_id__end_post: {
+        parameters: {
+            query: {
+                token: string;
+            };
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupportReasonRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_support_tickets_support_tickets_get: {
+        parameters: {
+            query?: {
+                status?: string | null;
+                priority?: string | null;
+                user_id?: string | null;
+                keyword?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportTicketOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_support_ticket_support_tickets_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupportTicketCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportTicketOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_support_ticket_support_tickets__ticket_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ticket_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportTicketOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_support_ticket_support_tickets__ticket_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ticket_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupportTicketUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportTicketOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_support_ticket_event_support_tickets__ticket_id__events_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ticket_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupportTicketEventCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportTicketOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_support_users_support_users_get: {
+        parameters: {
+            query?: {
+                keyword?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportUserSummaryOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_support_user_support_users__user_id__get: {
+        parameters: {
+            query?: {
+                diagnose?: boolean;
+            };
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportUserDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_support_repair_support_users__user_id__actions__action__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+                action: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupportReasonRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    request_support_approval_support_users__user_id__approvals_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupportApprovalCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    edit_support_contact_support_users__user_id__contact_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupportContactUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportUserDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    diagnose_support_user_support_users__user_id__diagnose_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupportReasonRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    edit_support_profile_support_users__user_id__profile_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupportProfileUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportUserDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reveal_sensitive_user_support_users__user_id__sensitive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupportReasonRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupportSensitiveOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    verify_support_email_support_verify_email_get: {
+        parameters: {
+            query: {
+                token: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_surveys_surveys_get: {
         parameters: {
             query?: {
@@ -65406,6 +67841,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AccessBlockStatus"];
+                };
+            };
+        };
+    };
+    report_client_error_system_client_errors_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientErrorReport"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
