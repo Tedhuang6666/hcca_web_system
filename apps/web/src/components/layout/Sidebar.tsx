@@ -83,6 +83,33 @@ function NavLink({ item, pathname, down }: { item: NavItem; pathname: string; do
   );
 }
 
+function SidebarNavSkeleton() {
+  const groups = [4, 7, 5];
+
+  return (
+    <div className="space-y-4 px-1" role="status" aria-label="正在載入導覽">
+      <span className="sr-only">正在載入導覽</span>
+      {groups.map((itemCount, groupIndex) => (
+        <div key={groupIndex} className="space-y-1.5" aria-hidden="true">
+          <div className="mx-3 h-3 w-16 rounded" style={{ background: "var(--sidebar-hover)" }} />
+          {Array.from({ length: itemCount }, (_, itemIndex) => (
+            <div key={itemIndex} className="flex h-8 items-center gap-2.5 px-3">
+              <div className="h-4 w-4 flex-shrink-0 rounded" style={{ background: "var(--sidebar-hover)" }} />
+              <div
+                className="h-3 rounded"
+                style={{
+                  width: `${56 + ((groupIndex + itemIndex) % 4) * 12}px`,
+                  background: "var(--sidebar-hover)",
+                }}
+              />
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /* ── Sidebar ──────────────────────────────────────────────────────────────── */
 export default function Sidebar() {
   const pathname = usePathname();
@@ -99,6 +126,7 @@ export default function Sidebar() {
   const [hydrated, setHydrated] = useState(false);
   const [serverProfile, setServerProfile] = useState<NavigationProfileConfig | null>(null);
   const [publicProfile, setPublicProfile] = useState<NavigationProfileConfig | null>(null);
+  const [resolvedLoginState, setResolvedLoginState] = useState<boolean | null>(null);
   const [authVersion, setAuthVersion] = useState(0);
   const navigationProfile = useMemo(
     () => resolveNavigationProfile(permissions, isAdmin),
@@ -120,10 +148,14 @@ export default function Sidebar() {
       setServerProfile(null);
       navigationProfilesApi.public("public")
         .then((profile) => {
-          if (alive) setPublicProfile(navProfileFromApi(profile));
+          if (!alive) return;
+          setPublicProfile(navProfileFromApi(profile));
+          setResolvedLoginState(false);
         })
         .catch(() => {
-          if (alive) setPublicProfile(null);
+          if (!alive) return;
+          setPublicProfile(null);
+          setResolvedLoginState(false);
         });
       return () => {
         alive = false;
@@ -138,9 +170,12 @@ export default function Sidebar() {
             ? null
             : navProfileFromApi(result.profile),
         );
+        setResolvedLoginState(true);
       })
       .catch(() => {
-        if (alive) setServerProfile(null);
+        if (!alive) return;
+        setServerProfile(null);
+        setResolvedLoginState(true);
       });
     return () => {
       alive = false;
@@ -291,6 +326,8 @@ export default function Sidebar() {
     ],
   );
 
+  const navigationReady = hydrated && resolvedLoginState === isLoggedIn;
+
   const initials = userName.charAt(0).toUpperCase();
 
   return (
@@ -328,76 +365,83 @@ export default function Sidebar() {
       <nav
         className="flex-1 overflow-y-auto py-3 px-2"
         style={{ scrollbarWidth: "none" }}
-        aria-label="主要導覽">
-        <Link
-          href="/"
-          className="sidebar-public-entry"
-          aria-label="返回公開網站">
-          <Globe2 size={15} aria-hidden={true} />
-          <span className="flex-1 truncate">返回公開頁</span>
-        </Link>
-        <div className="space-y-0.5">
-          <button
-            type="button"
-            onClick={() => window.dispatchEvent(new Event("hcca:open-command-menu"))}
-            className="sidebar-nav-item w-full text-left"
-            style={{ background: "var(--sidebar-hover)", color: "var(--sidebar-text-hover)" }}
-            aria-label="開啟所有功能">
-            <span className="flex-shrink-0"><NavIcon iconKey="modules" size={15} /></span>
-            <span className="flex-1 truncate">所有功能</span>
-          </button>
-          {navSections.map((entry, i) => {
-            if (!isSection(entry)) {
-              return (
-                <NavLink
-                  key={entry.href}
-                  item={entry}
-                  pathname={pathname}
-                  down={isModuleDown(NAV_ID_TO_MODULE[entry.id] ?? null)}
-                />
-              );
-            }
-            const isCollapsed = hydrated && collapsed.has(entry.heading);
-            const sectionId = `nav-section-${i}`;
-            return (
-              <div key={entry.heading + i} className="sidebar-section pt-4 first:pt-0">
-                {entry.collapsible ? (
-                  <button
-                    type="button"
-                    onClick={() => toggleSection(entry.heading)}
-                    className="sidebar-section-toggle"
-                    aria-expanded={!isCollapsed}
-                    aria-controls={sectionId}>
-                    <span className="sidebar-section-label">{entry.heading}</span>
-                    <ChevronDown
-                      size={12}
-                      aria-hidden={true}
-                      style={{
-                        color: "var(--sidebar-section-label)",
-                        transform: isCollapsed ? "rotate(-90deg)" : "rotate(0deg)",
-                        transition: "transform 150ms",
-                      }}
+        aria-label="主要導覽"
+        aria-busy={!navigationReady}>
+        {!navigationReady ? (
+          <SidebarNavSkeleton />
+        ) : (
+          <>
+            <Link
+              href="/"
+              className="sidebar-public-entry"
+              aria-label="返回公開網站">
+              <Globe2 size={15} aria-hidden={true} />
+              <span className="flex-1 truncate">返回公開頁</span>
+            </Link>
+            <div className="space-y-0.5">
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new Event("hcca:open-command-menu"))}
+                className="sidebar-nav-item w-full text-left"
+                style={{ background: "var(--sidebar-hover)", color: "var(--sidebar-text-hover)" }}
+                aria-label="開啟所有功能">
+                <span className="flex-shrink-0"><NavIcon iconKey="modules" size={15} /></span>
+                <span className="flex-1 truncate">所有功能</span>
+              </button>
+              {navSections.map((entry, i) => {
+                if (!isSection(entry)) {
+                  return (
+                    <NavLink
+                      key={entry.href}
+                      item={entry}
+                      pathname={pathname}
+                      down={isModuleDown(NAV_ID_TO_MODULE[entry.id] ?? null)}
                     />
-                  </button>
-                ) : (
-                  <p className="sidebar-section-label px-3 pb-1">{entry.heading}</p>
-                )}
-                {!isCollapsed && (
-                  <div id={sectionId} className="space-y-0.5">
-                    {entry.items.map((item) => (
-                      <NavLink
-                        key={item.href}
-                        item={item}
-                        pathname={pathname}
-                        down={isModuleDown(NAV_ID_TO_MODULE[item.id] ?? null)}
-                      />
-                    ))}
+                  );
+                }
+                const isCollapsed = collapsed.has(entry.heading);
+                const sectionId = `nav-section-${i}`;
+                return (
+                  <div key={entry.heading + i} className="sidebar-section pt-4 first:pt-0">
+                    {entry.collapsible ? (
+                      <button
+                        type="button"
+                        onClick={() => toggleSection(entry.heading)}
+                        className="sidebar-section-toggle"
+                        aria-expanded={!isCollapsed}
+                        aria-controls={sectionId}>
+                        <span className="sidebar-section-label">{entry.heading}</span>
+                        <ChevronDown
+                          size={12}
+                          aria-hidden={true}
+                          style={{
+                            color: "var(--sidebar-section-label)",
+                            transform: isCollapsed ? "rotate(-90deg)" : "rotate(0deg)",
+                            transition: "transform 150ms",
+                          }}
+                        />
+                      </button>
+                    ) : (
+                      <p className="sidebar-section-label px-3 pb-1">{entry.heading}</p>
+                    )}
+                    {!isCollapsed && (
+                      <div id={sectionId} className="space-y-0.5">
+                        {entry.items.map((item) => (
+                          <NavLink
+                            key={item.href}
+                            item={item}
+                            pathname={pathname}
+                            down={isModuleDown(NAV_ID_TO_MODULE[item.id] ?? null)}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                );
+              })}
+            </div>
+          </>
+        )}
       </nav>
 
       {/* User footer */}
