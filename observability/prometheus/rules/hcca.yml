@@ -1,0 +1,94 @@
+groups:
+  - name: hcca-symptoms
+    rules:
+      - alert: HccaApiHighErrorRate
+        expr: |
+          (
+            sum(rate(hcca_http_requests_total{status=~"5.."}[5m]))
+            /
+            clamp_min(sum(rate(hcca_http_requests_total[5m])), 0.001)
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: P1
+          service: api
+        annotations:
+          summary: "HCCA API 5xx 錯誤率過高"
+          description: "最近 5 分鐘 API 5xx 比例超過 5%。"
+
+      - alert: HccaApiHighLatency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(hcca_http_request_duration_seconds_bucket[5m])) by (le)
+          ) > 2
+        for: 10m
+        labels:
+          severity: P2
+          service: api
+        annotations:
+          summary: "HCCA API P95 延遲過高"
+          description: "最近 10 分鐘 API P95 延遲超過 2 秒。"
+
+      - alert: HccaCeleryTaskFailures
+        expr: sum(rate(hcca_celery_tasks_total{status="failed"}[10m])) > 0.1
+        for: 10m
+        labels:
+          severity: P2
+          service: celery
+        annotations:
+          summary: "Celery 任務持續失敗"
+          description: "Celery 失敗速率持續超過每秒 0.1 次。"
+
+      - alert: HccaCeleryQueueBacklog
+        expr: max(hcca_celery_queue_depth) > 100
+        for: 10m
+        labels:
+          severity: P2
+          service: celery
+        annotations:
+          summary: "Celery queue 積壓"
+          description: "至少一個 queue 積壓超過 100 個任務。"
+
+  - name: hcca-infrastructure
+    rules:
+      - alert: HccaPostgresDown
+        expr: pg_up == 0
+        for: 2m
+        labels:
+          severity: P1
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL exporter 無法連線"
+
+      - alert: HccaRedisDown
+        expr: redis_up == 0
+        for: 2m
+        labels:
+          severity: P1
+          service: redis
+        annotations:
+          summary: "Redis exporter 無法連線"
+
+      - alert: HccaDiskSpaceLow
+        expr: |
+          (
+            node_filesystem_avail_bytes{mountpoint="/",fstype!=""}
+            /
+            node_filesystem_size_bytes{mountpoint="/",fstype!=""}
+          ) < 0.15
+        for: 10m
+        labels:
+          severity: P1
+          service: host
+        annotations:
+          summary: "主機根目錄剩餘空間低於 15%"
+
+      - alert: HccaContainerRestarting
+        expr: increase(container_start_time_seconds[15m]) > 2
+        for: 5m
+        labels:
+          severity: P2
+          service: docker
+        annotations:
+          summary: "容器在短時間內反覆重啟"

@@ -23,6 +23,7 @@ _REDIS_EVENT_KEY = "error_audit:events:v1"
 _REDIS_RETENTION_ITEMS = 1000
 _MESSAGE_MAX = 1000
 _TRACEBACK_MAX = 6000
+_REDIS_WRITE_TIMEOUT_SECONDS = 0.25
 
 _SENSITIVE_TEXT = re.compile(
     r"(?i)(bearer\s+)[^\s,;]+|((?:password|passwd|secret|token|api[_-]?key|authorization|cookie)\s*[=:]\s*)[^\s,;]+"
@@ -76,6 +77,7 @@ class ErrorSample:
     last_seen: float
     occurrences: int = 1
     request_id: str | None = None
+    trace_id: str | None = None
     client_ip: str | None = None
     user_agent: str | None = None
 
@@ -119,6 +121,7 @@ def _sample_to_dict(sample: ErrorSample, *, source: str = "memory") -> dict[str,
     return {
         "error_id": sample.error_id,
         "request_id": sample.request_id,
+        "trace_id": sample.trace_id,
         "client_ip": sample.client_ip,
         "user_agent": sample.user_agent,
         "category": sample.category,
@@ -142,6 +145,7 @@ def _event_payload(sample: ErrorSample) -> dict[str, Any]:
         "first_seen": sample.first_seen,
         "error_id": sample.error_id,
         "request_id": sample.request_id,
+        "trace_id": sample.trace_id,
         "category": sample.category,
         "exc_type": sample.exc_type,
         "message": sample.message,
@@ -159,7 +163,9 @@ async def _persist_error_event(payload: dict[str, Any]) -> None:
     try:
         from api.core.security import redis_client
 
-        async with asyncio.timeout(settings.REDIS_SOCKET_TIMEOUT):
+        async with asyncio.timeout(
+            min(settings.REDIS_SOCKET_TIMEOUT, _REDIS_WRITE_TIMEOUT_SECONDS)
+        ):
             await redis_client.lpush(_REDIS_EVENT_KEY, json.dumps(payload, ensure_ascii=False))
             await redis_client.ltrim(_REDIS_EVENT_KEY, 0, _REDIS_RETENTION_ITEMS - 1)
     except Exception:
@@ -179,6 +185,7 @@ async def _record_event(
     status_code: int,
     category: str,
     request_id: str | None,
+    trace_id: str | None,
     client_ip: str | None,
     user_agent: str | None,
 ) -> str:
@@ -190,6 +197,7 @@ async def _record_event(
         if existing is not None:
             existing.touch(error_id, safe_message, status_code, safe_traceback)
             existing.request_id = request_id
+            existing.trace_id = trace_id
             existing.client_ip = client_ip
             existing.user_agent = user_agent
             sample = existing
@@ -208,6 +216,7 @@ async def _record_event(
                 first_seen=now,
                 last_seen=now,
                 request_id=request_id,
+                trace_id=trace_id,
                 client_ip=client_ip,
                 user_agent=user_agent,
             )
@@ -256,6 +265,7 @@ async def record_error(
     status_code: int,
     category: str | None = None,
     request_id: str | None = None,
+    trace_id: str | None = None,
     client_ip: str | None = None,
     user_agent: str | None = None,
 ) -> str:
@@ -272,6 +282,7 @@ async def record_error(
         status_code=status_code,
         category=category or classify(exc_type, message),
         request_id=request_id,
+        trace_id=trace_id,
         client_ip=client_ip,
         user_agent=user_agent,
     )
@@ -284,6 +295,7 @@ async def record_client_error(
     scope: str,
     path: str,
     request_id: str | None = None,
+    trace_id: str | None = None,
     client_ip: str | None = None,
     user_agent: str | None = None,
 ) -> str:
@@ -298,6 +310,7 @@ async def record_client_error(
         status_code=500,
         category="unhandled",
         request_id=request_id,
+        trace_id=trace_id,
         client_ip=client_ip,
         user_agent=user_agent,
     )
@@ -309,6 +322,7 @@ def record_background_error(
     task_id: str | None,
     exc: BaseException,
     traceback_text: str = "",
+    trace_id: str | None = None,
 ) -> str:
     """同步背景 worker 使用的錯誤入口（Celery signal 不在 API event loop）。"""
     error_id = uuid.uuid4().hex[:12]
@@ -324,6 +338,7 @@ def record_background_error(
         if existing is not None:
             existing.touch(error_id, safe_message, 500, safe_traceback)
             existing.request_id = task_id
+            existing.trace_id = trace_id
             sample = existing
         else:
             now = time.time()
@@ -340,6 +355,7 @@ def record_background_error(
                 first_seen=now,
                 last_seen=now,
                 request_id=task_id,
+                trace_id=trace_id,
             )
             _samples.append(sample)
             _index[signature] = sample
@@ -356,8 +372,8 @@ def record_background_error(
         client = Redis.from_url(
             str(settings.REDIS_URL),
             decode_responses=True,
-            socket_timeout=settings.REDIS_SOCKET_TIMEOUT,
-            socket_connect_timeout=settings.REDIS_SOCKET_TIMEOUT,
+            socket_timeout=min(settings.REDIS_SOCKET_TIMEOUT, _REDIS_WRITE_TIMEOUT_SECONDS),
+            socket_connect_timeout=min(settings.REDIS_SOCKET_TIMEOUT, _REDIS_WRITE_TIMEOUT_SECONDS),
         )
         pipe = client.pipeline()
         pipe.lpush(_REDIS_EVENT_KEY, json.dumps(payload, ensure_ascii=False))
@@ -391,7 +407,10 @@ async def get_recent_errors(top: int = 50) -> list[dict[str, object]]:
     try:
         from api.core.security import redis_client
 
-        raw_items = await redis_client.lrange(_REDIS_EVENT_KEY, 0, _REDIS_RETENTION_ITEMS - 1)
+        async with asyncio.timeout(
+            min(settings.REDIS_SOCKET_TIMEOUT, _REDIS_WRITE_TIMEOUT_SECONDS)
+        ):
+            raw_items = await redis_client.lrange(_REDIS_EVENT_KEY, 0, _REDIS_RETENTION_ITEMS - 1)
     except Exception:
         raw_items = []
 
@@ -415,6 +434,7 @@ async def get_recent_errors(top: int = 50) -> list[dict[str, object]]:
                 current = {
                     "error_id": str(item.get("error_id") or ""),
                     "request_id": item.get("request_id"),
+                    "trace_id": item.get("trace_id"),
                     "client_ip": item.get("client_ip"),
                     "user_agent": item.get("user_agent"),
                     "category": str(item.get("category") or "unhandled"),
@@ -437,6 +457,7 @@ async def get_recent_errors(top: int = 50) -> list[dict[str, object]]:
                         {
                             "error_id": str(item.get("error_id") or current["error_id"]),
                             "request_id": item.get("request_id"),
+                            "trace_id": item.get("trace_id"),
                             "client_ip": item.get("client_ip"),
                             "user_agent": item.get("user_agent"),
                             "message": str(item.get("message") or current["message"]),
@@ -470,7 +491,10 @@ async def find_error_by_id(error_id: str) -> dict[str, object] | None:
     try:
         from api.core.security import redis_client
 
-        raw_items = await redis_client.lrange(_REDIS_EVENT_KEY, 0, -1)
+        async with asyncio.timeout(
+            min(settings.REDIS_SOCKET_TIMEOUT, _REDIS_WRITE_TIMEOUT_SECONDS)
+        ):
+            raw_items = await redis_client.lrange(_REDIS_EVENT_KEY, 0, -1)
     except Exception:
         return None
 
@@ -485,6 +509,7 @@ async def find_error_by_id(error_id: str) -> dict[str, object] | None:
         return {
             "error_id": str(item.get("error_id") or ""),
             "request_id": item.get("request_id"),
+            "trace_id": item.get("trace_id"),
             "client_ip": item.get("client_ip"),
             "user_agent": item.get("user_agent"),
             "category": str(item.get("category") or "unhandled"),
@@ -511,7 +536,10 @@ async def clear_errors() -> int:
     try:
         from api.core.security import redis_client
 
-        await redis_client.delete(_REDIS_EVENT_KEY)
+        async with asyncio.timeout(
+            min(settings.REDIS_SOCKET_TIMEOUT, _REDIS_WRITE_TIMEOUT_SECONDS)
+        ):
+            await redis_client.delete(_REDIS_EVENT_KEY)
     except Exception:
         logger.warning("清空 Redis 錯誤稽核緩衝失敗", exc_info=True)
     return count

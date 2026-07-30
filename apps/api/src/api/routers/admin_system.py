@@ -17,7 +17,7 @@ import json
 import logging
 import time
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
@@ -74,6 +74,7 @@ from api.core.security import redis_client, revoke_user
 from api.core.ws_manager import manager as ws_manager
 from api.dependencies.auth import get_current_active_user, get_optional_user
 from api.models.email_message import EmailMessage
+from api.models.system_incident import IncidentSeverity, IncidentStatus
 from api.models.user import User
 from api.models.user_identity import UserIdentity
 from api.services import audit as audit_svc
@@ -81,6 +82,13 @@ from api.services import defense as defense_svc
 from api.services import mfa as mfa_svc
 from api.services import version as version_svc
 from api.services.discord_bot import emit_security_alert
+from api.services.incident import (
+    append_incident_event,
+    get_incident,
+    list_incident_events,
+    list_incidents,
+)
+from api.services.recovery_agent import RecoveryAction, execute_recovery
 
 router = APIRouter(
     prefix="/admin/system",
@@ -1412,6 +1420,7 @@ async def metrics_slow_queries(
 class RecentErrorItem(BaseModel):
     error_id: str
     request_id: str | None = None
+    trace_id: str | None = None
     client_ip: str | None = None
     user_agent: str | None = None
     category: str
@@ -1430,6 +1439,208 @@ class RecentErrorItem(BaseModel):
 class RecentErrorsResponse(BaseModel):
     count: int
     items: list[RecentErrorItem]
+
+
+class IncidentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    error_id: str
+    fingerprint: str
+    severity: IncidentSeverity
+    status: IncidentStatus
+    service: str
+    environment: str
+    release_version: str | None = None
+    title: str
+    summary: str | None = None
+    first_seen_at: datetime
+    last_seen_at: datetime
+    occurrence_count: int
+    trace_id: str | None = None
+    request_id: str | None = None
+    automatic_recovery_attempted: bool
+    automatic_recovery_succeeded: bool | None = None
+    recovery_action: str | None = None
+    assigned_to: uuid.UUID | None = None
+    resolved_at: datetime | None = None
+    resolution_note: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class IncidentEventOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    incident_id: uuid.UUID
+    event_type: str
+    actor_type: str
+    actor_id: uuid.UUID | None = None
+    details: dict
+    created_at: datetime
+
+
+class IncidentDetailOut(IncidentOut):
+    events: list[IncidentEventOut] = Field(default_factory=list)
+
+
+class IncidentUpdateBody(BaseModel):
+    status: IncidentStatus | None = None
+    resolution_note: str | None = Field(None, max_length=2000)
+
+
+class IncidentEventBody(BaseModel):
+    event_type: str = Field(..., min_length=1, max_length=64)
+    details: dict = Field(default_factory=dict)
+
+
+class RecoveryActionBody(BaseModel):
+    action: RecoveryAction
+    target: str = Field(..., min_length=1, max_length=64)
+    task_id: str | None = Field(None, max_length=200)
+
+
+@router.get("/incidents", response_model=list[IncidentOut], summary="查詢事故紀錄")
+async def admin_incidents(
+    _admin: AdminUser,
+    session: DbDep,
+    incident_status: IncidentStatus | None = None,
+    limit: int = 50,
+) -> list[IncidentOut]:
+    items = await list_incidents(
+        session,
+        status=incident_status.value if incident_status else None,
+        limit=limit,
+    )
+    return [IncidentOut.model_validate(item) for item in items]
+
+
+@router.get(
+    "/incidents/{incident_id}",
+    response_model=IncidentDetailOut,
+    summary="查詢事故與事件歷程",
+)
+async def admin_incident_detail(
+    incident_id: uuid.UUID,
+    _admin: AdminUser,
+    session: DbDep,
+) -> IncidentDetailOut:
+    incident = await get_incident(session, incident_id)
+    if incident is None:
+        raise HTTPException(status_code=404, detail="事故不存在")
+    events = await list_incident_events(session, incident_id)
+    return IncidentDetailOut(
+        **IncidentOut.model_validate(incident).model_dump(),
+        events=[IncidentEventOut.model_validate(event) for event in events],
+    )
+
+
+@router.patch(
+    "/incidents/{incident_id}",
+    response_model=IncidentOut,
+    summary="更新事故狀態",
+)
+async def update_incident(
+    incident_id: uuid.UUID,
+    body: IncidentUpdateBody,
+    _admin: AdminUser,
+    session: DbDep,
+) -> IncidentOut:
+    incident = await get_incident(session, incident_id)
+    if incident is None:
+        raise HTTPException(status_code=404, detail="事故不存在")
+    if body.status is not None:
+        incident.status = body.status
+        incident.resolved_at = datetime.now(UTC) if body.status == IncidentStatus.RESOLVED else None
+        await append_incident_event(
+            session,
+            incident_id=incident.id,
+            event_type="status_changed",
+            actor_id=_admin.id,
+            details={"status": body.status.value},
+        )
+    if body.resolution_note is not None:
+        incident.resolution_note = body.resolution_note
+    await session.commit()
+    await session.refresh(incident)
+    return IncidentOut.model_validate(incident)
+
+
+@router.post(
+    "/incidents/{incident_id}/events",
+    response_model=IncidentEventOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="新增事故事件",
+)
+async def create_incident_event(
+    incident_id: uuid.UUID,
+    body: IncidentEventBody,
+    _admin: AdminUser,
+    session: DbDep,
+) -> IncidentEventOut:
+    incident = await get_incident(session, incident_id)
+    if incident is None:
+        raise HTTPException(status_code=404, detail="事故不存在")
+    event = await append_incident_event(
+        session,
+        incident_id=incident_id,
+        event_type=body.event_type,
+        actor_id=_admin.id,
+        details=body.details,
+    )
+    await session.commit()
+    await session.refresh(event)
+    return IncidentEventOut.model_validate(event)
+
+
+@router.post(
+    "/incidents/{incident_id}/recover",
+    response_model=dict,
+    summary="執行白名單事故緩解動作",
+)
+async def recover_incident(
+    incident_id: uuid.UUID,
+    body: RecoveryActionBody,
+    _admin: AdminUser,
+    session: DbDep,
+) -> dict[str, Any]:
+    incident = await get_incident(session, incident_id)
+    if incident is None:
+        raise HTTPException(status_code=404, detail="事故不存在")
+    try:
+        result = await execute_recovery(
+            action=body.action,
+            target=body.target,
+            task_id=body.task_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    incident.automatic_recovery_attempted = True
+    incident.automatic_recovery_succeeded = result.success
+    incident.recovery_action = f"{result.action}:{result.target}"
+    await append_incident_event(
+        session,
+        incident_id=incident.id,
+        event_type="recovery_executed",
+        actor_id=_admin.id,
+        details={
+            "action": result.action,
+            "target": result.target,
+            "success": result.success,
+            "detail": result.detail,
+        },
+    )
+    if result.success and incident.status == IncidentStatus.OPEN:
+        incident.status = IncidentStatus.MITIGATED
+    await session.commit()
+    return {
+        "ok": result.success,
+        "action": result.action,
+        "target": result.target,
+        "detail": result.detail,
+    }
 
 
 class ClientErrorReport(BaseModel):
@@ -1457,12 +1668,14 @@ async def report_client_error(body: ClientErrorReport, request: Request) -> dict
         scope=body.scope,
         path=body.pathname,
         request_id=getattr(request.state, "request_id", None),
+        trace_id=getattr(request.state, "trace_id", None),
         client_ip=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),
     )
     return {
         "error_id": error_id,
         "request_id": str(getattr(request.state, "request_id", "")),
+        "trace_id": str(getattr(request.state, "trace_id", "")),
     }
 
 

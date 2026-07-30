@@ -21,6 +21,7 @@ from redis import Redis
 # 只載入 models —— 不碰 FastAPI / router / middleware，維持 worker import 輕量。
 import api.models  # noqa: E402,F401
 from api.core.config import settings
+from api.core.observability import init_celery_tracing
 from api.core.structured_logging import configure_logging
 
 
@@ -54,8 +55,11 @@ celery_app = Celery(
         "api.services.mail",
         "api.services.meal_tasks",
         "api.services.regulation_tasks",
+        "api.services.incident_tasks",
     ],
 )
+
+init_celery_tracing()
 
 celery_app.conf.update(
     # --- 序列化 ---
@@ -133,6 +137,7 @@ celery_app.conf.include = list(celery_app.conf.include or []) + [
     "api.services.discord_reminders",
     "api.services.discord_sync_tasks",
     "api.services.metrics_tasks",
+    "api.services.incident_tasks",
 ]
 
 celery_app.conf.beat_schedule = {
@@ -377,6 +382,7 @@ def _record_task_failure(
     exception=None,
     traceback=None,
     einfo=None,
+    request=None,
     **_kwargs,
 ) -> None:
     from api.core.error_audit import record_background_error
@@ -390,6 +396,7 @@ def _record_task_failure(
         exception=str(exception)[:1000] if exception else None,
     )
     record_celery_task(payload.get("task"), "failed")
+    task_name = payload.get("task") or "unknown"
     if payload.get("task") == "api.services.backup_tasks.backup_database":
         from api.core.prometheus_metrics import record_backup_run
 
@@ -405,11 +412,30 @@ def _record_task_failure(
     )
     if exception is not None:
         record_background_error(
-            task=payload.get("task") or "unknown",
+            task=task_name,
             task_id=payload.get("task_id") or task_id,
             exc=exception,
             traceback_text=str(traceback or "")[:6000],
+            trace_id=(getattr(request, "headers", {}) or {}).get("trace_id")
+            if request is not None
+            else None,
         )
+        if task_name != "api.services.incident_tasks.persist_background_incident":
+            try:
+                from api.services.incident_tasks import persist_background_incident
+
+                persist_background_incident.delay(
+                    task_name=task_name,
+                    task_id=payload.get("task_id") or task_id,
+                    exception_type=payload.get("exception_type") or "UnknownError",
+                    message=str(exception)[:1000],
+                    traceback_text=str(traceback or "")[:6000],
+                    trace_id=(getattr(request, "headers", {}) or {}).get("trace_id")
+                    if request is not None
+                    else None,
+                )
+            except Exception:
+                logger.warning("failed to enqueue durable celery incident", exc_info=True)
     _push_dead_letter(payload)
 
 

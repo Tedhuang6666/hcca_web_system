@@ -370,6 +370,12 @@ from api.models.survey import (  # noqa: F401
     SurveyResponse,
     SurveyStatus,
 )
+from api.models.system_incident import (  # noqa: F401
+    IncidentSeverity,
+    IncidentStatus,
+    SystemIncident,
+    SystemIncidentEvent,
+)
 from api.models.user import User  # noqa: F401
 from api.models.user_google_tasks import UserGoogleTasksConfig  # noqa: F401
 

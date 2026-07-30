@@ -64,6 +64,7 @@ class Settings(BaseSettings):
     # --- 應用程式基本設定 ---
     APP_NAME: str = "校園自治整合平台"
     APP_VERSION: str = _read_release_version()
+    APP_RELEASE: str = ""
     # 由 CI 在 image build 時寫入；不可在容器啟動後覆寫，才能正確識別實際執行映像。
     BUILD_COMMIT: str = ""
     BUILD_REF: str = ""
@@ -137,6 +138,19 @@ class Settings(BaseSettings):
     SENTRY_DSN: str = Field(default="")
     SENTRY_TRACES_SAMPLE_RATE: float = Field(default=0.1, ge=0.0, le=1.0)
     SENTRY_PROFILES_SAMPLE_RATE: float = Field(default=0.0, ge=0.0, le=1.0)
+    # --- OpenTelemetry / Trace ---
+    OTEL_ENABLED: bool = False
+    OTEL_SERVICE_NAME: str = "hcca-api"
+    OTEL_EXPORTER_OTLP_ENDPOINT: str = "http://localhost:4317"
+    OTEL_TRACES_SAMPLE_RATE: float = Field(default=0.1, ge=0.0, le=1.0)
+
+    # --- Incident persistence / recovery guardrails ---
+    INCIDENT_DB_ENABLED: bool = True
+    INCIDENT_AUTO_RECOVERY_ENABLED: bool = False
+    RECOVERY_AGENT_URL: str = ""
+    RECOVERY_AGENT_TOKEN: str = ""
+    RECOVERY_MAX_RESTARTS_PER_HOUR: int = Field(default=2, ge=1, le=10)
+    RECOVERY_TASK_MAX_RETRIES: int = Field(default=3, ge=0, le=10)
 
     # --- PostHog 產品分析 ---
     POSTHOG_API_KEY: str = Field(default="")

@@ -55,17 +55,23 @@ interface ResponseErrorDetail {
   message: string;
   requestId: string | null;
   errorId: string | null;
+  traceId: string | null;
 }
 
 async function errorDetailFromResponse(res: Response): Promise<ResponseErrorDetail> {
   let detail: unknown = res.statusText;
   let errorId: string | null = null;
+  let traceId = res.headers.get("X-Trace-ID");
   try {
     const payload: unknown = await res.json();
     if (payload && typeof payload === "object") {
       const record = payload as { detail?: unknown; error_id?: unknown; errors?: unknown };
       detail = record.errors ?? record.detail ?? payload;
       errorId = typeof record.error_id === "string" ? record.error_id : null;
+      if (!traceId && payload && typeof payload === "object") {
+        const payloadTraceId = (payload as { trace_id?: unknown }).trace_id;
+        traceId = typeof payloadTraceId === "string" ? payloadTraceId : null;
+      }
     } else {
       detail = payload;
     }
@@ -82,6 +88,7 @@ async function errorDetailFromResponse(res: Response): Promise<ResponseErrorDeta
     message: codes.length > 0 ? `${message}（${codes.join("，")}）` : message,
     requestId,
     errorId,
+    traceId,
   };
 }
 
@@ -91,7 +98,25 @@ export async function errorMessageFromResponse(res: Response): Promise<string> {
 
 async function apiErrorFromResponse(res: Response): Promise<ApiError> {
   const detail = await errorDetailFromResponse(res);
-  return new ApiError(res.status, detail.message, detail.requestId, detail.errorId);
+  return new ApiError(res.status, detail.message, detail.requestId, detail.errorId, detail.traceId);
+}
+
+function createTraceId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID().replaceAll("-", "");
+  }
+  return `${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`.padEnd(32, "0").slice(0, 32);
+}
+
+function createSpanId(): string {
+  if (typeof crypto !== "undefined" && "getRandomValues" in crypto) {
+    const bytes = new Uint8Array(8);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+  }
+  return (Date.now().toString(16) + Math.random().toString(16).slice(2))
+    .slice(-16)
+    .padStart(16, "0");
 }
 
 async function refreshWithStatus(): Promise<RefreshStatus> {
@@ -214,6 +239,8 @@ export async function request<T>(
   let res: Response;
   let lastError: unknown = null;
   const maxRetries = method === "GET" ? GET_NETWORK_RETRIES : 0;
+  const traceId = createTraceId();
+  const traceparent = "00-" + traceId + "-" + createSpanId() + "-01";
   let attempt = 0;
   const fetchInit = (): RequestInit => {
     const { skipImpersonation: _skipImpersonation, ...requestInit } = init;
@@ -226,6 +253,8 @@ export async function request<T>(
         ...csrfHeaders(init.method),
         ...init.headers,
         ...(impersonation ? { Authorization: `Bearer ${impersonation.token}` } : {}),
+        "X-Trace-ID": traceId,
+        traceparent,
       },
     };
   };
