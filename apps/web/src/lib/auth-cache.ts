@@ -23,6 +23,7 @@ export interface ImpersonationSession {
   actor_email: string;
   actor_display_name: string;
   expires_at: number;
+  read_only?: boolean;
 }
 
 // SECURITY: 敏感權限資料（is_superuser、is_owner、permissions）改存 sessionStorage，

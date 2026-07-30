@@ -144,6 +144,13 @@ export const NAV_ITEMS: NavItem[] = [
     perm: "admin:users",
   },
   {
+    id: "supportConsole",
+    href: "/admin/support",
+    iconKey: "shield",
+    label: "客服作業平台",
+    perms: ["support.users.read", "support.tickets.read", "admin:all"],
+  },
+  {
     id: "systemDefense",
     href: "/admin/system",
     iconKey: "systemDefense",
@@ -339,6 +346,7 @@ export const NAV_DEF: NavEntry[] = [
       "moduleBackoffice",
       "adminDashboard",
       "userAccountAdmin",
+      "supportConsole",
       "about",
     ]),
   },

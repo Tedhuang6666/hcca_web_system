@@ -7,6 +7,7 @@ const TABS = [
   { label: "人員主檔", href: "/admin/people" },
   { label: "帳號維護", href: "/admin/users" },
   { label: "組織與職位", href: "/admin/permissions" },
+  { label: "客服作業平台", href: "/admin/support" },
 ] as const;
 
 export default function AdminWorkbenchTabs() {

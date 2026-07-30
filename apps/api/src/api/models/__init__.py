@@ -362,6 +362,20 @@ from api.models.site import (  # noqa: F401
     PublicSitePage,
     PublicSiteSettings,
 )
+from api.models.support import (  # noqa: F401
+    SupportApproval,
+    SupportApprovalStatus,
+    SupportAssistanceSession,
+    SupportAssistanceStatus,
+    SupportAuditLog,
+    SupportGuideEntry,
+    SupportImpersonationMode,
+    SupportImpersonationSession,
+    SupportTicket,
+    SupportTicketEvent,
+    SupportTicketPriority,
+    SupportTicketStatus,
+)
 from api.models.survey import (  # noqa: F401
     QuestionType,
     Survey,
