@@ -112,16 +112,19 @@ class SupportTicketCreateRequest(BaseModel):
 
 
 class SupportTicketUpdateRequest(BaseModel):
-    status: Literal[
-        "new",
-        "assigned",
-        "investigating",
-        "waiting_user",
-        "waiting_internal",
-        "resolved",
-        "closed",
-        "reopened",
-    ] | None = None
+    status: (
+        Literal[
+            "new",
+            "assigned",
+            "investigating",
+            "waiting_user",
+            "waiting_internal",
+            "resolved",
+            "closed",
+            "reopened",
+        ]
+        | None
+    ) = None
     priority: Literal["low", "normal", "high", "urgent"] | None = None
     assigned_to_id: uuid.UUID | None = None
     resolution: str | None = Field(None, max_length=10000)
