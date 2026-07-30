@@ -287,6 +287,69 @@ async def test_member_cannot_clear_user_mfa(
 
 
 @pytest.mark.asyncio
+async def test_admin_can_update_user_settings(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin, member, _, _, _ = await _seed_admin_data(db_session)
+    _override_user(admin)
+
+    response = await client.patch(
+        f"/admin/users/{member.id}",
+        json={
+            "display_name": "新任幹部",
+            "student_id": "S2026001",
+            "is_verified": False,
+            "show_email": False,
+            "ui_theme": "dark",
+            "notification_preferences": {
+                "document_pending": {
+                    "inapp": False,
+                    "email": True,
+                    "line": False,
+                    "discord": False,
+                }
+            },
+            "notification_digest_frequency": "daily",
+            "muted_notification_modules": ["meeting"],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["display_name"] == "新任幹部"
+    assert payload["student_id"] == "S2026001"
+    assert payload["is_verified"] is False
+    assert payload["show_email"] is False
+    assert payload["ui_theme"] == "dark"
+    assert payload["notification_preferences"]["document_pending"]["email"] is True
+    assert payload["notification_digest_frequency"] == "daily"
+    assert payload["muted_notification_modules"] == ["meeting"]
+
+    await db_session.refresh(member)
+    assert member.student_id == "S2026001"
+    assert member.notification_preferences["__digest_frequency"] == "daily"
+
+
+@pytest.mark.asyncio
+async def test_admin_can_revoke_user_sessions(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    admin, member, _, _, _ = await _seed_admin_data(db_session)
+    _override_user(admin)
+    revoke = AsyncMock(return_value=4)
+    monkeypatch.setattr("api.routers.admin.revoke_user", revoke)
+
+    response = await client.post(f"/admin/users/{member.id}/sessions/revoke")
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {"user_id": str(member.id), "revoked_count": 4}
+    revoke.assert_awaited_once_with(str(member.id))
+
+
+@pytest.mark.asyncio
 async def test_update_missing_user_position_returns_404(
     client: AsyncClient,
     db_session: AsyncSession,

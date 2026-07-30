@@ -827,6 +827,18 @@ export interface AdminUserDetail {
   student_id: string | null;
   avatar_url: string | null;
   is_active: boolean;
+  is_verified: boolean;
+  show_email: boolean;
+  ui_theme: "auto" | "light" | "dark";
+  ui_locale: "zh-TW";
+  notification_preferences: Record<string, {
+    inapp: boolean;
+    email: boolean;
+    line: boolean;
+    discord: boolean;
+  }>;
+  notification_digest_frequency: "off" | "daily" | "weekly";
+  muted_notification_modules: string[];
   mfa_enabled: boolean;
   is_superuser: boolean;
   /** Owner 為 OWNER_EMAILS 環境變數驅動的最高權限角色 */

@@ -44,11 +44,26 @@ export const adminApi = {
     }),
   updateUser: (id: string, body: {
     display_name?: string;
+    student_id?: string | null;
     is_active?: boolean;
+    is_verified?: boolean;
+    show_email?: boolean;
+    ui_theme?: "auto" | "light" | "dark";
+    ui_locale?: "zh-TW";
     is_superuser?: boolean;
+    notification_preferences?: Record<string, {
+      inapp: boolean;
+      email: boolean;
+      line: boolean;
+      discord: boolean;
+    }>;
+    notification_digest_frequency?: "off" | "daily" | "weekly";
+    muted_notification_modules?: string[];
   }) =>
     patch<AdminUserDetail>(`/admin/users/${id}`, body),
   clearUserMfa: (id: string) => del<AdminUserDetail>(`/admin/users/${id}/mfa`),
+  revokeUserSessions: (id: string) =>
+    post<{ user_id: string; revoked_count: number }>(`/admin/users/${id}/sessions/revoke`, {}),
   addUserPosition: (userId: string, body: { position_id: string; start_date?: string; end_date?: string | null }) =>
     post<AdminUserDetail>(`/admin/users/${userId}/positions`, body),
   updateUserPosition: (

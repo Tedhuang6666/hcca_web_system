@@ -30,6 +30,7 @@ from api.core.permission_codes import (
     PermissionCode,
     validate_permission_codes,
 )
+from api.core.security import revoke_user
 from api.dependencies.permissions import require_permission
 from api.models.org import Org, Permission, Position, PositionCategory, UserPosition
 from api.models.person import PersonAffiliationKind, PersonAffiliationSource
@@ -41,6 +42,16 @@ from api.services import org as org_svc
 from api.services import person as person_svc
 from api.services import user_registration as user_registration_svc
 from api.services.discord_bot import enqueue_role_sync
+from api.services.notification_pref import (
+    DIGEST_FREQUENCIES,
+    KNOWN_MODULES,
+    NOTIFICATION_TYPES,
+    get_digest_frequency,
+    get_muted_modules,
+    normalize_preferences,
+    set_digest_frequency,
+    set_muted_modules,
+)
 from api.services.permission import get_user_permission_codes
 from api.services.user_registration import UserRegistrationError
 
@@ -80,6 +91,13 @@ class UserDetail(BaseModel):
     student_id: str | None
     avatar_url: str | None
     is_active: bool
+    is_verified: bool
+    show_email: bool
+    ui_theme: str
+    ui_locale: str
+    notification_preferences: dict[str, dict[str, bool]] = Field(default_factory=dict)
+    notification_digest_frequency: str = "off"
+    muted_notification_modules: list[str] = Field(default_factory=list)
     mfa_enabled: bool
     is_superuser: bool
     # Owner 為環境變數 OWNER_EMAILS 驅動的最高權限角色，由路由層注入
@@ -191,8 +209,16 @@ class UpdateUserPositionRequest(BaseModel):
 
 class UpdateUserRequest(BaseModel):
     display_name: str | None = Field(None, max_length=100)
+    student_id: str | None = Field(None, max_length=20)
     is_active: bool | None = None
+    is_verified: bool | None = None
+    show_email: bool | None = None
+    ui_theme: Literal["auto", "light", "dark"] | None = None
+    ui_locale: Literal["zh-TW"] | None = None
     is_superuser: bool | None = None
+    notification_preferences: dict[str, dict[str, bool]] | None = None
+    notification_digest_frequency: Literal["off", "daily", "weekly"] | None = None
+    muted_notification_modules: list[str] | None = None
 
 
 class PositionCreate(BaseModel):
@@ -228,6 +254,19 @@ class PermissionCatalogItem(BaseModel):
 
 
 # ── 輔助 ─────────────────────────────────────────────────────────────────────
+
+
+def _user_preference_fields(user: User) -> dict[str, object]:
+    preferences = user.notification_preferences or {}
+    return {
+        "show_email": user.show_email,
+        "is_verified": user.is_verified,
+        "ui_theme": user.ui_theme,
+        "ui_locale": user.ui_locale,
+        "notification_preferences": normalize_preferences(preferences),
+        "notification_digest_frequency": get_digest_frequency(preferences),
+        "muted_notification_modules": get_muted_modules(preferences),
+    }
 
 
 async def _enrich_user(db: AsyncSession, user: User) -> UserDetail:
@@ -284,6 +323,7 @@ async def _enrich_user(db: AsyncSession, user: User) -> UserDetail:
         created_at=user.created_at.isoformat(),
         positions=positions,
         effective_permissions=sorted(effective),
+        **_user_preference_fields(user),
     )
 
 
@@ -359,6 +399,7 @@ async def _enrich_users_batch(db: AsyncSession, users: list[User]) -> list[UserD
                 created_at=user.created_at.isoformat(),
                 positions=positions,
                 effective_permissions=sorted(effective),
+                **_user_preference_fields(user),
             )
         )
     return details
@@ -676,7 +717,7 @@ async def merge_user_accounts(
 @router.patch(
     "/users/{user_id}",
     response_model=UserDetail,
-    summary="更新使用者資料（啟用/停用、改名、設定超管）",
+    summary="更新使用者資料與偏好設定",
 )
 async def update_user(
     user_id: uuid.UUID,
@@ -690,8 +731,14 @@ async def update_user(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="使用者不存在")
     before = {
         "display_name": user.display_name,
+        "student_id": user.student_id,
         "is_active": user.is_active,
+        "is_verified": user.is_verified,
+        "show_email": user.show_email,
+        "ui_theme": user.ui_theme,
+        "ui_locale": user.ui_locale,
         "is_superuser": user.is_superuser,
+        "notification_preferences": user.notification_preferences or {},
     }
     is_owner = user.email.lower() in settings.OWNER_EMAILS
     # 職責分離：is_superuser 是比 admin:all 更高的層級（繞過全部 RBAC 與 owner 以外的保護），
@@ -721,15 +768,82 @@ async def update_user(
         )
     if body.display_name is not None:
         user.display_name = body.display_name
+    if "student_id" in body.model_fields_set:
+        user.student_id = (body.student_id.strip() or None) if body.student_id else None
     if body.is_active is not None:
         user.is_active = body.is_active
+    if body.is_verified is not None:
+        user.is_verified = body.is_verified
+    if body.show_email is not None:
+        user.show_email = body.show_email
+    if body.ui_theme is not None:
+        user.ui_theme = body.ui_theme
+    if body.ui_locale is not None:
+        user.ui_locale = body.ui_locale
     if body.is_superuser is not None:
         user.is_superuser = body.is_superuser
-    await db.flush()
+    if body.notification_preferences is not None:
+        unknown_types = sorted(set(body.notification_preferences) - set(NOTIFICATION_TYPES))
+        if unknown_types:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"未知的通知類型：{', '.join(unknown_types)}",
+            )
+        merged_preferences = normalize_preferences(user.notification_preferences)
+        for notification_type, channels in body.notification_preferences.items():
+            merged_preferences[notification_type] = {
+                "inapp": bool(channels.get("inapp", True)),
+                "email": bool(channels.get("email", False)),
+                "line": bool(channels.get("line", False)),
+                "discord": bool(channels.get("discord", False)),
+            }
+        preserved = {
+            key: value
+            for key, value in (user.notification_preferences or {}).items()
+            if key.startswith("__")
+        }
+        user.notification_preferences = {**merged_preferences, **preserved}
+    if body.notification_digest_frequency is not None:
+        if body.notification_digest_frequency not in DIGEST_FREQUENCIES:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="通知摘要頻率必須是 off、daily 或 weekly",
+            )
+        user.notification_preferences = set_digest_frequency(
+            user.notification_preferences,
+            body.notification_digest_frequency,
+        )
+    if body.muted_notification_modules is not None:
+        invalid_modules = sorted(set(body.muted_notification_modules) - KNOWN_MODULES)
+        if invalid_modules:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"未知的通知模組：{', '.join(invalid_modules)}",
+            )
+        user.notification_preferences = set_muted_modules(
+            user.notification_preferences,
+            body.muted_notification_modules,
+        )
+    try:
+        await db.flush()
+    except IntegrityError as exc:
+        await db.rollback()
+        if "student_id" in str(exc.orig):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="此學號已被其他帳號使用，請確認學號是否正確",
+            ) from None
+        raise
     after = {
         "display_name": user.display_name,
+        "student_id": user.student_id,
         "is_active": user.is_active,
+        "is_verified": user.is_verified,
+        "show_email": user.show_email,
+        "ui_theme": user.ui_theme,
+        "ui_locale": user.ui_locale,
         "is_superuser": user.is_superuser,
+        "notification_preferences": user.notification_preferences or {},
     }
     await audit_svc.record(
         db,
@@ -742,6 +856,33 @@ async def update_user(
         summary=f"更新使用者「{user.display_name}」資料",
     )
     return await _enrich_user(db, user)
+
+
+@router.post(
+    "/users/{user_id}/sessions/revoke",
+    response_model=dict[str, int | str],
+    summary="撤銷使用者全部登入工作階段",
+)
+async def revoke_user_sessions(
+    user_id: uuid.UUID,
+    db: DbDep,
+    admin_user: AdminUser,
+) -> dict[str, int | str]:
+    user = await db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="使用者不存在")
+    revoked_count = await revoke_user(str(user.id))
+    await audit_svc.record(
+        db,
+        entity_type="user",
+        entity_id=str(user.id),
+        action="user.sessions.revoke",
+        actor_id=str(admin_user.id),
+        actor_email=admin_user.email,
+        meta={"revoked_count": revoked_count},
+        summary=f"撤銷使用者「{user.display_name}」的全部登入工作階段",
+    )
+    return {"user_id": str(user.id), "revoked_count": revoked_count}
 
 
 @router.post(
