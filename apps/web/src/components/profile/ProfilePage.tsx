@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { usersApi, classApi, apiErrorMessage } from "@/lib/api";
 import { cacheGet, cacheHas, cacheSet } from "@/lib/api-cache";
 import { SectionSkeleton } from "@/components/ui/Skeleton";
+import { usePermissions } from "@/hooks/usePermissions";
 import type {
   UserRead,
   UserPositionRead,
@@ -106,10 +107,10 @@ const PROFILE_CLASS_KEY = "profile/class";
 
 export default function ProfilePage() {
   const pathname = usePathname();
+  const { permissions: authPermissions, isAdmin, isOwner } = usePermissions();
   const [activeTab, setActiveTab] = useState<ProfileTab>("account");
   const [user, setUser] = useState<UserRead | null>(() => cacheGet<UserRead>(PROFILE_ME_KEY) ?? null);
   const [positions, setPositions] = useState<UserPositionRead[]>(() => cacheGet<UserPositionRead[]>(PROFILE_POSITIONS_KEY) ?? []);
-  const [permissions, setPermissions] = useState<string[]>([]);
   const [myClass, setMyClass] = useState<SchoolClassListItem | null>(() => cacheGet<SchoolClassListItem>(PROFILE_CLASS_KEY) ?? null);
   const [linkedEmails, setLinkedEmails] = useState<string[]>(() => cacheGet<string[]>(PROFILE_EMAILS_KEY) ?? []);
   const [newEmail, setNewEmail] = useState("");
@@ -139,11 +140,6 @@ export default function ProfilePage() {
     }).finally(() => setLoading(false));
 
     classApi.myClass().then((cls) => { setMyClass(cls); cacheSet(PROFILE_CLASS_KEY, cls); }).catch(() => setMyClass(null));
-    // 從 sessionStorage 讀取有效權限（敏感欄位已移至 sessionStorage）
-    try {
-      const raw = sessionStorage.getItem("permissions");
-      if (raw) setPermissions(JSON.parse(raw));
-    } catch { /* ignore */ }
   }, []);
 
   async function saveDisplayName(v: string) {
@@ -227,6 +223,8 @@ export default function ProfilePage() {
   const pastPositions = positions.filter(
     p => p.end_date && p.end_date < today
   );
+  const permissionCodes = Array.from(authPermissions).sort();
+  const hasFullSystemAccess = isAdmin || authPermissions.has("admin:all");
 
   if (loading) {
     return (
@@ -547,14 +545,20 @@ export default function ProfilePage() {
       </section>}
 
       {/* 有效權限 */}
-      {activeTab === "permissions" && permissions.length > 0 && (
+      {activeTab === "permissions" && (hasFullSystemAccess || permissionCodes.length > 0) && (
         <section className="card p-5" aria-labelledby="perms-heading">
           <h2 id="perms-heading" className="text-sm font-semibold mb-3"
             style={{ color: "var(--text-primary)" }}>
             有效權限
           </h2>
+          {isAdmin && (
+            <div className="mb-3 rounded-md px-3 py-2 text-xs"
+              style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
+              {isOwner ? "系統擁有者" : "超級管理員"}：擁有全部系統權限（不受一般職位權限碼限制）
+            </div>
+          )}
           <div className="flex flex-wrap gap-1.5">
-            {permissions.map(code => (
+            {permissionCodes.map(code => (
               <span key={code} className="text-xs px-2 py-1 rounded font-mono"
                 style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
                 {code}
@@ -563,7 +567,7 @@ export default function ProfilePage() {
           </div>
         </section>
       )}
-      {activeTab === "permissions" && permissions.length === 0 && (
+      {activeTab === "permissions" && !hasFullSystemAccess && permissionCodes.length === 0 && (
         <section className="card p-6 text-center">
           <p className="text-sm" style={{ color: "var(--text-muted)" }}>
             目前沒有可顯示的有效權限。
