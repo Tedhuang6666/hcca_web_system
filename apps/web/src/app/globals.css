@@ -5220,7 +5220,7 @@ html[data-reveal-ready] [data-reveal].is-reveal-in {
   }
 
   .credential-card__main {
-    grid-template-columns: minmax(0, 1fr) 7.25rem;
+    grid-template-columns: minmax(0, 1fr) 6.5rem;
     align-items: center;
     gap: 0.75rem;
     padding-top: 1.1rem;
@@ -5249,11 +5249,11 @@ html[data-reveal-ready] [data-reveal].is-reveal-in {
   }
 
   .credential-card__fields dd {
-    font-size: 0.75rem;
+    font-size: 0.8125rem;
   }
 
   .credential-card__field-wide dd {
-    font-size: 0.6875rem;
+    font-size: 0.75rem;
   }
 
   .credential-card__seal {
@@ -5261,8 +5261,8 @@ html[data-reveal-ready] [data-reveal].is-reveal-in {
   }
 
   .credential-card__seal-ring {
-    width: 7.25rem;
-    height: 7.25rem;
+    width: 6.5rem;
+    height: 6.5rem;
   }
 
   .credential-card__seal p {
@@ -5328,7 +5328,7 @@ html[data-reveal-ready] [data-reveal].is-reveal-in {
   }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 380px) {
   .credential-card__main {
     grid-template-columns: 1fr;
     gap: 1.15rem;
