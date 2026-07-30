@@ -27,11 +27,15 @@ from typing import Any
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.database import advisory_xact_lock
 from api.models.audit_log import AuditLog
 
 logger = logging.getLogger(__name__)
 
 GENESIS_HASH = "GENESIS" + "0" * 56  # 64 chars to match SHA-256 hex length
+# Serialize every chain writer in PostgreSQL.  The lock is transaction-scoped and
+# is a no-op for the SQLite test database.
+AUDIT_CHAIN_LOCK_KEY = 0x48434341
 
 
 def _normalize_created_at(value: datetime) -> str:
@@ -101,6 +105,10 @@ async def get_last_hash(db: AsyncSession) -> str:
     呼叫端在寫入新紀錄前用此值作為 prev_hash。
     為避免並發寫入產生分叉、呼叫端應在交易中對「最後一筆」加鎖
     （SELECT ... FOR UPDATE），或用 advisory lock。
+
+    雜湊鏈啟用前可能已有 AuditLog 沒有 hash。第一次寫入時補齊缺少的
+    derived hash 欄位，避免舊資料讓所有新的稽核寫入都回 500；既有非空
+    self_hash 不會被自動覆寫，仍交由完整性檢查揭露內容不一致。
     """
     stmt = select(AuditLog).order_by(desc(AuditLog.created_at), desc(AuditLog.id)).limit(1)
     result = await db.execute(stmt)
@@ -108,7 +116,21 @@ async def get_last_hash(db: AsyncSession) -> str:
     if last is None:
         return GENESIS_HASH
     if not last.self_hash:
-        raise RuntimeError("audit_chain: last AuditLog has no self_hash")
+        rows_stmt = select(AuditLog).order_by(AuditLog.created_at, AuditLog.id)
+        rows_result = await db.execute(rows_stmt)
+        previous_hash = GENESIS_HASH
+        repaired = 0
+        for row in rows_result.scalars().all():
+            if not row.self_hash:
+                row.prev_hash = previous_hash
+                row.self_hash = compute_self_hash(row, previous_hash)
+                repaired += 1
+            previous_hash = row.self_hash
+
+        if repaired:
+            await db.flush()
+            logger.warning("audit_chain: repaired %d legacy AuditLog hash(es)", repaired)
+        return previous_hash
     return last.self_hash
 
 
@@ -136,6 +158,7 @@ async def write_audit_log_with_chain(
         meta=meta,
         summary=summary,
     )
+    await advisory_xact_lock(db, AUDIT_CHAIN_LOCK_KEY)
     prev_hash = await get_last_hash(db)
     now = datetime.now(UTC)
     row = AuditLog(
@@ -212,6 +235,7 @@ async def verify_integrity_range(
 
 __all__ = [
     "GENESIS_HASH",
+    "AUDIT_CHAIN_LOCK_KEY",
     "compute_self_hash",
     "get_last_hash",
     "verify_integrity_range",

@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.audit_log import AuditLog
+from api.services import audit_chain
 
 logger = logging.getLogger(__name__)
 
@@ -26,28 +26,18 @@ async def record(
     ip_address: str | None = None,
     summary: str | None = None,
 ) -> AuditLog:
-    """寫入一筆不可變稽核日誌，立即 flush（不 commit，由呼叫端事務決定）。"""
-    from api.services import impersonation as impersonation_svc
-
-    actor_id, actor_email, meta, summary = impersonation_svc.annotate_audit_fields(
-        actor_id=actor_id,
-        actor_email=actor_email,
-        meta=meta,
-        summary=summary,
-    )
-    log = AuditLog(
+    """寫入含 hash chain 的稽核日誌，立即 flush（不 commit）。"""
+    log = await audit_chain.write_audit_log_with_chain(
+        session,
         entity_type=entity_type,
         entity_id=str(entity_id),
         action=action,
         actor_id=str(actor_id) if actor_id else None,
         actor_email=actor_email,
-        meta=meta or {},
+        meta=meta,
         ip_address=ip_address,
-        created_at=datetime.now(UTC),
         summary=summary,
     )
-    session.add(log)
-    await session.flush()
 
     # ── 治理事件總線橋接 ────────────────────────────────────────────────
     # audit 幾乎涵蓋全平台每個狀態變化，因此把「治理中樞會關心的」生命週期動作
@@ -59,10 +49,10 @@ async def record(
         entity_type=entity_type,
         entity_id=str(entity_id),
         action=action,
-        actor_id=actor_id,
-        actor_email=actor_email,
-        summary=summary,
-        meta=meta,
+        actor_id=log.actor_id,
+        actor_email=log.actor_email,
+        summary=log.summary,
+        meta=log.meta,
     )
     return log
 
