@@ -60,7 +60,8 @@ export function ImpersonationBanner() {
       <div className="flex min-w-0 items-center gap-2 text-sm">
         <span aria-hidden>⚠️</span>
         <span className="truncate">
-          目前以 <strong>{session.target_display_name || session.target_email}</strong> 身分操作；
+          目前以 <strong>{session.target_display_name || session.target_email}</strong> 身分
+          {session.read_only ? "唯讀檢視" : "操作"}；
           由 <strong>{session.actor_display_name || session.actor_email}</strong> 管理員代行
         </span>
       </div>

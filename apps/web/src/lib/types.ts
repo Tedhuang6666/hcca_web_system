@@ -1254,5 +1254,141 @@ export interface DiscordNotificationEventOut {
   label: string;
 }
 
+// ── 客服作業平台 ─────────────────────────────────────────────────────────────
+export interface SupportUserSummary {
+  id: string;
+  display_name: string;
+  masked_name: string;
+  email: string;
+  masked_email: string;
+  student_id: string | null;
+  masked_student_id: string | null;
+  is_active: boolean;
+  is_verified: boolean;
+  mfa_enabled: boolean;
+  is_superuser: boolean;
+  created_at: string;
+}
+
+export interface SupportDiagnostic {
+  code: string;
+  severity: "info" | "warning" | "error";
+  message: string;
+  repair_action: string | null;
+}
+
+export interface SupportUserDetail {
+  user: SupportUserSummary;
+  linked_emails: string[];
+  masked_linked_emails: string[];
+  account: Record<string, unknown>;
+  roles: Array<{
+    id: string;
+    name: string;
+    org_id: string;
+    org_name: string;
+    start_date: string;
+    end_date: string | null;
+    permission_codes: string[];
+  }>;
+  effective_permissions: string[];
+  settings: Record<string, unknown>;
+  tickets: Array<{
+    id: string;
+    ticket_number: string;
+    title: string;
+    status: string;
+    priority: string;
+    updated_at: string;
+  }>;
+  diagnostics: SupportDiagnostic[];
+}
+
+export interface SupportTicket {
+  id: string;
+  ticket_number: string;
+  title: string;
+  description: string;
+  user_id: string | null;
+  reported_by_user_id: string | null;
+  assigned_to_id: string | null;
+  channel: string;
+  priority: "low" | "normal" | "high" | "urgent" | string;
+  status: "new" | "assigned" | "investigating" | "waiting_user" | "waiting_internal" | "resolved" | "closed" | "reopened" | string;
+  error_code: string | null;
+  request_id: string | null;
+  related_data: Record<string, unknown>;
+  resolution: string | null;
+  created_at: string;
+  updated_at: string;
+  closed_at: string | null;
+  events: Array<{
+    id: string;
+    actor_user_id: string | null;
+    event_type: string;
+    body: string;
+    metadata: Record<string, unknown>;
+    created_at: string;
+  }>;
+}
+
+export interface SupportDashboard {
+  open_tickets: number;
+  urgent_tickets: number;
+  pending_approvals: number;
+  active_assistance_sessions: number;
+  active_impersonation_sessions: number;
+  recent_actions: Array<Record<string, unknown>>;
+}
+
+export interface SupportApproval {
+  id: string;
+  approval_number: string;
+  requested_by: string;
+  approved_by: string | null;
+  ticket_id: string | null;
+  target_user_id: string | null;
+  action: string;
+  payload: Record<string, unknown>;
+  reason: string;
+  risk_level: string;
+  status: string;
+  requested_at: string;
+  reviewed_at: string | null;
+  executed_at: string | null;
+  review_note: string | null;
+  result: Record<string, unknown> | null;
+}
+
+export interface SupportAuditEntry {
+  id: string;
+  actor_user_id: string;
+  target_user_id: string | null;
+  ticket_id: string | null;
+  action: string;
+  resource_type: string;
+  resource_id: string | null;
+  risk_level: string;
+  reason: string;
+  before_data: Record<string, unknown> | null;
+  after_data: Record<string, unknown> | null;
+  request_id: string | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  created_at: string;
+}
+
+export interface SupportGuide {
+  id: string;
+  slug: string;
+  title: string;
+  summary: string;
+  body: string;
+  category: string;
+  required_permissions: string[];
+  route: string | null;
+  is_active: boolean;
+}
+
 
 // ── Google Calendar 同步 ──────────────────────────────────────────────────────

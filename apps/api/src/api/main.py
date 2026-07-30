@@ -109,6 +109,7 @@ from api.routers import (
     seating,
     shop,
     site,
+    support,
     survey,
     tasks,
     term_rollover,
@@ -503,6 +504,7 @@ def create_app() -> FastAPI:
     app.include_router(public_api.router)
     app.include_router(metrics_endpoint.router)
     app.include_router(impersonation.router)
+    app.include_router(support.router)
     app.include_router(feature_flags.router)
 
     # 使用者上傳檔案的靜態存取：僅限「本就公開」的媒體前綴（公告圖、問卷圖、官網素材）。

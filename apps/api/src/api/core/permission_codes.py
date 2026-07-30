@@ -178,6 +178,24 @@ class PermissionCode(StrEnum):
     ADMIN_IMPERSONATE = "admin:impersonate"
     FEATURE_FLAG_ADMIN = "feature_flag:admin"
 
+    SUPPORT_USERS_READ = "support.users.read"
+    SUPPORT_USERS_VIEW_SENSITIVE = "support.users.view_sensitive"
+    SUPPORT_USERS_EDIT_PROFILE = "support.users.edit_profile"
+    SUPPORT_USERS_EDIT_EMAIL = "support.users.edit_email"
+    SUPPORT_USERS_UNLOCK = "support.users.unlock"
+    SUPPORT_USERS_REVOKE_SESSIONS = "support.users.revoke_sessions"
+    SUPPORT_USERS_RESET_MFA = "support.users.reset_mfa"
+    SUPPORT_USERS_IMPERSONATE = "support.users.impersonate"
+    SUPPORT_USERS_IMPERSONATE_INTERACTIVE = "support.users.impersonate_interactive"
+    SUPPORT_TICKETS_READ = "support.tickets.read"
+    SUPPORT_TICKETS_CREATE = "support.tickets.create"
+    SUPPORT_TICKETS_MANAGE = "support.tickets.manage"
+    SUPPORT_APPROVALS_REVIEW = "support.approvals.review"
+    SUPPORT_AUDIT_READ = "support.audit.read"
+    SUPPORT_AUDIT_EXPORT = "support.audit.export"
+    SUPPORT_GUIDES_MANAGE = "support.guides.manage"
+    SUPPORT_ASSISTANCE_MANAGE = "support.assistance.manage"
+
 
 ALL_PERMISSION_CODES: list[dict[str, str]] = [
     {
@@ -1038,6 +1056,109 @@ ALL_PERMISSION_CODES: list[dict[str, str]] = [
         "code": PermissionCode.ADMIN_IMPERSONATE,
         "label": "代理登入（客服）",
         "desc": "以目標使用者身分檢視並操作介面（有時效，修改完整標註代行管理員）",
+    },
+    # ── 客服作業平台 ──────────────────────────────────────────────────
+    {
+        "group": "客服作業平台",
+        "code": PermissionCode.SUPPORT_USERS_READ,
+        "label": "查看客服使用者資料",
+        "desc": "以遮罩方式搜尋、查看使用者帳號、角色、設定、工單與診斷結果",
+    },
+    {
+        "group": "客服作業平台",
+        "code": PermissionCode.SUPPORT_USERS_VIEW_SENSITIVE,
+        "label": "查看客服敏感資料",
+        "desc": "綁定工單並填寫理由後查看未遮罩 Email、學號等資料",
+    },
+    {
+        "group": "客服作業平台",
+        "code": PermissionCode.SUPPORT_USERS_EDIT_PROFILE,
+        "label": "修改客服基本資料",
+        "desc": "透過白名單欄位修改顯示名稱、學號或聯絡顯示設定",
+    },
+    {
+        "group": "客服作業平台",
+        "code": PermissionCode.SUPPORT_USERS_EDIT_EMAIL,
+        "label": "修改客服 Email",
+        "desc": "透過受控流程修改登入 Email 並重新要求驗證",
+    },
+    {
+        "group": "客服作業平台",
+        "code": PermissionCode.SUPPORT_USERS_UNLOCK,
+        "label": "解除客服帳號鎖定",
+        "desc": "解除指定使用者的登入、MFA 與 Email 鎖定狀態",
+    },
+    {
+        "group": "客服作業平台",
+        "code": PermissionCode.SUPPORT_USERS_REVOKE_SESSIONS,
+        "label": "撤銷客服登入工作階段",
+        "desc": "撤銷指定使用者所有現存登入工作階段",
+    },
+    {
+        "group": "客服作業平台",
+        "code": PermissionCode.SUPPORT_USERS_RESET_MFA,
+        "label": "重設客服 MFA",
+        "desc": "清除 MFA 設定，讓使用者重新註冊（中風險）",
+    },
+    {
+        "group": "客服作業平台",
+        "code": PermissionCode.SUPPORT_USERS_IMPERSONATE,
+        "label": "啟動客服模擬使用者",
+        "desc": "啟動有時效、綁定工單的唯讀或可操作模擬工作階段",
+    },
+    {
+        "group": "客服作業平台",
+        "code": PermissionCode.SUPPORT_USERS_IMPERSONATE_INTERACTIVE,
+        "label": "啟動可操作模擬",
+        "desc": "在更高權限與短期限下代替使用者操作，財務、投票與權限管理區域仍禁止代理",
+    },
+    {
+        "group": "客服作業平台",
+        "code": PermissionCode.SUPPORT_TICKETS_READ,
+        "label": "查看客服工單",
+        "desc": "查看、搜尋與追蹤客服工單",
+    },
+    {
+        "group": "客服作業平台",
+        "code": PermissionCode.SUPPORT_TICKETS_CREATE,
+        "label": "建立客服工單",
+        "desc": "建立客服工單並綁定使用者、錯誤編號或 Request ID",
+    },
+    {
+        "group": "客服作業平台",
+        "code": PermissionCode.SUPPORT_TICKETS_MANAGE,
+        "label": "管理客服工單",
+        "desc": "指派、更新狀態、補充處理紀錄與結案",
+    },
+    {
+        "group": "客服作業平台",
+        "code": PermissionCode.SUPPORT_APPROVALS_REVIEW,
+        "label": "審核客服高風險操作",
+        "desc": "查看差異並核准或拒絕角色與資料還原操作",
+    },
+    {
+        "group": "客服作業平台",
+        "code": PermissionCode.SUPPORT_AUDIT_READ,
+        "label": "查看客服稽核",
+        "desc": "依客服、使用者、工單、風險與動作查詢客服 append-only 稽核",
+    },
+    {
+        "group": "客服作業平台",
+        "code": PermissionCode.SUPPORT_AUDIT_EXPORT,
+        "label": "匯出客服稽核",
+        "desc": "匯出遮罩後的客服操作稽核 CSV",
+    },
+    {
+        "group": "客服作業平台",
+        "code": PermissionCode.SUPPORT_GUIDES_MANAGE,
+        "label": "管理客服知識庫",
+        "desc": "建立與維護操作引導、常見錯誤與安全提示",
+    },
+    {
+        "group": "客服作業平台",
+        "code": PermissionCode.SUPPORT_ASSISTANCE_MANAGE,
+        "label": "管理客服協助模式",
+        "desc": "建立、查看、結束使用者協助碼與畫面狀態同步",
     },
     {
         "group": "企業級治理",

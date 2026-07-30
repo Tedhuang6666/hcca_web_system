@@ -10,7 +10,7 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 from api.core.config import settings
 from api.dependencies.auth import get_current_active_user
@@ -36,10 +36,44 @@ async def block_impersonation_write(
 class ImpersonationContextMiddleware(BaseHTTPMiddleware):
     """在整個請求生命週期提供代行者與目標使用者的雙重身分。"""
 
+    _INTERACTIVE_BLOCKED_PREFIXES = (
+        "/admin",
+        "/finance",
+        "/elections",
+        "/governance",
+        "/regulations",
+        "/documents",
+        "/support",
+        "/system",
+    )
+
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         context_token = None
         token = _extract_token(request)
         claims = impersonation_svc.parse_impersonation_token(token) if token else None
+        if (
+            claims is not None
+            and claims.get("support_read_only")
+            and request.method
+            not in {
+                "GET",
+                "HEAD",
+                "OPTIONS",
+            }
+        ):
+            return JSONResponse(
+                {"detail": "目前為客服唯讀模擬模式，不允許提交或修改資料"},
+                status_code=403,
+            )
+        if (
+            claims is not None
+            and claims.get("support_interactive")
+            and request.url.path.startswith(self._INTERACTIVE_BLOCKED_PREFIXES)
+        ):
+            return JSONResponse(
+                {"detail": "客服可操作模擬不允許進入財務、投票、權限或管理區域"},
+                status_code=403,
+            )
         context = (
             impersonation_svc.impersonation_context_from_claims(claims)
             if claims is not None
