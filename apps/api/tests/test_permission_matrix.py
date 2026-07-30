@@ -34,9 +34,15 @@ KNOWN_PUBLIC_ROUTES: set[tuple[str, str]] = {
     # 根路徑 / 健康探測
     ("/", "GET"),
     ("/health", "GET"),
+    ("/health/ready", "GET"),
+    ("/health/live", "GET"),
     ("/ready", "GET"),
     ("/metrics", "GET"),
     ("/live", "GET"),
+    # 匿名前端 runtime error 回報；不依賴登入，才能捕捉登入/公開頁面崩潰。
+    ("/system/client-errors", "POST"),
+    # 支援平台驗證連結；用於未登入的客服工作階段驗證。
+    ("/support/verify-email", "GET"),
     # 模組健康探測（每個 router 一條 __module_health__ 端點）
     ("/activities/__module_health__", "GET"),
     ("/announcements/__module_health__", "GET"),
