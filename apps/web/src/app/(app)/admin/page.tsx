@@ -11,6 +11,7 @@ import {
   Settings,
   Shield,
   SlidersHorizontal,
+  UserCog,
   Users,
 } from "lucide-react";
 import { adminApi, auditLogsApi, systemApi, type ModuleStatus } from "@/lib/api";
@@ -95,7 +96,8 @@ const QUICK_ACTIONS = [
   { href: "/admin/system",       icon: Shield,     label: "系統防護",   desc: "維護模式、限流與封鎖規則" },
   { href: "/admin/settings",     icon: Settings,   label: "系統設定",   desc: "全站設定與功能參數調整" },
   { href: "/admin/modules",      icon: Puzzle,     label: "模組維護",   desc: "查看各模組狀態、手動恢復" },
-  { href: "/admin/navigation-profiles", icon: SlidersHorizontal, label: "視角管理", desc: "管理角色視角與專屬導覽" },
+  { href: "/admin/navigation-profiles", icon: SlidersHorizontal, label: "視角管理", desc: "管理角色視角與專屬導覽", requiredPermission: "admin:all" },
+  { href: "/admin/impersonation", icon: UserCog, label: "代理登入", desc: "以特定使用者視角檢查平台", requiredPermission: "admin:impersonate" },
   { href: "/audit-logs",         icon: ClipboardList, label: "稽核日誌", desc: "追蹤所有操作紀錄" },
   { href: "/admin/diagnostics",  icon: Database,   label: "系統診斷",   desc: "資料庫、Redis 與 Celery 健康度" },
 ];
@@ -228,7 +230,7 @@ export default function AdminDashboardPage() {
           快速操作
         </h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
-          {QUICK_ACTIONS.map((action) => {
+          {QUICK_ACTIONS.filter((action) => !action.requiredPermission || isAdmin || can(action.requiredPermission)).map((action) => {
             const Icon = action.icon;
             return (
               <Link key={action.href} href={action.href} style={{ textDecoration: "none" }}>

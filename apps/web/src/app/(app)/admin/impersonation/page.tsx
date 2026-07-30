@@ -7,34 +7,39 @@ import {
   Lock,
   LogOut,
   ShieldHalf,
-  UserCog } from "lucide-react";
+  UserCog,
+} from "lucide-react";
 import { toast } from "sonner";
 
+import { UserPicker } from "@/components/meal/UserPicker";
 import { usePermissions } from "@/hooks/usePermissions";
 import {
   authApi,
   impersonationApi,
-  type ImpersonationStartResponse, apiErrorMessage } from "@/lib/api";
+  type ImpersonationStartResponse,
+  type UserSummary,
+  apiErrorMessage,
+} from "@/lib/api";
 import { cacheCurrentUser, clearImpersonationSession, saveImpersonationSession } from "@/lib/auth-cache";
 
 export default function ImpersonationPage() {
   const { can } = usePermissions();
   const router = useRouter();
-  const [userId, setUserId] = useState("");
+  const [selectedUser, setSelectedUser] = useState<UserSummary | null>(null);
   const [minutes, setMinutes] = useState(30);
   const [busy, setBusy] = useState(false);
   const [active, setActive] = useState<ImpersonationStartResponse | null>(null);
 
   const onStart = async () => {
-    const id = userId.trim();
-    if (!id) {
-      toast.error("請填入目標 user UUID");
+    if (!selectedUser) {
+      toast.error("請先從選單選擇目標使用者");
       return;
     }
+    const id = selectedUser.id;
     if (
       !window.confirm(
-        `將以該使用者身分檢視 ${minutes} 分鐘。\n` +
-          `所有修改會被記為「以 ${id} 身分，由你管理員代行」。\n\n` +
+        `將以「${selectedUser.display_name}」身分檢視 ${minutes} 分鐘。\n` +
+          `所有修改會被記為「以 ${selectedUser.display_name} 身分，由你管理員代行」。\n\n` +
           `繼續？`,
       )
     )
@@ -108,14 +113,34 @@ export default function ImpersonationPage() {
         style={{ borderColor: "var(--border)" }}>
         <h2 className="mb-2 text-sm font-semibold text-[var(--text-primary)]">啟動代理</h2>
         <div className="grid grid-cols-1 gap-2 md:grid-cols-[3fr_1fr_auto]">
-          <input
-            type="text"
-            value={userId}
-            onChange={(e) => setUserId(e.target.value)}
-            placeholder="目標使用者 UUID（從 /admin/permissions 找）"
-            className="input font-mono text-xs"
-            disabled={!!active}
-          />
+          {selectedUser ? (
+            <div
+              className="flex items-center justify-between gap-3 rounded-lg px-3 py-2"
+              style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-[var(--text-primary)]">
+                  {selectedUser.display_name}
+                </p>
+                <p className="truncate text-xs text-[var(--text-muted)]">
+                  {selectedUser.email || "未公開信箱"}
+                </p>
+              </div>
+              {!active && (
+                <button
+                  type="button"
+                  className="btn-sm flex-shrink-0"
+                  onClick={() => setSelectedUser(null)}
+                  disabled={busy}>
+                  更換
+                </button>
+              )}
+            </div>
+          ) : (
+            <UserPicker
+              placeholder="搜尋姓名、Email 或學號"
+              onPick={setSelectedUser}
+            />
+          )}
           <input
             type="number"
             min={1}
@@ -130,7 +155,7 @@ export default function ImpersonationPage() {
             type="button"
             className="btn btn-primary"
             onClick={onStart}
-            disabled={busy || !!active || !userId.trim()}>
+            disabled={busy || !!active || !selectedUser}>
             <UserCog size={14} aria-hidden />
             啟動
           </button>
