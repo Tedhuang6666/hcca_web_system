@@ -264,7 +264,12 @@ async def search_support_users(
     offset: int = Query(0, ge=0),
 ) -> list[SupportUserSummaryOut]:
     users = await support_svc.search_users(db, keyword=keyword, limit=limit, offset=offset)
-    return [SupportUserSummaryOut.model_validate(support_svc.user_summary(user)) for user in users]
+    return [
+        SupportUserSummaryOut.model_validate(
+            support_svc.user_summary(user, reveal_sensitive=actor.is_superuser)
+        )
+        for user in users
+    ]
 
 
 @router.get("/users/{user_id}", response_model=SupportUserDetailOut)
@@ -276,7 +281,12 @@ async def get_support_user(
 ) -> SupportUserDetailOut:
     user = await _get_user(db, user_id)
     return SupportUserDetailOut.model_validate(
-        await support_svc.user_detail(db, user, include_diagnostics=diagnose)
+        await support_svc.user_detail(
+            db,
+            user,
+            include_diagnostics=diagnose,
+            reveal_sensitive=actor.is_superuser,
+        )
     )
 
 

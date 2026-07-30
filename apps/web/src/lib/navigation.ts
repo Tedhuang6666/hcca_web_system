@@ -126,7 +126,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/admin",
     iconKey: "dashboard",
     label: "管理後台",
-    perm: "admin:users",
+    perms: ["admin:users", "support.users.read", "support.tickets.read", "admin:all"],
     end: true,
   },
   {
@@ -135,20 +135,6 @@ export const NAV_ITEMS: NavItem[] = [
     iconKey: "people",
     label: "人員管理",
     perm: "admin:users",
-  },
-  {
-    id: "userAccountAdmin",
-    href: "/admin/users",
-    iconKey: "people",
-    label: "帳號維護",
-    perm: "admin:users",
-  },
-  {
-    id: "supportConsole",
-    href: "/admin/support",
-    iconKey: "shield",
-    label: "客服作業平台",
-    perms: ["support.users.read", "support.tickets.read", "admin:all"],
   },
   {
     id: "systemDefense",
@@ -345,8 +331,6 @@ export const NAV_DEF: NavEntry[] = [
       "operations",
       "moduleBackoffice",
       "adminDashboard",
-      "userAccountAdmin",
-      "supportConsole",
       "about",
     ]),
   },
@@ -559,6 +543,7 @@ export function navItemsFromEntries(entries: NavEntry[]): NavItem[] {
 }
 
 export function isNavItemVisible(item: NavItem, options: NavVisibilityOptions): boolean {
+  if (item.id === "userAccountAdmin" || item.id === "supportConsole") return false;
   if (options.isModuleClosed?.(item)) return false;
   if (item.id === "tasks" && !options.hasPrefix("document:") && !options.hasPrefix("regulation:")) {
     return false;

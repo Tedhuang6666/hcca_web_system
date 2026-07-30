@@ -344,14 +344,19 @@ async def user_roles(db: AsyncSession, user_id: uuid.UUID) -> list[UserPosition]
     return list(result.scalars().all())
 
 
-def user_summary(user: User) -> dict:
+def user_summary(user: User, *, reveal_sensitive: bool = False) -> dict:
+    visible_name = user.display_name if reveal_sensitive else mask_name(user.display_name)
+    visible_email = user.email if reveal_sensitive else mask_email(user.email)
+    visible_student_id = (
+        user.student_id if reveal_sensitive else mask_identifier(user.student_id, visible_end=2)
+    )
     return {
         "id": user.id,
-        "display_name": user.display_name,
+        "display_name": visible_name,
         "masked_name": mask_name(user.display_name),
-        "email": mask_email(user.email),
+        "email": visible_email,
         "masked_email": mask_email(user.email),
-        "student_id": mask_identifier(user.student_id, visible_end=2),
+        "student_id": visible_student_id,
         "masked_student_id": mask_identifier(user.student_id, visible_end=2),
         "is_active": user.is_active,
         "is_verified": user.is_verified,
@@ -431,7 +436,13 @@ async def diagnose_user(db: AsyncSession, user: User) -> list[dict[str, str | No
     return results
 
 
-async def user_detail(db: AsyncSession, user: User, *, include_diagnostics: bool = False) -> dict:
+async def user_detail(
+    db: AsyncSession,
+    user: User,
+    *,
+    include_diagnostics: bool = False,
+    reveal_sensitive: bool = False,
+) -> dict:
     emails = await linked_emails(db, user)
     roles = await user_roles(db, user.id)
     effective = await get_user_permission_codes(db, user.id)
@@ -459,8 +470,8 @@ async def user_detail(db: AsyncSession, user: User, *, include_diagnostics: bool
         if row.position is not None
     ]
     return {
-        "user": user_summary(user),
-        "linked_emails": [mask_email(email) for email in emails],
+        "user": user_summary(user, reveal_sensitive=reveal_sensitive),
+        "linked_emails": emails if reveal_sensitive else [mask_email(email) for email in emails],
         "masked_linked_emails": [mask_email(email) for email in emails],
         "account": {
             "status": "active" if user.is_active else "inactive",
