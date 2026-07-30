@@ -353,6 +353,7 @@ export const NAV_DEF_LOGGED_OUT: NavEntry[] = [
       "publicDocuments",
       "publicAnnouncements",
       "publicPartnerMap",
+      "credential",
       "publicRecommendedVendors",
       "publicPetition",
       "publicAbout",
@@ -634,7 +635,31 @@ export function navDefinitionForProfile(profile: RuntimeNavigationProfile): NavE
   return NAVIGATION_PROFILES[profile as NavigationProfile].desktopSections;
 }
 
+function ensureCredentialEntry(entries: NavEntry[]): NavEntry[] {
+  if (navItemsFromEntries(entries).some((item) => item.id === "credential")) return entries;
+
+  const servicesIndex = entries.findIndex(
+    (entry) => isSection(entry) && entry.id === "services",
+  );
+  if (servicesIndex < 0) return [...entries, NAV_ITEMS_BY_ID.credential];
+
+  return entries.map((entry, index) => (
+    index === servicesIndex && isSection(entry)
+      ? { ...entry, items: [...entry.items, NAV_ITEMS_BY_ID.credential] }
+      : entry
+  ));
+}
+
 export function navProfileFromApi(profile: NavigationProfileOut): NavigationProfileConfig {
+  const desktopSections = ensureCredentialEntry(
+    (profile.desktop_sections ?? []).map((section) => ({
+      id: section.id,
+      heading: section.heading,
+      collapsible: section.collapsible,
+      defaultCollapsed: section.default_collapsed,
+      items: byIds(section.items ?? []),
+    })),
+  );
   return {
     id: profile.key,
     label: profile.label,
@@ -643,13 +668,7 @@ export function navProfileFromApi(profile: NavigationProfileOut): NavigationProf
     matchAnyPrefixes: profile.match_any_prefixes,
     matchAnyPermissions: profile.match_any_permissions ?? [],
     excludePrefixes: profile.exclude_prefixes ?? [],
-    desktopSections: (profile.desktop_sections ?? []).map((section) => ({
-      id: section.id,
-      heading: section.heading,
-      collapsible: section.collapsible,
-      defaultCollapsed: section.default_collapsed,
-      items: byIds(section.items ?? []),
-    })),
+    desktopSections,
     mobileOrder: profile.mobile_order ?? [],
   };
 }
