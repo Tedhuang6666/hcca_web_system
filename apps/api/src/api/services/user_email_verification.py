@@ -188,7 +188,8 @@ async def verify_and_link(
             if exc.payload and exc.payload.get("conflicts"):
                 raise UserRegistrationError(
                     409,
-                    "帳戶資料有衝突，請由管理員在後台選擇要保留的資料",
+                    "帳戶含有需要人工確認的業務資料，已停止合併並通知管理員",
+                    payload={"conflicts": exc.payload["conflicts"]},
                 ) from exc
             raise
     await redis_client.delete(key)

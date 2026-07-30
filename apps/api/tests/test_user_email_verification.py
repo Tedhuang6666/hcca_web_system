@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies.auth import get_current_active_user
 from api.main import app
+from api.models.council_proposal import CouncilProposal
+from api.models.notification import Notification
 from api.models.user import User
 from api.models.user_identity import UserIdentity
 from api.services import user_email_verification as verification_svc
@@ -182,3 +184,90 @@ async def test_user_can_self_merge_email_owned_by_another_account_without_confli
     )
     assert identity is not None
     assert identity.user_id == user.id
+
+
+@pytest.mark.asyncio
+async def test_self_merge_with_business_conflict_stops_and_notifies_admin(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    admin = User(
+        email="merge-admin@school.edu",
+        display_name="合併管理員",
+        is_active=True,
+        is_verified=True,
+        is_superuser=True,
+    )
+    user = User(
+        email="primary-conflict@school.edu",
+        display_name="主要帳號",
+        is_active=True,
+        is_verified=True,
+    )
+    other = User(
+        email="secondary-conflict@school.edu",
+        display_name="次要帳號",
+        is_active=True,
+        is_verified=True,
+    )
+    db_session.add_all([admin, user, other])
+    await db_session.flush()
+    db_session.add(
+        UserIdentity(
+            user_id=other.id,
+            provider="email",
+            external_id=other.email,
+            email=other.email,
+            display_name=other.display_name,
+            linked_at=datetime.now(UTC),
+        )
+    )
+    db_session.add(
+        CouncilProposal(
+            serial_number="CP-SELF-MERGE-001",
+            submitter_id=other.id,
+            contact_email=other.email,
+            proposer_name=other.display_name,
+            title="待人工處理的投稿",
+            summary="測試摘要",
+            proposal_text="測試內容",
+            rationale="測試理由",
+        )
+    )
+    await db_session.flush()
+    admin_id = admin.id
+    _override_user(user)
+
+    fake_redis = FakeRedis()
+    monkeypatch.setattr(verification_svc, "redis_client", fake_redis)
+    monkeypatch.setattr(verification_svc.secrets, "randbelow", lambda _limit: 123456)
+    monkeypatch.setattr(
+        verification_svc,
+        "send_branded_email",
+        lambda *_args, **_kwargs: ["task-id"],
+    )
+
+    request_response = await client.post(
+        "/users/me/emails/verification",
+        json={"email": other.email},
+    )
+    assert request_response.status_code == 202
+
+    verify_response = await client.post(
+        "/users/me/emails/verify",
+        json={"email": other.email, "code": "123456"},
+    )
+
+    assert verify_response.status_code == 409
+    assert "已停止合併並通知管理員" in verify_response.json()["detail"]
+    notification = await db_session.scalar(
+        select(Notification).where(
+            Notification.user_id == admin_id,
+            Notification.title == "帳戶合併需要管理員處理",
+        )
+    )
+    assert notification is not None
+    assert "議案投稿資料衝突" in (notification.body or "")
+    await db_session.refresh(other)
+    assert other.is_active is True

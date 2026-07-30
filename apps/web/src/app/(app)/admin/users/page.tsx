@@ -390,9 +390,9 @@ function AccountDetail({
   const [mutedModules, setMutedModules] = useState(user.muted_notification_modules);
   const [preferences, setPreferences] = useState(user.notification_preferences);
   const [emailAlias, setEmailAlias] = useState("");
+  const [mergePrimaryId, setMergePrimaryId] = useState(user.id);
   const [mergeSourceIds, setMergeSourceIds] = useState<string[]>([]);
   const [mergeConflicts, setMergeConflicts] = useState<AccountMergeConflict[]>([]);
-  const [mergeChoices, setMergeChoices] = useState<Record<string, string>>({});
   const [mergeModalOpen, setMergeModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [working, setWorking] = useState(false);
@@ -407,7 +407,10 @@ function AccountDetail({
     setDigest(user.notification_digest_frequency);
     setMutedModules(user.muted_notification_modules);
     setPreferences(user.notification_preferences);
+    setMergePrimaryId(user.id);
     setMergeSourceIds([]);
+    setMergeConflicts([]);
+    setMergeModalOpen(false);
   }, [user]);
 
   const updatePreference = (type: string, channel: keyof PreferenceChannels, checked: boolean) => {
@@ -477,23 +480,23 @@ function AccountDetail({
     action: async () => { await adminApi.updateUser(user.id, { is_superuser: !user.is_superuser }); },
   });
 
-  const mergeSources = users.filter((candidate) => mergeSourceIds.includes(candidate.id));
+  const mergePrimary = users.find((candidate) => candidate.id === mergePrimaryId) ?? user;
+  const mergeSources = users.filter(
+    (candidate) => candidate.id !== mergePrimaryId && mergeSourceIds.includes(candidate.id),
+  );
+  const selectedSourceIds = mergeSources.map((source) => source.id);
   const previewMerge = async () => {
-    if (!mergeSourceIds.length) return;
+    if (!selectedSourceIds.length) return;
     setWorking(true);
     try {
-      const preview = await adminApi.previewUserMerge(user.id, mergeSourceIds);
+      const preview = await adminApi.previewUserMerge(mergePrimaryId, selectedSourceIds);
       if (!preview.conflicts.length) {
         setMergeConflicts([]);
         setMergeModalOpen(false);
-        confirmMerge({});
+        confirmMerge();
         return;
       }
       setMergeConflicts(preview.conflicts);
-      setMergeChoices(Object.fromEntries(preview.conflicts.map((conflict) => [
-        conflict.key,
-        conflict.records.find((record) => record.side === "target")?.id ?? conflict.records[0]?.id,
-      ])));
       setMergeModalOpen(true);
     } catch (error) {
       toast.error(apiErrorMessage(error, "預覽帳戶合併失敗"));
@@ -502,11 +505,11 @@ function AccountDetail({
     }
   };
 
-  const confirmMerge = (conflictResolutions: Record<string, string>) => onConfirm({
+  const confirmMerge = () => onConfirm({
     title: "合併帳戶並歸戶歷史資料",
-    body: `確定將${mergeSources.map((source) => `「${source.display_name}」`).join("、")}合併到「${user.display_name}」？此操作會停用次要帳戶，並且不可逆。`,
+    body: `確定將${mergeSources.map((source) => `「${source.display_name}」`).join("、")}合併到主要帳戶「${mergePrimary.display_name}」？名稱、UUID、學號等帳號資料會沿用主要帳戶；此操作會停用次要帳戶且不可逆。`,
     actionLabel: "合併帳戶",
-    action: async () => { await adminApi.mergeUserAccounts(user.id, mergeSourceIds, conflictResolutions); },
+    action: async () => { await adminApi.mergeUserAccounts(mergePrimaryId, selectedSourceIds); },
   });
 
   return (
@@ -566,11 +569,26 @@ function AccountDetail({
             </div>
           </Section>
 
-          <Section title="帳戶合併與歸戶" description="把重複帳號的登入身分、職位、班級、人員檔案與歷史資料歸戶到目前帳戶。合併前會先檢查衝突，完成後次要帳戶會停用。" tone="warning">
+          <Section title="帳戶合併與歸戶" description="先選擇要保留名稱、UUID、學號與內部帳號資料的主要帳戶，再選擇要歸戶的次要帳戶。明確的投稿等業務資料衝突會停止合併並通知管理員。" tone="warning">
+            <label className="block text-xs" style={{ color: "var(--text-muted)" }}>
+              主要帳戶（沿用其帳號資料）
+              <SelectInput
+                className="mt-1"
+                value={mergePrimaryId}
+                onChange={(event) => {
+                  const nextId = event.target.value;
+                  setMergePrimaryId(nextId);
+                  setMergeSourceIds((current) => current.filter((id) => id !== nextId));
+                }}
+              >
+                {users.filter((candidate) => candidate.is_active).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.display_name} · {candidate.student_id ?? candidate.email}</option>)}
+              </SelectInput>
+            </label>
+            <p className="mt-3 text-xs" style={{ color: "var(--text-muted)" }}>選擇要併入主要帳戶的次要帳戶：</p>
             <div className="max-h-52 overflow-y-auto rounded-lg p-2" style={{ border: "1px solid var(--border)" }}>
-              {users.filter((candidate) => candidate.id !== user.id && candidate.is_active).map((candidate) => <label key={candidate.id} className="flex min-h-11 cursor-pointer items-center gap-2 rounded-md px-2 text-xs hover:bg-[var(--bg-hover)]" style={{ color: "var(--text-secondary)" }}><input type="checkbox" checked={mergeSourceIds.includes(candidate.id)} onChange={(event) => setMergeSourceIds((current) => event.target.checked ? [...current, candidate.id] : current.filter((id) => id !== candidate.id))} className="h-4 w-4 accent-[var(--primary)]" /><span className="min-w-0 truncate">{candidate.display_name} · {candidate.student_id ?? candidate.email}</span></label>)}
+              {users.filter((candidate) => candidate.id !== mergePrimaryId && candidate.is_active).map((candidate) => <label key={candidate.id} className="flex min-h-11 cursor-pointer items-center gap-2 rounded-md px-2 text-xs hover:bg-[var(--bg-hover)]" style={{ color: "var(--text-secondary)" }}><input type="checkbox" checked={mergeSourceIds.includes(candidate.id)} onChange={(event) => setMergeSourceIds((current) => event.target.checked ? [...current, candidate.id] : current.filter((id) => id !== candidate.id))} className="h-4 w-4 accent-[var(--primary)]" /><span className="min-w-0 truncate">{candidate.display_name} · {candidate.student_id ?? candidate.email}</span></label>)}
             </div>
-            <Button onClick={previewMerge} tone="warning" disabled={working || !mergeSourceIds.length} className="mt-3"><Link2 size={15} />檢查衝突並合併{mergeSourceIds.length ? `（${mergeSourceIds.length}）` : ""}</Button>
+            <Button onClick={previewMerge} tone="warning" disabled={working || !selectedSourceIds.length} className="mt-3"><Link2 size={15} />檢查衝突並合併{selectedSourceIds.length ? `（${selectedSourceIds.length}）` : ""}</Button>
           </Section>
         </div>
 
@@ -594,7 +612,7 @@ function AccountDetail({
         </aside>
       </div>
 
-      {mergeModalOpen && <Modal title="選擇要保留的資料" onClose={() => setMergeModalOpen(false)} size="2xl"><div className="space-y-4"><p className="text-sm leading-6" style={{ color: "var(--text-secondary)" }}>發現 {mergeConflicts.length} 組衝突。每組請選擇要保留的資料；未選的重複紀錄會由主要帳戶保留。</p>{mergeConflicts.map((conflict) => <fieldset key={conflict.key} className="space-y-2 rounded-lg p-3" style={{ border: "1px solid var(--border)" }}><legend className="px-1 text-xs font-semibold" style={{ color: "var(--text-primary)" }}>{conflict.title}</legend><p className="text-[11px]" style={{ color: "var(--text-muted)" }}>{conflict.message}</p>{conflict.records.map((record) => <label key={record.id} className="flex cursor-pointer items-start gap-2 rounded-md p-2" style={{ background: mergeChoices[conflict.key] === record.id ? "var(--primary-dim)" : "var(--bg-elevated)" }}><input type="radio" name={conflict.key} checked={mergeChoices[conflict.key] === record.id} onChange={() => setMergeChoices((current) => ({ ...current, [conflict.key]: record.id }))} className="mt-1" /><span className="text-xs leading-5" style={{ color: "var(--text-secondary)" }}>{record.side === "target" ? "主要帳戶" : "次要帳戶"}：{record.owner_name}<br />{record.label}</span></label>)}</fieldset>)}<div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button onClick={() => setMergeModalOpen(false)}>取消</Button><Button onClick={() => { setMergeModalOpen(false); confirmMerge(mergeChoices); }} tone="warning" disabled={mergeConflicts.some((conflict) => !mergeChoices[conflict.key])}>套用選擇並繼續</Button></div></div></Modal>}
+      {mergeModalOpen && <Modal title="帳戶合併已停止" onClose={() => setMergeModalOpen(false)} size="2xl"><div className="space-y-4"><p className="text-sm leading-6" style={{ color: "var(--text-secondary)" }}>發現 {mergeConflicts.length} 組需要人工處理的業務資料衝突。為避免投稿或其他業務紀錄被錯誤合併，系統未套用任何變更，請管理員先處理下列資料。</p>{mergeConflicts.map((conflict) => <fieldset key={conflict.key} className="space-y-2 rounded-lg p-3" style={{ border: "1px solid var(--border)" }}><legend className="px-1 text-xs font-semibold" style={{ color: "var(--text-primary)" }}>{conflict.title}</legend><p className="text-[11px]" style={{ color: "var(--text-muted)" }}>{conflict.message}</p>{conflict.records.map((record) => <div key={record.id} className="rounded-md p-2 text-xs leading-5" style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)" }}>{record.side === "target" ? "主要帳戶" : "次要帳戶"}：{record.owner_name}<br />{record.label}</div>)}</fieldset>)}<div className="flex justify-end"><Button onClick={() => setMergeModalOpen(false)}>關閉</Button></div></div></Modal>}
     </div>
   );
 }
