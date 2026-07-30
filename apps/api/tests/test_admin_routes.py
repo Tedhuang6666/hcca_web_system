@@ -506,9 +506,12 @@ async def test_admin_can_merge_previously_logged_in_secondary_account(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     admin, member, _, _, _ = await _seed_admin_data(db_session)
+    member.student_id = "PRIMARY-001"
+    await db_session.flush()
     secondary = User(
         email="secondary.private@gmail.com",
         display_name="次要帳號",
+        student_id="SECONDARY-001",
         google_sub="secondary-google-sub",
         is_active=True,
         is_verified=True,
@@ -551,9 +554,12 @@ async def test_admin_can_merge_previously_logged_in_secondary_account(
     )
 
     assert response.status_code == 200
+    assert response.json()["display_name"] == member.display_name
+    assert response.json()["student_id"] == "PRIMARY-001"
     assert secondary_email in response.json()["linked_emails"]
     await db_session.refresh(secondary)
     assert secondary.is_active is False
+    assert secondary.student_id is None
     assert secondary.email.endswith("@deleted.local")
     identity = await db_session.scalar(
         select(UserIdentity).where(
@@ -634,6 +640,7 @@ async def test_admin_account_merge_reparents_profile_roles_classes_and_history(
     )
     db_session.add(school_class)
     await db_session.flush()
+    school_class_id = school_class.id
     db_session.add(ClassCadre(class_id=school_class.id, user_id=member.id))
     await db_session.flush()
     db_session.add_all(
@@ -665,60 +672,48 @@ async def test_admin_account_merge_reparents_profile_roles_classes_and_history(
     )
     assert preview_response.status_code == 200
     preview = preview_response.json()
-    assert any(conflict["category"] == "record" for conflict in preview["conflicts"])
-    resolutions = {
-        conflict["key"]: next(
-            (
-                record["id"]
-                for record in conflict["records"]
-                if (conflict["title"] == "class_cadres 的重複資料" and record["side"] == "source")
-            ),
-            next(record["id"] for record in conflict["records"] if record["side"] == "target"),
-        )
-        for conflict in preview["conflicts"]
-    }
+    assert any(conflict["title"] == "議案投稿資料衝突" for conflict in preview["conflicts"])
     response = await client.post(
         f"/admin/users/{member.id}/merge",
         json={
             "source_user_ids": [str(source.id)],
-            "conflict_resolutions": resolutions,
         },
     )
 
-    assert response.status_code == 200, response.text
-    payload = response.json()
-    assert payload["student_id"] == school_student_id
-    assert "finance:view" in payload["effective_permissions"]
-    assert any(position["id"] == str(source_position.id) for position in payload["positions"])
+    assert response.status_code == 409, response.text
+    assert "業務資料衝突" in response.json()["detail"]["message"]
 
     await db_session.refresh(source)
-    assert source.is_active is False
-    assert source.email.endswith("@deleted.local")
+    assert source.is_active is True
+    assert source.email == "school-account@gmail.com"
     assert (
         await db_session.scalar(
             select(CouncilProposal.submitter_id).where(
                 CouncilProposal.serial_number == "CP-MERGE-001"
             )
         )
-        == member.id
+        == source.id
     )
     assert (
         await db_session.scalar(
-            select(ClassMembership.user_id).where(ClassMembership.class_id == school_class.id)
+            select(ClassMembership.user_id).where(ClassMembership.class_id == school_class_id)
         )
-        == member.id
+        == source.id
     )
     assert (
         await db_session.scalar(
-            select(ClassCadre.user_id).where(ClassCadre.class_id == school_class.id)
+            select(ClassCadre.user_id).where(
+                ClassCadre.class_id == school_class_id,
+                ClassCadre.user_id == source.id,
+            )
         )
-        == member.id
+        == source.id
     )
     people = (
         await db_session.scalars(select(Person).where(Person.student_id == school_student_id))
     ).all()
     assert len(people) == 1
-    assert people[0].user_id == member.id
+    assert people[0].user_id == source.id
     assert people[0].legal_name == "校務正式姓名"
 
 

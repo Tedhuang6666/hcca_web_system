@@ -15,6 +15,7 @@ from sqlalchemy.schema import UniqueConstraint
 from api.core.cache import cache_invalidate_user_permissions
 from api.core.database import Base
 from api.core.permission_codes import validate_permission_codes
+from api.models.notification import Notification
 from api.models.org import Org, Permission, Position, PositionCategory, UserPosition
 from api.models.person import (
     Person,
@@ -71,6 +72,26 @@ _ACCOUNT_MERGE_SAFE_DUPLICATE_TABLES = frozenset(
         "meeting_agenda_recusals",
     }
 )
+_ACCOUNT_MERGE_BUSINESS_TABLES = {
+    "council_proposals": {
+        "user_column": "submitter_id",
+        "title": "議案投稿",
+        "message": "兩個帳戶各有議案投稿，投稿內容與聯絡資料可能需要人工確認。",
+        "fields": ("serial_number", "title", "status"),
+    },
+    "merchandise_submissions": {
+        "user_column": "user_id",
+        "title": "校商投稿",
+        "message": "兩個帳戶各有校商投稿，投稿快照與審核流程需要人工確認。",
+        "fields": ("item_id", "status", "submitted_at"),
+    },
+    "partner_submissions": {
+        "user_column": "submitted_by",
+        "title": "特約店家投稿",
+        "message": "兩個帳戶各有特約店家投稿，投稿內容需要人工確認。",
+        "fields": ("name", "status", "business_id"),
+    },
+}
 
 
 def _serialize_merge_value(value: Any) -> str:
@@ -398,54 +419,82 @@ async def _collect_class_merge_conflicts(
     users = [target_user, *source_users]
     user_ids = {item.id for item in users}
     user_names = {item.id: item.display_name for item in users}
-    conflicts: list[dict[str, Any]] = []
-    for model in (ClassCadre, ClassManualMember, ClassRosterEntry):
-        conflicts.extend(
-            await _collect_table_merge_conflicts(
-                db,
-                model.__table__,
-                target_user_id=target_user.id,
-                user_ids=user_ids,
-                user_names=user_names,
-                require_user_column=model is not ClassRosterEntry,
-            )
-        )
+    table = ClassRosterEntry.__table__
+    class_column = table.c.class_id
+    student_column = table.c.student_id
+    user_column = table.c.user_id
+    rows = (await db.execute(select(table).where(user_column.in_(user_ids)))).all()
+    grouped: dict[uuid.UUID, list[Any]] = {}
+    for row in rows:
+        grouped.setdefault(_row_value(row, class_column), []).append(row)
 
-    membership_rows = (
-        await db.scalars(select(ClassMembership).where(ClassMembership.user_id.in_(user_ids)))
-    ).all()
-    grouped: dict[tuple[Any, ...], list[ClassMembership]] = {}
-    for row in membership_rows:
-        key = (row.class_id, row.academic_year, row.status, row.start_date, row.end_date)
-        grouped.setdefault(key, []).append(row)
-    for rows in grouped.values():
-        if len(rows) < 2:
+    conflicts: list[dict[str, Any]] = []
+    fields = [table.c[name] for name in ("class_id", "seat_number", "student_id")]
+    for class_rows in grouped.values():
+        if len({_row_value(row, student_column) for row in class_rows}) < 2:
             continue
         descriptors = [
+            _merge_record_descriptor(
+                table,
+                row,
+                [user_column],
+                target_user_id=target_user.id,
+                user_names=user_names,
+                fields=fields,
+            )
+            for row in class_rows
+        ]
+        descriptors.sort(key=lambda item: item["id"])
+        conflicts.append(
             {
-                "id": f"class_memberships:id={row.id}",
-                "side": "target" if row.user_id == target_user.id else "source",
-                "owner_user_id": str(row.user_id),
-                "owner_name": user_names.get(row.user_id, "帳戶"),
-                "label": f"class_id={row.class_id}、academic_year={row.academic_year}、status={row.status}",
-                "fields": {
-                    "class_id": str(row.class_id),
-                    "academic_year": str(row.academic_year),
-                    "status": str(row.status),
-                },
-                "_table": ClassMembership.__table__,
-                "_primary_key": (row.id,),
+                "key": "records:class_roster_entries:student_id:"
+                + "|".join(item["id"] for item in descriptors),
+                "category": "record",
+                "title": "班級名冊身分衝突",
+                "message": "同一班級存在不同學號，無法自動判定應保留哪一筆名冊資料。",
+                "records": descriptors,
             }
+        )
+    return conflicts
+
+
+async def _collect_business_data_conflicts(
+    db: AsyncSession,
+    *,
+    target_user: User,
+    source_users: list[User],
+) -> list[dict[str, Any]]:
+    """只列出需要人工確認的業務資料，不把一般帳號欄位當成衝突。"""
+    user_ids = {target_user.id, *(item.id for item in source_users)}
+    user_names = {item.id: item.display_name for item in [target_user, *source_users]}
+    conflicts: list[dict[str, Any]] = []
+    for table_name, definition in _ACCOUNT_MERGE_BUSINESS_TABLES.items():
+        table = Base.metadata.tables.get(table_name)
+        if table is None:
+            continue
+        user_column = table.c[definition["user_column"]]
+        rows = (await db.execute(select(table).where(user_column.in_(user_ids)))).all()
+        if not rows:
+            continue
+        fields = [table.c[name] for name in definition["fields"] if name in table.c]
+        descriptors = [
+            _merge_record_descriptor(
+                table,
+                row,
+                [user_column],
+                target_user_id=target_user.id,
+                user_names=user_names,
+                fields=fields,
+            )
             for row in rows
         ]
         descriptors.sort(key=lambda item: item["id"])
         conflicts.append(
             {
-                "key": "records:class_memberships:logical:"
-                + "|".join(item["id"] for item in descriptors),
+                "key": f"business:{table_name}:" + "|".join(item["id"] for item in descriptors),
                 "category": "record",
-                "title": "班級歷史紀錄重複",
-                "message": "同一班級、學年度與狀態已有多筆資料",
+                "title": f"{definition['title']}資料衝突",
+                "message": definition["message"] + "請先由管理員處理後再合併。",
                 "records": descriptors,
             }
         )
@@ -464,17 +513,12 @@ async def collect_merge_conflicts(
     user_ids = {item.id for item in users}
     user_names = {item.id: item.display_name for item in users}
     conflicts = [
-        *await _collect_identity_conflicts(
-            db,
-            target_user=target_user,
-            source_users=sources,
-        ),
-        *await _collect_profile_conflicts(
-            db,
-            target_user=target_user,
-            source_users=sources,
-        ),
         *await _collect_class_merge_conflicts(
+            db,
+            target_user=target_user,
+            source_users=sources,
+        ),
+        *await _collect_business_data_conflicts(
             db,
             target_user=target_user,
             source_users=sources,
@@ -767,26 +811,12 @@ async def _merge_person_profiles(
         .options(selectinload(Person.affiliations))
         .where(Person.user_id == source_user.id)
     )
-    profile_student_ids = {
-        student_id
-        for student_id in (
-            target_user.student_id,
-            source_user.student_id,
-            target_person.student_id if target_person else None,
-            source_person.student_id if source_person else None,
-        )
-        if student_id
-    }
-    if len(profile_student_ids) > 1:
-        raise UserRegistrationError(422, "要合併的人員檔案學號不一致")
-    merged_student_id = next(iter(profile_student_ids), None)
-    if merged_student_id and target_user.student_id is None:
-        target_user.student_id = merged_student_id
-    if target_person is None and target_user.student_id:
+    primary_student_id = target_user.student_id
+    if target_person is None and primary_student_id:
         target_person = await db.scalar(
             select(Person)
             .options(selectinload(Person.affiliations))
-            .where(Person.student_id == target_user.student_id)
+            .where(Person.student_id == primary_student_id)
         )
         if target_person is not None:
             if target_person.user_id not in (None, target_user.id):
@@ -801,20 +831,15 @@ async def _merge_person_profiles(
     if target_person is None:
         return
 
-    if (
-        source_person is not None
-        and source_person is not target_person
-        and source_person.student_id == target_user.student_id
-    ):
-        # people.student_id 也是唯一欄位，先釋放次要檔案的值再套用到主要檔案。
+    if source_person is not None and source_person is not target_person:
+        # 主要帳戶的學號是唯一保留值；先清除次要人員檔案快照，避免
+        # people.student_id 唯一索引在同一 transaction 內碰撞。
         source_person.student_id = None
         await db.flush()
 
-    target_person.student_id = merged_student_id
-    target_person.email = target_person.email or target_user.email
-    target_person.display_name = target_person.display_name or target_user.display_name
-    if target_person.status == "inactive" and source_user.is_active:
-        target_person.status = "active"
+    target_person.student_id = primary_student_id
+    target_person.email = target_user.email
+    target_person.display_name = target_user.display_name
 
     if source_person is None or source_person is target_person:
         await db.flush()
@@ -1227,19 +1252,11 @@ async def _merge_login_identities(
     if other_user.id == user.id:
         return
 
-    source_student_id = other_user.student_id
-    if user.student_id and source_student_id and user.student_id != source_student_id:
-        raise UserRegistrationError(422, "要合併的帳戶學號不一致")
-    if source_student_id and not user.student_id:
-        # users.student_id 有唯一索引；先釋放次要帳戶的值，避免資料庫
-        # 先 flush 主要帳戶而在同一個 transaction 內撞到唯一鍵。
+    # 主要帳戶是使用者選定的身分來源。名稱、學號、UUID、Email 與偏好
+    # 都不從次要帳戶反向覆蓋；次要帳戶的學號只保留在歷史稽核資料中。
+    if other_user.student_id is not None:
         other_user.student_id = None
         await db.flush()
-        user.student_id = source_student_id
-    if source_student_id == user.student_id:
-        # users.student_id 是唯一欄位，先釋放次要帳戶的值才能把校務學號
-        # 套用到主要帳戶；Person 檔案仍保留原始學號快照。
-        other_user.student_id = None
     await _preflight_user_record_reparenting(
         db,
         target_user_id=user.id,
@@ -1248,18 +1265,7 @@ async def _merge_login_identities(
 
     await _merge_class_records(db, target_user=user, source_user=other_user)
 
-    if other_user.notification_preferences:
-        user.notification_preferences = {
-            **other_user.notification_preferences,
-            **(user.notification_preferences or {}),
-        }
-    if user.ui_theme == "auto" and other_user.ui_theme != "auto":
-        user.ui_theme = other_user.ui_theme
-    if user.ui_locale == "zh-TW" and other_user.ui_locale != "zh-TW":
-        user.ui_locale = other_user.ui_locale
     user.is_verified = user.is_verified or other_user.is_verified
-    if user.avatar_url is None:
-        user.avatar_url = other_user.avatar_url
 
     identities = list(
         (await db.scalars(select(UserIdentity).where(UserIdentity.user_id == other_user.id))).all()
@@ -1285,9 +1291,6 @@ async def _merge_login_identities(
     if other_user.google_sub:
         google_key = ("google", other_user.google_sub)
         if google_key in existing_keys:
-            other_user.google_sub = None
-        elif user.google_sub is None:
-            user.google_sub = other_user.google_sub
             other_user.google_sub = None
         else:
             db.add(
@@ -1354,39 +1357,12 @@ async def merge_user_accounts(
         target_user=user,
         source_users=sources,
     )
-    resolutions = conflict_resolutions or {}
-    conflict_keys = {conflict["key"] for conflict in conflicts}
-    unknown_keys = set(resolutions) - conflict_keys
-    if unknown_keys:
-        raise UserRegistrationError(422, "包含不存在的衝突選項，請重新預覽後再合併")
-    unresolved = [
-        _public_merge_conflict(conflict)
-        for conflict in conflicts
-        if conflict["key"] not in resolutions
-    ]
-    if unresolved:
+    if conflicts:
         raise UserRegistrationError(
             409,
-            "帳戶資料存在衝突，請先選擇要保留的資料",
-            payload={"conflicts": unresolved},
+            "帳戶含有無法自動歸戶的業務資料衝突，請先由管理員處理",
+            payload={"conflicts": [_public_merge_conflict(conflict) for conflict in conflicts]},
         )
-    for conflict in conflicts:
-        selected_id = resolutions[conflict["key"]]
-        if selected_id not in {record["id"] for record in conflict["records"]}:
-            raise UserRegistrationError(422, f"衝突選擇無效：{conflict['title']}")
-
-    await _apply_record_conflict_resolutions(
-        db,
-        conflicts=conflicts,
-        resolutions=resolutions,
-    )
-    await _apply_field_conflict_resolutions(
-        db,
-        target_user=user,
-        source_users=sources,
-        conflicts=conflicts,
-        resolutions=resolutions,
-    )
     for source in sources:
         await _merge_login_identities(db, user=user, other_user=source, actor=actor)
     return user
@@ -1414,3 +1390,35 @@ async def preview_merge_user_accounts(
             source_users=sources,
         )
     ]
+
+
+async def notify_merge_conflict_admins(
+    db: AsyncSession,
+    *,
+    account_label: str,
+    conflicts: Iterable[dict[str, Any]],
+) -> None:
+    """把自助合併遇到的業務衝突通知給啟用中的超級管理員。"""
+    conflict_titles = [str(conflict.get("title") or "業務資料") for conflict in conflicts]
+    if not conflict_titles:
+        return
+    admin_ids = (
+        await db.scalars(
+            select(User.id).where(User.is_active.is_(True), User.is_superuser.is_(True))
+        )
+    ).all()
+    titles = "、".join(conflict_titles[:5])
+    body = (
+        f"使用者「{account_label}」自助連結帳戶時遇到資料衝突：{titles}。請至帳號維護確認後處理。"
+    )
+    for admin_id in admin_ids:
+        db.add(
+            Notification(
+                user_id=admin_id,
+                type="system",
+                title="帳戶合併需要管理員處理",
+                body=body,
+                link="/admin/users",
+            )
+        )
+    await db.flush()

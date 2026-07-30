@@ -15,6 +15,7 @@ from api.models.user import User
 from api.schemas.auth import UserRead
 from api.services import audit as audit_svc
 from api.services import user_email_verification as email_verification_svc
+from api.services import user_registration as user_registration_svc
 from api.services.permission import get_user_permission_codes
 from api.services.user_registration import UserRegistrationError
 
@@ -219,6 +220,18 @@ async def verify_email(
             code=body.code,
         )
     except UserRegistrationError as exc:
+        if exc.payload and exc.payload.get("conflicts"):
+            account_label = current_user.display_name
+            await db.rollback()
+            try:
+                await user_registration_svc.notify_merge_conflict_admins(
+                    db,
+                    account_label=account_label,
+                    conflicts=exc.payload["conflicts"],
+                )
+                await db.commit()
+            except Exception:
+                await db.rollback()
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     return LinkedEmailsOut(emails=await email_verification_svc.list_user_emails(db, current_user))
 
