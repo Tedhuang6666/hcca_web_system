@@ -9,6 +9,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models.audit_log import AuditLog
+from api.services import audit as audit_svc
 from api.services import audit_chain
 
 
@@ -59,6 +60,38 @@ def test_compute_self_hash_changes_when_content_changes():
 async def test_get_last_hash_empty_returns_genesis(db_session: AsyncSession):
     h = await audit_chain.get_last_hash(db_session)
     assert h == audit_chain.GENESIS_HASH
+
+
+@pytest.mark.asyncio
+async def test_get_last_hash_repairs_legacy_rows_without_hashes(db_session: AsyncSession):
+    rows = [
+        _make_row(created_at=datetime(2026, 1, 1, 0, 0, tzinfo=UTC)),
+        _make_row(created_at=datetime(2026, 1, 1, 0, 1, tzinfo=UTC)),
+    ]
+    db_session.add_all(rows)
+    await db_session.commit()
+
+    last_hash = await audit_chain.get_last_hash(db_session)
+    await db_session.commit()
+
+    assert rows[0].prev_hash == audit_chain.GENESIS_HASH
+    assert rows[0].self_hash is not None
+    assert rows[1].prev_hash == rows[0].self_hash
+    assert rows[1].self_hash == last_hash
+
+
+@pytest.mark.asyncio
+async def test_audit_record_writes_hash_chain(db_session: AsyncSession):
+    row = await audit_svc.record(
+        db_session,
+        entity_type="document",
+        entity_id="doc-1",
+        action="create",
+    )
+    await db_session.commit()
+
+    assert row.prev_hash == audit_chain.GENESIS_HASH
+    assert row.self_hash is not None
 
 
 @pytest.mark.asyncio
