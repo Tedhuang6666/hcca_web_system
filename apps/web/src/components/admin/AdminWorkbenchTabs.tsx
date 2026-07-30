@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 const TABS = [
   { label: "人員主檔", href: "/admin/people" },
+  { label: "帳號維護", href: "/admin/users" },
   { label: "組織與職位", href: "/admin/permissions" },
 ] as const;
 
@@ -12,7 +13,7 @@ export default function AdminWorkbenchTabs() {
   const pathname = usePathname();
   return (
     <div
-      className="flex flex-shrink-0 items-center gap-1 border-b px-4"
+      className="flex flex-shrink-0 items-center gap-1 overflow-x-auto border-b px-3 sm:px-4"
       style={{ borderColor: "var(--border)", background: "var(--bg-surface)" }}
     >
       {TABS.map(({ label, href }) => {
@@ -21,7 +22,7 @@ export default function AdminWorkbenchTabs() {
           <Link
             key={href}
             href={href}
-            className="relative px-4 py-3 text-sm font-medium transition-colors"
+            className="relative min-h-11 shrink-0 px-3 py-3 text-sm font-medium transition-colors sm:px-4"
             style={{
               color: active ? "var(--primary)" : "var(--text-muted)",
               textDecoration: "none",
