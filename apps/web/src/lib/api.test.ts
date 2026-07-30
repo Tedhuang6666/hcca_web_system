@@ -81,4 +81,25 @@ describe("API helpers", () => {
     clearImpersonationSession();
     vi.unstubAllGlobals();
   });
+
+  it("does not report an already-counted circuit-open state as another client error", async () => {
+    const fetchMock = vi.fn().mockImplementation(
+      () =>
+        Promise.resolve(
+          new Response(JSON.stringify({ detail: "backend unavailable" }), {
+            status: 503,
+            headers: { "Content-Type": "application/json" },
+          }),
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await expect(request("/test/circuit-open")).rejects.toMatchObject({ status: 503 });
+    }
+    await expect(request("/test/circuit-open")).rejects.toMatchObject({ status: 0 });
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    vi.unstubAllGlobals();
+  });
 });

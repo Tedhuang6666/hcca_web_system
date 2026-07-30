@@ -232,7 +232,8 @@ export async function request<T>(
   }
   // 熔斷開斷中：同一端點剛連續失敗過，60 秒內不再嘗試
   if (circuitOpen(cKey)) {
-    reportClientError({ scope: "api.circuit-open", message: `熔斷：${path}` });
+    // 熔斷是前端針對既有 5xx/網路錯誤的保護狀態，不是新的 runtime error；
+    // 重複回報會在後端不可用時形成回報風暴，並把同一事故誤顯示成多筆 500。
     throw new ApiError(0, "暫時無法連線至後端（熔斷中），請稍候再試");
   }
 
