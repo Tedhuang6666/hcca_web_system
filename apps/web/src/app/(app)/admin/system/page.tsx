@@ -1327,6 +1327,7 @@ const ERROR_CATEGORY: Record<
   unhandled: { label: "未處理例外", tone: "danger", hint: "展開追蹤後修正程式碼" },
   redis: { label: "Redis / 快取", tone: "warning", hint: "可試「清除快取」或「重啟服務」" },
   timeout: { label: "逾時", tone: "warning", hint: "負載可能過高，檢視慢查詢或重啟" },
+  validation: { label: "請求驗證", tone: "neutral", hint: "檢查前端 payload 與 API schema" },
   http: { label: "5xx 例外", tone: "neutral", hint: "由程式主動拋出的 5xx" },
 };
 

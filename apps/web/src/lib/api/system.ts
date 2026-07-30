@@ -212,7 +212,7 @@ export interface DefenseSummary {
   recent_status_counts: Record<string, number>;
 }
 
-export type ErrorCategory = "db" | "redis" | "timeout" | "http" | "unhandled";
+export type ErrorCategory = "db" | "redis" | "timeout" | "http" | "validation" | "unhandled";
 
 export interface RecentErrorItem {
   error_id: string;

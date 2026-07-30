@@ -494,6 +494,36 @@ def create_app() -> FastAPI:
         name="uploads",
     )
 
+    async def _record_request_error(
+        request: Request,
+        exc: BaseException,
+        *,
+        status_code: int,
+        category: str | None = None,
+    ) -> str:
+        """將同一個 request 的錯誤只登記一次，且不讓 audit 故障覆蓋原始錯誤。"""
+        existing_id = getattr(request.state, "error_id", None)
+        if existing_id:
+            return str(existing_id)
+
+        error_id = uuid.uuid4().hex[:12]
+        request.state.error_id = error_id
+        try:
+            await record_error(
+                error_id=error_id,
+                exc=exc,
+                method=request.method,
+                path=request.url.path,
+                status_code=status_code,
+                category=category,
+                request_id=getattr(request.state, "request_id", None),
+                client_ip=request.client.host if request.client else None,
+                user_agent=request.headers.get("user-agent"),
+            )
+        except Exception:
+            logger.exception("Error audit pipeline failed id=%s", error_id)
+        return error_id
+
     @app.middleware("http")
     async def _request_timing_middleware(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
@@ -505,6 +535,15 @@ def create_app() -> FastAPI:
         try:
             response = await call_next(request)
             status_code = response.status_code
+            if response.status_code >= 400:
+                await _record_request_error(
+                    request,
+                    StarletteHTTPException(
+                        status_code=response.status_code, detail="HTTP error response"
+                    ),
+                    status_code=response.status_code,
+                    category="http",
+                )
             duration_ms = (time.perf_counter() - start) * 1000
             response.headers["X-Process-Time-Ms"] = f"{duration_ms:.1f}"
             query_count, slow_count, query_ms = get_request_counters()
@@ -560,6 +599,11 @@ def create_app() -> FastAPI:
                     },
                 )
             return response
+        except Exception as exc:
+            # 例外若發生在 exception handler / router 之外的 middleware，
+            # 仍會一路冒泡到 ServerErrorMiddleware；這裡是最後一個能保留 request context 的位置。
+            await _record_request_error(request, exc, status_code=500)
+            raise
         finally:
             dec_active()
             record_status(status_code)
@@ -579,9 +623,14 @@ def create_app() -> FastAPI:
     async def _http_exception_handler(
         request: Request, exc: StarletteHTTPException
     ) -> JSONResponse:
-        # 4xx 維持原樣（含 detail 訊息），5xx 統一遮蔽具體訊息
+        # 所有 HTTP 錯誤都記錄；5xx 對外仍統一遮蔽具體訊息。
+        err_id = await _record_request_error(
+            request,
+            exc,
+            status_code=exc.status_code,
+            category="http",
+        )
         if exc.status_code >= 500:
-            err_id = uuid.uuid4().hex[:12]
             logger.error(
                 "5xx HTTPException id=%s path=%s detail=%s",
                 err_id,
@@ -589,22 +638,18 @@ def create_app() -> FastAPI:
                 exc.detail,
                 exc_info=True,
             )
-            record_error(
-                error_id=err_id,
-                exc=exc,
-                method=request.method,
-                path=request.url.path,
-                status_code=exc.status_code,
-                category="http",
-                request_id=getattr(request.state, "request_id", None),
-                client_ip=request.client.host if request.client else None,
-                user_agent=request.headers.get("user-agent"),
-            )
             return JSONResponse(
                 {"detail": "伺服器內部錯誤", "error_id": err_id},
                 status_code=exc.status_code,
                 headers=getattr(exc, "headers", None) or {},
             )
+        logger.warning(
+            "HTTP error id=%s path=%s status=%s detail=%s",
+            err_id,
+            request.url.path,
+            exc.status_code,
+            exc.detail,
+        )
         return JSONResponse(
             {"detail": exc.detail},
             status_code=exc.status_code,
@@ -615,6 +660,7 @@ def create_app() -> FastAPI:
     async def _validation_exception_handler(
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
+        await _record_request_error(request, exc, status_code=422, category="validation")
         return JSONResponse(
             jsonable_encoder({"detail": "請求格式驗證失敗", "errors": exc.errors()}),
             status_code=422,
@@ -622,23 +668,13 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(Exception)
     async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-        err_id = uuid.uuid4().hex[:12]
+        err_id = await _record_request_error(request, exc, status_code=500)
         logger.error(
             "Unhandled exception id=%s path=%s method=%s",
             err_id,
             request.url.path,
             request.method,
             exc_info=True,
-        )
-        record_error(
-            error_id=err_id,
-            exc=exc,
-            method=request.method,
-            path=request.url.path,
-            status_code=500,
-            request_id=getattr(request.state, "request_id", None),
-            client_ip=request.client.host if request.client else None,
-            user_agent=request.headers.get("user-agent"),
         )
         return JSONResponse(
             {"detail": "伺服器內部錯誤", "error_id": err_id},
