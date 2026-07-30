@@ -131,7 +131,14 @@ async def _process_due_async(batch_size: int) -> dict:
     return {"status": "ok", "dispatched": len(rows)}
 
 
-@celery_app.task(name="api.services.webhook_tasks.process_webhook_deliveries")
+@celery_app.task(
+    name="api.services.webhook_tasks.process_webhook_deliveries",
+    max_retries=5,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+)
 def process_webhook_deliveries(batch_size: int = 100) -> dict:
     """掃 due 的 webhook delivery、派發投遞。每 30 秒跑一次（建議）。"""
     return asyncio.run(_process_due_async(batch_size))

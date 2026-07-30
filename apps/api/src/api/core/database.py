@@ -1,14 +1,22 @@
 """SQLAlchemy 2.0 非同步資料庫設定"""
 
+import asyncio
+import logging
 from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.pool import NullPool
 
 from api.core.config import settings  # noqa: E402
+
+logger = logging.getLogger(__name__)
+
+_TASK_DB_CONNECT_MAX_ATTEMPTS = 5
+_TASK_DB_CONNECT_RETRY_BASE_SECONDS = 1.0
 
 # --- 非同步 Engine ---
 # 預設：app 端自管 QueuePool。
@@ -56,19 +64,48 @@ async def task_session() -> AsyncIterator[AsyncSession]:
     新增需在 Celery worker 內跑 async DB 的 task 時，一律用本函式，勿直接用
     `AsyncSessionLocal`。
     """
-    engine = create_async_engine(str(settings.DATABASE_URL), poolclass=NullPool)
-    factory = async_sessionmaker(
-        engine,
-        class_=AsyncSession,
-        expire_on_commit=False,
-        autoflush=False,
-        autocommit=False,
-    )
-    try:
-        async with factory() as session:
+    last_error: Exception | None = None
+    for attempt in range(1, _TASK_DB_CONNECT_MAX_ATTEMPTS + 1):
+        task_engine = create_async_engine(str(settings.DATABASE_URL), poolclass=NullPool)
+        factory = async_sessionmaker(
+            task_engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+            autoflush=False,
+            autocommit=False,
+        )
+        session = factory()
+        try:
+            # Force the connection before yielding.  Without this probe, a
+            # transient DB/DNS outage escapes from the context manager and each
+            # task reports a separate failure before Celery can retry it.
+            await session.execute(text("SELECT 1"))
+        except (OperationalError, OSError) as exc:
+            last_error = exc
+            await session.close()
+            await task_engine.dispose()
+            if attempt == _TASK_DB_CONNECT_MAX_ATTEMPTS:
+                raise
+            delay = _TASK_DB_CONNECT_RETRY_BASE_SECONDS * 2 ** (attempt - 1)
+            logger.warning(
+                "Celery task DB connection unavailable; retrying in %.1fs (%d/%d): %s",
+                delay,
+                attempt,
+                _TASK_DB_CONNECT_MAX_ATTEMPTS,
+                exc,
+            )
+            await asyncio.sleep(delay)
+            continue
+
+        try:
             yield session
-    finally:
-        await engine.dispose()
+        finally:
+            await session.close()
+            await task_engine.dispose()
+        return
+
+    if last_error is not None:  # pragma: no cover - loop always raises earlier
+        raise last_error
 
 
 # --- ORM 基礎類別 ---
