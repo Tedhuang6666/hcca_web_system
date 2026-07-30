@@ -1536,7 +1536,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** 更新使用者資料（啟用/停用、改名、設定超管） */
+        /** 更新使用者資料與偏好設定 */
         patch: operations["update_user_admin_users__user_id__patch"];
         trace?: never;
     };
@@ -1712,6 +1712,23 @@ export interface paths {
         head?: never;
         /** 更新使用者的某個職位任期日期 */
         patch: operations["update_user_position_admin_users__user_id__positions__up_id__patch"];
+        trace?: never;
+    };
+    "/admin/users/{user_id}/sessions/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 撤銷使用者全部登入工作階段 */
+        post: operations["revoke_user_sessions_admin_users__user_id__sessions_revoke_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/admin/zombie-credentials": {
@@ -33475,6 +33492,26 @@ export interface components {
             is_active?: boolean | null;
             /** Is Superuser */
             is_superuser?: boolean | null;
+            /** Is Verified */
+            is_verified?: boolean | null;
+            /** Muted Notification Modules */
+            muted_notification_modules?: string[] | null;
+            /** Notification Digest Frequency */
+            notification_digest_frequency?: ("off" | "daily" | "weekly") | null;
+            /** Notification Preferences */
+            notification_preferences?: {
+                [key: string]: {
+                    [key: string]: boolean;
+                };
+            } | null;
+            /** Show Email */
+            show_email?: boolean | null;
+            /** Student Id */
+            student_id?: string | null;
+            /** Ui Locale */
+            ui_locale?: "zh-TW" | null;
+            /** Ui Theme */
+            ui_theme?: ("auto" | "light" | "dark") | null;
         };
         /** UploadedImageOut */
         UploadedImageOut: {
@@ -33629,17 +33666,38 @@ export interface components {
             is_owner: boolean;
             /** Is Superuser */
             is_superuser: boolean;
+            /** Is Verified */
+            is_verified: boolean;
             /** Linked Emails */
             linked_emails?: string[];
             /** Mfa Enabled */
             mfa_enabled: boolean;
+            /** Muted Notification Modules */
+            muted_notification_modules?: string[];
+            /**
+             * Notification Digest Frequency
+             * @default off
+             */
+            notification_digest_frequency: string;
+            /** Notification Preferences */
+            notification_preferences?: {
+                [key: string]: {
+                    [key: string]: boolean;
+                };
+            };
             /**
              * Positions
              * @default []
              */
             positions: components["schemas"]["PositionSummary"][];
+            /** Show Email */
+            show_email: boolean;
             /** Student Id */
             student_id: string | null;
+            /** Ui Locale */
+            ui_locale: string;
+            /** Ui Theme */
+            ui_theme: string;
         };
         /** UserPositionCreate */
         UserPositionCreate: {
@@ -38800,6 +38858,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_user_sessions_admin_users__user_id__sessions_revoke_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number | string;
+                    };
                 };
             };
             /** @description Validation Error */
