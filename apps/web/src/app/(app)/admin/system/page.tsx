@@ -1325,10 +1325,11 @@ const ERROR_CATEGORY: Record<
 > = {
   db: { label: "資料庫", tone: "danger", hint: "可試「升級資料庫」或「重啟服務」" },
   unhandled: { label: "未處理例外", tone: "danger", hint: "展開追蹤後修正程式碼" },
+  client: { label: "前端錯誤", tone: "danger", hint: "檢查瀏覽器堆疊與發生頁面" },
   redis: { label: "Redis / 快取", tone: "warning", hint: "可試「清除快取」或「重啟服務」" },
   timeout: { label: "逾時", tone: "warning", hint: "負載可能過高，檢視慢查詢或重啟" },
   validation: { label: "請求驗證", tone: "neutral", hint: "檢查前端 payload 與 API schema" },
-  http: { label: "5xx 例外", tone: "neutral", hint: "由程式主動拋出的 5xx" },
+  http: { label: "HTTP 錯誤", tone: "neutral", hint: "API 回應的 4xx/5xx，請查看狀態碼與路徑" },
 };
 
 const ERROR_BAR: Record<ErrorTone, string> = {
@@ -1359,9 +1360,11 @@ function ErrorRow({ item }: { item: RecentErrorItem }) {
             <span className="font-mono text-sm font-semibold text-[var(--text-primary)]">
               {item.exc_type}
             </span>
-            <span className="rounded bg-[var(--bg-hover)] px-1.5 py-0.5 font-mono text-xs text-[var(--text-secondary)]">
-              {item.status_code}
-            </span>
+            {item.status_code > 0 && (
+              <span className="rounded bg-[var(--bg-hover)] px-1.5 py-0.5 font-mono text-xs text-[var(--text-secondary)]">
+                {item.status_code}
+              </span>
+            )}
             {item.occurrences > 1 && (
               <span className="rounded bg-[var(--bg-hover)] px-1.5 py-0.5 text-xs text-[var(--text-secondary)]">
                 ×{item.occurrences}

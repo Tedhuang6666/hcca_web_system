@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 from httpx import AsyncClient
 
@@ -55,6 +57,49 @@ async def test_record_error_keeps_traceback_sanitizes_and_aggregates(isolated_er
     assert "secret-value" not in str(items[0])
     assert "secret-token" not in str(items[0])
     assert "RuntimeError" in str(items[0]["traceback_head"])
+
+
+async def test_record_client_error_is_not_classified_as_server_exception(
+    isolated_error_audit,
+) -> None:
+    await isolated_error_audit.record_client_error(
+        message="browser failure",
+        stack="Error: browser failure",
+        scope="window.error",
+        path="/admin/system",
+    )
+
+    items = await isolated_error_audit.get_recent_errors()
+    assert len(items) == 1
+    assert items[0]["category"] == "client"
+    assert items[0]["status_code"] == 0
+
+
+async def test_recent_errors_normalize_legacy_client_events(
+    isolated_error_audit,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def legacy_lrange(*_args, **_kwargs) -> list[str]:
+        return [
+            json.dumps(
+                {
+                    "signature": "unhandled:ClientError:CLIENT:/admin/system",
+                    "error_id": "legacy-client-1",
+                    "category": "unhandled",
+                    "exc_type": "ClientError",
+                    "method": "CLIENT",
+                    "path": "/admin/system",
+                    "status_code": 500,
+                    "occurred_at": 1,
+                }
+            )
+        ]
+
+    monkeypatch.setattr(security.redis_client, "lrange", legacy_lrange)
+
+    items = await isolated_error_audit.get_recent_errors()
+    assert items[0]["category"] == "client"
+    assert items[0]["status_code"] == 0
 
 
 async def test_client_error_endpoint_is_anonymous_and_returns_error_id(

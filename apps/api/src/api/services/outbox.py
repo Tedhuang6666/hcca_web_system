@@ -35,10 +35,10 @@ async def emit(
     return event
 
 
-# ── Celery handler（同步，在 Celery worker 中執行）────────────────────────────
+# ── Celery handler（非同步，在 Celery worker 中以 task_session 執行）──────────
 
 
-def _dispatch(event: OutboxEvent) -> None:
+async def _dispatch(db: AsyncSession, event: OutboxEvent) -> None:
     """根據 event_type 分派到對應的通知邏輯。擴充時在此 switch 新增分支。"""
     from api.services.mail import enqueue_email
 
@@ -84,67 +84,49 @@ def _dispatch(event: OutboxEvent) -> None:
             enqueue_email(to, subject, body_text, subtype)
     elif etype == "admin.notification":
         # 模組跳閘 / 恢復等系統事件 → fan-out 給所有 superuser 的 inbox
-        _fan_out_admin_notification(payload)
+        await _fan_out_admin_notification(db, payload)
     elif etype == "module.recovered":
         # 模組恢復事件（INFO 等級），與 admin.notification 同邏輯
-        _fan_out_admin_notification(payload)
+        await _fan_out_admin_notification(db, payload)
     elif etype == "meeting.minutes_ready":
-        _handle_meeting_minutes_ready(payload)
+        await _handle_meeting_minutes_ready(db, payload)
     elif etype == "regulation.published":
-        _handle_regulation_published(payload)
+        await _handle_regulation_published(db, payload)
     elif etype == "shop.order_confirmed":
         _handle_shop_order_confirmed(payload)
     elif etype == "announcement.published":
-        _handle_announcement_published(payload)
+        await _handle_announcement_published(db, payload)
     elif etype == "petition.external_notify":
         _handle_petition_external_notify(payload)
     else:
         logger.warning("Unknown outbox event_type: %s", etype)
 
 
-def _fan_out_admin_notification(payload: dict) -> None:
-    """將模組事件寫入所有 superuser 的 notifications 表（同步，在 Celery worker）。"""
-    from sqlalchemy import create_engine, select
-    from sqlalchemy.orm import Session
+async def _fan_out_admin_notification(db: AsyncSession, payload: dict) -> None:
+    """將模組事件寫入所有 superuser 的 notifications 表。"""
+    from sqlalchemy import select
 
-    from api.core.config import settings
     from api.models.notification import Notification
     from api.models.user import User
 
-    sync_url = str(settings.DATABASE_URL).replace("+asyncpg", "")
-    engine = create_engine(sync_url)
-    try:
-        with Session(engine) as session:
-            rows = session.execute(select(User).where(User.is_superuser.is_(True))).scalars().all()
-            for u in rows:
-                session.add(
-                    Notification(
-                        user_id=u.id,
-                        type="system",
-                        title=str(payload.get("title", "系統通知"))[:200],
-                        body=str(payload.get("body", "")),
-                        link=payload.get("link"),
-                    )
-                )
-            session.commit()
-    except Exception as exc:
-        logger.warning("admin notification fan-out failed: %s", exc)
+    rows = (await db.execute(select(User).where(User.is_superuser.is_(True)))).scalars().all()
+    for user in rows:
+        db.add(
+            Notification(
+                user_id=user.id,
+                type="system",
+                title=str(payload.get("title", "系統通知"))[:200],
+                body=str(payload.get("body", "")),
+                link=payload.get("link"),
+            )
+        )
 
 
-def _make_sync_engine():
-    from sqlalchemy import create_engine
-
-    from api.core.config import settings
-
-    return create_engine(str(settings.DATABASE_URL).replace("+asyncpg", ""))
-
-
-def _handle_meeting_minutes_ready(payload: dict) -> None:
+async def _handle_meeting_minutes_ready(db: AsyncSession, payload: dict) -> None:
     """結束會議後建立「會議紀錄準備中」通知信草稿供主席確認後發送。"""
     import uuid as _uuid
 
     from sqlalchemy import select
-    from sqlalchemy.orm import Session
 
     from api.core.config import settings
     from api.models.email_message import EmailCampaignRecipient, EmailMessage, EmailStatus
@@ -160,84 +142,78 @@ def _handle_meeting_minutes_ready(payload: dict) -> None:
 
     idem_key = f"meeting-minutes-ready-{meeting_id}"
     base = settings.FRONTEND_BASE_URL.rstrip("/")
-    engine = _make_sync_engine()
-    with Session(engine) as session:
-        existing = session.scalar(
-            select(EmailMessage).where(EmailMessage.idempotency_key == idem_key)
-        )
-        if existing:
-            return
-        ids = [_uuid.UUID(uid) for uid in attendee_ids]
-        users = session.execute(select(User).where(User.id.in_(ids))).scalars().all()
-        external_emails = [u.email for u in users if u.email]
-        rv = [
-            {
-                "user_id": str(u.id),
-                "email": u.email,
-                "name": u.display_name or u.email,
-                "variables": {"姓名": u.display_name or u.email},
-            }
-            for u in users
-            if u.email
-        ]
-        context = {
-            "blocks": [],
-            "buttons": [
-                {"url": f"{base}/meetings/{meeting_id}", "label": "查看會議", "style": "primary"}
-            ],
-            "cta_url": "",
-            "heading": f"「{meeting_title}」已圓滿結束",
-            "card_rows": [{"label": "會議", "value": meeting_title}],
-            "cta_label": "",
-            "footer_text": "",
-            "accent_color": "#111827",
-            "preview_text": f"{meeting_title} 會議紀錄整理中",
-            "background_color": "#eef2f7",
-            "banner_image_alt": "",
-            "banner_image_url": "",
-            "body_line_height": 1.6,
-            "paragraph_spacing": 18,
-            "show_system_footer": True,
-            "content_background_color": "#ffffff",
+    existing = await db.scalar(select(EmailMessage).where(EmailMessage.idempotency_key == idem_key))
+    if existing:
+        return
+    ids = [_uuid.UUID(uid) for uid in attendee_ids]
+    users = (await db.execute(select(User).where(User.id.in_(ids)))).scalars().all()
+    external_emails = [u.email for u in users if u.email]
+    rv = [
+        {
+            "user_id": str(u.id),
+            "email": u.email,
+            "name": u.display_name or u.email,
+            "variables": {"姓名": u.display_name or u.email},
         }
-        msg = EmailMessage(
-            sender_id=_uuid.UUID(actor_id) if actor_id else None,
-            org_id=_uuid.UUID(org_id) if org_id else None,
-            subject=f"【會議紀錄準備中】{meeting_title}",
-            body=f"### {{{{ 姓名 }}}}您好，\n\n「{meeting_title}」已圓滿結束，會議紀錄正在整理中，完成後將另行公告。",
-            template="generic",
-            context=context,
-            recipient_spec={"external_emails": external_emails},
-            variable_definitions=[
-                {"key": "姓名", "label": "姓名", "required": False, "default_value": "您"}
-            ],
-            default_variables={"姓名": "您"},
-            recipient_variables=rv,
-            resolved_emails=external_emails,
-            recipient_count=len(external_emails),
-            status=EmailStatus.DRAFT,
-            idempotency_key=idem_key,
-        )
-        session.add(msg)
-        session.flush()
-        for r in rv:
-            session.add(
-                EmailCampaignRecipient(
-                    message_id=msg.id,
-                    user_id=_uuid.UUID(r["user_id"]),
-                    email=r["email"],
-                    name=r["name"],
-                    variables=r["variables"],
-                    status="queued",
-                )
+        for u in users
+        if u.email
+    ]
+    context = {
+        "blocks": [],
+        "buttons": [
+            {"url": f"{base}/meetings/{meeting_id}", "label": "查看會議", "style": "primary"}
+        ],
+        "cta_url": "",
+        "heading": f"「{meeting_title}」已圓滿結束",
+        "card_rows": [{"label": "會議", "value": meeting_title}],
+        "cta_label": "",
+        "footer_text": "",
+        "accent_color": "#111827",
+        "preview_text": f"{meeting_title} 會議紀錄整理中",
+        "background_color": "#eef2f7",
+        "banner_image_alt": "",
+        "banner_image_url": "",
+        "body_line_height": 1.6,
+        "paragraph_spacing": 18,
+        "show_system_footer": True,
+        "content_background_color": "#ffffff",
+    }
+    msg = EmailMessage(
+        sender_id=_uuid.UUID(actor_id) if actor_id else None,
+        org_id=_uuid.UUID(org_id) if org_id else None,
+        subject=f"【會議紀錄準備中】{meeting_title}",
+        body=f"### {{{{ 姓名 }}}}您好，\n\n「{meeting_title}」已圓滿結束，會議紀錄正在整理中，完成後將另行公告。",
+        template="generic",
+        context=context,
+        recipient_spec={"external_emails": external_emails},
+        variable_definitions=[
+            {"key": "姓名", "label": "姓名", "required": False, "default_value": "您"}
+        ],
+        default_variables={"姓名": "您"},
+        recipient_variables=rv,
+        resolved_emails=external_emails,
+        recipient_count=len(external_emails),
+        status=EmailStatus.DRAFT,
+        idempotency_key=idem_key,
+    )
+    db.add(msg)
+    await db.flush()
+    for recipient in rv:
+        db.add(
+            EmailCampaignRecipient(
+                message_id=msg.id,
+                user_id=_uuid.UUID(recipient["user_id"]),
+                email=recipient["email"],
+                name=recipient["name"],
+                variables=recipient["variables"],
+                status="queued",
             )
-        session.commit()
+        )
 
 
-def _handle_regulation_published(payload: dict) -> None:
+async def _handle_regulation_published(db: AsyncSession, payload: dict) -> None:
     """法規公布後，對啟用 regulation_published email 偏好的用戶發送通知。"""
     from sqlalchemy import select
-    from sqlalchemy.orm import Session
 
     from api.core.config import settings
     from api.models.user import User
@@ -246,24 +222,21 @@ def _handle_regulation_published(payload: dict) -> None:
 
     reg_title = payload.get("regulation_title", "法規")
     base = settings.FRONTEND_BASE_URL.rstrip("/")
-    engine = _make_sync_engine()
-    with Session(engine) as session:
-        stmt = select(User).where(User.is_active.is_(True))
-        users = session.execute(stmt).scalars().all()
-        for user in users:
-            if not user.email:
-                continue
-            prefs = normalize_preferences(user.notification_preferences or {})
-            if prefs.get("regulation_published", {}).get("email"):
-                subject = f"【法規公布】{reg_title}"
-                html = (
-                    f"<p>法規《{reg_title}》已由主席正式公布生效。</p>"
-                    f'<p><a href="{base}/regulations">查看法規庫</a></p>'
-                )
-                try:
-                    enqueue_email(user.email, subject, html)
-                except Exception as exc:
-                    logger.warning("regulation.published email failed user=%s: %s", user.id, exc)
+    users = (await db.execute(select(User).where(User.is_active.is_(True)))).scalars().all()
+    for user in users:
+        if not user.email:
+            continue
+        prefs = normalize_preferences(user.notification_preferences or {})
+        if prefs.get("regulation_published", {}).get("email"):
+            subject = f"【法規公布】{reg_title}"
+            html = (
+                f"<p>法規《{reg_title}》已由主席正式公布生效。</p>"
+                f'<p><a href="{base}/regulations">查看法規庫</a></p>'
+            )
+            try:
+                enqueue_email(user.email, subject, html)
+            except Exception as exc:
+                logger.warning("regulation.published email failed user=%s: %s", user.id, exc)
 
 
 def _handle_shop_order_confirmed(payload: dict) -> None:
@@ -291,10 +264,9 @@ def _handle_shop_order_confirmed(payload: dict) -> None:
         logger.warning("shop.order_confirmed email failed: %s", exc)
 
 
-def _handle_announcement_published(payload: dict) -> None:
+async def _handle_announcement_published(db: AsyncSession, payload: dict) -> None:
     """公告發布後，對啟用 announcement email 偏好的用戶發送通知。"""
     from sqlalchemy import select
-    from sqlalchemy.orm import Session
 
     from api.core.config import settings
     from api.models.user import User
@@ -303,23 +275,21 @@ def _handle_announcement_published(payload: dict) -> None:
 
     title = payload.get("title", "公告")
     base = settings.FRONTEND_BASE_URL.rstrip("/")
-    engine = _make_sync_engine()
-    with Session(engine) as session:
-        users = session.execute(select(User).where(User.is_active.is_(True))).scalars().all()
-        for user in users:
-            if not user.email:
-                continue
-            prefs = normalize_preferences(user.notification_preferences or {})
-            if prefs.get("announcement", {}).get("email"):
-                subject = f"【新公告】{title}"
-                html = (
-                    f"<p>平台新增公告：《{title}》</p>"
-                    f'<p><a href="{base}/announcements">查看公告</a></p>'
-                )
-                try:
-                    enqueue_email(user.email, subject, html)
-                except Exception as exc:
-                    logger.warning("announcement.published email failed user=%s: %s", user.id, exc)
+    users = (await db.execute(select(User).where(User.is_active.is_(True)))).scalars().all()
+    for user in users:
+        if not user.email:
+            continue
+        prefs = normalize_preferences(user.notification_preferences or {})
+        if prefs.get("announcement", {}).get("email"):
+            subject = f"【新公告】{title}"
+            html = (
+                f"<p>平台新增公告：《{title}》</p>"
+                f'<p><a href="{base}/announcements">查看公告</a></p>'
+            )
+            try:
+                enqueue_email(user.email, subject, html)
+            except Exception as exc:
+                logger.warning("announcement.published email failed user=%s: %s", user.id, exc)
 
 
 def _handle_petition_external_notify(payload: dict) -> None:
@@ -340,27 +310,23 @@ def _handle_petition_external_notify(payload: dict) -> None:
         logger.warning("petition.external_notify email failed: %s", exc)
 
 
-def process_pending_outbox() -> None:
-    """Celery Beat task：掃描並處理 pending outbox events（同步函式）。"""
+async def process_pending_outbox() -> None:
+    """Celery Beat task：以可重試的非同步 DB session 處理 pending outbox events。"""
+    from sqlalchemy.exc import SQLAlchemyError
 
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import Session
+    from api.core.database import task_session
 
-    from api.core.config import settings
-
-    # 使用同步引擎（Celery task 不在 asyncio event loop）
-    sync_url = str(settings.DATABASE_URL).replace("+asyncpg", "")
-    engine = create_engine(sync_url)
-
-    with Session(engine) as session:
+    async with task_session() as db:
         rows = (
-            session.execute(
-                select(OutboxEvent)
-                .where(OutboxEvent.status == OutboxStatus.PENDING)
-                .where(~OutboxEvent.event_type.like("discord.%"))
-                .order_by(OutboxEvent.created_at)
-                .limit(50)
-                .with_for_update(skip_locked=True)
+            (
+                await db.execute(
+                    select(OutboxEvent)
+                    .where(OutboxEvent.status == OutboxStatus.PENDING)
+                    .where(~OutboxEvent.event_type.like("discord.%"))
+                    .order_by(OutboxEvent.created_at)
+                    .limit(50)
+                    .with_for_update(skip_locked=True)
+                )
             )
             .scalars()
             .all()
@@ -368,10 +334,15 @@ def process_pending_outbox() -> None:
 
         for event in rows:
             try:
-                _dispatch(event)
+                await _dispatch(db, event)
                 event.status = OutboxStatus.PROCESSED
                 event.processed_at = datetime.now(UTC)
                 record_outbox_delivery(event.event_type, "processed")
+            except SQLAlchemyError:
+                # DB 連線中斷或 transaction 失效時不可把事件標成已處理；
+                # 讓 Celery 重新執行，task_session 也會重建連線。
+                await db.rollback()
+                raise
             except Exception as exc:
                 event.retry_count += 1
                 event.last_error = str(exc)
@@ -386,4 +357,4 @@ def process_pending_outbox() -> None:
                     logger.warning(
                         "Outbox event %s failed (retry %d): %s", event.id, event.retry_count, exc
                     )
-        session.commit()
+        await db.commit()

@@ -158,6 +158,21 @@ def _event_payload(sample: ErrorSample) -> dict[str, Any]:
     }
 
 
+def _normalize_error_fields(item: dict[str, Any]) -> tuple[str, int]:
+    """讀取 Redis 舊事件時，修正早期 ClientError 的錯誤分類與假 500。"""
+    method = str(item.get("method") or "")
+    exc_type = str(item.get("exc_type") or "")
+    if method == "CLIENT" or exc_type == "ClientError":
+        return "client", 0
+
+    category = str(item.get("category") or "unhandled")
+    try:
+        status_code = int(item["status_code"]) if item.get("status_code") is not None else 500
+    except (TypeError, ValueError):
+        status_code = 500
+    return category, status_code
+
+
 async def _persist_error_event(payload: dict[str, Any]) -> None:
     """Write a sanitized error event to Redis for cross-process audit lookup."""
     try:
@@ -307,8 +322,8 @@ async def record_client_error(
         traceback_head=stack,
         method="CLIENT",
         path=path or "unknown",
-        status_code=500,
-        category="unhandled",
+        status_code=0,
+        category="client",
         request_id=request_id,
         trace_id=trace_id,
         client_ip=client_ip,
@@ -423,6 +438,7 @@ async def get_recent_errors(top: int = 50) -> list[dict[str, object]]:
                 continue
             if not isinstance(item, dict):
                 continue
+            category, status_code = _normalize_error_fields(item)
             signature = str(
                 item.get("signature")
                 or f"{item.get('category', 'unhandled')}:{item.get('exc_type', '')}:"
@@ -437,12 +453,12 @@ async def get_recent_errors(top: int = 50) -> list[dict[str, object]]:
                     "trace_id": item.get("trace_id"),
                     "client_ip": item.get("client_ip"),
                     "user_agent": item.get("user_agent"),
-                    "category": str(item.get("category") or "unhandled"),
+                    "category": category,
                     "exc_type": str(item.get("exc_type") or ""),
                     "message": str(item.get("message") or ""),
                     "method": str(item.get("method") or ""),
                     "path": str(item.get("path") or ""),
-                    "status_code": int(item.get("status_code") or 500),
+                    "status_code": status_code,
                     "traceback_head": str(item.get("traceback_head") or ""),
                     "first_seen": float(item.get("first_seen") or occurred_at),
                     "last_seen": occurred_at,
@@ -461,7 +477,7 @@ async def get_recent_errors(top: int = 50) -> list[dict[str, object]]:
                             "client_ip": item.get("client_ip"),
                             "user_agent": item.get("user_agent"),
                             "message": str(item.get("message") or current["message"]),
-                            "status_code": int(item.get("status_code") or current["status_code"]),
+                            "status_code": status_code,
                             "traceback_head": str(
                                 item.get("traceback_head") or current["traceback_head"]
                             ),
@@ -505,6 +521,7 @@ async def find_error_by_id(error_id: str) -> dict[str, object] | None:
             continue
         if not isinstance(item, dict) or item.get("error_id") != needle:
             continue
+        category, status_code = _normalize_error_fields(item)
         occurred_at = float(item.get("occurred_at") or 0)
         return {
             "error_id": str(item.get("error_id") or ""),
@@ -512,12 +529,12 @@ async def find_error_by_id(error_id: str) -> dict[str, object] | None:
             "trace_id": item.get("trace_id"),
             "client_ip": item.get("client_ip"),
             "user_agent": item.get("user_agent"),
-            "category": str(item.get("category") or "unhandled"),
+            "category": category,
             "exc_type": str(item.get("exc_type") or ""),
             "message": str(item.get("message") or ""),
             "method": str(item.get("method") or ""),
             "path": str(item.get("path") or ""),
-            "status_code": int(item.get("status_code") or 500),
+            "status_code": status_code,
             "traceback_head": str(item.get("traceback_head") or ""),
             "first_seen": occurred_at,
             "last_seen": occurred_at,
