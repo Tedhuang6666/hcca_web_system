@@ -277,7 +277,7 @@ function AppShellContent({
           </main>
         </div>
         {!sidebarOpen && <BottomTabBar onMoreClick={() => setSidebarOpen((p) => !p)} />}
-        <UrgentAnnouncementPopup />
+        {isLoggedIn && <UrgentAnnouncementPopup />}
         <CommandMenu />
         <PolicyConsentBanner
           isAuthenticated={isLoggedIn && !suppressPolicyConsent && !isPublicRoute(pathname)}

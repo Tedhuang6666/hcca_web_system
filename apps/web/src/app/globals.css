@@ -2134,8 +2134,8 @@ select.input-field {
 /* ── Topbar 圖示按鈕 ──────────────────────────────────────────────────── */
 .topbar-icon-btn {
   position: relative;
-  width: 2.125rem;
-  height: 2.125rem;
+  width: 2.75rem;
+  height: 2.75rem;
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
@@ -2144,6 +2144,7 @@ select.input-field {
   background: transparent;
   border: 1px solid var(--border);
   cursor: pointer;
+  touch-action: manipulation;
   transition:
     background var(--transition),
     color var(--transition),

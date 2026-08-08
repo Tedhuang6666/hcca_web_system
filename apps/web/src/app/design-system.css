@@ -1728,8 +1728,8 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
 
   .topbar-actions .topbar-icon-btn,
   .topbar-user-menu > button {
-    width: 2.5rem;
-    height: 2.5rem;
+    width: 2.75rem;
+    height: 2.75rem;
   }
 
   .topbar-user-menu > button {
