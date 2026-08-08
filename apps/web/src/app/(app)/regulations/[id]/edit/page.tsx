@@ -589,6 +589,9 @@ export default function EditRegulationPage() {
   // 根據 workflow_status 決定頭部主要動作按鈕
   const canSubmit = (wfStatus === "draft" || wfStatus === "rejected") && can("regulation:submit");
   const canDirectPublish = wfStatus === "council_approved" && can("regulation:president_publish");
+  const canDirectEnactProcedure = reg.category === "procedure"
+    && (wfStatus === "draft" || wfStatus === "rejected")
+    && can("regulation:publish");
 
   const inputStyle = { border: "1px solid var(--border)" };
   const lastSnapshot = reg.revisions?.length
@@ -742,12 +745,12 @@ export default function EditRegulationPage() {
                 主席公布
               </button>
             )}
-            {/* 直接發布（無審議流程的草稿，向後兼容） */}
-            {wfStatus === "draft" && can("regulation:publish") && !can("regulation:submit") && (
+            {/* 辦法可由具發布權限的議會秘書處或班聯會直接制定 */}
+            {canDirectEnactProcedure && (
               <button onClick={openPublishFlow}
                 className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer whitespace-nowrap"
                 style={{ background: "var(--success-dim)", color: "var(--success)", border: "1px solid var(--success)" }}>
-                發布
+                直接制定辦法
               </button>
             )}
             {reg.is_active && wfStatus === "published" && (

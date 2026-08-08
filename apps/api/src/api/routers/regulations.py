@@ -618,11 +618,11 @@ async def update_regulation(
 @router.post(
     "/{reg_id}/publish",
     response_model=RegulationOut,
-    summary="（停用）直接發布法規",
+    summary="直接制定辦法（需 regulation:publish 權限）",
     responses={
-        200: {"description": "法規發布成功，修訂歷程已記錄"},
+        200: {"description": "辦法直接制定成功，修訂歷程已記錄"},
         403: {"description": "需要 regulation:publish 權限"},
-        409: {"description": "法規已發布"},
+        409: {"description": "憲章與條例必須經議會核定，或法規目前不可直接制定"},
     },
 )
 async def publish_regulation(
@@ -631,9 +631,7 @@ async def publish_regulation(
     session: DbDep,
     current_user: CurrentUser,
 ) -> Regulation:
-    """
-    此端點已停用：法規必須透過主席公布流程（president_publish）才可生效。
-    """
+    """直接制定辦法；憲章與條例必須改走議會審議及主席公布流程。"""
     reg = await _get_reg_or_404(reg_id, session)
     if not current_user.is_superuser:
         codes = await get_user_permission_codes_for_org(session, current_user.id, reg.org_id)

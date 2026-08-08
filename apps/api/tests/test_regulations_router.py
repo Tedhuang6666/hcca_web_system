@@ -459,10 +459,10 @@ async def test_repeal_already_repealed_regulation_returns_409(
     assert resp.status_code == 409
 
 
-async def test_publish_endpoint_is_disabled_returns_409(
+async def test_parliamentary_publish_endpoint_returns_409(
     db_session: AsyncSession, authed_client_factory, make_user
 ) -> None:
-    """/publish 端點已停用，一律應改用 president_publish 流程。"""
+    """憲章與條例的 /publish 必須改用 president_publish 流程。"""
     org = await _make_org(db_session)
     creator = await make_user(email="disabled-publish-owner@school.edu")
     await _grant_permission(db_session, creator, org, "regulation:publish")
@@ -714,6 +714,56 @@ async def test_submit_regulation_without_permission_returns_403(
     resp = await ac.post(f"/regulations/{reg.id}/submit", json={})
 
     assert resp.status_code == 403
+
+
+async def test_procedure_can_be_published_directly(
+    db_session: AsyncSession, authed_client_factory, make_user
+) -> None:
+    org = await _make_org(db_session)
+    creator = await make_user(email="procedure-publish-owner@school.edu")
+    await _grant_permission(db_session, creator, org, "regulation:publish")
+    reg = await _make_regulation(
+        db_session,
+        org,
+        creator,
+        category=RegulationCategory.PROCEDURE,
+    )
+
+    ac = authed_client_factory(creator)
+    resp = await ac.post(
+        f"/regulations/{reg.id}/publish",
+        json={"change_brief": "議會秘書處制定辦法"},
+    )
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["workflow_status"] == "published"
+    assert body["published_at"] is not None
+    assert len(body["revisions"]) == 1
+    assert body["workflow_logs"][-1]["to_status"] == "published"
+
+
+@pytest.mark.parametrize(
+    "category",
+    [RegulationCategory.CONSTITUTION, RegulationCategory.ORDINANCE],
+)
+async def test_parliamentary_regulations_cannot_be_published_directly(
+    db_session: AsyncSession, authed_client_factory, make_user, category: RegulationCategory
+) -> None:
+    org = await _make_org(db_session)
+    creator = await make_user(email=f"{category.value}-direct-publish@school.edu")
+    await _grant_permission(db_session, creator, org, "regulation:publish")
+    reg = await _make_regulation(db_session, org, creator, category=category)
+
+    ac = authed_client_factory(creator)
+    resp = await ac.post(
+        f"/regulations/{reg.id}/publish",
+        json={"change_brief": "不應跳過議會"},
+    )
+
+    assert resp.status_code == 409, resp.text
+    assert "議會核定" in resp.json()["detail"]
+    assert reg.workflow_status == RegulationWorkflowStatus.DRAFT
 
 
 async def test_schedule_without_meeting_id_returns_422(

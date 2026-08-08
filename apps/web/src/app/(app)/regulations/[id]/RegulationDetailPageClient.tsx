@@ -1042,12 +1042,12 @@ export default function RegulationDetailPageClient() {
             {/* 下一步視覺引導卡 */}
             {(() => {
               const NEXT: Record<string, { Icon: LucideIcon; color: string; bg: string; border: string; title: string; desc: string }> = {
-                draft:            { Icon: FilePenLine, color: "#818cf8", bg: "rgba(99,102,241,0.07)", border: "rgba(99,102,241,0.25)", title: "下一步：送交議會審議", desc: "草稿完成後，由起草人點擊「送交議會審議」，進入審議流程。" },
+                draft:            { Icon: FilePenLine, color: "#818cf8", bg: "rgba(99,102,241,0.07)", border: "rgba(99,102,241,0.25)", title: "下一步：送交議會審議或直接制定", desc: "憲章、條例須送交議會審議；辦法則可由具發布權限的議會秘書處或班聯會直接制定。" },
                 under_review:     { Icon: ClipboardList, color: "#0284c7", bg: "rgba(2,132,199,0.07)", border: "rgba(2,132,199,0.25)", title: "下一步：排入議程", desc: "書記官審閱後，點擊「排入議程」將法規列入下次議會討論。" },
                 scheduled:        { Icon: CalendarDays, color: "#7c3aed", bg: "rgba(124,58,237,0.07)", border: "rgba(124,58,237,0.25)", title: "下一步：議會核定", desc: "議會討論後，議長點擊「議會核定通過」完成議會程序。" },
                 council_approved: { Icon: ScrollText, color: "#d97706", bg: "rgba(217,119,6,0.07)", border: "rgba(217,119,6,0.25)", title: "下一步：主席公布", desc: "主席審核後點擊「主席公布法規」，法規正式生效並記錄修訂歷程。" },
                 published:        { Icon: CheckCircle2, color: "var(--success)", bg: "var(--success-dim)", border: "rgba(34,197,94,0.3)", title: "法規已公布生效", desc: "此法規目前為現行有效版本。如需修訂，請從法規詳情頁起草修正案。" },
-                rejected:         { Icon: Undo2, color: "var(--danger)", bg: "rgba(220,38,38,0.07)", border: "rgba(220,38,38,0.25)", title: "已退回草稿", desc: "法規已被退回，請修正內容後重新送審。" },
+                rejected:         { Icon: Undo2, color: "var(--danger)", bg: "rgba(220,38,38,0.07)", border: "rgba(220,38,38,0.25)", title: "已退回草稿", desc: "憲章、條例修正後重新送審；辦法可由具發布權限的議會秘書處或班聯會直接制定。" },
                 archived:         { Icon: Archive, color: "var(--text-muted)", bg: "var(--bg-elevated)", border: "var(--border)", title: "法規已廢止", desc: "此法規已停用，僅供歷史查閱。" },
               };
               const info = NEXT[reg.workflow_status];
@@ -1074,6 +1074,22 @@ export default function RegulationDetailPageClient() {
                 {reg.workflow_status === "draft" && can("regulation:submit") && (
                   <button disabled={wfActionLoading} onClick={() => runWfAction("送審", (note) => regulationsApi.submitReview(id, note || undefined).then(setReg))}
                     className="btn btn-primary text-xs px-3 py-1.5">送交議會審議</button>
+                )}
+                {/* 辦法直接制定 */}
+                {reg.category === "procedure"
+                  && ["draft", "rejected"].includes(reg.workflow_status)
+                  && can("regulation:publish") && (
+                  <button disabled={wfActionLoading}
+                    onClick={() => runWfAction(
+                      "直接制定辦法",
+                      (note) => regulationsApi.publish(id, {
+                        change_brief: note || "直接制定辦法",
+                      }).then(setReg),
+                      true,
+                      "制定說明（選填）",
+                      "例：議會秘書處制定本辦法",
+                    )}
+                    className="btn btn-primary text-xs px-3 py-1.5">直接制定辦法</button>
                 )}
                 {/* 排入議程 */}
                 {reg.workflow_status === "under_review" && can("regulation:schedule") && (
@@ -1124,7 +1140,9 @@ export default function RegulationDetailPageClient() {
                     廢止法規
                   </button>
                 )}
-                {(reg.workflow_status === "draft" || reg.workflow_status === "rejected") && !can("regulation:submit") && (
+                {(reg.workflow_status === "draft" || reg.workflow_status === "rejected")
+                  && !can("regulation:submit")
+                  && !(reg.category === "procedure" && can("regulation:publish")) && (
                   <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                     草稿由建立者送交議會後，再由書記官排入議程，議長核定，最終由主席公布。
                   </p>

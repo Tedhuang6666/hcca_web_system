@@ -766,11 +766,47 @@ async def publish_regulation(
     published_by: uuid.UUID,
 ) -> Regulation:
     """
-    發布法規（設定 published_at）。
-    同時建立修訂歷程快照記錄。
+    直接制定辦法（設定 published_at）。
+
+    憲章與條例必須走議會審議流程；只有辦法可由具備發布權限的組織
+    直接制定。直接制定同樣寫入流程日誌與修訂歷程，避免繞過稽核軌跡。
     """
-    _ = (session, reg, data, published_by)
-    raise ValueError("法規不可直接發布，請改用主席公布流程（president_publish）")
+    if reg.category != RegulationCategory.PROCEDURE:
+        raise ValueError("憲章與條例必須經議會核定後才能公布")
+    if reg.workflow_status not in {
+        RegulationWorkflowStatus.DRAFT,
+        RegulationWorkflowStatus.REJECTED,
+    }:
+        raise ValueError("辦法僅可從草稿或退回狀態直接制定")
+
+    change_brief = data.change_brief.strip() or "直接制定辦法"
+    now = datetime.now(UTC)
+    await transition_workflow(
+        session,
+        reg,
+        to_status=RegulationWorkflowStatus.PUBLISHED,
+        actor_id=published_by,
+        note=change_brief,
+    )
+    reg.published_at = now
+    reg.revisions.append(
+        RegulationRevision(
+            regulation_id=reg.id,
+            version=reg.version,
+            change_brief=change_brief,
+            is_total_amendment=data.is_total_amendment,
+            content_snapshot=reg.content,
+            article_snapshot=_article_snapshot_json(reg.articles),
+            proposal_metadata_snapshot=reg.proposal_metadata,
+            resolution_link=data.resolution_link,
+            amended_at=now,
+            amended_by=published_by,
+        )
+    )
+    await session.flush()
+    logger.info("辦法直接制定 id=%s title=%s", reg.id, reg.title)
+    loaded = await get_regulation(session, reg.id)
+    return loaded or reg
 
 
 # ── 停用 ─────────────────────────────────────────────────────────────────────
@@ -1012,7 +1048,12 @@ async def transition_workflow(
     note: str | None = None,
 ) -> Regulation:
     """執行審議流程狀態轉移，並寫入流程日誌"""
-    allowed = _ALLOWED_TRANSITIONS.get(reg.workflow_status, set())
+    allowed = set(_ALLOWED_TRANSITIONS.get(reg.workflow_status, set()))
+    if reg.category == RegulationCategory.PROCEDURE and reg.workflow_status in {
+        RegulationWorkflowStatus.DRAFT,
+        RegulationWorkflowStatus.REJECTED,
+    }:
+        allowed.add(RegulationWorkflowStatus.PUBLISHED)
     if to_status not in allowed:
         msg = f"無法從 {reg.workflow_status} 轉移至 {to_status}"
         raise ValueError(msg)
@@ -1026,7 +1067,11 @@ async def transition_workflow(
         actor_id=actor_id,
         note=note,
     )
-    session.add(log)
+    loaded_logs = reg.__dict__.get("workflow_logs")
+    if loaded_logs is not None:
+        loaded_logs.append(log)
+    else:
+        session.add(log)
 
     reg.workflow_status = to_status
     reg.workflow_note = note
