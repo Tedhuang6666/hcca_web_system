@@ -130,6 +130,16 @@ function SessionGate({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
       window.removeEventListener("focus", revalidate);
+  // 公開詳情頁不需要等待瀏覽器端驗證；讓伺服器預先輸出的正文直接進入首屏。
+  // 受保護路徑仍沿用原本的驗證閘門與登入導向。
+  if (isPublicRoute(pathname)) {
+    return (
+      <ModuleStatusProvider authenticated={false}>
+        <AppShellContent isLoggedIn={false}>{children}</AppShellContent>
+      </ModuleStatusProvider>
+    );
+  }
+
       document.removeEventListener("visibilitychange", revalidate);
     };
   }, [pathname, router]);
