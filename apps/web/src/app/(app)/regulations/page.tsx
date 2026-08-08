@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo, type ReactNode } from "react";
+import { useEffect, useState, useMemo, type ReactNode } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { regulationsApi, regulationHref } from "@/lib/api";
@@ -110,10 +110,16 @@ export default function RegulationsPage() {
   const [category, setCategory] = usePersistedState<RegulationCategory | "all">("hcca:pref:regulations:category:v1", "all");
   const [workflow, setWorkflow] = usePersistedState<RegulationWorkflowStatus | "all">("hcca:pref:regulations:workflow:v1", "all");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [showAll, setShowAll] = useState(false);
   const { can } = usePermissions();
 
   const canManage = can("regulation:create") || can("regulation:admin");
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search), 250);
+    return () => window.clearTimeout(timer);
+  }, [search]);
 
   const [allRegs, loading] = useFetch(
     () => {
@@ -121,11 +127,11 @@ export default function RegulationsPage() {
       if (category !== "all") params.category = category;
       if (canManage && workflow !== "all") params.workflow_status = workflow;
       if (!showAll || !canManage) params.active_only = "true";
-      return search.trim()
-        ? regulationsApi.search(search.trim(), params)
+      return debouncedSearch.trim()
+        ? regulationsApi.search(debouncedSearch.trim(), params)
         : regulationsApi.list(params);
     },
-    [category, search, showAll, canManage, workflow],
+    [category, debouncedSearch, showAll, canManage, workflow],
     "載入失敗",
     [] as Array<RegulationListItem | RegulationSearchResult>,
     "regulations/list",
@@ -204,9 +210,9 @@ export default function RegulationsPage() {
           {CATEGORIES.map(({ key, label }) => {
             const active = category === key;
             return (
-              <button key={key} aria-pressed={active}
+              <button key={key} type="button" aria-pressed={active}
                 onClick={() => setCategory(key)}
-                className="px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap cursor-pointer hover:opacity-80"
+                className="min-h-11 touch-manipulation px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap cursor-pointer hover:opacity-80"
                 style={active
                   ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
                   : { color: "var(--text-muted)", border: "1px solid var(--border)", background: "var(--bg-surface)" }}>
@@ -222,9 +228,10 @@ export default function RegulationsPage() {
               return (
                 <button
                   key={key}
+                  type="button"
                   aria-pressed={active}
                   onClick={() => setWorkflow(key)}
-                  className="px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap cursor-pointer hover:opacity-80"
+                  className="min-h-11 touch-manipulation px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap cursor-pointer hover:opacity-80"
                   style={active
                     ? { background: "var(--primary-dim)", color: "var(--primary)", border: "1px solid var(--border-strong)" }
                     : { color: "var(--text-muted)", border: "1px solid var(--border)", background: "var(--bg-surface)" }}
@@ -239,7 +246,7 @@ export default function RegulationsPage() {
 
       {/* 統計列 */}
       {!loading && sorted.length > 0 && (
-        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+        <p className="text-xs" style={{ color: "var(--text-muted)" }} role="status" aria-live="polite">
           共 {sorted.length} 筆法規
         </p>
       )}
@@ -265,7 +272,7 @@ export default function RegulationsPage() {
           style={{ gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))" }}
         >
           {sorted.map((reg) => (
-            <RegCard key={reg.id} reg={reg} keyword={search.trim()} />
+            <RegCard key={reg.id} reg={reg} keyword={debouncedSearch.trim()} />
           ))}
         </div>
       )}
@@ -291,14 +298,14 @@ function RegCard({
         transition: "box-shadow var(--transition), border-color var(--transition)",
       }}>
       <div className="flex items-start justify-between gap-2">
-        <h3 className="font-semibold text-sm leading-snug flex-1 reg-card-title"
+        <h2 className="font-semibold text-sm leading-snug flex-1 reg-card-title"
           style={{
             color: "var(--text-primary)",
             transition: "color var(--transition)",
             textDecoration: isArchived ? "line-through" : "none",
           }}>
           {reg.title}
-        </h3>
+        </h2>
         <RegulationCategoryBadge category={reg.category} />
       </div>
       <div className="flex items-center justify-between">
