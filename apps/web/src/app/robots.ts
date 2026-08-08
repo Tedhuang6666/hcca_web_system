@@ -16,6 +16,9 @@ export default function robots(): MetadataRoute.Robots {
           "/documents",
           "/documents/",
           "/meetings",
+          "/petitions",
+          "/petitions/public",
+          "/petitions/public/",
         ],
         disallow: [
           "/admin",

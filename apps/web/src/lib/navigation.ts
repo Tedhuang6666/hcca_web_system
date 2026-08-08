@@ -66,7 +66,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "publicAnnouncements", href: "/announcements", iconKey: "announcement", label: "校內公告" },
   { id: "publicPartnerMap", href: "/partner-map", iconKey: "partnerMap", label: "特約地圖" },
   { id: "publicRecommendedVendors", href: "/recommended-vendors", iconKey: "shopOrders", label: "推薦商家" },
-  { id: "publicPetition", href: "/petitions/new", iconKey: "petition", label: "我要陳情" },
+  { id: "publicPetition", href: "/petitions/public", iconKey: "petition", label: "公開陳情" },
   { id: "publicAbout", href: "/about", iconKey: "info", label: "關於本系統" },
   { id: "documents", href: "/documents", iconKey: "documents", label: "公文系統" },
   { id: "calendar", href: "/calendar", iconKey: "calendar", label: "行事曆" },
@@ -291,6 +291,12 @@ export const NAV_ITEMS_BY_ID: Record<string, NavItem> = Object.fromEntries(
   NAV_ITEMS.map((item) => [item.id, item]),
 );
 
+const PRIVATE_PUBLIC_NAV_ITEM_IDS = new Set([
+  "credential",
+  "recommendedVendors",
+  "publicRecommendedVendors",
+]);
+
 export const NAV_DEF: NavEntry[] = [
   {
     id: "work",
@@ -345,8 +351,6 @@ export const NAV_DEF_LOGGED_OUT: NavEntry[] = [
       "publicDocuments",
       "publicAnnouncements",
       "publicPartnerMap",
-      "credential",
-      "publicRecommendedVendors",
       "publicPetition",
       "publicAbout",
     ]),
@@ -644,15 +648,16 @@ function ensureCredentialEntry(entries: NavEntry[]): NavEntry[] {
 }
 
 export function navProfileFromApi(profile: NavigationProfileOut): NavigationProfileConfig {
-  const desktopSections = ensureCredentialEntry(
-    (profile.desktop_sections ?? []).map((section) => ({
-      id: section.id,
-      heading: section.heading,
-      collapsible: section.collapsible,
-      defaultCollapsed: section.default_collapsed,
-      items: byIds(section.items ?? []),
-    })),
-  );
+  const sections = (profile.desktop_sections ?? []).map((section) => ({
+    id: section.id,
+    heading: section.heading,
+    collapsible: section.collapsible,
+    defaultCollapsed: section.default_collapsed,
+    items: byIds(section.items ?? []).filter(
+      (item) => profile.key !== "public" || !PRIVATE_PUBLIC_NAV_ITEM_IDS.has(item.id),
+    ),
+  }));
+  const desktopSections = profile.key === "public" ? sections : ensureCredentialEntry(sections);
   return {
     id: profile.key,
     label: profile.label,

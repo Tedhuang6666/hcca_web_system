@@ -53,7 +53,7 @@ export const PUBLIC_NAV_ITEMS: PublicNavItemDef[] = [
   { key: "partner-map", href: "/partner-map", label: "特約地圖", description: "合作店家與學生優惠", iconKey: "partner-map", group: "data", guestUsable: true, moduleId: "partnerMap" },
   { key: "surveys", href: "/surveys", label: "公開問卷", description: "參與目前開放的校園調查", iconKey: "surveys", group: "data", guestUsable: true, moduleId: "surveys" },
 
-  { key: "petitions", href: "/petitions", label: "陳情中心", description: "提出陳情、用案號查詢案件進度", iconKey: "petitions", group: "participation", guestUsable: true, moduleId: "petitions" },
+  { key: "petitions", href: "/petitions/public", label: "公開陳情", description: "閱讀公開案件與回覆，也可以提出新的陳情", iconKey: "petitions", group: "participation", guestUsable: true, moduleId: "petitions" },
 ];
 
 /** 後台存進 settings.theme_config.nav 的覆寫形狀。 */
