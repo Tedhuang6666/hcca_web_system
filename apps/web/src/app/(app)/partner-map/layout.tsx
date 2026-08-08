@@ -1,5 +1,3 @@
-import "leaflet/dist/leaflet.css";
-
 import type { Metadata } from "next";
 
 import ModuleBoundary from "@/components/ModuleBoundary";
@@ -17,9 +15,6 @@ export const metadata: Metadata = pageMetadata({
 export default function PartnerMapLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
-      <link rel="preconnect" href="https://a.basemaps.cartocdn.com" crossOrigin="" />
-      <link rel="preconnect" href="https://b.basemaps.cartocdn.com" crossOrigin="" />
-      <link rel="preconnect" href="https://c.basemaps.cartocdn.com" crossOrigin="" />
       <ModuleBoundary id="partnerMap" skeleton={<ListPageSkeleton />}>
         <PartnerMapTabs />
         {children}
