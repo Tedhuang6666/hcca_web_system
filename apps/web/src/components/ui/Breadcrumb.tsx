@@ -22,7 +22,7 @@ export function Breadcrumb({ items }: { items: BreadcrumbItem[] }) {
             )}
             {item.href && !isLast ? (
               <Link href={item.href}
-                className="transition-colors hover:opacity-80"
+                className="inline-flex min-h-11 items-center px-1 transition-colors hover:opacity-80"
                 style={{ color: "var(--text-muted)", textDecoration: "none" }}>
                 {item.label}
               </Link>

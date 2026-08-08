@@ -8,10 +8,10 @@ export function VersionHistory({ revisions }: { revisions: RevisionOut[] }) {
   if (revisions.length === 0) {
     return (
       <div className="card p-4">
-        <h3 className="text-xs font-semibold uppercase tracking-widest mb-2"
+        <h2 className="text-xs font-semibold uppercase tracking-widest mb-2"
           style={{ color: "var(--text-muted)" }}>
           版本歷程
-        </h3>
+        </h2>
         <p className="text-xs" style={{ color: "var(--text-disabled)" }}>尚無版本記錄</p>
       </div>
     );
@@ -22,10 +22,10 @@ export function VersionHistory({ revisions }: { revisions: RevisionOut[] }) {
   return (
     <div className="card p-4">
       <div className="flex items-center gap-2 mb-3">
-        <h3 className="text-xs font-semibold uppercase tracking-widest"
+        <h2 className="text-xs font-semibold uppercase tracking-widest"
           style={{ color: "var(--text-muted)" }}>
           版本歷程
-        </h3>
+        </h2>
         <span
           className="badge text-[10px]"
           style={{ color: "var(--primary)", background: "var(--primary-dim)", borderColor: "var(--primary-dim)" }}>
