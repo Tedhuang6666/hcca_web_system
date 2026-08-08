@@ -256,9 +256,11 @@ def is_sensitive_document(doc: Document) -> bool:
 
 
 def can_anonymous_access_document(doc: Document) -> bool:
-    return doc.visibility_level == DocumentVisibility.PUBLICLY_OPEN and not is_sensitive_document(
-        doc
-    )
+    return (
+        doc.visibility_level == DocumentVisibility.PUBLICLY_OPEN
+        or doc.visibility_level == DocumentVisibility.PUBLIC
+        or doc.is_public is True  # 舊版 API 只寫入 is_public 的資料
+    ) and not is_sensitive_document(doc)
 
 
 async def user_has_full_document_access(
@@ -408,6 +410,7 @@ async def _build_visibility_filter(
 
     return [
         Document.visibility_level == DocumentVisibility.PUBLICLY_OPEN,
+        Document.is_public.is_(True),
         Document.visibility_level == DocumentVisibility.PUBLIC,
         Document.created_by == viewer_id,
         is_approver,
@@ -480,7 +483,13 @@ async def list_documents(
 ) -> list[Document]:
     q = _doc_query_for_list()
     if public_only:
-        q = q.where(Document.visibility_level == DocumentVisibility.PUBLICLY_OPEN)
+        q = q.where(
+            or_(
+                Document.visibility_level == DocumentVisibility.PUBLICLY_OPEN,
+                Document.visibility_level == DocumentVisibility.PUBLIC,
+                Document.is_public.is_(True),
+            )
+        )
     elif viewer_id is not None:
         visibility_conditions = await _build_visibility_filter(session, viewer_id)
         if visibility_conditions:
@@ -496,7 +505,16 @@ async def list_documents(
     if classification:
         q = q.where(Document.classification == classification)
     if visibility:
-        q = q.where(Document.visibility_level == visibility)
+        if visibility in {DocumentVisibility.PUBLIC, DocumentVisibility.PUBLICLY_OPEN}:
+            q = q.where(
+                or_(
+                    Document.visibility_level == DocumentVisibility.PUBLIC,
+                    Document.visibility_level == DocumentVisibility.PUBLICLY_OPEN,
+                    Document.is_public.is_(True),
+                )
+            )
+        else:
+            q = q.where(Document.visibility_level == visibility)
     if created_by:
         q = q.where(Document.created_by == created_by)
     if serial_prefix:

@@ -54,14 +54,14 @@ const URGENCY_LABEL: Record<string, string> = { normal: "普通件", priority: "
 const VISIBILITY_LABEL: Record<DocumentVisibility, string> = {
   subject_only: "僅當事人",
   org_only: "機關成員",
-  public: "登入可見",
-  publicly_open: "公開（含未登入）",
+  public: "公開（含未登入）",
+  publicly_open: "公開（舊版相容值）",
 };
 const VISIBILITY_OPTIONS: Array<{ value: DocumentVisibility; label: string }> = [
   { value: "subject_only", label: "僅當事人" },
   { value: "org_only", label: "機關成員" },
-  { value: "public", label: "登入可見" },
-  { value: "publicly_open", label: "公開" },
+  { value: "public", label: "公開（含未登入）" },
+  { value: "publicly_open", label: "公開（舊版相容值）" },
 ];
 
 function fmtSize(bytes: number) {

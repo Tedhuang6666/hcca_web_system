@@ -119,7 +119,12 @@ async def create_document(
                 raise PermissionError("字號模板不屬於此組織，無法使用")
             serial = await generate_serial_from_template(session, template)
 
-    visibility = data.visibility_level
+    # 舊版客戶端只傳 is_public=true；若沒有明確傳入新欄位，保留相容行為。
+    visibility = (
+        DocumentVisibility.PUBLICLY_OPEN
+        if data.is_public and "visibility_level" not in data.model_fields_set
+        else data.visibility_level
+    )
     doc = Document(
         serial_number=serial,
         title=data.title,
@@ -146,7 +151,7 @@ async def create_document(
         page_info=data.page_info,
         serial_template_id=template.id if template else None,
         visibility_level=visibility,
-        is_public=(visibility == DocumentVisibility.PUBLICLY_OPEN),
+        is_public=visibility in {DocumentVisibility.PUBLIC, DocumentVisibility.PUBLICLY_OPEN},
     )
     session.add(doc)
     await session.flush()
@@ -195,7 +200,11 @@ async def update_document(
         raise ValueError(f"公文 {doc.serial_number} 非草稿狀態（{doc.status}），無法編輯")
 
     changed = False
-    update_fields = data.model_dump(exclude_unset=True, exclude={"change_note", "autosave"})
+    update_fields = data.model_dump(
+        exclude_unset=True, exclude={"change_note", "autosave", "is_public"}
+    )
+    if data.is_public and "visibility_level" not in data.model_fields_set:
+        update_fields["visibility_level"] = DocumentVisibility.PUBLICLY_OPEN
     for field, value in update_fields.items():
         if getattr(doc, field, None) != value:
             setattr(doc, field, value)
@@ -204,7 +213,10 @@ async def update_document(
         doc.issuer_full_name = "主席"
         changed = True
     if "visibility_level" in update_fields:
-        doc.is_public = doc.visibility_level == DocumentVisibility.PUBLICLY_OPEN
+        doc.is_public = doc.visibility_level in {
+            DocumentVisibility.PUBLIC,
+            DocumentVisibility.PUBLICLY_OPEN,
+        }
 
     if changed and not data.autosave:
         result = await session.execute(
@@ -237,7 +249,10 @@ async def update_document_visibility(
 ) -> Document:
     """調整公文可見度；不受草稿狀態限制，也不建立正文版本快照。"""
     doc.visibility_level = visibility
-    doc.is_public = visibility == DocumentVisibility.PUBLICLY_OPEN
+    doc.is_public = visibility in {
+        DocumentVisibility.PUBLIC,
+        DocumentVisibility.PUBLICLY_OPEN,
+    }
     await session.flush()
     return doc
 

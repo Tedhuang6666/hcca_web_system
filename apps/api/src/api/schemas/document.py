@@ -559,7 +559,7 @@ class DocumentCreate(BaseModel):
     due_date: datetime | None = Field(None, description="限辦日期")
     visibility_level: DocumentVisibility = Field(
         DocumentVisibility.ORG_ONLY,
-        description="可見度：subject_only=僅當事人 / org_only=機關成員 / public=全體登入 / publicly_open=公開（含未登入）",
+        description="可見度：subject_only=僅當事人 / org_only=機關成員 / public=公開（含未登入） / publicly_open=舊版公開值",
     )
     is_public: bool = Field(False, description="由 visibility_level 自動同步")
     page_info: str | None = Field(None, max_length=50, description="頁次資訊（列印後回填）")
