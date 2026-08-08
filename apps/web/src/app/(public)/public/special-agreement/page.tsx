@@ -20,7 +20,7 @@ export default async function SpecialAgreementPage() {
 
   return (
     <div className="space-y-8 pb-8">
-      <header className="overflow-hidden rounded-2xl bg-[#173654] px-6 py-9 text-white sm:px-9 sm:py-11">
+      <header className="public-partnership-hero overflow-hidden rounded-2xl bg-[#173654] px-6 py-9 text-white sm:px-9 sm:py-11">
         <div className="flex flex-col gap-7 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
             <div className="flex items-center gap-2 text-xs font-semibold tracking-[0.16em] text-[#e8c970]">
@@ -55,7 +55,7 @@ export default async function SpecialAgreementPage() {
           <ol className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             {content.process.map((step, index) => (
             <li key={step.id} className="rounded-xl border border-[var(--public-border)] bg-[var(--public-surface)] p-5">
-              <span className="text-xs font-semibold tracking-[0.14em] text-[var(--public-accent)]">{String(index + 1).padStart(2, "0")}</span>
+              <span className="text-xs font-semibold tracking-[0.14em] text-[var(--public-accent-text)]">{String(index + 1).padStart(2, "0")}</span>
               <h3 className="mt-5 text-lg font-semibold">{step.title}</h3>
               <p className="mt-2 text-sm leading-6 text-[var(--public-secondary)]">{step.description}</p>
             </li>
