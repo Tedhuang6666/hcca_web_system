@@ -216,14 +216,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     petitions: settingsLastModified,
   };
 
-  const navEntries = visibleNavItems.map((item) => ({
-    url: `${site}${item.href}`,
-    lastModified: lastModifiedByNavKey[item.key] ?? settingsLastModified,
-    changeFrequency: ["about", "system-info", "officers", "links"].includes(item.key)
-      ? ("monthly" as const)
-      : ("daily" as const),
-    priority: item.key === "public-db" ? 0.6 : item.group === "primary" ? 0.8 : 0.7,
-  }));
+  const navEntries = visibleNavItems
+    .filter((item) => item.key !== "petition-new")
+    .map((item) => ({
+      url: `${site}${item.href}`,
+      lastModified: lastModifiedByNavKey[item.key] ?? settingsLastModified,
+      changeFrequency: ["about", "system-info", "officers", "links"].includes(item.key)
+        ? ("monthly" as const)
+        : ("daily" as const),
+      priority: item.key === "public-db" ? 0.6 : item.group === "primary" ? 0.8 : 0.7,
+    }));
 
   return [
     { url: `${site}/`, lastModified: homepageLastModified, changeFrequency: "daily", priority: 1 },

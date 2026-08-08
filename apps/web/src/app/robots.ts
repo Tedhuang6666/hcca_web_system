@@ -24,8 +24,6 @@ export default function robots(): MetadataRoute.Robots {
           "/auth",
           "/documents/new",
           "/documents/*/edit",
-          "/public/regulations",
-          "/public/documents",
           "/regulations/new",
           "/regulations/pending",
           "/regulations/archived",

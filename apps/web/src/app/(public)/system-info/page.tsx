@@ -4,6 +4,14 @@ import MarkdownBlock from "@/components/site/MarkdownBlock";
 import PublicSiteShell from "@/components/site/PublicSiteShell";
 import { fetchPublicBundle } from "@/lib/serverFetch";
 import { getSystemInfoMarkdown } from "@/lib/systemInfoMarkdown";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata = pageMetadata({
+  title: "關於本系統",
+  description: "HCCA 校園自治整合平台的使用協助、回報管道與公開說明。",
+  path: "/system-info",
+  type: "website",
+});
 
 export default async function SystemInfoPage() {
   const bundle = await fetchPublicBundle();

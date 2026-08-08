@@ -1,8 +1,31 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import AnnouncementMarkdown from "@/components/announcements/AnnouncementMarkdown";
 import PublicSiteShell from "@/components/site/PublicSiteShell";
+import { uploadUrl } from "@/lib/config";
 import { fetchAnnouncement, fetchPublicBundle } from "@/lib/serverFetch";
+import { JsonLd, absoluteUrl, excerpt, pageMetadata } from "@/lib/seo";
+
+function markdownFromContent(content: Record<string, unknown> | null | undefined) {
+  if (!content) return "";
+  if (typeof content.markdown === "string") return content.markdown;
+  if (typeof content.text === "string") return content.text;
+  return "";
+}
+
+export async function generateMetadata(
+  { params }: { params: Promise<{ id: string }> },
+): Promise<Metadata> {
+  const { id } = await params;
+  const item = await fetchAnnouncement(id);
+  const title = item?.title ?? "公告";
+  const description = excerpt(markdownFromContent(item?.content), "新竹高中班聯會公開公告。");
+  const path = "/news/" + encodeURIComponent(id);
+  const imagePath = item?.media?.[0]?.url ? uploadUrl(item.media[0].url) : undefined;
+
+  return pageMetadata({ title, description, path, imagePath });
+}
 
 export default async function PublicNewsDetailPage({
   params,
@@ -18,7 +41,22 @@ export default async function PublicNewsDetailPage({
   if (!item) notFound();
 
   return (
-    <PublicSiteShell navPages={bundle?.nav_pages ?? []} settings={bundle?.settings}>
+    <>
+      <JsonLd
+        data={{
+          "@context": "https://schema.org",
+          "@type": "Article",
+          headline: item.title,
+          description: excerpt(markdownFromContent(item.content), "新竹高中班聯會公開公告。"),
+          datePublished: item.published_at ?? item.created_at,
+          dateModified: item.updated_at,
+          author: { "@type": "Person", name: item.author_name || "新竹高中班聯會" },
+          publisher: { "@type": "Organization", name: "新竹高中班聯會" },
+          mainEntityOfPage: absoluteUrl("/news/" + encodeURIComponent(id)),
+          image: item.media.map((media) => uploadUrl(media.url)).filter(Boolean),
+        }}
+      />
+      <PublicSiteShell navPages={bundle?.nav_pages ?? []} settings={bundle?.settings}>
       <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
         <article className="space-y-5">
           <header className="public-page-head space-y-3">
@@ -50,6 +88,7 @@ export default async function PublicNewsDetailPage({
           </div>
         </article>
       </div>
-    </PublicSiteShell>
+      </PublicSiteShell>
+    </>
   );
 }

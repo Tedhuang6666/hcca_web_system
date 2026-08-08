@@ -1,13 +1,14 @@
-import type { Metadata } from "next";
-
 import MarkdownBlock from "@/components/site/MarkdownBlock";
 import PublicSiteShell from "@/components/site/PublicSiteShell";
 import { fetchPublicBundle } from "@/lib/serverFetch";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata = pageMetadata({
   title: "聯絡我們",
   description: "班聯會公開聯絡方式與聯繫說明。",
-};
+  path: "/contact",
+  type: "website",
+});
 
 export default async function ContactPage() {
   const bundle = await fetchPublicBundle();
