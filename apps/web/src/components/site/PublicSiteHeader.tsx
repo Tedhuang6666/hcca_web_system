@@ -8,6 +8,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import ImportantAnnouncementBanner from "@/components/site/ImportantAnnouncementBanner";
 import PublicEmblem from "@/components/site/PublicEmblem";
+import PublicNavIcon from "@/components/site/PublicNavIcon";
 import { BRANDING } from "@/lib/branding";
 import {
   PUBLIC_NAV_GROUP_META,
@@ -61,16 +62,16 @@ function PublicSiteHeaderContent({
   );
   const groups = {
     primary: resolvedGroups.primary.filter(
-      (item) => !moduleStatusReady || !closedModuleIds.has(item.moduleId ?? ""),
+      (item) => !item.moduleId || (moduleStatusReady && !closedModuleIds.has(item.moduleId)),
     ),
     info: resolvedGroups.info.filter(
-      (item) => !moduleStatusReady || !closedModuleIds.has(item.moduleId ?? ""),
+      (item) => !item.moduleId || (moduleStatusReady && !closedModuleIds.has(item.moduleId)),
     ),
     data: resolvedGroups.data.filter(
-      (item) => !moduleStatusReady || !closedModuleIds.has(item.moduleId ?? ""),
+      (item) => !item.moduleId || (moduleStatusReady && !closedModuleIds.has(item.moduleId)),
     ),
     participation: resolvedGroups.participation.filter(
-      (item) => !moduleStatusReady || !closedModuleIds.has(item.moduleId ?? ""),
+      (item) => !item.moduleId || (moduleStatusReady && !closedModuleIds.has(item.moduleId)),
     ),
   };
   const topLevel = [
@@ -110,25 +111,17 @@ function PublicSiteHeaderContent({
           setClosedModuleIds(
             new Set(statuses.filter((item) => item.on && item.mode === "closed").map((item) => item.id)),
           );
-          setModuleStatusReady(true);
         }
       } catch {
+        // 載入失敗時維持保守預設：只顯示不依賴模組狀態的入口。
+      } finally {
         if (active) setModuleStatusReady(true);
       }
     };
 
-    let idleId: number | undefined;
-    const timeoutId = window.setTimeout(() => {
-      if (typeof window.requestIdleCallback === "function") {
-        idleId = window.requestIdleCallback(loadModuleStatus, { timeout: 1_000 });
-      } else {
-        void loadModuleStatus();
-      }
-    }, 2_500);
+    void loadModuleStatus();
     return () => {
       active = false;
-      window.clearTimeout(timeoutId);
-      if (idleId !== undefined) window.cancelIdleCallback(idleId);
     };
   }, []);
 
@@ -202,6 +195,9 @@ function PublicSiteHeaderContent({
                     <div className="grid gap-0.5">
                       {group.items.map((item) => (
                         <Link key={item.key} href={item.href} className="public-nav-dropdown-link">
+                          <span className="public-nav-dropdown-icon" aria-hidden="true">
+                            <PublicNavIcon iconKey={item.iconKey} size={18} />
+                          </span>
                           <span className="min-w-0">
                             <span className="flex items-center gap-1.5">
                               <span className="text-sm font-semibold">{item.label}</span>
@@ -289,6 +285,9 @@ function PublicSiteHeaderContent({
                         onClick={() => setOpen(false)}
                         className="public-mobile-service-link"
                       >
+                        <span className="public-nav-dropdown-icon" aria-hidden="true">
+                          <PublicNavIcon iconKey={item.iconKey} size={18} />
+                        </span>
                         <span className="min-w-0">
                           <span className="flex items-center gap-1.5">
                             <span className="truncate text-sm font-semibold">{item.label}</span>

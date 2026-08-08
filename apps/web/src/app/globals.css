@@ -782,7 +782,9 @@
 }
 
 .public-nav-dropdown-link {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
   min-height: 58px;
   border-radius: 10px;
   color: var(--public-text);
@@ -808,6 +810,17 @@
   color: #f8f3e5;
   font-size: 0.85rem;
   text-decoration: none;
+}
+
+.public-nav-dropdown-icon {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 0.6rem;
+  background: var(--public-accent-soft);
+  color: var(--public-accent);
 }
 
 @media (min-width: 640px) {
@@ -1127,7 +1140,9 @@
 }
 
 .public-mobile-service-link {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
   min-height: 48px;
   border: 1px solid var(--public-border);
   border-radius: 10px;
