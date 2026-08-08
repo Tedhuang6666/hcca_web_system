@@ -11611,8 +11611,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * （停用）直接發布法規
-         * @description 此端點已停用：法規必須透過主席公布流程（president_publish）才可生效。
+         * 直接制定辦法（需 regulation:publish 權限）
+         * @description 直接制定辦法；憲章與條例必須改走議會審議及主席公布流程。
          */
         post: operations["publish_regulation_regulations__reg_id__publish_post"];
         delete?: never;
@@ -62997,7 +62997,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 法規發布成功，修訂歷程已記錄 */
+            /** @description 辦法直接制定成功，修訂歷程已記錄 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -63013,7 +63013,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description 法規已發布 */
+            /** @description 憲章與條例必須經議會核定，或法規目前不可直接制定 */
             409: {
                 headers: {
                     [name: string]: unknown;
