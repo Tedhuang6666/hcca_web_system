@@ -19107,7 +19107,7 @@ export interface components {
             /** @default normal */
             urgency: components["schemas"]["DocumentUrgency"];
             /**
-             * @description 可見度：subject_only=僅當事人 / org_only=機關成員 / public=全體登入 / publicly_open=公開（含未登入）
+             * @description 可見度：subject_only=僅當事人 / org_only=機關成員 / public=公開（含未登入） / publicly_open=舊版公開值
              * @default org_only
              */
             visibility_level: components["schemas"]["DocumentVisibility"];
