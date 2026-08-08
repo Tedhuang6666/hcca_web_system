@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { authApi } from "@/lib/api";
 import { cacheCurrentUser } from "@/lib/auth-cache";
+import { isPublicRoute } from "@/lib/route-access";
 
 declare global {
   interface Window {
@@ -32,14 +33,11 @@ declare global {
 }
 
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-const BARE_PATH_PREFIXES = ["/auth", "/profile/complete", "/public", "/unsubscribe"];
-
 function canShowOneTap(pathname: string): boolean {
   if (!GOOGLE_CLIENT_ID) return false;
   if (typeof window === "undefined") return false;
   if (localStorage.getItem("user_id")) return false;
-  if (pathname === "/login") return false;
-  return !BARE_PATH_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+  return !isPublicRoute(pathname);
 }
 
 export default function GoogleOneTap() {
