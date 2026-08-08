@@ -1,15 +1,11 @@
-import { Suspense } from "react";
-
-import TelemetryProvider from "@/components/providers/TelemetryProvider";
+import PublicEnhancements from "@/components/site/PublicEnhancements";
 import "../public-design-system.css";
 import "./public-home.css";
 
 export default function PublicLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
-      <Suspense fallback={null}>
-        <TelemetryProvider />
-      </Suspense>
+      <PublicEnhancements />
       {children}
     </>
   );

@@ -3,7 +3,7 @@
 import { AlertTriangle, ArrowRight, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { announcementsApi } from "@/lib/api";
+import { announcementsApi } from "@/lib/api/announcements";
 import type { AnnouncementOut } from "@/lib/types";
 
 const DISMISSAL_TTL_MS = 10 * 60 * 1000;
