@@ -30,7 +30,7 @@ export default async function SystemInfoPage() {
         </header>
 
         {systemInfoMarkdown ? (
-          <section className="card p-6 sm:p-8" data-reveal>
+          <section className="card p-6 sm:p-8">
             <MarkdownBlock markdown={systemInfoMarkdown} />
           </section>
         ) : (
