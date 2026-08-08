@@ -1531,8 +1531,10 @@
 }
 
 .public-site .prose a {
-  color: var(--public-accent);
+  color: var(--public-accent-text);
   font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .public-site .text-\[var\(--text-secondary\)\],
