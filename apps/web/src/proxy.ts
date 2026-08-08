@@ -4,6 +4,7 @@ const API_INTERNAL_BASE =
   process.env.API_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const MAINTENANCE_CHECK_TIMEOUT_MS = 450;
 const MAINTENANCE_BYPASS_TIMEOUT_MS = 300;
+const PUBLIC_CONTENT_LAST_MODIFIED_TIMEOUT_MS = 800;
 
 // 模組級快取：在同一 edge worker 實例內跨 request 共用，避免每次換頁都打 API。
 // 鍵值：maintenance 用 "global"，access-status 用 IP，bypass 用 cookie 前 64 字元。
@@ -30,6 +31,7 @@ type AccessState = { blocked: false } | { blocked: true; reason?: string; expire
 const maintenanceCache = new Map<string, CacheEntry<MaintenanceState>>();
 const accessStatusCache = new Map<string, CacheEntry<AccessState>>();
 const bypassCache = new Map<string, CacheEntry<boolean>>();
+const publicContentLastModifiedCache = new Map<string, CacheEntry<Date | null>>();
 
 /**
  * 識別中文公文字號格式，例如：
@@ -277,6 +279,89 @@ async function blockedRedirect(req: NextRequest) {
   return NextResponse.redirect(url);
 }
 
+function publicContentApiPath(req: NextRequest): string | null {
+  const segments = req.nextUrl.pathname.split("/").filter(Boolean);
+  if (segments.length !== 2) return null;
+
+  const [section, rawId] = segments;
+  if (!["announcements", "documents", "news", "regulations"].includes(section)) {
+    return null;
+  }
+
+  const id = decodePathPart(rawId).trim();
+  if (!id) return null;
+  const apiSection = section === "news" ? "announcements" : section;
+  return "/" + apiSection + "/" + encodeURIComponent(id);
+}
+
+async function publicContentLastModified(req: NextRequest): Promise<Date | null> {
+  if (req.method !== "GET" && req.method !== "HEAD") return null;
+  if (req.headers.get("RSC") === "1" || req.headers.get("Next-Router-Prefetch") === "1") {
+    return null;
+  }
+  if (req.headers.get("cookie") || req.headers.get("authorization")) return null;
+
+  const apiPath = publicContentApiPath(req);
+  if (!apiPath) return null;
+
+  const cached = cacheGet(publicContentLastModifiedCache, apiPath);
+  if (cached !== undefined) return cached;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    PUBLIC_CONTENT_LAST_MODIFIED_TIMEOUT_MS,
+  );
+  try {
+    const res = await fetch(API_INTERNAL_BASE + apiPath, {
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      cacheSet(publicContentLastModifiedCache, apiPath, null);
+      return null;
+    }
+
+    const raw = (await res.json()) as {
+      updated_at?: string | null;
+      published_at?: string | null;
+      created_at?: string | null;
+    };
+    const value = raw.updated_at ?? raw.published_at ?? raw.created_at;
+    const timestamp = value ? new Date(value).getTime() : Number.NaN;
+    if (!Number.isFinite(timestamp)) {
+      cacheSet(publicContentLastModifiedCache, apiPath, null);
+      return null;
+    }
+
+    // HTTP-date 只有秒精度；截斷毫秒避免瀏覽器拿剛收到的 header
+    // 回傳 If-Modified-Since 時永遠比資料庫時間早幾毫秒。
+    const lastModified = new Date(Math.floor(timestamp / 1000) * 1000);
+    cacheSet(publicContentLastModifiedCache, apiPath, lastModified);
+    return lastModified;
+  } catch {
+    // SEO header 失敗不應影響公開頁面正常回應。
+    cacheSet(publicContentLastModifiedCache, apiPath, null);
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function isNotModified(req: NextRequest, lastModified: Date): boolean {
+  const header = req.headers.get("if-modified-since");
+  if (!header) return false;
+  const since = Date.parse(header);
+  return Number.isFinite(since) && since >= lastModified.getTime();
+}
+
+function notModifiedResponse(lastModified: Date) {
+  return new NextResponse(null, {
+    status: 304,
+    headers: { "Last-Modified": lastModified.toUTCString() },
+  });
+}
+
 export default async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
@@ -309,7 +394,16 @@ export default async function proxy(req: NextRequest) {
     }
   }
 
-  return withCsp(req);
+  const lastModified = isRscNav ? null : await publicContentLastModified(req);
+  if (lastModified && isNotModified(req, lastModified)) {
+    return notModifiedResponse(lastModified);
+  }
+
+  const response = withCsp(req);
+  if (lastModified) {
+    response.headers.set("Last-Modified", lastModified.toUTCString());
+  }
+  return response;
 }
 
 export const config = {
