@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import Image from "next/image";
 import dynamic from "next/dynamic";
-import { AtSign, Clock, ExternalLink, LocateFixed, Mail, MapPin, MessageCircle, Phone, Search, Send, Star, Tag, Trophy } from "lucide-react";
+import { AtSign, Clock, Copy, ExternalLink, LocateFixed, Mail, MapPin, MessageCircle, Phone, Search, Send, Share2, Star, Tag, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import { partnerMapApi, recommendedVendorsApi, ApiError } from "@/lib/api";
 import type { PartnerBusinessDetail, PartnerBusinessDirectoryItem } from "@/lib/api";
@@ -66,6 +66,52 @@ function externalUrl(url: string): string {
   return /^https?:\/\//i.test(url) ? url : `https://${url}`;
 }
 
+function businessPath(name: string): string {
+  const slug = name.trim().replace(/[/?#%\s]/g, (character) => encodeURIComponent(character));
+  return `/partner-map/${slug}`;
+}
+
+function businessUrl(name: string): string {
+  if (typeof window === "undefined") return businessPath(name);
+  return `${window.location.origin}${businessPath(name)}`;
+}
+
+function decodeBusinessSlug(value: string): string {
+  try {
+    return decodeURIComponent(value).trim();
+  } catch {
+    return value.trim();
+  }
+}
+
+function normalizedBusinessName(value: string): string {
+  return decodeBusinessSlug(value).toLocaleLowerCase();
+}
+
+async function copyText(value: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "true");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  try {
+    if (!document.execCommand("copy")) throw new Error("copy_failed");
+  } finally {
+    textarea.remove();
+  }
+}
+
+function replacePartnerMapPath(path: string): void {
+  if (typeof window === "undefined") return;
+  window.history.replaceState(window.history.state, "", path);
+}
+
 function promoImagesFor(business: PartnerBusinessDetail): PartnerPromoImage[] {
   if (business.promo_images.length > 0) return business.promo_images;
   return business.flyer_image_url
@@ -92,12 +138,16 @@ function DetailPanel({
   loading,
   onRate,
   onCheckIn,
+  onShare,
+  onCopyLink,
   onClose,
 }: {
   business: PartnerBusinessDetail | null;
   loading: boolean;
   onRate: (score: number) => void;
   onCheckIn: () => void;
+  onShare: () => void;
+  onCopyLink: () => void;
   onClose: () => void;
 }) {
   if (!business && !loading) return null;
@@ -117,12 +167,20 @@ function DetailPanel({
             {loading ? "載入中..." : business?.name}
           </h2>
         </div>
-        <button className="topbar-icon-btn" onClick={onClose} aria-label="關閉詳情">×</button>
+        <button type="button" className="topbar-icon-btn" onClick={onClose} aria-label="關閉詳情">×</button>
       </div>
       {loading || !business ? (
         <div className="mt-6 text-sm" style={{ color: "var(--text-muted)" }}>載入店家資料中...</div>
       ) : (
         <div className="mt-4 space-y-4">
+          <div className="flex flex-wrap gap-2" aria-label="店家連結操作">
+            <button type="button" className="btn btn-secondary min-h-11 flex-1" onClick={onShare}>
+              <Share2 size={15} aria-hidden="true" /> 分享店家
+            </button>
+            <button type="button" className="btn btn-secondary min-h-11 flex-1" onClick={onCopyLink}>
+              <Copy size={15} aria-hidden="true" /> 複製連結
+            </button>
+          </div>
           {business.cover_image_url && (
             <Image
               src={uploadUrl(business.cover_image_url)}
@@ -385,7 +443,11 @@ function RecommendedDetailPanel({
   return typeof document === "undefined" ? null : createPortal(panel, document.body);
 }
 
-export default function PartnerMapPage() {
+export type PartnerMapPageProps = {
+  initialBusinessSlug?: string;
+};
+
+export default function PartnerMapPage({ initialBusinessSlug }: PartnerMapPageProps = {}) {
   const [items, setItems] = useState<UnifiedMapItem[]>([]);
   const [contactBusinesses, setContactBusinesses] = useState<PartnerBusinessDirectoryItem[]>([]);
   const [tags, setTags] = useState<PartnerTagOut[]>([]);
@@ -402,6 +464,10 @@ export default function PartnerMapPage() {
   const [submissionOpen, setSubmissionOpen] = useState(false);
   const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
   const [mapReady, setMapReady] = useState(false);
+  const [contactDirectoryReady, setContactDirectoryReady] = useState(false);
+  const [initialBusinessId, setInitialBusinessId] = useState<string | null>(null);
+  const [initialLinkHandled, setInitialLinkHandled] = useState(false);
+  const initialBoundsReported = useRef(false);
   const [submission, setSubmission] = useState<PartnerSubmissionCreate>({
     name: "",
     category: "",
@@ -484,11 +550,19 @@ export default function PartnerMapPage() {
 
   useEffect(() => {
     partnerMapApi.tags().then(setTags).catch(() => {});
-    partnerMapApi.directory().then(setContactBusinesses).catch(() => {});
+    partnerMapApi.directory()
+      .then(setContactBusinesses)
+      .catch(() => {})
+      .finally(() => setContactDirectoryReady(true));
     partnerMapApi.rankings(5).then(setRankings).catch(() => {});
     if (window.localStorage.getItem("user_id")) {
       partnerMapApi.myBusinesses().then(setMyBusinesses).catch(() => {});
     }
+  }, []);
+
+  useEffect(() => {
+    const businessId = new URLSearchParams(window.location.search).get("business");
+    if (businessId) setInitialBusinessId(businessId);
   }, []);
 
   useEffect(() => {
@@ -514,15 +588,22 @@ export default function PartnerMapPage() {
 
   const handleMapBoundsChange = useCallback((bounds: PartnerMapBoundsState) => {
     setMapBounds(bounds);
-    setSelectedBusiness(null);
-    setSelectedVendor(null);
-    setDetailLoading(false);
+    if (initialBoundsReported.current) {
+      setSelectedBusiness(null);
+      setSelectedVendor(null);
+      setDetailLoading(false);
+      replacePartnerMapPath("/partner-map");
+    } else {
+      initialBoundsReported.current = true;
+    }
   }, []);
 
-  const openBusiness = (businessId: string, source: "partner" | "recommended" = "partner") => {
+  const openBusiness = useCallback((businessId: string, source: "partner" | "recommended" = "partner") => {
     setSelectedBusiness(null);
     setSelectedVendor(null);
     if (source === "recommended") {
+      setDetailLoading(false);
+      replacePartnerMapPath("/partner-map");
       recommendedVendorsApi
         .get(businessId)
         .then(setSelectedVendor)
@@ -533,10 +614,77 @@ export default function PartnerMapPage() {
     partnerMapApi.recordClick(businessId).catch(() => {});
     partnerMapApi
       .getBusiness(businessId)
-      .then(setSelectedBusiness)
+      .then((business) => {
+        setSelectedBusiness(business);
+        replacePartnerMapPath(businessPath(business.name));
+      })
       .catch((error) => toast.error(error instanceof ApiError ? error.message : "載入店家詳情失敗"))
       .finally(() => setDetailLoading(false));
-  };
+  }, []);
+
+  useEffect(() => {
+    if (initialLinkHandled || (!initialBusinessSlug && !initialBusinessId)) return;
+    if (initialBusinessId) {
+      setInitialLinkHandled(true);
+      openBusiness(initialBusinessId);
+      return;
+    }
+    if (loading || !contactDirectoryReady) return;
+
+    const targetName = normalizedBusinessName(initialBusinessSlug ?? "");
+    const target = [
+      ...items.map((item) => ({ id: item.business_id, name: item.business_name })),
+      ...contactBusinesses.map((business) => ({ id: business.id, name: business.name })),
+    ].find((item) => normalizedBusinessName(item.name) === targetName);
+
+    setInitialLinkHandled(true);
+    if (target) {
+      openBusiness(target.id);
+    } else {
+      replacePartnerMapPath("/partner-map");
+      toast.error("找不到此特約店家");
+    }
+  }, [contactBusinesses, contactDirectoryReady, initialBusinessId, initialBusinessSlug, initialLinkHandled, items, loading, openBusiness]);
+
+  const closeDetails = useCallback(() => {
+    setSelectedBusiness(null);
+    setSelectedVendor(null);
+    setDetailLoading(false);
+    replacePartnerMapPath("/partner-map");
+  }, []);
+
+  const copySelectedLink = useCallback(async () => {
+    if (!selectedBusiness) return;
+    try {
+      await copyText(businessUrl(selectedBusiness.name));
+      toast.success("店家連結已複製");
+    } catch {
+      toast.error("無法複製連結，請手動複製網址列");
+    }
+  }, [selectedBusiness]);
+
+  const shareSelected = useCallback(async () => {
+    if (!selectedBusiness) return;
+    const url = businessUrl(selectedBusiness.name);
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try {
+        await navigator.share({
+          title: `${selectedBusiness.name}｜特約地圖`,
+          text: `查看 ${selectedBusiness.name} 的特約資訊`,
+          url,
+        });
+        return;
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") return;
+      }
+    }
+    try {
+      await copyText(url);
+      toast.success("此裝置不支援直接分享，連結已複製");
+    } catch {
+      toast.error("無法分享連結，請手動複製網址列");
+    }
+  }, [selectedBusiness]);
 
   const submitNewBusiness = async () => {
     if (!submission.name?.trim()) {
@@ -906,11 +1054,7 @@ export default function PartnerMapPage() {
               type="button"
               className="partner-map-detail-backdrop fixed inset-0 lg:hidden"
               aria-label="關閉特約詳情"
-              onClick={() => {
-                setSelectedBusiness(null);
-                setSelectedVendor(null);
-                setDetailLoading(false);
-              }}
+              onClick={closeDetails}
             />,
             document.body,
           )}
@@ -919,15 +1063,13 @@ export default function PartnerMapPage() {
             loading={detailLoading}
             onRate={rateSelected}
             onCheckIn={checkInSelected}
-            onClose={() => {
-              setSelectedBusiness(null);
-              setSelectedVendor(null);
-              setDetailLoading(false);
-            }}
+            onShare={shareSelected}
+            onCopyLink={copySelectedLink}
+            onClose={closeDetails}
           />
           <RecommendedDetailPanel
             vendor={selectedVendor}
-            onClose={() => setSelectedVendor(null)}
+            onClose={closeDetails}
           />
           <div className="pointer-events-none absolute left-4 top-4 hidden rounded-lg border px-3 py-2 text-xs shadow lg:block" style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text-secondary)" }}>
             <span className="inline-flex items-center gap-1"><MapPin size={13} aria-hidden="true" /> {filteredItems.length} 個點位</span>
