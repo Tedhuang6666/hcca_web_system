@@ -5,8 +5,37 @@ import { authFetch, BASE, get, post, patch, del, csrfHeaders, silentRefresh, err
 
 // ── 公告系統 ───────────────────────────────────────────────────────────────────
 
+const ACTIVE_URGENT_CACHE_TTL_MS = 60_000;
+let activeUrgentCache: { value: AnnouncementOut | null; expiresAt: number } | null = null;
+let activeUrgentPromise: Promise<AnnouncementOut | null> | null = null;
+
+function invalidateActiveUrgentCache(): void {
+  activeUrgentCache = null;
+}
+
+function getActiveUrgent(): Promise<AnnouncementOut | null> {
+  if (activeUrgentCache && activeUrgentCache.expiresAt > Date.now()) {
+    return Promise.resolve(activeUrgentCache.value);
+  }
+  if (activeUrgentPromise) return activeUrgentPromise;
+
+  const nextRequest = get<AnnouncementOut | null>("/announcements/active-urgent")
+    .then((value) => {
+      activeUrgentCache = {
+        value,
+        expiresAt: Date.now() + ACTIVE_URGENT_CACHE_TTL_MS,
+      };
+      return value;
+    })
+    .finally(() => {
+      activeUrgentPromise = null;
+    });
+  activeUrgentPromise = nextRequest;
+  return nextRequest;
+}
+
 export const announcementsApi = {
-  activeUrgent: () => get<AnnouncementOut | null>("/announcements/active-urgent"),
+  activeUrgent: getActiveUrgent,
   list: (params?: { org_id?: string; activity_id?: string; skip?: number; limit?: number }) => {
     const qs = new URLSearchParams();
     if (params?.org_id) qs.set("org_id", params.org_id);
@@ -27,16 +56,35 @@ export const announcementsApi = {
   },
   get: (id: string) => get<AnnouncementOut>(`/announcements/${id}`),
   create: (body: AnnouncementCreate) => post<AnnouncementOut>("/announcements", body),
-  update: (id: string, body: AnnouncementUpdate) => patch<AnnouncementOut>(`/announcements/${id}`, body),
-  publish: (id: string) => post<AnnouncementOut>(`/announcements/${id}/publish`, {}),
-  unpublish: (id: string) => post<AnnouncementOut>(`/announcements/${id}/unpublish`, {}),
-  setUrgent: (id: string, body: {
+  update: async (id: string, body: AnnouncementUpdate) => {
+    const result = await patch<AnnouncementOut>(`/announcements/${id}`, body);
+    invalidateActiveUrgentCache();
+    return result;
+  },
+  publish: async (id: string) => {
+    const result = await post<AnnouncementOut>(`/announcements/${id}/publish`, {});
+    invalidateActiveUrgentCache();
+    return result;
+  },
+  unpublish: async (id: string) => {
+    const result = await post<AnnouncementOut>(`/announcements/${id}/unpublish`, {});
+    invalidateActiveUrgentCache();
+    return result;
+  },
+  setUrgent: async (id: string, body: {
     is_urgent?: boolean;
     urgent_until?: string | null;
     show_on_every_visit?: boolean;
-  }) =>
-    patch<AnnouncementOut>(`/announcements/${id}/urgent`, body),
-  delete: (id: string) => del<void>(`/announcements/${id}`),
+  }) => {
+    const result = await patch<AnnouncementOut>(`/announcements/${id}/urgent`, body);
+    invalidateActiveUrgentCache();
+    return result;
+  },
+  delete: async (id: string) => {
+    const result = await del<void>(`/announcements/${id}`);
+    invalidateActiveUrgentCache();
+    return result;
+  },
   uploadMedia: async (id: string, file: File): Promise<AnnouncementMediaOut> => {
     const fd = new FormData();
     fd.append("file", file);

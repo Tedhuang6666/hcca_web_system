@@ -1,11 +1,8 @@
-import { Suspense } from "react";
 import { Toaster } from "sonner";
 
-import GoogleOneTap from "@/components/auth/GoogleOneTap";
 import AppShell from "@/components/layout/AppShell";
+import AppEnhancements from "@/components/layout/AppEnhancements";
 import NavigationProgress from "@/components/layout/NavigationProgress";
-import TelemetryProvider from "@/components/providers/TelemetryProvider";
-import PwaInstallPrompt from "@/components/pwa/PwaInstallPrompt";
 import AccessBlockGuard from "@/components/security/AccessBlockGuard";
 import ScrollProgressBar from "@/components/ui/ScrollProgressBar";
 import "../design-system.css";
@@ -17,10 +14,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <NavigationProgress />
       <ScrollProgressBar />
       <AppShell>{children}</AppShell>
-      <Suspense fallback={null}>
-        <TelemetryProvider />
-      </Suspense>
-      <PwaInstallPrompt />
+      <AppEnhancements />
       <Toaster
         position="top-right"
         richColors
@@ -33,9 +27,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           },
         }}
       />
-      <Suspense fallback={null}>
-        <GoogleOneTap />
-      </Suspense>
     </>
   );
 }
