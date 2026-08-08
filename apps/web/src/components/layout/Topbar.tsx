@@ -52,7 +52,7 @@ function MobileBreadcrumb({ items, fallbackTitle }: { items: Crumb[]; fallbackTi
               {item.href ? (
                 <Link
                   href={item.href}
-                  className="inline-flex min-h-11 max-w-16 items-center truncate px-1 transition-colors hover:opacity-80"
+                  className="inline-flex min-h-11 min-w-11 max-w-16 items-center justify-center truncate px-1 transition-colors hover:opacity-80"
                   style={{ color: "var(--text-secondary)", textDecoration: "none" }}>
                   {item.label}
                 </Link>
