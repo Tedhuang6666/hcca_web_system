@@ -15,16 +15,20 @@ import PageTransition from "./PageTransition";
 import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import { LoadingState } from "@/components/ui/LoadingState";
 import ModuleMaintenance from "@/components/ui/ModuleMaintenance";
-import UrgentAnnouncementPopup from "@/components/announcements/UrgentAnnouncementPopup";
 import ImportantAnnouncementBanner from "@/components/site/ImportantAnnouncementBanner";
 const CommandMenu = dynamic(() => import("./CommandMenu"), { ssr: false });
+const UrgentAnnouncementPopup = dynamic(() => import("@/components/announcements/UrgentAnnouncementPopup"), { ssr: false });
+const PasskeySetupPrompt = dynamic(() => import("@/components/auth/PasskeySetupPrompt"), { ssr: false });
+const ImpersonationBanner = dynamic(
+  () => import("@/components/admin/ImpersonationBanner").then((module) => module.ImpersonationBanner),
+  { ssr: false },
+);
 import { PolicyConsentBanner } from "@/components/legal/PolicyConsentBanner";
 import { isPublicRoute, requiresAuthentication } from "@/lib/route-access";
-import { ApiError, authApi } from "@/lib/api";
+import { ApiError } from "@/lib/api-helpers";
+import { authApi } from "@/lib/api/auth";
 import { API_BASE } from "@/lib/config";
 import { cacheCurrentUser, clearAuthCache, getImpersonationSession } from "@/lib/auth-cache";
-import PasskeySetupPrompt from "@/components/auth/PasskeySetupPrompt";
-import { ImpersonationBanner } from "@/components/admin/ImpersonationBanner";
 
 /** 完全裸頁（不渲染 Shell）：公開官網、login、auth callback、Email 退訂落地頁 */
 const BARE_PATHS = [

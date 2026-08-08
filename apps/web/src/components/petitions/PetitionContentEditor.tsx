@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import { ApiError, petitionsApi } from "@/lib/api";
+import { ApiError } from "@/lib/api-helpers";
+import { petitionsApi } from "@/lib/api/petitions";
 import type { PetitionCaseOut } from "@/lib/types";
 
 type Props = {

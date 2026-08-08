@@ -14,7 +14,8 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { ApiError, policiesApi } from "@/lib/api";
+import { ApiError } from "@/lib/api-helpers";
+import { policiesApi } from "@/lib/api/policies";
 import { normalizeCouncilName } from "@/lib/copy";
 import { prefersReducedNetworkUsage } from "@/lib/data-saver";
 import type { PendingConsentItem, PolicyKind } from "@/lib/types";

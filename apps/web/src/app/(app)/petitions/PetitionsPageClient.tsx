@@ -1,23 +1,27 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ApiError, petitionsApi } from "@/lib/api";
+import { ApiError } from "@/lib/api-helpers";
+import { petitionsApi } from "@/lib/api/petitions";
 import type { PetitionCaseListItem, PetitionCaseOut, PetitionPublicListItem, PetitionStatsOut } from "@/lib/types";
 import { PetitionStatusBadge } from "@/components/ui/StatusBadge";
-import PetitionPublicConsent from "@/components/petitions/PetitionPublicConsent";
-import PetitionContentEditor from "@/components/petitions/PetitionContentEditor";
 import { usePermissions } from "@/hooks/usePermissions";
+
+const PetitionPublicConsent = dynamic(() => import("@/components/petitions/PetitionPublicConsent"), { ssr: false });
+const PetitionContentEditor = dynamic(() => import("@/components/petitions/PetitionContentEditor"), { ssr: false });
+const EMPTY_PUBLIC_CASES: PetitionPublicListItem[] = [];
 
 function fmt(iso: string) {
   return new Date(iso).toLocaleString("zh-TW", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
 export default function PetitionsPageClient({
-  initialPublicCases,
+  initialPublicCases = EMPTY_PUBLIC_CASES,
 }: {
-  initialPublicCases: PetitionPublicListItem[];
+  initialPublicCases?: PetitionPublicListItem[];
 }) {
   const [myCases, setMyCases] = useState<PetitionCaseListItem[]>([]);
   const [stats, setStats] = useState<PetitionStatsOut | null>(null);
@@ -25,8 +29,25 @@ export default function PetitionsPageClient({
   const [verificationCode, setVerificationCode] = useState("");
   const [lookup, setLookup] = useState<PetitionCaseOut | null>(null);
   const [loadingLookup, setLoadingLookup] = useState(false);
-  const [publicCases] = useState(initialPublicCases);
+  const [publicCases, setPublicCases] = useState(initialPublicCases);
+  const [publicCasesLoading, setPublicCasesLoading] = useState(initialPublicCases.length === 0);
   const { can } = usePermissions();
+
+  useEffect(() => {
+    if (initialPublicCases.length > 0) return;
+    let cancelled = false;
+    petitionsApi.publicList({ limit: 6 })
+      .then((cases) => {
+        if (!cancelled) setPublicCases(cases);
+      })
+      .catch(() => null)
+      .finally(() => {
+        if (!cancelled) setPublicCasesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [initialPublicCases]);
 
   useEffect(() => {
     if (!localStorage.getItem("user_id")) return;
@@ -189,7 +210,11 @@ export default function PetitionsPageClient({
           </div>
           <Link href="/petitions/public" className="btn btn-ghost shrink-0">查看全部</Link>
         </div>
-        {publicCases.length === 0 ? (
+        {publicCasesLoading ? (
+          <div className="card p-5 text-sm" style={{ color: "var(--text-muted)" }} role="status" aria-live="polite">
+            公開陳情載入中…
+          </div>
+        ) : publicCases.length === 0 ? (
           <div className="card p-5 text-sm" style={{ color: "var(--text-muted)" }}>
             目前尚無已公開陳情。
           </div>
