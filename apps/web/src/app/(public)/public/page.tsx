@@ -61,9 +61,9 @@ const SERVICES: Array<{
     moduleId: "announcements",
   },
   {
-    href: "/petitions/new",
-    title: "提出陳情",
-    description: "向自治組織反映問題並留下正式紀錄。",
+    href: "/petitions",
+    title: "陳情中心",
+    description: "提出陳情、用案號查詢案件進度。",
     icon: MessageSquareText,
     moduleId: "petitions",
   },
