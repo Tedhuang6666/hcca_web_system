@@ -238,7 +238,9 @@ export default function DocumentListPage() {
     Promise.all([
       cacheHas("documents/orgs")
         ? Promise.resolve(cacheGet<OrgRead[]>("documents/orgs")!)
-        : withFallback(orgsApi.list({ active_only: true }), []),
+        : userId
+          ? withFallback(orgsApi.list({ active_only: true }), [])
+          : Promise.resolve([]),
       userId ? withFallback(savedFiltersApi.list("documents"), []) : Promise.resolve([]),
       documentsApi.list(initialParams).catch(() => null),
     ]).then(([orgsRes, savedFiltersRes, docsRes]) => {

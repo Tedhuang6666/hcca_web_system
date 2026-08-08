@@ -23,9 +23,25 @@ export interface ActiveLiveElection {
 }
 
 async function fetchPublicElections(): Promise<PublicElectionItem[]> {
-  const res = await fetch(apiUrl("/elections/public"), { credentials: "include" });
-  if (!res.ok) return [];
-  return (await res.json()) as PublicElectionItem[];
+  try {
+    const moduleStatus = await fetch(apiUrl("/system/module-status"), {
+      cache: "no-store",
+      credentials: "include",
+    });
+    if (moduleStatus.ok) {
+      const statuses = (await moduleStatus.json()) as Array<{
+        id: string;
+        on: boolean;
+      }>;
+      if (statuses.some((item) => item.id === "elections" && item.on)) return [];
+    }
+
+    const res = await fetch(apiUrl("/elections/public"), { credentials: "include" });
+    if (!res.ok) return [];
+    return (await res.json()) as PublicElectionItem[];
+  } catch {
+    return [];
+  }
 }
 
 /**
