@@ -1,15 +1,20 @@
+import "./public-home.css";
+import { Suspense } from "react";
 import PublicSiteShell from "@/components/site/PublicSiteShell";
 import {
   fetchActiveUrgentAnnouncement,
-  fetchAnnouncements,
   fetchPublicBundle,
 } from "@/lib/serverFetch";
-import HomeContent from "./HomeContent";
+import DeferredHomeContent from "./DeferredHomeContent";
+import HomeHero from "./HomeHero";
+
+function DeferredHomeFallback() {
+  return <div className="min-h-40" aria-hidden="true" />;
+}
 
 export default async function PublicHomePage() {
-  const [bundle, announcements, urgentAnnouncement] = await Promise.all([
+  const [bundle, urgentAnnouncement] = await Promise.all([
     fetchPublicBundle(),
-    fetchAnnouncements(6),
     fetchActiveUrgentAnnouncement(),
   ]);
 
@@ -19,11 +24,10 @@ export default async function PublicHomePage() {
       settings={bundle?.settings}
       urgentAnnouncement={urgentAnnouncement}
     >
-      <HomeContent
-        bundle={bundle}
-        announcements={announcements}
-        urgentAnnouncement={urgentAnnouncement}
-      />
+      <HomeHero bundle={bundle} />
+      <Suspense fallback={<DeferredHomeFallback />}>
+        <DeferredHomeContent bundle={bundle} urgentAnnouncement={urgentAnnouncement} />
+      </Suspense>
     </PublicSiteShell>
   );
 }

@@ -782,11 +782,8 @@
 }
 
 .public-nav-dropdown-link {
-  display: grid;
+  display: block;
   min-height: 58px;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 0.65rem;
   border-radius: 10px;
   color: var(--public-text);
   padding: 0.5rem 0.6rem;
@@ -797,23 +794,6 @@
 .public-nav-dropdown-link:hover,
 .public-nav-dropdown-link:focus-visible {
   background: var(--public-soft);
-}
-
-.public-nav-dropdown-link:hover .public-nav-dropdown-icon,
-.public-nav-dropdown-link:focus-visible .public-nav-dropdown-icon {
-  background: var(--public-accent);
-  color: var(--primary-fg);
-}
-
-.public-nav-dropdown-icon {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  place-items: center;
-  border-radius: 9px;
-  background: var(--public-accent-soft);
-  color: var(--public-accent);
-  transition: background var(--transition), color var(--transition);
 }
 
 /* ── 站台級「正在發生」即時開票橫幅 ───────────────────────────────── */
@@ -1147,11 +1127,8 @@
 }
 
 .public-mobile-service-link {
-  display: grid;
+  display: block;
   min-height: 48px;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 0.6rem;
   border: 1px solid var(--public-border);
   border-radius: 10px;
   background: var(--public-surface);
@@ -3957,24 +3934,6 @@ details[open] > :not(summary) {
    media query 收斂為瞬間到位（見檔首），故可安全停在最終狀態；無限循環動畫
    亦同步靜止。捲動揭示由 useScrollReveal hook 驅動。
    ══════════════════════════════════════════════════════════════════════════ */
-
-/* ── 捲動揭示：只做位移，避免淡入期間降低文字對比 ─────────────────────── */
-html[data-reveal-ready] [data-reveal] {
-  transform: translateY(22px);
-  transition:
-    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
-  transition-delay: var(--reveal-delay, 0ms);
-  will-change: transform;
-}
-html[data-reveal-ready] [data-reveal].is-reveal-in {
-  transform: none;
-}
-@media (prefers-reduced-motion: reduce) {
-  html[data-reveal-ready] [data-reveal] {
-    opacity: 1 !important;
-    transform: none !important;
-  }
-}
 
 /* ── Hero：極光光暈 + 細點紋理 ─────────────────────────────────────────── */
 .public-hero {

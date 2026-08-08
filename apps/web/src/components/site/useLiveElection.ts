@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 
-import { useModuleStatus } from "@/contexts/ModuleStatusContext";
 import { useResilientPoll } from "@/hooks/useResilientPoll";
 import { electionsApi } from "@/lib/api/elections";
 import { apiUrl } from "@/lib/config";
@@ -36,15 +35,10 @@ async function fetchPublicElections(): Promise<PublicElectionItem[]> {
  */
 export function useLiveElection(pollMs = 25_000, enabled = true): ActiveLiveElection | null {
   const [active, setActive] = useState<ActiveLiveElection | null>(null);
-  const { moduleInfo } = useModuleStatus();
-  const electionModule = moduleInfo("elections");
-  // 模組狀態尚未完成初次讀取，或選舉模組正在維護／關閉時，不發公開選舉請求。
-  // 這也避免後端的保護性 503 被當成正常結果而持續輪詢。
-  const pollingEnabled = electionModule !== null && !electionModule.on;
 
   useEffect(() => {
-    if (!enabled || !pollingEnabled) setActive(null);
-  }, [enabled, pollingEnabled]);
+    if (!enabled) setActive(null);
+  }, [enabled]);
 
   useResilientPoll(
     async () => {
@@ -71,7 +65,7 @@ export function useLiveElection(pollMs = 25_000, enabled = true): ActiveLiveElec
       });
       return "ok";
     },
-    { enabled: enabled && pollingEnabled, intervalMs: pollMs },
+    { enabled, intervalMs: pollMs },
   );
 
   return active;

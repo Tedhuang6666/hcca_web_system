@@ -3,8 +3,6 @@ import Link from "next/link";
 import PublicEmblem from "@/components/site/PublicEmblem";
 import PublicSiteBackLink from "@/components/site/PublicSiteBackLink";
 import PublicSiteHeader from "@/components/site/PublicSiteHeader";
-import PublicScrollReveal from "@/components/site/PublicScrollReveal";
-import PublicSiteRuntime from "@/components/site/PublicSiteRuntime";
 import { BRANDING } from "@/lib/branding";
 import type { AnnouncementOut, PublicSitePageOut, PublicSiteSettingsOut } from "@/lib/types";
 
@@ -22,8 +20,7 @@ export default function PublicSiteShell({
   const publicEmblemUrl = settings?.site_logo_url?.trim() || BRANDING.publicEmblemUrl;
 
   return (
-    <PublicSiteRuntime>
-      <div className="public-site min-h-screen text-[var(--public-text)]">
+    <div className="public-site min-h-screen text-[var(--public-text)]">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-[var(--public-surface)] focus:px-3 focus:py-2"
@@ -35,7 +32,6 @@ export default function PublicSiteShell({
         settings={settings}
         urgentAnnouncement={urgentAnnouncement}
       />
-      <PublicScrollReveal />
       <main id="main-content">
         <PublicSiteBackLink />
         {children}
@@ -77,7 +73,6 @@ export default function PublicSiteShell({
           <span>學生自治，從公開開始。</span>
         </div>
       </footer>
-      </div>
-    </PublicSiteRuntime>
+    </div>
   );
 }

@@ -1,5 +1,13 @@
 /* 公開站只需要的品牌 token 與公開介面覆寫。
    後台完整設計系統由 app route group 載入，避免公開頁面下載整份後台樣式。 */
+.public-site .public-partnership-hero h1,
+.public-site .public-partnership-hero .prose,
+.public-site .public-partnership-hero .prose p,
+.public-site .public-partnership-hero .prose li,
+.public-site .public-partnership-hero .prose blockquote {
+  color: #f8fafc;
+}
+
 :root {
   --brand-ink: #1a1a2e;
   --brand-gold: #c9a84c;
