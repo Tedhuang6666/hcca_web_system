@@ -158,6 +158,20 @@ async def test_can_anonymous_access_publicly_open_normal_doc(
     assert can_anonymous_access_document(doc) is True
 
 
+async def test_can_anonymous_access_legacy_is_public_doc(
+    db_session: AsyncSession, make_user
+) -> None:
+    org = await _make_org(db_session)
+    creator = await make_user()
+    doc = _make_doc(
+        org,
+        creator,
+        visibility_level=DocumentVisibility.ORG_ONLY,
+        is_public=True,
+    )
+    assert can_anonymous_access_document(doc) is True
+
+
 async def test_can_anonymous_access_denied_for_sensitive_public_doc(
     db_session: AsyncSession, make_user
 ) -> None:
@@ -172,12 +186,12 @@ async def test_can_anonymous_access_denied_for_sensitive_public_doc(
     assert can_anonymous_access_document(doc) is False
 
 
-async def test_can_anonymous_access_denied_for_non_open_visibility(
+async def test_can_anonymous_access_denied_for_org_only_visibility(
     db_session: AsyncSession, make_user
 ) -> None:
     org = await _make_org(db_session)
     creator = await make_user()
-    doc = _make_doc(org, creator, visibility_level=DocumentVisibility.PUBLIC)
+    doc = _make_doc(org, creator, visibility_level=DocumentVisibility.ORG_ONLY)
     assert can_anonymous_access_document(doc) is False
 
 
@@ -490,15 +504,42 @@ async def test_list_documents_public_only_excludes_non_open_docs(
     open_doc = _make_doc(
         org, creator, visibility_level=DocumentVisibility.PUBLICLY_OPEN, title="公開公文"
     )
+    legacy_public_doc = _make_doc(
+        org,
+        creator,
+        visibility_level=DocumentVisibility.PUBLIC,
+        is_public=False,
+        title="舊版公開公文",
+    )
+    legacy_flag_doc = _make_doc(
+        org,
+        creator,
+        visibility_level=DocumentVisibility.ORG_ONLY,
+        is_public=True,
+        title="舊欄位公開公文",
+    )
     private_doc = _make_doc(org, creator, visibility_level=DocumentVisibility.ORG_ONLY)
-    db_session.add_all([open_doc, private_doc])
+    db_session.add_all([open_doc, legacy_public_doc, legacy_flag_doc, private_doc])
     await db_session.flush()
 
     results = await list_documents(db_session, public_only=True)
 
     result_ids = {d.id for d in results}
     assert open_doc.id in result_ids
+    assert legacy_public_doc.id in result_ids
+    assert legacy_flag_doc.id in result_ids
     assert private_doc.id not in result_ids
+
+    filtered_results = await list_documents(
+        db_session,
+        visibility=DocumentVisibility.PUBLICLY_OPEN,
+        viewer_id=creator.id,
+    )
+    filtered_ids = {d.id for d in filtered_results}
+    assert open_doc.id in filtered_ids
+    assert legacy_public_doc.id in filtered_ids
+    assert legacy_flag_doc.id in filtered_ids
+    assert private_doc.id not in filtered_ids
 
 
 async def test_list_documents_viewer_visibility_hides_org_only_for_non_member(

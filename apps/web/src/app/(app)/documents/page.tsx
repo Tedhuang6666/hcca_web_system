@@ -42,8 +42,8 @@ const DOC_CLASSIFICATIONS: { key: string; label: string }[] = [
 const DOC_VISIBILITIES: { key: string; label: string }[] = [
   { key: "subject_only", label: "僅當事人" },
   { key: "org_only", label: "機關成員" },
-  { key: "public", label: "登入可見" },
-  { key: "publicly_open", label: "公開" },
+  { key: "public", label: "公開" },
+  { key: "publicly_open", label: "公開（舊版）" },
 ];
 
 type SortKey = "created_desc" | "created_asc" | "title_asc" | "due_asc" | "urgency_desc";
@@ -149,6 +149,7 @@ export default function DocumentListPage() {
   const canBatch = canReview || can("document:archive") || can("document:forward");
   const canViewAll = can("document:view_all") || can("document:admin") || canBatch;
   const effectiveVisibility = canViewAll ? undefined : "publicly_open";
+  const hasLocalLogin = typeof window !== "undefined" && Boolean(window.localStorage.getItem("user_id"));
   const visibleTabs = useMemo(() => [
     TABS[0],
     ...(can("document:draft") ? [TABS[1]] : []),
@@ -206,7 +207,9 @@ export default function DocumentListPage() {
     filters.rocYear || filters.serialPrefix || filters.handlerKeyword || filters.recipientKeyword ||
     filters.myOnly || filters.orgId || filters.activityId
   );
-  const queryVisibility = canViewAll ? filters.visibility : effectiveVisibility;
+  // 訪客請求由後端依 OptionalUser 判斷公開資料；不要再加上舊欄位的精確篩選，
+  // 否則只存 is_public=true 的舊資料會被 visibility_level=publicly_open 排除。
+  const queryVisibility = canViewAll ? filters.visibility : hasLocalLogin ? effectiveVisibility : undefined;
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search), 300);

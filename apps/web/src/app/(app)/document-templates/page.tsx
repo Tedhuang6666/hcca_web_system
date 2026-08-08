@@ -451,8 +451,8 @@ export default function DocumentTemplatesPage() {
             >
               <option value="org_only">機關成員可見</option>
               <option value="subject_only">僅當事人</option>
-              <option value="public">全體登入使用者</option>
-              <option value="publicly_open">完全公開</option>
+              <option value="public">公開（含未登入）</option>
+              <option value="publicly_open">公開（舊版相容值）</option>
             </select>
             {selectedOrg && (
               <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>

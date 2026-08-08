@@ -280,6 +280,29 @@ async def test_create_document_sets_is_public_for_publicly_open_visibility(
     assert doc.is_public is True
 
 
+async def test_create_document_sets_is_public_for_public_visibility(
+    db_session: AsyncSession, make_user
+) -> None:
+    org = await _make_org(db_session)
+    creator = await make_user()
+
+    doc = await _make_draft(db_session, org, creator, visibility_level=DocumentVisibility.PUBLIC)
+
+    assert doc.is_public is True
+
+
+async def test_create_document_legacy_is_public_maps_to_publicly_open(
+    db_session: AsyncSession, make_user
+) -> None:
+    org = await _make_org(db_session)
+    creator = await make_user()
+
+    doc = await _make_draft(db_session, org, creator, is_public=True)
+
+    assert doc.visibility_level is DocumentVisibility.PUBLICLY_OPEN
+    assert doc.is_public is True
+
+
 # ── update_document ──────────────────────────────────────────────────────────
 
 
@@ -301,6 +324,24 @@ async def test_update_document_creates_new_revision_when_changed(
     await db_session.refresh(updated, attribute_names=["revisions"])
     assert len(updated.revisions) == 2
     assert updated.revisions[-1].change_note == "修正標題"
+
+
+async def test_update_document_legacy_is_public_maps_to_publicly_open(
+    db_session: AsyncSession, make_user
+) -> None:
+    org = await _make_org(db_session)
+    creator = await make_user()
+    doc = await _make_draft(db_session, org, creator)
+
+    updated = await update_document(
+        db_session,
+        doc,
+        data=DocumentUpdate(is_public=True),
+        changed_by=creator.id,
+    )
+
+    assert updated.visibility_level is DocumentVisibility.PUBLICLY_OPEN
+    assert updated.is_public is True
 
 
 async def test_update_document_autosave_does_not_create_revision(

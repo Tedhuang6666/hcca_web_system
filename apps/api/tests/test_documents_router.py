@@ -150,7 +150,7 @@ async def test_create_document_without_permission_returns_403(
 
 
 @pytest.mark.asyncio
-async def test_list_documents_anonymous_only_sees_publicly_open(
+async def test_list_documents_anonymous_sees_public_documents(
     db_session: AsyncSession, client
 ) -> None:
     org = Org(name=f"列表公開組織-{uuid.uuid4().hex[:6]}")
@@ -161,8 +161,11 @@ async def test_list_documents_anonymous_only_sees_publicly_open(
     public_doc = _make_doc(
         org, creator, visibility_level=DocumentVisibility.PUBLICLY_OPEN, is_public=True
     )
+    public_value_doc = _make_doc(
+        org, creator, visibility_level=DocumentVisibility.PUBLIC, is_public=False
+    )
     private_doc = _make_doc(org, creator, visibility_level=DocumentVisibility.ORG_ONLY)
-    db_session.add_all([public_doc, private_doc])
+    db_session.add_all([public_doc, public_value_doc, private_doc])
     await db_session.flush()
 
     resp = await client.get("/documents")
@@ -170,6 +173,7 @@ async def test_list_documents_anonymous_only_sees_publicly_open(
     assert resp.status_code == 200, resp.text
     ids = [item["id"] for item in resp.json()]
     assert str(public_doc.id) in ids
+    assert str(public_value_doc.id) in ids
     assert str(private_doc.id) not in ids
 
 
@@ -250,6 +254,27 @@ async def test_get_document_anonymous_public_open_succeeds(
     await db_session.flush()
 
     doc = _make_doc(org, creator, visibility_level=DocumentVisibility.PUBLICLY_OPEN, is_public=True)
+    db_session.add(doc)
+    await db_session.flush()
+
+    resp = await client.get(f"/documents/{doc.id}")
+
+    assert resp.status_code == 200, resp.text
+
+
+@pytest.mark.asyncio
+async def test_get_document_anonymous_public_succeeds(db_session: AsyncSession, client) -> None:
+    org = Org(name=f"匿名公開組織-{uuid.uuid4().hex[:6]}")
+    creator = User(email="get-anon-public@example.com", display_name="Creator", is_active=True)
+    db_session.add_all([org, creator])
+    await db_session.flush()
+
+    doc = _make_doc(
+        org,
+        creator,
+        visibility_level=DocumentVisibility.PUBLIC,
+        is_public=False,
+    )
     db_session.add(doc)
     await db_session.flush()
 

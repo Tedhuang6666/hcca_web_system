@@ -122,8 +122,8 @@ class DocumentVisibility(enum.StrEnum):
 
     SUBJECT_ONLY = "subject_only"  # 僅當事人（受文者 + 建立者 + 審核人）可見
     ORG_ONLY = "org_only"  # 僅所屬機關成員可見
-    PUBLIC = "public"  # 全體登入使用者可見
-    PUBLICLY_OPEN = "publicly_open"  # 未登入亦可查看
+    PUBLIC = "public"  # 全體使用者可見（含未登入）
+    PUBLICLY_OPEN = "publicly_open"  # 舊版公開值，未登入亦可查看
 
 
 class YearMode(enum.StrEnum):
@@ -442,7 +442,7 @@ class Document(Base, TimestampMixin):
     # 頁次資訊（列印後可回填）
     page_info: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
-    # 可見度控制（主欄位；service 層須同步 is_public = visibility_level == PUBLICLY_OPEN）
+    # 可見度控制（主欄位；service 層須同步公開值至 is_public）
     visibility_level: Mapped[DocumentVisibility] = mapped_column(
         Enum(
             DocumentVisibility,
