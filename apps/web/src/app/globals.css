@@ -318,6 +318,7 @@
 
 .partner-map-submit-dialog {
   z-index: 1100;
+  overscroll-behavior: contain;
 }
 
 @media (max-width: 1023.98px) {

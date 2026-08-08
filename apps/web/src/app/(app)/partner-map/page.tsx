@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import Image from "next/image";
-import dynamic from "next/dynamic";
 import { AtSign, Clock, Copy, ExternalLink, LocateFixed, Mail, MapPin, MessageCircle, Phone, Search, Send, Share2, Star, Tag, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import { partnerMapApi, recommendedVendorsApi, ApiError } from "@/lib/api";
@@ -17,18 +16,19 @@ import type {
 } from "@/lib/types";
 import type { RecommendedVendorOutWithHours, UnifiedMapItem } from "@/lib/partner-map-types";
 import { formatBusinessHours } from "@/lib/business-hours";
-import { markerColor, markerLabel, type PartnerMapBoundsState } from "./PartnerLeafletMap";
+import { markerColor, markerLabel, type PartnerMapBoundsState } from "./partner-map-utils";
 import PartnerPromoCarousel, { type PartnerPromoImage } from "./PartnerPromoCarousel";
 
 const DEFAULT_CENTER: [number, number] = [24.795151, 120.98018];
-const PartnerLeafletMap = dynamic(() => import("./PartnerLeafletMap"), {
-  ssr: false,
-  loading: () => (
-    <div className="flex h-full items-center justify-center text-sm" style={{ color: "var(--text-muted)" }}>
-      載入地圖中…
+type PartnerLeafletMapComponent = (typeof import("./PartnerLeafletMap"))["default"];
+
+function MapLoadingState() {
+  return (
+    <div className="flex h-full items-center justify-center text-sm" role="status" aria-live="polite" style={{ color: "var(--text-muted)" }}>
+      互動地圖載入中…
     </div>
-  ),
-});
+  );
+}
 
 function MapPlaceholder({ onLoad }: { onLoad: () => void }) {
   return (
@@ -42,7 +42,7 @@ function MapPlaceholder({ onLoad }: { onLoad: () => void }) {
           互動地圖準備中…
         </p>
         <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-          地圖會在頁面完成初次載入後開啟，先節省流量與電量。
+          互動地圖會在你需要時載入，先節省流量與電量。
         </p>
         <button type="button" className="btn mt-4" onClick={onLoad}>
           立即載入地圖
@@ -464,6 +464,7 @@ export default function PartnerMapPage({ initialBusinessSlug }: PartnerMapPagePr
   const [submissionOpen, setSubmissionOpen] = useState(false);
   const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
   const [mapReady, setMapReady] = useState(false);
+  const [mapComponent, setMapComponent] = useState<PartnerLeafletMapComponent | null>(null);
   const [contactDirectoryReady, setContactDirectoryReady] = useState(false);
   const [initialBusinessId, setInitialBusinessId] = useState<string | null>(null);
   const [initialLinkHandled, setInitialLinkHandled] = useState(false);
@@ -563,20 +564,6 @@ export default function PartnerMapPage({ initialBusinessSlug }: PartnerMapPagePr
   useEffect(() => {
     const businessId = new URLSearchParams(window.location.search).get("business");
     if (businessId) setInitialBusinessId(businessId);
-  }, []);
-
-  useEffect(() => {
-    const loadMap = () => setMapReady(true);
-    const idleWindow = window as Window & {
-      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
-      cancelIdleCallback?: (id: number) => void;
-    };
-    if (idleWindow.requestIdleCallback) {
-      const idleId = idleWindow.requestIdleCallback(loadMap, { timeout: 1200 });
-      return () => idleWindow.cancelIdleCallback?.(idleId);
-    }
-    const timer = window.setTimeout(loadMap, 800);
-    return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -727,6 +714,13 @@ export default function PartnerMapPage({ initialBusinessSlug }: PartnerMapPagePr
     }
   };
 
+  const loadMap = useCallback(() => {
+    setMapReady(true);
+    void import("./PartnerLeafletMap").then(({ default: loadedMap }) => {
+      setMapComponent(() => loadedMap);
+    });
+  }, []);
+
   const toggleTag = (id: string) => {
     setSelectedTagIds((current) => {
       const next = new Set(current);
@@ -743,6 +737,7 @@ export default function PartnerMapPage({ initialBusinessSlug }: PartnerMapPagePr
   );
 
   const thumbFor = (item: UnifiedMapItem) => item.logo_url || item.cover_image_url;
+  const MapComponent = mapComponent;
 
   return (
     <div className="h-[calc(100dvh-92px)] min-h-[620px] overflow-hidden rounded-lg border partner-map-shell" style={{ borderColor: "var(--border)" }}>
@@ -761,7 +756,7 @@ export default function PartnerMapPage({ initialBusinessSlug }: PartnerMapPagePr
                  name="partner-map-search"
                  autoComplete="off"
                  placeholder="搜尋店名、地址、優惠…"
-                 className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+                      className="min-w-0 flex-1 bg-transparent text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--border-focus)]"
                  style={{ color: "var(--text-primary)" }}
               />
             </label>
@@ -928,7 +923,7 @@ export default function PartnerMapPage({ initialBusinessSlug }: PartnerMapPagePr
                      name="partner-map-mobile-search"
                      autoComplete="off"
                      placeholder="搜尋店家…"
-                     className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+                      className="min-w-0 flex-1 bg-transparent text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--border-focus)]"
                      style={{ color: "var(--text-primary)" }}
                   />
                 </label>
@@ -996,15 +991,19 @@ export default function PartnerMapPage({ initialBusinessSlug }: PartnerMapPagePr
             )}
           </div>
           {mapReady ? (
-            <PartnerLeafletMap
-              items={filteredItems}
-              center={center}
-              userLocation={null}
-              onOpenBusiness={openBusiness}
-              onBoundsChange={handleMapBoundsChange}
-            />
+            MapComponent ? (
+              <MapComponent
+                items={filteredItems}
+                center={center}
+                userLocation={null}
+                onOpenBusiness={openBusiness}
+                onBoundsChange={handleMapBoundsChange}
+              />
+            ) : (
+              <MapLoadingState />
+            )
           ) : (
-            <MapPlaceholder onLoad={() => setMapReady(true)} />
+            <MapPlaceholder onLoad={loadMap} />
           )}
           <div className="partner-map-mobile-strip absolute inset-x-0 bottom-3 z-[500] flex snap-x gap-3 overflow-x-auto px-3 pb-1 lg:hidden">
             {filteredItems.map((item) => (
