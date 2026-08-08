@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { CheckCircle2, LoaderCircle, Send } from "lucide-react";
-import { ApiError, apiErrorMessage, partnerApplicationApi } from "@/lib/api";
+import { ApiError, apiErrorMessage } from "@/lib/api-helpers";
+import { partnerApplicationApi } from "@/lib/api/partner-applications";
 import type { PartnerApplicationFieldOut, PartnerApplicationPortalOut } from "@/lib/types";
 
 function FieldControl({

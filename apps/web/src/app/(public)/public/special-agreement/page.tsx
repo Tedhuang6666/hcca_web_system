@@ -6,7 +6,7 @@ import MarkdownBlock from "@/components/site/MarkdownBlock";
 import PublicFileEmbed, { type PublicFileEmbedItem } from "@/components/site/PublicFileEmbed";
 import { fetchPublicBundle } from "@/lib/serverFetch";
 import { readSpecialAgreementContent } from "@/lib/specialAgreement";
-import MerchantApplicationForm from "./MerchantApplicationForm";
+import DeferredMerchantApplicationForm from "./DeferredMerchantApplicationForm";
 
 export const metadata: Metadata = {
   title: "特約洽談",
@@ -20,21 +20,21 @@ export default async function SpecialAgreementPage() {
 
   return (
     <div className="space-y-8 pb-8">
-      <header className="overflow-hidden rounded-2xl bg-[#173654] px-6 py-9 text-[#f8f3e5] sm:px-9 sm:py-11">
+      <header className="overflow-hidden rounded-2xl bg-[#173654] px-6 py-9 text-white sm:px-9 sm:py-11">
         <div className="flex flex-col gap-7 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
             <div className="flex items-center gap-2 text-xs font-semibold tracking-[0.16em] text-[#e8c970]">
               <Handshake size={15} aria-hidden />
               PUBLIC PARTNERSHIP
             </div>
-            <h1 className="mt-3 font-serif text-3xl font-semibold leading-tight tracking-[-0.02em] sm:text-4xl">
+            <h1 className="mt-3 font-serif text-3xl font-semibold leading-tight tracking-[-0.02em] text-white sm:text-4xl">
               特約洽談
             </h1>
-            <div className="mt-4 max-w-2xl text-sm leading-7 text-[#d5e0e6] sm:text-base sm:leading-8 [&_.prose_p]:my-0 [&_.prose]:text-inherit">
+            <div className="mt-4 max-w-2xl text-sm leading-7 text-[#f1f5f9] sm:text-base sm:leading-8 [&_.prose_p]:my-0 [&_.prose]:text-inherit">
               <MarkdownBlock markdown={content.intro_md} />
             </div>
           </div>
-          <div className="flex items-center gap-3 rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-sm text-[#e9eef1]">
+          <div className="flex items-center gap-3 rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-sm text-white">
             <CheckCircle2 size={18} className="shrink-0 text-[#e8c970]" aria-hidden />
             <span>免登入即可閱讀</span>
           </div>
@@ -94,7 +94,7 @@ export default async function SpecialAgreementPage() {
         </aside>
       </section>
 
-      <MerchantApplicationForm />
+      <DeferredMerchantApplicationForm />
 
       <section aria-labelledby="special-agreement-files">
         <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
