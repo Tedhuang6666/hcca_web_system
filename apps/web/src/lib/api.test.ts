@@ -102,4 +102,15 @@ describe("API helpers", () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
     vi.unstubAllGlobals();
   });
+
+  it("treats a 401 after refresh as an expired session", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 401 }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ detail: "expired" }), { status: 401 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(request("/auth-me-retry")).rejects.toMatchObject({ status: 401 });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
 });

@@ -15,6 +15,9 @@ export type HccaRequestInit = RequestInit & { skipImpersonation?: boolean };
 type RefreshStatus = "ok" | "invalid" | "unavailable";
 
 let refreshPromise: Promise<RefreshStatus> | null = null;
+let sessionExpiryRedirectStarted = false;
+
+const AUTH_REFRESH_TIMEOUT_MS = 8_000;
 
 export function formatErrorDetail(detail: unknown, fallback: string): string {
   if (!detail) return fallback;
@@ -122,10 +125,13 @@ function createSpanId(): string {
 async function refreshWithStatus(): Promise<RefreshStatus> {
   if (refreshPromise) return refreshPromise;
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), AUTH_REFRESH_TIMEOUT_MS);
   const nextRefresh = fetch(apiUrl("/auth/refresh"), {
     method: "POST",
     credentials: "include",
     headers: csrfHeaders("POST"),
+    signal: controller.signal,
   })
     .then((res): RefreshStatus => {
       if (res.ok) return "ok";
@@ -133,6 +139,7 @@ async function refreshWithStatus(): Promise<RefreshStatus> {
     })
     .catch((): RefreshStatus => "unavailable")
     .finally(() => {
+      clearTimeout(timeout);
       refreshPromise = null;
     });
   refreshPromise = nextRefresh;
@@ -158,6 +165,17 @@ export function csrfHeaders(method?: string): Record<string, string> {
   if (!["POST", "PUT", "PATCH", "DELETE"].includes(normalized)) return {};
   const token = getCookie("csrf_token");
   return token ? { "X-CSRF-Token": decodeURIComponent(token) } : {};
+}
+
+function redirectToLoginAfterExpiry(): void {
+  if (typeof window === "undefined") return;
+
+  clearAuthCache();
+  if (window.location.pathname === "/login" || sessionExpiryRedirectStarted) return;
+
+  sessionExpiryRedirectStarted = true;
+  const next = `${window.location.pathname}${window.location.search}`;
+  window.location.replace(`/login?next=${encodeURIComponent(next)}`);
 }
 
 /** 供上傳、下載等不能直接使用 request() 的 API 呼叫沿用代行身分。 */
@@ -306,6 +324,10 @@ export async function request<T>(
         if (retry.status === 204) return undefined as T;
         return retry.json();
       }
+      if (retry.status === 401) {
+        redirectToLoginAfterExpiry();
+        throw new ApiError(401, "登入已過期，請重新登入", retry.headers.get("X-Request-ID"));
+      }
       throw await apiErrorFromResponse(retry);
     }
     if (refreshStatus === "unavailable") {
@@ -318,8 +340,7 @@ export async function request<T>(
     if (typeof window !== "undefined") {
       const hasLocalLogin = Boolean(localStorage.getItem("user_id"));
       if (hasLocalLogin) {
-        clearAuthCache();
-        window.location.replace("/login");
+        redirectToLoginAfterExpiry();
       }
     }
     throw new ApiError(401, "登入已過期，請重新登入", res.headers.get("X-Request-ID"));
