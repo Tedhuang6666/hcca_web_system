@@ -526,7 +526,7 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
   width: 24px;
   height: 2px;
   border-radius: 0 0 2px 2px;
-  background: var(--primary);
+  background: var(--primary-text);
   content: "";
   transform: translateX(-50%);
 }

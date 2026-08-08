@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import { Suspense } from "react";
 
 // These features are useful after the page is interactive, but none is part
@@ -11,8 +12,20 @@ const TelemetryProvider = dynamic(() => import("@/components/providers/Telemetry
 const PwaInstallPrompt = dynamic(() => import("@/components/pwa/PwaInstallPrompt"), { ssr: false });
 
 export default function AppEnhancements() {
+  const [ready, setReady] = useState(false);
   const pathname = usePathname();
   const isPetitionsRoute = pathname === "/petitions" || pathname.startsWith("/petitions/");
+
+  useEffect(() => {
+    if (typeof window.requestIdleCallback === "function") {
+      const idleId = window.requestIdleCallback(() => setReady(true), { timeout: 2_000 });
+      return () => window.cancelIdleCallback(idleId);
+    }
+    const timeoutId = window.setTimeout(() => setReady(true), 1_500);
+    return () => window.clearTimeout(timeoutId);
+  }, []);
+
+  if (!ready) return null;
 
   return (
     <>

@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, useMemo, type ReactNode } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import { regulationsApi, regulationHref } from "@/lib/api";
 import { useFetch } from "@/hooks/useFetch";
@@ -14,9 +15,10 @@ import type {
 import { RegulationCategoryBadge } from "@/components/ui/StatusBadge";
 import Toggle from "@/components/ui/Toggle";
 import { ListPageSkeleton } from "@/components/ui/Skeleton";
-import SmartEmptyState from "@/components/ui/SmartEmptyState";
 import { usePermissions } from "@/hooks/usePermissions";
 import { usePersistedState } from "@/hooks/usePersistedState";
+
+const SmartEmptyState = dynamic(() => import("@/components/ui/SmartEmptyState"), { ssr: false });
 
 const CATEGORIES: { key: RegulationCategory | "all"; label: string }[] = [
   { key: "all",                label: "全部" },
@@ -36,8 +38,8 @@ const WORKFLOW_FILTERS: { key: RegulationWorkflowStatus | "all"; label: string }
 
 const WORKFLOW_LABEL: Record<RegulationWorkflowStatus, { label: string; color: string; bg: string }> = {
   draft:            { label: "草稿",     color: "var(--text-muted)",     bg: "var(--bg-elevated)" },
-  under_review:     { label: "送審中",   color: "#0284c7",               bg: "rgba(2,132,199,0.1)" },
-  scheduled:        { label: "排入議程", color: "#7c3aed",               bg: "rgba(124,58,237,0.1)" },
+  under_review:     { label: "送審中",   color: "var(--info)",            bg: "var(--info-dim)" },
+  scheduled:        { label: "排入議程", color: "var(--primary-text)",    bg: "var(--primary-dim)" },
   council_approved: { label: "議會核定", color: "var(--warning)",        bg: "var(--warning-dim)" },
   published:        { label: "現行有效", color: "var(--success)",        bg: "var(--success-dim)" },
   rejected:         { label: "已退回",   color: "var(--danger)",         bg: "rgba(220,38,38,0.1)" },
@@ -48,7 +50,11 @@ function WorkflowBadge({ status }: { status: RegulationWorkflowStatus }) {
   const s = WORKFLOW_LABEL[status] ?? WORKFLOW_LABEL.draft;
   return (
     <span className="text-[10px] font-medium px-1.5 py-0.5 rounded"
-      style={{ color: s.color, background: s.bg, border: `1px solid ${s.color}22` }}>
+      style={{
+        color: s.color,
+        background: s.bg,
+        border: "1px solid color-mix(in srgb, currentColor 24%, transparent)",
+      }}>
       {s.label}
     </span>
   );
@@ -90,7 +96,7 @@ function HighlightedSnippet({
     parts.push(
       <mark
         key={markKey++}
-        style={{ background: "var(--primary-dim)", color: "var(--primary)", borderRadius: 3, padding: "0 2px" }}
+        style={{ background: "var(--primary-dim)", color: "var(--primary-text)", borderRadius: 3, padding: "0 2px" }}
       >
         {display.slice(found, found + kw.length)}
       </mark>,
@@ -318,7 +324,7 @@ function RegCard({
           : <span>更新 {new Date(reg.updated_at).toLocaleDateString("zh-TW")}</span>
         }
         {!isArchived ? (
-          <span className="flex items-center gap-1 reg-card-cta" style={{ color: "var(--primary)" }}>
+          <span className="flex items-center gap-1 reg-card-cta" style={{ color: "var(--primary-text)" }}>
             閱讀全文
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
