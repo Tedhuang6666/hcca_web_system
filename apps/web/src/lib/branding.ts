@@ -10,7 +10,7 @@ export const BRANDING = {
   slogan: "竹嶺班聯數位整合平台",
   appName: "新竹高中班聯會數位整合平台",
   platformName: "校園自治整合平台",
-  description: "新竹高中班聯會的整合平台，整合公文、法規、公告、會議、購票、學餐與問卷等等班聯服務",
+  description: "新竹高中班聯會 HCCA 官方公開平台，提供最新公告、幹部名單、校園自治法規、公文與學生服務，讓你快速找到班聯會資訊與參與入口。",
   emblemPath: "/brand/hcca-emblem.png",
   publicEmblemUrl: "/brand/hcca-emblem-512.png",
   emblemAlt: "新竹高中班聯會會徽",

@@ -3,7 +3,15 @@ import { ArrowLeft } from "lucide-react";
 
 import PublicOfficerDirectory from "@/components/site/PublicOfficerDirectory";
 import PublicSiteShell from "@/components/site/PublicSiteShell";
+import { pageMetadata } from "@/lib/seo";
 import { fetchPublicBundle, fetchPublicOfficers } from "@/lib/serverFetch";
+
+export const metadata = pageMetadata({
+  title: "班聯會幹部名單",
+  description: "查看新竹高中班聯會本屆幹部、組織與職務，找到適合的自治工作聯絡窗口。",
+  path: "/officers",
+  type: "website",
+});
 
 export default async function OfficersPage() {
   const [bundle, officers] = await Promise.all([

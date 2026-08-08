@@ -1,6 +1,6 @@
 "use client";
 
-import { Crown, UsersRound } from "lucide-react";
+import { Crown, UserRound, UsersRound } from "lucide-react";
 import { useState } from "react";
 
 import { getMemberLeadershipLabel } from "./officerRosterUtils";
@@ -116,7 +116,7 @@ export default function OfficerRosterTabs({ tabs }: { tabs: OfficerRosterTab[] }
                         }}
                         aria-hidden
                       >
-                        {leadershipLabel ? <Crown size={14} /> : name.slice(0, 1)}
+                        {leadershipLabel ? <Crown size={14} /> : <UserRound size={14} aria-hidden />}
                       </span>
                       <span className="flex min-w-0 flex-wrap items-center gap-2">
                         <span className="truncate">{name}</span>

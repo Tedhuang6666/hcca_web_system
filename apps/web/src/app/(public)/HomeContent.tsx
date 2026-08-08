@@ -215,7 +215,7 @@ export default function HomeContent({
                 <h2>精選幹部</h2>
                 <Link href="/officers" className="public-text-link">全部</Link>
               </div>
-              <div className="public-mini-list">
+              <div className="public-mini-list" data-nosnippet>
                 {officers.map((officer) => (
                   <div key={officer.profile_id} className="public-mini-item">
                     <p className="font-medium">{officer.display_name}</p>
