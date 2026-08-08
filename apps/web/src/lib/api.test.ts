@@ -104,6 +104,7 @@ describe("API helpers", () => {
   });
 
   it("treats a 401 after refresh as an expired session", async () => {
+    localStorage.setItem("user_id", "user-401-retry");
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(null, { status: 401 }))
       .mockResolvedValueOnce(new Response(null, { status: 200 }))
@@ -112,5 +113,15 @@ describe("API helpers", () => {
 
     await expect(request("/auth-me-retry")).rejects.toMatchObject({ status: 401 });
     expect(fetchMock).toHaveBeenCalledTimes(3);
+    localStorage.removeItem("user_id");
+  });
+
+  it("does not refresh a 401 for a visitor without a local session", async () => {
+    localStorage.removeItem("user_id");
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 401 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(request("/protected-as-visitor")).rejects.toMatchObject({ status: 401 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

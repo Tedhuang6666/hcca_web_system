@@ -164,6 +164,7 @@ async def test_partner_business_returns_multiple_promo_images_and_preview(
     assert [image["filename"] for image in images] == ["image-0.png", "image-1.png"]
     assert preview.status_code == 200
     assert preview.headers["content-type"] == "image/png"
+    assert preview.headers["cache-control"] == "public, max-age=31536000, immutable"
     assert image_paths[0].exists()
 
 

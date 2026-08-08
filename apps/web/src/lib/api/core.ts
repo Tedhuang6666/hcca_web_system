@@ -304,12 +304,20 @@ export async function request<T>(
 
   // 401 → 嘗試 silent refresh，成功後重試一次
   if (res.status === 401) {
-    if (getImpersonationSession() && !init.skipImpersonation) {
+    const impersonation = getImpersonationSession();
+    if (impersonation && !init.skipImpersonation) {
       clearImpersonationSession();
       if (typeof window !== "undefined" && window.location.pathname !== "/login") {
         window.location.reload();
       }
       throw new ApiError(401, "模擬登入已過期，已返回原本的管理員身分");
+    }
+    // 公開頁面也會呼叫共用 API wrapper；訪客沒有可更新的 refresh token，
+    // 不應因單一受保護請求再製造一個 /auth/refresh 401。
+    const hasLocalLogin = typeof window === "undefined"
+      || Boolean(window.localStorage.getItem("user_id"));
+    if (!hasLocalLogin && !impersonation) {
+      throw await apiErrorFromResponse(res);
     }
     const refreshStatus = await refreshWithStatus();
     if (refreshStatus === "ok") {
@@ -338,8 +346,7 @@ export async function request<T>(
     // - 若本地「看起來已登入」（有 user_id），視為 session 過期 → 清除並導回登入
     // - 若未登入（無 user_id），可能是在存取公開端點 → 不強制導向 /login
     if (typeof window !== "undefined") {
-      const hasLocalLogin = Boolean(localStorage.getItem("user_id"));
-      if (hasLocalLogin) {
+      if (Boolean(localStorage.getItem("user_id"))) {
         redirectToLoginAfterExpiry();
       }
     }
