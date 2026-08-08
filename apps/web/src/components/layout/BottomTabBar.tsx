@@ -6,7 +6,7 @@ import { LogIn, MoreHorizontal } from "lucide-react";
 import { useWS } from "@/hooks/useWS";
 import { useInboxCountsContext } from "@/contexts/InboxCountsContext";
 import { useModuleStatus } from "@/contexts/ModuleStatusContext";
-import { navigationProfilesApi } from "@/lib/api";
+import { navigationProfilesApi } from "@/lib/api/navigation-profiles";
 import { AUTH_CACHE_EVENT } from "@/lib/auth-cache";
 import { NAV_ID_TO_MODULE, moduleForPath } from "@/lib/modules";
 import {
@@ -250,7 +250,7 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
         const inner = (
           <div className="relative flex flex-col items-center justify-center gap-0.5 flex-1 h-full"
             style={{
-              color: active ? "var(--primary-text)" : "var(--text-secondary)",
+              color: active ? "var(--primary-text)" : "var(--text-primary)",
               transition: "color 150ms",
             }}>
             <span className="relative">
