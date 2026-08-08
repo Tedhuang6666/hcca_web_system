@@ -250,7 +250,7 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
         const inner = (
           <div className="relative flex flex-col items-center justify-center gap-0.5 flex-1 h-full"
             style={{
-              color: active ? "var(--primary)" : "var(--text-muted)",
+              color: active ? "var(--primary)" : "var(--text-secondary)",
               transition: "color 150ms",
             }}>
             <span className="relative">
@@ -264,7 +264,7 @@ export default function BottomTabBar({ onMoreClick }: BottomTabBarProps) {
                 </span>
               )}
             </span>
-            <span className="text-[10px] font-medium" style={{ letterSpacing: 0 }}>
+            <span className="text-[11px] font-medium" style={{ letterSpacing: 0 }}>
               {t.label}
             </span>
           </div>

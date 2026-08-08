@@ -25,10 +25,32 @@ const PartnerLeafletMap = dynamic(() => import("./PartnerLeafletMap"), {
   ssr: false,
   loading: () => (
     <div className="flex h-full items-center justify-center text-sm" style={{ color: "var(--text-muted)" }}>
-      載入地圖中...
+      載入地圖中…
     </div>
   ),
 });
+
+function MapPlaceholder({ onLoad }: { onLoad: () => void }) {
+  return (
+    <div
+      className="partner-map-placeholder flex h-full min-h-[360px] items-center justify-center p-6"
+      role="status"
+      aria-live="polite">
+      <div className="max-w-sm text-center">
+        <MapPin className="mx-auto" size={28} aria-hidden="true" />
+        <p className="mt-3 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+          互動地圖準備中…
+        </p>
+        <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+          地圖會在頁面完成初次載入後開啟，先節省流量與電量。
+        </p>
+        <button type="button" className="btn mt-4" onClick={onLoad}>
+          立即載入地圖
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function formatOffers(item: UnifiedMapItem): string {
   if (item.source === "recommended") return "推薦商家資訊";
@@ -379,6 +401,7 @@ export default function PartnerMapPage() {
   const [myBusinesses, setMyBusinesses] = useState<PartnerBusinessDirectoryItem[]>([]);
   const [submissionOpen, setSubmissionOpen] = useState(false);
   const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
+  const [mapReady, setMapReady] = useState(false);
   const [submission, setSubmission] = useState<PartnerSubmissionCreate>({
     name: "",
     category: "",
@@ -463,7 +486,23 @@ export default function PartnerMapPage() {
     partnerMapApi.tags().then(setTags).catch(() => {});
     partnerMapApi.directory().then(setContactBusinesses).catch(() => {});
     partnerMapApi.rankings(5).then(setRankings).catch(() => {});
-    partnerMapApi.myBusinesses().then(setMyBusinesses).catch(() => {});
+    if (window.localStorage.getItem("user_id")) {
+      partnerMapApi.myBusinesses().then(setMyBusinesses).catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
+    const loadMap = () => setMapReady(true);
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    if (idleWindow.requestIdleCallback) {
+      const idleId = idleWindow.requestIdleCallback(loadMap, { timeout: 1200 });
+      return () => idleWindow.cancelIdleCallback?.(idleId);
+    }
+    const timer = window.setTimeout(loadMap, 800);
+    return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -568,12 +607,14 @@ export default function PartnerMapPage() {
             </div>
             <label className="flex items-center gap-2 rounded-lg border px-3 py-2" style={{ borderColor: "var(--border)", background: "var(--bg-elevated)" }}>
               <Search size={16} aria-hidden="true" />
-              <input
-                value={keyword}
-                onChange={(event) => setKeyword(event.target.value)}
-                placeholder="搜尋店名、地址、優惠"
-                className="min-w-0 flex-1 bg-transparent text-sm outline-none"
-                style={{ color: "var(--text-primary)" }}
+               <input
+                 value={keyword}
+                 onChange={(event) => setKeyword(event.target.value)}
+                 name="partner-map-search"
+                 autoComplete="off"
+                 placeholder="搜尋店名、地址、優惠…"
+                 className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+                 style={{ color: "var(--text-primary)" }}
               />
             </label>
             <div className="flex items-center gap-2 overflow-x-auto pb-1">
@@ -659,7 +700,7 @@ export default function PartnerMapPage() {
             ) : filteredItems.length === 0 ? (
               <div className="py-10 text-center text-sm" style={{ color: "var(--text-muted)" }}>沒有符合條件的特約店家</div>
             ) : (
-              <div className="space-y-2">
+               <div className="partner-map-list space-y-2">
                 {filteredItems.map((item) => (
                   <button
                     key={item.location_id}
@@ -733,12 +774,14 @@ export default function PartnerMapPage() {
               <div id="partner-map-mobile-filters" className="mt-2.5 space-y-2.5">
                 <label className="partner-map-mobile-search flex items-center gap-2 rounded-lg border px-3 py-2.5">
                   <Search size={15} aria-hidden="true" />
-                  <input
-                    value={keyword}
-                    onChange={(event) => setKeyword(event.target.value)}
-                    placeholder="搜尋店家"
-                    className="min-w-0 flex-1 bg-transparent text-sm outline-none"
-                    style={{ color: "var(--text-primary)" }}
+                   <input
+                     value={keyword}
+                     onChange={(event) => setKeyword(event.target.value)}
+                     name="partner-map-mobile-search"
+                     autoComplete="off"
+                     placeholder="搜尋店家…"
+                     className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+                     style={{ color: "var(--text-primary)" }}
                   />
                 </label>
                 <div className="flex gap-2 overflow-x-auto pb-1">
@@ -804,13 +847,17 @@ export default function PartnerMapPage() {
               </section>
             )}
           </div>
-          <PartnerLeafletMap
-            items={filteredItems}
-            center={center}
-            userLocation={null}
-            onOpenBusiness={openBusiness}
-            onBoundsChange={handleMapBoundsChange}
-          />
+          {mapReady ? (
+            <PartnerLeafletMap
+              items={filteredItems}
+              center={center}
+              userLocation={null}
+              onOpenBusiness={openBusiness}
+              onBoundsChange={handleMapBoundsChange}
+            />
+          ) : (
+            <MapPlaceholder onLoad={() => setMapReady(true)} />
+          )}
           <div className="partner-map-mobile-strip absolute inset-x-0 bottom-3 z-[500] flex snap-x gap-3 overflow-x-auto px-3 pb-1 lg:hidden">
             {filteredItems.map((item) => (
               <button
@@ -896,12 +943,70 @@ export default function PartnerMapPage() {
                   <button className="topbar-icon-btn" onClick={() => setSubmissionOpen(false)} aria-label="關閉投稿">×</button>
                 </div>
                 <div className="mt-4 grid gap-3">
-                  <input className="input" placeholder="店家名稱" value={submission.name} onChange={(e) => setSubmission((s) => ({ ...s, name: e.target.value }))} />
-                  <input className="input" placeholder="類型，例如 飲料 / 早餐 / 文具 / 補習班" value={submission.category ?? ""} onChange={(e) => setSubmission((s) => ({ ...s, category: e.target.value }))} />
-                  <input className="input" placeholder="地址" value={submission.address ?? ""} onChange={(e) => setSubmission((s) => ({ ...s, address: e.target.value }))} />
-                  <input className="input" type="url" placeholder="Google Maps 連結（可直接貼上）" value={submission.google_maps_url ?? ""} onChange={(e) => setSubmission((s) => ({ ...s, google_maps_url: e.target.value }))} />
-                  <textarea className="input min-h-20" placeholder="推薦原因" value={submission.reason ?? ""} onChange={(e) => setSubmission((s) => ({ ...s, reason: e.target.value }))} />
-                  <input className="input" placeholder="可能的特約優惠，例如 學生證九折" value={submission.offer_hint ?? ""} onChange={(e) => setSubmission((s) => ({ ...s, offer_hint: e.target.value }))} />
+                  <label className="grid gap-1.5 text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
+                    店家名稱
+                    <input
+                      className="input"
+                      name="business-name"
+                      autoComplete="organization"
+                      placeholder="例如：沃爾創意行銷"
+                      value={submission.name}
+                      onChange={(e) => setSubmission((s) => ({ ...s, name: e.target.value }))}
+                    />
+                  </label>
+                  <label className="grid gap-1.5 text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
+                    類型
+                    <input
+                      className="input"
+                      name="business-category"
+                      placeholder="例如：飲料、早餐、文具、補習班"
+                      value={submission.category ?? ""}
+                      onChange={(e) => setSubmission((s) => ({ ...s, category: e.target.value }))}
+                    />
+                  </label>
+                  <label className="grid gap-1.5 text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
+                    地址
+                    <input
+                      className="input"
+                      name="business-address"
+                      autoComplete="street-address"
+                      placeholder="例如：新竹市東區學府路 1 號"
+                      value={submission.address ?? ""}
+                      onChange={(e) => setSubmission((s) => ({ ...s, address: e.target.value }))}
+                    />
+                  </label>
+                  <label className="grid gap-1.5 text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
+                    Google Maps 連結
+                    <input
+                      className="input"
+                      name="google-maps-url"
+                      type="url"
+                      inputMode="url"
+                      placeholder="可直接貼上地圖連結"
+                      value={submission.google_maps_url ?? ""}
+                      onChange={(e) => setSubmission((s) => ({ ...s, google_maps_url: e.target.value }))}
+                    />
+                  </label>
+                  <label className="grid gap-1.5 text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
+                    推薦原因
+                    <textarea
+                      className="input min-h-20"
+                      name="submission-reason"
+                      placeholder="為什麼推薦這間店家？"
+                      value={submission.reason ?? ""}
+                      onChange={(e) => setSubmission((s) => ({ ...s, reason: e.target.value }))}
+                    />
+                  </label>
+                  <label className="grid gap-1.5 text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
+                    可能的特約優惠
+                    <input
+                      className="input"
+                      name="offer-hint"
+                      placeholder="例如：學生證九折"
+                      value={submission.offer_hint ?? ""}
+                      onChange={(e) => setSubmission((s) => ({ ...s, offer_hint: e.target.value }))}
+                    />
+                  </label>
                 </div>
                 <div className="mt-4 flex justify-end gap-2">
                   <button className="btn btn-ghost" onClick={() => setSubmissionOpen(false)}>取消</button>

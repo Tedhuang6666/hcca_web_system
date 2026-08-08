@@ -5,6 +5,12 @@
   border: 0;
 }
 
+.partner-map-marker-shell:focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+
 .partner-map-marker {
   position: relative;
   display: grid;
@@ -18,6 +24,26 @@
   box-shadow: 0 3px 8px rgba(15, 23, 42, 0.2);
   transform: rotate(-45deg);
   transition: box-shadow 150ms ease, opacity 150ms ease;
+}
+
+.partner-map-placeholder {
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+}
+
+.partner-map-list > * {
+  content-visibility: auto;
+  contain-intrinsic-size: 92px;
+}
+
+.partner-map-placeholder button,
+.partner-map-marker-shell,
+.partner-map-control-toggle {
+  touch-action: manipulation;
+}
+
+[data-theme="dark"] .partner-map-placeholder {
+  background: #10151b;
 }
 
 .partner-map-marker:hover {

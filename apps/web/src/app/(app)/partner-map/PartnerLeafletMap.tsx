@@ -271,70 +271,108 @@ export default function PartnerLeafletMap({
   const hsinchuStation: LatLngExpression = [24.801645, 120.971703];
 
   return (
-    <MapContainer
-      center={center}
-      zoom={16}
-      zoomControl={false}
-      className={`h-full w-full partner-map-leaflet partner-map-theme-${theme}`}
-      scrollWheelZoom>
-      <TileLayer
-        key={theme}
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-        url={tileUrl}
-      />
-      <ZoomControl position="bottomright" />
-      <ThemeClassSync theme={theme} />
-      <BoundsReporter onBoundsChange={onBoundsChange} />
-      <Marker
-        position={center}
-        icon={landmarkIcon("school")}>
-        <Popup>新竹高中周邊</Popup>
-      </Marker>
-      <Marker
-        position={hsinchuStation}
-        icon={landmarkIcon("station")}>
-        <Popup>新竹火車站</Popup>
-      </Marker>
-      {userLocation && (
+    <div className="h-full w-full" role="region" aria-label="特約與推薦商家互動地圖">
+      <MapContainer
+        center={center}
+        zoom={16}
+        zoomControl={false}
+        className={`h-full w-full partner-map-leaflet partner-map-theme-${theme}`}
+        scrollWheelZoom>
+        <TileLayer
+          key={theme}
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          url={tileUrl.replace("{r}", "")}
+          detectRetina={false}
+          keepBuffer={0}
+          updateWhenIdle
+          updateWhenZooming={false}
+        />
+        <ZoomControl position="bottomright" />
+        <ThemeClassSync theme={theme} />
+        <BoundsReporter onBoundsChange={onBoundsChange} />
         <Marker
-          position={userLocation}
-          icon={divIcon({
-            className: "partner-map-marker-shell",
-            iconSize: [30, 30],
-            iconAnchor: [15, 15],
-            html: '<div class="partner-map-user-marker"></div>',
-          })}>
-          <Popup>你的位置</Popup>
+          position={center}
+          icon={landmarkIcon("school")}
+          alt="新竹高中周邊地標"
+          title="新竹高中周邊地標"
+          eventHandlers={{
+            add: (event) => {
+              (event.target as { getElement?: () => HTMLElement | undefined }).getElement?.()
+                ?.setAttribute("aria-label", "新竹高中周邊地標");
+            },
+          }}>
+          <Popup>新竹高中周邊</Popup>
         </Marker>
-      )}
-      {items.map((item) => (
         <Marker
-          key={item.location_id}
-          position={[item.latitude, item.longitude]}
-          icon={storeIcon(item)}
-          eventHandlers={{ click: () => onOpenBusiness(item.business_id, item.source) }}>
-          <Popup>
-            <div className="min-w-48">
-              <p className="text-sm font-semibold">{item.business_name}</p>
-              <p className="mt-1 flex items-center gap-1 text-[11px] font-medium" style={{ color: markerColor(item) }}>
-                <span className="h-1.5 w-1.5 rounded-full" style={{ background: markerColor(item) }} aria-hidden="true" />
-                {markerLabel(item)}
-              </p>
-              <p className="mt-1 text-xs">{item.address}</p>
-              {item.has_discount_offer && <p className="mt-1 text-xs text-amber-600">★ 有折扣優惠</p>}
-              {item.has_active_offer && (
-                <p className="mt-2 text-xs text-emerald-700">{item.active_offer_titles.join("、")}</p>
-              )}
-              <button
-                type="button"
-                className="mt-2 text-xs font-medium text-blue-700"
-                onClick={() => onOpenBusiness(item.business_id, item.source)}>
-                查看詳情
-              </button>
-            </div>
-          </Popup>
+          position={hsinchuStation}
+          icon={landmarkIcon("station")}
+          alt="新竹火車站地標"
+          title="新竹火車站地標"
+          eventHandlers={{
+            add: (event) => {
+              (event.target as { getElement?: () => HTMLElement | undefined }).getElement?.()
+                ?.setAttribute("aria-label", "新竹火車站地標");
+            },
+          }}>
+          <Popup>新竹火車站</Popup>
         </Marker>
-      ))}
-    </MapContainer>
+        {userLocation && (
+          <Marker
+            position={userLocation}
+            icon={divIcon({
+              className: "partner-map-marker-shell",
+              iconSize: [30, 30],
+              iconAnchor: [15, 15],
+              html: '<div class="partner-map-user-marker"></div>',
+            })}
+            alt="你的目前位置"
+            title="你的目前位置"
+            eventHandlers={{
+              add: (event) => {
+                (event.target as { getElement?: () => HTMLElement | undefined }).getElement?.()
+                  ?.setAttribute("aria-label", "你的目前位置");
+              },
+            }}>
+            <Popup>你的位置</Popup>
+          </Marker>
+        )}
+        {items.map((item) => (
+          <Marker
+            key={item.location_id}
+            position={[item.latitude, item.longitude]}
+            icon={storeIcon(item)}
+            alt={`${item.business_name}，${markerLabel(item)}。按 Enter 開啟詳情`}
+            title={item.business_name}
+            eventHandlers={{
+              add: (event) => {
+                (event.target as { getElement?: () => HTMLElement | undefined }).getElement?.()
+                  ?.setAttribute("aria-label", `${item.business_name}，${markerLabel(item)}。按 Enter 開啟詳情`);
+              },
+              click: () => onOpenBusiness(item.business_id, item.source),
+            }}>
+            <Popup>
+              <div className="min-w-48">
+                <p className="text-sm font-semibold">{item.business_name}</p>
+                <p className="mt-1 flex items-center gap-1 text-[11px] font-medium" style={{ color: markerColor(item) }}>
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: markerColor(item) }} aria-hidden="true" />
+                  {markerLabel(item)}
+                </p>
+                <p className="mt-1 text-xs">{item.address}</p>
+                {item.has_discount_offer && <p className="mt-1 text-xs text-amber-600">★ 有折扣優惠</p>}
+                {item.has_active_offer && (
+                  <p className="mt-2 text-xs text-emerald-700">{item.active_offer_titles.join("、")}</p>
+                )}
+                <button
+                  type="button"
+                  className="mt-2 text-xs font-medium text-blue-700"
+                  onClick={() => onOpenBusiness(item.business_id, item.source)}>
+                  查看詳情
+                </button>
+              </div>
+            </Popup>
+          </Marker>
+        ))}
+      </MapContainer>
+    </div>
   );
 }
