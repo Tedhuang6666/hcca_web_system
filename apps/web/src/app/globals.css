@@ -203,6 +203,12 @@
   background: #10151b;
 }
 
+.partner-map-leaflet .leaflet-tile-pane img.leaflet-tile {
+  /* Hide fractional-transform seams between adjacent Leaflet tiles. */
+  width: 257px !important;
+  height: 257px !important;
+}
+
 .partner-map-theme-dark .leaflet-tile-pane {
   filter: brightness(1.05) contrast(0.86) saturate(0.72) sepia(0.08) hue-rotate(8deg);
 }
