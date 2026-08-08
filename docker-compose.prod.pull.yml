@@ -199,13 +199,13 @@ services:
     # 持久化的 celerybeat volume（/tmp），重啟後 celery 讀到舊 pidfile「1」，
     # 而每個容器都有 PID 1 → 判定「已在執行」而中止 → restart/autoheal 反覆
     # 拉起形成 CPU 爆掉的重啟迴圈（ERROR: Pidfile already exists ... pid: 1）。
-    # 修法：pidfile 改放非持久化的 /dev/shm（每次啟動皆乾淨），schedule 仍持久化
-    # 於 /tmp；啟動先 rm 掉新舊兩處殘留 pidfile 作保險。exec 讓 celery 接手 PID 1。
+    # pidfile 放在非持久化的 /dev/shm；排程檔每次啟動清除並依目前程式碼重建，
+    # 避免已刪除的任務從舊的 PersistentScheduler 狀態重新投遞。exec 讓 celery 接手 PID 1。
     command:
       - sh
       - -c
       - >
-        rm -f /dev/shm/celerybeat.pid /tmp/celerybeat.pid &&
+        rm -f /dev/shm/celerybeat.pid /tmp/celerybeat.pid /tmp/celerybeat-schedule* &&
         exec python -m celery -A api.core.celery_app.celery_app beat
         --loglevel=INFO
         --scheduler celery.beat:PersistentScheduler

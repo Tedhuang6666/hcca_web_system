@@ -310,12 +310,13 @@ services:
     # 而映像中 /app 對非 root 執行使用者唯讀 → beat 啟動即 _gdbm Permission denied 崩潰。
     # pidfile 則放非持久化的 /dev/shm：beat 以 PID 1 執行會把「1」寫進 pidfile，若放在
     # 持久化 volume，重啟後 celery 讀到舊「1」→ 誤判「已在執行（pid: 1）」卡重啟迴圈。
-    # 啟動先 rm 掉新舊兩處殘留 pidfile 作保險；exec 讓 celery 接手 PID 1。
+    # 啟動清理 pidfile 與舊排程檔，避免已刪除的任務從持久化狀態重新投遞。
+    # exec 讓 celery 接手 PID 1。
     command:
       - sh
       - -c
       - >
-        rm -f /dev/shm/celerybeat.pid /tmp/celerybeat.pid &&
+        rm -f /dev/shm/celerybeat.pid /tmp/celerybeat.pid /tmp/celerybeat-schedule* &&
         exec python -m celery -A api.core.celery_app.celery_app beat
         --loglevel=INFO
         --scheduler celery.beat:PersistentScheduler
