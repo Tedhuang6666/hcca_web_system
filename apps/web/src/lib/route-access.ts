@@ -21,6 +21,7 @@ const PUBLIC_EXACT_PATHS = new Set([
   "/partner-map",
   "/petitions",
   "/petitions/new",
+  "/petitions/public",
   "/profile/complete",
   "/regulations",
   "/surveys",
@@ -32,6 +33,7 @@ const PUBLIC_PATTERNS = [
   /^\/meetings\/(?:join|screen)\/[^/]+$/,
   /^\/regulations\/(?!new(?:\/|$)|pending(?:\/|$))[^/]+(?:\/(?!edit(?:\/|$)|amendment(?:\/|$)).*)?$/,
   /^\/surveys\/(?!new$)[^/]+$/,
+  /^\/petitions\/public\/[^/]+$/,
 ];
 
 export function isPublicRoute(pathname: string): boolean {

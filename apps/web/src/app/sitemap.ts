@@ -34,6 +34,11 @@ type AnnouncementListItem = {
   updated_at: string;
 };
 
+type PublicPetitionListItem = {
+  id: string;
+  published_at: string;
+};
+
 type PublicElectionListItem = {
   id: string;
   slug: string | null;
@@ -126,7 +131,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const visibleNavKeys = new Set(visibleNavItems.map((item) => item.key));
   const hasNavItem = (key: string) => visibleNavKeys.has(key);
 
-  const [regs, docs, announcements, elections] = await Promise.all([
+  const [regs, docs, announcements, elections, petitions] = await Promise.all([
     hasNavItem("regulations")
       ? (() => {
           const url = new URL(serverApiUrl("/regulations"));
@@ -151,6 +156,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
           (items) => items ?? [],
         )
       : Promise.resolve([] as PublicElectionListItem[]),
+    hasNavItem("petitions")
+      ? pagedFetch<PublicPetitionListItem>(new URL(serverApiUrl("/petitions/public")))
+      : Promise.resolve([] as PublicPetitionListItem[]),
   ]);
 
   const announcementLastModified = latestModifiedAt(
@@ -169,6 +177,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     elections.map((election) => election.updated_at),
     settingsLastModified,
   );
+  const petitionLastModified = latestModifiedAt(
+    petitions.map((petition) => petition.published_at),
+    settingsLastModified,
+  );
   const linkLastModified = latestModifiedAt(
     bundle?.links.map((link) => link.updated_at) ?? [],
     settingsLastModified,
@@ -182,6 +194,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       ...regs.map((regulation) => regulation.updated_at),
       ...docs.map((document) => document.updated_at ?? document.created_at),
       ...elections.map((election) => election.updated_at),
+      ...petitions.map((petition) => petition.published_at),
       ...(publicPages?.map((page) => page.updated_at) ?? []),
     ],
     settingsLastModified,
@@ -193,6 +206,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       regulationLastModified.toISOString(),
       documentLastModified.toISOString(),
       electionLastModified.toISOString(),
+      petitionLastModified.toISOString(),
       linkLastModified.toISOString(),
       publicPageLastModified.toISOString(),
     ],
@@ -213,7 +227,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     "partner-map": settingsLastModified,
     surveys: settingsLastModified,
     "petition-new": settingsLastModified,
-    petitions: settingsLastModified,
+    petitions: petitionLastModified,
   };
 
   const navEntries = visibleNavItems
@@ -252,6 +266,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       url: `${site}/live/elections/${encodeURIComponent(election.slug ?? election.id)}`,
       lastModified: new Date(election.updated_at),
       changeFrequency: "daily" as const,
+      priority: 0.6,
+    })),
+    ...petitions.map((petition) => ({
+      url: `${site}/petitions/public/${encodeURIComponent(petition.id)}`,
+      lastModified: new Date(petition.published_at),
+      changeFrequency: "weekly" as const,
       priority: 0.6,
     })),
     ...(publicPages ?? [])
