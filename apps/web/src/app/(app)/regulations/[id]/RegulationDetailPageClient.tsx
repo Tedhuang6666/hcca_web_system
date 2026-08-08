@@ -1,7 +1,8 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import {
   Archive,
   CalendarDays,
@@ -13,11 +14,7 @@ import {
   Loader2,
   Undo2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
-
-import remarkBreaks from "@/lib/remarkBreaks";
 
 import {
   loadDrafts,
@@ -26,7 +23,6 @@ import {
 } from "@/components/regulations/AmendmentDraftParts";
 import {
   ArticleRow,
-  DiffModal,
   PROSE,
   RevisionCard,
   WfNoteModal,
@@ -45,7 +41,6 @@ import { documentsApi, regulationsApi, regulationHref, apiErrorMessage } from "@
 import { apiUrl } from "@/lib/config";
 import { formatGeneratedHistoryRows, splitLegislativeHistory } from "@/lib/regulationHistory";
 import { recordRecent } from "@/lib/recents";
-import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
 import {
   LINKABLE_ARTICLE_TYPES,
   decodeRouteSegment,
@@ -63,21 +58,45 @@ import type {
   RegulationRevisionOut,
 } from "@/lib/types";
 
+const GovernanceLinkPanel = dynamic(() => import("@/components/governance/GovernanceLinkPanel"), {
+  ssr: false,
+});
+const RegulationMarkdownContent = dynamic(
+  () => import("@/components/regulations/RegulationMarkdownContent"),
+  { ssr: false },
+);
+const RegulationDiffModal = dynamic(
+  () => import("@/components/regulations/RegulationDiffModal"),
+  { ssr: false },
+);
+
+type RegulationDetailPageClientProps = {
+  initialId: string;
+  initialRefs?: string[];
+  initialTitle?: string | null;
+  initialTab?: string | null;
+  initialArticleRef?: string | null;
+  initialUnitRef?: string | null;
+};
+
 // ── 主頁面 ────────────────────────────────────────────────────────────────────
 
-export default function RegulationDetailPageClient() {
-  const { id: rawId, refs: routeRefs } = useParams<{ id: string; refs?: string[] }>();
+export default function RegulationDetailPageClient({
+  initialId,
+  initialRefs = [],
+  initialTitle = null,
+  initialTab,
+  initialArticleRef,
+  initialUnitRef,
+}: RegulationDetailPageClientProps) {
   // useParams 對非 ASCII 會回傳 URL-encoded 值（如 %E5%85%AD...）；
   // 統一 decode 後再給 API / localStorage / encodeURIComponent 使用，避免雙重編碼。
-  const id = useMemo(() => decodeRouteSegment(rawId), [rawId]);
+  const id = useMemo(() => decodeRouteSegment(initialId), [initialId]);
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [reg, setReg] = useState<RegulationOut | null>(null);
   const [loading, setLoading] = useState(true);
-  const initialTab = searchParams.get("tab");
-  const articleRef = searchParams.get("article_ref");
-  const unitRef = searchParams.get("unit_ref");
-  const [tab, setTab] = useState<Tab>(isTab(initialTab) ? initialTab : "content");
+  const normalizedInitialTab = initialTab ?? null;
+  const [tab, setTab] = useState<Tab>(isTab(normalizedInitialTab) ? normalizedInitialTab : "content");
   const { zoom, setZoom, zoomStyle } = usePersistedZoom("hcca.viewer.zoom");
   const [diffPair, setDiffPair] = useState<[RegulationRevisionOut, RegulationRevisionOut | null] | null>(null);
 
@@ -112,8 +131,8 @@ export default function RegulationDetailPageClient() {
   const [printingPdf, setPrintingPdf] = useState(false);
   const [publishedDoc, setPublishedDoc] = useState<DocumentOut | null>(null);
   const { can, isAdmin } = usePermissions();
-  const currentUserId = typeof window !== "undefined" ? localStorage.getItem("user_id") ?? "" : "";
-  const isAnonymous = typeof window !== "undefined" && !localStorage.getItem("user_id");
+  const [currentUserId, setCurrentUserId] = useState("");
+  const isAnonymous = !currentUserId;
   const currentRegHref = reg ? regulationHref(reg) : `/regulations/${encodeURIComponent(id)}`;
 
   const reload = useCallback(() => {
@@ -125,6 +144,13 @@ export default function RegulationDetailPageClient() {
   }, [reg, id]);
 
   useEffect(() => {
+    const storedUserId = localStorage.getItem("user_id") ?? "";
+    setCurrentUserId(storedUserId);
+  }, []);
+
+  useEffect(() => {
+    setReg(null);
+    setLoading(true);
     regulationsApi.get(id)
       .then(setReg)
       .catch(e => toast.error(apiErrorMessage(e, "載入失敗")))
@@ -157,11 +183,20 @@ export default function RegulationDetailPageClient() {
   }, [id]);
 
   useEffect(() => {
-    const nextTab = searchParams.get("tab");
+    const syncTabFromUrl = () => {
+      const nextTab = new URLSearchParams(window.location.search).get("tab");
+      if (isTab(nextTab)) setTab(nextTab);
+    };
+    window.addEventListener("popstate", syncTabFromUrl);
+    return () => window.removeEventListener("popstate", syncTabFromUrl);
+  }, []);
+
+  useEffect(() => {
+    const nextTab = initialTab ?? null;
     if (isTab(nextTab)) {
       setTab(nextTab);
     }
-  }, [searchParams]);
+  }, [initialTab]);
 
   const handleTabChange = useCallback((nextTab: Tab) => {
     setTab(nextTab);
@@ -328,15 +363,11 @@ export default function RegulationDetailPageClient() {
   }, [activeArticles, articleDisplayRows, reg]);
 
   const deepLinkRefs = useMemo(() => {
-    const refs = (routeRefs ?? []).map(decodeRouteSegment);
-    for (let index = 0; index < 8; index += 1) {
-      const value = searchParams.get(`ref${index}`);
-      if (value) refs.push(value);
-    }
-    if (refs.length === 0 && articleRef) refs.push(articleRef);
-    if (refs.length === 1 && unitRef) refs.push(unitRef);
+    const refs = initialRefs.map(decodeRouteSegment);
+    if (refs.length === 0 && initialArticleRef) refs.push(initialArticleRef);
+    if (refs.length === 1 && initialUnitRef) refs.push(initialUnitRef);
     return refs;
-  }, [articleRef, routeRefs, searchParams, unitRef]);
+  }, [initialArticleRef, initialRefs, initialUnitRef]);
 
   useEffect(() => {
     setChapterCollapsedMap((prev) => {
@@ -497,11 +528,35 @@ export default function RegulationDetailPageClient() {
   }, [deepLinkRefs, reg, tab]);
 
   if (loading) {
+    if (initialTitle) {
+      return (
+        <div className="regulation-detail-loading regulation-detail-page app-page-width space-y-5">
+          <style>{`.regulation-detail-loading [data-skeleton="true"] { animation: none; background: var(--bg-hover) !important; }`}</style>
+          <div className="regulation-detail-heading flex items-start gap-3">
+            <div className="min-w-0 flex-1">
+              <h1
+                className="w-full min-w-0 break-words text-lg font-semibold leading-snug sm:text-xl"
+                style={{ color: "var(--text-primary)", overflowWrap: "anywhere", wordBreak: "break-word" }}
+              >
+                {initialTitle}
+              </h1>
+            </div>
+          </div>
+          <DetailPageLoading
+            title="法規詳情載入中"
+            description="正在準備條文、版本與修正紀錄。"
+          />
+        </div>
+      );
+    }
     return (
-      <DetailPageLoading
-        title="法規詳情載入中"
-        description="正在準備條文、版本與修正紀錄。"
-      />
+      <div className="regulation-detail-loading">
+        <style>{`.regulation-detail-loading [data-skeleton="true"] { animation: none; background: var(--bg-hover) !important; }`}</style>
+        <DetailPageLoading
+          title="法規詳情載入中"
+          description="正在準備條文、版本與修正紀錄。"
+        />
+      </div>
     );
   }
   if (!reg) return <div className="py-20 text-center" style={{ color: "var(--danger)" }}>法規不存在或無法存取</div>;
@@ -563,13 +618,15 @@ export default function RegulationDetailPageClient() {
               {/* 工具列 */}
               <div className="regulation-detail-toolbar no-print">
                 <div className="regulation-detail-governance">
-                  <GovernanceLinkPanel
-                    entityType="regulation"
-                    entityId={reg.id}
-                    title={reg.title}
-                    href={currentRegHref}
-                    compact
-                  />
+                  {currentUserId && (
+                    <GovernanceLinkPanel
+                      entityType="regulation"
+                      entityId={reg.id}
+                      title={reg.title}
+                      href={currentRegHref}
+                      compact
+                    />
+                  )}
                 </div>
 
                 <div className="regulation-detail-action-groups">
@@ -872,9 +929,7 @@ export default function RegulationDetailPageClient() {
               </details>
             )}
             {activeArticles.length === 0 && reg.content ? (
-              <div className={PROSE} style={zoomStyle}>
-                <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{reg.content}</ReactMarkdown>
-              </div>
+              <RegulationMarkdownContent content={reg.content} className={PROSE} style={zoomStyle} />
             ) : (
               <div className="space-y-3">
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
@@ -1257,7 +1312,7 @@ export default function RegulationDetailPageClient() {
 
       {/* ── 版本差異 Modal ──────────────────────────────────────────────────── */}
       {diffPair && (
-        <DiffModal
+        <RegulationDiffModal
           revA={diffPair[0]}
           revB={diffPair[1]}
           onClose={() => setDiffPair(null)}
