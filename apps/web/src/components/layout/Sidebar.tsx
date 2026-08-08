@@ -9,7 +9,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { AUTH_CACHE_EVENT } from "@/lib/auth-cache";
 import { useModuleStatus } from "@/contexts/ModuleStatusContext";
 import { BRANDING } from "@/lib/branding";
-import { navigationProfilesApi } from "@/lib/api";
+import { navigationProfilesApi } from "@/lib/api/navigation-profiles";
 import { NAV_ID_TO_MODULE } from "@/lib/modules";
 import NavIcon from "./NavIcon";
 import {
