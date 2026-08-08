@@ -143,6 +143,8 @@ export default function Sidebar() {
   );
 
   useEffect(() => {
+    if (!hydrated) return;
+
     let alive = true;
     if (!isLoggedIn) {
       setServerProfile(null);
@@ -180,7 +182,7 @@ export default function Sidebar() {
     return () => {
       alive = false;
     };
-  }, [authVersion, isLoggedIn]);
+  }, [authVersion, hydrated, isLoggedIn]);
 
   // 初始化：讀 localStorage、設定 event listener，僅在 mount 時執行一次
   useEffect(() => {
@@ -198,17 +200,7 @@ export default function Sidebar() {
     syncAuth();
 
     const persisted = readCollapsed();
-    const startCollapsed = persisted.size === 0
-      ? (() => {
-          const d = new Set<string>();
-          for (const entry of activeNavDef) {
-            if (isSection(entry) && entry.collapsible && entry.defaultCollapsed) d.add(entry.heading);
-          }
-          return d;
-        })()
-      : new Set(persisted);
-
-    setCollapsed(startCollapsed);
+    setCollapsed(new Set(persisted));
     setHydrated(true);
 
     const syncPrefs = () => {
@@ -224,7 +216,9 @@ export default function Sidebar() {
       window.removeEventListener(AUTH_CACHE_EVENT, syncAuth);
       window.removeEventListener("storage", syncPrefs);
     };
-  }, [activeNavDef]);
+    // This is mount-only initialization. Profile changes are handled by the
+    // activeNavDef effect below and must not re-run auth/profile requests.
+  }, []);
 
   // 切頁時自動展開當前路徑所在分組（不寫 localStorage、不覆蓋手動設定）
   useEffect(() => {

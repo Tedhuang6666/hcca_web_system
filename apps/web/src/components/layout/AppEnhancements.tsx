@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { usePathname } from "next/navigation";
 import { Suspense } from "react";
 
 // These features are useful after the page is interactive, but none is part
@@ -10,14 +11,17 @@ const TelemetryProvider = dynamic(() => import("@/components/providers/Telemetry
 const PwaInstallPrompt = dynamic(() => import("@/components/pwa/PwaInstallPrompt"), { ssr: false });
 
 export default function AppEnhancements() {
+  const pathname = usePathname();
+  const isPetitionsRoute = pathname === "/petitions" || pathname.startsWith("/petitions/");
+
   return (
     <>
       <Suspense fallback={null}>
         <TelemetryProvider />
       </Suspense>
-      <PwaInstallPrompt />
+      {!isPetitionsRoute && <PwaInstallPrompt />}
       <Suspense fallback={null}>
-        <GoogleOneTap />
+        {!isPetitionsRoute && <GoogleOneTap />}
       </Suspense>
     </>
   );
