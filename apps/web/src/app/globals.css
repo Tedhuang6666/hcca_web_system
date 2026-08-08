@@ -2922,7 +2922,7 @@ input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
 .module-tab-link.is-active {
   border-color: color-mix(in srgb, var(--primary) 36%, var(--border));
   background: color-mix(in srgb, var(--primary-dim) 76%, var(--bg-elevated));
-  color: var(--primary);
+  color: var(--primary-text);
   box-shadow: var(--shadow-sm);
 }
 

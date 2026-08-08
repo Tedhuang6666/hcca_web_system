@@ -220,7 +220,7 @@ export function RegulationCategoryBadge({ category }: { category: string }) {
     <span
       className="badge"
       style={{
-        color,
+        color: "var(--text-primary)",
         background: `${color}18`,
         borderColor: `${color}40`,
       }}>
