@@ -56,6 +56,22 @@ export default async function PublicNewsDetailPage({
           image: item.media.map((media) => uploadUrl(media.url)).filter(Boolean),
         }}
       />
+      <JsonLd
+        data={{
+          "@context": "https://schema.org",
+          "@type": "BreadcrumbList",
+          itemListElement: [
+            { "@type": "ListItem", position: 1, name: "首頁", item: absoluteUrl("/") },
+            { "@type": "ListItem", position: 2, name: "最新公告", item: absoluteUrl("/news") },
+            {
+              "@type": "ListItem",
+              position: 3,
+              name: item.title,
+              item: absoluteUrl("/news/" + encodeURIComponent(id)),
+            },
+          ],
+        }}
+      />
       <PublicSiteShell navPages={bundle?.nav_pages ?? []} settings={bundle?.settings}>
       <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
         <article className="space-y-5">

@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 
 import { serverApiUrl } from "@/lib/config";
 import { socialDescription } from "@/lib/social-metadata";
-import { pageMetadata } from "@/lib/seo";
+import { absoluteUrl, JsonLd, pageMetadata } from "@/lib/seo";
 
 type RegulationMeta = {
   title: string;
@@ -34,6 +34,32 @@ export async function generateMetadata(
   return pageMetadata({ title: regTitle, description, path });
 }
 
-export default function RegulationDetailLayout({ children }: { children: ReactNode }) {
-  return children;
+export default async function RegulationDetailLayout({
+  children,
+  params,
+}: {
+  children: ReactNode;
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const reg = await fetchReg(id);
+  const title = reg?.title ?? decodeURIComponent(id);
+  const path = "/regulations/" + encodeURIComponent(title);
+
+  return (
+    <>
+      <JsonLd
+        data={{
+          "@context": "https://schema.org",
+          "@type": "BreadcrumbList",
+          itemListElement: [
+            { "@type": "ListItem", position: 1, name: "首頁", item: absoluteUrl("/") },
+            { "@type": "ListItem", position: 2, name: "法規查詢", item: absoluteUrl("/regulations") },
+            { "@type": "ListItem", position: 3, name: title, item: absoluteUrl(path) },
+          ],
+        }}
+      />
+      {children}
+    </>
+  );
 }
