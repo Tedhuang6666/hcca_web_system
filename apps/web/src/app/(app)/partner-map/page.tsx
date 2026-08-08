@@ -30,28 +30,6 @@ function MapLoadingState() {
   );
 }
 
-function MapPlaceholder({ onLoad }: { onLoad: () => void }) {
-  return (
-    <div
-      className="partner-map-placeholder flex h-full min-h-[360px] items-center justify-center p-6"
-      role="status"
-      aria-live="polite">
-      <div className="max-w-sm text-center">
-        <MapPin className="mx-auto" size={28} aria-hidden="true" />
-        <p className="mt-3 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-          互動地圖準備中…
-        </p>
-        <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-          互動地圖會在你需要時載入，先節省流量與電量。
-        </p>
-        <button type="button" className="btn mt-4" onClick={onLoad}>
-          立即載入地圖
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function formatOffers(item: UnifiedMapItem): string {
   if (item.source === "recommended") return "推薦商家資訊";
   if (!item.has_active_offer) return "目前無有效優惠";
@@ -463,7 +441,6 @@ export default function PartnerMapPage({ initialBusinessSlug }: PartnerMapPagePr
   const [myBusinesses, setMyBusinesses] = useState<PartnerBusinessDirectoryItem[]>([]);
   const [submissionOpen, setSubmissionOpen] = useState(false);
   const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
-  const [mapReady, setMapReady] = useState(false);
   const [mapComponent, setMapComponent] = useState<PartnerLeafletMapComponent | null>(null);
   const [contactDirectoryReady, setContactDirectoryReady] = useState(false);
   const [initialBusinessId, setInitialBusinessId] = useState<string | null>(null);
@@ -559,6 +536,16 @@ export default function PartnerMapPage({ initialBusinessSlug }: PartnerMapPagePr
     if (window.localStorage.getItem("user_id")) {
       partnerMapApi.myBusinesses().then(setMyBusinesses).catch(() => {});
     }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void import("./PartnerLeafletMap").then(({ default: loadedMap }) => {
+      if (!cancelled) setMapComponent(() => loadedMap);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -713,13 +700,6 @@ export default function PartnerMapPage({ initialBusinessSlug }: PartnerMapPagePr
       toast.error(error instanceof ApiError ? error.message : "更新失敗");
     }
   };
-
-  const loadMap = useCallback(() => {
-    setMapReady(true);
-    void import("./PartnerLeafletMap").then(({ default: loadedMap }) => {
-      setMapComponent(() => loadedMap);
-    });
-  }, []);
 
   const toggleTag = (id: string) => {
     setSelectedTagIds((current) => {
@@ -990,20 +970,16 @@ export default function PartnerMapPage({ initialBusinessSlug }: PartnerMapPagePr
               </section>
             )}
           </div>
-          {mapReady ? (
-            MapComponent ? (
-              <MapComponent
-                items={filteredItems}
-                center={center}
-                userLocation={null}
-                onOpenBusiness={openBusiness}
-                onBoundsChange={handleMapBoundsChange}
-              />
-            ) : (
-              <MapLoadingState />
-            )
+          {MapComponent ? (
+            <MapComponent
+              items={filteredItems}
+              center={center}
+              userLocation={null}
+              onOpenBusiness={openBusiness}
+              onBoundsChange={handleMapBoundsChange}
+            />
           ) : (
-            <MapPlaceholder onLoad={loadMap} />
+            <MapLoadingState />
           )}
           <div className="partner-map-mobile-strip absolute inset-x-0 bottom-3 z-[500] flex snap-x gap-3 overflow-x-auto px-3 pb-1 lg:hidden">
             {filteredItems.map((item) => (
