@@ -22,10 +22,20 @@ from sqlalchemy.engine import Engine
 
 logger = logging.getLogger(__name__)
 
+
 # 每 request scope 的計數器（middleware 在 request 開頭 reset、結尾讀取）
-_query_count: ContextVar[int] = ContextVar("query_count", default=0)
-_slow_query_count: ContextVar[int] = ContextVar("slow_query_count", default=0)
-_total_query_ms: ContextVar[float] = ContextVar("total_query_ms", default=0.0)
+@dataclass
+class _RequestQueryCounters:
+    """Mutable counters shared by the request task and SQLAlchemy's greenlet."""
+
+    query_count: int = 0
+    slow_query_count: int = 0
+    total_query_ms: float = 0.0
+
+
+_query_counters: ContextVar[_RequestQueryCounters | None] = ContextVar(
+    "query_counters", default=None
+)
 
 SLOW_QUERY_MS = 50.0  # 單筆 query > 50ms 視為慢查詢
 N_PLUS_ONE_THRESHOLD = 20  # 單一 request 超過此 query 數會 WARN
@@ -49,6 +59,7 @@ class SlowQuerySample:
 _slow_samples: deque[SlowQuerySample] = deque(maxlen=_SLOW_RING_MAX)
 _slow_index: dict[str, SlowQuerySample] = {}
 _slow_lock = threading.Lock()
+_listeners_installed = False
 
 
 def _normalize_statement(statement: str) -> str:
@@ -95,30 +106,49 @@ def get_slow_queries(top: int = 10) -> list[dict[str, object]]:
 
 
 def reset_request_counters() -> None:
-    _query_count.set(0)
-    _slow_query_count.set(0)
-    _total_query_ms.set(0.0)
+    _query_counters.set(_RequestQueryCounters())
 
 
 def get_request_counters() -> tuple[int, int, float]:
-    return _query_count.get(), _slow_query_count.get(), _total_query_ms.get()
+    counters = _query_counters.get()
+    if counters is None:
+        return 0, 0, 0.0
+    return counters.query_count, counters.slow_query_count, counters.total_query_ms
 
 
 def install_listeners() -> None:
     """於 app startup 時呼叫一次；註冊全域 cursor event。"""
 
-    @event.listens_for(Engine, "before_cursor_execute")
-    def _before(conn, cursor, statement, parameters, context, executemany):  # noqa: ANN001, ANN202
-        context._query_start_time = time.perf_counter()
-
-    @event.listens_for(Engine, "after_cursor_execute")
-    def _after(conn, cursor, statement, parameters, context, executemany):  # noqa: ANN001, ANN202
-        start = getattr(context, "_query_start_time", None)
-        if start is None:
+    global _listeners_installed
+    with _slow_lock:
+        if _listeners_installed:
             return
-        elapsed_ms = (time.perf_counter() - start) * 1000.0
-        _query_count.set(_query_count.get() + 1)
-        _total_query_ms.set(_total_query_ms.get() + elapsed_ms)
-        if elapsed_ms > SLOW_QUERY_MS:
-            _slow_query_count.set(_slow_query_count.get() + 1)
-            _record_slow_sample(str(statement), elapsed_ms)
+
+        @event.listens_for(Engine, "before_cursor_execute")
+        def _before(  # noqa: ANN001, ANN202
+            conn, cursor, statement, parameters, context, executemany
+        ):
+            context._query_start_time = time.perf_counter()
+
+        @event.listens_for(Engine, "after_cursor_execute")
+        def _after(  # noqa: ANN001, ANN202
+            conn, cursor, statement, parameters, context, executemany
+        ):
+            start = getattr(context, "_query_start_time", None)
+            if start is None:
+                return
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            # SQLAlchemy async engines execute these callbacks in a greenlet.
+            # Mutating the object keeps the update visible to the outer request
+            # task; replacing a ContextVar scalar there does not propagate back.
+            counters = _query_counters.get()
+            if counters is None:
+                counters = _RequestQueryCounters()
+                _query_counters.set(counters)
+            counters.query_count += 1
+            counters.total_query_ms += elapsed_ms
+            if elapsed_ms > SLOW_QUERY_MS:
+                counters.slow_query_count += 1
+                _record_slow_sample(str(statement), elapsed_ms)
+
+        _listeners_installed = True
