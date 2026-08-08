@@ -1524,6 +1524,65 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
   white-space: nowrap;
 }
 
+/* ── Shared topbar: quiet chrome, clear current location ──────────────── */
+.topbar-header {
+  isolation: isolate;
+}
+
+.topbar-header .topbar-icon-btn {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.topbar-header .topbar-icon-btn:hover,
+.topbar-header .topbar-icon-btn:focus-visible {
+  border-color: transparent;
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.topbar-mobile-title-content {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+}
+
+.topbar-mobile-parent {
+  flex: 0 1 auto;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.topbar-mobile-separator {
+  color: var(--text-disabled);
+}
+
+.topbar-mobile-title-content h1 {
+  flex: 1 1 auto;
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar-login-action {
+  border: 0 !important;
+  background: var(--primary) !important;
+  color: var(--primary-fg) !important;
+  box-shadow: none;
+  font-weight: 650;
+}
+
+.topbar-login-action:hover,
+.topbar-login-action:focus-visible {
+  background: var(--primary-hover) !important;
+  color: var(--primary-fg) !important;
+}
+
 .dashboard-page {
   width: 100%;
 }
@@ -1724,6 +1783,22 @@ nav[aria-label="底部主選單"] a[aria-current="page"]::before {
 
   .topbar-mobile-title {
     min-width: 5.5rem;
+  }
+
+  .topbar-mobile-title-content {
+    gap: 0.35rem;
+  }
+
+  .topbar-header .topbar-icon-btn,
+  .topbar-header .topbar-user-menu > button {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+
+  .topbar-header .topbar-login-action {
+    min-width: 4.25rem;
+    padding-inline: 0.75rem;
+    border-radius: 0.75rem;
   }
 
   .topbar-actions .topbar-icon-btn,
