@@ -1,17 +1,11 @@
 import PublicEnhancements from "@/components/site/PublicEnhancements";
 import { BRANDING } from "@/lib/branding";
 import { absoluteUrl, JsonLd } from "@/lib/seo";
-import { preload } from "react-dom";
 import "../public-design-system.css";
 import "./public-footer.css";
 
 export default function PublicLayout({ children }: { children: React.ReactNode }) {
   const organizationId = absoluteUrl("/#organization");
-  preload("/brand/hcca-emblem-320.avif", {
-    as: "image",
-    type: "image/avif",
-    fetchPriority: "high",
-  });
 
   return (
     <>

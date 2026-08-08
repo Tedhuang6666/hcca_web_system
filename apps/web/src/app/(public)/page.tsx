@@ -1,5 +1,6 @@
 import "./public-home.css";
 import { Suspense } from "react";
+import { preload } from "react-dom";
 import PublicSiteShell from "@/components/site/PublicSiteShell";
 import {
   fetchActiveUrgentAnnouncement,
@@ -17,6 +18,12 @@ export default async function PublicHomePage() {
     fetchPublicBundle(),
     fetchActiveUrgentAnnouncement(),
   ]);
+  const heroImageUrl = bundle?.settings?.site_logo_url?.trim() || "/brand/hcca-emblem-320.avif";
+  preload(heroImageUrl, {
+    as: "image",
+    fetchPriority: "high",
+    ...(heroImageUrl.endsWith(".avif") ? { type: "image/avif" } : {}),
+  });
 
   return (
     <PublicSiteShell
