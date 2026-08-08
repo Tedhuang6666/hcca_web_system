@@ -5,23 +5,6 @@
  * 不再各自重寫一份硬編碼清單。後台的開關／排序／改名只存「覆寫」到
  * settings.theme_config.nav，免 DB migration；前台用 resolvePublicNav() 把預設與覆寫合併。
  */
-import type { LucideIcon } from "lucide-react";
-import {
-  BookOpenText,
-  FileSearch,
-  Handshake,
-  Info,
-  Landmark,
-  Link2,
-  ListChecks,
-  Mail,
-  MapPinned,
-  Megaphone,
-  MessageSquareText,
-  Radio,
-  Scale,
-  UsersRound,
-} from "lucide-react";
 import type { ModuleId } from "./modules";
 
 /** primary 顯示在頂列；其餘三組收進「所有公開服務」選單。每個項目只屬於一組，從結構上杜絕重複。 */
@@ -34,7 +17,7 @@ export interface PublicNavItemDef {
   /** 預設文案，後台可覆寫。 */
   label: string;
   description: string;
-  icon: LucideIcon;
+  iconKey: string;
   group: PublicNavGroupId;
   /** 對應的功能模組；模組關閉時不在公開站顯示。 */
   moduleId?: ModuleId;
@@ -54,23 +37,23 @@ export const PUBLIC_NAV_GROUP_META: Record<
 
 /** 顯示順序＝陣列順序（同組內）。後台 order 覆寫只調整同組相對位置。 */
 export const PUBLIC_NAV_ITEMS: PublicNavItemDef[] = [
-  { key: "news", href: "/news", label: "最新公告", description: "公開消息與重要通知", icon: Megaphone, group: "primary", moduleId: "announcements" },
-  { key: "about", href: "/about", label: "關於班聯會", description: "任務、沿革與公共角色", icon: Landmark, group: "primary" },
-  { key: "system-info", href: "/system-info", label: "關於本系統", description: "協助、回報與公開說明", icon: Info, group: "primary" },
+  { key: "news", href: "/news", label: "最新公告", description: "公開消息與重要通知", iconKey: "news", group: "primary", moduleId: "announcements" },
+  { key: "about", href: "/about", label: "關於班聯會", description: "任務、沿革與公共角色", iconKey: "about", group: "primary" },
+  { key: "system-info", href: "/system-info", label: "關於本系統", description: "協助、回報與公開說明", iconKey: "system-info", group: "primary" },
 
-  { key: "officers", href: "/officers", label: "班聯會幹部", description: "當屆幹部與公開資料", icon: UsersRound, group: "info", guestUsable: true },
-  { key: "contact", href: "/contact", label: "聯絡我們", description: "聯絡班聯會與提出問題", icon: Mail, group: "info", guestUsable: true },
-  { key: "links", href: "/links", label: "平台連結", description: "常用服務與外部連結", icon: Link2, group: "info", guestUsable: true },
+  { key: "officers", href: "/officers", label: "班聯會幹部", description: "當屆幹部與公開資料", iconKey: "officers", group: "info", guestUsable: true },
+  { key: "contact", href: "/contact", label: "聯絡我們", description: "聯絡班聯會與提出問題", iconKey: "contact", group: "info", guestUsable: true },
+  { key: "links", href: "/links", label: "平台連結", description: "常用服務與外部連結", iconKey: "links", group: "info", guestUsable: true },
 
-  { key: "public-db", href: "/public", label: "公開資料庫", description: "所有公開資料與參與入口", icon: BookOpenText, group: "data", guestUsable: true },
-  { key: "regulations", href: "/regulations", label: "法規查詢", description: "現行條文、沿革與版本", icon: Scale, group: "data", guestUsable: true, moduleId: "regulations" },
-  { key: "documents", href: "/documents", label: "公文查詢", description: "公開公文、字號與附件", icon: FileSearch, group: "data", guestUsable: true, moduleId: "documents" },
-  { key: "elections", href: "/public/elections", label: "即時開票", description: "公開選舉票數與進度", icon: Radio, group: "data", guestUsable: true, moduleId: "elections" },
-  { key: "special-agreement", href: "/public/special-agreement", label: "特約洽談", description: "合作流程、洽談資訊與文件", icon: Handshake, group: "data", guestUsable: true },
-  { key: "partner-map", href: "/partner-map", label: "特約地圖", description: "合作店家與學生優惠", icon: MapPinned, group: "data", guestUsable: true, moduleId: "partnerMap" },
-  { key: "surveys", href: "/surveys", label: "公開問卷", description: "參與目前開放的校園調查", icon: ListChecks, group: "data", guestUsable: true, moduleId: "surveys" },
+  { key: "public-db", href: "/public", label: "公開資料庫", description: "所有公開資料與參與入口", iconKey: "public-db", group: "data", guestUsable: true },
+  { key: "regulations", href: "/regulations", label: "法規查詢", description: "現行條文、沿革與版本", iconKey: "regulations", group: "data", guestUsable: true, moduleId: "regulations" },
+  { key: "documents", href: "/documents", label: "公文查詢", description: "公開公文、字號與附件", iconKey: "documents", group: "data", guestUsable: true, moduleId: "documents" },
+  { key: "elections", href: "/public/elections", label: "即時開票", description: "公開選舉票數與進度", iconKey: "elections", group: "data", guestUsable: true, moduleId: "elections" },
+  { key: "special-agreement", href: "/public/special-agreement", label: "特約洽談", description: "合作流程、洽談資訊與文件", iconKey: "special-agreement", group: "data", guestUsable: true },
+  { key: "partner-map", href: "/partner-map", label: "特約地圖", description: "合作店家與學生優惠", iconKey: "partner-map", group: "data", guestUsable: true, moduleId: "partnerMap" },
+  { key: "surveys", href: "/surveys", label: "公開問卷", description: "參與目前開放的校園調查", iconKey: "surveys", group: "data", guestUsable: true, moduleId: "surveys" },
 
-  { key: "petitions", href: "/petitions", label: "陳情中心", description: "提出陳情、用案號查詢案件進度", icon: MessageSquareText, group: "participation", guestUsable: true, moduleId: "petitions" },
+  { key: "petitions", href: "/petitions", label: "陳情中心", description: "提出陳情、用案號查詢案件進度", iconKey: "petitions", group: "participation", guestUsable: true, moduleId: "petitions" },
 ];
 
 /** 後台存進 settings.theme_config.nav 的覆寫形狀。 */

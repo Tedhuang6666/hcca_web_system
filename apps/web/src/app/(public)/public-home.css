@@ -1,12 +1,4 @@
-/* 首頁下半部：把入口、組織介紹與頁尾收成一個安靜的閱讀節奏。 */
-.public-site .public-partnership-hero h1,
-.public-site .public-partnership-hero .prose,
-.public-site .public-partnership-hero .prose p,
-.public-site .public-partnership-hero .prose li,
-.public-site .public-partnership-hero .prose blockquote {
-  color: #f8fafc;
-}
-
+/* 首頁下半部：把入口與組織介紹收成一個安靜的閱讀節奏。 */
 .public-home-entry-section {
   width: min(100%, 72rem);
   margin: 0 auto;
@@ -148,99 +140,8 @@
   transform: translateX(3px);
 }
 
-.public-footer {
-  background: color-mix(in srgb, var(--public-surface) 82%, var(--public-bg));
-}
-
-.public-footer-inner {
-  display: grid;
-  width: min(100%, 72rem);
-  grid-template-columns: minmax(0, 1.7fr) repeat(2, minmax(7rem, 0.55fr));
-  gap: 2rem;
-  margin: 0 auto;
-  padding: 2.5rem 1rem 2rem;
-}
-
-.public-footer-brand-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.7rem;
-  color: var(--public-text);
-  text-decoration: none;
-}
-
-.public-footer-mark {
-  display: grid;
-  width: 2.25rem;
-  height: 2.25rem;
-  place-items: center;
-}
-
-.public-footer-brand-link strong,
-.public-footer-brand-link span span {
-  display: block;
-}
-
-.public-footer-brand-link strong {
-  font-size: 0.9rem;
-}
-
-.public-footer-brand-link span span {
-  margin-top: 0.15rem;
-  color: var(--public-muted);
-  font-size: 0.72rem;
-}
-
-.public-footer-brand > p {
-  max-width: 25rem;
-  margin-top: 1rem;
-  color: var(--public-muted);
-  font-size: 0.8rem;
-  line-height: 1.7;
-}
-
-.public-footer-links {
-  display: grid;
-  align-content: start;
-  justify-items: start;
-  gap: 0.6rem;
-  font-size: 0.8rem;
-}
-
-.public-footer-links a {
-  color: var(--public-secondary);
-  text-decoration: none;
-}
-
-.public-footer-links a:hover,
-.public-footer-links a:focus-visible {
-  color: var(--public-accent);
-}
-
-.public-footer-label {
-  margin-bottom: 0.25rem;
-  color: var(--public-muted);
-  font-size: 0.7rem;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-}
-
-.public-footer-bottom {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  width: min(100%, 72rem);
-  margin: 0 auto;
-  padding: 1rem;
-  border-top: 1px solid var(--public-border);
-  color: var(--public-muted);
-  font-size: 0.7rem;
-}
-
 @media (min-width: 640px) {
-  .public-home-entry-section,
-  .public-footer-inner,
-  .public-footer-bottom {
+  .public-home-entry-section {
     padding-inline: 1.5rem;
   }
 }
@@ -309,20 +210,6 @@
     margin-top: 2rem;
   }
 
-  .public-footer-inner {
-    grid-template-columns: 1fr 1fr;
-    gap: 1.75rem 1rem;
-    padding-top: 2rem;
-  }
-
-  .public-footer-brand {
-    grid-column: 1 / -1;
-  }
-
-  .public-footer-bottom {
-    display: grid;
-    gap: 0.35rem;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

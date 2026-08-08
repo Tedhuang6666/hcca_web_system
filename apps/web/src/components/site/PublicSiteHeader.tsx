@@ -3,12 +3,10 @@
 import Link from "next/link";
 import { ChevronDown, LogIn, Menu, Moon, Sun, X } from "lucide-react";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 
-import { useModuleStatus } from "@/contexts/ModuleStatusContext";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import ImportantAnnouncementBanner from "@/components/site/ImportantAnnouncementBanner";
-import LiveElectionBanner from "@/components/site/LiveElectionBanner";
 import PublicEmblem from "@/components/site/PublicEmblem";
 import { BRANDING } from "@/lib/branding";
 import {
@@ -20,6 +18,7 @@ import {
 import type { AnnouncementOut, PublicSitePageOut, PublicSiteSettingsOut } from "@/lib/types";
 
 const MENU_GROUP_ORDER: PublicNavGroupId[] = ["info", "data", "participation"];
+const DeferredLiveElectionBanner = lazy(() => import("@/components/site/LiveElectionBanner"));
 
 function PublicSiteHeaderContent({
   navPages,
@@ -33,8 +32,9 @@ function PublicSiteHeaderContent({
   const [open, setOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [moduleStatusReady, setModuleStatusReady] = useState(false);
+  const [closedModuleIds, setClosedModuleIds] = useState<Set<string>>(() => new Set());
+  const [liveBannerReady, setLiveBannerReady] = useState(false);
   const { theme, toggleTheme } = useTheme();
-  const { isModuleClosed } = useModuleStatus();
   const pathname = usePathname();
   const publicEmblemUrl = settings?.site_logo_url?.trim() || BRANDING.publicEmblemUrl;
   const menuRef = useRef<HTMLDetailsElement>(null);
@@ -61,16 +61,16 @@ function PublicSiteHeaderContent({
   );
   const groups = {
     primary: resolvedGroups.primary.filter(
-      (item) => !moduleStatusReady || !isModuleClosed(item.moduleId ?? null),
+      (item) => !moduleStatusReady || !closedModuleIds.has(item.moduleId ?? ""),
     ),
     info: resolvedGroups.info.filter(
-      (item) => !moduleStatusReady || !isModuleClosed(item.moduleId ?? null),
+      (item) => !moduleStatusReady || !closedModuleIds.has(item.moduleId ?? ""),
     ),
     data: resolvedGroups.data.filter(
-      (item) => !moduleStatusReady || !isModuleClosed(item.moduleId ?? null),
+      (item) => !moduleStatusReady || !closedModuleIds.has(item.moduleId ?? ""),
     ),
     participation: resolvedGroups.participation.filter(
-      (item) => !moduleStatusReady || !isModuleClosed(item.moduleId ?? null),
+      (item) => !moduleStatusReady || !closedModuleIds.has(item.moduleId ?? ""),
     ),
   };
   const topLevel = [
@@ -96,12 +96,62 @@ function PublicSiteHeaderContent({
 
   useEffect(() => {
     setIsLoggedIn(Boolean(window.localStorage.getItem("user_id")));
-    setModuleStatusReady(true);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadModuleStatus = async () => {
+      try {
+        const response = await fetch("/api/system/module-status", { cache: "no-store" });
+        if (!response.ok) return;
+        const statuses = (await response.json()) as Array<{ id: string; on: boolean; mode: string }>;
+        if (active) {
+          setClosedModuleIds(
+            new Set(statuses.filter((item) => item.on && item.mode === "closed").map((item) => item.id)),
+          );
+          setModuleStatusReady(true);
+        }
+      } catch {
+        if (active) setModuleStatusReady(true);
+      }
+    };
+
+    let idleId: number | undefined;
+    const timeoutId = window.setTimeout(() => {
+      if (typeof window.requestIdleCallback === "function") {
+        idleId = window.requestIdleCallback(loadModuleStatus, { timeout: 1_000 });
+      } else {
+        void loadModuleStatus();
+      }
+    }, 2_500);
+    return () => {
+      active = false;
+      window.clearTimeout(timeoutId);
+      if (idleId !== undefined) window.cancelIdleCallback(idleId);
+    };
+  }, []);
+
+  useEffect(() => {
+    let idleId: number | undefined;
+    const timeoutId = window.setTimeout(() => {
+      if (typeof window.requestIdleCallback === "function") {
+        idleId = window.requestIdleCallback(() => setLiveBannerReady(true), { timeout: 1_000 });
+      } else {
+        setLiveBannerReady(true);
+      }
+    }, 3_000);
+    return () => {
+      window.clearTimeout(timeoutId);
+      if (idleId !== undefined) window.cancelIdleCallback(idleId);
+    };
   }, []);
 
   return (
     <header className="public-header" ref={headerRef}>
-      <LiveElectionBanner />
+      <Suspense fallback={null}>
+        {liveBannerReady && <DeferredLiveElectionBanner />}
+      </Suspense>
       <ImportantAnnouncementBanner announcement={urgentAnnouncement} />
       <div className="public-header-inner">
         <Link href="/" className="public-brand" onClick={() => setOpen(false)}>
@@ -150,27 +200,21 @@ function PublicSiteHeaderContent({
                       )}
                     </p>
                     <div className="grid gap-0.5">
-                      {group.items.map((item) => {
-                        const Icon = item.icon;
-                        return (
-                          <Link key={item.key} href={item.href} className="public-nav-dropdown-link">
-                            <span className="public-nav-dropdown-icon">
-                              <Icon size={17} aria-hidden />
+                      {group.items.map((item) => (
+                        <Link key={item.key} href={item.href} className="public-nav-dropdown-link">
+                          <span className="min-w-0">
+                            <span className="flex items-center gap-1.5">
+                              <span className="text-sm font-semibold">{item.label}</span>
+                              {item.guestUsable && !group.meta.hint && (
+                                <span className="public-nav-badge">免登入</span>
+                              )}
                             </span>
-                            <span className="min-w-0">
-                              <span className="flex items-center gap-1.5">
-                                <span className="text-sm font-semibold">{item.label}</span>
-                                {item.guestUsable && !group.meta.hint && (
-                                  <span className="public-nav-badge">免登入</span>
-                                )}
-                              </span>
-                              <span className="mt-0.5 block text-xs text-[var(--public-muted)]">
-                                {item.description}
-                              </span>
+                            <span className="mt-0.5 block text-xs text-[var(--public-muted)]">
+                              {item.description}
                             </span>
-                          </Link>
-                        );
-                      })}
+                          </span>
+                        </Link>
+                      ))}
                     </div>
                   </section>
                 ))}
@@ -238,29 +282,23 @@ function PublicSiteHeaderContent({
                     )}
                   </p>
                   <div className="grid gap-2 sm:grid-cols-2">
-                    {group.items.map((item) => {
-                      const Icon = item.icon;
-                      return (
-                        <Link
-                          key={item.key}
-                          href={item.href}
-                          onClick={() => setOpen(false)}
-                          className="public-mobile-service-link"
-                        >
-                          <span className="public-nav-dropdown-icon">
-                            <Icon size={16} aria-hidden />
+                    {group.items.map((item) => (
+                      <Link
+                        key={item.key}
+                        href={item.href}
+                        onClick={() => setOpen(false)}
+                        className="public-mobile-service-link"
+                      >
+                        <span className="min-w-0">
+                          <span className="flex items-center gap-1.5">
+                            <span className="truncate text-sm font-semibold">{item.label}</span>
+                            {item.guestUsable && !group.meta.hint && (
+                              <span className="public-nav-badge">免登入</span>
+                            )}
                           </span>
-                          <span className="min-w-0">
-                            <span className="flex items-center gap-1.5">
-                              <span className="truncate text-sm font-semibold">{item.label}</span>
-                              {item.guestUsable && !group.meta.hint && (
-                                <span className="public-nav-badge">免登入</span>
-                              )}
-                            </span>
-                          </span>
-                        </Link>
-                      );
-                    })}
+                        </span>
+                      </Link>
+                    ))}
                   </div>
                 </section>
               ))}

@@ -47,7 +47,7 @@ export default function ImportantAnnouncementBanner({
   const [announcement, setAnnouncement] = useState<AnnouncementOut | null>(
     initialAnnouncement ?? null,
   );
-  const [visible, setVisible] = useState(false);
+  const [visible, setVisible] = useState(Boolean(initialAnnouncement));
   const [resolved, setResolved] = useState(initialAnnouncement !== undefined);
 
   useEffect(() => {

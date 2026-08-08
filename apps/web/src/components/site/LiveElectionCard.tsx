@@ -2,12 +2,29 @@
 
 import Link from "next/link";
 import { ArrowRight, Radio } from "lucide-react";
+import { useEffect, useState } from "react";
 
-import { liveLeader } from "@/components/site/useLiveElection";
-import { usePublicLiveElection } from "@/components/site/PublicSiteRuntime";
+import { liveLeader, useLiveElection } from "@/components/site/useLiveElection";
 
 export default function LiveElectionCard({ standalone = false }: { standalone?: boolean }) {
-  const activeElection = usePublicLiveElection();
+  const [ready, setReady] = useState(false);
+  const activeElection = useLiveElection(25_000, ready);
+
+  useEffect(() => {
+    let idleId: number | undefined;
+    const timeoutId = window.setTimeout(() => {
+      if (typeof window.requestIdleCallback === "function") {
+        idleId = window.requestIdleCallback(() => setReady(true), { timeout: 1_000 });
+      } else {
+        setReady(true);
+      }
+    }, 3_000);
+    return () => {
+      window.clearTimeout(timeoutId);
+      if (idleId !== undefined) window.cancelIdleCallback(idleId);
+    };
+  }, []);
+
   if (!activeElection) return null;
 
   const liveSummary = activeElection.summary;

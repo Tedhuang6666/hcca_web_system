@@ -1,7 +1,11 @@
 import Link from "next/link";
 
 import PublicSiteShell from "@/components/site/PublicSiteShell";
-import { fetchAnnouncements, fetchPublicBundle } from "@/lib/serverFetch";
+import {
+  fetchActiveUrgentAnnouncement,
+  fetchAnnouncements,
+  fetchPublicBundle,
+} from "@/lib/serverFetch";
 import { pageMetadata } from "@/lib/seo";
 
 export const metadata = pageMetadata({
@@ -12,9 +16,10 @@ export const metadata = pageMetadata({
 });
 
 export default async function NewsPage() {
-  const [bundle, items] = await Promise.all([
+  const [bundle, items, urgentAnnouncement] = await Promise.all([
     fetchPublicBundle(),
     fetchAnnouncements(100),
+    fetchActiveUrgentAnnouncement(),
   ]);
 
   const sorted = [...items].sort((a, b) =>
@@ -22,7 +27,11 @@ export default async function NewsPage() {
   );
 
   return (
-    <PublicSiteShell navPages={bundle?.nav_pages ?? []} settings={bundle?.settings}>
+    <PublicSiteShell
+      navPages={bundle?.nav_pages ?? []}
+      settings={bundle?.settings}
+      urgentAnnouncement={urgentAnnouncement}
+    >
       <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
         <header className="public-page-head mb-8">
           <p className="public-section-kicker">News</p>
@@ -32,13 +41,12 @@ export default async function NewsPage() {
           </p>
         </header>
         <div className="space-y-3">
-          {sorted.map((item, i) => (
+          {sorted.map((item) => (
             <Link
               key={item.id}
               href={`/news/${item.id}`}
               className="card card-hover block p-5 no-underline"
-              data-reveal
-              style={{ "--reveal-delay": `${Math.min(i, 8) * 55}ms` } as React.CSSProperties}>
+            >
               <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
                 {item.is_urgent && (
                   <span className="badge" style={{ color: "var(--warning)", background: "var(--warning-dim)", borderColor: "var(--warning-border)" }}>

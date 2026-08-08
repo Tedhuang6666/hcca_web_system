@@ -33,6 +33,7 @@ import { toast } from "sonner";
 import { ApiError, partnerApplicationApi, siteApi } from "@/lib/api";
 import { safeImageUrl } from "@/lib/config";
 import MarkdownBlock from "@/components/site/MarkdownBlock";
+import PublicNavIcon from "@/components/site/PublicNavIcon";
 import { getSystemInfoMarkdown } from "@/lib/systemInfoMarkdown";
 import {
   PUBLIC_NAV_GROUP_META,
@@ -1484,7 +1485,6 @@ export default function PublicSiteAdminPage() {
                 </div>
                 <div className="space-y-2">
                   {items.map((item, index) => {
-                    const Icon = item.icon;
                     const def = PUBLIC_NAV_ITEMS.find((entry) => entry.key === item.key);
                     return (
                       <div
@@ -1493,7 +1493,7 @@ export default function PublicSiteAdminPage() {
                         style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
                       >
                         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>
-                          <Icon size={17} aria-hidden />
+                          <PublicNavIcon iconKey={item.iconKey} size={17} />
                         </span>
                         <div className="min-w-[10rem] flex-1">
                           <input
