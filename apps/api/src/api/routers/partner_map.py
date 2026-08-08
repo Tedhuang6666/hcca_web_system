@@ -62,6 +62,7 @@ router = APIRouter(prefix="/partner-map", tags=["特約地圖"])
 
 _MAX_PROMO_IMAGES = 12
 _PROMO_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+_IMAGE_CACHE_CONTROL = "public, max-age=31536000, immutable"
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 OptionalUser = Annotated[User | None, Depends(get_optional_user)]
@@ -284,7 +285,11 @@ async def _serve_business_image(image: PartnerBusinessImage) -> FileResponse | R
     if local is not None:
         if not local.exists():
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="宣傳圖不存在")
-        return FileResponse(str(local), media_type=image.content_type)
+        return FileResponse(
+            str(local),
+            media_type=image.content_type,
+            headers={"Cache-Control": _IMAGE_CACHE_CONTROL},
+        )
     return RedirectResponse(await storage.get_url(image.storage_key, disposition="inline"))
 
 
@@ -486,7 +491,11 @@ async def preview_business_flyer(
     if local is not None:
         if not local.exists():
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="店家照片不存在")
-        return FileResponse(str(local), media_type=business.flyer_content_type or "image/*")
+        return FileResponse(
+            str(local),
+            media_type=business.flyer_content_type or "image/*",
+            headers={"Cache-Control": _IMAGE_CACHE_CONTROL},
+        )
     return RedirectResponse(await storage.get_url(business.flyer_storage_key, disposition="inline"))
 
 

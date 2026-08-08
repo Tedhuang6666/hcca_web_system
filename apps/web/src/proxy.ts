@@ -73,6 +73,8 @@ function generateNonce(): string {
  *   - Next.js 會自動把此 nonce 套到框架腳本與 <Script> 元件（含 Google One Tap）。
  *   - 'strict-dynamic' 讓已信任（帶 nonce）的腳本可載入其子腳本（GSI、PostHog 錄製）。
  *   - 明列的 https 來源是給支援 nonce 但不支援 strict-dynamic 的舊瀏覽器的後備。
+ *   - script-src-elem 允許同源 Next.js 動態 chunk；Next.js 某些 client dynamic
+ *     preload 會沒有 nonce，但 inline script 仍由 script-src 的 nonce 保護。
  * style-src 仍保留 'unsafe-inline'：React 行內樣式、站台自訂 CSS、Toaster 需要，
  *   且樣式注入風險遠低於腳本注入。
  */
@@ -108,14 +110,14 @@ function buildCsp(nonce: string): string {
     "frame-ancestors 'none'",
     "form-action 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://accounts.google.com https://us-assets.i.posthog.com${devEval}`,
-    `script-src-elem 'self' 'nonce-${nonce}'`,
+    `script-src-elem 'self' 'nonce-${nonce}' https://accounts.google.com https://us-assets.i.posthog.com`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com",
     "font-src 'self' https://fonts.gstatic.com data:",
     "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://*.googleusercontent.com https://hcca.buckets.hct.works",
     `connect-src 'self' ${[...wsSources].join(" ")} https://accounts.google.com ${[...posthogConnectSources].join(" ")} https://cdn.jsdelivr.net https://fonts.googleapis.com https://static.cloudflareinsights.com`,
     "frame-src 'self' https://accounts.google.com",
     "worker-src 'self' blob:",
-    "manifest-src 'self'",
+    "manifest-src 'self' https://hcca.tw https://www.hcca.tw",
   ].join("; ");
 }
 
