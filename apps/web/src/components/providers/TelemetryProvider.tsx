@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import type { PostHog } from "posthog-js/dist/module.slim";
-import { analyticsApi } from "@/lib/api";
+import { analyticsApi } from "@/lib/api/analytics";
 import { requiresAuthentication } from "@/lib/route-access";
 
 let posthogPromise: Promise<PostHog> | null = null;

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import { useModuleStatus } from "@/contexts/ModuleStatusContext";
 import { useResilientPoll } from "@/hooks/useResilientPoll";
-import { electionsApi } from "@/lib/api";
+import { electionsApi } from "@/lib/api/elections";
 import { apiUrl } from "@/lib/config";
 import type { CandidateTally, ElectionLiveSummary, ElectionStatus } from "@/lib/types";
 

@@ -1,6 +1,7 @@
 "use client";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { ApiError, systemApi, type ModuleStatusPublic } from "@/lib/api";
+import { ApiError } from "@/lib/api-helpers";
+import { systemApi, type ModuleStatusPublic } from "@/lib/api/system";
 import { FE_MODULES, type ModuleId } from "@/lib/modules";
 import { useWS } from "@/hooks/useWS";
 import { useLowDataMode } from "@/hooks/useLowDataMode";
