@@ -3,10 +3,10 @@ import Link from "next/link";
 import { ArrowUpRight, Crown, Mail, UserRound, UsersRound } from "lucide-react";
 
 import OfficerRosterTabs, {
-  isLeadershipTitle,
   type OfficerRosterTab,
 } from "@/components/site/OfficerRosterTabs";
 import type { PublicOfficerOut } from "@/lib/types";
+import { isLeadershipTitle } from "./officerRosterUtils";
 
 export function parseDirectOfficerRosters(
   themeConfig: Record<string, unknown> | undefined,
