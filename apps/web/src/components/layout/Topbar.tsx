@@ -24,53 +24,38 @@ interface TopbarProps {
 
 function MobileBreadcrumb({ items, fallbackTitle }: { items: Crumb[]; fallbackTitle: string }) {
   const current = items[items.length - 1]?.label ?? fallbackTitle;
-  const ancestors = items.slice(0, -1);
+  const parent = items.length > 1 ? items[items.length - 2] : undefined;
+  const showParent = parent && parent.label !== "首頁";
 
   return (
-    <div className="min-w-0 flex flex-col justify-center gap-0.5 overflow-hidden">
-      {ancestors.length > 0 && (
-        <nav
-          aria-label="上層路徑"
-          className="flex items-center gap-1 overflow-hidden text-[10px] leading-none">
-          {ancestors.map((item, i) => (
-            <span key={`${item.label}-${i}`} className="flex min-w-0 items-center gap-1">
-              {i > 0 && (
-                <svg
-                  width="9"
-                  height="9"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  className="flex-shrink-0"
-                  style={{ color: "var(--text-disabled)" }}
-                  aria-hidden="true">
-                  <polyline points="9 18 15 12 9 6" />
-                </svg>
-              )}
-              {item.href ? (
-                <Link
-                  href={item.href}
-                  className="inline-flex min-h-11 min-w-11 max-w-16 items-center justify-center truncate px-1 transition-colors hover:opacity-80"
-                  style={{ color: "var(--text-secondary)", textDecoration: "none" }}>
-                  {item.label}
-                </Link>
-              ) : (
-                <span className="block max-w-16 truncate" style={{ color: "var(--text-secondary)" }}>
-                  {item.label}
-                </span>
-              )}
-            </span>
-          ))}
-        </nav>
+    <nav
+      aria-label="目前位置"
+      className="topbar-mobile-title-content min-w-0 overflow-hidden">
+      {showParent && (
+        <span className="topbar-mobile-parent max-w-[40%] truncate">
+          {parent.label}
+        </span>
+      )}
+      {showParent && (
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          className="topbar-mobile-separator flex-shrink-0"
+          aria-hidden="true">
+          <polyline points="9 18 15 12 9 6" />
+        </svg>
       )}
       <h1
-        className="block w-full truncate whitespace-nowrap text-sm leading-tight"
+        className="min-w-0 truncate whitespace-nowrap text-[15px] leading-tight"
         style={{ color: "var(--text-primary)", fontWeight: 650 }}>
         {current}
       </h1>
-    </div>
+    </nav>
   );
 }
 
@@ -599,7 +584,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
         ) : (
           <Link
             href="/login"
-            className="flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-medium transition-colors"
+            className="topbar-login-action flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-medium transition-colors"
             style={{
               background: "var(--primary-dim)",
               color: "var(--primary-text)",
