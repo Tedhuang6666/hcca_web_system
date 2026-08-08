@@ -39,6 +39,15 @@ export default function ActivitySelect({
 
   useEffect(() => {
     let alive = true;
+    if (typeof window === "undefined" || !localStorage.getItem("user_id")) {
+      setActivities([]);
+      onActivitiesLoaded?.([]);
+      setLoading(false);
+      return () => {
+        alive = false;
+      };
+    }
+
     const request = scope === "all"
       ? activitiesApi.list({ active_only: true }).catch(() => activitiesApi.mine(true))
       : activitiesApi.mine(true);
