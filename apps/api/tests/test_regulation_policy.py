@@ -364,11 +364,19 @@ def test_regulation_print_splits_merged_subparagraphs() -> None:
 
 
 @pytest.mark.asyncio
-async def test_publish_regulation_disabled_requires_president_publish() -> None:
-    with pytest.raises(ValueError, match="president_publish"):
+async def test_publish_regulation_rejects_parliamentary_categories() -> None:
+    reg = Regulation(
+        title="測試條例",
+        category=RegulationCategory.ORDINANCE,
+        content="",
+        org_id=uuid.uuid4(),
+        created_by=uuid.uuid4(),
+        workflow_status=RegulationWorkflowStatus.DRAFT,
+    )
+    with pytest.raises(ValueError, match="憲章與條例必須經議會核定"):
         await reg_svc.publish_regulation(
             session=None,  # type: ignore[arg-type]
-            reg=None,  # type: ignore[arg-type]
+            reg=reg,
             data=RegulationPublishRequest(change_brief="test"),
             published_by=uuid.uuid4(),
         )
