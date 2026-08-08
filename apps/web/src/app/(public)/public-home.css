@@ -1,4 +1,12 @@
 /* 首頁下半部：把入口、組織介紹與頁尾收成一個安靜的閱讀節奏。 */
+.public-site .public-partnership-hero h1,
+.public-site .public-partnership-hero .prose,
+.public-site .public-partnership-hero .prose p,
+.public-site .public-partnership-hero .prose li,
+.public-site .public-partnership-hero .prose blockquote {
+  color: #f8fafc;
+}
+
 .public-home-entry-section {
   width: min(100%, 72rem);
   margin: 0 auto;
