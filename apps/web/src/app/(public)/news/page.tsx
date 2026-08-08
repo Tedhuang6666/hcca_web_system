@@ -2,6 +2,14 @@ import Link from "next/link";
 
 import PublicSiteShell from "@/components/site/PublicSiteShell";
 import { fetchAnnouncements, fetchPublicBundle } from "@/lib/serverFetch";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata = pageMetadata({
+  title: "最新公告",
+  description: "新竹高中班聯會公開公告、活動消息與重要通知。",
+  path: "/news",
+  type: "website",
+});
 
 export default async function NewsPage() {
   const [bundle, items] = await Promise.all([

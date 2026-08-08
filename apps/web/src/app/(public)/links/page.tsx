@@ -2,7 +2,15 @@ import { ArrowUpRight } from "lucide-react";
 
 import PublicSiteShell from "@/components/site/PublicSiteShell";
 import { fetchPublicBundle } from "@/lib/serverFetch";
+import { pageMetadata } from "@/lib/seo";
 import type { PublicLinkOut } from "@/lib/types";
+
+export const metadata = pageMetadata({
+  title: "平台連結",
+  description: "班聯會各平台、表單、社群與公開資料入口。",
+  path: "/links",
+  type: "website",
+});
 
 export default async function LinksPage() {
   const bundle = await fetchPublicBundle();
