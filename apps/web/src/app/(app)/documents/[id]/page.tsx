@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useMemo, memo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { documentsApi, usersApi, ApiError, apiErrorMessage } from "@/lib/api";
@@ -12,13 +13,24 @@ import { DocumentStatusBadge, UrgencyBadge } from "@/components/ui/StatusBadge";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { DetailPageLoading } from "@/components/ui/LoadingState";
 import { OfficialText } from "@/components/ui/OfficialText";
-import { ApprovalPanel } from "@/components/documents/ApprovalPanel";
-import { VersionHistory } from "@/components/documents/VersionHistory";
 import { usePersistedZoom } from "@/hooks/usePersistedZoom";
 import { useWS } from "@/hooks/useWS";
 import { apiUrl } from "@/lib/config";
 import { recordRecent } from "@/lib/recents";
-import GovernanceLinkPanel from "@/components/governance/GovernanceLinkPanel";
+
+const DeferredPanel = () => <div className="card min-h-24 animate-pulse" aria-hidden="true" />;
+const GovernanceLinkPanel = dynamic(() => import("@/components/governance/GovernanceLinkPanel"), {
+  loading: () => <div className="min-h-11" aria-hidden="true" />,
+  ssr: false,
+});
+const ApprovalPanel = dynamic(
+  () => import("@/components/documents/ApprovalPanel").then((module) => module.ApprovalPanel),
+  { loading: () => <DeferredPanel />, ssr: false },
+);
+const VersionHistory = dynamic(
+  () => import("@/components/documents/VersionHistory").then((module) => module.VersionHistory),
+  { loading: () => <DeferredPanel />, ssr: false },
+);
 
 function toROCDate(dateStr: string) {
   const d = new Date(dateStr);
@@ -180,6 +192,7 @@ export default function DocumentDetailPage() {
   const [approverIds, setApproverIds] = useState<string[]>([]);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [allUsers, setAllUsers] = useState<UserSummary[]>([]);
+  const [allUsersLoaded, setAllUsersLoaded] = useState(false);
   const { zoom, setZoom, zoomStyle } = usePersistedZoom("hcca.viewer.zoom");
   const [printingPdf, setPrintingPdf] = useState(false);
   const [downloadVariant, setDownloadVariant] = useState<RecipientDownloadVariant>("primary");
@@ -206,7 +219,6 @@ export default function DocumentDetailPage() {
   }, [id]);
 
   useEffect(() => { fetchDoc(); }, [fetchDoc]);
-  useEffect(() => { usersApi.list().then(setAllUsers).catch(() => {}); }, []);
   useEffect(() => {
     if (doc) recordRecent({ kind: "document", id, title: doc.serial_number ?? doc.title, href: `/documents/${id}` });
   }, [doc, id]);
@@ -216,6 +228,16 @@ export default function DocumentDetailPage() {
       setVisibilityValue(doc.visibility_level);
     }
   }, [doc]);
+
+  const loadAllUsers = useCallback(async () => {
+    if (allUsersLoaded) return;
+    try {
+      setAllUsers(await usersApi.list());
+      setAllUsersLoaded(true);
+    } catch {
+      toast.error("無法載入使用者清單，請稍後再試");
+    }
+  }, [allUsersLoaded]);
 
   // 即時 WebSocket 更新
   useWS(doc ? `org:${doc.org_id}` : null, (msg) => {
@@ -654,7 +676,7 @@ export default function DocumentDetailPage() {
       {submitMode && (
         <div className="card p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold ">設定審核人（按順序選取）</h3>
+            <h2 className="text-sm font-semibold ">設定審核人（按順序選取）</h2>
             <button onClick={() => { setSubmitMode(false); setApproverIds([]); }}
               className="text-xs px-3 py-1 rounded" style={{ color: "var(--text-muted)" }}>
               取消
@@ -672,9 +694,9 @@ export default function DocumentDetailPage() {
       {doc.status === "approved" && (can("document:archive_settings") || can("document:admin")) && (
         <div className="card p-4 space-y-3">
           <div>
-            <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+            <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
               預約歸檔
-            </h3>
+            </h2>
             <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
               到期後系統會自動封存公文，封存後不再顯示審核步驟。
             </p>
@@ -1115,9 +1137,9 @@ export default function DocumentDetailPage() {
           {showAttachments && (
           <div className="card p-4">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+              <h2 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
                 附件 {doc.attachments.length > 0 && `(${doc.attachments.length})`}
-              </h3>
+              </h2>
               {isDraft && (
                 <label className={`text-xs cursor-pointer px-2.5 py-1 rounded transition-opacity hover:opacity-80
                   ${uploadingFile ? "opacity-40 pointer-events-none" : ""}`}
@@ -1300,10 +1322,10 @@ export default function DocumentDetailPage() {
 
             return previews.map(p => (
               <div key={p.key} className="card p-4">
-                <h3 className="text-xs font-semibold uppercase tracking-wider mb-3"
+                <h2 className="text-xs font-semibold uppercase tracking-wider mb-3"
                   style={{ color: "var(--text-muted)" }}>
                   {p.label}
-                </h3>
+                </h2>
                 <iframe
                   src={p.src}
                   title={p.label}
@@ -1329,6 +1351,7 @@ export default function DocumentDetailPage() {
                 canApprove={canApprove}
                 currentUserId={currentUserId}
                 allUsers={allUsers}
+                onLoadUsers={loadAllUsers}
                 onApprove={handleApprove}
                 onReject={handleReject}
                 onSetDelegate={handleSetDelegate}

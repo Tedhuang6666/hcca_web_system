@@ -65,10 +65,12 @@ function formatStepActor(step: ApprovalStepOut) {
 
 function DelegatePicker({
   step, users, currentDelegate,
+  loading,
   onSetDelegate, onClose,
 }: {
   step: ApprovalStepOut;
   users: UserSummary[];
+  loading: boolean;
   currentDelegate: string | null;
   onSetDelegate: (stepOrder: number, delegateId: string | null) => Promise<void>;
   onClose: () => void;
@@ -113,7 +115,11 @@ function DelegatePicker({
           <span className="w-4 h-4 text-center"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>
           <span style={{ color: "var(--text-muted)" }}>不指定代理人</span>
         </button>
-        {filtered.slice(0, 20).map(u => (
+        {loading ? (
+          <p className="px-2 py-3 text-xs" role="status" style={{ color: "var(--text-muted)" }}>
+            正在載入使用者…
+          </p>
+        ) : filtered.slice(0, 20).map(u => (
           <button
             key={u.id}
             onClick={() => setSelectedId(u.id)}
@@ -150,12 +156,13 @@ function DelegatePicker({
 
 export function ApprovalPanel({
   steps, canApprove, currentUserId, allUsers,
-  onApprove, onReject, onSetDelegate,
+  onLoadUsers, onApprove, onReject, onSetDelegate,
 }: {
   steps: ApprovalStepOut[];
   canApprove: boolean;
   currentUserId: string;
   allUsers: UserSummary[];
+  onLoadUsers: () => Promise<void>;
   onApprove: (comment: string) => Promise<void>;
   onReject: (comment: string, mode: "to_creator" | "to_previous") => Promise<void>;
   onSetDelegate: (stepOrder: number, delegateId: string | null) => Promise<void>;
@@ -166,6 +173,7 @@ export function ApprovalPanel({
   const [rejectMode, setRejectMode] = useState<"to_creator" | "to_previous">("to_creator");
   const [approveComment, setApproveComment] = useState("");
   const [delegatePickerStep, setDelegatePickerStep] = useState<number | null>(null);
+  const [loadingUsers, setLoadingUsers] = useState(false);
 
   const handleApprove = async () => {
     setLoading(true);
@@ -178,11 +186,19 @@ export function ApprovalPanel({
     try { await onReject(rejectComment, rejectMode); setShowReject(false); } finally { setLoading(false); }
   };
 
+  const toggleDelegatePicker = async (stepOrder: number) => {
+    const shouldOpen = delegatePickerStep !== stepOrder;
+    setDelegatePickerStep(shouldOpen ? stepOrder : null);
+    if (!shouldOpen || allUsers.length > 0) return;
+    setLoadingUsers(true);
+    try { await onLoadUsers(); } finally { setLoadingUsers(false); }
+  };
+
   return (
     <div className="card p-5 space-y-5">
-      <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+      <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
         審核工作流
-      </h3>
+      </h2>
 
       {/* 步驟進度條 */}
       <div className="flex items-center" role="list" aria-label="審核步驟">
@@ -201,6 +217,7 @@ export function ApprovalPanel({
                       ? `0 0 0 4px var(${s.bgVar})`
                       : "none",
                   }}
+                  role="img"
                   aria-label={`${step.approver.name}：${STATUS_LABEL[step.status]}`}>
                   {STATUS_ICON[step.status]}
                 </div>
@@ -297,8 +314,9 @@ export function ApprovalPanel({
                     )}
                     {canDelegate && (
                       <button
-                        onClick={() => setDelegatePickerStep(delegatePickerStep === step.step_order ? null : step.step_order)}
-                        className="text-[10px] px-2 py-0.5 rounded transition-all"
+                        type="button"
+                        onClick={() => void toggleDelegatePicker(step.step_order)}
+                        className="min-h-11 rounded px-3 py-2 text-[10px] transition-all"
                         style={{ color: "var(--primary)", background: "var(--primary-dim)" }}>
                         {step.delegate ? "變更代理" : "指定代理"}
                       </button>
@@ -321,6 +339,7 @@ export function ApprovalPanel({
                 <DelegatePicker
                   step={step}
                   users={allUsers}
+                  loading={loadingUsers}
                   currentDelegate={step.delegate?.id ?? null}
                   onSetDelegate={onSetDelegate}
                   onClose={() => setDelegatePickerStep(null)}
