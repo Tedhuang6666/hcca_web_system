@@ -177,6 +177,7 @@ class MergeConflictRecord(BaseModel):
 class MergeConflict(BaseModel):
     key: str
     category: Literal["record", "field"]
+    resolvable: bool = False
     title: str
     message: str
     records: list[MergeConflictRecord]

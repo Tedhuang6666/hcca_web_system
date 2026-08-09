@@ -22,9 +22,11 @@ from api.models.person import (
     PersonAffiliationSource,
     PersonAffiliationStatus,
 )
+from api.models.policy import PolicyConsent, PolicyDocument
 from api.models.school_class import ClassCadre, ClassMembership, SchoolClass
 from api.models.user import User
 from api.models.user_identity import UserIdentity
+from api.models.web_push import WebPushSubscription
 from api.routers import auth as auth_router
 
 
@@ -588,6 +590,139 @@ async def test_admin_can_merge_previously_logged_in_secondary_account(
         user_agent="pytest",
     )
     assert logged_in.id == member.id
+
+
+@pytest.mark.asyncio
+async def test_admin_merge_auto_resolves_duplicate_policy_consents(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin, member, _, _, _ = await _seed_admin_data(db_session)
+    source = User(
+        email="policy-secondary@gmail.com",
+        display_name=member.display_name,
+        is_active=True,
+        is_verified=True,
+    )
+    db_session.add(source)
+    await db_session.flush()
+    document = PolicyDocument(
+        kind="privacy",
+        version="merge-test-1",
+        title="合併測試政策",
+        content_md="# 測試",
+        effective_at=datetime.now(UTC),
+        is_active=False,
+    )
+    db_session.add(document)
+    await db_session.flush()
+    target_consent = PolicyConsent(
+        user_id=member.id,
+        policy_document_id=document.id,
+        agreed_at=datetime(2026, 1, 1, tzinfo=UTC),
+        ip_address="192.0.2.1",
+        user_agent="target",
+    )
+    source_consent = PolicyConsent(
+        user_id=source.id,
+        policy_document_id=document.id,
+        agreed_at=datetime(2026, 1, 2, tzinfo=UTC),
+        ip_address="192.0.2.2",
+        user_agent="source",
+    )
+    db_session.add_all([target_consent, source_consent])
+    await db_session.flush()
+    _override_user(admin)
+
+    preview = await client.post(
+        f"/admin/users/{member.id}/merge/preview",
+        json={"source_user_ids": [str(source.id)]},
+    )
+    assert preview.status_code == 200, preview.text
+    assert not any(
+        "policy_consents" in conflict["title"] for conflict in preview.json()["conflicts"]
+    )
+
+    response = await client.post(
+        f"/admin/users/{member.id}/merge",
+        json={"source_user_ids": [str(source.id)]},
+    )
+
+    assert response.status_code == 200, response.text
+    consents = (
+        await db_session.scalars(select(PolicyConsent).where(PolicyConsent.user_id == member.id))
+    ).all()
+    assert [consent.id for consent in consents] == [target_consent.id]
+    await db_session.refresh(source)
+    assert source.is_active is False
+
+
+@pytest.mark.asyncio
+async def test_admin_can_choose_record_to_keep_for_merge_duplicate(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin, member, _, _, _ = await _seed_admin_data(db_session)
+    source = User(
+        email="push-secondary@gmail.com",
+        display_name=member.display_name,
+        is_active=True,
+        is_verified=True,
+    )
+    db_session.add(source)
+    await db_session.flush()
+    target_subscription = WebPushSubscription(
+        user_id=member.id,
+        endpoint="https://push.example.test/shared-endpoint",
+        p256dh="target-key",
+        auth="target-auth",
+    )
+    source_subscription = WebPushSubscription(
+        user_id=source.id,
+        endpoint=target_subscription.endpoint,
+        p256dh="source-key",
+        auth="source-auth",
+    )
+    db_session.add_all([target_subscription, source_subscription])
+    await db_session.flush()
+    member_id = member.id
+    source_id = source.id
+    endpoint = target_subscription.endpoint
+    source_subscription_id = source_subscription.id
+    _override_user(admin)
+
+    preview = await client.post(
+        f"/admin/users/{member_id}/merge/preview",
+        json={"source_user_ids": [str(source_id)]},
+    )
+    assert preview.status_code == 200, preview.text
+    conflict = next(
+        item
+        for item in preview.json()["conflicts"]
+        if item["title"].startswith("web_push_subscriptions")
+    )
+    assert conflict["resolvable"] is True
+    source_record_id = next(
+        record["id"] for record in conflict["records"] if record["side"] == "source"
+    )
+
+    response = await client.post(
+        f"/admin/users/{member_id}/merge",
+        json={
+            "source_user_ids": [str(source_id)],
+            "conflict_resolutions": {conflict["key"]: source_record_id},
+        },
+    )
+    assert response.status_code == 200, response.text
+    subscription = await db_session.scalar(
+        select(WebPushSubscription).where(
+            WebPushSubscription.user_id == member_id,
+            WebPushSubscription.endpoint == endpoint,
+        )
+    )
+    assert subscription is not None
+    assert subscription.id == source_subscription_id
+    assert subscription.p256dh == "source-key"
 
 
 @pytest.mark.asyncio
