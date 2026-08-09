@@ -1101,6 +1101,7 @@ function UserPanel({
   const [mergePrimaryId, setMergePrimaryId] = useState(user.id);
   const [mergeSourceIds, setMergeSourceIds] = useState<string[]>([]);
   const [mergeConflicts, setMergeConflicts] = useState<AccountMergeConflict[]>([]);
+  const [mergeChoices, setMergeChoices] = useState<Record<string, string>>({});
   const [mergeConflictOpen, setMergeConflictOpen] = useState(false);
   const [mergePreviewing, setMergePreviewing] = useState(false);
   const [start, setStart] = useState(today());
@@ -1154,12 +1155,12 @@ function UserPanel({
     (candidate) => candidate.id !== mergePrimaryId && mergeSourceIds.includes(candidate.id),
   );
   const selectedSourceIds = mergeSources.map((source) => source.id);
-  const openMergeConfirmation = () => {
+  const openMergeConfirmation = (conflictResolutions: Record<string, string>) => {
     const sourceNames = mergeSources.map((source) => `「${source.display_name}」`).join("、");
     onConfirm({
       title: "合併帳戶並歸戶歷史資料",
       body: `確定將${sourceNames}合併到主要帳戶「${mergePrimary.display_name}」？名稱、UUID、學號等帳號資料會沿用主要帳戶；次要帳戶會停用。此操作不可逆。`,
-      action: () => adminApi.mergeUserAccounts(mergePrimaryId, selectedSourceIds),
+      action: () => adminApi.mergeUserAccounts(mergePrimaryId, selectedSourceIds, conflictResolutions),
     });
   };
   const mergeAccount = async () => {
@@ -1168,10 +1169,19 @@ function UserPanel({
     try {
       const preview = await adminApi.previewUserMerge(mergePrimaryId, selectedSourceIds);
       if (preview.conflicts.length === 0) {
-        openMergeConfirmation();
+        openMergeConfirmation({});
         return;
       }
       setMergeConflicts(preview.conflicts);
+      setMergeChoices(Object.fromEntries(
+        preview.conflicts
+          .filter((conflict) => conflict.resolvable)
+          .map((conflict) => [
+            conflict.key,
+            conflict.records.find((record) => record.side === "target")?.id
+              ?? conflict.records[0]?.id,
+          ]),
+      ));
       setMergeConflictOpen(true);
     } catch (e) {
       displayError(e, "預覽帳戶合併失敗");
@@ -1289,28 +1299,46 @@ function UserPanel({
         </div>
       </section>
       {mergeConflictOpen && (
-        <Modal title="帳戶合併已停止" onClose={() => setMergeConflictOpen(false)}>
-          <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+        <Modal title="選擇要保留的資料" onClose={() => setMergeConflictOpen(false)}>
+          <div className="space-y-4">
             <p className="text-sm leading-6" style={{ color: "var(--text-secondary)" }}>
-              發現 {mergeConflicts.length} 組需要人工處理的業務資料衝突。為避免投稿或其他業務紀錄被錯誤合併，系統未套用任何變更，請管理員先處理下列資料。
+              可安全去重的資料請選擇要保留的紀錄；政策同意等冪等資料會由系統自動保留主要帳戶的紀錄。投稿等業務資料仍需先在原模組處理。
             </p>
-            {mergeConflicts.map((conflict) => (
-              <fieldset key={conflict.key} className="rounded-lg p-3 space-y-2" style={{ border: "1px solid var(--border)" }}>
-                <legend className="px-1 text-xs font-semibold" style={{ color: "var(--text-primary)" }}>{conflict.title}</legend>
-                <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>{conflict.message}</p>
-                {conflict.records.map((record) => (
-                  <div key={record.id} className="rounded-md p-2" style={{ background: "var(--bg-elevated)" }}>
-                    <span className="text-xs leading-5" style={{ color: "var(--text-secondary)" }}>
-                      <span className="font-medium" style={{ color: "var(--text-primary)" }}>{record.side === "target" ? "主要帳戶" : "次要帳戶"}：{record.owner_name}</span>
-                      <br />{record.label}
-                    </span>
-                  </div>
-                ))}
-              </fieldset>
-            ))}
-          </div>
-          <div className="flex justify-end gap-2">
-            <SmallButton onClick={() => setMergeConflictOpen(false)}>關閉</SmallButton>
+            <div className="max-h-[60vh] space-y-4 overflow-y-auto">
+              {mergeConflicts.map((conflict) => (
+                <fieldset key={conflict.key} className="space-y-2 rounded-lg p-3" style={{ border: "1px solid var(--border)" }}>
+                  <legend className="px-1 text-xs font-semibold" style={{ color: "var(--text-primary)" }}>{conflict.title}</legend>
+                  <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>{conflict.message}</p>
+                  {conflict.resolvable ? conflict.records.map((record) => (
+                    <label key={record.id} className="flex cursor-pointer items-start gap-2 rounded-md p-2" style={{ background: mergeChoices[conflict.key] === record.id ? "var(--primary-dim)" : "var(--bg-elevated)" }}>
+                      <input
+                        type="radio"
+                        name={conflict.key}
+                        checked={mergeChoices[conflict.key] === record.id}
+                        onChange={() => setMergeChoices((current) => ({ ...current, [conflict.key]: record.id }))}
+                        className="mt-1 h-4 w-4 accent-[var(--primary)]"
+                      />
+                      <span className="text-xs leading-5" style={{ color: "var(--text-secondary)" }}>
+                        <span className="font-medium" style={{ color: "var(--text-primary)" }}>{record.side === "target" ? "主要帳戶" : "次要帳戶"}：{record.owner_name}</span>
+                        <br />{record.label}
+                      </span>
+                    </label>
+                  )) : (
+                    <p className="rounded-md p-2 text-xs leading-5" style={{ background: "var(--warning-dim)", color: "var(--text-secondary)" }}>
+                      這類資料不能在帳戶合併時直接刪除，請先在對應業務模組處理。
+                    </p>
+                  )}
+                </fieldset>
+              ))}
+            </div>
+            <div className="flex justify-end gap-2">
+              <SmallButton onClick={() => setMergeConflictOpen(false)}>關閉</SmallButton>
+              {!mergeConflicts.some((conflict) => !conflict.resolvable) && (
+                <SmallButton onClick={() => { setMergeConflictOpen(false); openMergeConfirmation(mergeChoices); }} tone="warning">
+                  選擇後繼續合併
+                </SmallButton>
+              )}
+            </div>
           </div>
         </Modal>
       )}

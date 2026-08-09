@@ -859,7 +859,8 @@ export interface AccountMergeConflictRecord {
 
 export interface AccountMergeConflict {
   key: string;
-  category: "record";
+  category: "record" | "field";
+  resolvable: boolean;
   title: string;
   message: string;
   records: AccountMergeConflictRecord[];

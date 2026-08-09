@@ -36,9 +36,11 @@ export const adminApi = {
   mergeUserAccounts: (
     id: string,
     sourceUserIds: string[],
+    conflictResolutions: Record<string, string> = {},
   ) =>
     post<AdminUserDetail>(`/admin/users/${id}/merge`, {
       source_user_ids: sourceUserIds,
+      conflict_resolutions: conflictResolutions,
     }),
   updateUser: (id: string, body: {
     display_name?: string;

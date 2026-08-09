@@ -70,6 +70,8 @@ _ACCOUNT_MERGE_SAFE_DUPLICATE_TABLES = frozenset(
         "email_recipient_list_members",
         "meal_vendor_managers",
         "meeting_agenda_recusals",
+        # 同一政策版本的同意是冪等資料；合併帳戶時保留主要帳戶那筆即可。
+        "policy_consents",
     }
 )
 _ACCOUNT_MERGE_BUSINESS_TABLES = {
@@ -242,6 +244,7 @@ async def _collect_table_merge_conflicts(
                 {
                     "key": f"records:{table.name}:{constraint_name}:{record_ids}",
                     "category": "record",
+                    "resolvable": True,
                     "title": f"{table.name} 的重複資料",
                     "message": f"唯一欄位：{constraint_name}",
                     "records": descriptors,
@@ -450,6 +453,7 @@ async def _collect_class_merge_conflicts(
                 "key": "records:class_roster_entries:student_id:"
                 + "|".join(item["id"] for item in descriptors),
                 "category": "record",
+                "resolvable": True,
                 "title": "班級名冊身分衝突",
                 "message": "同一班級存在不同學號，無法自動判定應保留哪一筆名冊資料。",
                 "records": descriptors,
@@ -493,6 +497,7 @@ async def _collect_business_data_conflicts(
             {
                 "key": f"business:{table_name}:" + "|".join(item["id"] for item in descriptors),
                 "category": "record",
+                "resolvable": False,
                 "title": f"{definition['title']}資料衝突",
                 "message": definition["message"] + "請先由管理員處理後再合併。",
                 "records": descriptors,
@@ -1357,12 +1362,34 @@ async def merge_user_accounts(
         target_user=user,
         source_users=sources,
     )
-    if conflicts:
+    resolutions = conflict_resolutions or {}
+    resolvable_conflicts = [conflict for conflict in conflicts if conflict.get("resolvable", False)]
+    unknown_keys = set(resolutions) - {conflict["key"] for conflict in resolvable_conflicts}
+    if unknown_keys:
+        raise UserRegistrationError(422, "包含不存在的衝突選項，請重新預覽後再合併")
+
+    unresolved = [
+        conflict
+        for conflict in conflicts
+        if not conflict.get("resolvable", False) or conflict["key"] not in resolutions
+    ]
+    if unresolved:
         raise UserRegistrationError(
             409,
-            "帳戶含有無法自動歸戶的業務資料衝突，請先由管理員處理",
-            payload={"conflicts": [_public_merge_conflict(conflict) for conflict in conflicts]},
+            "帳戶含有業務資料衝突或未完成重複資料選擇，請先選擇要保留的資料或處理業務紀錄",
+            payload={"conflicts": [_public_merge_conflict(conflict) for conflict in unresolved]},
         )
+
+    for conflict in resolvable_conflicts:
+        selected_id = resolutions[conflict["key"]]
+        if selected_id not in {record["id"] for record in conflict["records"]}:
+            raise UserRegistrationError(422, f"衝突選擇無效：{conflict['title']}")
+
+    await _apply_record_conflict_resolutions(
+        db,
+        conflicts=resolvable_conflicts,
+        resolutions=resolutions,
+    )
     for source in sources:
         await _merge_login_identities(db, user=user, other_user=source, actor=actor)
     return user
