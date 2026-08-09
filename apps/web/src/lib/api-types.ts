@@ -25417,6 +25417,11 @@ export interface components {
             message: string;
             /** Records */
             records: components["schemas"]["MergeConflictRecord"][];
+            /**
+             * Resolvable
+             * @default false
+             */
+            resolvable: boolean;
             /** Title */
             title: string;
         };
