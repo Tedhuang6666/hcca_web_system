@@ -4,20 +4,26 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { startAuthentication } from "@simplewebauthn/browser";
-import { toast } from "sonner";
+import { CheckCircle2, KeyRound, ShieldCheck } from "lucide-react";
 import { authApi, mfaApi, apiErrorMessage } from "@/lib/api";
 import { cacheCurrentUser } from "@/lib/auth-cache";
 import { safeNextPath } from "@/lib/safe-redirect";
+import OtpInput from "@/components/auth/OtpInput";
 
 export default function MFALoginPage() {
   const searchParams = useSearchParams();
   const next = safeNextPath(searchParams.get("next"));
   const [challenge, setChallenge] = useState<string>("");
   const [code, setCode] = useState("");
+  const [codeMode, setCodeMode] = useState<"totp" | "backup">("totp");
   const [submitting, setSubmitting] = useState(false);
   const [passkeySubmitting, setPasskeySubmitting] = useState(false);
   const [passkeyAvailable, setPasskeyAvailable] = useState(false);
+  const [verificationError, setVerificationError] = useState("");
+  const [verified, setVerified] = useState(false);
   const codeInputRef = useRef<HTMLInputElement>(null);
+  const codeLength = codeMode === "totp" ? 6 : 16;
+  const codeComplete = code.length === codeLength;
 
   useEffect(() => {
     // challenge token 存放在 server session（不暴露在 URL），需 exchange 取出
@@ -34,15 +40,22 @@ export default function MFALoginPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const submit = async () => {
+  const submit = async (submittedCode = code) => {
+    if (!challenge || submittedCode.length !== codeLength || submitting) return;
     setSubmitting(true);
+    setVerificationError("");
     try {
-      await mfaApi.verifyLogin(challenge, code.trim());
+      await mfaApi.verifyLogin(challenge, submittedCode);
+      setVerified(true);
       const me = await authApi.me();
       cacheCurrentUser(me);
+      await new Promise((resolve) => window.setTimeout(resolve, 420));
       window.location.replace(next);
     } catch (e) {
-      toast.error(apiErrorMessage(e, "驗證失敗，請重新輸入"));
+      setVerificationError(apiErrorMessage(e, "驗證失敗，請重新輸入"));
+      setCode("");
+      window.setTimeout(() => setVerificationError(""), 520);
+      codeInputRef.current?.focus();
     } finally {
       setSubmitting(false);
     }
@@ -61,32 +74,48 @@ export default function MFALoginPage() {
       cacheCurrentUser(me);
       window.location.replace(next);
     } catch (e) {
-      toast.error(apiErrorMessage(e, "Passkey 驗證失敗，請改用驗證器 App"));
+      setVerificationError(apiErrorMessage(e, "Passkey 驗證失敗，請改用驗證器 App"));
       codeInputRef.current?.focus();
     } finally {
       setPasskeySubmitting(false);
     }
   };
 
+  const switchCodeMode = () => {
+    setCodeMode((current) => (current === "totp" ? "backup" : "totp"));
+    setCode("");
+    setVerificationError("");
+    window.requestAnimationFrame(() => codeInputRef.current?.focus());
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center p-6" style={{ background: "var(--bg-base)" }}>
-      <main className="w-full max-w-sm rounded-2xl p-8 animate-slide-in"
-        style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", boxShadow: "var(--shadow-lg)" }}>
-        <div className="mb-6">
-          <p className="text-xs font-semibold tracking-widest" style={{ color: "var(--primary)" }}>
+    <div className="flex min-h-screen items-center justify-center p-4 sm:p-6" style={{ background: "var(--bg-base)" }}>
+      <main
+        className="w-full max-w-md animate-slide-in rounded-2xl p-6 sm:p-8"
+        style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", boxShadow: "var(--shadow-lg)" }}
+      >
+        <div className="mb-8">
+          <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-xl"
+            style={{ background: "var(--primary-dim)", color: "var(--primary-text)" }}>
+            <ShieldCheck size={23} aria-hidden="true" />
+          </div>
+          <p className="text-xs font-semibold tracking-[0.16em]" style={{ color: "var(--primary-text)" }}>
             TWO-FACTOR AUTH
           </p>
-          <h1 className="mt-1 text-xl font-bold">輸入 2FA 驗證碼</h1>
-          <p className="mt-1.5 text-sm" style={{ color: "var(--text-muted)" }}>
-            請輸入驗證器 App 的 6 位數代碼，或使用一組未使用過的備用碼。
+          <h1 className="mt-1 text-xl font-bold" style={{ color: "var(--text-primary)" }}>
+            完成安全驗證
+          </h1>
+          <p className="mt-2 text-sm leading-6" style={{ color: "var(--text-muted)" }}>
+            開啟驗證器 App，輸入目前顯示的 6 位數代碼以繼續登入。
           </p>
         </div>
 
         {passkeyAvailable && (
           <button
-            className="btn btn-primary w-full"
+            className="btn btn-secondary w-full"
             disabled={passkeySubmitting || submitting || !challenge}
             onClick={() => void submitWithPasskey()}>
+            <KeyRound size={16} aria-hidden="true" />
             {passkeySubmitting ? "Passkey 驗證中" : "使用 Passkey 驗證"}
           </button>
         )}
@@ -99,28 +128,69 @@ export default function MFALoginPage() {
           </div>
         )}
 
-        <label className="block space-y-1.5">
-          <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>驗證碼</span>
-          <input
-            className="input text-center font-mono text-lg tracking-widest"
-            ref={codeInputRef}
-            autoFocus
-            inputMode="numeric"
-            maxLength={8}
+        <div>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+              {codeMode === "totp" ? "驗證器 App 代碼" : "備用碼"}
+            </span>
+            <span className="font-mono text-xs" style={{ color: "var(--text-muted)" }}>
+              {code.length}/{codeLength}
+            </span>
+          </div>
+          <OtpInput
             value={code}
-            onChange={(e) => setCode(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && code.trim().length >= 6 && challenge) void submit();
+            onChange={(nextCode) => {
+              setCode(nextCode);
+              setVerificationError("");
             }}
-            placeholder="000000"
+            mode={codeMode === "totp" ? "numeric" : "backup"}
+            label={codeMode === "totp" ? "驗證器 App 6 位數代碼" : "16 位備用碼"}
+            describedBy="mfa-code-hint mfa-code-error"
+            error={Boolean(verificationError)}
+            status={verified ? "success" : "idle"}
+            disabled={submitting || passkeySubmitting}
+            autoFocus
+            firstInputRef={codeInputRef}
+            onComplete={(completeCode) => {
+              if (challenge && !submitting) void submit(completeCode);
+            }}
+            onEnter={() => {
+              if (challenge && codeComplete) void submit();
+            }}
           />
-        </label>
+          <p id="mfa-code-hint" className="mt-3 text-center text-xs" style={{ color: "var(--text-muted)" }}>
+            {codeMode === "totp"
+              ? "代碼每 30 秒更新一次，填滿後會自動驗證。"
+              : "備用碼為設定 2FA 時產生的 16 位英數字串。"}
+          </p>
+          {verificationError && (
+            <p id="mfa-code-error" className="mt-3 text-center text-sm" style={{ color: "var(--danger)" }} role="alert" aria-live="assertive">
+              {verificationError}
+            </p>
+          )}
+          {verified && (
+            <p className="mt-3 flex items-center justify-center gap-1.5 text-sm" style={{ color: "var(--success)" }} role="status">
+              <CheckCircle2 size={16} aria-hidden="true" />
+              驗證成功，正在完成登入…
+            </p>
+          )}
+        </div>
 
         <button
           className="btn btn-primary mt-5 w-full"
-          disabled={submitting || !challenge || code.trim().length < 6}
-          onClick={submit}>
+          disabled={submitting || passkeySubmitting || !challenge || !codeComplete}
+          onClick={() => void submit()}>
           {submitting ? "驗證中" : "完成登入"}
+        </button>
+
+        <button
+          type="button"
+          className="mx-auto mt-4 block text-xs font-medium underline underline-offset-4"
+          style={{ color: "var(--primary-text)" }}
+          disabled={submitting || passkeySubmitting}
+          onClick={switchCodeMode}
+        >
+          {codeMode === "totp" ? "改用備用碼" : "改用驗證器 App"}
         </button>
 
         <Link href="/login" className="mt-4 block text-center text-xs"

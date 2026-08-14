@@ -56,7 +56,7 @@ class MFAVerifyIn(BaseModel):
 
 class MFALoginVerifyIn(BaseModel):
     challenge_token: str = Field(..., min_length=1)
-    code: str = Field(..., min_length=6, max_length=8, description="TOTP 或備用碼")
+    code: str = Field(..., min_length=6, max_length=16, description="TOTP 或備用碼")
 
 
 class MFABackupCodesOut(BaseModel):
@@ -89,7 +89,7 @@ class PasskeyAuthenticationVerifyIn(BaseModel):
 
 
 class PasskeyDeleteIn(BaseModel):
-    code: str | None = Field(default=None, min_length=6, max_length=8)
+    code: str | None = Field(default=None, min_length=6, max_length=16)
 
 
 class PasskeyOut(BaseModel):

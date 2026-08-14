@@ -8,6 +8,7 @@ import QRCode from "qrcode";
 import { toast } from "sonner";
 import { discordApi, mfaApi, apiErrorMessage } from "@/lib/api";
 import type { DiscordBindingOut, MFASetupOut, MFAStatusOut, PasskeyOut } from "@/lib/types";
+import OtpInput from "@/components/auth/OtpInput";
 import { SectionSkeleton } from "@/components/ui/Skeleton";
 import { safeNextPath } from "@/lib/safe-redirect";
 
@@ -298,19 +299,17 @@ export default function SecuritySettingsPage() {
               </div>
             )}
             <div className="rounded-lg p-4" style={{ border: "1px solid var(--border)" }}>
-              <label className="block space-y-1.5">
+              <div className="block space-y-1.5">
                 <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
                   重新產生備用碼
                 </span>
-                <input
-                  className="input"
-                  inputMode="numeric"
-                  maxLength={8}
+                <OtpInput
                   value={regenerateCode}
-                  onChange={(e) => setRegenerateCode(e.target.value)}
-                  placeholder="輸入目前 2FA 驗證碼"
+                  onChange={setRegenerateCode}
+                  label="重新產生備用碼的 2FA 驗證碼"
+                  disabled={busy}
                 />
-              </label>
+              </div>
               <button
                 className="btn btn-secondary mt-3"
                 disabled={busy || regenerateCode.trim().length < 6}
@@ -318,19 +317,17 @@ export default function SecuritySettingsPage() {
                 重新產生備用碼
               </button>
             </div>
-            <label className="block space-y-1.5">
+            <div className="block space-y-1.5">
               <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
                 停用驗證碼
               </span>
-              <input
-                className="input"
-                inputMode="numeric"
-                maxLength={8}
+              <OtpInput
                 value={disableCode}
-                onChange={(e) => setDisableCode(e.target.value)}
-                placeholder="輸入 6 位數驗證碼"
+                onChange={setDisableCode}
+                label="停用 2FA 驗證碼"
+                disabled={busy}
               />
-            </label>
+            </div>
             <button
               className="btn btn-danger"
               disabled={busy || disableCode.trim().length < 6}
@@ -362,25 +359,23 @@ export default function SecuritySettingsPage() {
                 </p>
               </div>
             </div>
-            <label className="block space-y-1.5">
+            <div className="block space-y-1.5">
               <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
                 Authenticator URI
               </span>
               <textarea className="input min-h-24 resize-none font-mono text-xs" readOnly value={setup.qr_uri} />
-            </label>
-            <label className="block space-y-1.5">
+            </div>
+            <div className="block space-y-1.5">
               <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
                 驗證碼
               </span>
-              <input
-                className="input"
-                inputMode="numeric"
-                maxLength={8}
+              <OtpInput
                 value={confirmCode}
-                onChange={(e) => setConfirmCode(e.target.value)}
-                placeholder="輸入 App 產生的 6 位數驗證碼"
+                onChange={setConfirmCode}
+                label="啟用 2FA 的驗證碼"
+                disabled={busy}
               />
-            </label>
+            </div>
             <div className="flex flex-wrap gap-2">
               <button className="btn btn-primary" disabled={busy || confirmCode.trim().length < 6} onClick={confirmSetup}>
                 啟用 2FA
@@ -455,8 +450,12 @@ export default function SecuritySettingsPage() {
             </div>
           )}
           {status?.mfa_enabled && passkeys.length > 0 && (
-            <input className="input" inputMode="numeric" maxLength={8} value={passkeyCode}
-              onChange={(e) => setPasskeyCode(e.target.value)} placeholder="刪除 Passkey 時輸入目前 TOTP 驗證碼" />
+            <OtpInput
+              value={passkeyCode}
+              onChange={setPasskeyCode}
+              label="刪除 Passkey 時的 TOTP 驗證碼"
+              disabled={passkeyBusy}
+            />
           )}
           <div className="flex flex-col gap-2 sm:flex-row">
             <input className="input" maxLength={100} value={passkeyName}
