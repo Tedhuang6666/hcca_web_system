@@ -127,6 +127,8 @@ function postHogSources(): string[] {
 function buildCsp(nonce: string): string {
   // 開發模式 Next.js Fast Refresh (HMR) 需要 eval；正式環境不含 'unsafe-eval'。
   const devEval = process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'";
+  // Turbopack 開發模式會注入無 nonce 的 <style>；正式環境仍要求 nonce。
+  const styleNonce = process.env.NODE_ENV === "production" ? ` 'nonce-${nonce}'` : "";
   // Turbopack 在開發模式會以 <style> 注入 HMR CSS；正式環境仍只接受 nonce。
   const devStyle = process.env.NODE_ENV === "production" ? "" : " 'unsafe-inline'";
   return [
@@ -137,8 +139,8 @@ function buildCsp(nonce: string): string {
     "form-action 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://accounts.google.com https://us-assets.i.posthog.com https://static.cloudflareinsights.com${devEval}`,
     `script-src-elem 'self' 'nonce-${nonce}' https://accounts.google.com https://us-assets.i.posthog.com https://static.cloudflareinsights.com`,
-    `style-src 'self' 'nonce-${nonce}'${devStyle} https://fonts.googleapis.com https://accounts.google.com`,
-    `style-src-elem 'self' 'nonce-${nonce}'${devStyle} https://fonts.googleapis.com https://accounts.google.com`,
+    `style-src 'self'${styleNonce}${devStyle} https://fonts.googleapis.com https://accounts.google.com`,
+    `style-src-elem 'self'${styleNonce}${devStyle} https://fonts.googleapis.com https://accounts.google.com`,
     "style-src-attr 'unsafe-inline'",
     "font-src 'self' https://fonts.gstatic.com data:",
     "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://*.googleusercontent.com https://hcca.buckets.hct.works",
