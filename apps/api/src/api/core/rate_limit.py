@@ -26,6 +26,9 @@ class _BoundedMemoryBuckets:
         self.max_entries = max_entries
         self.buckets: OrderedDict[str, list[float]] = OrderedDict()
 
+    def clear(self) -> None:
+        self.buckets.clear()
+
     def check(self, key: str, req_limit: int, window_seconds: int) -> bool:
         now = time.monotonic()
         window_start = now - window_seconds
@@ -47,8 +50,9 @@ class _BoundedMemoryBuckets:
         return len(timestamps) > req_limit
 
 
-# Redis 恢復後這些短期資料自然在下一次請求被覆蓋；每個 middleware 實例各自限流。
+# Redis 恢復後這些短期資料自然在下一次請求被覆蓋；每個 process 共用一個限流桶。
 _MEMORY_CACHE_MAX_ENTRIES = 8_192
+_memory_buckets = _BoundedMemoryBuckets(_MEMORY_CACHE_MAX_ENTRIES)
 
 
 class SimpleRateLimitMiddleware:
@@ -72,7 +76,6 @@ class SimpleRateLimitMiddleware:
         self.enabled = enabled
         self.requests = requests
         self.window_seconds = window_seconds
-        self._memory_buckets = _BoundedMemoryBuckets(_MEMORY_CACHE_MAX_ENTRIES)
 
         self._overrides: list[tuple[str, int, int]] = [
             ("/auth/refresh", 20, 60),
@@ -122,7 +125,7 @@ class SimpleRateLimitMiddleware:
 
     def _check_memory_rate_limit(self, key: str, req_limit: int, win: int) -> bool:
         """簡單的內存降級 rate limit（固定視窗）"""
-        return self._memory_buckets.check(key, req_limit, win)
+        return _memory_buckets.check(key, req_limit, win)
 
     async def __call__(self, scope, receive, send) -> None:
         if scope["type"] != "http":
